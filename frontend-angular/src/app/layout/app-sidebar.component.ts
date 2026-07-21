@@ -2,11 +2,12 @@ import { Component, ElementRef, HostListener } from '@angular/core';
 import { NgFor } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../core/services/auth.service';
+import { TranslatePipe } from '../shared/pipes/translate.pipe';
 
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [NgFor, RouterLink, RouterLinkActive],
+  imports: [NgFor, RouterLink, RouterLinkActive, TranslatePipe],
   templateUrl: './app-sidebar.component.html',
   styleUrls: ['./app-sidebar.component.css'],
 })
@@ -55,11 +56,13 @@ export class AppSidebarComponent {
     ] },
     { label: 'POS', icon: 'bi-receipt', route: '/pos', exact: false, links: [
       { label: 'POS Billing', icon: 'bi-receipt', route: '/pos', exact: true },
-      { label: 'POS Sales', icon: 'bi-cart-check', route: '/pos/sales', exact: false },
-      { label: 'Invoices', icon: 'bi-receipt-cutoff', route: '/pos/invoices', exact: false },
-      { label: 'Cash Drawer', icon: 'bi-cash-stack', route: '/pos/cash-drawer', exact: false },
+      { label: 'Invoices & Refunds', icon: 'bi-receipt-cutoff', route: '/pos/invoices', exact: false },
+      { label: 'Held Invoices', icon: 'bi-pause-circle', route: '/pos/holds', exact: false },
+      { label: 'Payment Modes', icon: 'bi-credit-card', route: '/pos/payment-modes', exact: false },
+      { label: 'Tips', icon: 'bi-cash-coin', route: '/pos/tips', exact: false },
+      { label: 'Cash Drawer & Reconciliation', icon: 'bi-cash-stack', route: '/pos/cash-drawer', exact: false },
       { label: 'Happy Hours', icon: 'bi-clock-history', route: '/pos/happy-hours', exact: false },
-      { label: 'POS Enterprise', icon: 'bi-building-gear', route: '/pos/enterprise', exact: false },
+      { label: 'Daily Closing & Enterprise', icon: 'bi-building-gear', route: '/pos/enterprise', exact: false },
     ] },
     { label: 'Inventory', icon: 'bi-box-seam', route: '/inventory', exact: false, links: [
       { label: 'Inventory', icon: 'bi-box-seam', route: '/inventory', exact: true },
@@ -87,15 +90,15 @@ export class AppSidebarComponent {
       { label: 'Marketing & Leads', icon: 'bi-megaphone', route: '/marketing', exact: true },
       { label: 'Birthdays & Anniversaries', icon: 'bi-calendar2-heart', route: '/marketing/birthdays', exact: false },
     ] },
+    { label: 'Operations', icon: 'bi-geo-alt', route: '/operations', exact: false, links: [
+      { label: 'Outcall & Marketplace', icon: 'bi-geo-alt', route: '/operations', exact: true },
+    ] },
     { label: 'Finance', icon: 'bi-bank', route: '/finance', exact: false, links: [
       { label: 'Balance Sheet', icon: 'bi-bank', route: '/finance', exact: false },
       { label: 'Outgoing Funds', icon: 'bi-wallet2', route: '/finance/outgoing-funds', exact: false },
     ] },
     { label: 'SMS Center', icon: 'bi-chat-left-text', route: '/sms-center', exact: false, links: [
       { label: 'SMS Center', icon: 'bi-chat-left-text', route: '/sms-center', exact: false },
-    ] },
-    { label: 'Notifications', icon: 'bi-bell', route: '/notifications', exact: false, links: [
-      { label: 'Notifications', icon: 'bi-bell', route: '/notifications', exact: false },
     ] },
     { label: 'Settings', icon: 'bi-gear', route: '/settings', exact: false, links: [
       { label: 'Settings', icon: 'bi-gear', route: '/settings', exact: false },

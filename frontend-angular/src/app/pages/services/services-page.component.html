@@ -46,32 +46,32 @@
       <table>
         <thead>
           <tr>
-            <th>Service</th>
-            <th>Category</th>
-            <th>Price</th>
-            <th>Duration</th>
-            <th>Wait time</th>
-            <th>Cleanup time</th>
-            <th>Buffer time</th>
-            <th>GST %</th>
-            <th>Staff</th>
-            <th>Pricing</th>
-            <th>Status</th>
-            <th>Action</th>
+            <th scope="col">Service</th>
+            <th scope="col">Category</th>
+            <th scope="col" class="numeric">Price</th>
+            <th scope="col" class="numeric">Duration</th>
+            <th scope="col" class="numeric">Wait time</th>
+            <th scope="col" class="numeric">Cleanup time</th>
+            <th scope="col" class="numeric">Buffer time</th>
+            <th scope="col" class="numeric">GST %</th>
+            <th scope="col" class="numeric">Staff</th>
+            <th scope="col" class="numeric">Pricing</th>
+            <th scope="col">Status</th>
+            <th scope="col">Action</th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let service of filteredServices; trackBy: trackByIndex">
             <td>{{ service.name }}</td>
             <td>{{ service.category }}</td>
-            <td>{{ rupees(service.pricePaise) }}</td>
-            <td>{{ service.durationMinutes }}</td>
-            <td>{{ service.waitTimeMinutes }}</td>
-            <td>{{ service.cleanupTimeMinutes }}</td>
-            <td>{{ service.bufferTimeMinutes }}</td>
-            <td>{{ service.gstPercent }}</td>
-            <td>{{ service.staffIds.length }}</td>
-            <td>{{ service.variants.length }} / {{ service.addons.length }} / {{ service.priceRules.length }}</td>
+            <td class="numeric">{{ rupees(service.pricePaise) }}</td>
+            <td class="numeric">{{ service.durationMinutes }}</td>
+            <td class="numeric">{{ service.waitTimeMinutes }}</td>
+            <td class="numeric">{{ service.cleanupTimeMinutes }}</td>
+            <td class="numeric">{{ service.bufferTimeMinutes }}</td>
+            <td class="numeric">{{ service.gstPercent }}</td>
+            <td class="numeric">{{ service.staffIds.length }}</td>
+            <td class="numeric">{{ service.variants.length }} / {{ service.addons.length }} / {{ service.priceRules.length }}</td>
             <td><span class="status-pill">{{ service.status }}</span></td>
             <td><button type="button" (click)="openEditService(service)">Edit</button></td>
           </tr>

@@ -141,7 +141,14 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--as-blue);
-  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 
 button.active {
@@ -588,7 +595,7 @@ button.active {
   background: var(--as-line);
 }
 
-.metrics article {
+.metrics .metric-card {
   position: relative;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -602,12 +609,16 @@ button.active {
   border-radius: 12px;
   background: #fff;
   box-shadow: 0 10px 24px rgba(15, 23, 42, .08);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   transform: translateZ(0);
   transform-style: preserve-3d;
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 
-.metrics article::after {
+.metrics .metric-card::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -615,7 +626,8 @@ button.active {
   background: linear-gradient(135deg, rgba(255, 255, 255, .58), transparent 44%);
 }
 
-.metrics article:hover {
+.metrics .metric-card:not(:disabled):hover,
+.metrics .metric-card.active-filter {
   border-color: #b8c6da;
   box-shadow: 0 20px 36px rgba(15, 23, 42, .16);
   transform: translateY(-6px) rotateX(5deg) rotateY(-2deg);
@@ -703,11 +715,16 @@ button.active {
 .calendar-grid {
   --time-width: 84px;
   --staff-width: minmax(220px, 1fr);
+  --calendar-slot-height: 48px;
   display: grid;
   grid-template-columns: var(--time-width) repeat(5, var(--staff-width));
   min-height: 570px;
   max-height: calc(100vh - 310px);
   overflow: auto;
+}
+
+.metrics .metric-card:disabled {
+  cursor: default;
 }
 
 .compact-grid-mode {
@@ -722,7 +739,11 @@ button.active {
 
 .compact-grid-mode .time-row,
 .compact-grid-mode .slot {
-  height: 38px;
+  height: var(--calendar-slot-height);
+}
+
+.compact-grid-mode {
+  --calendar-slot-height: 38px;
 }
 
 .compact-grid-mode .lane {
@@ -747,7 +768,11 @@ button.active {
 
 .timeline-grid-mode .time-row,
 .timeline-grid-mode .slot {
-  height: 60px;
+  height: var(--calendar-slot-height);
+}
+
+.timeline-grid-mode {
+  --calendar-slot-height: 60px;
 }
 
 .timeline-grid-mode .lane {
@@ -898,13 +923,14 @@ button.active {
 
 .time-row,
 .slot {
-  height: 48px;
+  height: var(--calendar-slot-height);
 }
 
 .time-row {
   display: flex;
   justify-content: flex-end;
-  padding: 10px 10px 0 0;
+  align-items: center;
+  padding: 0 10px 0 0;
   border-bottom: 1px solid var(--as-soft-line);
   color: var(--as-muted);
   font-size: 12px;
@@ -921,6 +947,7 @@ button.active {
 }
 
 .slot {
+  display: block;
   width: 100%;
   min-height: 0;
   border: 0;
@@ -932,7 +959,6 @@ button.active {
 
 .slot:hover,
 .slot:focus-visible {
-  outline: 0;
   background: #f3f8ff;
 }
 
@@ -1249,6 +1275,18 @@ button.active {
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.staff-request-badge {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  color: #9f1239;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .booking:hover,
@@ -1814,6 +1852,31 @@ button.active {
   background: #f8fffc;
 }
 
+.booking-client-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.booking-client-kpis article {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.booking-client-kpis span,
+.booking-client-kpis small {
+  color: var(--as-muted);
+  font-size: 11px;
+}
+
+.booking-client-kpis span { font-weight: 700; text-transform: uppercase; }
+.booking-client-kpis strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+
 .previous-service-list {
   display: grid;
   gap: 8px;
@@ -1943,6 +2006,47 @@ button.active {
   opacity: .45;
 }
 
+.staff-preference-field {
+  grid-column: span 2;
+}
+
+.staff-change-review {
+  display: grid;
+  gap: 10px;
+  margin: 0 16px 14px;
+  padding: 12px;
+  border: 1px solid #f0b8c5;
+  border-radius: 10px;
+  background: #fff8fa;
+}
+
+.staff-change-review header,
+.staff-change-review footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.staff-change-review header button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+}
+
+.staff-change-review article {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid #f2d4dc;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.staff-change-review small { color: var(--as-muted); }
+
 .picker-results {
   position: absolute;
   left: 0;
@@ -2065,3 +2169,12 @@ button.active {
     grid-template-columns: 1fr;
   }
 }
+
+.booking-intelligence-panel { display:grid; gap:8px; padding:12px; border:1px solid #cfe0f5; border-radius:12px; background:#f8fbff; }
+.booking-intelligence-summary { display:flex; flex-wrap:wrap; gap:8px; }
+.booking-intelligence-summary span { padding:5px 7px; border:1px solid #d8e5f2; border-radius:7px; background:#fff; color:var(--as-muted); font-size:11px; }
+.booking-intelligence-summary b { color:var(--as-ink); }
+.booking-plan-line { display:grid; gap:5px; padding:9px; border:1px solid #d8e5f2; border-radius:9px; background:#fff; }
+.booking-plan-line > div:first-child { display:grid; gap:2px; }
+.booking-plan-line small { color:var(--as-muted); font-size:11px; }
+.booking-alternatives { display:flex; flex-wrap:wrap; gap:6px; }

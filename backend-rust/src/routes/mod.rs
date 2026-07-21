@@ -11,7 +11,7 @@ use axum::{
     middleware::from_fn_with_state,
     Router,
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
 pub mod ai_concierge;
 pub mod appointment_activity;
@@ -32,13 +32,15 @@ pub mod health;
 pub mod integrations;
 pub mod inventory;
 pub mod inventory_governance;
-pub mod inventory_reorder_forecasts;
 pub mod inventory_transfers;
 pub mod invoice_webhooks;
+pub mod language_settings;
 pub mod laundry;
+pub mod marketing_leads;
 pub mod membership_enterprise;
 pub mod memberships;
 pub mod notifications;
+pub mod operations;
 pub mod outgoing_funds;
 pub mod packages;
 pub mod pos;
@@ -63,6 +65,7 @@ pub mod staff_payroll;
 pub mod staff_schedule;
 pub mod stock_audit;
 pub mod wallets;
+pub mod whatsapp;
 
 pub fn build_router(state: AppState) -> Router {
     let with_state = state.clone();
@@ -77,6 +80,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(customer_portal::router())
         .merge(realtime::router())
         .merge(invoice_webhooks::router())
+        .route(
+            "/booking-payments/webhook/razorpay",
+            axum::routing::post(invoice_webhooks::receive_razorpay_webhook),
+        )
         .merge(staff_advanced::public_router())
         .merge(membership_enterprise::public_router())
         .merge(booking_extensions::public_router())
@@ -115,6 +122,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(inventory_reorder_forecasts::router())
         .merge(stock_audit::router())
         .merge(inventory_transfers::router())
+        .merge(language_settings::router())
         .merge(memberships::router())
         .merge(membership_enterprise::router())
         .merge(packages::router())
@@ -126,7 +134,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(booking_extensions::protected_router())
         .merge(integrations::router())
         .merge(laundry::router())
+        .merge(marketing_leads::router())
         .merge(notifications::router())
+        .merge(operations::router())
+        .merge(whatsapp::router())
         .route_layer(from_fn_with_state(
             with_state.clone(),
             tenant_middleware::require_route_role,
@@ -147,6 +158,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", axum::routing::get(health::health))
         .nest("/api/v1", api.clone())
         .nest("/api", api)
+        .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .layer(from_fn_with_state(
@@ -191,3 +203,5 @@ fn cors_layer(state: &AppState) -> CorsLayer {
         ])
         .allow_credentials(true)
 }
+
+pub mod inventory_reorder_forecasts;

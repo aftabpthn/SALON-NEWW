@@ -3,6 +3,5 @@ export const environment = {
   apiBaseUrl: '/api/v1',
   aiApiBaseUrl: '/ai',
   tenantContext: '',
-  enableLocalDevSession: false,
-  localDevSessionSecret: ''
+  enableLocalDevSession: false
 };

@@ -764,7 +764,7 @@ pub async fn salary_revisions(
     branch: &str,
     staff: &str,
 ) -> Result<Vec<SalaryRevisionRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,rate_type,old_amount_paise,new_amount_paise,effective_date,reason,status,requested_by,reviewed_by,reviewed_at,review_note,version,created_at,updated_at FROM staff_salary_revisions WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 ORDER BY effective_date DESC,created_at DESC")
+    sqlx::query_as("SELECT id,staff_id,rate_type,old_amount_paise,new_amount_paise,effective_date,reason,status,requested_by,reviewed_by,reviewed_at,review_note,version,created_at,updated_at FROM staff_salary_revisions WHERE tenant_id=$1 AND branch_id=$2 AND ($3='' OR staff_id=$3) ORDER BY effective_date DESC,created_at DESC")
       .bind(tenant).bind(branch).bind(staff).fetch_all(db).await
 }
 

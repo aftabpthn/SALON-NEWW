@@ -1,9 +1,11 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'operations';
 type NegativeStockRequest = { id:string; productName:string; requestedStockQuantity:number; reason:string; status:string; requestedBy:string; requestedAt:string };
@@ -31,11 +33,12 @@ type AdvancedControls = {
 @Component({
   selector: 'page-inventory-advanced-controls',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, TranslatePipe],
   templateUrl: './advanced-controls-page.component.html',
   styleUrls: ['./advanced-controls-page.component.css'],
 })
 export class AdvancedControlsPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
 
   readonly tabs: Array<{ id: Tab; label: string }> = [
@@ -92,7 +95,7 @@ export class AdvancedControlsPageComponent implements OnInit {
     try {
       const response = await firstValueFrom(this.api.put<ApiEnvelope<InventoryPolicy>>('/inventory/policy', this.policy));
       if (!response.data) throw new Error('Policy response was empty');
-      this.policy = response.data; this.notice = 'Inventory policy saved'; await this.reload();
+      this.policy = response.data; this.notice = this.language.text('inventory.message.b65d768d7a'); await this.reload();
     } catch (error: any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Inventory policy could not be saved'; }
     finally { this.savingPolicy = false; }
   }
@@ -107,13 +110,13 @@ export class AdvancedControlsPageComponent implements OnInit {
     try {
       await firstValueFrom(this.api.post(`/inventory/supplier-governance/communications/${id}/retry`, {}));
       await this.reload();
-      this.notice = 'Supplier communication queued for retry';
+      this.notice = this.language.text('inventory.message.f61da9fdc6');
     } catch (error: any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Communication could not be retried'; }
     finally { this.retryingJobId = ''; }
   }
   exportEvidence() {
     const rows = [
-      ['Severity', 'Control', 'Exception', 'Value Paise', 'Evidence', 'Owner', 'Status'],
+      ['Severity', 'Control', 'Exception', 'Value Paise', 'Evidence', 'Owner', 'Status'].map((value) => this.language.textValue(value)),
       ...this.filteredExceptions.map((row) => [row.severity, row.control, row.title, row.valuePaise, row.evidence, row.owner, row.status]),
     ];
     const csv = rows.map((row) => row.map((value) => this.csv(value)).join(',')).join('\r\n');

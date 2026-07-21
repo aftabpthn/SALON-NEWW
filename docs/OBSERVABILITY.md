@@ -57,3 +57,7 @@ Salon SaaS dies quietly when tenants stop transacting — watch business signals
 
 - OpenTelemetry-compatible export once external tooling is chosen.
 - Per-tenant SLO reporting in the super admin console.
+
+## 10. Data Migration Signals
+
+`GET /api/settings/integrations/import-monitoring` is the tenant/branch-scoped migration signal source. Alert thresholds, owners, safe recovery steps, AI degradation behavior, and release checks are defined in `docs/DATA_MIGRATION_RUNBOOK.md`.

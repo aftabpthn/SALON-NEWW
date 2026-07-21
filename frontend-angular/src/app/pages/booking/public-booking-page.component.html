@@ -1,10 +1,10 @@
 <main class="booking-shell">
   <aside class="booking-nav" aria-label="Booking navigation">
     <div class="brand">{{ tenant.name || 'AuraShine' }}</div>
-    <button class="nav-item active" type="button"><i class="bi bi-calendar2-check"></i><span>Public Booking</span></button>
+    <button class="nav-item" [class.active]="!showMyBookings" type="button" (click)="closeMyBookings()"><i class="bi bi-calendar2-check"></i><span>Public Booking</span></button>
     <button class="nav-item" type="button"><i class="bi bi-scissors"></i><span>Services</span></button>
     <button class="nav-item" type="button"><i class="bi bi-people"></i><span>Staff</span></button>
-    <button class="nav-item" type="button"><i class="bi bi-calendar-week"></i><span>My Bookings</span></button>
+    <button class="nav-item" [class.active]="showMyBookings" type="button" (click)="openMyBookings()"><i class="bi bi-calendar-week"></i><span>My Bookings</span></button>
     <button class="nav-item nav-bottom" type="button"><i class="bi bi-gear"></i><span>Settings</span></button>
   </aside>
 
@@ -32,7 +32,7 @@
     <p class="state error" *ngIf="error">{{ error }}</p>
     <p class="state success" *ngIf="success">{{ success }}</p>
 
-    <div class="booking-filters" *ngIf="!loading && !success">
+    <div class="booking-filters" *ngIf="!loading && !success && !showMyBookings">
       <label class="search-field">
         <i class="bi bi-search"></i>
         <input [(ngModel)]="serviceSearch" placeholder="Search services" />
@@ -52,7 +52,61 @@
       <div class="empty-card"><span class="spinner"></span><b>Loading</b></div>
     </div>
 
-    <div class="booking-grid" *ngIf="!loading && !success">
+    <section class="confirmation-panel" *ngIf="!loading && success && !showMyBookings">
+      <span class="confirmation-icon"><i class="bi bi-check2"></i></span>
+      <h2>{{ success }}</h2>
+      <div class="payment-card" *ngIf="payment">
+        <p><span>Deposit</span><b>{{ money(payment.amountPaise) }}</b></p>
+        <p><span>Status</span><b class="status-pill" [class.paid]="payment.status === 'paid'">{{ payment.status | titlecase }}</b></p>
+        <p class="state error" *ngIf="paymentError">{{ paymentError }}</p>
+        <div class="confirmation-actions">
+          <a class="primary action-link" *ngIf="payment.url && payment.status !== 'paid'" [href]="payment.url" target="_blank" rel="noopener">Pay deposit</a>
+          <button type="button" *ngIf="!payment.url && payment.status !== 'paid'" (click)="createPaymentLink()" [disabled]="paymentBusy">Create payment link</button>
+          <button type="button" (click)="refreshPayment()" [disabled]="paymentBusy">Refresh status</button>
+        </div>
+      </div>
+      <div class="confirmation-actions">
+        <button type="button" class="primary" (click)="openMyBookings()">My Bookings</button>
+        <button type="button" (click)="success = ''; step = 1">Book another</button>
+      </div>
+    </section>
+
+    <section class="panel my-bookings-panel" *ngIf="!loading && showMyBookings">
+      <header class="panel-head">
+        <h2>My Bookings</h2>
+        <button type="button" class="icon-btn" (click)="closeMyBookings()" aria-label="Close My Bookings"><i class="bi bi-x-lg"></i></button>
+      </header>
+      <div class="booking-records" *ngIf="myBookings.length; else noBookings">
+        <article class="booking-record" *ngFor="let booking of myBookings">
+          <div class="booking-record-main">
+            <span class="booking-date"><b>{{ date(booking.start_at) }}</b><small>{{ time(booking.start_at) }}</small></span>
+            <span><b>{{ serviceNames(booking) }}</b><small>{{ branchName(booking.branch_id) }}</small></span>
+            <span class="status-pill" [class.paid]="booking.status === 'confirmed' || booking.status === 'paid'">{{ booking.status | titlecase }}</span>
+          </div>
+          <div class="booking-payment" *ngIf="bookingPayments[booking.id] as recordPayment">
+            <span>Deposit {{ money(recordPayment.amountPaise) }}</span>
+            <b>{{ recordPayment.status | titlecase }}</b>
+          </div>
+          <div class="booking-record-actions">
+            <button type="button" (click)="refreshPayment(booking.id)" *ngIf="bookingPayments[booking.id] && bookingPayments[booking.id]?.status !== 'refunded'" [disabled]="paymentBusy">Payment status</button>
+            <button type="button" (click)="openReschedule(booking)" *ngIf="canChangeBooking(booking)" [disabled]="busy">Reschedule</button>
+            <button type="button" class="danger" (click)="cancelBooking(booking)" *ngIf="canChangeBooking(booking)" [disabled]="busy">
+              {{ cancelPendingId === booking.id ? 'Confirm cancel' : 'Cancel' }}
+            </button>
+            <button type="button" (click)="refundDeposit(booking)" *ngIf="booking.status === 'cancelled' && bookingPayments[booking.id]?.status === 'paid'" [disabled]="busy">Refund deposit</button>
+          </div>
+        </article>
+      </div>
+      <ng-template #noBookings>
+        <div class="empty-card">
+          <span class="spinner" *ngIf="busy"></span>
+          <i class="bi bi-calendar2" *ngIf="!busy"></i>
+          <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
+        </div>
+      </ng-template>
+    </section>
+
+    <div class="booking-grid" *ngIf="!loading && !success && !showMyBookings">
       <section class="panel service-panel">
         <header class="panel-head">
           <h2>Services</h2>
@@ -134,6 +188,15 @@
             <i class="bi bi-calendar2" *ngIf="!busy"></i>
             <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
           </div>
+          <section class="nearby-alternatives" *ngIf="!busy && nearbyAlternatives.length" aria-label="Nearby branch availability">
+            <header><b>Available at nearby branches</b></header>
+            <article *ngFor="let alternative of nearbyAlternatives">
+              <div><b>{{ alternative.branchName }}</b><small>{{ alternative.distanceKm != null ? alternative.distanceKm + ' km away' : alternative.address }}</small></div>
+              <div class="slot-list compact">
+                <button type="button" *ngFor="let slot of alternative.slots" (click)="chooseNearbyAlternative(alternative, slot)">{{ time(slot.startAt) }}</button>
+              </div>
+            </article>
+          </section>
         </ng-template>
       </section>
 
@@ -163,7 +226,7 @@
 
         <section class="summary-section">
           <h3>Deposit</h3>
-          <p class="status-row"><span><i class="bi bi-credit-card"></i>{{ depositPaise ? money(depositPaise) : 'Deposit' }}</span><b>Pending</b></p>
+          <p class="status-row"><span><i class="bi bi-credit-card"></i>{{ depositPaise ? money(depositPaise) : 'Deposit' }}</span><b>{{ depositPaise ? 'Pending' : 'Not required' }}</b></p>
         </section>
 
         <section class="summary-section">
@@ -172,6 +235,7 @@
             <span>Mobile</span>
             <input [(ngModel)]="mobile" inputmode="tel" placeholder="Mobile number" />
           </label>
+          <div id="booking-turnstile" class="captcha-host" *ngIf="captcha.required" aria-label="CAPTCHA verification"></div>
           <div class="otp-row">
             <input [(ngModel)]="otp" inputmode="numeric" maxlength="6" placeholder="OTP" />
             <button type="button" (click)="sendOtp()" [disabled]="busy || !mobile.trim()">Send OTP</button>
@@ -182,7 +246,7 @@
 
         <section class="summary-section">
           <h3>Payment Status</h3>
-          <p class="status-row"><span><i class="bi bi-wallet2"></i>Total {{ money(totalPaise) }}</span><b>Pending</b></p>
+          <p class="status-row"><span><i class="bi bi-wallet2"></i>Total {{ money(totalPaise) }}</span><b>{{ depositPaise ? 'Deposit pending' : 'Pay at salon' }}</b></p>
         </section>
 
         <footer class="summary-actions">
@@ -192,7 +256,7 @@
       </aside>
     </div>
 
-    <section class="mobile-app-panel" *ngIf="!loading && !success" aria-label="Customer app preview">
+    <section class="mobile-app-panel" *ngIf="!loading && !success && !showMyBookings" aria-label="Customer app preview">
       <header>
         <h2>Customer App</h2>
         <button type="button" class="icon-btn" disabled><i class="bi bi-bell"></i></button>
@@ -212,4 +276,22 @@
       </div>
     </section>
   </section>
+
+  <aside class="reschedule-drawer" *ngIf="rescheduleBooking">
+    <header>
+      <div><span class="section-label">My Bookings</span><h2>Reschedule</h2></div>
+      <button type="button" class="icon-btn" (click)="closeReschedule()" aria-label="Close reschedule"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <div class="drawer-body">
+      <as-date-picker [(value)]="rescheduleDate" ariaLabel="Reschedule date" (valueChange)="loadRescheduleSlots()" />
+      <div class="slot-list" *ngIf="rescheduleSlots.length; else noRescheduleSlots">
+        <button type="button" *ngFor="let slot of rescheduleSlots" [class.selected]="selectedRescheduleSlot === slot" (click)="selectedRescheduleSlot = slot">{{ time(slot.startAt) }}</button>
+      </div>
+      <ng-template #noRescheduleSlots><div class="empty-card compact"><b>{{ busy ? 'Loading' : 'No records yet' }}</b></div></ng-template>
+    </div>
+    <footer>
+      <button type="button" (click)="closeReschedule()">Cancel</button>
+      <button type="button" class="primary" (click)="confirmReschedule()" [disabled]="!selectedRescheduleSlot || busy">Confirm</button>
+    </footer>
+  </aside>
 </main>

@@ -1,21 +1,21 @@
 <section class="suppliers-page">
   <header class="command-bar">
-    <div class="command-title"><h1>Suppliers</h1><span class="data-pill" [class.online]="!loading && !error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
+    <div class="command-title"><h1>{{ 'inventory.ui.6f76bb2b12' | translate }}</h1><span class="data-pill" [class.online]="!loading && !error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
     <label class="search-box">
       <i class="bi bi-search" aria-hidden="true"></i>
       <input
         type="search"
-        aria-label="Search suppliers"
-        placeholder="Search supplier, code or GSTIN"
+        [attr.aria-label]="'inventory.ui.6224fa996d' | translate"
+        [attr.placeholder]="'inventory.ui.0bd6cf91fc' | translate"
         [(ngModel)]="searchTerm"
       />
     </label>
-    <select aria-label="Filter supplier status" [(ngModel)]="statusFilter">
-      <option value="all">All statuses</option>
-      <option value="active">Active</option>
-      <option value="inactive">Inactive</option>
+    <select [attr.aria-label]="'inventory.ui.ccca00d51b' | translate" [(ngModel)]="statusFilter">
+      <option value="all">{{ 'inventory.ui.6405179d24' | translate }}</option>
+      <option value="active">{{ 'inventory.ui.a733b809d2' | translate }}</option>
+      <option value="inactive">{{ 'inventory.ui.09af574c7f' | translate }}</option>
     </select>
-    <button class="icon-button" type="button" aria-label="Refresh suppliers" [disabled]="loading" (click)="reload()">
+    <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.36943c5fce' | translate" [disabled]="loading" (click)="reload()">
       <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
     </button>
     <button class="primary-button" type="button" (click)="openCreate()">
@@ -24,63 +24,63 @@
     </button>
   </header>
 
-  <nav class="view-tabs" aria-label="Supplier workspace">
-    <button type="button" [class.active]="view === 'register'" (click)="selectView('register')">Supplier Register</button>
-    <button type="button" [class.active]="view === 'compliance'" (click)="selectView('compliance')">Compliance</button>
-    <button type="button" [class.active]="view === 'price'" (click)="selectView('price')">Price Intelligence</button>
+  <nav class="view-tabs" [attr.aria-label]="'inventory.ui.bb67841bb8' | translate">
+    <button type="button" [class.active]="view === 'register'" (click)="selectView('register')">{{ 'inventory.ui.744cf2ca91' | translate }}</button>
+    <button type="button" [class.active]="view === 'compliance'" (click)="selectView('compliance')">{{ 'inventory.ui.68f0ae4911' | translate }}</button>
+    <button type="button" [class.active]="view === 'price'" (click)="selectView('price')">{{ 'inventory.ui.b3ab4ea0d8' | translate }}</button>
   </nav>
 
   <div class="message error" *ngIf="error">{{ error }}</div>
   <div class="message success" *ngIf="notice">{{ notice }}</div>
 
-  <section class="metrics" aria-label="Supplier summary">
-    <article class="blue"><i class="bi bi-people" aria-hidden="true"></i><div><span>Suppliers</span><strong>{{ suppliers.length }}</strong></div></article>
-    <article class="amber"><i class="bi bi-check2" aria-hidden="true"></i><div><span>Active</span><strong>{{ activeCount }}</strong></div></article>
-    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><div><span>At risk</span><strong>{{ atRiskCount }}</strong></div></article>
-    <article class="green"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><div><span>Open POs</span><strong>{{ openOrderCount }}</strong></div></article>
+  <section class="metrics" [attr.aria-label]="'inventory.ui.b087b95bb9' | translate">
+    <article class="blue"><i class="bi bi-people" aria-hidden="true"></i><div><span>{{ 'inventory.ui.6f76bb2b12' | translate }}</span><strong>{{ suppliers.length }}</strong></div></article>
+    <article class="amber"><i class="bi bi-check2" aria-hidden="true"></i><div><span>{{ 'inventory.ui.a733b809d2' | translate }}</span><strong>{{ activeCount }}</strong></div></article>
+    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><div><span>{{ 'inventory.ui.b04189af94' | translate }}</span><strong>{{ atRiskCount }}</strong></div></article>
+    <article class="green"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><div><span>{{ 'inventory.ui.82e3e3c2b6' | translate }}</span><strong>{{ openOrderCount }}</strong></div></article>
   </section>
 
   <section class="register-card" *ngIf="view === 'register'">
     <header>
-      <h2>Supplier command register</h2>
+      <h2>{{ 'inventory.ui.a0bbd52f3d' | translate }}</h2>
       <div class="quick-filters">
-        <button type="button" [class.active]="quickFilter === 'gstin'" (click)="setQuickFilter('gstin')">GSTIN missing</button>
-        <button type="button" [class.active]="quickFilter === 'openPo'" (click)="setQuickFilter('openPo')">Pending PO</button>
+        <button type="button" [class.active]="quickFilter === 'gstin'" (click)="setQuickFilter('gstin')">{{ 'inventory.ui.30919853ec' | translate }}</button>
+        <button type="button" [class.active]="quickFilter === 'openPo'" (click)="setQuickFilter('openPo')">{{ 'inventory.ui.429a117678' | translate }}</button>
       </div>
     </header>
 
     <div class="loading-state" *ngIf="loading">
       <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
-      <span>Loading suppliers</span>
+      <span>{{ 'inventory.ui.6a4dde5982' | translate }}</span>
     </div>
 
     <div class="table-scroll" *ngIf="!loading">
       <table>
         <thead>
           <tr>
-            <th>Supplier</th>
-            <th>Contact / GSTIN</th>
-            <th>Score</th>
-            <th>Spend</th>
-            <th>Open POs</th>
-            <th>Compliance</th>
-            <th>Status</th>
-            <th aria-label="Actions"></th>
+            <th scope="col">{{ 'inventory.ui.55edd46287' | translate }}</th>
+            <th scope="col">{{ 'inventory.ui.184c052113' | translate }}</th>
+            <th scope="col" class="numeric">{{ 'inventory.ui.489f487724' | translate }}</th>
+            <th scope="col" class="numeric">{{ 'inventory.ui.14eeee8d40' | translate }}</th>
+            <th scope="col" class="numeric">{{ 'inventory.ui.82e3e3c2b6' | translate }}</th>
+            <th scope="col">{{ 'inventory.ui.68f0ae4911' | translate }}</th>
+            <th scope="col">{{ 'inventory.ui.bae7d5be70' | translate }}</th>
+            <th scope="col" [attr.aria-label]="'inventory.ui.c3cd636a58' | translate"></th>
           </tr>
         </thead>
         <tbody>
           <tr *ngFor="let supplier of filteredSuppliers">
             <td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td>
             <td><strong>{{ supplier.contactName || '—' }}</strong><small>{{ supplier.phone || supplier.email || '—' }} · {{ supplier.gstin || 'GSTIN missing' }}</small></td>
-            <td><span class="score">{{ score(supplier) }}%</span></td>
-            <td>{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td>
-            <td>{{ openOrdersFor(supplier.id) }}</td>
+            <td class="numeric"><span class="score">{{ score(supplier) }}%</span></td>
+            <td class="numeric">{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td>
+            <td class="numeric">{{ openOrdersFor(supplier.id) }}</td>
             <td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td>
             <td><span class="status" [class.inactive]="!supplier.active">{{ supplier.active ? 'Active' : 'Inactive' }}</span></td>
-            <td><button class="icon-button" type="button" aria-label="Edit supplier" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
+            <td><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
           </tr>
           <tr *ngIf="!filteredSuppliers.length">
-            <td class="empty-state" colspan="8">No records yet</td>
+            <td class="empty-state" colspan="8">{{ 'inventory.ui.e619c5b961' | translate }}</td>
           </tr>
         </tbody>
       </table>
@@ -88,55 +88,55 @@
   </section>
 
   <section class="register-card" *ngIf="view === 'compliance'">
-    <header><h2>Supplier compliance</h2><span>{{ suppliers.length }} suppliers</span></header>
-    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Loading suppliers</span></div>
+    <header><h2>{{ 'inventory.ui.a94c8d0f09' | translate }}</h2><span>{{ suppliers.length }} suppliers</span></header>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>{{ 'inventory.ui.6a4dde5982' | translate }}</span></div>
     <div class="table-scroll" *ngIf="!loading">
       <table>
-        <thead><tr><th>Supplier</th><th>GSTIN</th><th>Contact</th><th>Address</th><th>Score</th><th>Status</th><th aria-label="Actions"></th></tr></thead>
+        <thead><tr><th scope="col">{{ 'inventory.ui.55edd46287' | translate }}</th><th scope="col">{{ 'inventory.ui.da7751f5fa' | translate }}</th><th scope="col">{{ 'inventory.ui.b37456c453' | translate }}</th><th scope="col">{{ 'inventory.ui.d70f93df5e' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.489f487724' | translate }}</th><th scope="col">{{ 'inventory.ui.bae7d5be70' | translate }}</th><th scope="col" [attr.aria-label]="'inventory.ui.c3cd636a58' | translate"></th></tr></thead>
         <tbody>
-          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td>{{ supplier.gstin || 'Missing' }}</td><td>{{ supplier.phone || supplier.email || 'Missing' }}</td><td>{{ supplier.address || 'Missing' }}</td><td><span class="score">{{ score(supplier) }}%</span></td><td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td><td><button class="icon-button" type="button" aria-label="Edit supplier" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td></tr>
-          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="7">No records yet</td></tr>
+          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td>{{ supplier.gstin || 'Missing' }}</td><td>{{ supplier.phone || supplier.email || 'Missing' }}</td><td>{{ supplier.address || 'Missing' }}</td><td class="numeric"><span class="score">{{ score(supplier) }}%</span></td><td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td><td><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td></tr>
+          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="7">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <section class="register-card" *ngIf="view === 'price'">
-    <header><h2>Price intelligence</h2><span>Received purchase value</span></header>
-    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Loading purchase data</span></div>
+    <header><h2>{{ 'inventory.ui.ba1bbb3115' | translate }}</h2><span>{{ 'inventory.ui.1830422572' | translate }}</span></header>
+    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>{{ 'inventory.ui.3c9051a602' | translate }}</span></div>
     <div class="table-scroll" *ngIf="!loading">
       <table>
-        <thead><tr><th>Supplier</th><th>Receipts</th><th>Net spend</th><th>Outstanding</th><th>Open POs</th><th>Payment terms</th></tr></thead>
+        <thead><tr><th scope="col">{{ 'inventory.ui.55edd46287' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.d6dadec066' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.19bf6f0c86' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.f8ee57ec86' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.82e3e3c2b6' | translate }}</th><th scope="col">{{ 'inventory.ui.8744d51917' | translate }}</th></tr></thead>
         <tbody>
-          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td>{{ ordersLoaded ? metricsFor(supplier.id).receipts : '—' }}</td><td>{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td><td>{{ ordersLoaded ? money(metricsFor(supplier.id).outstandingPaise) : '—' }}</td><td>{{ openOrdersFor(supplier.id) }}</td><td>{{ supplier.paymentTermsDays }} days</td></tr>
-          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="6">No records yet</td></tr>
+          <tr *ngFor="let supplier of filteredSuppliers"><td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td><td class="numeric">{{ ordersLoaded ? metricsFor(supplier.id).receipts : '—' }}</td><td class="numeric">{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td><td class="numeric">{{ ordersLoaded ? money(metricsFor(supplier.id).outstandingPaise) : '—' }}</td><td class="numeric">{{ openOrdersFor(supplier.id) }}</td><td>{{ supplier.paymentTermsDays }} days</td></tr>
+          <tr *ngIf="!filteredSuppliers.length"><td class="empty-state" colspan="6">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <button class="drawer-backdrop" type="button" aria-label="Close supplier form" *ngIf="drawerOpen" (click)="closeDrawer()"></button>
-  <aside class="supplier-drawer" *ngIf="drawerOpen" aria-label="Supplier form">
+  <button class="drawer-backdrop" type="button" [attr.aria-label]="'inventory.ui.897ce497e6' | translate" *ngIf="drawerOpen" (click)="closeDrawer()"></button>
+  <aside class="supplier-drawer" *ngIf="drawerOpen" [attr.aria-label]="'inventory.ui.b4a97262cd' | translate">
     <header>
       <h2>{{ editingSupplierId ? 'Edit supplier' : 'Add supplier' }}</h2>
-      <button class="icon-button" type="button" aria-label="Close supplier form" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+      <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.897ce497e6' | translate" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
     </header>
 
     <div class="drawer-body">
-      <label>Supplier code<input maxlength="80" autocomplete="off" [ngModel]="draft.code" (ngModelChange)="draft.code = $event.toUpperCase()" /></label>
-      <label>Supplier name<input maxlength="160" autocomplete="organization" [ngModel]="draft.name" (ngModelChange)="draft.name = titleCase($event)" /></label>
-      <label>GSTIN<input maxlength="15" autocomplete="off" [ngModel]="draft.gstin" (ngModelChange)="draft.gstin = $event.toUpperCase()" /></label>
-      <label>Contact name<input maxlength="160" autocomplete="name" [ngModel]="draft.contactName" (ngModelChange)="draft.contactName = titleCase($event)" /></label>
-      <label>Phone<input maxlength="40" autocomplete="tel" [(ngModel)]="draft.phone" /></label>
-      <label>Email<input type="email" maxlength="254" autocomplete="email" [(ngModel)]="draft.email" /></label>
-      <label>Payment terms (days)<input type="number" min="0" max="3650" [(ngModel)]="draft.paymentTermsDays" /></label>
-      <label class="active-field"><input type="checkbox" [(ngModel)]="draft.active" />Active</label>
-      <label class="full-field">Address<textarea maxlength="1000" rows="4" [(ngModel)]="draft.address"></textarea></label>
+      <label>{{ 'inventory.ui.011ace7964' | translate }}<input maxlength="80" autocomplete="off" [ngModel]="draft.code" (ngModelChange)="draft.code = $event.toUpperCase()" /></label>
+      <label>{{ 'inventory.ui.1b6428e32f' | translate }}<input maxlength="160" autocomplete="organization" [ngModel]="draft.name" (ngModelChange)="draft.name = titleCase($event)" /></label>
+      <label>{{ 'inventory.ui.da7751f5fa' | translate }}<input maxlength="15" autocomplete="off" [ngModel]="draft.gstin" (ngModelChange)="draft.gstin = $event.toUpperCase()" /></label>
+      <label>{{ 'inventory.ui.565e288e2a' | translate }}<input maxlength="160" autocomplete="name" [ngModel]="draft.contactName" (ngModelChange)="draft.contactName = titleCase($event)" /></label>
+      <label>{{ 'inventory.ui.77064d5265' | translate }}<input maxlength="40" autocomplete="tel" [(ngModel)]="draft.phone" /></label>
+      <label>{{ 'inventory.ui.84add5b295' | translate }}<input type="email" maxlength="254" autocomplete="email" [(ngModel)]="draft.email" /></label>
+      <label>{{ 'inventory.ui.fd94d85cfb' | translate }}<input type="number" min="0" max="3650" [(ngModel)]="draft.paymentTermsDays" /></label>
+      <label class="active-field"><input type="checkbox" [(ngModel)]="draft.active" />{{ 'inventory.ui.a733b809d2' | translate }}</label>
+      <label class="full-field">{{ 'inventory.ui.d70f93df5e' | translate }}<textarea maxlength="1000" rows="4" [(ngModel)]="draft.address"></textarea></label>
       <p class="form-error full-field" *ngIf="error">{{ error }}</p>
     </div>
 
     <footer>
-      <button type="button" (click)="closeDrawer()">Cancel</button>
+      <button type="button" (click)="closeDrawer()">{{ 'inventory.ui.77dfd2135f' | translate }}</button>
       <button class="primary-button" type="button" [disabled]="saving" (click)="saveSupplier()">{{ saving ? 'Saving...' : 'Save supplier' }}</button>
     </footer>
   </aside>

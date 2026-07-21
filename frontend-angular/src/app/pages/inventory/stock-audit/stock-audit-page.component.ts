@@ -1,8 +1,10 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type AuditStatus = 'counting' | 'recount_required' | 'review' | 'pending_approval' | 'posted' | 'rejected';
 type Session = { id: string; name: string; status: AuditStatus; blindCounting: boolean; requiredCounters: number; recountThreshold: number; cutoffAt: string; createdAt: string };
@@ -13,11 +15,12 @@ type InventoryItem = { id: string; name: string; sku: string; unit: string };
 @Component({
   selector: 'page-stock-audit',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './stock-audit-page.component.html',
   styleUrls: ['./stock-audit-page.component.css'],
 })
 export class StockAuditPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   sessions: Session[] = [];
   inventory: InventoryItem[] = [];
@@ -46,7 +49,7 @@ export class StockAuditPageComponent implements OnInit {
       const target = selectId ?? this.selected?.session.id;
       if (target) this.selected = await this.get<Detail>(`/inventory/stock-audits/${target}`);
       else this.selected = null;
-    } catch (error) { this.error = this.message(error, 'Stock audit data could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.5057d29aab')); }
     finally { this.loading = false; }
   }
 
@@ -57,22 +60,22 @@ export class StockAuditPageComponent implements OnInit {
     try {
       const detail = await this.post<Detail>('/inventory/stock-audits', this.createForm);
       this.createForm = { name: '', blindCounting: true, requiredCounters: 1, recountThreshold: 0 };
-      this.notice = 'Stock count session created';
+      this.notice = this.language.text('inventory.message.c714f46c02');
       await this.load(detail.session.id);
-    } catch (error) { this.error = this.message(error, 'Stock audit could not be created'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.a2f3b17fa2')); }
     finally { this.saving = false; }
   }
 
   async submitCount() {
     const detail = this.selected;
-    if (!detail || !this.countForm.inventoryItemId || this.countForm.quantity === null || !Number.isSafeInteger(Number(this.countForm.quantity)) || Number(this.countForm.quantity) < 0) { this.error = 'Select a product and enter a whole counted quantity'; return; }
+    if (!detail || !this.countForm.inventoryItemId || this.countForm.quantity === null || !Number.isSafeInteger(Number(this.countForm.quantity)) || Number(this.countForm.quantity) < 0) { this.error = this.language.text('inventory.message.c16267c8cd'); return; }
     this.saving = true; this.clearFeedback();
     try {
       await this.post<Detail>(`/inventory/stock-audits/${detail.session.id}/counts`, { inventoryItemId: this.countForm.inventoryItemId, countedQuantity: Number(this.countForm.quantity), deviceId: this.countForm.deviceId, idempotencyKey: crypto.randomUUID() });
       this.countForm = { ...this.countForm, quantity: null };
-      this.notice = 'Count saved';
+      this.notice = this.language.text('inventory.message.14f753147d');
       await this.load(detail.session.id);
-    } catch (error) { this.error = this.message(error, 'Count could not be saved'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.cda56c892d')); }
     finally { this.saving = false; }
   }
 
@@ -80,36 +83,36 @@ export class StockAuditPageComponent implements OnInit {
     if (!this.selected) return;
     this.saving = true; this.clearFeedback();
     try { await this.post<Detail>(`/inventory/stock-audits/${this.selected.session.id}/${action}`, {}); this.notice = action === 'approve' ? 'Adjustment posted to stock ledger and GL' : 'Stock audit updated'; await this.load(this.selected.session.id); }
-    catch (error) { this.error = this.message(error, 'Stock audit action failed'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.a5449370e6')); }
     finally { this.saving = false; }
   }
 
   async saveReason(item: AuditItem) {
     if (!this.selected) return;
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(this.api.patch(`/inventory/stock-audits/${this.selected.session.id}/items/${item.inventoryItemId}/reason`, { reason: item.varianceReason })); this.notice = 'Variance reason saved'; await this.load(this.selected.session.id); }
-    catch (error) { this.error = this.message(error, 'Reason could not be saved'); }
+    try { await firstValueFrom(this.api.patch(`/inventory/stock-audits/${this.selected.session.id}/items/${item.inventoryItemId}/reason`, { reason: item.varianceReason })); this.notice = this.language.text('inventory.message.61ac4aa70c'); await this.load(this.selected.session.id); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.8369ac2ce6')); }
     finally { this.saving = false; }
   }
 
   async addFinding() {
-    if (!this.selected || !this.findingForm.itemId) { this.error = 'Select an audit item for the finding'; return; }
+    if (!this.selected || !this.findingForm.itemId) { this.error = this.language.text('inventory.message.4045e3633e'); return; }
     const reference = this.findingForm.evidenceReference.trim();
-    if ((this.findingForm.findingType === 'leakage' || this.findingForm.findingType === 'theft') && !reference) { this.error = 'Leakage and theft findings need an evidence reference'; return; }
+    if ((this.findingForm.findingType === 'leakage' || this.findingForm.findingType === 'theft') && !reference) { this.error = this.language.text('inventory.message.50f9c2cded'); return; }
     this.saving = true; this.clearFeedback();
     try {
       await this.post<Detail>(`/inventory/stock-audits/${this.selected.session.id}/items/${this.findingForm.itemId}/findings`, { findingType: this.findingForm.findingType, notes: this.findingForm.notes, evidence: reference ? [{ reference }] : [] });
       this.findingForm = { itemId: '', findingType: 'variance', notes: '', evidenceReference: '' };
-      this.notice = 'Finding recorded'; await this.load(this.selected.session.id);
-    } catch (error) { this.error = this.message(error, 'Finding could not be saved'); }
+      this.notice = this.language.text('inventory.message.2d9631d272'); await this.load(this.selected.session.id);
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.3fffb72492')); }
     finally { this.saving = false; }
   }
 
   async reject() {
-    if (!this.selected || !this.rejectionReason.trim()) { this.error = 'Rejection reason is required'; return; }
+    if (!this.selected || !this.rejectionReason.trim()) { this.error = this.language.text('inventory.message.dd4e16ac15'); return; }
     this.saving = true; this.clearFeedback();
-    try { await this.post<Detail>(`/inventory/stock-audits/${this.selected.session.id}/reject`, { reason: this.rejectionReason.trim() }); this.rejectionReason = ''; this.notice = 'Stock audit rejected'; await this.load(this.selected.session.id); }
-    catch (error) { this.error = this.message(error, 'Stock audit could not be rejected'); }
+    try { await this.post<Detail>(`/inventory/stock-audits/${this.selected.session.id}/reject`, { reason: this.rejectionReason.trim() }); this.rejectionReason = ''; this.notice = this.language.text('inventory.message.c512fa8f7e'); await this.load(this.selected.session.id); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.9d50b30fe8')); }
     finally { this.saving = false; }
   }
 

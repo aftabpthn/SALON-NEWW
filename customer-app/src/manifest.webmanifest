@@ -1,0 +1,17 @@
+{
+  "name": "Aura Booking",
+  "short_name": "Aura",
+  "description": "Book premium salons, spas, and wellness appointments.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

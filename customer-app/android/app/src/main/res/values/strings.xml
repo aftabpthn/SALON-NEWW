@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aura Booking</string>
+    <string name="title_activity_main">Aura Booking</string>
+    <string name="package_name">com.aura.customer</string>
+    <string name="custom_url_scheme">com.aura.customer</string>
+</resources>

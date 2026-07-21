@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use chrono::Utc;
+use chrono::{DateTime, TimeZone, Utc};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::Value;
@@ -17,7 +17,9 @@ use uuid::Uuid;
 use crate::{
     models::common::AppError,
     repositories::benefit_notification_repository::{self, NewBenefitDelivery},
-    routes::pos::append_pos_invoice_event_from_gateway,
+    routes::pos::{
+        append_pos_invoice_event_from_gateway, settle_deferred_customer_commerce_benefits,
+    },
     services::{accounting_service, ai_concierge_service, pos_enterprise_service},
     state::AppState,
 };
@@ -523,6 +525,7 @@ struct NormalizedGatewayEvent {
     status: String,
     amount_paise: i64,
     method: String,
+    paid_at: DateTime<Utc>,
     payload: Value,
     event_fingerprint: String,
 }
@@ -547,6 +550,15 @@ async fn receive_cashfree_webhook(
         .map_err(|_| AppError::validation("invalid Cashfree webhook payload"))?;
     let status = json_string(&payload, &["data", "link_status"]).to_ascii_lowercase();
     let amount_paise = json_decimal_paise(&payload, &["data", "link_amount_paid"]);
+    let paid_at = provider_paid_at(
+        &payload,
+        &[
+            "/data/transaction_time",
+            "/data/payment_time",
+            "/data/payment/transaction_time",
+            "/data/payment/payment_time",
+        ],
+    );
     let event = NormalizedGatewayEvent {
         provider: "cashfree",
         event_type: json_string(&payload, &["type"]),
@@ -555,6 +567,7 @@ async fn receive_cashfree_webhook(
         status,
         amount_paise,
         method: "bank_transfer".to_string(),
+        paid_at,
         payload,
         event_fingerprint: format!("{:x}", Sha256::digest(&body)),
     };
@@ -586,6 +599,13 @@ async fn receive_phonepe_webhook(
             .unwrap_or(""),
     )
     .to_string();
+    let paid_at = provider_paid_at(
+        &payload,
+        &[
+            "/payload/paymentDetails/0/timestamp",
+            "/payload/completionTime",
+        ],
+    );
     let event = NormalizedGatewayEvent {
         provider: "phonepe",
         event_type: json_string(&payload, &["event"]),
@@ -598,6 +618,7 @@ async fn receive_phonepe_webhook(
         status,
         amount_paise: json_i64(&payload, &["payload", "amount"]).unwrap_or_default(),
         method,
+        paid_at,
         payload,
         event_fingerprint: format!("{:x}", Sha256::digest(&body)),
     };
@@ -731,8 +752,8 @@ async fn process_external_gateway_event(
         "phonepe" => "PhonePe",
         _ => "Online",
     };
-    sqlx::query("INSERT INTO pos_payments (id,tenant_id,branch_id,sale_id,method,amount_paise,method_reference,label,notes,idempotency_key,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())")
-        .bind(&payment_id).bind(&link.tenant_id).bind(&link.branch_id).bind(&link.sale_id).bind(&event.method).bind(event.amount_paise).bind(&event.provider_payment_id).bind(label).bind(format!("{} verified payment webhook",label)).bind(&idempotency_key).execute(&mut *tx).await.map_err(|_|AppError::internal("failed to record provider POS payment"))?;
+    sqlx::query("INSERT INTO pos_payments (id,tenant_id,branch_id,sale_id,method,amount_paise,method_reference,label,notes,idempotency_key,paid_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())")
+        .bind(&payment_id).bind(&link.tenant_id).bind(&link.branch_id).bind(&link.sale_id).bind(&event.method).bind(event.amount_paise).bind(&event.provider_payment_id).bind(label).bind(format!("{} verified payment webhook",label)).bind(&idempotency_key).bind(event.paid_at.clone()).execute(&mut *tx).await.map_err(|_|AppError::internal("failed to record provider POS payment"))?;
     let paid = sale.paid_paise.saturating_add(event.amount_paise);
     let sale_status = if paid >= sale.total_paise {
         "paid"
@@ -752,7 +773,16 @@ async fn process_external_gateway_event(
         event.amount_paise,
     )
     .await?;
-    append_pos_invoice_event_from_gateway(&mut tx,&link.tenant_id,&link.branch_id,&sale.id,&format!("{}-webhook",event.provider),"payment.gateway_settled",serde_json::json!({"provider":event.provider,"providerPaymentId":event.provider_payment_id,"paymentLinkId":link.id,"amountPaise":event.amount_paise,"method":event.method,"paidPaise":paid,"status":sale_status})).await?;
+    if sale_status == "paid" {
+        settle_deferred_customer_commerce_benefits(
+            &mut tx,
+            &link.tenant_id,
+            &link.branch_id,
+            &sale.id,
+        )
+        .await?;
+    }
+    append_pos_invoice_event_from_gateway(&mut tx,&link.tenant_id,&link.branch_id,&sale.id,&format!("{}-webhook",event.provider),"payment.gateway_settled",serde_json::json!({"provider":event.provider,"providerPaymentId":event.provider_payment_id,"paymentLinkId":link.id,"amountPaise":event.amount_paise,"method":event.method,"paidAt":event.paid_at,"paidPaise":paid,"status":sale_status})).await?;
     mark_gateway_event(&mut tx, &event_id, "processed").await?;
     tx.commit()
         .await
@@ -849,7 +879,7 @@ fn json_decimal_paise(payload: &Value, path: &[&str]) -> i64 {
         .unwrap_or(0)
 }
 
-async fn receive_razorpay_webhook(
+pub(crate) async fn receive_razorpay_webhook(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
@@ -885,9 +915,14 @@ async fn receive_razorpay_webhook(
     .await
     .map_err(|_| AppError::internal("failed to locate Razorpay payment link"))?;
     let Some(link) = link else {
-        return Ok(Json(
-            serde_json::json!({ "received": true, "matched": false }),
-        ));
+        return crate::routes::booking_extensions::settle_razorpay_booking_payment(
+            &state,
+            &event_type,
+            &provider_link_id,
+            &body,
+            &payload,
+        )
+        .await;
     };
     let provider_event_id = format!("{:x}", Sha256::digest(&body));
     let provider_payment_id = json_string(&payload, &["payload", "payment", "entity", "id"]);
@@ -1047,9 +1082,16 @@ async fn receive_razorpay_webhook(
         &payload,
         &["payload", "payment", "entity", "method"],
     ));
+    let paid_at = provider_paid_at(
+        &payload,
+        &[
+            "/payload/payment/entity/created_at",
+            "/payload/payment_link/entity/updated_at",
+        ],
+    );
     let payment_id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO pos_payments (id, tenant_id, branch_id, sale_id, method, amount_paise, method_reference, label, notes, idempotency_key, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())",
+        "INSERT INTO pos_payments (id, tenant_id, branch_id, sale_id, method, amount_paise, method_reference, label, notes, idempotency_key, paid_at, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())",
     )
     .bind(&payment_id)
     .bind(&link.tenant_id)
@@ -1061,6 +1103,7 @@ async fn receive_razorpay_webhook(
     .bind("Razorpay")
     .bind("Razorpay signed payment-link webhook")
     .bind(&payment_idempotency_key)
+    .bind(paid_at.clone())
     .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to record Razorpay POS payment"))?;
@@ -1107,6 +1150,15 @@ async fn receive_razorpay_webhook(
         amount_paise,
     )
     .await?;
+    if status == "paid" {
+        settle_deferred_customer_commerce_benefits(
+            &mut tx,
+            &link.tenant_id,
+            &link.branch_id,
+            &sale.id,
+        )
+        .await?;
+    }
     append_pos_invoice_event_from_gateway(
         &mut tx,
         &link.tenant_id,
@@ -1120,6 +1172,7 @@ async fn receive_razorpay_webhook(
             "paymentLinkId": link.id,
             "amountPaise": amount_paise,
             "method": method,
+            "paidAt": paid_at,
             "paidPaise": paid_paise,
             "status": status,
         }),
@@ -1406,6 +1459,46 @@ fn json_i64(payload: &Value, path: &[&str]) -> Option<i64> {
     path.iter()
         .try_fold(payload, |value, key| value.get(*key))
         .and_then(Value::as_i64)
+}
+
+fn provider_paid_at(payload: &Value, pointers: &[&str]) -> DateTime<Utc> {
+    pointers
+        .iter()
+        .find_map(|pointer| payload.pointer(pointer).and_then(parse_provider_timestamp))
+        .unwrap_or_else(Utc::now)
+}
+
+fn parse_provider_timestamp(value: &Value) -> Option<DateTime<Utc>> {
+    if let Some(raw) = value.as_i64().or_else(|| value.as_str()?.parse().ok()) {
+        let (seconds, nanos) = if raw.abs() >= 1_000_000_000_000 {
+            (
+                raw.div_euclid(1_000),
+                raw.rem_euclid(1_000) as u32 * 1_000_000,
+            )
+        } else {
+            (raw, 0)
+        };
+        return Utc.timestamp_opt(seconds, nanos).single();
+    }
+    value
+        .as_str()
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .map(|value| value.with_timezone(&Utc))
+}
+
+#[cfg(test)]
+mod payment_timestamp_tests {
+    use super::parse_provider_timestamp;
+    use serde_json::json;
+
+    #[test]
+    fn provider_timestamp_supports_epoch_seconds_millis_and_rfc3339() {
+        let seconds = parse_provider_timestamp(&json!(1_700_000_000)).unwrap();
+        let millis = parse_provider_timestamp(&json!(1_700_000_000_000_i64)).unwrap();
+        let rfc3339 = parse_provider_timestamp(&json!("2023-11-14T22:13:20Z")).unwrap();
+        assert_eq!(seconds, millis);
+        assert_eq!(seconds, rfc3339);
+    }
 }
 
 fn json_bool(payload: &Value, path: &[&str]) -> Option<bool> {

@@ -1,14 +1,18 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
 type PayrollTab = 'summary' | 'detail' | 'history';
 type PayrollColumn = 'attendance' | 'payrate' | 'commission' | 'adjustments' | 'gross' | 'net' | 'validation' | 'status';
-type StaffOption = { id: string; firstName: string; lastName: string; appointmentDisplayName: string };
+type SalaryMode = 'preview' | 'generate' | 'history';
+type StaffOption = { id: string; firstName: string; lastName: string; appointmentDisplayName: string; jobTitle?: string | null; branchId?: string | null };
 type StaffListPage = { items: StaffOption[] };
 
 type PayrollItem = {
@@ -58,7 +62,7 @@ type PayrollRun = {
 };
 
 type PayrollEvent = { id: string; eventType: string; actorUserId: string; payloadJson: unknown; createdAt: string };
-type PayrollRunDetail = { run: PayrollRun; items: PayrollItem[]; events: PayrollEvent[] };
+type PayrollRunDetail = { run: PayrollRun; items: PayrollItem[]; events: PayrollEvent[]; salaryRows?: Record<string, unknown>[] };
 type StaffHoliday = { id: string; holidayDate: string; name: string; isPaid: boolean; active: boolean };
 type PayrollPreview = {
   cycle: string;
@@ -70,18 +74,22 @@ type PayrollPreview = {
   deductionsPaise: number;
   netPaise: number;
   items: PayrollItem[];
+  salaryRows?: Record<string, unknown>[];
 };
 
 @Component({
   selector: 'page-staff-payroll',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './staff-payroll-page.component.html',
   styleUrls: ['./staff-payroll-page.component.css'],
 })
 export class StaffPayrollPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
 
   readonly tabs: Array<{ key: PayrollTab; label: string; icon: string }> = [
     { key: 'summary', label: 'Summary', icon: 'bi-layout-text-window-reverse' },
@@ -106,14 +114,18 @@ export class StaffPayrollPageComponent implements OnInit {
 
   activeTab: PayrollTab = 'summary';
   cycle = 'monthly';
+  salaryMode: SalaryMode = 'preview';
   month = new Date().getMonth() + 1;
   year = new Date().getFullYear();
   staffId = '';
+  category = '';
   staff: StaffOption[] = [];
   history: PayrollRun[] = [];
   run: PayrollRun | null = null;
   items: PayrollItem[] = [];
+  salaryRows: Record<string, unknown>[] = [];
   events: PayrollEvent[] = [];
+  selectedItem: PayrollItem | null = null;
   adjustmentInputs: Record<string, string> = {};
   noteInputs: Record<string, string> = {};
   loading = false;
@@ -163,6 +175,18 @@ export class StaffPayrollPageComponent implements OnInit {
   get workflowIcon() {
     return this.run?.status === 'finalized' ? 'bi-check2-circle' : 'bi-shield-check';
   }
+  get isStaffOsSalaryGenerate() { return Boolean(this.route.snapshot.data['staffOsSalaryGenerate']) || this.router.url.includes('/staff-os/'); }
+  get pageTitle() { return this.isStaffOsSalaryGenerate ? 'Salary Generate' : 'Employee Payroll'; }
+  get backLabel() { return this.isStaffOsSalaryGenerate ? 'Staff OS' : 'Back to staff'; }
+  get branchLabel() { return this.auth.branchName || localStorage.getItem('aurashine_branch_id') || 'Current branch'; }
+  get categoryOptions() {
+    return [...new Set(this.staff.map((row) => (row.jobTitle || '').trim()).filter(Boolean))].sort();
+  }
+  get filteredItems() {
+    if (!this.category) return this.items;
+    return this.items.filter((item) => this.itemCategory(item) === this.category);
+  }
+  get selectedSalaryRow() { return this.selectedItem ? this.salaryRow(this.selectedItem) : null; }
   get canSaveDraft() { return this.run?.status === 'calculated' && !this.loading; }
   get canAdvance() {
     if (!this.run || this.invalidCount > 0 || !['calculated', 'reviewed', 'finalized'].includes(this.run.status) || this.loading) return false;
@@ -181,6 +205,11 @@ export class StaffPayrollPageComponent implements OnInit {
   async changePeriod() {
     this.success = '';
     await Promise.all([this.loadPeriod(), this.loadHolidays()]);
+  }
+
+  async changeMode() {
+    if (this.salaryMode === 'history') this.activeTab = 'history';
+    else this.activeTab = this.salaryMode === 'generate' ? 'detail' : 'summary';
   }
 
   async refresh() {
@@ -212,6 +241,12 @@ export class StaffPayrollPageComponent implements OnInit {
       await this.loadHistory();
       this.success = 'Payroll draft calculated and saved';
     });
+  }
+
+  async runSelectedMode() {
+    if (this.salaryMode === 'history') { this.activeTab = 'history'; await this.loadHistory(); return; }
+    if (this.salaryMode === 'generate') { await this.runPayroll(); return; }
+    await this.checkSourceData(false);
   }
 
   async saveDraft() {
@@ -253,7 +288,11 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   async exportCsv() {
-    if (!this.run) { this.error = 'Save a payroll run before exporting'; return; }
+    if (!this.run) {
+      if (!this.filteredItems.length) { this.error = this.language.text('staff.message.e86a1c430a'); return; }
+      this.downloadText(this.previewCsv(), `salary-preview-${this.year}-${String(this.month).padStart(2, '0')}.csv`);
+      return;
+    }
     await this.download(`/staff-payroll/runs/${this.run.id}/export`, `payroll-${this.run.periodStart}-${this.run.periodEnd}.csv`);
   }
 
@@ -288,7 +327,7 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   formatMoney(paise: number | null | undefined) {
-    if (paise === null || paise === undefined) return '—';
+    if (paise === null || paise === undefined || !Number.isFinite(paise)) return '—';
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100);
   }
   formatDate(value: string | null | undefined) {
@@ -302,14 +341,36 @@ export class StaffPayrollPageComponent implements OnInit {
   }
   statusLabel(status: string) { return status.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   titleCase(value: string) { return value.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
-  backToStaff() { void this.router.navigate(['/staff']); }
+  displayJson(value: unknown) { return JSON.stringify(value || {}, null, 2); }
+  backToStaff() { void this.router.navigate([this.isStaffOsSalaryGenerate ? '/staff-os/salary-history' : '/staff']); }
+  openStaffDetail(item: PayrollItem) { this.selectedItem = item; }
+  closeStaffDetail() { this.selectedItem = null; }
+  salaryRow(item: PayrollItem) {
+    return this.salaryRows.find((row) => row['staffId'] === item.staffId)
+      || (item.calculationJson?.['salaryRow'] as Record<string, unknown> | undefined)
+      || {};
+  }
+  detailRows(item: PayrollItem | null) {
+    if (!item) return [];
+    const row = this.salaryRow(item);
+    return [
+      ['Payable days', this.days(Number(row['payableDaysX2'] || item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2 + item.holidayDaysX2))],
+      ['Worked minutes', row['workedMinutes'] ?? item.workedMinutes],
+      ['Overtime', `${row['overtimeMinutes'] ?? item.overtimeMinutes} min · ${this.formatMoney(item.overtimePaise)}`],
+      ['Commission', this.formatMoney(Number(row['commissionPaise'] ?? item.commissionPaise))],
+      ['Tips', this.formatMoney(Number(row['tipsPaise'] || 0))],
+      ['Allowances', this.formatMoney(Number(row['allowancePaise'] || 0))],
+      ['Deductions', this.formatMoney(item.deductionsPaise)],
+      ['Net salary', this.formatMoney(item.netPaise)],
+    ];
+  }
 
   private async loadStaff() {
     try {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffListPage>>('/staff/list?page=1&pageSize=100&active=true&sortBy=firstName&sortDirection=asc'));
       this.staff = this.unwrap(result, 'Unable to load employees').items;
     } catch (error) {
-      this.error = this.message(error, 'Unable to load employees');
+      this.error = this.message(error, this.language.text('staff.message.1ad2e1d76e'));
     }
   }
 
@@ -318,7 +379,7 @@ export class StaffPayrollPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollRun[]>>('/staff-payroll/runs'));
       this.history = this.unwrap(result, 'Unable to load payroll history');
     } catch (error) {
-      this.error = this.message(error, 'Unable to load payroll history');
+      this.error = this.message(error, this.language.text('staff.message.dd84d916e8'));
     }
   }
 
@@ -327,7 +388,7 @@ export class StaffPayrollPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffHoliday[]>>(`/staff-payroll/holidays?from=${this.year}-01-01&to=${this.year}-12-31`));
       this.holidays = this.unwrap(result, 'Unable to load holidays');
     } catch (error) {
-      this.error = this.message(error, 'Unable to load holidays');
+      this.error = this.message(error, this.language.text('staff.message.cf143f3902'));
     }
   }
 
@@ -352,6 +413,7 @@ export class StaffPayrollPageComponent implements OnInit {
   private applyPreview(preview: PayrollPreview) {
     this.run = null;
     this.items = preview.items;
+    this.salaryRows = preview.salaryRows || [];
     this.events = [];
     this.resetDraftInputs();
   }
@@ -359,6 +421,7 @@ export class StaffPayrollPageComponent implements OnInit {
   private applyDetail(detail: PayrollRunDetail) {
     this.run = detail.run;
     this.items = detail.items;
+    this.salaryRows = detail.salaryRows || [];
     this.events = detail.events;
     if (detail.run.status === 'finalized') this.payoutKey = crypto.randomUUID();
     this.resetDraftInputs();
@@ -379,6 +442,41 @@ export class StaffPayrollPageComponent implements OnInit {
     return params.toString();
   }
 
+  private itemCategory(item: PayrollItem) {
+    return (this.staff.find((row) => row.id === item.staffId)?.jobTitle || '').trim();
+  }
+
+  private previewCsv() {
+    const rows = this.filteredItems.map((item) => [
+      item.employeeCode || '',
+      item.staffName,
+      this.itemCategory(item),
+      item.payRateType || '',
+      item.payRatePaise ?? '',
+      item.earnedSalaryPaise,
+      item.overtimePaise,
+      item.commissionPaise,
+      item.adjustmentPaise,
+      item.deductionsPaise,
+      item.netPaise,
+      item.status,
+    ]);
+    return [
+      [...['employeeCode', 'staff', 'category', 'payRateType', 'payRate', 'earnedSalary', 'overtime', 'commission', 'adjustment', 'deductions', 'netPay', 'status'].map((key) => this.language.text(`staff.export.${key}`))],
+      ...rows,
+    ].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+  }
+
+  private downloadText(content: string, filename: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename.replace(/[^a-z0-9._-]+/gi, '-');
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   private toPaise(value: string | undefined) {
     if (!value?.trim()) return 0;
     const amount = Number(value);
@@ -396,7 +494,7 @@ export class StaffPayrollPageComponent implements OnInit {
       link.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      this.error = this.message(error, 'Unable to download payroll file');
+      this.error = this.message(error, this.language.text('staff.message.e1d064acf9'));
     }
   }
 
@@ -410,7 +508,7 @@ export class StaffPayrollPageComponent implements OnInit {
     this.action = action;
     this.error = '';
     try { await operation(); }
-    catch (error) { this.error = this.message(error, 'Payroll action failed'); }
+    catch (error) { this.error = this.message(error, this.language.text('staff.message.23adfe88a7')); }
     finally { this.loading = false; this.action = ''; }
   }
 

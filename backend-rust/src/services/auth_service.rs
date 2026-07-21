@@ -257,6 +257,31 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Marketing",
     },
     PermissionDefinition {
+        code: "marketing.approve",
+        label: "Approve marketing campaigns",
+        group: "Marketing",
+    },
+    PermissionDefinition {
+        code: "marketing.send",
+        label: "Send marketing campaigns",
+        group: "Marketing",
+    },
+    PermissionDefinition {
+        code: "offers.approve",
+        label: "Approve marketing offers",
+        group: "Marketing",
+    },
+    PermissionDefinition {
+        code: "templates.manage",
+        label: "Manage message templates",
+        group: "Marketing",
+    },
+    PermissionDefinition {
+        code: "analytics.read",
+        label: "View marketing analytics",
+        group: "Marketing",
+    },
+    PermissionDefinition {
         code: "settings.read",
         label: "View operational settings",
         group: "Settings",
@@ -265,6 +290,21 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         code: "settings.manage",
         label: "Manage operational settings",
         group: "Settings",
+    },
+    PermissionDefinition {
+        code: "data_migration.read",
+        label: "View data migration jobs",
+        group: "Data migration",
+    },
+    PermissionDefinition {
+        code: "data_migration.manage",
+        label: "Manage data migrations",
+        group: "Data migration",
+    },
+    PermissionDefinition {
+        code: "data_migration.export",
+        label: "Export migration evidence",
+        group: "Data migration",
     },
     PermissionDefinition {
         code: "security.read",

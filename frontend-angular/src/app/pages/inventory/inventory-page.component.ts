@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
+import { LanguageService } from '../../core/i18n/language.service';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from './purchase-order-register';
 
@@ -45,20 +47,21 @@ const CODE39: Record<string, string> = {
 @Component({
   selector: 'page-inventory',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './inventory-page.component.html',
   styleUrls: ['./inventory-page.component.css'],
 })
 export class InventoryPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
-  readonly tabs: { id: Tab; label: string }[] = [
-    { id: 'products', label: 'Products' },
-    { id: 'batches', label: 'Batches & Expiry' },
-    { id: 'ledger', label: 'Stock Ledger' }, { id: 'reorder', label: 'Reorder' },
-    { id: 'valuation', label: 'Valuation' }, { id: 'transfers', label: 'Transfers' },
-    { id: 'suppliers', label: 'Suppliers' }, { id: 'orders', label: 'Purchase Orders' },
-    { id: 'grn', label: 'GRN' }, { id: 'returns', label: 'Returns' }, { id: 'payables', label: 'Payables' },
+  readonly language = inject(LanguageService);
+  readonly tabs: { id: Tab; labelKey: string }[] = [
+    { id: 'products', labelKey: 'inventory.products' },
+    { id: 'batches', labelKey: 'inventory.batchesExpiry' },
+    { id: 'ledger', labelKey: 'inventory.stockLedger' }, { id: 'reorder', labelKey: 'inventory.reorder' },
+    { id: 'valuation', labelKey: 'inventory.valuation' }, { id: 'transfers', labelKey: 'inventory.transfers' },
+    { id: 'suppliers', labelKey: 'inventory.suppliers' }, { id: 'orders', labelKey: 'inventory.purchaseOrders' },
+    { id: 'grn', labelKey: 'inventory.grn' }, { id: 'returns', labelKey: 'inventory.returns' }, { id: 'payables', labelKey: 'inventory.payables' },
   ];
   tab: Tab = 'products';
   standaloneOrders = false;
@@ -138,14 +141,14 @@ export class InventoryPageComponent implements OnInit {
       this.suppliers = suppliers; this.items = items; this.orders = orders;
       this.receipts = receipts; this.returns = returns; this.payables = payables; this.transfers = transfers; this.batches = batches; this.supplierGovernance = governance; this.inventoryPolicy = policy;
       await this.loadOperationalTab();
-    } catch (error) { this.error = this.message(error, 'Procurement data could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.errors.procurementLoad')); }
     finally { this.loading = false; }
   }
 
   selectTab(tab: Tab) { this.tab = tab; this.pageTitle = ''; this.closeDrawer(); void this.loadOperationalTab(); }
   closeDrawer() { if (!this.saving) { this.drawer = null; this.productEditing = false; this.productCreating = false; } }
-  money(paise: number) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format((paise || 0) / 100); }
-  date(value?: string) { return value ? new Intl.DateTimeFormat('en-GB').format(new Date(`${value.slice(0, 10)}T00:00:00`)) : '—'; }
+  money(paise: number) { return this.language.formatCurrency((paise || 0) / 100); }
+  date(value?: string) { return value ? this.language.formatDate(new Date(`${value.slice(0, 10)}T00:00:00`)) : '—'; }
   itemName(id: string) { return this.items.find((item) => item.id === id)?.name ?? id; }
   remaining(line: OrderLine) { return Math.max(line.quantity - line.receivedQuantity, 0); }
   receiptGst(row: Receipt) { return row.cgstPaise + row.sgstPaise + row.igstPaise; }
@@ -162,7 +165,8 @@ export class InventoryPageComponent implements OnInit {
   get receiptSuppliers() { return [...new Set(this.receipts.map((row) => row.supplierName))].sort((a, b) => a.localeCompare(b)); }
   get heading() {
     if (this.pageTitle) return this.pageTitle;
-    return ({ products: 'Inventory', batches: 'Batches & Expiry', ledger: 'Stock Ledger', reorder: 'Reorder Suggestions', valuation: 'Inventory Valuation', orders: 'Purchase Orders' } as Partial<Record<Tab, string>>)[this.tab] ?? 'Procurement';
+    const key = ({ products: 'inventory.title', batches: 'inventory.batchesExpiry', ledger: 'inventory.stockLedger', reorder: 'inventory.reorderSuggestions', valuation: 'inventory.inventoryValuation', orders: 'inventory.purchaseOrders' } as Partial<Record<Tab, string>>)[this.tab] ?? 'inventory.procurement';
+    return this.language.text(key);
   }
   get productCategories() { return [...new Set(this.items.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
   get filteredItems() {
@@ -207,7 +211,7 @@ export class InventoryPageComponent implements OnInit {
       if (this.tab === 'ledger') await this.loadLedger();
       if (this.tab === 'reorder') await this.loadReorder();
       if (this.tab === 'valuation') await this.loadValuation();
-    } catch (error) { this.error = this.message(error, 'Inventory data could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.c9afc27eb9')); }
   }
 
   async loadLedger() {
@@ -226,27 +230,27 @@ export class InventoryPageComponent implements OnInit {
   }
   async generateReorder() {
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(this.api.post('/inventory/reorder-forecasts', {})); await this.loadReorder(); this.notice = 'AI reorder forecast generated'; }
-    catch (error) { this.error = this.message(error, 'Reorder forecast could not be generated'); }
+    try { await firstValueFrom(this.api.post('/inventory/reorder-forecasts', {})); await this.loadReorder(); this.notice = this.language.text('inventory.message.398da20892'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.8283ad1a35')); }
     finally { this.saving = false; }
   }
   async approveReorder(row: ReorderRow) {
     if (!row.id) { this.createOrderFromSuggestion(row); return; }
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(this.api.post(`/inventory/reorder-recommendations/${row.id}/approve`, {})); await this.reload(); this.notice = 'Approved recommendation converted to a PO draft'; }
-    catch (error) { this.error = this.message(error, 'Recommendation could not be approved'); }
+    try { await firstValueFrom(this.api.post(`/inventory/reorder-recommendations/${row.id}/approve`, {})); await this.reload(); this.notice = this.language.text('inventory.message.69bcbb3f55'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.012f9fd0ea')); }
     finally { this.saving = false; }
   }
   async loadValuation() { this.valuationRows = await this.get<ValuationRow[]>(`/inventory/valuation?asOf=${this.valuationAsOf}`); }
 
   exportLedger() {
     const rows = this.ledgerRows.map((row) => [this.date(row.createdAt), row.itemName, row.movementType, row.quantityDelta, row.valuePaise / 100, row.source]);
-    this.downloadCsv(`stock-ledger-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Product', 'Movement', 'Quantity', 'Value', 'Source'], rows);
+    this.downloadCsv(`stock-ledger-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Product', 'Movement', 'Quantity', 'Value', 'Source'].map((value) => this.language.textValue(value)), rows);
   }
 
   exportValuation() {
     const rows = this.valuationRows.map((row) => [row.productName, row.category, row.stockQuantity, row.unitCostPaise / 100, row.stockValuePaise / 100, row.reorderPoint]);
-    this.downloadCsv(`inventory-valuation-${this.valuationAsOf}.csv`, ['Product', 'Category', 'Stock', 'Unit cost', 'Stock value', 'Reorder level'], rows);
+    this.downloadCsv(`inventory-valuation-${this.valuationAsOf}.csv`, ['Product', 'Category', 'Stock', 'Unit cost', 'Stock value', 'Reorder level'].map((value) => this.language.textValue(value)), rows);
   }
 
   createOrderFromSuggestion(row: ReorderRow) {
@@ -257,12 +261,12 @@ export class InventoryPageComponent implements OnInit {
 
   exportOrders() {
     const rows = this.filteredOrders.map((row) => [row.orderNumber, row.supplierName, this.date(row.createdAt), this.date(row.expectedDate), row.lineCount, row.totalPaise / 100, row.status]);
-    this.downloadCsv(`purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`, ['PO number', 'Supplier', 'Created date', 'Expected date', 'Items', 'Total', 'Status'], rows);
+    this.downloadCsv(`purchase-orders-${new Date().toISOString().slice(0, 10)}.csv`, ['PO number', 'Supplier', 'Created date', 'Expected date', 'Items', 'Total', 'Status'].map((value) => this.language.textValue(value)), rows);
   }
 
   exportReceipts() {
     const rows = this.filteredReceipts.map((row) => [this.date(row.receivedDate), row.supplierName, row.supplierGstin, row.supplierInvoiceNumber, row.taxablePaise / 100, this.receiptGst(row) / 100, row.totalPaise / 100]);
-    this.downloadCsv(`purchase-bills-${new Date().toISOString().slice(0, 10)}.csv`, ['Bill date', 'Supplier', 'GSTIN', 'Invoice number', 'Taxable', 'GST', 'Total'], rows);
+    this.downloadCsv(`purchase-bills-${new Date().toISOString().slice(0, 10)}.csv`, ['Bill date', 'Supplier', 'GSTIN', 'Invoice number', 'Taxable', 'GST', 'Total'].map((value) => this.language.textValue(value)), rows);
   }
 
   private downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
@@ -298,7 +302,7 @@ export class InventoryPageComponent implements OnInit {
   async saveProduct() {
     const product = this.productDetail?.product;
     if ((!product && !this.productCreating) || !this.productDraft.name.trim() || !this.productDraft.unit.trim() || Number(this.productDraft.reorderPoint) < 0 || Number(this.productDraft.unitCostRupees) < 0 || Number(this.productDraft.gstPercent) < 0 || Number(this.productDraft.gstPercent) > 100) {
-      this.error = 'Valid product details are required'; return;
+      this.error = this.language.text('inventory.message.1436482d07'); return;
     }
     this.saving = true; this.clearFeedback();
     try {
@@ -317,8 +321,8 @@ export class InventoryPageComponent implements OnInit {
       const savedId = response.data?.id ?? product?.id;
       await this.reload();
       if (savedId) await this.loadProduct(savedId);
-      this.productCreating = false; this.productEditing = false; this.notice = 'Product saved';
-    } catch (error) { this.error = this.message(error, 'Product could not be saved'); }
+      this.productCreating = false; this.productEditing = false; this.notice = this.language.text('inventory.message.0809e15440');
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.e52c90c1c7')); }
     finally { this.saving = false; }
   }
 
@@ -343,34 +347,34 @@ export class InventoryPageComponent implements OnInit {
     const components = this.kitDraft.components
       .filter((row) => row.inventoryItemId && Number(row.quantity) > 0)
       .map((row) => ({ inventoryItemId: row.inventoryItemId, quantity: Number(row.quantity) }));
-    if (!kit || !components.length) { this.error = 'At least one valid kit component is required'; return; }
+    if (!kit || !components.length) { this.error = this.language.text('inventory.message.8de312b32f'); return; }
     this.saving = true; this.clearFeedback();
     try {
       await firstValueFrom(this.api.put(`/inventory/${kit.id}/kit`, { components }));
       await this.loadProduct(kit.id);
-      this.notice = 'Kit components saved';
-    } catch (error) { this.error = this.message(error, 'Kit could not be saved'); }
+      this.notice = this.language.text('inventory.message.80419f63f0');
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.8d5c3750bc')); }
     finally { this.saving = false; }
   }
 
   async assembleKit() {
     const kit = this.productDetail?.product;
     const quantity = Number(this.kitDraft.quantity);
-    if (!kit || !Number.isInteger(quantity) || quantity <= 0) { this.error = 'Positive assembly quantity is required'; return; }
+    if (!kit || !Number.isInteger(quantity) || quantity <= 0) { this.error = this.language.text('inventory.message.b4ffc8fa18'); return; }
     this.saving = true; this.clearFeedback();
     try {
       await firstValueFrom(this.api.post(`/inventory/${kit.id}/assemble`, { quantity, idempotencyKey: crypto.randomUUID() }));
       await this.reload(); await this.loadProduct(kit.id); this.kitDraft.quantity = null;
-      this.notice = 'Kit assembled';
-    } catch (error) { this.error = this.message(error, 'Kit could not be assembled'); }
+      this.notice = this.language.text('inventory.message.ded0325efb');
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.a9c2be662d')); }
     finally { this.saving = false; }
   }
 
   printBarcode(row: Item) {
     const code = (row.barcode || row.sku).trim().toUpperCase();
-    if (!code || [...code].some((char) => !CODE39[char])) { this.error = 'A valid barcode or SKU is required'; return; }
+    if (!code || [...code].some((char) => !CODE39[char])) { this.error = this.language.text('inventory.message.e2383ff060'); return; }
     const popup = window.open('', '_blank', 'width=520,height=420');
-    if (!popup) { this.error = 'Allow pop-ups to print the label'; return; }
+    if (!popup) { this.error = this.language.text('inventory.message.d37af2b6c8'); return; }
     popup.document.write('<!doctype html><title>Product label</title><style>body{margin:0;font:14px Arial}main{width:76mm;padding:5mm;text-align:center}h1{font-size:18px;margin:0 0 4mm}svg{width:100%;height:24mm}p{margin:2mm 0;font-weight:700}@media print{main{padding:2mm}}</style><main><h1></h1><div></div><p></p></main>');
     popup.document.querySelector('h1')!.textContent = row.name;
     popup.document.querySelector('div')!.innerHTML = this.code39Svg(code);
@@ -385,18 +389,18 @@ export class InventoryPageComponent implements OnInit {
     const stockQuantity = Number(this.stocktakeDraft.stockQuantity);
     const reason = this.stocktakeDraft.reason.trim();
     if (!product || this.stocktakeDraft.stockQuantity === null || !Number.isInteger(stockQuantity) || (stockQuantity < 0 && this.inventoryPolicy.negativeStockRule !== 'approval_required') || !reason) {
-      this.error = 'Actual stock and adjustment reason are required'; return;
+      this.error = this.language.text('inventory.message.fa79c19033'); return;
     }
     this.saving = true; this.clearFeedback();
     try {
       if (stockQuantity < 0) {
         await firstValueFrom(this.api.post('/inventory/negative-stock-requests', { inventoryItemId: product.id, requestedStockQuantity: stockQuantity, reason }));
-        this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = 'Negative stock exception sent for owner approval';
+        this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = this.language.text('inventory.message.bd80357f01');
       } else {
         await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, { stockQuantity, adjustmentReason: reason, idempotencyKey: crypto.randomUUID() }));
-        await this.reload(); await this.loadProduct(product.id); this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = 'Stocktake posted';
+        await this.reload(); await this.loadProduct(product.id); this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = this.language.text('inventory.message.460f70de67');
       }
-    } catch (error) { this.error = this.message(error, 'Stocktake could not be posted'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.63c7a3b242')); }
     finally { this.saving = false; }
   }
 
@@ -421,7 +425,7 @@ export class InventoryPageComponent implements OnInit {
       try {
         const details = await this.get<{ order: Order; lines: OrderLine[] }>(`/purchases/orders/${order.id}`);
         this.grnDraft.lines = details.lines.filter((line) => this.remaining(line) > 0).map((line) => ({ inventoryItemId: line.inventoryItemId, quantity: this.remaining(line), unitCostRupees: line.unitCostPaise / 100, gstPercent: line.gstPercent }));
-      } catch (error) { this.error = this.message(error, 'Purchase order could not be loaded'); return; }
+      } catch (error) { this.error = this.message(error, this.language.text('inventory.message.5749120dce')); return; }
     }
     this.drawer = 'grn';
   }
@@ -438,7 +442,7 @@ export class InventoryPageComponent implements OnInit {
     try {
       const details = await this.get<{ lines: ReceiptLine[] }>(`/purchases/grn/${this.returnDraft.receiptId}`);
       this.returnDraft.lines = details.lines.map((line) => ({ inventoryItemId: line.inventoryItemId, sourceLineId: line.id, quantity: null, unitCostRupees: line.unitCostPaise / 100, gstPercent: line.gstPercent, maxQuantity: line.quantity }));
-    } catch (error) { this.error = this.message(error, 'GRN lines could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.50cf87fc57')); }
   }
 
   openPayment(row: Payable) {
@@ -471,19 +475,19 @@ export class InventoryPageComponent implements OnInit {
   async saveSupplierTerms() {
     const draft = this.supplierTermsDraft;
     if (!this.supplierId || !draft.inventoryItemId || draft.leadTimeDays === null || draft.minimumOrderQuantity === null || draft.packSize === null) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/reorder-supplier-terms', { supplierId: this.supplierId, ...draft })); await this.reload(); this.notice = 'Supplier terms saved'; } catch (error) { this.error = this.message(error, 'Supplier terms could not be saved'); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/reorder-supplier-terms', { supplierId: this.supplierId, ...draft })); await this.reload(); this.notice = this.language.text('inventory.message.1c28eea79e'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.7f6964929f')); } finally { this.saving = false; }
   }
   async saveSupplierPrice() {
     if (!this.supplierId || !this.supplierPriceDraft.inventoryItemId || this.supplierPriceDraft.unitCostRupees === null) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/prices', { supplierId: this.supplierId, inventoryItemId: this.supplierPriceDraft.inventoryItemId, unitCostPaise: Math.round(Number(this.supplierPriceDraft.unitCostRupees) * 100), effectiveFrom: this.supplierPriceDraft.effectiveFrom, effectiveTo: null })); await this.reload(); this.notice = 'Supplier price saved'; } catch (error) { this.error = this.message(error, 'Supplier price could not be saved'); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/prices', { supplierId: this.supplierId, inventoryItemId: this.supplierPriceDraft.inventoryItemId, unitCostPaise: Math.round(Number(this.supplierPriceDraft.unitCostRupees) * 100), effectiveFrom: this.supplierPriceDraft.effectiveFrom, effectiveTo: null })); await this.reload(); this.notice = this.language.text('inventory.message.570d7c46a0'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.628af52a7a')); } finally { this.saving = false; }
   }
   async queueSupplierCommunication() {
     if (!this.supplierId || !this.supplierCommunicationDraft.destination.trim() || !this.supplierCommunicationDraft.message.trim()) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/communications', { supplierId: this.supplierId, purchaseOrderId: null, ...this.supplierCommunicationDraft, idempotencyKey: crypto.randomUUID() })); await this.reload(); this.notice = 'Supplier communication queued'; } catch (error) { this.error = this.message(error, 'Supplier communication could not be queued'); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/communications', { supplierId: this.supplierId, purchaseOrderId: null, ...this.supplierCommunicationDraft, idempotencyKey: crypto.randomUUID() })); await this.reload(); this.notice = this.language.text('inventory.message.ff44ae0a75'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.84b2c1ec7f')); } finally { this.saving = false; }
   }
   async saveOrder() {
     const lines = this.validLines(this.orderDraft.lines, false);
-    if (!this.orderDraft.supplierId || !lines.length) { this.error = 'Supplier and at least one valid line are required'; return; }
+    if (!this.orderDraft.supplierId || !lines.length) { this.error = this.language.text('inventory.message.67fac0e7a7'); return; }
     await this.mutate(this.api.post('/purchases/orders', { supplierId: this.orderDraft.supplierId, expectedDate: this.orderDraft.expectedDate || null, notes: this.orderDraft.notes, lines }), 'Purchase order created');
   }
 
@@ -499,31 +503,31 @@ export class InventoryPageComponent implements OnInit {
       this.orderEvents = await this.get<OrderEvent[]>(`/purchases/orders/${order.id}/events`);
       this.orderHistoryOrder = order;
       this.drawer = 'orderHistory';
-    } catch (error) { this.error = this.message(error, 'Purchase order timeline could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.d5bda6eae7')); }
   }
 
   async saveGrn() {
     const supplier = this.suppliers.find((row) => row.id === this.grnDraft.supplierId);
     const lines = this.validLines(this.grnDraft.lines, true);
-    if (!supplier || !this.grnDraft.invoiceNumber.trim() || !lines.length) { this.error = 'Supplier, invoice number and valid lines are required'; return; }
+    if (!supplier || !this.grnDraft.invoiceNumber.trim() || !lines.length) { this.error = this.language.text('inventory.message.d2dbbb62ba'); return; }
     await this.mutate(this.api.post('/purchases/grn', { supplierId: supplier.id, purchaseOrderId: this.grnDraft.purchaseOrderId || null, supplierName: supplier.name, supplierGstin: supplier.gstin, supplierInvoiceNumber: this.grnDraft.invoiceNumber.trim(), receivedDate: this.grnDraft.receivedDate || null, dueDate: this.grnDraft.dueDate || null, idempotencyKey: crypto.randomUUID(), lines }), 'GRN posted');
   }
 
   async saveReturn() {
     const lines = this.returnDraft.lines.filter((line) => Number(line.quantity) > 0).map((line) => ({ purchaseReceiptLineId: line.sourceLineId, quantity: Number(line.quantity) }));
-    if (!this.returnDraft.receiptId || !this.returnDraft.reason.trim() || !lines.length) { this.error = 'GRN, reason and at least one return quantity are required'; return; }
+    if (!this.returnDraft.receiptId || !this.returnDraft.reason.trim() || !lines.length) { this.error = this.language.text('inventory.message.b558c2701e'); return; }
     await this.mutate(this.api.post('/purchases/returns', { purchaseReceiptId: this.returnDraft.receiptId, reason: this.returnDraft.reason.trim(), idempotencyKey: crypto.randomUUID(), lines }), 'Purchase return posted');
   }
 
   async savePayment() {
     const amountPaise = Math.round(Number(this.paymentDraft.amountRupees) * 100);
-    if (!this.paymentDraft.receiptId || amountPaise <= 0) { this.error = 'Valid payment amount is required'; return; }
+    if (!this.paymentDraft.receiptId || amountPaise <= 0) { this.error = this.language.text('inventory.message.62a3419043'); return; }
     await this.mutate(this.api.post('/purchases/payments', { purchaseReceiptId: this.paymentDraft.receiptId, amountPaise, paymentMethod: this.paymentDraft.method, reference: this.paymentDraft.reference.trim(), idempotencyKey: crypto.randomUUID() }), 'Supplier payment posted');
   }
 
   async saveTransfer() {
     const lines = this.transferDraft.lines.filter((line) => line.sourceInventoryItemId && line.destinationInventoryItemId && Number(line.quantity) > 0).map((line) => ({ ...line, quantity: Number(line.quantity) }));
-    if (!this.transferDraft.destinationBranchId.trim() || !lines.length) { this.error = 'Destination branch and at least one valid line are required'; return; }
+    if (!this.transferDraft.destinationBranchId.trim() || !lines.length) { this.error = this.language.text('inventory.message.e92deb7bf1'); return; }
     await this.mutate(this.api.post('/inventory/transfers', { destinationBranchId: this.transferDraft.destinationBranchId.trim(), notes: this.transferDraft.notes.trim(), idempotencyKey: crypto.randomUUID(), lines }), 'Inventory transfer dispatched');
   }
 
@@ -543,7 +547,7 @@ export class InventoryPageComponent implements OnInit {
   private async mutate(request: any, success: string, close = true) {
     this.saving = true; this.clearFeedback();
     try { await firstValueFrom(request); this.notice = success; if (close) this.drawer = null; await this.reload(); this.notice = success; }
-    catch (error) { this.error = this.message(error, 'Action could not be completed'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.78b92a0634')); }
     finally { this.saving = false; }
   }
 
@@ -551,7 +555,7 @@ export class InventoryPageComponent implements OnInit {
   private async loadProduct(id: string) {
     this.productLoading = true; this.productDetail = null;
     try { this.productDetail = await this.get<Product360>(`/inventory/${id}/360`); }
-    catch (error) { this.error = this.message(error, 'Product details could not be loaded'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.401335ec5e')); }
     finally { this.productLoading = false; }
   }
   private message(error: any, fallback: string) { return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback; }

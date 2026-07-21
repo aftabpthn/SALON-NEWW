@@ -1,76 +1,105 @@
 <section class="controls-page">
   <header class="command-bar">
-    <div class="command-title"><h1>Inventory Advanced Controls</h1><span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
+    <div class="command-title"><h1>{{ 'inventory.ui.6dc3c7ac80' | translate }}</h1><span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
     <span></span>
-    <select aria-label="Filter exception severity" [(ngModel)]="severity">
-      <option value="all">All severities</option>
-      <option value="critical">Critical</option>
-      <option value="warning">Warning</option>
+    <select [attr.aria-label]="'inventory.ui.e66bd46a34' | translate" [(ngModel)]="severity">
+      <option value="all">{{ 'inventory.ui.068616a640' | translate }}</option>
+      <option value="critical">{{ 'inventory.ui.04b7b26c8c' | translate }}</option>
+      <option value="warning">{{ 'inventory.ui.e9c4556335' | translate }}</option>
     </select>
-    <button class="primary-button" type="button" [disabled]="loading" (click)="reload()">Refresh controls</button>
+    <button class="primary-button" type="button" [disabled]="loading" (click)="reload()">{{ 'inventory.ui.aa5ced548b' | translate }}</button>
   </header>
 
   <p class="message error" *ngIf="error">{{ error }}</p><p class="message success" *ngIf="notice">{{ notice }}</p>
 
-  <nav class="tabs" aria-label="Inventory advanced control sections">
+  <nav class="tabs" [attr.aria-label]="'inventory.ui.9a8e647829' | translate">
     <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
   </nav>
 
-  <section class="metrics" aria-label="Inventory control summary">
-    <article class="critical"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Critical</span><strong>{{ controls.summary.critical }}</strong></article>
-    <article class="approval"><i class="bi bi-arrow-up-right" aria-hidden="true"></i><span>Pending approvals</span><strong>{{ controls.summary.pendingApprovals }}</strong></article>
-    <article class="expiry"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>Expiry alerts</span><strong>{{ controls.summary.expiryAlerts === null ? '—' : controls.summary.expiryAlerts }}</strong></article>
-    <article class="dead"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Dead stock</span><strong>{{ controls.summary.deadStock }}</strong></article>
+  <section class="metrics" [attr.aria-label]="'inventory.ui.7088f8447e' | translate">
+    <article class="critical"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.04b7b26c8c' | translate }}</span><strong>{{ controls.summary.critical }}</strong></article>
+    <article class="approval"><i class="bi bi-arrow-up-right" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ controls.summary.pendingApprovals }}</strong></article>
+    <article class="expiry"><i class="bi bi-hourglass-split" aria-hidden="true"></i><span>{{ 'inventory.ui.8df6fbb79f' | translate }}</span><strong>{{ controls.summary.expiryAlerts === null ? '—' : controls.summary.expiryAlerts }}</strong></article>
+    <article class="dead"><i class="bi bi-box-seam" aria-hidden="true"></i><span>{{ 'inventory.ui.d83e70287e' | translate }}</span><strong>{{ controls.summary.deadStock }}</strong></article>
   </section>
 
   <section class="panel" *ngIf="activeTab === 'exceptions'">
-    <header><h2>Exception dashboard</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">Export evidence</button><button class="icon-button" type="button" aria-label="Refresh exceptions" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
-    <div class="loading-state" *ngIf="loading">Loading controls</div>
+    <header><h2>{{ 'inventory.ui.bec0df1287' | translate }}</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.43bba59126' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.56d2e1b1c1' | translate }}</div>
     <div class="table-scroll" *ngIf="!loading && filteredExceptions.length">
       <table>
-        <thead><tr><th>Severity</th><th>Control</th><th>Exception</th><th>Value</th><th>Evidence</th><th>Owner</th><th>Status</th><th>Action</th></tr></thead>
+        <thead><tr><th>{{ 'inventory.ui.de314fa0c9' | translate }}</th><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.20049bc069' | translate }}</th><th>{{ 'inventory.ui.8dce170de2' | translate }}</th><th>{{ 'inventory.ui.7ea014de7b' | translate }}</th><th>{{ 'inventory.ui.89ff31225c' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
         <tbody>
           <tr *ngFor="let row of filteredExceptions">
             <td><span class="status" [class.critical]="row.severity === 'critical'">{{ row.severity }}</span></td>
             <td>{{ row.control }}</td><td><strong>{{ row.title }}</strong></td><td>{{ money(row.valuePaise) }}</td><td>{{ row.evidence || '—' }}</td><td>{{ row.owner }}</td><td>{{ row.status }}</td>
-            <td><a [routerLink]="row.route">Open</a></td>
+            <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <div class="empty-state" *ngIf="!loading && !filteredExceptions.length"><i class="bi bi-shield-check" aria-hidden="true"></i><strong>No control exceptions yet</strong></div>
+    <div class="empty-state" *ngIf="!loading && !filteredExceptions.length"><i class="bi bi-shield-check" aria-hidden="true"></i><strong>{{ 'inventory.ui.5ca2f7b527' | translate }}</strong></div>
   </section>
 
   <section class="panel" *ngIf="activeTab === 'approvals'">
-    <header><h2>Approval Matrix</h2></header>
-    <div class="table-scroll"><table><thead><tr><th>Control</th><th>Required role</th><th>Pending</th><th>Gate</th><th>Action</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.approvalMatrix"><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">Open</a></td></tr>
-      <tr *ngIf="!controls.approvalMatrix.length"><td class="empty-state" colspan="5">No approval controls available</td></tr>
+    <header><h2>{{ 'inventory.ui.f2bb844c2c' | translate }}</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.1d8dbcf82e' | translate }}</th><th>{{ 'inventory.ui.96f608c16c' | translate }}</th><th>{{ 'inventory.ui.5701b5f6fe' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.approvalMatrix"><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+      <tr *ngIf="!controls.approvalMatrix.length"><td class="empty-state" colspan="5">{{ 'inventory.ui.235a2a357f' | translate }}</td></tr>
     </tbody></table></div>
   </section>
 
   <section class="panel" *ngIf="activeTab === 'locks'">
-    <header><h2>Audit Locks</h2></header>
-    <div class="table-scroll"><table><thead><tr><th>Lock</th><th>Locked records</th><th>Reason</th><th>Action</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.auditLocks"><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">Open</a></td></tr>
-      <tr *ngIf="!controls.auditLocks.length"><td class="empty-state" colspan="4">No audit locks available</td></tr>
+    <header><h2>{{ 'inventory.ui.8a053eb92a' | translate }}</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.891ebccd5b' | translate }}</th><th>{{ 'inventory.ui.160507bf60' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
+      <tr *ngFor="let row of controls.auditLocks"><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+      <tr *ngIf="!controls.auditLocks.length"><td class="empty-state" colspan="4">{{ 'inventory.ui.162fea976c' | translate }}</td></tr>
     </tbody></table></div>
   </section>
 
   <section class="panel" *ngIf="activeTab === 'expiry'">
-    <header><h2>Expiry</h2></header>
-    <div class="capability-state" *ngIf="!controls.capabilities.expiry">Batch expiry data is not available</div>
-    <div class="table-scroll" *ngIf="controls.capabilities.expiry"><table><thead><tr><th>Product</th><th>Batch</th><th>Expiry</th><th>Days</th></tr></thead><tbody>
+    <header><h2>{{ 'inventory.ui.ba8f571e0f' | translate }}</h2></header>
+    <div class="capability-state" *ngIf="!controls.capabilities.expiry">{{ 'inventory.ui.62d8a65dff' | translate }}</div>
+    <div class="table-scroll" *ngIf="controls.capabilities.expiry"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.8bf1ef5668' | translate }}</th><th>{{ 'inventory.ui.ba8f571e0f' | translate }}</th><th>{{ 'inventory.ui.f6bb0f468a' | translate }}</th></tr></thead><tbody>
       <tr *ngFor="let row of controls.expiringRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ date(row.expiryDate) }}</td><td>{{ row.daysToExpiry }}</td></tr>
-      <tr *ngIf="!controls.expiringRows.length"><td class="empty-state" colspan="4">No records yet</td></tr>
+      <tr *ngIf="!controls.expiringRows.length"><td class="empty-state" colspan="4">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
     </tbody></table></div>
   </section>
 
   <section class="panel" *ngIf="activeTab === 'dead-stock'">
-    <header><h2>Dead Stock</h2></header>
-    <div class="table-scroll"><table><thead><tr><th>Product</th><th>SKU</th><th>Stock</th><th>Inactive days</th><th>Value</th><th>Last outbound</th></tr></thead><tbody>
+    <header><h2>{{ 'inventory.ui.093fc9f435' | translate }}</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.d59192b9c8' | translate }}</th><th>{{ 'inventory.ui.bcecf4562f' | translate }}</th><th>{{ 'inventory.ui.d6975f0dc1' | translate }}</th><th>{{ 'inventory.ui.8dce170de2' | translate }}</th><th>{{ 'inventory.ui.b1c24a3970' | translate }}</th></tr></thead><tbody>
       <tr *ngFor="let row of controls.deadStockRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.sku || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ row.inactiveDays }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ date(row.lastOutboundAt) }}</td></tr>
-      <tr *ngIf="!controls.deadStockRows.length"><td class="empty-state" colspan="6">No records yet</td></tr>
+      <tr *ngIf="!controls.deadStockRows.length"><td class="empty-state" colspan="6">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section class="panel" *ngIf="activeTab === 'policy'">
+    <header><h2>{{ 'inventory.ui.3835314865' | translate }}</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">{{ savingPolicy ? 'Saving…' : 'Save policy' }}</button></header>
+    <div class="policy-grid">
+      <label>{{ 'inventory.ui.f1d1c11769' | translate }}<select [(ngModel)]="policy.negativeStockRule"><option value="block">{{ 'inventory.ui.82dd2cdf36' | translate }}</option><option value="approval_required">{{ 'inventory.ui.b8d012c200' | translate }}</option></select></label>
+      <label>{{ 'inventory.ui.2dfbcefb7b' | translate }}<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">{{ 'inventory.ui.c74e4e7c5c' | translate }}</option><option value="fifo">{{ 'inventory.ui.07c257b166' | translate }}</option></select></label>
+      <label>{{ 'inventory.ui.e3d400bee8' | translate }}<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
+      <label>{{ 'inventory.ui.a692bbeff4' | translate }}<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
+      <label>{{ 'inventory.ui.24e8505587' | translate }}<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
+      <label>{{ 'inventory.ui.eb2cf73d0b' | translate }}<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
+      <label>{{ 'inventory.ui.f5595ea0c0' | translate }}<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
+    </div>
+    <div class="table-scroll" *ngIf="negativeStockRequests.length"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.2f0039e913' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.bcdf8d373d' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody><tr *ngFor="let row of negativeStockRequests"><td><strong>{{ row.productName }}</strong></td><td>{{ row.requestedStockQuantity }}</td><td>{{ row.reason }}</td><td>{{ row.requestedBy }}</td><td><span class="status">{{ row.status }}</span></td><td><div class="panel-actions" *ngIf="row.status === 'pending'"><button type="button" (click)="reviewNegativeStock(row,'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button type="button" (click)="reviewNegativeStock(row,'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div></td></tr></tbody></table></div>  </section>
+
+  <section class="panel" *ngIf="activeTab === 'operations'">
+    <header><h2>{{ 'inventory.ui.72580d4cef' | translate }}</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.a58cdd4aac' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+    <div class="operations-grid">
+      <article><span>{{ 'inventory.ui.6a599877d7' | translate }}</span><strong>{{ operations.queue.queued }}</strong></article>
+      <article><span>{{ 'inventory.ui.e63451d3cf' | translate }}</span><strong>{{ operations.queue.processing }}</strong></article>
+      <article><span>{{ 'inventory.ui.c535a71665' | translate }}</span><strong>{{ operations.queue.retryScheduled }}</strong></article>
+      <article><span>{{ 'inventory.ui.3db9beef5f' | translate }}</span><strong>{{ operations.queue.terminalFailed }}</strong></article>
+      <article><span>{{ 'inventory.ui.0210e85f19' | translate }}</span><strong>{{ operations.invariants.ledgerStockMismatch }}</strong></article>
+      <article><span>{{ 'inventory.ui.f1d1c11769' | translate }}</span><strong>{{ operations.invariants.negativeStock }}</strong></article>
+    </div>
+    <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.879f0b1bef' | translate }}</th><th>{{ 'inventory.ui.d42713493c' | translate }}</th><th>{{ 'inventory.ui.5a29585e3f' | translate }}</th><th>{{ 'inventory.ui.5e4df866b2' | translate }}</th><th>{{ 'inventory.ui.f2f8570ddd' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
+      <tr *ngFor="let row of operations.failedJobs"><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
+      <tr *ngIf="!operations.failedJobs.length"><td class="empty-state" colspan="6">{{ 'inventory.ui.8633a2b8bc' | translate }}</td></tr>
     </tbody></table></div>
   </section>
 

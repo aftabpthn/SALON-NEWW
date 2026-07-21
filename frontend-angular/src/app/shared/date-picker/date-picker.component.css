@@ -44,6 +44,12 @@ button:focus {
   outline: none;
 }
 
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
 .date-input-shell button {
   display: grid;
   place-items: center;
@@ -194,8 +200,15 @@ footer .apply {
 
 @media (max-width: 640px) {
   .calendar-popover {
+    position: fixed;
+    top: 50%;
+    right: 12px;
+    left: 12px;
     grid-template-columns: 1fr;
-    width: min(330px, calc(100vw - 24px));
+    width: auto;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    transform: translateY(-50%);
   }
 
   .shortcut-rail {

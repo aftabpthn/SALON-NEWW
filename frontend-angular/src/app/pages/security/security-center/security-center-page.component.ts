@@ -373,12 +373,12 @@ export class SecurityCenterPageComponent implements OnInit {
   }
 
   get canViewSecurityCenter(): boolean {
-    return this.auth.hasRole('owner', 'admin', 'superadmin')
+    return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
       || this.auth.hasPermission('security.read', 'security.manage');
   }
 
   get canManageSecurity(): boolean {
-    return this.auth.hasRole('owner', 'admin', 'superadmin')
+    return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
       || this.auth.hasPermission('security.manage');
   }
 

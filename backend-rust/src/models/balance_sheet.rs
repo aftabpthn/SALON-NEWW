@@ -60,6 +60,7 @@ pub struct BalanceSheetTotals {
 pub struct BalanceSheetReport {
     pub as_of_date: NaiveDate,
     pub branch_id: String,
+    pub branch_count: usize,
     pub balanced: bool,
     pub totals: BalanceSheetTotals,
     pub sections: BalanceSheetSections,
@@ -71,6 +72,7 @@ pub struct BalanceSheetReport {
 pub struct WorkingCapitalReport {
     pub as_of_date: NaiveDate,
     pub branch_id: String,
+    pub branch_count: usize,
     pub current_assets_paise: i64,
     pub current_liabilities_paise: i64,
     pub working_capital_paise: i64,
@@ -112,6 +114,7 @@ pub struct LedgerPage {
 #[serde(rename_all = "camelCase")]
 pub struct AsOfQuery {
     pub as_of_date: Option<String>,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

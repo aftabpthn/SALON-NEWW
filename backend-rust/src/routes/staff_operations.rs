@@ -1,7 +1,9 @@
+use chrono::NaiveDate;
+
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::{get, patch, post},
     Extension, Json, Router,
 };
 use serde::Deserialize;
@@ -12,8 +14,10 @@ use crate::{
     services::{
         auth_service::AuthClaims,
         staff_operations_service::{
-            self, BranchTransferRequest, DecisionRequest, PerformanceReviewRequest,
-            ShiftSwapRequest, SkillLicenseRequest,
+            self, BranchTransferRequest, DecisionRequest, OperationAttendanceRequest,
+            OperationAutomationRequest, OperationSchedulePatchRequest, OperationScheduleRequest,
+            OperationTaskPatchRequest, OperationTaskRequest, OperationTemplateRequest,
+            PerformanceReviewRequest, ShiftSwapRequest, SkillLicenseRequest,
         },
     },
     state::AppState,
@@ -21,6 +25,34 @@ use crate::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route(
+            "/staff/operations/templates",
+            get(list_operation_templates).post(create_operation_template),
+        )
+        .route(
+            "/staff/operations/schedules",
+            get(list_operation_schedules).post(create_operation_schedules),
+        )
+        .route(
+            "/staff/operations/schedules/:id",
+            patch(update_operation_schedule),
+        )
+        .route("/staff/operations/tasks", get(list_operation_tasks))
+        .route("/staff/operations/:id/tasks", post(create_operation_task))
+        .route("/staff/operations/tasks/:id", patch(update_operation_task))
+        .route(
+            "/staff/operations/attendance",
+            get(list_operation_attendance),
+        )
+        .route(
+            "/staff/operations/:id/attendance",
+            post(upsert_operation_attendance),
+        )
+        .route("/staff/operations/reports", get(operation_report))
+        .route(
+            "/staff/operations/automations/run",
+            post(run_operation_automations),
+        )
         .route(
             "/staff/shift-swaps",
             get(list_shift_swaps).post(create_shift_swap),
@@ -53,6 +85,276 @@ struct StatusQuery {
 #[serde(rename_all = "camelCase")]
 struct StaffQuery {
     staff_id: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationTemplateQuery {
+    operation_type: Option<String>,
+    active_only: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationScheduleQuery {
+    from: NaiveDate,
+    to: NaiveDate,
+    status: Option<String>,
+    operation_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationChildQuery {
+    operation_id: Option<String>,
+    staff_id: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationReportQuery {
+    from: NaiveDate,
+    to: NaiveDate,
+    staff_id: Option<String>,
+    operation_type: Option<String>,
+}
+
+async fn list_operation_templates(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OperationTemplateQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_operations_repository::StaffOperationTemplateRecord>>
+{
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_operations_service::list_operation_templates(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.operation_type.as_deref().unwrap_or(""),
+        query.active_only.unwrap_or(true),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_operation_template(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<OperationTemplateRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::StaffOperationTemplateRecord> {
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_operations_service::create_operation_template(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_operation_schedules(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OperationScheduleQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_operations_repository::StaffOperationScheduleRecord>>
+{
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_operations_service::list_operation_schedules(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.from,
+        query.to,
+        query.status.as_deref().unwrap_or(""),
+        query.operation_type.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_operation_schedules(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<OperationScheduleRequest>,
+) -> ApiResult<Vec<crate::repositories::staff_operations_repository::StaffOperationScheduleRecord>>
+{
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_operations_service::create_operation_schedules(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn update_operation_schedule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<OperationSchedulePatchRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::StaffOperationScheduleRecord> {
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_operations_service::update_operation_schedule(
+        &state.db, &tenant_id, &branch_id, &id, payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_operation_tasks(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OperationChildQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_operations_repository::StaffOperationTaskRecord>> {
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_operations_service::list_operation_tasks(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.operation_id.as_deref().unwrap_or(""),
+        query.staff_id.as_deref().unwrap_or(""),
+        query.status.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_operation_task(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<OperationTaskRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::StaffOperationTaskRecord> {
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_operations_service::create_operation_task(
+        &state.db, &tenant_id, &branch_id, &id, payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_operation_task(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<OperationTaskPatchRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::StaffOperationTaskRecord> {
+    ensure_staff_read(&claims)?;
+    let manager_action = is_staff_manager(&claims);
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_operations_service::update_operation_task(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        manager_action,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_operation_attendance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OperationChildQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_operations_repository::StaffOperationAttendanceRecord>>
+{
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_operations_service::list_operation_attendance(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.operation_id.as_deref().unwrap_or(""),
+        query.staff_id.as_deref().unwrap_or(""),
+        query.status.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn upsert_operation_attendance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<OperationAttendanceRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::StaffOperationAttendanceRecord> {
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_operations_service::upsert_operation_attendance(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn operation_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OperationReportQuery>,
+) -> ApiResult<staff_operations_service::OperationReportResponse> {
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let report = staff_operations_service::operation_report(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.from,
+        query.to,
+        query.staff_id.as_deref().unwrap_or(""),
+        query.operation_type.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(report)))
+}
+
+async fn run_operation_automations(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<OperationAutomationRequest>,
+) -> ApiResult<staff_operations_service::OperationAutomationRunResponse> {
+    ensure_staff_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let result = staff_operations_service::run_operation_automations(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 async fn list_shift_swaps(
@@ -262,6 +564,13 @@ fn ensure_staff_read(claims: &AuthClaims) -> Result<(), AppError> {
     } else {
         Err(AppError::forbidden("staff access is restricted"))
     }
+}
+
+fn is_staff_manager(claims: &AuthClaims) -> bool {
+    const ALLOWED: &[&str] = &["owner", "admin", "manager"];
+    ALLOWED
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role))
 }
 
 fn ensure_staff_manage(claims: &AuthClaims) -> Result<(), AppError> {

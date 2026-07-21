@@ -29,6 +29,12 @@ type AppointmentSettings = {
   roomNumberOption: boolean;
   staffCalendar: boolean;
   defaultStatus: string;
+  clientSelfReschedule: boolean;
+  rescheduleApprovalRequired: boolean;
+  rescheduleCutoffHours: number;
+  maxRescheduleCount: number;
+  rescheduleSmsAppNotification: boolean;
+  perServiceRescheduleSms: boolean;
   colors: Array<{ status: string; enabled: boolean; color: string; label: string }>;
 };
 
@@ -62,6 +68,8 @@ type AppointmentRecord = {
   id: string;
   clientId: string;
   staffId: string;
+  requestedStaffId: string;
+  staffPreference: 'any' | 'preferred' | 'required';
   serviceIds: string[];
   startAt: string;
   endAt: string;
@@ -86,6 +94,8 @@ type AppointmentCard = {
   id: string;
   clientId: string;
   staffId: string;
+  requestedStaffId: string;
+  staffPreference: 'any' | 'preferred' | 'required';
   serviceIds: string[];
   startAt: string;
   endAt: string;
@@ -120,6 +130,9 @@ type CalendarColumn = {
 type BookingLine = {
   id: string;
   appointmentId: string;
+  clientId: string;
+  clientSearch: string;
+  clientOpen: boolean;
   serviceId: string;
   serviceSearch: string;
   staffId: string;
@@ -127,7 +140,11 @@ type BookingLine = {
   startTime: string;
   durationMinutes: number;
   chairRoomId: string;
-  staffRequested: boolean;
+  initialStaffId: string;
+  requestedStaffId: string;
+  staffPreference: 'any' | 'preferred' | 'required';
+  staffChangeApproval: '' | 'client-approved' | 'manager-override';
+  staffChangeReason: string;
   serviceOpen: boolean;
   staffOpen: boolean;
   variantId: string;
@@ -177,6 +194,20 @@ type PreviousService = {
 
 type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; notes: string };
 type BlackoutEntry = { id: string; staffId: string; blackoutGroupId: string; blackoutDate: string; blockedFrom: string; blockedUntil: string; reason: string };
+type BookingIntelligence = {
+  plan: Array<{ lineId: string; serviceName: string; startAt: string; activeEndsAt: string; busyUntil: string; processingMinutes: number; cleanupMinutes: number; bufferMinutes: number; consultation: { required: boolean; patchTestRequired: boolean; formDefinitionId: string; current: boolean }; staff: Array<{ staffId: string; name: string; gender: string; verifiedSkills: number; bookedMinutes: number }> }>;
+  alternatives: Array<{ lineId: string; slots: Array<{ staffId: string; startAt: string; endAt: string; requestedStaff: boolean }> }>;
+  deposit: { required: boolean; depositPaise: number; totalPaise: number };
+  client: { activeMemberships: number; packageCredits: number; riskScore: number; riskLevel: string } | null;
+};
+
+type BookingClientKpi = {
+  walletPaise: number;
+  unpaidPaise: number;
+  membershipAssignDate: string | null;
+  membershipExpireDate: string | null;
+  hasActiveMembership: boolean;
+};
 
 @Component({
   selector: 'page-appointments',
@@ -234,6 +265,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   editingAppointmentId = '';
   editingBookingGroupId = '';
   removedServiceAppointmentIds: string[] = [];
+  staffChangeReviewOpen = false;
   dataSourceStatus = { label: 'Checking backend', online: false };
   hoveredAppointment: { card: AppointmentCard; x: number; y: number } | null = null;
   hoveredSlot: { time: string; staff: string; x: number; y: number } | null = null;
@@ -251,6 +283,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   noShowProvider = 'razorpay';
   noShowSaving = false;
   activityRefreshError = '';
+  clientSmsSending = false;
   private activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private currentTimeTimer: ReturnType<typeof setInterval> | null = null;
   private liveSocket: WebSocket | null = null;
@@ -268,11 +301,21 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   bookingClientSearch = '';
   selectedClientId = '';
+  bookingClientKpi: BookingClientKpi | null = null;
+  bookingClientKpiLoading = false;
+  bookingIntelligence: BookingIntelligence | null = null;
+  bookingIntelligenceLoading = false;
+  bookingIntelligenceError = "";
+  private bookingIntelligenceRequest = 0;
+  private bookingClientKpiRequest = 0;
   bookingNotes = '';
   notifyStaff = true;
   recurrenceFrequency: 'none' | 'weekly' | 'fortnightly' | 'monthly' = 'none';
   recurrenceCount = '';
   bookingLines: BookingLine[] = [];
+  rescheduleMode = false;
+  rescheduleSelectedAppointmentIds = new Set<string>();
+  rescheduleRequests: any[] = [];
   activeCommand: ToolbarCommand | null = null;
   commandError = '';
   commandSaving = false;
@@ -285,6 +328,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   commandDurationMinutes = 30;
   commandReason = '';
   slotAction: { columnIndex: number; time: string; left: number; top: number } | null = null;
+  statusFilter: string[] | null = null;
 
   private lineSeed = 0;
 
@@ -292,14 +336,37 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     const count = (statuses: string[]) => this.appointmentRows.filter((item) => statuses.includes(item.status)).length;
 
     return [
-      { icon: 'booked', label: 'Booked', value: String(count(['booked', 'confirmed'])), tone: 'blue' },
-      { icon: 'pending', label: 'Pending', value: String(count(['pending', 'waiting', 'draft'])), tone: 'amber' },
-      { icon: 'arrived', label: 'Arrived', value: String(count(['arrived'])), tone: 'teal' },
-      { icon: 'service', label: 'In Service', value: String(count(['in-service'])), tone: 'violet' },
-      { icon: 'completed', label: 'Completed', value: String(count(['completed', 'paid'])), tone: 'green' },
-      { icon: 'waitlist', label: 'Waitlist', value: String(this.waitlistEntries.length), tone: 'pink' },
-      { icon: 'revenue', label: 'Revenue', value: '₹0', tone: 'dark' },
+      { icon: 'booked', label: 'Booked', value: String(count(['booked', 'confirmed'])), tone: 'blue', statuses: ['booked', 'confirmed'] },
+      { icon: 'pending', label: 'Pending', value: String(count(['pending', 'waiting', 'draft'])), tone: 'amber', statuses: ['pending', 'waiting', 'draft'] },
+      { icon: 'arrived', label: 'Arrived', value: String(count(['arrived'])), tone: 'teal', statuses: ['arrived'] },
+      { icon: 'service', label: 'In Service', value: String(count(['in-service'])), tone: 'violet', statuses: ['in-service'] },
+      { icon: 'completed', label: 'Completed', value: String(count(['completed', 'paid'])), tone: 'green', statuses: ['completed', 'paid'] },
+      { icon: 'waitlist', label: 'Waitlist', value: String(this.waitlistEntries.length), tone: 'pink', statuses: [] as string[], command: 'waitlist' },
+      { icon: 'revenue', label: 'Revenue', value: '₹0', tone: 'dark', statuses: [] as string[], command: 'reports' },
     ];
+  }
+
+  setSummaryFilter(statuses: string[]) {
+    if (!statuses.length) return;
+    const alreadySelected = this.statusFilter?.length === statuses.length && statuses.every((status) => this.statusFilter?.includes(status));
+    this.statusFilter = alreadySelected ? null : statuses;
+    this.mapAppointmentCards();
+  }
+
+  openSummaryMetric(statuses: string[], command?: string) {
+    if (command === 'waitlist') {
+      this.openCommand('waitlist');
+      return;
+    }
+    if (command === 'reports') {
+      void this.router.navigate(['/appointment-reports']);
+      return;
+    }
+    this.setSummaryFilter(statuses);
+  }
+
+  isSummaryFilterActive(statuses: string[]) {
+    return Boolean(statuses.length && this.statusFilter?.length === statuses.length && statuses.every((status) => this.statusFilter?.includes(status)));
   }
 
   get scheduledStaff() {
@@ -396,6 +463,12 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     };
   }
 
+  private get calendarSlotHeight() {
+    if (this.activeStaffGridMode === 'Compact Grid') return 38;
+    if (this.activeStaffGridMode === 'Timeline') return 60;
+    return 48;
+  }
+
   get calendarColumns() {
     const staffCount = Math.max(1, this.calendarColumnsData.length);
     const timeWidth = this.activeStaffGridMode === 'Compact Grid' ? 72 : 84;
@@ -470,6 +543,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     window.addEventListener('storage', this.storageUpdatedHandler);
     this.updateCurrentTimeLine();
     this.currentTimeTimer = setInterval(() => this.updateCurrentTimeLine(), 30000);
+    void this.loadRescheduleRequests();
     await Promise.all([this.loadClients(), this.loadStaff(), this.loadServices(), this.loadChairRooms(), this.loadOverlapSetting(), this.loadWaitlist(), this.loadBlackouts()]);
     await this.loadAppointments();
     this.connectLiveAppointments();
@@ -498,6 +572,61 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   async refreshPreviousServices() {
     await this.loadAppointments();
+  }
+
+  async refreshBookingIntelligence() {
+    const lines = this.bookingLines.filter((line) => line.serviceId && line.startTime);
+    if (!lines.length) {
+      this.bookingIntelligence = null;
+      this.bookingIntelligenceError = 'Add a service and time first';
+      return;
+    }
+    const request = ++this.bookingIntelligenceRequest;
+    this.bookingIntelligenceLoading = true;
+    this.bookingIntelligenceError = '';
+    try {
+      const result: any = await this.postJson('/api/v1/booking-intelligence/preview', {
+        clientId: this.selectedClientId,
+        lines: lines.map((line, index) => ({
+          id: line.id,
+          serviceId: line.serviceId,
+          staffId: line.staffId,
+          startAt: this.localDateTimeToIso(this.appointmentDate, line.startTime),
+          parallel: index > 0 && line.startTime === lines[0].startTime,
+        })),
+      });
+      if (request === this.bookingIntelligenceRequest) this.bookingIntelligence = (result?.data ?? result) as BookingIntelligence;
+    } catch (error) {
+      if (request === this.bookingIntelligenceRequest) this.bookingIntelligenceError = this.errorMessage(error, 'Unable to load booking plan');
+    } finally {
+      if (request === this.bookingIntelligenceRequest) this.bookingIntelligenceLoading = false;
+    }
+  }
+
+  private refreshBookingIntelligenceIfReady() {
+    if (this.selectedClientId && this.bookingLines.some((line) => line.serviceId && line.startTime)) {
+      void this.refreshBookingIntelligence();
+    }
+  }
+  applySequencePlan() {
+    const plans = new Map((this.bookingIntelligence?.plan || []).map((item) => [item.lineId, item]));
+    this.bookingLines = this.bookingLines.map((line) => {
+      const plan = plans.get(line.id);
+      if (!plan) return line;
+      const date = new Date(plan.startAt);
+      return { ...line, startTime: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}` };
+    });
+  }
+
+  applyAlternative(lineId: string, slot: { staffId: string; startAt: string }) {
+    const staff = this.staff.find((person) => person.id === slot.staffId);
+    const date = new Date(slot.startAt);
+    this.bookingLines = this.bookingLines.map((line) => line.id !== lineId ? line : {
+      ...line,
+      staffId: slot.staffId,
+      staffSearch: staff?.name || line.staffSearch,
+      startTime: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
+    });
   }
 
   filteredClients() {
@@ -657,6 +786,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.editingAppointmentId = '';
     this.editingBookingGroupId = '';
     this.removedServiceAppointmentIds = [];
+    this.rescheduleMode = false;
+    this.rescheduleSelectedAppointmentIds = new Set<string>();
   }
 
   openCommand(command: ToolbarCommand) {
@@ -757,12 +888,24 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   setClientSearch(value: string) {
     this.bookingClientSearch = value;
     const selected = this.clients.find((client) => client.id === this.selectedClientId);
-    if (selected && value !== this.clientLabel(selected)) this.selectedClientId = '';
+    if (selected && value !== this.clientLabel(selected)) {
+      this.selectedClientId = '';
+      this.bookingClientKpi = null;
+      this.bookingIntelligence = null;
+      this.bookingClientKpiRequest += 1;
+    }
   }
 
   selectClient(client: ClientOption) {
     this.selectedClientId = client.id;
     this.bookingClientSearch = this.clientLabel(client);
+    this.bookingLines = this.bookingLines.map((line) => line.clientId ? line : {
+      ...line,
+      clientId: client.id,
+      clientSearch: this.clientLabel(client),
+    });
+    void this.loadBookingClientKpi(client.id);
+    this.refreshBookingIntelligenceIfReady();
   }
 
   addPreviousServiceToBooking(item: PreviousService) {
@@ -781,6 +924,31 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     const last = this.bookingLines[this.bookingLines.length - 1];
     const startTime = last ? this.addMinutesToTime(last.startTime, last.durationMinutes || 30) : this.timeToInput(this.times[0]);
     this.bookingLines = [...this.bookingLines, this.blankLine(last?.staffId || this.staff[0]?.id || '', startTime)];
+  }
+
+  addParallelServiceLine() {
+    const base = this.bookingLines[0];
+    const nextStaff = this.staff.find((person) => person.id !== base?.staffId)?.id || '';
+    this.bookingLines = [...this.bookingLines, this.blankLine(nextStaff, base?.startTime || this.timeToInput(this.times[0]))];
+  }
+
+  filteredLineClients(line: BookingLine) {
+    const q = line.clientSearch.trim().toLowerCase();
+    return this.clients
+      .filter((client) => !q || `${client.name} ${client.phone} ${client.email}`.toLowerCase().includes(q))
+      .slice(0, 8);
+  }
+
+  setLineClientSearch(line: BookingLine, value: string) {
+    line.clientSearch = value;
+    line.clientId = '';
+    line.clientOpen = true;
+  }
+
+  selectLineClient(line: BookingLine, client: ClientOption) {
+    line.clientId = client.id;
+    line.clientSearch = this.clientLabel(client);
+    line.clientOpen = false;
   }
 
   removeServiceLine(lineId: string) {
@@ -803,6 +971,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     line.serviceOpen = false;
     line.variantId = '';
     line.addonIds = [];
+    this.refreshBookingIntelligenceIfReady();
   }
 
   serviceVariants(line: BookingLine) { return this.services.find((service) => service.id === line.serviceId)?.variants || []; }
@@ -822,27 +991,36 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   setStaffSearch(line: BookingLine, value: string) {
     line.staffSearch = value;
     line.staffId = '';
-    line.staffRequested = false;
     line.staffOpen = true;
   }
 
   selectStaff(line: BookingLine, person: StaffOption) {
     line.staffId = person.id;
     line.staffSearch = person.name;
+    if (line.staffPreference !== 'any' && (!line.appointmentId || !line.requestedStaffId)) {
+      line.requestedStaffId = person.id;
+    }
     line.staffOpen = false;
+    this.refreshBookingIntelligenceIfReady();
   }
 
   toggleStaffRequest(line: BookingLine) {
-    if (line.staffId) line.staffRequested = !line.staffRequested;
+    if (!line.staffId) return;
+    this.setStaffPreference(line, line.staffPreference === 'any' ? 'preferred' : 'any');
+  }
+
+  setStaffPreference(line: BookingLine, preference: 'any' | 'preferred' | 'required') {
+    line.staffPreference = preference;
+    line.requestedStaffId = preference === 'any' ? '' : (line.requestedStaffId || line.staffId);
   }
 
   addSelectedPreviousService(item: PreviousService) {
     this.addPreviousServiceToBooking(item);
   }
 
-  async createBooking() {
+  async createBooking(skipStaffChangeReview = false) {
     this.bookingError = '';
-    if (!this.selectedClientId) {
+    if (!this.selectedClientId || this.bookingLines.some((line) => !line.clientId)) {
       this.bookingError = 'Client required';
       return;
     }
@@ -869,6 +1047,14 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.bookingError = 'Selected chair or room is already booked for this time';
       return;
     }
+    if (!skipStaffChangeReview && this.pendingStaffChanges().length) {
+      this.staffChangeReviewOpen = true;
+      return;
+    }
+    if (this.rescheduleMode) {
+      await this.submitOfficialReschedule(validLines);
+      return;
+    }
 
     this.savingBooking = true;
     try {
@@ -884,7 +1070,12 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         recurrence_interval_days: this.recurrenceFrequency === 'fortnightly' ? 14 : this.recurrenceFrequency === 'monthly' ? 28 : 7,
         lines: validLines.map((line) => ({
           appointment_id: line.appointmentId,
+          client_id: line.clientId,
           staff_id: line.staffId,
+          requested_staff_id: line.requestedStaffId,
+          staff_preference: line.staffPreference,
+          staff_change_approval: line.staffChangeApproval,
+          staff_change_reason: line.staffChangeReason.trim(),
           service_id: line.serviceId,
           start_at: this.localDateTimeToIso(this.appointmentDate, line.startTime),
           end_at: this.localDateTimeToIso(
@@ -905,6 +1096,65 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     } finally {
       this.savingBooking = false;
     }
+  }
+
+  private async submitOfficialReschedule(lines: BookingLine[]) {
+    const targets = [...new Map(lines.filter((line) => line.appointmentId && this.isRescheduleLineSelected(line)).map((line) => [line.appointmentId, line])).values()];
+    if (!targets.length) {
+      this.bookingError = 'Choose at least one service to reschedule';
+      return;
+    }
+    this.savingBooking = true;
+    try {
+      for (const line of targets) {
+        await this.postJson(`/api/v1/appointments/${line.appointmentId}/reschedule`, {
+          start_at: this.localDateTimeToIso(this.appointmentDate, line.startTime),
+          end_at: this.localDateTimeToIso(this.appointmentDate, this.addMinutesToTime(line.startTime, line.durationMinutes || 30)),
+          staff_id: line.staffId,
+          chair_room_id: line.chairRoomId,
+          reason: 'Rescheduled from CRM',
+          booking_group_id: this.editingBookingGroupId,
+          change_mode: 'official',
+          actor_source: 'crm',
+          staff_change_approval: line.staffChangeApproval,
+          staff_change_reason: line.staffChangeReason.trim(),
+        });
+      }
+      await this.loadAppointments();
+      this.closeNewBooking();
+    } catch (error) {
+      this.bookingError = error instanceof Error ? error.message : 'Unable to reschedule booking';
+    } finally {
+      this.savingBooking = false;
+    }
+  }
+
+  confirmStaffChanges() {
+    const pending = this.pendingStaffChanges();
+    for (const line of pending) {
+      if (line.staffPreference === 'required' && line.staffChangeApproval !== 'client-approved') {
+        this.bookingError = 'Client approval is required to change required staff';
+        return;
+      }
+      if (line.staffPreference === 'preferred' && !line.staffChangeApproval) {
+        this.bookingError = 'Choose client approval or manager override';
+        return;
+      }
+      if (line.staffChangeApproval === 'manager-override' && !line.staffChangeReason.trim()) {
+        this.bookingError = 'Manager override reason is required';
+        return;
+      }
+    }
+    this.staffChangeReviewOpen = false;
+    void this.createBooking(true);
+  }
+
+  pendingStaffChanges() {
+    return this.bookingLines.filter((line) => line.appointmentId
+      && line.initialStaffId !== line.staffId
+      && line.staffPreference !== 'any'
+      && line.requestedStaffId
+      && line.requestedStaffId !== line.staffId);
   }
 
   trackByIndex(index: number) {
@@ -1138,6 +1388,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.selectedClientId = card.clientId;
     const client = this.clients.find((entry) => entry.id === card.clientId);
     this.bookingClientSearch = client ? this.clientLabel(client) : card.client;
+    void this.loadBookingClientKpi(card.clientId);
     this.bookingNotes = card.notes;
     this.notifyStaff = true;
     const rows = this.bookingGroupRows(card);
@@ -1146,19 +1397,82 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           const line = this.blankLine(row.staffId, this.timeToInput(this.timeText(row.startAt)));
           const service = this.services.find((entry) => entry.id === serviceId);
           line.appointmentId = row.id;
+          line.clientId = row.clientId;
+          line.clientSearch = this.clientLabel(this.clients.find((entry) => entry.id === row.clientId));
           line.serviceId = serviceId;
           line.serviceSearch = service?.name || this.serviceName(serviceId);
           line.durationMinutes = service?.durationMinutes || line.durationMinutes;
           line.chairRoomId = row.chairRoomId;
+          line.initialStaffId = row.staffId;
+          line.requestedStaffId = row.requestedStaffId;
+          line.staffPreference = row.staffPreference;
           return line;
         }))
       : [this.blankLine(card.staffId, this.timeToInput(this.timeText(card.startAt)))];
   }
 
-  sendClientSms(card: AppointmentCard) {
-    const phone = this.clientPhone(card.clientId);
-    if (!phone) return;
-    window.location.href = `sms:${phone}`;
+  openRescheduleAppointment(card: AppointmentCard) {
+    this.openEditAppointment(card);
+    this.rescheduleMode = true;
+    this.rescheduleSelectedAppointmentIds = new Set(this.bookingLines.map((line) => line.appointmentId).filter(Boolean));
+  }
+
+  isRescheduleLineSelected(line: BookingLine) {
+    return !!line.appointmentId && this.rescheduleSelectedAppointmentIds.has(line.appointmentId);
+  }
+
+  get selectedRescheduleRequests() {
+    const appointmentId = this.selectedAppointment?.id || '';
+    return this.rescheduleRequests.filter((item) => String(item.appointmentId || '') === appointmentId);
+  }
+
+  private async loadRescheduleRequests() {
+    try {
+      const result = await this.getJson<any>('/api/v1/appointment-reschedule-requests');
+      this.rescheduleRequests = this.asArray(result?.data ?? result);
+    } catch {
+      this.rescheduleRequests = [];
+    }
+  }
+
+  async decideRescheduleRequest(requestId: string, approved: boolean) {
+    this.appointmentActionError = '';
+    try {
+      await this.postJson(`/api/v1/appointment-reschedule-requests/${requestId}/${approved ? 'approve' : 'reject'}`, { reason: approved ? 'Approved by CRM' : 'Rejected by CRM' });
+      await Promise.all([this.loadAppointments(), this.loadRescheduleRequests()]);
+      if (this.selectedAppointment) {
+        const refreshed = this.appointments.find((item) => item.id === this.selectedAppointment?.id);
+        if (refreshed) this.openAppointment(refreshed);
+      }
+    } catch (error) {
+      this.appointmentActionError = this.errorMessage(error, 'Unable to decide reschedule request');
+    }
+  }
+
+  toggleRescheduleLine(line: BookingLine, selected: boolean) {
+    if (!line.appointmentId) return;
+    const next = new Set(this.rescheduleSelectedAppointmentIds);
+    if (selected) next.add(line.appointmentId);
+    else next.delete(line.appointmentId);
+    this.rescheduleSelectedAppointmentIds = next;
+  }
+
+  async sendClientSms(card: AppointmentCard) {
+    if (!this.clientPhone(card.clientId) || this.clientSmsSending) return;
+    this.clientSmsSending = true;
+    this.appointmentActionError = '';
+    this.appointmentActionMessage = '';
+    try {
+      await this.postJson(`/api/v1/appointment-sms/appointments/${encodeURIComponent(card.id)}/queue`, {
+        channel: 'sms',
+        message: `Appointment update: ${card.service} is ${card.status} for ${card.time}.`,
+      });
+      this.appointmentActionMessage = 'Appointment SMS queued';
+    } catch (error) {
+      this.appointmentActionError = this.errorMessage(error, 'Unable to queue appointment SMS');
+    } finally {
+      this.clientSmsSending = false;
+    }
   }
 
   serviceBillLines(card: AppointmentCard) {
@@ -1207,6 +1521,28 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       })).filter((client) => client.id);
     } catch {
       this.clients = [];
+    }
+  }
+
+  private async loadBookingClientKpi(clientId: string) {
+    const request = ++this.bookingClientKpiRequest;
+    this.bookingClientKpi = null;
+    this.bookingClientKpiLoading = true;
+    try {
+      const result: any = await this.getJson(`/api/v1/pos/clients/${clientId}/kpi`);
+      if (request !== this.bookingClientKpiRequest) return;
+      const kpi = result?.data ?? result;
+      this.bookingClientKpi = {
+        walletPaise: Number(kpi?.walletPaise ?? kpi?.wallet_paise ?? 0) || 0,
+        unpaidPaise: Number(kpi?.unpaidPaise ?? kpi?.unpaid_paise ?? 0) || 0,
+        membershipAssignDate: kpi?.membershipAssignDate ?? kpi?.membership_assigned_at ?? null,
+        membershipExpireDate: kpi?.membershipExpireDate ?? kpi?.membership_expires_at ?? null,
+        hasActiveMembership: Boolean(kpi?.hasActiveMembership ?? kpi?.has_active_membership),
+      };
+    } catch {
+      if (request === this.bookingClientKpiRequest) this.bookingClientKpi = null;
+    } finally {
+      if (request === this.bookingClientKpiRequest) this.bookingClientKpiLoading = false;
     }
   }
 
@@ -1369,11 +1705,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   blackoutTop(entry: BlackoutEntry) {
     const start = new Date(entry.blockedFrom);
-    return Math.max(0, ((start.getHours() * 60 + start.getMinutes() - this.minutesFromTime(this.appointmentSettings.startTime)) / this.appointmentSettings.slotMinutes) * 48);
+    return Math.max(0, ((start.getHours() * 60 + start.getMinutes() - this.minutesFromTime(this.appointmentSettings.startTime)) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight);
   }
 
   blackoutHeight(entry: BlackoutEntry) {
-    return Math.max(48, (this.minutesBetween(entry.blockedFrom, entry.blockedUntil) / this.appointmentSettings.slotMinutes) * 48 - 4);
+    return Math.max(this.calendarSlotHeight, (this.minutesBetween(entry.blockedFrom, entry.blockedUntil) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight - 4);
   }
 
   private async loadOverlapSetting() {
@@ -1404,13 +1740,32 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     const date = column.date || this.appointmentDate;
     const startAt = this.localDateTimeToIso(date, this.timeToInput(time));
     const duration = this.minutesBetween(dragged.startAt, dragged.endAt) || 30;
+    const nextStaffId = column.staffId || dragged.staffId;
+    if (nextStaffId !== dragged.staffId
+      && dragged.staffPreference !== 'any'
+      && dragged.requestedStaffId
+      && dragged.requestedStaffId !== nextStaffId) {
+      this.openEditAppointment(dragged);
+      this.appointmentDate = date;
+      const line = this.bookingLines.find((item) => item.appointmentId === dragged.id);
+      if (line) {
+        line.staffId = nextStaffId;
+        line.staffSearch = this.staffName(nextStaffId);
+        line.startTime = this.timeToInput(time);
+        line.durationMinutes = duration;
+      }
+      this.staffChangeReviewOpen = true;
+      return;
+    }
     try {
       await this.postJson(`/api/v1/appointments/${dragged.id}/reschedule`, {
         start_at: startAt,
         end_at: this.localDateTimeToIso(date, this.addMinutesToTime(this.timeToInput(time), duration)),
-        staff_id: column.staffId || dragged.staffId,
+        staff_id: nextStaffId,
         chair_room_id: dragged.chairRoomId,
         reason: 'Moved on calendar',
+        change_mode: 'calendar-move',
+        actor_source: 'crm',
       });
       await this.loadAppointments();
     } catch (error) {
@@ -1442,6 +1797,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.bookingError = '';
     this.selectedClientId = '';
     this.bookingClientSearch = '';
+    this.bookingClientKpi = null;
+    this.bookingClientKpiRequest += 1;
     this.bookingNotes = '';
     this.notifyStaff = true;
     this.recurrenceFrequency = 'none';
@@ -1451,9 +1808,13 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   private blankLine(staffId: string, startTime: string): BookingLine {
     const person = this.staff.find((entry) => entry.id === staffId);
+    const client = this.clients.find((entry) => entry.id === this.selectedClientId);
     return {
       id: `line_${++this.lineSeed}`,
       appointmentId: '',
+      clientId: client?.id || '',
+      clientSearch: this.clientLabel(client),
+      clientOpen: false,
       serviceId: '',
       serviceSearch: '',
       staffId: person?.id || '',
@@ -1461,7 +1822,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       startTime,
       durationMinutes: 30,
       chairRoomId: '',
-      staffRequested: false,
+      initialStaffId: '',
+      requestedStaffId: person?.id || '',
+      staffPreference: person?.id ? 'preferred' : 'any',
+      staffChangeApproval: '',
+      staffChangeReason: '',
       serviceOpen: false,
       staffOpen: false,
       variantId: '',
@@ -1477,6 +1842,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       .filter((item) => {
         const status = String(item.status || '').toLowerCase();
         if (status === 'cancelled' || status === 'canceled') return false;
+        if (this.statusFilter && !this.statusFilter.includes(status)) return false;
         if (this.activeView === 'Day') return item.startAt.slice(0, 10) === this.appointmentDate;
         return columns.some((column) => column.date === item.startAt.slice(0, 10)) && (!selectedStaffIds.size || selectedStaffIds.has(item.staffId));
       })
@@ -1488,12 +1854,14 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         const start = new Date(item.startAt);
         const end = new Date(item.endAt);
         const minutes = start.getHours() * 60 + start.getMinutes();
-        const top = Math.max(0, ((minutes - this.minutesFromTime(this.appointmentSettings.startTime)) / this.appointmentSettings.slotMinutes) * 48);
-        const height = Math.max(48, (Math.max(this.appointmentSettings.slotMinutes, (end.getTime() - start.getTime()) / 60000) / this.appointmentSettings.slotMinutes) * 48 - 4);
+        const top = Math.max(0, ((minutes - this.minutesFromTime(this.appointmentSettings.startTime)) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight);
+        const height = Math.max(this.calendarSlotHeight, (Math.max(this.appointmentSettings.slotMinutes, (end.getTime() - start.getTime()) / 60000) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight - 4);
         const card: AppointmentCard = {
           id: item.id,
           clientId: item.clientId,
           staffId: item.staffId,
+          requestedStaffId: item.requestedStaffId,
+          staffPreference: item.staffPreference,
           serviceIds: item.serviceIds,
           startAt: item.startAt,
           endAt: item.endAt,
@@ -1585,6 +1953,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     };
   }
 
+  requestedStaffLabel(item: { requestedStaffId: string }) {
+    return this.staffName(item.requestedStaffId) || 'Staff';
+  }
+
   private appointmentsOverlap(first: AppointmentRecord, second: AppointmentRecord) {
     return new Date(first.startAt).getTime() < new Date(second.endAt).getTime()
       && new Date(second.startAt).getTime() < new Date(first.endAt).getTime();
@@ -1629,6 +2001,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       id: String(item.id || ''),
       clientId: String(item.client_id || item.clientId || ''),
       staffId: String(item.staff_id || item.staffId || ''),
+      requestedStaffId: String(item.requested_staff_id || item.requestedStaffId || ''),
+      staffPreference: ['preferred', 'required'].includes(String(item.staff_preference || item.staffPreference || '').toLowerCase())
+        ? String(item.staff_preference || item.staffPreference).toLowerCase() as 'preferred' | 'required'
+        : 'any',
       serviceIds: Array.isArray(item.service_ids) ? item.service_ids : Array.isArray(item.serviceIds) ? item.serviceIds : [],
       startAt: String(item.start_at || item.startAt || ''),
       endAt: String(item.end_at || item.endAt || ''),
@@ -1682,7 +2058,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         id: String(row.id || `${_id}-activity-${index}`),
         title: this.activityTitle(row),
         time: String(row.created_at || row.createdAt || ''),
-        body: String(row.reason || row.body || row.description || row.action || ''),
+        body: this.activityBody(row),
       }))
       .filter((event) => event.time || event.title || event.body);
   }
@@ -1700,12 +2076,24 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     const oldStatus = String(row.old_status || row.oldStatus || '').trim();
     const newStatus = String(row.new_status || row.newStatus || '').trim();
     if (oldStatus && newStatus) return `Status: ${oldStatus} → ${newStatus}`;
-    return String(row.action || row.title || row.event || 'Activity');
+    const action = String(row.action || row.title || row.event || 'Activity');
+    const labels: Record<string, string> = {
+      BOOKING_RESCHEDULED: 'Rescheduled by CRM', CLIENT_RESCHEDULE_REQUESTED: 'Client reschedule requested',
+      CALENDAR_MOVED: 'Calendar moved', RESCHEDULE_APPROVED: 'Reschedule approved', RESCHEDULE_REJECTED: 'Reschedule rejected',
+    };
+    return labels[action] || action;
+  }
+
+  private activityBody(row: any) {
+    const body = String(row.reason || row.body || row.description || row.action || '');
+    const appointment = this.selectedAppointment;
+    if (!appointment || appointment.staffPreference === 'any' || !/booking saved/i.test(body)) return body;
+    const preference = appointment.staffPreference === 'required' ? 'Required' : 'Preferred';
+    return `${body} · ♥ ${this.requestedStaffLabel(appointment)} requested (${preference})`;
   }
 
   private bookingNotesFor(line: BookingLine) {
-    const requested = line.staffRequested ? `Requested staff: ${this.staffName(line.staffId)}` : '';
-    return [this.bookingNotes.trim(), requested].filter(Boolean).join('\n');
+    return this.bookingNotes.trim();
   }
 
   private startActivityRefresh() {
@@ -1822,7 +2210,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     return `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase() || '--';
   }
 
-  private clientLabel(client: ClientOption) {
+  private clientLabel(client?: ClientOption) {
+    if (!client) return '';
     return [client.name, client.phone].filter(Boolean).join(' · ');
   }
 
@@ -1834,7 +2223,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     return this.services.find((service) => service.id === id)?.name || 'Service';
   }
 
-  private staffName(id: string) {
+  staffName(id: string) {
     return this.staff.find((person) => person.id === id)?.name || 'Staff';
   }
 
@@ -1911,7 +2300,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.currentTimeTop = ((currentMinutes - gridStart) / this.appointmentSettings.slotMinutes) * 48;
+    this.currentTimeTop = ((currentMinutes - gridStart) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight;
     this.currentTimeLabel = this.timeLabel(now.getHours(), now.getMinutes());
   }
 
@@ -1943,6 +2332,12 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       roomNumberOption: false,
       staffCalendar: true,
       defaultStatus: 'Confirmed',
+      clientSelfReschedule: true,
+      rescheduleApprovalRequired: false,
+      rescheduleCutoffHours: 2,
+      maxRescheduleCount: 2,
+      rescheduleSmsAppNotification: true,
+      perServiceRescheduleSms: true,
       colors: [
         { status: 'booked', enabled: true, color: '#84cfb1', label: 'Confirmed' },
         { status: 'arrived', enabled: true, color: '#9fd6fd', label: 'Arrived' },
@@ -2102,7 +2497,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     );
   }
 
-  private shortDate(value: string) {
+  shortDate(value: string) {
     if (!value) return '';
     return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }

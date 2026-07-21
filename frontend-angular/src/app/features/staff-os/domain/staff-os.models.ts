@@ -70,14 +70,20 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     eyebrow: 'Payroll',
     title: 'Salary rules',
     icon: 'bi-sliders',
-    endpoints: [{ title: 'Payroll adjustment rules', path: '/staff/payroll-adjustment-rules' }],
+    endpoints: [
+      { title: 'Payroll adjustment rules', path: '/staff/payroll-adjustment-rules' },
+      { title: 'Statutory payroll rules', path: '/staff/payroll-compliance/rules' },
+    ],
   },
   'salary-history': {
     key: 'salary-history',
     eyebrow: 'Payroll',
     title: 'Salary history',
     icon: 'bi-clock-history',
-    endpoints: [{ title: 'Payroll runs', path: '/staff-payroll/runs' }],
+    endpoints: [
+      { title: 'Payroll runs', path: '/staff-payroll/runs' },
+      { title: 'Salary revisions', path: '/staff/salary-revisions' },
+    ],
     actions: [{ label: 'Open Payroll', icon: 'bi-wallet2', route: '/staff/payroll' }],
   },
   'fines-deductions': {

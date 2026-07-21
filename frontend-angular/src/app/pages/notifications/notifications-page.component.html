@@ -1,14 +1,57 @@
 <section class="inbox-page">
   <header class="page-header">
-    <div class="title-switch"><h1>Message Inbox</h1><nav><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button></nav></div>
+    <div class="title-switch"><h1>SMS Center</h1><nav><button type="button" [class.active]="mode === 'center'" (click)="setMode('center')">Control</button><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button></nav></div>
     <div class="provider-state">
       <span [class.ready]="providerReady('whatsapp')">WhatsApp</span>
       <span [class.ready]="providerReady('sms')">SMS</span>
+      <span [class.ready]="providerReady('email')">Email</span>
       <button type="button" (click)="reload()" [disabled]="loading">Refresh</button>
     </div>
   </header>
   <p class="alert" *ngIf="error">{{ error }}</p>
 
+  <ng-container *ngIf="mode === 'center'; else conversations">
+    <div class="control-shell">
+      <section class="compose-card">
+        <header><h2>Send message</h2><strong>{{ eligibleRecipients }} recipients</strong></header>
+        <div class="control-grid">
+          <label>Channel<select [(ngModel)]="controlChannel" (ngModelChange)="controlSelectionChanged()"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label>
+          <label>Category<select [(ngModel)]="controlCategory" (ngModelChange)="controlSelectionChanged()"><option *ngFor="let item of availableCategories" [value]="item.value">{{ item.label }}</option></select></label>
+          <label>Audience<select [(ngModel)]="controlAudience" (ngModelChange)="controlSelectionChanged()"><option *ngFor="let item of availableAudiences" [value]="item.value">{{ item.label }}</option></select></label>
+          <label *ngIf="controlChannel === 'email'">Subject<input [(ngModel)]="controlSubject" maxlength="160" /></label>
+        </div>
+        <small class="control-note">Booking OTP and customer verification remain rate-limited system messages; delivery activates when the provider is configured.</small>
+        <label class="message-field">Message<textarea [(ngModel)]="controlMessage" rows="7" maxlength="1000"></textarea></label>
+        <div class="compose-actions">
+          <div class="emoji-list" aria-label="Insert emoji"><button type="button" *ngFor="let emoji of emojis" (click)="addEmoji(emoji)">{{ emoji }}</button></div>
+          <label class="sensitive-check" *ngIf="isSalaryMessage"><input type="checkbox" [(ngModel)]="sensitiveConfirmed" /> Confirm salary message</label>
+          <button class="primary" type="button" (click)="sendControlMessage()" [disabled]="busy || !controlMessage.trim() || !eligibleRecipients || !providerReady(controlChannel) || (controlChannel === 'email' && !controlSubject.trim()) || (isSalaryMessage && !sensitiveConfirmed)">{{ busy ? 'Queuing…' : 'Queue message' }}</button>
+        </div>
+      </section>
+
+      <section class="history-card">
+        <header><h2>Delivery history</h2><button type="button" (click)="reloadControl()">Refresh</button></header>
+        <div class="history-table-wrap">
+          <table>
+            <thead><tr><th scope="col">Message</th><th scope="col">Channel</th><th scope="col">Audience</th><th scope="col">Status</th><th scope="col">Delivery</th><th scope="col">Created</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let campaign of controlCampaigns">
+                <td><strong>{{ campaign.title }}</strong><small>{{ campaign.body }}</small></td>
+                <td>{{ campaign.metadata.channel || '—' }}</td>
+                <td>{{ campaign.metadata.audience || '—' }}</td>
+                <td>{{ campaign.metadata.status || 'scheduled' }}</td>
+                <td>{{ campaign.metadata.deliveredCount || 0 }}/{{ campaign.metadata.recipientCount || campaign.metadata.eligibleRecipients || 0 }}<small *ngIf="campaign.metadata.failedCount || campaign.metadata.blockedCount">Failed {{ campaign.metadata.failedCount || 0 }} · Blocked {{ campaign.metadata.blockedCount || 0 }}</small></td>
+                <td>{{ formatDateTime(campaign.createdAt) }}</td>
+              </tr>
+              <tr *ngIf="!controlCampaigns.length"><td colspan="6" class="empty">No records yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </ng-container>
+
+  <ng-template #conversations>
   <div class="inbox-shell" *ngIf="mode === 'client'; else teamChat">
     <aside class="thread-list">
       <button type="button" *ngFor="let thread of threads" [class.active]="thread.clientId === selectedClientId" (click)="selectThread(thread)">
@@ -53,5 +96,6 @@
         <button class="primary" type="button" (click)="sendTeamMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
       </footer>
     </section>
+  </ng-template>
   </ng-template>
 </section>

@@ -1,12 +1,16 @@
-use chrono::NaiveDate;
-use serde::Deserialize;
+use chrono::{Datelike, Duration, NaiveDate, NaiveTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
     repositories::staff_operations_repository::{
-        self as repository, BranchTransferRecord, PerformanceReviewRecord, ShiftSwapRecord,
-        SkillLicenseRecord,
+        self as repository, BranchTransferRecord, OperationCleaningScoreRow,
+        OperationHygieneComplianceRow, OperationMeetingAttendanceRow, OperationReportOperationRow,
+        PerformanceReviewRecord, ShiftSwapRecord, SkillLicenseRecord,
+        StaffOperationAttendanceRecord, StaffOperationScheduleRecord, StaffOperationTaskRecord,
+        StaffOperationTemplateRecord,
     },
 };
 
@@ -14,6 +18,137 @@ const DECISIONS: &[&str] = &["approved", "rejected"];
 const TRANSFER_TYPES: &[&str] = &["permanent", "deputation"];
 const LICENSE_STATUSES: &[&str] = &["pending", "verified", "rejected", "expired"];
 const REVIEW_STATUSES: &[&str] = &["draft", "shared", "acknowledged", "closed"];
+const OPERATION_TYPES: &[&str] = &[
+    "opening_checklist",
+    "closing_checklist",
+    "tool_sanitization",
+    "stock_linen_check",
+    "cleaning_task",
+    "staff_meeting",
+    "performance_review",
+    "training_session",
+    "deep_cleaning",
+    "hygiene_audit",
+    "custom",
+];
+const OPERATION_SCHEDULE_STATUSES: &[&str] =
+    &["planned", "in_progress", "completed", "missed", "cancelled"];
+const OPERATION_TASK_STATUSES: &[&str] = &[
+    "planned",
+    "in_progress",
+    "completed",
+    "missed",
+    "cancelled",
+    "approved",
+    "rejected",
+];
+const OPERATION_ATTENDANCE_STATUSES: &[&str] = &["pending", "present", "absent", "late", "excused"];
+const OPERATION_FREQUENCIES: &[&str] = &["daily", "weekly", "fortnightly", "monthly", "custom"];
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationTaskRequest {
+    pub staff_id: String,
+    pub task_title: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationTaskPatchRequest {
+    pub status: Option<String>,
+    pub proof_url: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationAttendanceRequest {
+    pub staff_id: String,
+    pub status: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationTemplateRequest {
+    pub name: String,
+    pub operation_type: String,
+    pub frequency: String,
+    pub checklist_json: Option<Value>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationScheduleRequest {
+    pub template_id: Option<String>,
+    pub title: String,
+    pub operation_type: String,
+    pub frequency: String,
+    pub scheduled_date: NaiveDate,
+    pub scheduled_time: Option<NaiveTime>,
+    pub assigned_staff_ids: Option<Vec<String>>,
+    pub owner_user_id: Option<String>,
+    pub checklist_json: Option<Value>,
+    pub notes: Option<String>,
+    pub until: Option<NaiveDate>,
+    pub occurrences: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationSchedulePatchRequest {
+    pub title: Option<String>,
+    pub scheduled_date: Option<NaiveDate>,
+    pub scheduled_time: Option<NaiveTime>,
+    pub assigned_staff_ids: Option<Vec<String>>,
+    pub status: Option<String>,
+    pub checklist_json: Option<Value>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationAutomationRequest {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationReportSummary {
+    pub completed_count: i64,
+    pub missed_count: i64,
+    pub pending_approval_count: i64,
+    pub meeting_present_count: i64,
+    pub meeting_absent_count: i64,
+    pub average_cleaning_score: f64,
+    pub hygiene_compliance_percent: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationReportResponse {
+    pub date_from: NaiveDate,
+    pub date_to: NaiveDate,
+    pub summary: OperationReportSummary,
+    pub completed_operations: Vec<OperationReportOperationRow>,
+    pub missed_operations: Vec<OperationReportOperationRow>,
+    pub pending_approvals: Vec<OperationReportOperationRow>,
+    pub meeting_attendance: Vec<OperationMeetingAttendanceRow>,
+    pub cleaning_scores: Vec<OperationCleaningScoreRow>,
+    pub hygiene_compliance: Vec<OperationHygieneComplianceRow>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationAutomationRunResponse {
+    pub escalations_queued: i64,
+    pub meeting_reminders_queued: i64,
+    pub cleaning_reminders_queued: i64,
+    pub monthly_summaries_queued: i64,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -392,6 +527,632 @@ pub async fn save_review(
     .ok_or_else(stale)
 }
 
+pub async fn list_operation_templates(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    operation_type: &str,
+    active_only: bool,
+) -> Result<Vec<StaffOperationTemplateRecord>, AppError> {
+    let operation_type = optional_enum(operation_type, OPERATION_TYPES, "operation type")?;
+    repository::list_operation_templates(db, tenant_id, branch_id, &operation_type, active_only)
+        .await
+        .map_err(internal("load operation templates"))
+}
+
+pub async fn list_operation_schedules(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    status: &str,
+    operation_type: &str,
+) -> Result<Vec<StaffOperationScheduleRecord>, AppError> {
+    validate_date_range(from, to)?;
+    let status = optional_enum(status, OPERATION_SCHEDULE_STATUSES, "operation status")?;
+    let operation_type = optional_enum(operation_type, OPERATION_TYPES, "operation type")?;
+    repository::list_operation_schedules(
+        db,
+        tenant_id,
+        branch_id,
+        from,
+        to,
+        &status,
+        &operation_type,
+    )
+    .await
+    .map_err(internal("load operation schedules"))
+}
+
+pub async fn list_operation_tasks(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    operation_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<StaffOperationTaskRecord>, AppError> {
+    let operation_id = optional(Some(operation_id), 160, "operation")?;
+    let staff_id = optional(Some(staff_id), 160, "employee")?;
+    let status = optional_enum(status, OPERATION_TASK_STATUSES, "task status")?;
+    repository::list_operation_tasks(db, tenant_id, branch_id, &operation_id, &staff_id, &status)
+        .await
+        .map_err(internal("load operation tasks"))
+}
+
+pub async fn list_operation_attendance(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    operation_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<StaffOperationAttendanceRecord>, AppError> {
+    let operation_id = optional(Some(operation_id), 160, "operation")?;
+    let staff_id = optional(Some(staff_id), 160, "employee")?;
+    let status = optional_enum(status, OPERATION_ATTENDANCE_STATUSES, "attendance status")?;
+    repository::list_operation_attendance(
+        db,
+        tenant_id,
+        branch_id,
+        &operation_id,
+        &staff_id,
+        &status,
+    )
+    .await
+    .map_err(internal("load operation attendance"))
+}
+
+pub async fn create_operation_task(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    operation_id: &str,
+    request: OperationTaskRequest,
+) -> Result<StaffOperationTaskRecord, AppError> {
+    let operation_id = required(operation_id, 160, "operation")?;
+    let staff_id = required(&request.staff_id, 160, "employee")?;
+    let task_title = required(&request.task_title, 240, "task title")?;
+    let notes = optional(request.notes.as_deref(), 2000, "notes")?;
+    repository::create_operation_task(
+        db,
+        tenant_id,
+        branch_id,
+        &operation_id,
+        &staff_id,
+        &task_title,
+        &notes,
+    )
+    .await
+    .map_err(internal("create operation task"))?
+    .ok_or_else(|| AppError::validation("operation or employee is invalid for this branch"))
+}
+
+pub async fn update_operation_task(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor_user_id: &str,
+    manager_action: bool,
+    request: OperationTaskPatchRequest,
+) -> Result<StaffOperationTaskRecord, AppError> {
+    let id = required(id, 160, "task")?;
+    let status = match request.status.as_deref() {
+        Some(value) => Some(required_enum(
+            value,
+            OPERATION_TASK_STATUSES,
+            "task status",
+        )?),
+        None => None,
+    };
+    if status
+        .as_deref()
+        .is_some_and(|value| matches!(value, "approved" | "rejected"))
+        && !manager_action
+    {
+        return Err(AppError::forbidden("manager approval is restricted"));
+    }
+    let proof_url = match request.proof_url.as_deref() {
+        Some(value) => Some(optional(Some(value), 2000, "proof URL")?),
+        None => None,
+    };
+    let notes = match request.notes.as_deref() {
+        Some(value) => Some(optional(Some(value), 2000, "notes")?),
+        None => None,
+    };
+    repository::update_operation_task(
+        db,
+        tenant_id,
+        branch_id,
+        &id,
+        status.as_deref(),
+        proof_url.as_deref(),
+        notes.as_deref(),
+        if status
+            .as_deref()
+            .is_some_and(|value| matches!(value, "approved" | "rejected"))
+        {
+            Some(actor_user_id)
+        } else {
+            None
+        },
+    )
+    .await
+    .map_err(internal("update operation task"))?
+    .ok_or_else(|| AppError::not_found("operation task not found"))
+}
+
+pub async fn upsert_operation_attendance(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    operation_id: &str,
+    actor_user_id: &str,
+    request: OperationAttendanceRequest,
+) -> Result<StaffOperationAttendanceRecord, AppError> {
+    let operation_id = required(operation_id, 160, "operation")?;
+    let staff_id = required(&request.staff_id, 160, "employee")?;
+    let status = required_enum(
+        &request.status,
+        OPERATION_ATTENDANCE_STATUSES,
+        "attendance status",
+    )?;
+    let notes = optional(request.notes.as_deref(), 2000, "notes")?;
+    repository::upsert_operation_attendance(
+        db,
+        tenant_id,
+        branch_id,
+        &operation_id,
+        &staff_id,
+        &status,
+        &notes,
+        actor_user_id,
+    )
+    .await
+    .map_err(internal("save operation attendance"))?
+    .ok_or_else(|| AppError::validation("operation or employee is invalid for this branch"))
+}
+
+pub async fn create_operation_template(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request: OperationTemplateRequest,
+) -> Result<StaffOperationTemplateRecord, AppError> {
+    let name = required(&request.name, 200, "template name")?;
+    let operation_type = required_enum(&request.operation_type, OPERATION_TYPES, "operation type")?;
+    let frequency = required_enum(&request.frequency, OPERATION_FREQUENCIES, "frequency")?;
+    let checklist_json = checklist_array(request.checklist_json)?;
+    repository::create_operation_template(
+        db,
+        tenant_id,
+        branch_id,
+        &name,
+        &operation_type,
+        &frequency,
+        &checklist_json,
+        request.active.unwrap_or(true),
+        actor_user_id,
+    )
+    .await
+    .map_err(write_error(
+        "operation template name already exists",
+        "create operation template",
+    ))
+}
+
+pub async fn create_operation_schedules(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request: OperationScheduleRequest,
+) -> Result<Vec<StaffOperationScheduleRecord>, AppError> {
+    let title = required(&request.title, 240, "schedule title")?;
+    let operation_type = required_enum(&request.operation_type, OPERATION_TYPES, "operation type")?;
+    let frequency = required_enum(&request.frequency, OPERATION_FREQUENCIES, "frequency")?;
+    let notes = optional(request.notes.as_deref(), 2000, "notes")?;
+    let checklist_json = checklist_array(request.checklist_json)?;
+    let assigned_staff_ids = clean_staff_ids(request.assigned_staff_ids.unwrap_or_default())?;
+    ensure_active_staff(db, tenant_id, branch_id, &assigned_staff_ids).await?;
+    let template_id = clean_optional_id(request.template_id.as_deref(), "template")?;
+    if let Some(template_id) = template_id.as_deref() {
+        let exists = repository::operation_template_exists(db, tenant_id, branch_id, template_id)
+            .await
+            .map_err(internal("validate operation template"))?;
+        if !exists {
+            return Err(AppError::validation("template is invalid for this branch"));
+        }
+    }
+    let dates = expand_schedule_dates(
+        request.scheduled_date,
+        &frequency,
+        request.until,
+        request.occurrences,
+    )?;
+    repository::create_operation_schedules(
+        db,
+        tenant_id,
+        branch_id,
+        template_id.as_deref(),
+        &title,
+        &operation_type,
+        &frequency,
+        &dates,
+        request.scheduled_time,
+        &json!(assigned_staff_ids),
+        request
+            .owner_user_id
+            .as_deref()
+            .unwrap_or(actor_user_id)
+            .trim(),
+        &checklist_json,
+        &notes,
+        actor_user_id,
+    )
+    .await
+    .map_err(internal("create operation schedules"))
+}
+
+pub async fn update_operation_schedule(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    request: OperationSchedulePatchRequest,
+) -> Result<StaffOperationScheduleRecord, AppError> {
+    let title = match request.title.as_deref() {
+        Some(value) => Some(required(value, 240, "schedule title")?),
+        None => None,
+    };
+    let notes = match request.notes.as_deref() {
+        Some(value) => Some(optional(Some(value), 2000, "notes")?),
+        None => None,
+    };
+    let status = match request.status.as_deref() {
+        Some(value) => Some(required_enum(
+            value,
+            OPERATION_SCHEDULE_STATUSES,
+            "operation status",
+        )?),
+        None => None,
+    };
+    let assigned_staff_ids = match request.assigned_staff_ids {
+        Some(ids) => {
+            let ids = clean_staff_ids(ids)?;
+            ensure_active_staff(db, tenant_id, branch_id, &ids).await?;
+            Some(json!(ids))
+        }
+        None => None,
+    };
+    let checklist_json = match request.checklist_json {
+        Some(value) => Some(checklist_array(Some(value))?),
+        None => None,
+    };
+    repository::update_operation_schedule(
+        db,
+        tenant_id,
+        branch_id,
+        id.trim(),
+        title.as_deref(),
+        request.scheduled_date,
+        request.scheduled_time,
+        assigned_staff_ids.as_ref(),
+        status.as_deref(),
+        checklist_json.as_ref(),
+        notes.as_deref(),
+    )
+    .await
+    .map_err(internal("update operation schedule"))?
+    .ok_or_else(|| AppError::not_found("operation schedule not found"))
+}
+
+pub async fn operation_report(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    staff_id: &str,
+    operation_type: &str,
+) -> Result<OperationReportResponse, AppError> {
+    validate_date_range(from, to)?;
+    let staff_id = optional(Some(staff_id), 160, "employee")?;
+    let operation_type = optional_enum(operation_type, OPERATION_TYPES, "operation type")?;
+
+    let completed_operations = repository::operation_report_operation_rows(
+        db,
+        tenant_id,
+        branch_id,
+        from,
+        to,
+        &staff_id,
+        &operation_type,
+        "completed",
+    )
+    .await
+    .map_err(internal("load completed operation report"))?;
+    let missed_operations = repository::operation_report_operation_rows(
+        db,
+        tenant_id,
+        branch_id,
+        from,
+        to,
+        &staff_id,
+        &operation_type,
+        "missed",
+    )
+    .await
+    .map_err(internal("load missed operation report"))?;
+    let pending_approvals = repository::operation_report_operation_rows(
+        db,
+        tenant_id,
+        branch_id,
+        from,
+        to,
+        &staff_id,
+        &operation_type,
+        "pending_approval",
+    )
+    .await
+    .map_err(internal("load pending operation approvals"))?;
+    let meeting_attendance = repository::operation_meeting_attendance_rows(
+        db, tenant_id, branch_id, from, to, &staff_id,
+    )
+    .await
+    .map_err(internal("load meeting attendance report"))?;
+    let cleaning_scores =
+        repository::operation_cleaning_score_rows(db, tenant_id, branch_id, from, to, &staff_id)
+            .await
+            .map_err(internal("load cleaning score report"))?;
+    let hygiene_compliance = repository::operation_hygiene_compliance_rows(
+        db,
+        tenant_id,
+        branch_id,
+        from,
+        to,
+        &operation_type,
+    )
+    .await
+    .map_err(internal("load hygiene compliance report"))?;
+
+    let meeting_present_count = meeting_attendance.iter().map(|row| row.present_count).sum();
+    let meeting_absent_count = meeting_attendance.iter().map(|row| row.absent_count).sum();
+    let average_cleaning_score = average_score(cleaning_scores.iter().map(|row| row.score));
+    let hygiene_compliance_percent =
+        average_score(hygiene_compliance.iter().map(|row| row.compliance_percent));
+
+    Ok(OperationReportResponse {
+        date_from: from,
+        date_to: to,
+        summary: OperationReportSummary {
+            completed_count: completed_operations.len() as i64,
+            missed_count: missed_operations.len() as i64,
+            pending_approval_count: pending_approvals.len() as i64,
+            meeting_present_count,
+            meeting_absent_count,
+            average_cleaning_score,
+            hygiene_compliance_percent,
+        },
+        completed_operations,
+        missed_operations,
+        pending_approvals,
+        meeting_attendance,
+        cleaning_scores,
+        hygiene_compliance,
+    })
+}
+
+pub async fn run_operation_automations(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request: OperationAutomationRequest,
+) -> Result<OperationAutomationRunResponse, AppError> {
+    validate_date_range(request.from, request.to)?;
+    let now = Utc::now();
+    let today = now.date_naive();
+    let reminder_from = if request.from > today {
+        request.from
+    } else {
+        today
+    };
+    let reminder_to = if request.to < reminder_from {
+        reminder_from
+    } else {
+        request.to
+    };
+
+    let mut escalations_queued = 0_i64;
+    for target in
+        repository::missed_operation_targets(db, tenant_id, branch_id, request.from, request.to)
+            .await
+            .map_err(internal("load missed operation automation targets"))?
+    {
+        let task_key = target.task_id.as_deref().unwrap_or("operation");
+        let idempotency_key = format!("missed:{}:{}", target.operation_id, task_key);
+        let metadata = json!({
+            "idempotencyKey": idempotency_key,
+            "operationId": target.operation_id,
+            "taskId": target.task_id,
+            "operationType": target.operation_type,
+            "scheduledDate": target.scheduled_date,
+            "automation": "missed_task_escalation"
+        });
+        let queued = repository::queue_staff_operation_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &target.staff_id,
+            "operation_missed_task_escalation",
+            &target.mobile_phone,
+            "Missed operation task",
+            &format!("{} missed on {}", target.title, target.scheduled_date),
+            now,
+            &metadata,
+            &idempotency_key,
+        )
+        .await
+        .map_err(internal("queue missed task escalation"))?;
+        if queued {
+            escalations_queued += 1;
+        }
+    }
+
+    let meeting_types = vec![
+        "staff_meeting".to_string(),
+        "performance_review".to_string(),
+        "training_session".to_string(),
+    ];
+    let mut meeting_reminders_queued = 0_i64;
+    for target in repository::upcoming_operation_targets(
+        db,
+        tenant_id,
+        branch_id,
+        reminder_from,
+        reminder_to,
+        &meeting_types,
+    )
+    .await
+    .map_err(internal("load meeting reminder targets"))?
+    {
+        let idempotency_key = format!("meeting:{}:{}", target.operation_id, target.staff_id);
+        let metadata = json!({
+            "idempotencyKey": idempotency_key,
+            "operationId": target.operation_id,
+            "operationType": target.operation_type,
+            "scheduledDate": target.scheduled_date,
+            "automation": "upcoming_meeting_reminder"
+        });
+        let queued = repository::queue_staff_operation_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &target.staff_id,
+            "operation_meeting_reminder",
+            &target.mobile_phone,
+            "Upcoming staff operation",
+            &format!("{} is scheduled on {}", target.title, target.scheduled_date),
+            now,
+            &metadata,
+            &idempotency_key,
+        )
+        .await
+        .map_err(internal("queue meeting reminder"))?;
+        if queued {
+            meeting_reminders_queued += 1;
+        }
+    }
+
+    let cleaning_types = vec![
+        "cleaning_task".to_string(),
+        "deep_cleaning".to_string(),
+        "hygiene_audit".to_string(),
+    ];
+    let mut cleaning_reminders_queued = 0_i64;
+    for target in repository::upcoming_operation_targets(
+        db,
+        tenant_id,
+        branch_id,
+        reminder_from,
+        reminder_to,
+        &cleaning_types,
+    )
+    .await
+    .map_err(internal("load deep cleaning reminder targets"))?
+    {
+        let idempotency_key = format!("cleaning:{}:{}", target.operation_id, target.staff_id);
+        let metadata = json!({
+            "idempotencyKey": idempotency_key,
+            "operationId": target.operation_id,
+            "operationType": target.operation_type,
+            "scheduledDate": target.scheduled_date,
+            "automation": "deep_cleaning_reminder"
+        });
+        let queued = repository::queue_staff_operation_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &target.staff_id,
+            "operation_deep_cleaning_reminder",
+            &target.mobile_phone,
+            "Deep cleaning reminder",
+            &format!("{} is scheduled on {}", target.title, target.scheduled_date),
+            now,
+            &metadata,
+            &idempotency_key,
+        )
+        .await
+        .map_err(internal("queue deep cleaning reminder"))?;
+        if queued {
+            cleaning_reminders_queued += 1;
+        }
+    }
+
+    let report =
+        operation_report(db, tenant_id, branch_id, request.from, request.to, "", "").await?;
+    let idempotency_key = format!("monthly:{}:{}", request.from, request.to);
+    let body = format!(
+        "Completed: {} | Missed: {} | Pending approvals: {} | Hygiene: {:.2}%",
+        report.summary.completed_count,
+        report.summary.missed_count,
+        report.summary.pending_approval_count,
+        report.summary.hygiene_compliance_percent
+    );
+    let metadata = json!({
+        "idempotencyKey": idempotency_key,
+        "from": request.from,
+        "to": request.to,
+        "summary": &report.summary,
+        "automation": "monthly_summary"
+    });
+    let monthly_summaries_queued = if repository::queue_owner_operation_summary(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        "Staff operations monthly summary",
+        &body,
+        &metadata,
+        &idempotency_key,
+    )
+    .await
+    .map_err(internal("queue monthly operation summary"))?
+    {
+        1
+    } else {
+        0
+    };
+
+    Ok(OperationAutomationRunResponse {
+        escalations_queued,
+        meeting_reminders_queued,
+        cleaning_reminders_queued,
+        monthly_summaries_queued,
+    })
+}
+
+fn average_score(values: impl Iterator<Item = f64>) -> f64 {
+    let mut total = 0.0;
+    let mut count = 0.0;
+    for value in values {
+        total += value;
+        count += 1.0;
+    }
+    if count == 0.0 {
+        0.0
+    } else {
+        ((total / count) * 100.0).round() / 100.0
+    }
+}
+
 fn required(value: &str, max: usize, field: &str) -> Result<String, AppError> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > max {
@@ -437,6 +1198,138 @@ fn positive_version(version: i32) -> Result<i32, AppError> {
     }
 }
 
+fn validate_date_range(from: NaiveDate, to: NaiveDate) -> Result<(), AppError> {
+    if to < from {
+        return Err(AppError::validation(
+            "to date must be on or after from date",
+        ));
+    }
+    if to.signed_duration_since(from).num_days() > 370 {
+        return Err(AppError::validation("date range cannot exceed 370 days"));
+    }
+    Ok(())
+}
+
+fn checklist_array(value: Option<Value>) -> Result<Value, AppError> {
+    let value = value.unwrap_or_else(|| json!([]));
+    if value.as_array().is_none() {
+        return Err(AppError::validation("checklistJson must be an array"));
+    }
+    Ok(value)
+}
+
+fn clean_optional_id(value: Option<&str>, field: &str) -> Result<Option<String>, AppError> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) if value.chars().count() <= 160 => Ok(Some(value.to_string())),
+        Some(_) => Err(AppError::validation(format!("{field} is too long"))),
+        None => Ok(None),
+    }
+}
+
+fn clean_staff_ids(values: Vec<String>) -> Result<Vec<String>, AppError> {
+    let mut ids = Vec::new();
+    for value in values {
+        let value = value.trim();
+        if value.is_empty() || value.chars().count() > 160 {
+            return Err(AppError::validation(
+                "assigned staff contains an invalid employee",
+            ));
+        }
+        if !ids.iter().any(|id| id == value) {
+            ids.push(value.to_string());
+        }
+    }
+    if ids.len() > 200 {
+        return Err(AppError::validation(
+            "assigned staff cannot exceed 200 employees",
+        ));
+    }
+    Ok(ids)
+}
+
+async fn ensure_active_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_ids: &[String],
+) -> Result<(), AppError> {
+    if staff_ids.is_empty() {
+        return Ok(());
+    }
+    let count = repository::active_staff_count(db, tenant_id, branch_id, staff_ids)
+        .await
+        .map_err(internal("validate assigned staff"))?;
+    if count as usize == staff_ids.len() {
+        Ok(())
+    } else {
+        Err(AppError::validation(
+            "assigned staff must be active in this branch",
+        ))
+    }
+}
+
+fn expand_schedule_dates(
+    start: NaiveDate,
+    frequency: &str,
+    until: Option<NaiveDate>,
+    occurrences: Option<i32>,
+) -> Result<Vec<NaiveDate>, AppError> {
+    if frequency == "custom" && (until.is_some() || occurrences.unwrap_or(1) > 1) {
+        return Err(AppError::validation(
+            "custom frequency creates one schedule at a time",
+        ));
+    }
+    let max = occurrences.unwrap_or(if until.is_some() { 120 } else { 1 });
+    if !(1..=120).contains(&max) {
+        return Err(AppError::validation(
+            "occurrences must be between 1 and 120",
+        ));
+    }
+    if let Some(until) = until {
+        validate_date_range(start, until)?;
+    }
+    let mut dates = Vec::new();
+    let original_day = start.day();
+    let mut current = start;
+    while dates.len() < max as usize {
+        if until.is_some_and(|until| current > until) {
+            break;
+        }
+        dates.push(current);
+        current = match frequency {
+            "daily" => current + Duration::days(1),
+            "weekly" => current + Duration::days(7),
+            "fortnightly" => current + Duration::days(15),
+            "monthly" => add_month(current, original_day)?,
+            "custom" => break,
+            _ => return Err(AppError::validation("invalid frequency")),
+        };
+    }
+    Ok(dates)
+}
+
+fn add_month(date: NaiveDate, desired_day: u32) -> Result<NaiveDate, AppError> {
+    let mut year = date.year();
+    let mut month = date.month() + 1;
+    if month == 13 {
+        month = 1;
+        year += 1;
+    }
+    let day = desired_day.min(days_in_month(year, month));
+    NaiveDate::from_ymd_opt(year, month, day)
+        .ok_or_else(|| AppError::validation("invalid monthly schedule date"))
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    let first_next = NaiveDate::from_ymd_opt(next_year, next_month, 1).expect("valid month");
+    (first_next - Duration::days(1)).day()
+}
+
 fn stale() -> AppError {
     AppError::conflict("record was changed or is no longer pending")
 }
@@ -463,7 +1356,31 @@ fn write_error(
 
 #[cfg(test)]
 mod tests {
-    use super::{required_enum, TRANSFER_TYPES};
+    use super::{
+        expand_schedule_dates, required_enum, OPERATION_FREQUENCIES, OPERATION_TASK_STATUSES,
+        TRANSFER_TYPES,
+    };
+    use chrono::NaiveDate;
+
+    #[test]
+    fn monthly_recurrence_clamps_to_month_end() {
+        let dates = expand_schedule_dates(
+            NaiveDate::from_ymd_opt(2026, 1, 31).unwrap(),
+            "monthly",
+            None,
+            Some(2),
+        )
+        .unwrap();
+        assert_eq!(dates[1], NaiveDate::from_ymd_opt(2026, 2, 28).unwrap());
+        assert!(required_enum("weekly", OPERATION_FREQUENCIES, "frequency").is_ok());
+    }
+
+    #[test]
+    fn task_statuses_allow_completion_and_approval() {
+        assert!(required_enum("completed", OPERATION_TASK_STATUSES, "task status").is_ok());
+        assert!(required_enum("approved", OPERATION_TASK_STATUSES, "task status").is_ok());
+        assert!(required_enum("done", OPERATION_TASK_STATUSES, "task status").is_err());
+    }
 
     #[test]
     fn transfer_type_is_strict() {

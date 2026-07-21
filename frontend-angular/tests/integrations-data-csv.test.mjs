@@ -14,3 +14,30 @@ test('CSV import preserves quoted commas and escaped quotes', () => {
     ['Sara', 'She said "yes"'],
   ]);
 });
+
+test('Data Migration workspace keeps the seven-stage workflow on the shared store', () => {
+  const store = readFileSync('src/app/pages/data-migration/data-migration.store.ts', 'utf8');
+  const page = readFileSync('src/app/pages/data-migration/integrations-data-page.component.ts', 'utf8');
+  const template = readFileSync('src/app/pages/data-migration/integrations-data-page.component.html', 'utf8');
+
+  assert.match(store, /providedIn:\s*'root'/);
+  assert.match(store, /\/settings\/integrations\/import-jobs/);
+  assert.match(store, /\/settings\/integrations\/import-source-files/);
+  assert.match(store, /\/settings\/integrations\/import-mappings/);
+  assert.match(store, /\/settings\/integrations\/import-templates/);
+  assert.match(page, /inject\(DataMigrationStore\)/);
+  assert.match(page, /migration\.reload\(\)/);
+  assert.match(page, /migration\.loadGovernance\(job\.id\)/);
+  assert.match(page, /import-mapping-suggestions/);
+  assert.match(page, /sourceFileId:\s*this\.selectedSourceFileId/);
+  assert.match(page, /mapping:\s*this\.selectedMappingId \? \{\} : this\.suggestedMapping/);
+  assert.match(page, /mode:\s*'dry-run'/);
+  assert.match(page, /migration\.loadFailureAssistant\(job\.id\)/);
+  assert.match(store, /import-monitoring/);
+
+  for (const stage of ['Source / upload', 'Mapping', 'Validation', 'Worker progress', 'Approval', 'Reconciliation', 'History / rollback']) {
+    assert.match(template, new RegExp(stage.replace('/', '\\/'), 'i'));
+  }
+  assert.match(template, /preRollbackImpact/);
+  assert.match(template, /recoveryRecommendations/);
+});

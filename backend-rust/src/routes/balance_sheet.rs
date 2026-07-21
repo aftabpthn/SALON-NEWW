@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -6,6 +8,7 @@ use axum::{
 };
 
 use crate::{
+    config::is_local_env,
     models::{
         balance_sheet::{
             AccountDefinition, AccountingActionResponse, AccountingPeriodResponse, AsOfQuery,
@@ -16,10 +19,11 @@ use crate::{
             ManualJournalRequest, ManualJournalResponse, PeriodCloseRequest, PeriodReopenRequest,
             SnapshotRequest, SnapshotResponse, WorkingCapitalReport,
         },
-        common::{ApiResponse, ApiResult},
+        common::{ApiResponse, ApiResult, AppError},
     },
+    repositories::auth_repository,
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, balance_sheet_service},
+    services::{auth_service::AuthClaims, balance_sheet_service, branch_service},
     state::AppState,
 };
 
@@ -78,14 +82,23 @@ async fn accounts(headers: HeaderMap) -> ApiResult<Vec<AccountDefinition>> {
 
 async fn live(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<AsOfQuery>,
 ) -> ApiResult<BalanceSheetReport> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let report = balance_sheet_service::live(
-        &state.db,
+    let branch_ids = balance_scope_branch_ids(
+        &state,
+        &claims,
         &tenant_id,
         &branch_id,
+        query.scope.as_deref().unwrap_or("branch"),
+    )
+    .await?;
+    let report = balance_sheet_service::live_for_branches(
+        &state.db,
+        &tenant_id,
+        &branch_ids,
         query.as_of_date.as_deref(),
     )
     .await?;
@@ -94,14 +107,23 @@ async fn live(
 
 async fn working_capital(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<AsOfQuery>,
 ) -> ApiResult<WorkingCapitalReport> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let report = balance_sheet_service::working_capital(
-        &state.db,
+    let branch_ids = balance_scope_branch_ids(
+        &state,
+        &claims,
         &tenant_id,
         &branch_id,
+        query.scope.as_deref().unwrap_or("branch"),
+    )
+    .await?;
+    let report = balance_sheet_service::working_capital_for_branches(
+        &state.db,
+        &tenant_id,
+        &branch_ids,
         query.as_of_date.as_deref(),
     )
     .await?;
@@ -341,4 +363,58 @@ async fn finance_reconciliation(
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn balance_scope_branch_ids(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    selected_branch_id: &str,
+    scope: &str,
+) -> Result<Vec<String>, AppError> {
+    if scope == "branch" {
+        return Ok(vec![selected_branch_id.to_string()]);
+    }
+    if scope != "tenant" {
+        return Err(AppError::validation("scope must be branch or tenant"));
+    }
+    if !["owner", "admin", "manager", "analyst"]
+        .iter()
+        .any(|role| claims.role.eq_ignore_ascii_case(role))
+    {
+        return Err(AppError::forbidden(
+            "multi-branch Balance Sheet access requires owner, admin, manager, or analyst role",
+        ));
+    }
+    let branch_ids = if is_local_env(&state.settings.app_env)
+        && state.settings.enable_dev_session
+        && claims.sub == "dev-admin"
+    {
+        branch_service::list(&state.db, tenant_id, None)
+            .await?
+            .into_iter()
+            .filter(|branch| branch.active)
+            .map(|branch| branch.id)
+            .collect::<Vec<_>>()
+    } else {
+        let user = auth_repository::find_user_by_id(&state.db, tenant_id, &claims.sub)
+            .await
+            .map_err(|_| AppError::internal("failed to load Balance Sheet branch access"))?
+            .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
+        auth_repository::list_branch_access(&state.db, &user)
+            .await
+            .map_err(|_| AppError::internal("failed to load Balance Sheet branch access"))?
+            .into_iter()
+            .map(|access| access.branch_id)
+            .collect::<Vec<_>>()
+    };
+    let branch_ids = branch_ids
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if branch_ids.is_empty() {
+        return Err(AppError::forbidden("no authorized branches are available"));
+    }
+    Ok(branch_ids)
 }

@@ -1,8 +1,10 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type RecipeLine = {
   productId?: string;
@@ -28,11 +30,12 @@ type RecipeTab = 'recipes' | 'approvals' | 'variance';
 @Component({
   selector: 'page-service-recipes',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './service-recipes-page.component.html',
   styleUrls: ['./service-recipes-page.component.css'],
 })
 export class ServiceRecipesPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   services: Service[] = [];
   items: Item[] = [];
@@ -77,7 +80,7 @@ export class ServiceRecipesPageComponent implements OnInit {
       }));
       const selected = this.selectedService;
       if (selected) this.editRecipe(selected, false);
-    } catch (error) { this.error = this.message(error, 'Service recipes could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.e1cd5dcf1e')); }
     finally { this.loading = false; }
   }
 
@@ -126,11 +129,11 @@ export class ServiceRecipesPageComponent implements OnInit {
 
   async saveRecipe() {
     const service = this.selectedService;
-    if (!service) { this.error = 'Select a service'; return; }
+    if (!service) { this.error = this.language.text('inventory.message.c950ccc9e2'); return; }
     const productIds = this.lines.map((line) => line.productId);
-    if (this.lines.some((line) => !line.productId || !Number.isInteger(Number(line.standardQty)) || Number(line.standardQty) <= 0)) { this.error = 'Every recipe line needs a product and whole standard quantity'; return; }
-    if (new Set(productIds).size !== productIds.length) { this.error = 'A product can appear only once in a recipe'; return; }
-    if (!this.lines.length && this.originalLineCount && !confirm('Remove all recipe lines from this service?')) return;
+    if (this.lines.some((line) => !line.productId || !Number.isInteger(Number(line.standardQty)) || Number(line.standardQty) <= 0)) { this.error = this.language.text('inventory.message.4ac5f19264'); return; }
+    if (new Set(productIds).size !== productIds.length) { this.error = this.language.text('inventory.message.387a7a34b0'); return; }
+    if (!this.lines.length && this.originalLineCount && !confirm(this.language.text('inventory.message.34da7a31a7'))) return;
     const payload = this.lines.map((line) => ({
       productId: line.productId, productName: line.productName, unit: line.unit,
       minQty: this.number(line.minQty), standardQty: this.number(line.standardQty), maxQty: this.number(line.maxQty),
@@ -139,8 +142,8 @@ export class ServiceRecipesPageComponent implements OnInit {
     this.saving = true; this.clearFeedback();
     try {
       await firstValueFrom(this.api.patch(`/services/${service.id}`, { productConsumption: payload }));
-      this.notice = 'Recipe saved'; await this.load(); this.notice = 'Recipe saved';
-    } catch (error) { this.error = this.message(error, 'Recipe could not be saved'); }
+      this.notice = this.language.text('inventory.message.2daa18be1f'); await this.load(); this.notice = this.language.text('inventory.message.2daa18be1f');
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.09c3f615f7')); }
     finally { this.saving = false; }
   }
 

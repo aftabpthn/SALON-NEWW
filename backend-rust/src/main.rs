@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 mod config;
 mod handlers;
 mod infrastructure;
@@ -40,6 +42,22 @@ async fn main() -> Result<()> {
                     .is_err()
                 {
                     tracing::warn!("client intelligence snapshot refresh failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if routes::appointments::expire_waitlist_offers(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("waitlist offer expiry cycle failed");
                 }
             }
         });
@@ -261,6 +279,24 @@ async fn main() -> Result<()> {
                     .is_err()
                 {
                     tracing::warn!("POS financial integrity monitor cycle failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if services::profit_governance_service::process_automated_action_queue(
+                    &worker_state.db,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("automated profit action scan cycle failed");
                 }
             }
         });

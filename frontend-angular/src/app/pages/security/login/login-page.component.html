@@ -150,6 +150,9 @@
         <i class="bi bi-lock" aria-hidden="true"></i>
         <input id="new-password" type="password" formControlName="newPassword" autocomplete="new-password" placeholder="12 to 128 characters" />
       </div>
+      <p *ngIf="passwordChangeForm.controls.newPassword.touched && passwordChangeForm.controls.newPassword.invalid" class="form-error" role="alert">
+        New password must contain 12 to 128 characters.
+      </p>
 
       <label class="field-label" for="confirm-password">Confirm password</label>
       <div class="input-shell" [class.invalid]="passwordChangeForm.controls.confirmPassword.touched && passwordChangeForm.controls.confirmPassword.invalid">
@@ -159,7 +162,7 @@
 
       <p *ngIf="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
 
-      <button class="primary-button" type="submit" [disabled]="changingPassword">
+      <button class="primary-button" type="submit" [disabled]="changingPassword || passwordChangeForm.invalid">
         <span>{{ changingPassword ? 'Changing password...' : 'Change password' }}</span>
         <span *ngIf="changingPassword" class="button-spinner" aria-hidden="true"></span>
       </button>

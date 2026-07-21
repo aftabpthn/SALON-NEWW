@@ -103,6 +103,20 @@
   line-height: 1;
 }
 
+.kpi-card.filterable {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kpi-card.filterable:hover,
+.kpi-card.filterable:focus-visible,
+.kpi-card.filterable.active {
+  border-color: #155ee8;
+  box-shadow: 0 0 0 3px rgba(21, 94, 232, .14), 0 14px 32px rgba(15, 23, 42, .08);
+}
+
 .kpi-card.cyan { background: linear-gradient(135deg, #d6fff7, #dff5ff); border-color: #7ed6cb; }
 .kpi-card.pink { background: linear-gradient(135deg, #f9dcf8, #ffe6f8); border-color: #d68dcf; }
 .kpi-card.blue { background: linear-gradient(135deg, #dff1ff, #eef7ff); border-color: #8fc5e9; }
@@ -131,6 +145,19 @@
   min-width: 1080px;
   align-items: center;
   gap: 12px;
+}
+
+.table-head > :nth-child(n + 6):not(:last-child),
+.invoice-row > :nth-child(n + 6):not(:last-child) {
+  justify-self: stretch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-head > :last-child,
+.invoice-row > :last-child {
+  justify-self: center;
+  text-align: center;
 }
 
 .table-head {
@@ -290,7 +317,6 @@
 .return-items:focus-visible {
   border-color: #9b2b62;
   background: #fff5f9;
-  outline: none;
 }
 
 .void-invoice {
@@ -307,10 +333,45 @@
 }
 
 .void-invoice:hover:not(:disabled),
-.void-invoice:focus-visible { background: #fff5f4; outline: none; }
+.void-invoice:focus-visible { background: #fff5f4; }
+
+.delete-request {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 10px;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  background: #fff;
+  color: #92400e;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-request:hover:not(:disabled),
+.delete-request:focus-visible { background: #fffbeb; }
+
+.delete-approval {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #f0c36e;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.delete-approval > div:first-child { display: grid; gap: 4px; }
+.delete-approval span, .delete-approval small { color: #78560b; font-size: 12px; }
+.delete-approval strong { color: #102346; }
+.delete-decision-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.delete-decision-actions button { min-height: 38px; border: 1px solid #c8d7ea; border-radius: 8px; background: #fff; color: #102346; font: inherit; font-weight: 600; cursor: pointer; }
+.delete-decision-actions .approve { border-color: #0f7a4f; background: #0f7a4f; color: #fff; }
+.delete-warning { margin: 0 0 16px; color: #78560b; }
 
 .credit-note,
 .ledger-check,
+.receive-payment,
 .payment-link-create {
   width: 100%;
   min-height: 38px;
@@ -328,8 +389,10 @@
 .credit-note:focus-visible,
 .ledger-check:hover:not(:disabled),
 .ledger-check:focus-visible,
+.receive-payment:hover:not(:disabled),
+.receive-payment:focus-visible,
 .payment-link-create:hover:not(:disabled),
-.payment-link-create:focus-visible { border-color: #155ee8; background: #f4f8ff; outline: none; }
+.payment-link-create:focus-visible { border-color: #155ee8; background: #f4f8ff; }
 
 .ledger-result {
   display: flex;
@@ -371,12 +434,34 @@
 .confirm-void:disabled,
 .credit-note:disabled,
 .ledger-check:disabled,
+.receive-payment:disabled,
 .payment-link-create:disabled,
 .confirm-credit-note:disabled,
-.confirm-payment-link:disabled {
+.confirm-payment-link:disabled,
+.confirm-receive-payment:disabled {
   cursor: not-allowed;
   opacity: .62;
 }
+
+.payment-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #c8d7ea;
+  border-radius: 8px;
+  background: #f4f8ff;
+}
+
+.payment-balance span,
+.receive-payment-modes label span { color: var(--muted, #5d6b82); font-size: 12px; font-weight: 700; }
+.payment-balance strong { color: #102346; font-size: 20px; }
+.receive-payment-modes { display: grid; gap: 10px; margin: 14px 0; }
+.receive-payment-modes article { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; border: 1px solid #e1e8f1; border-radius: 9px; }
+.payment-mode-title { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.payment-mode-title button { border: 0; background: none; color: #155ee8; font: inherit; font-weight: 600; cursor: pointer; }
+.receive-payment-modes label { display: grid; gap: 6px; }
+.receive-payment-modes input { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid #c8d7ea; border-radius: 8px; color: #102346; font: inherit; }
 
 .void-warning {
   margin: 0 0 18px;
@@ -398,6 +483,7 @@
   font-weight: 600;
 }
 
+.payment-timeline,
 .history {
   margin-top: 18px;
   padding-top: 14px;
@@ -408,6 +494,7 @@
 .deliveries div { display: grid; gap: 3px; padding: 9px 0; border-bottom: 1px solid #edf2f8; font-size: 12px; }
 .deliveries span, .deliveries small { color: var(--muted, #5d6b82); }
 
+.payment-timeline div,
 .history div {
   display: grid;
   grid-template-columns: 90px 1fr;
@@ -417,6 +504,8 @@
   font-size: 13px;
 }
 
+.payment-timeline small { grid-column: 1 / -1; color: var(--muted, #5d6b82); }
+.payment-timeline time,
 .history time {
   grid-column: 1 / -1;
   color: var(--muted, #5d6b82);
@@ -597,6 +686,12 @@
   cursor: pointer;
 }
 
+.return-drawer-footer .confirm-delete-request {
+  border-color: #d97706;
+  background: #d97706;
+  color: #fff;
+}
+
 .return-drawer-footer .confirm-return {
   border-color: #0f7a4f;
   background: #0f7a4f;
@@ -621,6 +716,12 @@
   color: #fff;
 }
 
+.return-drawer-footer .confirm-receive-payment {
+  border-color: #0f7a4f;
+  background: #0f7a4f;
+  color: #fff;
+}
+
 @media (max-width: 1200px) {
   .kpi-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
   .invoice-workspace { grid-template-columns: 1fr; }
@@ -629,8 +730,12 @@
 @media (max-width: 700px) {
   .invoice-page { padding: 14px; }
   .invoice-hero { align-items: flex-start; flex-direction: column; }
+  .invoice-hero nav { width: 100%; flex-wrap: wrap; }
+  .invoice-hero nav a { flex: 1 1 auto; justify-content: center; }
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .return-line { align-items: flex-start; flex-direction: column; }
   .return-line-input { width: 100%; grid-template-columns: 104px 1fr; text-align: left; }
+  .receive-payment-modes article { grid-template-columns: 1fr; }
+  .payment-mode-title { grid-column: 1; }
   .return-drawer-footer > div { width: 100%; }
 }

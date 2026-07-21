@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { catchError, finalize, of } from 'rxjs';
+import { catchError, finalize, of, timeout } from 'rxjs';
 import {
   AuthBranchAccess,
   AuthService,
@@ -99,13 +99,13 @@ export class LoginPageComponent implements OnInit {
 
     this.errorMessage = '';
     this.successMessage = '';
-    this.signingIn = true;
     this.tenantContext = tenantContext;
     const { loginId, password, mfaCode } = this.loginForm.getRawValue();
     if (this.mfaRequired && !mfaCode.trim()) {
       this.errorMessage = 'Enter your authenticator or recovery code.';
       return;
     }
+    this.signingIn = true;
     this.auth.login(tenantContext, loginId, password, mfaCode)
       .pipe(finalize(() => { this.signingIn = false; }))
       .subscribe({
@@ -176,9 +176,13 @@ export class LoginPageComponent implements OnInit {
       return;
     }
     this.errorMessage = '';
+    this.successMessage = '';
     this.changingPassword = true;
     this.auth.changePassword(newPassword)
-      .pipe(finalize(() => { this.changingPassword = false; }))
+      .pipe(
+        timeout({ first: 15000 }),
+        finalize(() => { this.changingPassword = false; }),
+      )
       .subscribe({
         next: () => {
           this.passwordChangeForm.reset();
@@ -186,7 +190,11 @@ export class LoginPageComponent implements OnInit {
           this.view = 'signin';
           this.successMessage = 'Password changed. Sign in again.';
         },
-        error: (error) => { this.errorMessage = this.readError(error); },
+        error: (error) => {
+          this.errorMessage = error?.name === 'TimeoutError'
+            ? 'Password change is taking too long. Check backend and try again.'
+            : this.readError(error);
+        },
       });
   }
 
@@ -235,11 +243,10 @@ export class LoginPageComponent implements OnInit {
       return;
     }
 
+    void this.router.navigateByUrl(this.safeReturnUrl(), { replaceUrl: true });
     this.auth.hydrateCurrentBranchName()
       .pipe(catchError(() => of(undefined)))
-      .subscribe(() => {
-        void this.router.navigateByUrl(this.safeReturnUrl(), { replaceUrl: true });
-      });
+      .subscribe();
   }
 
   private isBranchSelection(response: LoginResponse): response is BranchSelectionResponse {
@@ -248,10 +255,11 @@ export class LoginPageComponent implements OnInit {
 
   private safeReturnUrl(): string {
     const requested = this.route.snapshot.queryParamMap.get('returnUrl') || '/dashboard';
-    if (!requested.startsWith('/') || requested.startsWith('//') || requested.startsWith('/login')) {
+    const cleanPath = requested.split('http://')[0].split('https://')[0] || '/dashboard';
+    if (!cleanPath.startsWith('/') || cleanPath.startsWith('//') || cleanPath.startsWith('/login')) {
       return '/dashboard';
     }
-    return requested;
+    return cleanPath;
   }
 
   private readError(error: any): string {
@@ -263,6 +271,7 @@ export class LoginPageComponent implements OnInit {
     }
     if (error?.status === 401) return 'Invalid login ID or password.';
     if (error?.status === 429) return backendMessage || 'Too many attempts. Try again later.';
+    if (error?.status === 0 || error?.status >= 500) return backendMessage || 'Server is unavailable. Start the backend API and try again.';
     return backendMessage || error?.message || 'Unable to continue. Try again.';
   }
 }

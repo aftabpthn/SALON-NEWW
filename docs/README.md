@@ -14,7 +14,9 @@
 - [PROJECT_RULES.md](./PROJECT_RULES.md) — coding guardrails, roles, and workflow for contributions.
 - [DATABASE.md](./DATABASE.md) — tenant data model, isolation, and migration assumptions.
 - [API_GUIDELINES.md](./API_GUIDELINES.md) — endpoint patterns, validation, error, and response contracts.
+- [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) — current Rust inventory, audit, supplier, backbar, laundry and forecast contracts.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
+- [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.
 
 ## Docs Layout
 
@@ -213,20 +215,25 @@ POST   /api/staff-management/payroll/export
 
 Staff operations persist into `staff_attendance`, `staff_shifts`, `staff_commission_runs` and `payroll_exports`. Commission and payroll calculations use saved sales, appointment completion, service duration, attendance and staff commission rules.
 
-Intelligent inventory endpoints:
+Current inventory endpoints:
 
 ```text
-GET    /api/inventory-intelligence/summary
-GET    /api/inventory-intelligence/usage
-GET    /api/inventory-intelligence/predictions
-POST   /api/inventory-intelligence/suppliers
-POST   /api/inventory-intelligence/purchase-entry
-POST   /api/inventory-intelligence/batches
-POST   /api/inventory-intelligence/waste
-POST   /api/inventory-intelligence/reorder-suggestions/run
+GET/POST/PATCH /api/v1/inventory
+GET            /api/v1/inventory/ledger
+GET            /api/v1/inventory/valuation
+GET/PUT        /api/v1/inventory/policy
+GET            /api/v1/inventory/advanced-controls
+GET/POST       /api/v1/inventory/reorder-forecasts
+GET/POST       /api/v1/inventory/stock-audits
+GET/POST       /api/v1/inventory/backbar-usage
+GET/POST       /api/v1/inventory/backbar-containers
+GET/POST       /api/v1/inventory/supplier-governance
+GET/POST       /api/v1/inventory/laundry/orders
+GET/POST       /api/v1/purchases/orders
+GET/POST       /api/v1/purchases/grn
 ```
 
-Inventory intelligence persists suppliers, batches, reorder predictions and waste events in `suppliers`, `inventory_batches`, `inventory_predictions` and `inventory_waste_events`. Sale and service deductions continue to reduce product stock and now attach batch/supplier cost metadata when an available batch exists.
+PostgreSQL is the durable source of truth. Stock changes post through immutable ledger transactions; batch movements support FIFO/FEFO evidence; stock-audit and backbar overrides are approval gated. See [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) for exact request, role, idempotency and ownership rules.
 
 Mobile API and auth:
 
@@ -538,7 +545,7 @@ quality, and audit logs.
 
 ### 7. Technology Stack
 
-- Frontend: Angular standalone app under `frontend-angular/src/app`.
+- Frontends: the Angular CRM SPA under `frontend-angular/src/app`, the standalone Ionic/Capacitor customer app under `customer-app/`, and the standalone Ionic staff app under `staff-app/`.
 - Backend: Rust + Axum service under `backend-rust/src`.
 - Database: PostgreSQL via `sqlx` and `DATABASE_URL`.
 - Auth: JWT access tokens, refresh tokens, RBAC, tenant and branch headers.
@@ -548,6 +555,8 @@ quality, and audit logs.
 ### 8. Repository Structure
 
 - `frontend-angular/src/app/`: Angular application, routes, pages, core services, shared UI.
+- `customer-app/`: standalone customer booking app for web/PWA and Capacitor Android/iOS packaging.
+- `staff-app/`: standalone staff operations web/PWA app.
 - `backend-rust/src/`: Rust Axum app, routes, services, repositories, middleware,
   infrastructure, and handlers.
 - `docs/`: domain guides, audit reports, roadmap, runbooks, and operational

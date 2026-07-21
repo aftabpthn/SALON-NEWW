@@ -10,10 +10,17 @@ import { ApiService } from '../../../shared/services/api.service';
 type OutgoingCategory = {
   key: string;
   label: string;
+  categoryBucket: string;
+  balanceSheetImpact: string;
+  operating: boolean;
   accountCode?: string;
   manualEntry: boolean;
   workflowPath?: string;
   workflowLabel?: string;
+  requiresParty?: boolean;
+  requiresBillReference?: boolean;
+  requiresAttachment?: boolean;
+  approvalThresholdPaise?: number;
 };
 
 type AccountDefinition = { code: string; name: string; group: string };
@@ -24,12 +31,43 @@ type OutgoingLine = {
   lineNumber: number;
   categoryKey: string;
   categoryLabel: string;
+  categoryBucket: string;
+  balanceSheetImpact: string;
+  operating: boolean;
   accountCode: string;
   amountPaise: number;
   gstTreatment: string;
   gstPaise: number;
   netPaise: number;
+  subcategory?: string;
+  costCenterId?: string;
+  department?: string;
+  linkedPartyType?: string;
+  linkedPartyId?: string;
+  linkedPartyName?: string;
+  sourceReferenceType?: string;
+  sourceReferenceId?: string;
+  receiptNumber?: string;
+  taxInvoice?: boolean;
+  reimbursement?: boolean;
   remarks?: string;
+};
+
+type OutgoingAttachment = {
+  id: string;
+  lineNumber?: number;
+  fileUrl: string;
+  fileType?: string;
+  uploadedByUserId: string;
+  createdAt: string;
+};
+
+type OutgoingAuditEvent = {
+  id: string;
+  eventType: string;
+  actorUserId: string;
+  details: unknown;
+  createdAt: string;
 };
 
 type OutgoingVoucher = {
@@ -39,6 +77,11 @@ type OutgoingVoucher = {
   paymentAccountCode: string;
   paymentAccountName: string;
   paymentMode: string;
+  fundSource: string;
+  cashDrawerSessionId?: string;
+  cashDrawerTillId?: string;
+  openingBalancePaise?: number;
+  closingBalancePaise?: number;
   referenceNumber?: string;
   chequeNumber?: string;
   chequeDate?: string;
@@ -53,12 +96,15 @@ type OutgoingVoucher = {
   gstPaise: number;
   journalEntryId?: string;
   reversalJournalEntryId?: string;
+  approvalPolicyReason?: string;
   version: number;
   rejectionReason?: string;
   reversalReason?: string;
   createdAt: string;
   updatedAt: string;
   lines: OutgoingLine[];
+  attachments: OutgoingAttachment[];
+  auditEvents: OutgoingAuditEvent[];
 };
 
 type OutgoingSummary = {
@@ -79,13 +125,32 @@ type DraftLine = {
   amount: string;
   gstTreatment: 'none' | 'cgst_sgst' | 'igst';
   gstAmount: string;
+  subcategory: string;
+  costCenterId: string;
+  department: string;
+  linkedPartyType: string;
+  linkedPartyId: string;
+  linkedPartyName: string;
+  sourceReferenceType: string;
+  sourceReferenceId: string;
+  receiptNumber: string;
+  taxInvoice: boolean;
+  reimbursement: boolean;
   remarks: string;
+};
+
+type DraftAttachment = {
+  lineNumber: string;
+  fileUrl: string;
+  fileType: string;
 };
 
 type VoucherDraft = {
   businessDate: string;
   paymentAccountCode: string;
   paymentMode: string;
+  fundSource: string;
+  cashDrawerTillId: string;
   referenceNumber: string;
   chequeNumber: string;
   chequeDate: string;
@@ -96,6 +161,7 @@ type VoucherDraft = {
   attachmentUrl: string;
   remarks: string;
   lines: DraftLine[];
+  attachments: DraftAttachment[];
 };
 
 type ReportLine = OutgoingLine & {
@@ -160,6 +226,10 @@ export class OutgoingFundsPageComponent implements OnInit {
     billReference: voucher.billReference || '',
     status: voucher.status,
   }))));
+  readonly reportCategoryCount = computed(() => new Set(this.reportLines().map((line) => line.categoryKey)).size);
+  readonly operatingOutgoingPaise = computed(() => this.reportLines().filter((line) => line.operating).reduce((total, line) => total + line.amountPaise, 0));
+  readonly balanceSheetOnlyOutgoingPaise = computed(() => this.reportLines().filter((line) => !line.operating).reduce((total, line) => total + line.amountPaise, 0));
+  readonly reviewLineCount = computed(() => this.reportLines().filter((line) => line.categoryBucket === 'review').length);
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalRecords() / 100)));
 
   readonly canWrite = this.auth.hasPermission('finance.write') || this.auth.hasRole('owner', 'admin', 'manager', 'accountant');
@@ -251,6 +321,8 @@ export class OutgoingFundsPageComponent implements OnInit {
       businessDate: voucher.businessDate,
       paymentAccountCode: voucher.paymentAccountCode,
       paymentMode: voucher.paymentMode,
+      fundSource: voucher.fundSource || this.defaultFundSource(voucher.paymentAccountCode),
+      cashDrawerTillId: voucher.cashDrawerTillId || '',
       referenceNumber: voucher.referenceNumber || '',
       chequeNumber: voucher.chequeNumber || '',
       chequeDate: voucher.chequeDate || '',
@@ -265,7 +337,23 @@ export class OutgoingFundsPageComponent implements OnInit {
         amount: this.inputMoney(line.amountPaise),
         gstTreatment: (line.gstTreatment as DraftLine['gstTreatment']) || 'none',
         gstAmount: this.inputMoney(line.gstPaise),
+        subcategory: line.subcategory || '',
+        costCenterId: line.costCenterId || '',
+        department: line.department || '',
+        linkedPartyType: line.linkedPartyType || 'voucher',
+        linkedPartyId: line.linkedPartyId || '',
+        linkedPartyName: line.linkedPartyName || '',
+        sourceReferenceType: line.sourceReferenceType || '',
+        sourceReferenceId: line.sourceReferenceId || '',
+        receiptNumber: line.receiptNumber || '',
+        taxInvoice: !!line.taxInvoice,
+        reimbursement: !!line.reimbursement,
         remarks: line.remarks || '',
+      })),
+      attachments: (voucher.attachments || []).map((attachment) => ({
+        lineNumber: attachment.lineNumber ? String(attachment.lineNumber) : '',
+        fileUrl: attachment.fileUrl,
+        fileType: attachment.fileType || '',
       })),
     };
     this.decisionMode.set('');
@@ -309,8 +397,35 @@ export class OutgoingFundsPageComponent implements OnInit {
   }
 
   paymentModeChanged(): void {
-    if (this.draft.paymentMode === 'Cash') this.draft.paymentAccountCode = 'CASH_ON_HAND';
-    else if (this.draft.paymentMode !== 'Other') this.draft.paymentAccountCode = 'BANK_CLEARING';
+    if (this.draft.paymentMode === 'Cash') {
+      this.draft.paymentAccountCode = 'CASH_ON_HAND';
+      if (!['business_cash', 'petty_cash_balance', 'other'].includes(this.draft.fundSource)) this.draft.fundSource = 'business_cash';
+    } else if (this.draft.paymentMode !== 'Other') {
+      this.draft.paymentAccountCode = 'BANK_CLEARING';
+      this.draft.fundSource = 'bank';
+    }
+  }
+
+  paymentAccountChanged(): void {
+    this.draft.fundSource = this.defaultFundSource(this.draft.paymentAccountCode);
+    if (this.draft.paymentAccountCode !== 'CASH_ON_HAND') this.draft.cashDrawerTillId = '';
+  }
+
+  defaultFundSource(paymentAccountCode: string): string {
+    return paymentAccountCode === 'BANK_CLEARING' ? 'bank' : 'business_cash';
+  }
+
+  linePartyChanged(line: DraftLine): void {
+    line.linkedPartyId = '';
+    line.linkedPartyName = '';
+  }
+
+  addAttachment(): void {
+    this.draft.attachments.push(blankAttachmentDraft());
+  }
+
+  removeAttachment(index: number): void {
+    this.draft.attachments.splice(index, 1);
   }
 
   linkedPartyChanged(): void {
@@ -419,12 +534,15 @@ export class OutgoingFundsPageComponent implements OnInit {
       const vouchers = this.unwrap<OutgoingVoucher[]>(response) || [];
       const rows = vouchers.flatMap((voucher) => voucher.lines.map((line) => [
         this.displayDate(voucher.businessDate), voucher.voucherNumber, line.categoryLabel,
-        voucher.linkedPartyName || '', voucher.paymentAccountName, voucher.paymentMode,
+        line.categoryBucket || '', line.balanceSheetImpact || '', line.operating ? 'yes' : 'no',
+        line.subcategory || '', line.department || '', voucher.linkedPartyName || line.linkedPartyName || '',
+        voucher.paymentAccountName, voucher.paymentMode, voucher.fundSource || '',
         voucher.status, this.money(line.gstPaise), this.money(line.amountPaise),
-        voucher.billReference || '', line.remarks || voucher.remarks || '',
+        voucher.billReference || '', line.receiptNumber || '', line.taxInvoice ? 'yes' : 'no',
+        line.reimbursement ? 'yes' : 'no', line.remarks || voucher.remarks || '',
       ]));
       const csv = [
-        ['Date', 'Voucher', 'Category', 'Linked party', 'Payment account', 'Payment mode', 'Status', 'GST', 'Amount', 'Bill reference', 'Remarks'],
+        ['Date', 'Voucher', 'Category', 'Bucket', 'Balance sheet impact', 'Operating', 'Subcategory', 'Department', 'Linked party', 'Payment account', 'Payment mode', 'Fund source', 'Status', 'GST', 'Amount', 'Bill reference', 'Receipt', 'Tax invoice', 'Reimbursement', 'Remarks'],
         ...rows,
       ].map((row) => row.map(csvCell).join(',')).join('\r\n');
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -487,6 +605,17 @@ export class OutgoingFundsPageComponent implements OnInit {
       amountPaise: this.rupeesToPaise(line.amount),
       gstTreatment: line.gstTreatment,
       gstPaise: this.rupeesToPaise(line.gstAmount),
+      subcategory: line.subcategory.trim() || null,
+      costCenterId: line.costCenterId.trim() || null,
+      department: line.department.trim() || null,
+      linkedPartyType: line.linkedPartyType || 'voucher',
+      linkedPartyId: line.linkedPartyId.trim() || null,
+      linkedPartyName: line.linkedPartyName.trim() || null,
+      sourceReferenceType: line.sourceReferenceType.trim() || null,
+      sourceReferenceId: line.sourceReferenceId.trim() || null,
+      receiptNumber: line.receiptNumber.trim() || null,
+      taxInvoice: line.taxInvoice,
+      reimbursement: line.reimbursement,
       remarks: line.remarks.trim() || null,
     })).filter((line) => line.categoryKey || line.amountPaise || line.remarks);
     if (!lines.length || lines.some((line) => !line.categoryKey || line.amountPaise <= 0)) {
@@ -505,10 +634,27 @@ export class OutgoingFundsPageComponent implements OnInit {
       this.error.set('Select or enter the linked party');
       return null;
     }
+    const attachments = this.draft.attachments
+      .map((attachment) => ({
+        lineNumber: attachment.lineNumber ? Number(attachment.lineNumber) : null,
+        fileUrl: attachment.fileUrl.trim(),
+        fileType: attachment.fileType.trim() || null,
+      }))
+      .filter((attachment) => attachment.fileUrl);
+    if (attachments.some((attachment) => attachment.lineNumber && (attachment.lineNumber < 1 || attachment.lineNumber > lines.length))) {
+      this.error.set('Attachment line number must match an expense line');
+      return null;
+    }
+    if (attachments.some((attachment) => !/^https?:\/\//i.test(attachment.fileUrl))) {
+      this.error.set('Attachment file URL must start with http:// or https://');
+      return null;
+    }
     return {
       businessDate: this.draft.businessDate,
       paymentAccountCode: this.draft.paymentAccountCode,
       paymentMode: this.draft.paymentMode,
+      fundSource: this.draft.fundSource,
+      cashDrawerTillId: this.draft.cashDrawerTillId.trim() || null,
       referenceNumber: this.draft.referenceNumber.trim() || null,
       chequeNumber: this.draft.chequeNumber.trim() || null,
       chequeDate: this.draft.chequeDate || null,
@@ -519,6 +665,7 @@ export class OutgoingFundsPageComponent implements OnInit {
       attachmentUrl: this.draft.attachmentUrl.trim() || null,
       remarks: this.draft.remarks.trim() || null,
       lines,
+      attachments,
     };
   }
 
@@ -572,6 +719,8 @@ function blankVoucherDraft(): VoucherDraft {
     businessDate: todayIso(),
     paymentAccountCode: 'CASH_ON_HAND',
     paymentMode: 'Cash',
+    fundSource: 'business_cash',
+    cashDrawerTillId: '',
     referenceNumber: '',
     chequeNumber: '',
     chequeDate: '',
@@ -582,11 +731,33 @@ function blankVoucherDraft(): VoucherDraft {
     attachmentUrl: '',
     remarks: '',
     lines: [blankLineDraft()],
+    attachments: [],
   };
 }
 
 function blankLineDraft(): DraftLine {
-  return { categoryKey: '', amount: '', gstTreatment: 'none', gstAmount: '', remarks: '' };
+  return {
+    categoryKey: '',
+    amount: '',
+    gstTreatment: 'none',
+    gstAmount: '',
+    subcategory: '',
+    costCenterId: '',
+    department: '',
+    linkedPartyType: 'voucher',
+    linkedPartyId: '',
+    linkedPartyName: '',
+    sourceReferenceType: '',
+    sourceReferenceId: '',
+    receiptNumber: '',
+    taxInvoice: false,
+    reimbursement: false,
+    remarks: '',
+  };
+}
+
+function blankAttachmentDraft(): DraftAttachment {
+  return { lineNumber: '', fileUrl: '', fileType: '' };
 }
 
 function todayIso(): string {

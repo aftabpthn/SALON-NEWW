@@ -1,9 +1,11 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type Draft = {
   id: string; status: string; sourceFileName: string; sourceSha256: string; sourceSizeBytes: number;
@@ -31,11 +33,12 @@ type Order = { id: string; orderNumber: string; supplierId: string; supplierName
 @Component({
   selector: 'page-purchase-bill-drafts',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './purchase-bill-drafts-page.component.html',
   styleUrls: ['./purchase-bill-drafts-page.component.css'],
 })
 export class PurchaseBillDraftsPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   drafts: Draft[] = [];
   suppliers: Supplier[] = [];
@@ -63,7 +66,7 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
         this.get<Order[]>('/purchases/orders'),
       ]);
       if (selectedId) await this.open(selectedId);
-    } catch (error) { this.error = this.message(error, 'Purchase bill drafts could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.a8495bad85')); }
     finally { this.loading = false; }
   }
 
@@ -73,9 +76,9 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
     input.value = '';
     if (!file) return;
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      this.error = 'Upload a PDF, JPEG, PNG or WebP file'; return;
+      this.error = this.language.text('inventory.message.2e23275ed2'); return;
     }
-    if (file.size > 10 * 1024 * 1024) { this.error = 'File must be 10 MB or smaller'; return; }
+    if (file.size > 10 * 1024 * 1024) { this.error = this.language.text('inventory.message.15a6667c94'); return; }
     this.uploading = true; this.error = ''; this.notice = '';
     try {
       const response = await firstValueFrom(this.api.postBytes<ApiEnvelope<Details>>(
@@ -83,15 +86,15 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
       ));
       if (!response.data) throw new Error('Upload returned no draft');
       this.selected = response.data;
-      this.notice = 'Draft uploaded for human review';
+      this.notice = this.language.text('inventory.message.3a64387121');
       await this.reload();
-    } catch (error) { this.error = this.message(error, 'Purchase bill could not be uploaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.cf48ce5b00')); }
     finally { this.uploading = false; }
   }
 
   async open(id: string) {
     try { this.selected = await this.get<Details>(`/purchases/bill-drafts/${id}`); }
-    catch (error) { this.error = this.message(error, 'Draft could not be loaded'); }
+    catch (error) { this.error = this.message(error, this.language.text('inventory.message.4c63337c0d')); }
   }
 
   close() { this.selected = null; }
@@ -138,14 +141,14 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
   }
 
   async confirmDraft() {
-    if (!this.selected || !confirm('Confirm this reviewed bill and post its GRN exactly once?')) return;
+    if (!this.selected || !confirm(this.language.text('inventory.message.95314d6110'))) return;
     await this.mutate(this.api.post<ApiEnvelope<Details>>(
       `/purchases/bill-drafts/${this.selected.draft.id}/confirm`, {},
     ), 'Bill confirmed and GRN posted');
   }
 
   async cancelDraft() {
-    if (!this.selected || !confirm('Cancel this draft?')) return;
+    if (!this.selected || !confirm(this.language.text('inventory.message.3a17f1770d'))) return;
     await this.mutate(this.api.post<ApiEnvelope<Details>>(
       `/purchases/bill-drafts/${this.selected.draft.id}/cancel`, {},
     ), 'Draft cancelled');
@@ -203,7 +206,7 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
       this.selected = response.data;
       this.notice = notice;
       await this.reload();
-    } catch (error) { this.error = this.message(error, 'Action could not be completed'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.78b92a0634')); }
     finally { this.saving = false; }
   }
 

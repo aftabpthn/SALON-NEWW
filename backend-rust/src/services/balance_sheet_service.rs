@@ -17,6 +17,7 @@ use crate::{
         common::AppError,
     },
     repositories::{
+        analytics_repository,
         balance_sheet_repository::{self, AccountTotalRecord, ManualJournalLineRecord},
         inventory_repository,
     },
@@ -360,11 +361,28 @@ pub async fn live(
     branch_id: &str,
     as_of_date: Option<&str>,
 ) -> Result<BalanceSheetReport, AppError> {
+    live_for_branches(db, tenant_id, &[branch_id.to_string()], as_of_date).await
+}
+
+pub async fn live_for_branches(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    as_of_date: Option<&str>,
+) -> Result<BalanceSheetReport, AppError> {
+    if branch_ids.is_empty() {
+        return Err(AppError::forbidden("no authorized branches are available"));
+    }
     let as_of_date = parse_date(as_of_date, "asOfDate")?.unwrap_or_else(today_ist);
-    let rows = balance_sheet_repository::account_totals(db, tenant_id, branch_id, as_of_date)
+    let rows = balance_sheet_repository::account_totals(db, tenant_id, branch_ids, as_of_date)
         .await
         .map_err(|_| AppError::internal("failed to load accounting balances"))?;
-    build_report(branch_id, as_of_date, &rows)
+    let scope_id = if branch_ids.len() == 1 {
+        &branch_ids[0]
+    } else {
+        "consolidated"
+    };
+    build_report(scope_id, branch_ids.len(), as_of_date, &rows)
 }
 
 pub async fn working_capital(
@@ -373,8 +391,20 @@ pub async fn working_capital(
     branch_id: &str,
     as_of_date: Option<&str>,
 ) -> Result<WorkingCapitalReport, AppError> {
+    working_capital_for_branches(db, tenant_id, &[branch_id.to_string()], as_of_date).await
+}
+
+pub async fn working_capital_for_branches(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    as_of_date: Option<&str>,
+) -> Result<WorkingCapitalReport, AppError> {
+    if branch_ids.is_empty() {
+        return Err(AppError::forbidden("no authorized branches are available"));
+    }
     let as_of_date = parse_date(as_of_date, "asOfDate")?.unwrap_or_else(today_ist);
-    let rows = balance_sheet_repository::account_totals(db, tenant_id, branch_id, as_of_date)
+    let rows = balance_sheet_repository::account_totals(db, tenant_id, branch_ids, as_of_date)
         .await
         .map_err(|_| AppError::internal("failed to load working capital balances"))?;
     let mut current_assets = 0_i64;
@@ -395,7 +425,12 @@ pub async fn working_capital(
     }
     Ok(WorkingCapitalReport {
         as_of_date,
-        branch_id: branch_id.to_string(),
+        branch_id: if branch_ids.len() == 1 {
+            branch_ids[0].clone()
+        } else {
+            "consolidated".into()
+        },
+        branch_count: branch_ids.len(),
         current_assets_paise: current_assets,
         current_liabilities_paise: current_liabilities,
         working_capital_paise: subtract_money(current_assets, current_liabilities)?,
@@ -1075,13 +1110,29 @@ pub async fn finance_hardening_status(
     )
     .await
     .map_err(|_| AppError::internal("failed to load inventory reconciliation"))?;
-    let report = live(db, tenant_id, branch_id, Some(&as_of_date.to_string())).await?;
     let period_month = NaiveDate::from_ymd_opt(as_of_date.year(), as_of_date.month(), 1)
         .expect("valid report date has a valid month");
+    let micro_profit = analytics_repository::micro_profit_reconciliation(
+        db,
+        tenant_id,
+        &[branch_id.to_string()],
+        period_month,
+        as_of_date,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load Micro P&L close readiness"))?;
+    let report = live(db, tenant_id, branch_id, Some(&as_of_date.to_string())).await?;
     let accounting_period_status =
         balance_sheet_repository::accounting_period_status(db, tenant_id, branch_id, period_month)
             .await
             .map_err(|_| AppError::internal("failed to load accounting period status"))?;
+    let micro_cost_complete_line_count = if micro_profit.reportable_line_count == 0
+        || (micro_profit.allocation_rule_count > 0 && micro_profit.unallocated_overhead_paise == 0)
+    {
+        micro_profit.cost_complete_line_count
+    } else {
+        0
+    };
 
     let mut checks = vec![
         reconciliation_check(
@@ -1117,6 +1168,36 @@ pub async fn finance_hardening_status(
             reconciliation.fixed_asset_source_paise,
             reconciliation.fixed_asset_ledger_paise,
             0,
+            false,
+        )?,
+        reconciliation_check(
+            "micro_profit_revenue",
+            micro_profit.micro_revenue_paise,
+            micro_profit.ledger_revenue_paise,
+            micro_profit.missing_invoice_journal_count,
+            false,
+        )?,
+        reconciliation_check(
+            "micro_profit_cogs",
+            micro_profit.micro_product_cost_paise,
+            micro_profit.ledger_cogs_paise,
+            micro_profit.missing_product_cost_line_count,
+            false,
+        )?,
+        reconciliation_check(
+            "micro_profit_payroll",
+            micro_profit.payroll_source_paise,
+            micro_profit.ledger_payroll_paise,
+            micro_profit.missing_staff_time_cost_line_count,
+            false,
+        )?,
+        reconciliation_check(
+            "micro_profit_cost_completeness",
+            micro_profit.reportable_line_count,
+            micro_cost_complete_line_count,
+            micro_profit
+                .reportable_line_count
+                .saturating_sub(micro_cost_complete_line_count),
             false,
         )?,
         reconciliation_check(
@@ -1169,6 +1250,7 @@ pub async fn finance_hardening_status(
 
 fn build_report(
     branch_id: &str,
+    branch_count: usize,
     as_of_date: NaiveDate,
     rows: &[AccountTotalRecord],
 ) -> Result<BalanceSheetReport, AppError> {
@@ -1218,6 +1300,7 @@ fn build_report(
     Ok(BalanceSheetReport {
         as_of_date,
         branch_id: branch_id.to_string(),
+        branch_count,
         balanced: difference == 0 && unclassified.is_empty(),
         totals: BalanceSheetTotals {
             assets_paise: total_assets,
@@ -1584,6 +1667,7 @@ mod tests {
     fn report_rolls_income_into_current_equity() {
         let report = build_report(
             "branch",
+            1,
             NaiveDate::from_ymd_opt(2026, 7, 14).unwrap(),
             &[
                 AccountTotalRecord {
@@ -1605,6 +1689,7 @@ mod tests {
         )
         .unwrap();
         assert!(report.balanced);
+        assert_eq!(report.branch_count, 1);
         assert_eq!(report.totals.assets_paise, 11_800);
         assert_eq!(report.totals.liabilities_paise, 1_800);
         assert_eq!(report.totals.equity_paise, 10_000);

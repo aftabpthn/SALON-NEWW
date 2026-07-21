@@ -7,6 +7,7 @@ import { PosRealtimeService } from '../../../core/services/pos-realtime.service'
 import { ApiService } from '../../../shared/services/api.service';
 
 interface Terminal { id: string; terminalCode: string; terminalName: string; assignedCounter: string; status: string; lastSeenAt: string | null; activeSessionId: string | null; }
+interface TerminalSalesSummary { terminalId: string; from: string; to: string; invoiceCount: number; totalPaise: number; paidPaise: number; }
 interface PrintDevice { id: string; terminalId: string; deviceName: string; deviceType: string; connectionType: string; status: string; }
 interface PrintJob { id: string; terminalId: string; deviceId: string | null; saleId: string; invoiceNumber: string; format: string; status: string; attempts: number; lastError: string; }
 interface RiskCase { id: string; businessDate: string; riskCode: string; severity: string; riskScore: number; entityType: string; evidenceJson: any; amountAtRiskPaise: number; status: string; }
@@ -27,6 +28,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   tab: 'eod' | 'terminals' | 'print' | 'risk' | 'corporate' | 'reliability' | 'notifications' = 'eod';
   businessDate = this.displayDate(new Date());
   terminals: Terminal[] = [];
+  terminalSales: TerminalSalesSummary | null = null;
   devices: PrintDevice[] = [];
   jobs: PrintJob[] = [];
   risks: RiskCase[] = [];
@@ -65,6 +67,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
     this.load();
     this.liveUpdates = this.realtime.events().subscribe((event) => {
       if (event.entityType === 'terminal') this.reloadTerminals();
+      if (event.entityType === 'invoice' && this.terminalSales?.terminalId) this.loadTerminalSales(this.terminalSales.terminalId);
       if (event.entityType === 'print_job') this.reloadPrintJobs();
       if (event.entityType === 'invoice' || event.entityType === 'print_job') this.reloadReliability();
     });
@@ -103,6 +106,9 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
     else if (action === 'heartbeat') request = this.api.post(`/api/v1/pos/terminals/${row.id}/heartbeat`, {});
     else request = this.api.patch(`/api/v1/pos/terminals/${row.id}/status`, { status: row.status === 'active' ? 'suspended' : 'active' });
     this.run(request, action === 'heartbeat' ? 'Heartbeat recorded' : 'Terminal updated');
+  }
+  loadTerminalSales(terminalId: string): void {
+    this.read<TerminalSalesSummary>(`/api/v1/pos/terminals/${terminalId}/sales?from=${this.isoDate()}&to=${this.isoDate()}`, (row) => this.terminalSales = row, () => {});
   }
   createDevice(): void {
     if (!this.deviceTerminalId || !this.deviceName.trim()) return this.fail('Terminal and device name are required');

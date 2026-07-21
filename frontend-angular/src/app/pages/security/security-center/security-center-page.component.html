@@ -135,23 +135,23 @@
       <div class="section-header"><h2>OIDC SSO</h2></div>
       <form *ngIf="ssoPolicy" class="mfa-setup" (ngSubmit)="saveSsoPolicy()">
         <label class="check-field">
-          <input name="googleSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.googleConfigured" [(ngModel)]="ssoDraft.googleEnabled" />
+          <input name="googleSsoEnabled" type="checkbox" [disabled]="!canManageSecurity || !ssoPolicy.googleConfigured" [(ngModel)]="ssoDraft.googleEnabled" />
           <span>Google OIDC — {{ ssoPolicy.googleConfigured ? 'Configured' : 'Not configured' }}</span>
         </label>
         <label class="check-field">
-          <input name="microsoftSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.microsoftConfigured" [(ngModel)]="ssoDraft.microsoftEnabled" />
+          <input name="microsoftSsoEnabled" type="checkbox" [disabled]="!canManageSecurity || !ssoPolicy.microsoftConfigured" [(ngModel)]="ssoDraft.microsoftEnabled" />
           <span>Microsoft Entra ID — {{ ssoPolicy.microsoftConfigured ? 'Configured' : 'Not configured' }}</span>
         </label>
         <label class="check-field">
-          <input name="samlSsoEnabled" type="checkbox" [disabled]="!ssoPolicy.samlConfigured" [(ngModel)]="ssoDraft.samlEnabled" />
+          <input name="samlSsoEnabled" type="checkbox" [disabled]="!canManageSecurity || !ssoPolicy.samlConfigured" [(ngModel)]="ssoDraft.samlEnabled" />
           <span>SAML federation — {{ ssoPolicy.samlConfigured ? 'Configured' : 'Not configured' }}</span>
         </label>
         <label>Require SSO for roles
-          <select name="ssoEnforcedRoles" multiple [(ngModel)]="ssoDraft.enforcedRoles">
+          <select name="ssoEnforcedRoles" multiple [disabled]="!canManageSecurity" [(ngModel)]="ssoDraft.enforcedRoles">
             <option value="owner">Owner</option><option value="admin">Admin</option><option value="superadmin">SuperAdmin</option>
           </select>
         </label>
-        <button class="primary-button" type="submit" [disabled]="saving">Save SSO policy</button>
+        <button *ngIf="canManageSecurity" class="primary-button" type="submit" [disabled]="saving">Save SSO policy</button>
       </form>
       <div *ngIf="!ssoPolicy" class="compact-state">No SSO policy loaded.</div>
 
@@ -164,7 +164,7 @@
       <div class="mfa-setup">
         <label>SCIM base URL<input type="text" readonly value="/api/v1/scim/v2" /></label>
         <label *ngIf="scimToken">New bearer token<input type="text" readonly [value]="scimToken" /></label>
-        <div class="action-cell">
+        <div *ngIf="canManageSecurity" class="action-cell">
           <button class="primary-button" type="button" [disabled]="saving" (click)="rotateScimToken()">
             {{ scimStatus?.configured ? 'Rotate token' : 'Generate token' }}
           </button>
@@ -245,7 +245,7 @@
               <td>{{ session.userId }}</td><td>{{ session.roleName || '—' }}</td>
               <td>{{ session.deviceId || session.userAgent || '—' }}</td><td>{{ session.ipAddress || '—' }}</td>
               <td>{{ session.expiresAt | date:'dd/MM/yyyy HH:mm' }}</td>
-              <td><button class="utility-button" type="button" (click)="revokeSession(session)">Revoke</button></td>
+              <td><button *ngIf="canManageSecurity" class="utility-button" type="button" (click)="revokeSession(session)">Revoke</button></td>
             </tr>
           </tbody>
         </table>
@@ -266,9 +266,9 @@
               <td>{{ device.ipCount }} IP / {{ device.userAgentCount }} UA</td>
               <td>{{ device.lastSeenAt ? (device.lastSeenAt | date:'dd/MM/yyyy HH:mm') : '—' }}</td>
               <td class="action-cell">
-                <button *ngIf="device.status === 'revoked'" class="utility-button" type="button" [disabled]="saving" (click)="trustDevice(device)">Trust</button>
-                <button *ngIf="device.status !== 'revoked'" class="utility-button danger" type="button" [disabled]="saving" (click)="revokeDevice(device)">Revoke</button>
-                <button class="utility-button" type="button" [disabled]="saving || !device.activeSessions" (click)="signOutAllDevices(device)">Sign out all</button>
+                <button *ngIf="canManageSecurity && device.status === 'revoked'" class="utility-button" type="button" [disabled]="saving" (click)="trustDevice(device)">Trust</button>
+                <button *ngIf="canManageSecurity && device.status !== 'revoked'" class="utility-button danger" type="button" [disabled]="saving" (click)="revokeDevice(device)">Revoke</button>
+                <button *ngIf="canManageSecurity" class="utility-button" type="button" [disabled]="saving || !device.activeSessions" (click)="signOutAllDevices(device)">Sign out all</button>
               </td>
             </tr>
           </tbody>
@@ -477,7 +477,7 @@
               <td><span class="badge" [class.critical]="alert.severity === 'critical'">{{ alert.severity }}</span></td>
               <td>{{ alert.status }}</td><td>{{ alert.sourceIp || '—' }}</td>
               <td>{{ alert.detectedAt | date:'dd/MM/yyyy HH:mm' }}</td>
-              <td><button *ngIf="alert.status === 'open'" class="utility-button" type="button" (click)="resolveAlert(alert)">Resolve</button></td>
+              <td><button *ngIf="canManageSecurity && alert.status === 'open'" class="utility-button" type="button" (click)="resolveAlert(alert)">Resolve</button></td>
             </tr>
           </tbody>
         </table>
@@ -493,7 +493,7 @@
             <tr *ngFor="let block of blocks; trackBy: trackById">
               <td>{{ block.ipAddress || block.userId || '—' }}</td><td>{{ block.reason }}</td><td>{{ block.severity }}</td>
               <td>{{ block.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
-              <td><button *ngIf="!block.unblockedAt" class="utility-button" type="button" (click)="unblock(block)">Unblock</button></td>
+              <td><button *ngIf="canManageSecurity && !block.unblockedAt" class="utility-button" type="button" (click)="unblock(block)">Unblock</button></td>
             </tr>
           </tbody>
         </table>
@@ -549,10 +549,10 @@
 
     <section *ngIf="activeTab === 'policy'" class="panel">
       <form *ngIf="policy" class="policy-form" (ngSubmit)="savePolicy()">
-        <label>Audit retention days<input name="auditRetentionDays" type="number" min="1" max="3650" required [(ngModel)]="policy.auditRetentionDays" /></label>
-        <label>Audit page size<input name="auditPageSize" type="number" min="10" max="250" required [(ngModel)]="policy.auditPageSize" /></label>
-        <label class="check-field"><input name="sessionRevocationEnabled" type="checkbox" [(ngModel)]="policy.sessionRevocationEnabled" /><span>Session revocation enabled</span></label>
-        <div class="form-actions"><button class="primary-button" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save policy' }}</button></div>
+        <label>Audit retention days<input name="auditRetentionDays" type="number" min="1" max="3650" required [disabled]="!canManageSecurity" [(ngModel)]="policy.auditRetentionDays" /></label>
+        <label>Audit page size<input name="auditPageSize" type="number" min="10" max="250" required [disabled]="!canManageSecurity" [(ngModel)]="policy.auditPageSize" /></label>
+        <label class="check-field"><input name="sessionRevocationEnabled" type="checkbox" [disabled]="!canManageSecurity" [(ngModel)]="policy.sessionRevocationEnabled" /><span>Session revocation enabled</span></label>
+        <div *ngIf="canManageSecurity" class="form-actions"><button class="primary-button" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save policy' }}</button></div>
       </form>
       <div *ngIf="!policy" class="compact-state">No policy loaded.</div>
     </section>

@@ -12,6 +12,10 @@ This folder documents the production AWS target. Add Terraform/CDK here when inf
 - ALB + ACM: HTTPS ingress.
 - CloudWatch: logs, metrics, alarms.
 
+`data-protection.yaml` provisions the shared KMS key, encrypted AWS Backup vault,
+7 daily / 4 weekly / 12 monthly recovery points, 35-day PostgreSQL PITR, and a
+private versioned file bucket with archival lifecycle rules.
+
 ## Environments
 
 Use separate AWS resources per environment:

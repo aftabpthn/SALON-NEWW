@@ -50,13 +50,13 @@
 
     <div class="table-wrap" *ngIf="!loading && activeTab === 'occasions'">
       <table>
-        <thead><tr><th>Client</th><th>Occasion</th><th>Date</th><th>Top service</th><th>Reachable via</th><th>Reminder</th><th>Actions</th></tr></thead>
+        <thead><tr><th scope="col">Client</th><th scope="col">Occasion</th><th scope="col">Date</th><th scope="col">Top service</th><th scope="col">Reachable via</th><th scope="col">Reminder</th><th scope="col">Actions</th></tr></thead>
         <tbody>
           <tr *ngFor="let row of occasions; trackBy: trackById">
             <td data-label="Client"><strong>{{ clientName(row) }}</strong><small>{{ row.phone || row.email || '—' }}</small></td>
             <td data-label="Occasion"><span class="occasion"><i class="bi" [ngClass]="row.eventType === 'birthday' ? 'bi-cake2' : 'bi-hearts'"></i>{{ title(row.eventType) }}</span></td>
             <td data-label="Date">{{ displayDate(row.eventDate) }}<small>{{ row.daysUntil === 0 ? 'Today' : row.daysUntil + ' days' }}</small></td>
-            <td data-label="Top service">{{ serviceName(row) }}<small *ngIf="row.mostUsedServiceVisits">{{ row.mostUsedServiceVisits }} visits</small></td>
+            <td data-label="Top service">{{ serviceName(row) }}<small *ngIf="row.mostUsedServiceVisits">{{ row.mostUsedServiceVisits }} visits</small><small *ngIf="giftTitle(row)">{{ giftTitle(row) }}</small></td>
             <td data-label="Reachable via">{{ reachable(row) }}</td>
             <td data-label="Reminder"><span class="status" [attr.data-status]="row.reminderStatus || 'not-started'">{{ title(row.reminderStatus || 'not started') }}</span></td>
             <td data-label="Actions"><button type="button" (click)="openDraft(row)">Draft</button></td>
@@ -68,7 +68,7 @@
 
     <div class="table-wrap" *ngIf="!loading && activeTab === 'reminders'">
       <table>
-        <thead><tr><th>Client</th><th>Occasion</th><th>Date</th><th>Channels</th><th>Status</th><th>Voucher</th><th>Actions</th></tr></thead>
+        <thead><tr><th scope="col">Client</th><th scope="col">Occasion</th><th scope="col">Date</th><th scope="col">Channels</th><th scope="col">Status</th><th scope="col">Voucher</th><th scope="col">Actions</th></tr></thead>
         <tbody>
           <tr *ngFor="let row of reminders; trackBy: trackById">
             <td data-label="Client"><strong>{{ row.clientName || row.clientId }}</strong></td>
@@ -86,8 +86,16 @@
     </div>
 
     <div class="table-wrap" *ngIf="!loading && activeTab === 'vouchers'">
+      <div class="voucher-intelligence">
+        <span><small>Prepared</small><strong>{{ overview.metrics.giftPrepared }}</strong></span>
+        <span><small>Sent</small><strong>{{ overview.metrics.giftSent }}</strong></span>
+        <span><small>Redeemed</small><strong>{{ overview.metrics.giftRedeemed }}</strong></span>
+        <span><small>Expired</small><strong>{{ overview.metrics.giftExpired }}</strong></span>
+        <span><small>Prepared value</small><strong>{{ money(overview.metrics.giftPreparedValuePaise) }}</strong></span>
+        <span><small>Redeemed value</small><strong>{{ money(overview.metrics.giftRedeemedValuePaise) }}</strong></span>
+      </div>
       <table>
-        <thead><tr><th>Voucher</th><th>Client</th><th>Status</th><th>Expires</th><th>Sale</th><th>Actions</th></tr></thead>
+        <thead><tr><th scope="col">Voucher</th><th scope="col">Client</th><th scope="col">Status</th><th scope="col">Expires</th><th scope="col">Sale</th><th scope="col">Actions</th></tr></thead>
         <tbody>
           <tr *ngFor="let row of overview.vouchers; trackBy: trackById"><td data-label="Voucher"><strong>{{ row.couponCode }}</strong></td><td data-label="Client">{{ row.clientName }}</td><td data-label="Status"><span class="status" [attr.data-status]="row.status">{{ title(row.status) }}</span></td><td data-label="Expires">{{ displayDate(row.expiresAt) }}</td><td data-label="Sale">{{ row.redeemedSaleId || '—' }}</td><td data-label="Actions"><button type="button" *ngIf="row.status === 'created' || row.status === 'sent'" (click)="openRedeem(row)">Redeem</button></td></tr>
           <tr *ngIf="!overview.vouchers.length"><td class="empty" colspan="6"><i class="bi bi-ticket-perforated"></i><strong>No records yet</strong></td></tr>
@@ -99,6 +107,7 @@
       <div class="campaign-toolbar">
         <div class="view-switch"><button type="button" [class.active]="campaignMode === 'all'" (click)="campaignMode = 'all'">All</button><button type="button" [class.active]="campaignMode === 'today'" (click)="campaignMode = 'today'">Today</button><button type="button" [class.active]="campaignMode === 'upcoming'" (click)="campaignMode = 'upcoming'">Upcoming</button></div>
         <span>{{ campaignClients.length }} clients</span>
+        <button type="button" [disabled]="busy || !campaign.clients.length" (click)="prepareMonth()">Prepare month</button>
       </div>
       <div class="campaign-grid">
         <label>Client<select [(ngModel)]="campaignClientId"><option value="">Select client</option><option *ngFor="let row of campaignClients; trackBy: trackById" [value]="row.clientId">{{ clientName(row) }} · {{ displayDate(row.eventDate) }}</option></select></label>

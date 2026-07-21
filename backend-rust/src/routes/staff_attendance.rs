@@ -33,6 +33,8 @@ pub fn router() -> Router<AppState> {
         .route("/staff-attendance/:staff_id/details", get(get_details))
         .route("/staff-attendance/clock-in", post(clock_in))
         .route("/staff-attendance/clock-out", post(clock_out))
+        .route("/staff-attendance/break-start", post(start_break))
+        .route("/staff-attendance/break-end", post(end_break))
         .route(
             "/staff-attendance/:staff_id/:business_date/correction",
             axum::routing::patch(correct_attendance),
@@ -83,6 +85,13 @@ struct ClockOutRequest {
     clock_out_at: Option<DateTime<Utc>>,
     penalty_paise: Option<i64>,
     comments: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BreakRequest {
+    staff_id: String,
+    business_date: NaiveDate,
 }
 
 #[derive(Debug, Deserialize)]
@@ -238,6 +247,59 @@ async fn clock_out(
             payload.penalty_paise.unwrap_or(0)
         },
         payload.comments.as_deref().unwrap_or("").trim(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn start_break(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<BreakRequest>,
+) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceBreakRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.staff_id.trim(),
+    )
+    .await?;
+    let row = staff_attendance_service::start_break(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        payload.business_date,
+        &claims.sub,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn end_break(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<BreakRequest>,
+) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.staff_id.trim(),
+    )
+    .await?;
+    let row = staff_attendance_service::end_break(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        payload.business_date,
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))

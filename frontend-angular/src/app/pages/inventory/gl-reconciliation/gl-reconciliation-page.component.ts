@@ -1,3 +1,4 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -5,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type Tab = 'summary' | 'exceptions' | 'audit';
 type GlBranchRow = {
@@ -32,11 +34,12 @@ type GlReconciliation = {
 @Component({
   selector: 'page-inventory-gl-reconciliation',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
+  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent, TranslatePipe],
   templateUrl: './gl-reconciliation-page.component.html',
   styleUrls: ['./gl-reconciliation-page.component.css'],
 })
 export class GlReconciliationPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
 
   readonly tabs: Array<{ id: Tab; label: string }> = [
@@ -56,7 +59,7 @@ export class GlReconciliationPageComponent implements OnInit {
 
   async runReconciliation() {
     if (!this.asOf) {
-      this.error = 'Reconciliation date is required';
+      this.error = this.language.text('inventory.message.106beebb44');
       return;
     }
     this.loading = true;
@@ -82,7 +85,7 @@ export class GlReconciliationPageComponent implements OnInit {
   exportCsv() {
     if (!this.result) return;
     const rows = [
-      ['As of', 'Branch', 'Products', 'Inventory value paise', 'GL stock value paise', 'Difference paise', 'Missing cost products', 'Status'],
+      ['As of', 'Branch', 'Products', 'Inventory value paise', 'GL stock value paise', 'Difference paise', 'Missing cost products', 'Status'].map((value) => this.language.textValue(value)),
       ...this.result.rows.map((row) => [
         this.result!.asOfDate,
         row.branchName,

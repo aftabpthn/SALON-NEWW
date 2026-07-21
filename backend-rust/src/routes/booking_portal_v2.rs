@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     Json, Router,
 };
 use chrono::TimeZone;
@@ -16,7 +16,10 @@ use super::appointments::{
     self, ApiError, AppointmentCreatePayload, AppointmentPayload, AppointmentServiceSelection,
     ListAppointmentQuery,
 };
-use crate::{services::invoice_delivery, state::AppState};
+use crate::{
+    services::{booking_service, invoice_delivery},
+    state::AppState,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct PublicTenantPath {
@@ -41,14 +44,25 @@ struct PublicSessionBody {
 }
 
 #[derive(Deserialize)]
-struct SlotRequest {
+pub(crate) struct SlotRequest {
+    #[serde(rename = "branchId")]
+    pub(crate) branch_id: Option<String>,
+    #[serde(rename = "serviceIds")]
+    pub(crate) service_ids: Option<Vec<String>>,
+    pub(crate) date: Option<String>,
+    #[serde(default)]
+    pub(crate) duration: Option<i64>,
+    #[serde(rename = "limit")]
+    pub(crate) count: Option<i64>,
+}
+
+#[derive(Deserialize)]
+struct NearbyAlternativesRequest {
     #[serde(rename = "branchId")]
     branch_id: Option<String>,
     #[serde(rename = "serviceIds")]
     service_ids: Option<Vec<String>>,
     date: Option<String>,
-    #[serde(default)]
-    duration: Option<i64>,
     #[serde(rename = "limit")]
     count: Option<i64>,
 }
@@ -101,7 +115,7 @@ struct ConfirmRequest {
     #[serde(rename = "mobile")]
     mobile: Option<String>,
     #[serde(rename = "sessionId")]
-    _session_id: Option<String>,
+    session_id: Option<String>,
     #[serde(rename = "holdId")]
     hold_id: Option<String>,
     #[serde(default, rename = "serviceSelections")]
@@ -182,6 +196,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/booking-portal/v2/slots",
             axum::routing::post(booking_portal_v2_slots),
+        )
+        .route(
+            "/booking-portal/v2/nearby-alternatives",
+            axum::routing::post(booking_portal_v2_nearby_alternatives),
         )
         .route(
             "/booking-portal/v2/holds",
@@ -266,7 +284,12 @@ async fn booking_portal_v2_public_tenant(
             "id": tenant_id,
             "name": tenant.try_get::<String,_>("name").unwrap_or_default(),
         },
-        "branches": branches
+        "branches": branches,
+        "captcha": {
+            "provider": "turnstile",
+            "required": state.settings.turnstile_enabled(),
+            "siteKey": state.settings.turnstile_site_key.as_deref().unwrap_or_default(),
+        }
     })))
 }
 
@@ -280,34 +303,99 @@ async fn booking_portal_v2_create_session(
             Ok(claims) => (claims.tenant_id, claims.branch_id),
             Err(_) => scope_for_query(&headers, None, body.branch_id.as_deref()),
         };
+    let id = Uuid::new_v4().to_string();
+    let source = body.source.unwrap_or_else(|| "portal".to_string());
+    let device_type = body.device_type.unwrap_or_default();
+    sqlx::query("INSERT INTO public_booking_sessions (id,tenant_id,branch_id,source,device_type) VALUES ($1,$2,$3,$4,$5)")
+        .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&source).bind(&device_type)
+        .execute(&state.db).await
+        .map_err(|_| ApiError::internal("failed to create booking session"))?;
+    sqlx::query("INSERT INTO public_booking_session_events (tenant_id,branch_id,session_id,event_name,step_order) VALUES ($1,$2,$3,'session_started',0)")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).execute(&state.db).await
+        .map_err(|_| ApiError::internal("failed to record booking session"))?;
+    if let Some(reference) = source.strip_prefix("marketing_campaign:") {
+        let mut parts = reference.split(':');
+        if let (Some(campaign_id), Some(client_id), None) =
+            (parts.next(), parts.next(), parts.next())
+        {
+            sqlx::query("INSERT INTO marketing_campaign_events(tenant_id,branch_id,campaign_id,client_id,channel,event_type) SELECT DISTINCT tenant_id,branch_id,$3,$4,channel,'clicked' FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$4 AND source_type='marketing_campaign' AND payload_json->>'campaignId'=$3 ON CONFLICT DO NOTHING")
+                .bind(&tenant_id).bind(&branch_id).bind(campaign_id).bind(client_id).execute(&state.db).await
+                .map_err(|_| ApiError::internal("failed to record campaign click"))?;
+        }
+    }
     Ok(Json(json!({
-        "id": Uuid::new_v4().to_string(),
+        "id": id,
         "tenantId": tenant_id,
         "branchId": branch_id,
-        "source": body.source.unwrap_or_else(|| "portal".to_string()),
-        "deviceType": body.device_type.unwrap_or_default(),
+        "source": source,
+        "deviceType": device_type,
         "createdAt": Utc::now().to_rfc3339(),
         "status": "created"
     })))
 }
 
 async fn booking_portal_v2_session_event(
-    headers: HeaderMap,
+    State(state): State<AppState>,
+    _headers: HeaderMap,
     Path(id): Path<String>,
     Json(body): Json<PublicSessionEventBody>,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, branch_id) = scope_for_query(&headers, None, None);
+    let session =
+        sqlx::query("SELECT tenant_id,branch_id FROM public_booking_sessions WHERE id=$1")
+            .bind(&id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|_| ApiError::internal("failed to load booking session"))?
+            .ok_or_else(|| ApiError::not_found("booking session was not found"))?;
+    let tenant_id = session
+        .try_get::<String, _>("tenant_id")
+        .unwrap_or_default();
+    let branch_id = session
+        .try_get::<String, _>("branch_id")
+        .unwrap_or_default();
     if body.event_name.trim().is_empty() {
         return Err(ApiError::bad_request("eventName is required"));
     }
+    let event_name = body.event_name.trim();
+    let mut event_data = body.event_data.unwrap_or_else(|| json!({}));
+    let contact_value = if event_name == "otp_verified" {
+        event_data
+            .get("mobile")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| value.len() >= 8 && value.len() <= 20)
+            .unwrap_or("")
+            .to_string()
+    } else {
+        String::new()
+    };
+    if let Some(data) = event_data.as_object_mut() {
+        data.remove("mobile");
+    }
+    let step_order = body.step_order.unwrap_or(0).clamp(0, 100) as i32;
+    let event_id = Uuid::new_v4().to_string();
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| ApiError::internal("failed to record booking event"))?;
+    sqlx::query("INSERT INTO public_booking_session_events (id,tenant_id,branch_id,session_id,event_name,step_order,event_data) VALUES ($1,$2,$3,$4,$5,$6,$7)")
+        .bind(&event_id).bind(&tenant_id).bind(&branch_id).bind(&id).bind(event_name).bind(step_order).bind(&event_data)
+        .execute(&mut *tx).await.map_err(|_| ApiError::internal("failed to record booking event"))?;
+    sqlx::query("UPDATE public_booking_sessions SET last_event=$2,last_step=GREATEST(last_step,$3),event_data=$4,contact_value=CASE WHEN $5='' THEN contact_value ELSE $5 END,last_event_at=NOW() WHERE id=$1 AND status='active'")
+        .bind(&id).bind(event_name).bind(step_order).bind(&event_data).bind(&contact_value).execute(&mut *tx).await
+        .map_err(|_| ApiError::internal("failed to update booking session"))?;
+    tx.commit()
+        .await
+        .map_err(|_| ApiError::internal("failed to record booking event"))?;
     Ok(Json(json!({
-        "id": Uuid::new_v4().to_string(),
+        "id": event_id,
         "tenantId": tenant_id,
         "branchId": branch_id,
         "sessionId": id,
-        "event": body.event_name,
-        "eventData": body.event_data.unwrap_or_else(|| json!({})),
-        "stepOrder": body.step_order.unwrap_or(0),
+        "event": event_name,
+        "eventData": event_data,
+        "stepOrder": step_order,
         "createdAt": Utc::now().to_rfc3339(),
         "status": "recorded"
     })))
@@ -395,7 +483,7 @@ async fn booking_portal_v2_staff(
     })))
 }
 
-async fn booking_portal_v2_slots(
+pub(crate) async fn booking_portal_v2_slots(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<SlotRequest>,
@@ -429,6 +517,117 @@ async fn booking_portal_v2_slots(
         "slots": slots,
         "recommendations": slots,
         "cache": "MISS"
+    })))
+}
+
+async fn booking_portal_v2_nearby_alternatives(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<NearbyAlternativesRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, origin_branch_id) =
+        required_scope_for_query(&headers, None, payload.branch_id.as_deref())?;
+    let service_ids = payload.service_ids.unwrap_or_default();
+    if service_ids.is_empty() {
+        return Err(ApiError::bad_request("serviceIds are required"));
+    }
+    let source_rows = sqlx::query(
+        "SELECT id,COALESCE(NULLIF(central_master_service_id,''),id) AS master_id FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND id=ANY($3)",
+    )
+    .bind(&tenant_id)
+    .bind(&origin_branch_id)
+    .bind(&service_ids)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to validate booking services"))?;
+    if source_rows.len() != service_ids.len() {
+        return Err(ApiError::bad_request(
+            "one or more services are unavailable",
+        ));
+    }
+    let master_by_service = source_rows
+        .into_iter()
+        .filter_map(|row| {
+            Some((
+                row.try_get::<String, _>("id").ok()?,
+                row.try_get::<String, _>("master_id").ok()?,
+            ))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
+    let master_ids = ordered_service_mapping(&service_ids, &master_by_service)
+        .ok_or_else(|| ApiError::bad_request("one or more services are unavailable"))?;
+    let date = payload
+        .date
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+    let count = payload.count.unwrap_or(3).clamp(1, 12);
+    let branches = sqlx::query(
+        "SELECT id::TEXT AS id,name,address,latitude,longitude FROM branches WHERE tenant_id=$1::uuid AND active=TRUE AND id::TEXT<>$2 ORDER BY name LIMIT 12",
+    )
+    .bind(&tenant_id)
+    .bind(&origin_branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load nearby branches"))?;
+    let mut alternatives = Vec::new();
+    for branch in branches {
+        let branch_id = branch.try_get::<String, _>("id").unwrap_or_default();
+        let mapped_rows = sqlx::query(
+            "SELECT id,COALESCE(NULLIF(central_master_service_id,''),id) AS master_id FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND COALESCE(NULLIF(central_master_service_id,''),id)=ANY($3) ORDER BY id",
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&master_ids)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| ApiError::internal("failed to map branch services"))?;
+        let mapped_by_master = mapped_rows
+            .into_iter()
+            .filter_map(|row| {
+                Some((
+                    row.try_get::<String, _>("master_id").ok()?,
+                    row.try_get::<String, _>("id").ok()?,
+                ))
+            })
+            .collect::<std::collections::HashMap<_, _>>();
+        let Some(mapped_service_ids) = ordered_service_mapping(&master_ids, &mapped_by_master)
+        else {
+            continue;
+        };
+        let Some(duration) =
+            real_booking_duration_minutes(&state, &tenant_id, &branch_id, &mapped_service_ids)
+                .await?
+        else {
+            continue;
+        };
+        let slots = generate_slots(
+            &state,
+            &tenant_id,
+            &date,
+            branch_id.clone(),
+            mapped_service_ids.clone(),
+            count,
+            duration,
+        )
+        .await?;
+        if slots.is_empty() {
+            continue;
+        }
+        alternatives.push(json!({
+            "branchId": branch_id,
+            "branchName": branch.try_get::<String, _>("name").unwrap_or_default(),
+            "address": branch.try_get::<String, _>("address").unwrap_or_default(),
+            "latitude": branch.try_get::<Option<f64>, _>("latitude").unwrap_or_default(),
+            "longitude": branch.try_get::<Option<f64>, _>("longitude").unwrap_or_default(),
+            "serviceIds": mapped_service_ids,
+            "slots": slots,
+        }));
+    }
+    Ok(Json(json!({
+        "tenantId": tenant_id,
+        "originBranchId": origin_branch_id,
+        "date": date,
+        "alternatives": alternatives,
     })))
 }
 
@@ -501,6 +700,7 @@ async fn booking_portal_v2_holds(
 
 async fn booking_portal_v2_send_otp(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<PublicSessionQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let mobile = query.mobile.trim().to_string();
@@ -509,6 +709,7 @@ async fn booking_portal_v2_send_otp(
     }
     let purpose = query.purpose.unwrap_or_else(|| "booking".to_string());
     let language = query.language.unwrap_or_else(|| "en".to_string());
+    verify_turnstile(&state, &headers).await?;
     if state.settings.invoice_delivery_webhook_url.is_none() {
         return Err(ApiError::with_status(
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
@@ -563,6 +764,56 @@ async fn booking_portal_v2_send_otp(
         "providerMessageId": provider_message_id,
         "requestId": Uuid::new_v4().to_string()
     })))
+}
+
+#[derive(Deserialize)]
+struct TurnstileVerification {
+    success: bool,
+}
+
+async fn verify_turnstile(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    if !state.settings.turnstile_enabled() {
+        return Ok(());
+    }
+    let token = headers
+        .get("x-turnstile-token")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::bad_request("captcha verification is required"))?;
+    let secret = state
+        .settings
+        .turnstile_secret_key
+        .as_deref()
+        .ok_or_else(|| ApiError::internal("captcha provider is not configured"))?;
+    let response = reqwest::Client::new()
+        .post("https://challenges.cloudflare.com/turnstile/v0/siteverify")
+        .form(&[("secret", secret), ("response", token)])
+        .send()
+        .await
+        .map_err(|_| {
+            ApiError::with_status(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "captcha provider is unavailable",
+            )
+        })?;
+    if !response.status().is_success() {
+        return Err(ApiError::with_status(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "captcha provider rejected verification",
+        ));
+    }
+    let verification = response
+        .json::<TurnstileVerification>()
+        .await
+        .map_err(|_| ApiError::internal("captcha provider returned an invalid response"))?;
+    if !verification.success {
+        return Err(ApiError::with_status(
+            StatusCode::FORBIDDEN,
+            "captcha verification failed",
+        ));
+    }
+    Ok(())
 }
 
 fn booking_otp_delivery_payload(mobile: &str, purpose: &str, language: &str, otp: &str) -> Value {
@@ -772,6 +1023,12 @@ async fn booking_portal_v2_multi_service_confirm(
         let create = AppointmentCreatePayload {
             tenant_id: Some(tenant_id.clone()),
             branch_id: Some(branch_id.clone()),
+            requested_staff_id: item
+                .get("staffId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            staff_preference: "preferred".to_string(),
             staff_id: item
                 .get("staffId")
                 .and_then(Value::as_str)
@@ -922,15 +1179,12 @@ async fn booking_portal_v2_confirm(
             .with_timezone(&Utc),
     )
     .await?;
-    let deposit_percent = sqlx::query_scalar::<_, i32>(
-        "SELECT booking_deposit_percent FROM branches WHERE (id::text=$1 OR scope_id=$1) AND active=TRUE",
-    )
-    .bind(&branch_id)
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?
-    .unwrap_or(0);
-    let deposit_amount = total_paise.saturating_mul(i64::from(deposit_percent)) / 100;
+    let deposit_quote =
+        booking_service::deposit_quote(&state.db, &tenant_id, &branch_id, total_paise)
+            .await
+            .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?;
+    let deposit_amount = deposit_quote.deposit_paise;
+    let deposit = deposit_quote.as_json();
     let source = payload
         .source
         .as_deref()
@@ -938,7 +1192,7 @@ async fn booking_portal_v2_confirm(
         .filter(|value| {
             matches!(
                 *value,
-                "website" | "instagram" | "facebook" | "google" | "whatsapp"
+                "website" | "instagram" | "facebook" | "google" | "whatsapp" | "voice"
             )
         })
         .unwrap_or("public-booking")
@@ -946,6 +1200,8 @@ async fn booking_portal_v2_confirm(
     let create = AppointmentCreatePayload {
         tenant_id: Some(tenant_id),
         branch_id: Some(branch_id.clone()),
+        requested_staff_id: staff_id.clone(),
+        staff_preference: "preferred".to_string(),
         staff_id,
         client_id,
         service_ids: services,
@@ -961,8 +1217,22 @@ async fn booking_portal_v2_confirm(
     };
     let created =
         appointments::create_appointment(State(state.clone()), headers, Json(create)).await?;
-    clear_booking_hold(&state, hold_id).await?;
     let appointment = created.0;
+    clear_booking_hold(&state, hold_id).await?;
+    if let Some(session_id) = payload
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        sqlx::query("UPDATE public_booking_sessions SET status=CASE WHEN status='recovery_queued' THEN 'recovered' ELSE 'converted' END,client_id=$2,appointment_id=$3,last_event='booking_confirmed',last_event_at=NOW(),converted_at=NOW(),recovered_at=CASE WHEN status='recovery_queued' THEN NOW() ELSE recovered_at END WHERE id=$1 AND tenant_id=$4 AND branch_id=$5 AND status IN ('active','abandoned','recovery_queued')")
+            .bind(session_id).bind(&appointment.client_id).bind(&appointment.id).bind(&appointment.tenant_id).bind(&appointment.branch_id)
+            .execute(&state.db).await
+            .map_err(|_| ApiError::internal("failed to complete booking funnel session"))?;
+        sqlx::query("INSERT INTO public_booking_session_events (tenant_id,branch_id,session_id,event_name,step_order,event_data) SELECT tenant_id,branch_id,id,'booking_confirmed',100,jsonb_build_object('appointmentId',$2) FROM public_booking_sessions WHERE id=$1")
+            .bind(session_id).bind(&appointment.id).execute(&state.db).await
+            .map_err(|_| ApiError::internal("failed to record booking conversion"))?;
+    }
     let action_token = appointments::issue_public_booking_token(
         &state,
         &appointment.tenant_id,
@@ -980,13 +1250,9 @@ async fn booking_portal_v2_confirm(
         "appointmentId": appointment.id,
         "version": appointment.version,
         "appointment": appointment,
-        "deposit": {
-            "required": deposit_amount > 0,
-            "percent": deposit_percent,
-            "amount": deposit_amount,
-            "currency": "INR"
-        },
+        "deposit": deposit,
         "paymentLink": null,
+        "paymentStatus": if deposit_amount > 0 { "pending" } else { "not_required" },
         "publicActions": public_actions,
         "requiredActions": if deposit_amount > 0 { vec!["deposit"] } else { Vec::<&str>::new() }
     })))
@@ -1024,20 +1290,15 @@ async fn booking_portal_v2_quote(
         starts_at,
     )
     .await?;
-    let deposit_percent = sqlx::query_scalar::<_, i32>(
-        "SELECT booking_deposit_percent FROM branches WHERE (id::text=$1 OR scope_id=$1) AND active=TRUE",
+    let quote = booking_service::deposit_quote(
+        &state.db,
+        &claims.tenant_id,
+        &claims.branch_id,
+        total_paise,
     )
-    .bind(&claims.branch_id)
-    .fetch_optional(&state.db)
     .await
-    .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?
-    .unwrap_or(0);
-    Ok(Json(json!({
-        "totalPaise": total_paise,
-        "depositPercent": deposit_percent,
-        "depositPaise": total_paise.saturating_mul(i64::from(deposit_percent)) / 100,
-        "currency": "INR"
-    })))
+    .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?;
+    Ok(Json(quote.as_json()))
 }
 
 async fn booking_portal_v2_my_bookings(
@@ -1078,24 +1339,32 @@ async fn booking_portal_v2_my_bookings(
 }
 
 async fn booking_portal_v2_sessions(
+    State(state): State<AppState>,
     Query(query): Query<SessionListQuery>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, _branch_id) = scope_for_query(&headers, query.tenant_id.as_deref(), None);
+    let (tenant_id, branch_id) = scope_for_query(&headers, query.tenant_id.as_deref(), None);
+    let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'source',source,'deviceType',device_type,'status',status,'lastEvent',last_event,'lastStep',last_step,'createdAt',created_at,'lastEventAt',last_event_at) FROM public_booking_sessions WHERE tenant_id=$1 AND ($2='' OR branch_id=$2) ORDER BY created_at DESC LIMIT 200")
+        .bind(&tenant_id).bind(&branch_id).fetch_all(&state.db).await
+        .map_err(|_| ApiError::internal("failed to load booking sessions"))?;
     Ok(Json(json!({
         "tenantId": tenant_id,
-        "sessions": []
+        "sessions": rows
     })))
 }
 
 async fn booking_portal_v2_abandonments(
+    State(state): State<AppState>,
     Query(query): Query<SessionListQuery>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, _branch_id) = scope_for_query(&headers, query.tenant_id.as_deref(), None);
+    let (tenant_id, branch_id) = scope_for_query(&headers, query.tenant_id.as_deref(), None);
+    let rows: Vec<Value> = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'source',source,'deviceType',device_type,'status',status,'lastEvent',last_event,'lastStep',last_step,'createdAt',created_at,'abandonedAt',abandoned_at,'recoveredAt',recovered_at) FROM public_booking_sessions WHERE tenant_id=$1 AND ($2='' OR branch_id=$2) AND status IN ('abandoned','recovery_queued','recovered') ORDER BY COALESCE(abandoned_at,last_event_at) DESC LIMIT 200")
+        .bind(&tenant_id).bind(&branch_id).fetch_all(&state.db).await
+        .map_err(|_| ApiError::internal("failed to load booking abandonments"))?;
     Ok(Json(json!({
         "tenantId": tenant_id,
-        "abandonments": []
+        "abandonments": rows
     })))
 }
 
@@ -1327,7 +1596,9 @@ fn otp_hash(mobile: &str, purpose: &str, otp: &str, secret: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::booking_otp_delivery_payload;
+    use std::collections::HashMap;
+
+    use super::{booking_otp_delivery_payload, ordered_service_mapping};
 
     #[test]
     fn booking_otp_uses_real_sms_provider_payload() {
@@ -1338,6 +1609,23 @@ mod tests {
         assert_eq!(payload["template"], "booking_otp");
         assert_eq!(payload["code"], "123456");
         assert_eq!(payload["ttlSeconds"], 300);
+    }
+
+    #[test]
+    fn nearby_branch_mapping_requires_every_selected_service() {
+        let mapping = HashMap::from([("master-cut".to_string(), "branch-cut".to_string())]);
+
+        assert_eq!(
+            ordered_service_mapping(&["master-cut".to_string()], &mapping),
+            Some(vec!["branch-cut".to_string()])
+        );
+        assert_eq!(
+            ordered_service_mapping(
+                &["master-cut".to_string(), "master-color".to_string()],
+                &mapping
+            ),
+            None
+        );
     }
 }
 
@@ -1370,6 +1658,16 @@ async fn real_booking_duration_minutes(
     ))
 }
 
+fn ordered_service_mapping(
+    source_ids: &[String],
+    target_by_source: &std::collections::HashMap<String, String>,
+) -> Option<Vec<String>> {
+    source_ids
+        .iter()
+        .map(|id| target_by_source.get(id).cloned())
+        .collect()
+}
+
 pub(crate) async fn marketplace_availability(
     state: &AppState,
     branch_id: &str,
@@ -1377,19 +1675,21 @@ pub(crate) async fn marketplace_availability(
     date: Option<&str>,
     count: Option<i64>,
 ) -> Result<Value, ApiError> {
-    let tenant_id = sqlx::query_scalar::<_, String>(
-        "SELECT tenant_id::TEXT FROM branches WHERE id::TEXT=$1 AND active=TRUE",
+    let row = sqlx::query(
+        "SELECT COALESCE(NULLIF(t.slug,''),t.name,b.tenant_id::TEXT) AS tenant_id, COALESCE(NULLIF(b.code,''),b.name,b.id::TEXT) AS branch_id FROM branches b JOIN tenants t ON t.id=b.tenant_id WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE",
     )
     .bind(branch_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| ApiError::internal("failed to validate marketplace branch"))?
     .ok_or_else(|| ApiError::not_found("marketplace business was not found"))?;
+    let tenant_id = row.try_get::<String, _>("tenant_id").unwrap_or_default();
+    let branch_id = row.try_get::<String, _>("branch_id").unwrap_or_default();
     let services = vec![service_id.trim().to_string()];
     if services[0].is_empty() {
         return Err(ApiError::bad_request("serviceId is required"));
     }
-    let duration = real_booking_duration_minutes(state, &tenant_id, branch_id, &services)
+    let duration = real_booking_duration_minutes(state, &tenant_id, &branch_id, &services)
         .await?
         .ok_or_else(|| ApiError::not_found("service is not available for online booking"))?;
     let date = date
@@ -1401,7 +1701,7 @@ pub(crate) async fn marketplace_availability(
         state,
         &tenant_id,
         &date,
-        branch_id.to_string(),
+        branch_id.clone(),
         services,
         count.unwrap_or(DEFAULT_SLOT_COUNT).clamp(1, 48),
         duration,

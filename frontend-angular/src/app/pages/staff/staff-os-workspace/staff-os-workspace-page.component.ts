@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { STAFF_OS_VIEWS, StaffOsAction, StaffOsSection } from '../../../features/staff-os/domain/staff-os.models';
@@ -7,7 +8,7 @@ import { StaffOsStore } from '../../../features/staff-os/application/staff-os.st
 @Component({
   selector: 'page-staff-os-workspace',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe],
   providers: [StaffOsStore],
   templateUrl: './staff-os-workspace-page.component.html',
   styleUrls: ['./staff-os-workspace-page.component.css'],

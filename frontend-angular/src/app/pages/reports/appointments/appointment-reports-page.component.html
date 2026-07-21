@@ -30,7 +30,7 @@
   <section class="history-panel" *ngIf="!loading && filteredRows.length">
     <div class="history-title"><h2>Appointments</h2><span>{{ filteredRows.length }} records</span></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Mode</th><th>Client</th><th>Contact</th><th>Staff</th><th>Services</th><th>Appointment</th><th>Status</th><th>Action</th></tr></thead>
+      <thead><tr><th scope="col">Mode</th><th scope="col">Client</th><th scope="col">Contact</th><th scope="col">Staff</th><th scope="col">Services</th><th scope="col">Appointment</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
       <tbody><tr *ngFor="let row of filteredRows">
         <td><strong>{{ bookingMode(row) }}</strong></td>
         <td><strong>{{ row.clientName || '-' }}</strong><small>{{ bookingId(row) }}</small></td>

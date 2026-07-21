@@ -37,6 +37,14 @@ pub async fn create_job(
             "chunkSize must be between 100 and 10000",
         ));
     }
+    let owner = migration_service::resolve_owner(
+        db,
+        tenant,
+        branch,
+        actor,
+        request.owner_user_id.as_deref(),
+    )
+    .await?;
     let (file_name, source_hash, _) =
         migration_file_service::worker_sources(db, tenant, branch, request.source_file_id.trim())
             .await?;
@@ -91,7 +99,15 @@ pub async fn create_job(
     )
     .await;
     match result {
-        Ok(job) => Ok(job),
+        Ok(mut job) => {
+            if owner != actor {
+                migration_repository::assign_job_owner(db, tenant, branch, &job.id, &owner, actor)
+                    .await
+                    .map_err(|_| AppError::internal("failed to assign import owner"))?;
+                job.owner_user_id = owner;
+            }
+            Ok(job)
+        }
         Err(error) if migration_repository::is_active_source_duplicate_error(&error) => Err(
             AppError::conflict("this source file already has an active commit import job"),
         ),
@@ -240,6 +256,34 @@ async fn stage_source(
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::Appointments
+                    | crate::models::migration::MigrationEntity::Payments
+                    | crate::models::migration::MigrationEntity::Expenses => row
+                        .get("source_external_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::Sales
+                    | crate::models::migration::MigrationEntity::Invoices => row
+                        .get("invoice_number")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .or_else(|| row.get("source_external_id").and_then(Value::as_str))
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::PurchaseBills => format!(
+                        "{}:{}:{}",
+                        row.get("supplier_gstin")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        row.get("invoice_number")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        row.get("inventory_item_id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                    )
+                    .to_ascii_lowercase(),
                 };
                 let duplicate = !key.is_empty() && !seen_source_keys.insert(key);
                 if duplicate {
@@ -394,28 +438,44 @@ fn produce_xlsx(
     let mut workbook =
         open_workbook_auto(path).map_err(|_| "XLSX source could not be opened".to_string())?;
     for (sheet_name, range) in workbook.worksheets() {
-        let all = range
-            .rows()
+        let mut rows = range.rows();
+        let Some(header) = rows
+            .next()
             .map(|row| row.iter().map(ToString::to_string).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        let Some(header) = all.first().cloned() else {
+        else {
             continue;
         };
         if header.iter().all(|cell| cell.trim().is_empty()) {
             continue;
         }
         let source_sheet = format!("{name}:{sheet_name}");
-        for (index, data) in all[1..].chunks(chunk_size).enumerate() {
-            if data.is_empty() {
+        let mut data = Vec::with_capacity(chunk_size);
+        let mut source_row_offset = 0_i32;
+        for row in rows {
+            data.push(row.iter().map(ToString::to_string).collect::<Vec<_>>());
+            if data.len() < chunk_size {
                 continue;
             }
             let mut table = Vec::with_capacity(data.len() + 1);
             table.push(header.clone());
-            table.extend_from_slice(data);
+            table.append(&mut data);
             sender
                 .blocking_send(Ok(RawChunk {
                     source_sheet: source_sheet.clone(),
-                    source_row_offset: (index * chunk_size) as i32,
+                    source_row_offset,
+                    table,
+                }))
+                .map_err(|_| "staging worker stopped".to_string())?;
+            source_row_offset += chunk_size as i32;
+        }
+        if !data.is_empty() {
+            let mut table = Vec::with_capacity(data.len() + 1);
+            table.push(header);
+            table.append(&mut data);
+            sender
+                .blocking_send(Ok(RawChunk {
+                    source_sheet,
+                    source_row_offset,
                     table,
                 }))
                 .map_err(|_| "staging worker stopped".to_string())?;

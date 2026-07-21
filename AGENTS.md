@@ -8,8 +8,26 @@
 - Keep changes minimal and focused.
 - Do not duplicate logic.
 - Preserve backward compatibility.
+- No agent may add dummy, fake, demo, placeholder, or sample business data; use real API/database data or a clear empty state only.
 - New top-level folders are allowed only when the domain is genuinely different.
 - AI agents must not execute `npm run ...` commands in this repository. When a frontend npm script is needed, provide the exact command for the user to run instead.
+## GSD Execution Rule
+
+- Prioritize Get Stuff Done: ship the smallest production-safe fix that solves the real issue.
+- Avoid rabbit holes: do not over-explore unrelated files, features, or speculative future work.
+- Use a tight loop: inspect, fix, run the smallest useful verification, then report.
+- If the same issue repeats after two failed attempts, stop and report the root cause, blocker, and next concrete action.
+
+## Token Efficiency Rules
+
+- After completing one logical task, feature, or fix, run `/compact` before moving to the next task when the current agent environment supports it.
+- After investigation or debugging is complete, compact or summarize the findings before implementation; do not carry unnecessary research context forward.
+- Do not scan the whole codebase. Read only the files directly relevant to the current task.
+- Prefer targeted, low-noise commands and summarized output, for example `git status --short` instead of verbose status output.
+- Do not repeatedly paste raw output from verbose commands such as `git status`, `ls -la`, `docker ps`, or full test runs.
+- Use low or medium reasoning effort for routine edits; reserve high or xhigh effort for genuinely complex, multi-step problems.
+- Keep each session focused on one task or feature. Suggest a new session for unrelated work, but resume related follow-up work in the current session.
+- Avoid repeating known file content. Show focused diffs or patches instead of entire files unless the user explicitly requests the full file.
 
 ## 10X Completion Rule
 

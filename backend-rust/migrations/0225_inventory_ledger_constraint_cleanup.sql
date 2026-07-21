@@ -1,0 +1,2 @@
+ALTER TABLE inventory_stock_ledger
+  DROP CONSTRAINT IF EXISTS inventory_stock_ledger_tenant_id_branch_id_inventory_item_i_key;

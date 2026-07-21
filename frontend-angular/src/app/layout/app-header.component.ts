@@ -4,11 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
 import { AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
+import { TranslatePipe } from '../shared/pipes/translate.pipe';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './app-header.component.html',
   styleUrls: ['./app-header.component.css'],
 })
@@ -17,6 +19,7 @@ export class AppHeaderComponent implements OnInit {
   private readonly element = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
   private readonly concierge = inject(AiConciergeService);
+  readonly language = inject(LanguageService);
 
   readonly appName = localStorage.getItem('aurashine_tenant_name')
     ?? localStorage.getItem('tenantName')
@@ -27,6 +30,9 @@ export class AppHeaderComponent implements OnInit {
   branchMenuOpen = false;
   switchingBranchId = '';
   branchError = '';
+  languageMenuOpen = false;
+  languageSaving = false;
+  languageError = '';
   assistantOpen = false;
   assistantBusy = false;
   assistantError = '';
@@ -41,11 +47,17 @@ export class AppHeaderComponent implements OnInit {
       ?? localStorage.getItem('selectedBranchName')
       ?? localStorage.getItem('branchName')
       ?? localStorage.getItem('aurashine_branch_id')
-      ?? 'No branch selected';
+      ?? this.language.text('header.noBranchSelected');
   }
 
   get currentBranch(): AuthBranchAccess | undefined {
     return this.branches.find((branch) => branch.branchId === this.auth.branchId);
+  }
+
+  get languageLabel(): string {
+    const preferences = this.language.preferences();
+    if (preferences.mode === 'bilingual') return 'English + हिन्दी';
+    return preferences.primary === 'hi-IN' ? 'हिन्दी' : 'English';
   }
 
   get filteredBranches(): AuthBranchAccess[] {
@@ -57,14 +69,36 @@ export class AppHeaderComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.auth.accessToken) return;
+    void this.language.loadSettings().catch((error) => {
+      this.languageError = this.message(error, 'error.unableToLoad');
+    });
     this.auth.loadProfile().subscribe({
       next: (profile) => {
         this.branches = profile.branches;
       },
       error: () => {
-        this.branchError = 'Unable to load branches';
+        this.branchError = this.language.text('error.unableToLoad');
       },
     });
+  }
+
+  toggleLanguageMenu(): void {
+    if (this.languageSaving) return;
+    this.languageMenuOpen = !this.languageMenuOpen;
+  }
+
+  async selectLanguage(preference: UserLanguagePreference): Promise<void> {
+    if (this.languageSaving || this.language.settings()?.tenantDefault.allowUserOverride === false) return;
+    this.languageSaving = true;
+    this.languageError = '';
+    try {
+      await this.language.saveUserPreference(preference);
+      this.languageMenuOpen = false;
+    } catch (error) {
+      this.languageError = this.message(error, 'error.unableToSave');
+    } finally {
+      this.languageSaving = false;
+    }
   }
 
   toggleBranchMenu(): void {
@@ -88,7 +122,7 @@ export class AppHeaderComponent implements OnInit {
       },
       error: () => {
         this.switchingBranchId = '';
-        this.branchError = 'Unable to switch branch';
+        this.branchError = this.language.text('error.unableToSave');
       },
     });
   }
@@ -101,7 +135,7 @@ export class AppHeaderComponent implements OnInit {
     try {
       this.assistantSession = await this.concierge.open();
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
-    } catch (error) { this.assistantError = this.message(error, 'AI Assistant could not be opened'); }
+    } catch (error) { this.assistantError = this.message(error, 'error.unableToLoad'); }
     finally { this.assistantBusy = false; }
   }
 
@@ -115,7 +149,7 @@ export class AppHeaderComponent implements OnInit {
       this.assistantDraft = '';
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
       this.assistantAction = response.actionType ? { type: response.actionType, serviceId: response.actionPayload?.serviceId || '' } : null;
-    } catch (error) { this.assistantError = this.message(error, 'AI Assistant could not respond'); }
+    } catch (error) { this.assistantError = this.message(error, 'common.error'); }
     finally { this.assistantBusy = false; }
   }
 
@@ -130,19 +164,21 @@ export class AppHeaderComponent implements OnInit {
       this.branchMenuOpen = false;
       this.branchSearch = '';
     }
+    if (this.languageMenuOpen && !this.element.nativeElement.contains(event.target as Node)) this.languageMenuOpen = false;
   }
 
   @HostListener('document:keydown.escape')
   closeBranchMenuWithKeyboard(): void {
     this.branchMenuOpen = false;
+    this.languageMenuOpen = false;
     this.branchSearch = '';
     this.assistantOpen = false;
   }
 
   formatTime(value: string): string {
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(date);
+    return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(this.language.locale(), { hour: '2-digit', minute: '2-digit' }).format(date);
   }
 
-  private message(error: any, fallback: string): string { return error?.error?.error?.message || error?.error?.message || error?.message || fallback; }
+  private message(error: any, fallbackKey: string): string { return this.language.apiError(error, fallbackKey); }
 }

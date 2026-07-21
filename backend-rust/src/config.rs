@@ -50,15 +50,19 @@ pub struct Settings {
     pub dev_session_secret: Option<String>,
     pub ai_service_url: Option<String>,
     pub ai_service_token: Option<String>,
+    pub customer_firebase_api_key: Option<String>,
     pub voice_provider_token: Option<String>,
     pub invoice_delivery_webhook_url: Option<String>,
     pub invoice_delivery_webhook_token: Option<String>,
+    pub turnstile_site_key: Option<String>,
+    pub turnstile_secret_key: Option<String>,
     pub compliance_provider_url: Option<String>,
     pub compliance_provider_token: Option<String>,
     pub payroll_payout_provider_url: Option<String>,
     pub payroll_payout_provider_token: Option<String>,
     pub mobile_push_provider_url: Option<String>,
     pub mobile_push_provider_token: Option<String>,
+    pub mobile_push_public_key: Option<String>,
     pub whatsapp_cloud_access_token: Option<String>,
     pub whatsapp_cloud_phone_number_id: Option<String>,
     pub whatsapp_cloud_app_secret: Option<String>,
@@ -91,6 +95,8 @@ impl Settings {
         if app_env.is_empty() {
             return Err(anyhow!("APP_ENV must not be empty"));
         }
+        let database_url = var_or_required("DATABASE_URL")?;
+        validate_database_tls(&app_env, &database_url)?;
         let jwt_access_secret = secure_secret("JWT_ACCESS_SECRET")?;
         let jwt_refresh_secret = secure_secret("JWT_REFRESH_SECRET")?;
         let cors_allowed_origins = csv_var("CORS_ALLOWED_ORIGINS");
@@ -118,12 +124,19 @@ impl Settings {
                 "DEV_SESSION_SECRET is required when ENABLE_DEV_SESSION=true"
             ));
         }
+        let turnstile_site_key = optional_value("TURNSTILE_SITE_KEY");
+        let turnstile_secret_key = optional_secure_secret("TURNSTILE_SECRET_KEY")?;
+        if turnstile_site_key.is_some() != turnstile_secret_key.is_some() {
+            return Err(anyhow!(
+                "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured together"
+            ));
+        }
 
         Ok(Settings {
             app_env,
             app_host: var_or("APP_HOST", "0.0.0.0"),
             app_port: var_or_parse("APP_PORT", 8080)?,
-            database_url: var_or_required("DATABASE_URL")?,
+            database_url,
             redis_url: var_or_required("REDIS_URL")?,
             jwt_access_secret,
             jwt_refresh_secret,
@@ -188,6 +201,7 @@ impl Settings {
                 .map(|value| value.trim_end_matches('/').to_string())
                 .filter(|value| value.starts_with("http://") || value.starts_with("https://")),
             ai_service_token: optional_secure_secret("AI_SERVICE_TOKEN")?,
+            customer_firebase_api_key: optional_value("CUSTOMER_FIREBASE_API_KEY"),
             voice_provider_token: optional_secure_secret("VOICE_PROVIDER_TOKEN")?,
             invoice_delivery_webhook_url: std::env::var("INVOICE_DELIVERY_WEBHOOK_URL")
                 .ok()
@@ -195,6 +209,8 @@ impl Settings {
             invoice_delivery_webhook_token: std::env::var("INVOICE_DELIVERY_WEBHOOK_TOKEN")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
+            turnstile_site_key,
+            turnstile_secret_key,
             compliance_provider_url: std::env::var("COMPLIANCE_PROVIDER_URL")
                 .ok()
                 .filter(|value| value.starts_with("https://")),
@@ -212,6 +228,7 @@ impl Settings {
                 .map(|value| value.trim_end_matches('/').to_string())
                 .filter(|value| value.starts_with("http://") || value.starts_with("https://")),
             mobile_push_provider_token: optional_secure_secret("MOBILE_PUSH_PROVIDER_TOKEN")?,
+            mobile_push_public_key: optional_value("MOBILE_PUSH_PUBLIC_KEY"),
             whatsapp_cloud_access_token: std::env::var("WHATSAPP_CLOUD_ACCESS_TOKEN")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
@@ -283,6 +300,10 @@ impl Settings {
         self.invoice_delivery_webhook_url.is_some() || self.whatsapp_cloud_enabled()
     }
 
+    pub fn turnstile_enabled(&self) -> bool {
+        self.turnstile_site_key.is_some() && self.turnstile_secret_key.is_some()
+    }
+
     pub fn compliance_provider_enabled(&self) -> bool {
         self.compliance_provider_url.is_some() && self.compliance_provider_token.is_some()
     }
@@ -335,6 +356,35 @@ impl Settings {
 
 pub fn is_local_env(app_env: &str) -> bool {
     matches!(app_env, "development" | "local" | "test")
+}
+
+fn validate_database_tls(app_env: &str, database_url: &str) -> Result<()> {
+    if is_local_env(app_env)
+        || [
+            "sslmode=require",
+            "sslmode=verify-ca",
+            "sslmode=verify-full",
+        ]
+        .iter()
+        .any(|mode| database_url.to_ascii_lowercase().contains(mode))
+    {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "DATABASE_URL must require PostgreSQL TLS outside local development"
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_database_tls;
+
+    #[test]
+    fn production_database_requires_tls() {
+        assert!(validate_database_tls("development", "postgresql://db/app").is_ok());
+        assert!(validate_database_tls("production", "postgresql://db/app?sslmode=require").is_ok());
+        assert!(validate_database_tls("production", "postgresql://db/app").is_err());
+    }
 }
 
 fn var_or(key: &str, default: &str) -> String {

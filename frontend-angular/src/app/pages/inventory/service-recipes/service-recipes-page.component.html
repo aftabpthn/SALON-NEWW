@@ -1,36 +1,36 @@
 <section class="page-shell">
   <header class="page-head">
-    <h1>Service Recipes</h1>
+    <h1>{{ 'inventory.ui.f6a02bcc65' | translate }}</h1>
     <div class="head-actions">
-      <input aria-label="Search services" placeholder="Search service" [(ngModel)]="search" />
-      <select aria-label="Filter recipe status" [(ngModel)]="status"><option value="">All statuses</option><option value="with">With recipe</option><option value="missing">Missing recipe</option></select>
-      <button type="button" (click)="load()">Refresh</button>
-      <button class="primary" type="button" (click)="newRecipe()">Add recipe</button>
+      <input [attr.aria-label]="'inventory.ui.d1e0a42e24' | translate" [attr.placeholder]="'inventory.ui.307704b474' | translate" [(ngModel)]="search" />
+      <select [attr.aria-label]="'inventory.ui.fdd01f71b2' | translate" [(ngModel)]="status"><option value="">{{ 'inventory.ui.6405179d24' | translate }}</option><option value="with">{{ 'inventory.ui.eb6cba1e56' | translate }}</option><option value="missing">{{ 'inventory.ui.6880e91c32' | translate }}</option></select>
+      <button type="button" (click)="load()">{{ 'inventory.ui.56e3badc4e' | translate }}</button>
+      <button class="primary" type="button" (click)="newRecipe()">{{ 'inventory.ui.2ba1709cc6' | translate }}</button>
     </div>
   </header>
 
   <p class="message error" *ngIf="error">{{ error }}</p>
   <p class="message success" *ngIf="notice">{{ notice }}</p>
-  <div class="loading" *ngIf="loading">Loading…</div>
+  <div class="loading" *ngIf="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
 
-  <nav class="tabs" *ngIf="!loading" aria-label="Service recipe views">
-    <button type="button" [class.active]="activeTab === 'recipes'" (click)="activeTab = 'recipes'">Recipes</button>
-    <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">Approval Queue</button>
-    <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">Variance</button>
+  <nav class="tabs" *ngIf="!loading" [attr.aria-label]="'inventory.ui.fef2a18293' | translate">
+    <button type="button" [class.active]="activeTab === 'recipes'" (click)="activeTab = 'recipes'">{{ 'inventory.ui.9fb1092f32' | translate }}</button>
+    <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">{{ 'inventory.ui.c452adfe90' | translate }}</button>
+    <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">{{ 'inventory.ui.eb39bbf6cc' | translate }}</button>
   </nav>
 
   <section class="kpis" *ngIf="!loading">
-    <article class="blue"><i class="bi bi-scissors" aria-hidden="true"></i><span>Services</span><strong>{{ services.length }}</strong></article>
-    <article class="orange"><i class="bi bi-journal-check" aria-hidden="true"></i><span>With recipe</span><strong>{{ withRecipeCount }}</strong></article>
-    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>Missing recipe</span><strong>{{ services.length - withRecipeCount }}</strong></article>
-    <article class="green"><i class="bi bi-check-lg" aria-hidden="true"></i><span>Pending approvals</span><strong>{{ approvalRows.length }}</strong></article>
+    <article class="blue"><i class="bi bi-scissors" aria-hidden="true"></i><span>{{ 'inventory.ui.5cbd584046' | translate }}</span><strong>{{ services.length }}</strong></article>
+    <article class="orange"><i class="bi bi-journal-check" aria-hidden="true"></i><span>{{ 'inventory.ui.eb6cba1e56' | translate }}</span><strong>{{ withRecipeCount }}</strong></article>
+    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6880e91c32' | translate }}</span><strong>{{ services.length - withRecipeCount }}</strong></article>
+    <article class="green"><i class="bi bi-check-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ approvalRows.length }}</strong></article>
   </section>
 
   <section class="recipe-workspace" *ngIf="!loading && activeTab === 'recipes'">
     <div class="table-pane">
-      <header><h2>Service consumption recipes</h2></header>
+      <header><h2>{{ 'inventory.ui.26ca3a7cb2' | translate }}</h2></header>
       <div class="table-scroll" *ngIf="filteredServices.length; else empty">
-        <table><thead><tr><th>Service</th><th>Products</th><th>Standard cost</th><th>Margin</th><th>Status</th><th>Auto consume</th><th></th></tr></thead>
+        <table><thead><tr><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.fe0a091fdb' | translate }}</th><th>{{ 'inventory.ui.b91328e568' | translate }}</th><th>{{ 'inventory.ui.792fe4aaaf' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.e609e9498c' | translate }}</th><th></th></tr></thead>
           <tbody><tr *ngFor="let service of filteredServices">
             <td><strong>{{ service.name }}</strong><small>{{ service.category || '—' }}</small></td>
             <td>{{ service.productConsumption.length }}</td><td>{{ money(recipeCost(service)) }}</td><td>{{ money(service.pricePaise - recipeCost(service)) }}</td>
@@ -39,24 +39,24 @@
           </tr></tbody>
         </table>
       </div>
-      <ng-template #empty><div class="empty-state">No records yet</div></ng-template>
+      <ng-template #empty><div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div></ng-template>
       <footer>Showing {{ filteredServices.length }} of {{ services.length }} services</footer>
     </div>
 
     <aside class="editor">
-      <header><h2>Recipe editor</h2></header>
+      <header><h2>{{ 'inventory.ui.ad87a7bcd3' | translate }}</h2></header>
       <div class="editor-body">
-        <label>Service<select [(ngModel)]="selectedServiceId" (ngModelChange)="selectService()"><option value="">Select service</option><option *ngFor="let service of services" [value]="service.id">{{ service.name }}</option></select></label>
+        <label>{{ 'inventory.ui.329cb8b6ba' | translate }}<select [(ngModel)]="selectedServiceId" (ngModelChange)="selectService()"><option value="">{{ 'inventory.ui.f216b2305e' | translate }}</option><option *ngFor="let service of services" [value]="service.id">{{ service.name }}</option></select></label>
         <div class="line-list" *ngIf="selectedServiceId">
           <article class="recipe-line" *ngFor="let line of lines; let i = index">
-            <label>Product<select required [(ngModel)]="line.productId" (ngModelChange)="selectItem(line)"><option value="">Select product</option><option *ngFor="let item of items" [value]="item.id">{{ item.name }} · {{ item.sku }}</option></select></label>
-            <div class="line-fields"><label>Unit<input [value]="line.unit || '—'" readonly /></label><label>Standard qty<input type="number" min="1" step="1" [(ngModel)]="line.standardQty" /></label><label>Min qty<input type="number" min="0" step="1" [(ngModel)]="line.minQty" /></label><label>Max qty<input type="number" min="0" step="1" [(ngModel)]="line.maxQty" /></label><label>Waste %<input type="number" min="0" max="100" [(ngModel)]="line.wastePercent" /></label><label>Approval %<input type="number" min="0" max="100" [(ngModel)]="line.ownerApprovalPercent" /></label></div>
-            <div class="line-actions"><label>Hit limit<input type="number" min="0" step="1" [(ngModel)]="line.hitLimit" /></label><button type="button" (click)="removeLine(i)">Remove</button></div>
+            <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select required [(ngModel)]="line.productId" (ngModelChange)="selectItem(line)"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let item of items" [value]="item.id">{{ item.name }} · {{ item.sku }}</option></select></label>
+            <div class="line-fields"><label>{{ 'inventory.ui.f6b935ab33' | translate }}<input [value]="line.unit || '—'" readonly /></label><label>{{ 'inventory.ui.cdf884a4d0' | translate }}<input type="number" min="1" step="1" [(ngModel)]="line.standardQty" /></label><label>{{ 'inventory.ui.b1d66dcc51' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.minQty" /></label><label>{{ 'inventory.ui.794ff3293c' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.maxQty" /></label><label>{{ 'inventory.ui.11f9a8d33d' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.wastePercent" /></label><label>{{ 'inventory.ui.31baca419a' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.ownerApprovalPercent" /></label></div>
+            <div class="line-actions"><label>{{ 'inventory.ui.c86381cabe' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.hitLimit" /></label><button type="button" (click)="removeLine(i)">{{ 'inventory.ui.e963907dac' | translate }}</button></div>
           </article>
-          <button class="add-line" type="button" (click)="addLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add product</button>
+          <button class="add-line" type="button" (click)="addLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{ 'inventory.ui.7c37958a3f' | translate }}</button>
         </div>
-        <div class="empty-state compact" *ngIf="!selectedServiceId">Select a service</div>
-        <div class="empty-state compact" *ngIf="selectedServiceId && !lines.length">No recipe lines</div>
+        <div class="empty-state compact" *ngIf="!selectedServiceId">{{ 'inventory.ui.c950ccc9e2' | translate }}</div>
+        <div class="empty-state compact" *ngIf="selectedServiceId && !lines.length">{{ 'inventory.ui.deecc9e2b9' | translate }}</div>
       </div>
       <footer><button class="primary" type="button" [disabled]="!selectedServiceId || saving" (click)="saveRecipe()">{{ saving ? 'Saving…' : 'Save recipe' }}</button></footer>
     </aside>
@@ -65,11 +65,11 @@
   <section class="review-card" *ngIf="!loading && activeTab !== 'recipes'">
     <header><h2>{{ activeTab === 'approvals' ? 'Approval queue' : 'Consumption variance' }}</h2></header>
     <div class="table-scroll" *ngIf="(activeTab === 'approvals' ? approvalRows : varianceRows) as rows">
-      <table *ngIf="rows.length; else noReviewRows"><thead><tr><th>Date</th><th>Service</th><th>Product</th><th>Staff</th><th>Expected</th><th>Actual</th><th>Variance</th><th *ngIf="activeTab === 'approvals'">Threshold</th><th>Status</th></tr></thead>
+      <table *ngIf="rows.length; else noReviewRows"><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th *ngIf="activeTab === 'approvals'">{{ 'inventory.ui.c51f7b7227' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th></tr></thead>
         <tbody><tr *ngFor="let row of rows"><td>{{ date(row.createdAt) }}</td><td>{{ row.serviceName || '—' }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td *ngIf="activeTab === 'approvals'">{{ approvalThreshold(row) }}%</td><td><span class="status">{{ activeTab === 'approvals' ? 'Pending review' : 'Recorded' }}</span></td></tr></tbody>
       </table>
     </div>
-    <ng-template #noReviewRows><div class="empty-state">No records yet</div></ng-template>
+    <ng-template #noReviewRows><div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div></ng-template>
     <footer>Showing {{ (activeTab === 'approvals' ? approvalRows : varianceRows).length }} records</footer>
   </section>
 </section>

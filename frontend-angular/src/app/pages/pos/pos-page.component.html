@@ -35,10 +35,10 @@
       </div>
       <button type="button" *ngIf="!selectedClient" (click)="walkInClient()">Walk-in</button>
     </article>
-    <article class="client-card"><span>E-wallet amt</span><strong>{{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
-    <article class="client-card"><span>Unpaid amt</span><strong>{{ clientKpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
-    <article class="client-card"><span>Membership assign date</span><strong>{{ formatDate(clientKpi.membershipAssignDate) }}</strong><small>No active membership</small></article>
-    <article class="client-card"><span>Membership expire date</span><strong>{{ formatDate(clientKpi.membershipExpireDate) }}</strong><small>No active membership</small></article>
+    <article class="client-card"><span>E-wallet amt</span><strong>{{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
+    <article class="client-card"><span>Unpaid amt</span><strong>{{ clientKpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
+    <article class="client-card"><span>Membership assign date</span><strong>{{ formatDate(clientKpi.membershipAssignDate) }}</strong><small>{{ clientKpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
+    <article class="client-card"><span>Membership expire date</span><strong>{{ formatDate(clientKpi.membershipExpireDate) }}</strong><small>{{ clientKpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
   </section>
 
   <main class="pos-workspace">
@@ -81,7 +81,7 @@
             <article class="client-result" *ngFor="let client of filteredClients(); trackBy: trackById">
               <button type="button" class="client-result-main" (mousedown)="$event.preventDefault()" (click)="selectClient(client)">
                 <strong>{{ recordName(client) }}</strong><span>{{ client.phone || client.mobile || client.whatsapp || '-' }}</span><small *ngIf="client.email">{{ client.email }}</small>
-                <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-0' }}</em><em *ngIf="clientHasDuplicates(client)">Duplicate</em>
+                <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em><em *ngIf="clientHasDuplicates(client)">Duplicate</em>
               </button>
               <div class="client-result-actions">
                 <a *ngIf="whatsappUrl(client)" [href]="whatsappUrl(client)" target="_blank" rel="noopener" (click)="$event.stopPropagation()">WA</a>
@@ -231,6 +231,7 @@
           <div class="item-summary">
             <span class="type-chip" [class.product-chip]="line.lineType === 'product'">{{ typeLabel(line.lineType) }}</span>
             <strong *ngIf="line.lineType !== 'custom'">{{ line.itemName }}</strong>
+            <small class="roundoff-line" *ngIf="settlementDiscountForLine(line) > 0">Round-off discount {{ settlementDiscountForLine(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</small>
             <input *ngIf="line.lineType === 'custom'" type="text" [ngModel]="line.customName" (ngModelChange)="setLineItemSearch(line, $event)" placeholder="Custom item" />
           </div>
           <div class="staff-cell smart-field">
@@ -264,13 +265,13 @@
           <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.unitPrice" placeholder="0" /></label>
           <label class="item-cell discount-combo"><select [ngModel]="line.discountType" (ngModelChange)="setLineDiscountType(line, $event)"><option value="amount">₹</option><option value="percent">%</option></select><input type="number" min="0" step="0.01" [ngModel]="line.discount" (ngModelChange)="setLineDiscount(line, $event)" placeholder="0" /></label>
           <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.taxPercent" placeholder="0" /></label>
-          <strong class="line-total">{{ lineTotalPaise(line) / 100 | currency:'INR':'symbol':'1.0-0' }}</strong>
+          <strong class="line-total">{{ lineTotalPaise(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
           <button class="icon-action kebab-action" type="button" (click)="removeSaleLine(line)" aria-label="Remove line"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
         </div>
       </div>
       <div class="items-footer">
         <button type="button" class="secondary-action clear-lines" (click)="clearSaleLines()"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></span>Clear all</button>
-        <div class="items-footer-total"><span>Items: {{ itemCount }}</span><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></div>
+        <div class="items-footer-total"><span>Items: {{ itemCount }}</span><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></div>
       </div>
     </section>
 
@@ -283,21 +284,22 @@
           <label><span>Type</span><select [(ngModel)]="billDiscountType"><option value="amount">₹</option><option value="percent">%</option></select></label>
           <label><span>Tip</span><input type="number" min="0" step="0.01" [(ngModel)]="tipAmount" placeholder="0" /></label>
           <label class="wide"><span>Coupon code</span><input type="text" [(ngModel)]="couponCode" placeholder="Coupon" /></label>
-          <label class="check-line wide"><input type="checkbox" [(ngModel)]="roundTotal" /><span>Round total</span></label>
+          <label class="check-line wide"><input type="checkbox" [(ngModel)]="roundTotal" /><span>Round invoice to nearest ₹1</span></label>
         </div>
       </section>
 
       <section class="summary-card">
-        <div><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div><span>Manual discount</span><strong>{{ billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div><span>Line discount</span><strong>{{ lineDiscountPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+        <div><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div><span>Manual discount</span><strong>{{ billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div><span>Membership discount</span><strong>{{ lineDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div *ngIf="roundOffDiscountPaise > 0"><span>Round-off service discount</span><strong>-{{ roundOffDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
         <div *ngIf="membershipRedeemCount() > 0"><span>Membership redeem</span><strong>{{ membershipRedeemCount() }}</strong></div>
         <div *ngIf="packageRedeemCount() > 0"><span>Package redeem</span><strong>{{ packageRedeemCount() }}</strong></div>
-        <div><span>GST</span><strong>{{ gstPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div><span>Staff tips</span><strong>{{ tipPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="total"><span>Total</span><strong>{{ totalPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div><span>Paid now</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-        <div class="due"><span>Balance due</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+        <div><span>GST</span><strong>{{ gstPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div><span>Staff tips</span><strong>{{ tipPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div class="total"><span>Total</span><strong>{{ totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div><span>Paid now</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <div class="due"><span>Balance due</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
       </section>
 
       <section class="payment-card" id="tip-register">
@@ -305,27 +307,29 @@
         <div class="payment-grid">
           <label class="payment-method" [class.gift-card-method]="method.code === 'gift_card'" *ngFor="let method of paymentMethods; trackBy: trackByPayment" (click)="fillPayment(method)">
             <span>{{ method.label }}</span>
-            <button type="button" (click)="$event.stopPropagation(); fillPayment(method)">Click {{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</button>
+            <button type="button" (click)="$event.stopPropagation(); fillPayment(method)">Click {{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</button>
             <input type="number" min="0" step="0.01" [(ngModel)]="paymentInputs[method.code]" placeholder="0" (click)="$event.stopPropagation()" (focus)="(!paymentInputs[method.code] || paymentInputs[method.code] === '0') && fillPayment(method)" />
             <div class="gift-card-reference" *ngIf="method.code === 'gift_card'" (click)="$event.stopPropagation()">
               <input type="text" aria-label="Gift card code" placeholder="Gift card code" autocomplete="off" [ngModel]="giftCardPaymentCode" (ngModelChange)="onGiftCardCodeInput($event)" (keydown.enter)="$event.preventDefault(); verifyGiftCard()" />
               <button type="button" [disabled]="giftCardLookupLoading || !giftCardPaymentCode" (click)="verifyGiftCard()">{{ giftCardLookupLoading ? 'Checking...' : 'Verify' }}</button>
             </div>
-            <small class="gift-card-state success" *ngIf="method.code === 'gift_card' && verifiedGiftCard">{{ verifiedGiftCard.clientName || verifiedGiftCard.code }} · {{ verifiedGiftCard.balancePaise / 100 | currency:'INR':'symbol':'1.0-0' }} available</small>
+            <small class="gift-card-state success" *ngIf="method.code === 'gift_card' && verifiedGiftCard">{{ verifiedGiftCard.clientName || verifiedGiftCard.code }} · {{ verifiedGiftCard.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }} available</small>
             <small class="gift-card-state error" *ngIf="method.code === 'gift_card' && giftCardLookupError">{{ giftCardLookupError }}</small>
           </label>
           <p class="empty" *ngIf="!paymentMethods.length">No payment modes yet.</p>
         </div>
         <div class="overpay-actions" *ngIf="unappliedOverpayPaise > 0">
-          <span>Extra {{ unappliedOverpayPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</span>
+          <span>Extra {{ unappliedOverpayPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
           <button type="button" (click)="applyOverpayToWallet()">Add wallet</button>
           <button type="button" (click)="applyOverpayToTip()">Staff tip</button>
         </div>
-        <div class="unpaid-option" *ngIf="paidNowPaise > 0 && balanceDuePaise > 0">
-          <span>Unpaid</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong>
+        <div class="balance-settlement" *ngIf="paidNowPaise > 0 && partialBalancePaise > 0">
+          <button type="button" [class.active]="balanceSettlement === 'unpaid'" (click)="selectBalanceSettlement('unpaid')"><span>Next time / Unpaid</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
+          <button type="button" [class.active]="balanceSettlement === 'round_off'" (click)="selectBalanceSettlement('round_off')"><span>Round off due</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
         </div>
-        <p class="wallet-line" *ngIf="walletCreditPaise > 0">Wallet credit: {{ walletCreditPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</p>
-        <p class="wallet-line">Wallet balance: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</p>
+        <p class="settlement-error" *ngIf="roundOffError">{{ roundOffError }}</p>
+        <p class="wallet-line" *ngIf="walletCreditPaise > 0">Wallet credit: {{ walletCreditPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
+        <p class="wallet-line">Wallet balance: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
         <label class="reward-redemption" *ngIf="selectedClientId && clientKpi.hasActiveMembership && membershipSettings.creditsBenefits.rewardPointsEnabled && clientKpi.rewardPointsBalance > 0">
           <span>Reward points <small>{{ clientKpi.rewardPointsBalance }} available</small></span>
           <input type="number" min="0" step="1" [max]="clientKpi.rewardPointsBalance" [(ngModel)]="rewardPointsToRedeem" placeholder="Points to redeem" />
@@ -335,9 +339,9 @@
       <section class="review-card">
         <h3>Review payment split</h3>
         <div class="review-grid">
-          <div><span>Advance adjusted</span><strong>{{ advanceAdjustedPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-          <div><span>Collection amount</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
-          <div><span>Due after save</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong></div>
+          <div><span>Advance adjusted</span><strong>{{ advanceAdjustedPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+          <div><span>Collection amount</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+          <div><span>Due after save</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
         </div>
       </section>
 

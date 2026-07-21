@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::NaiveDate;
+use chrono::{FixedOffset, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -18,6 +18,7 @@ use crate::{
     routes::context::tenant_branch,
     services::{
         auth_service::AuthClaims,
+        staff_app_service,
         staff_enterprise_service::{
             self, ApprovalDetail, ApprovalPolicyRequest, ApprovalRequestInput, BestStaffRequest,
             CoachingGoalRequest, ComplianceExport, DecisionRequest, IntelligenceRiskRow,
@@ -47,6 +48,16 @@ pub fn router() -> Router<AppState> {
         .route("/staff/approvals/:id/decision", post(decide_approval))
         .route("/staff/audit", get(list_audit))
         .route("/staff/self/dashboard", get(self_dashboard))
+        .route("/staff-self/enterprise-os", get(staff_app_enterprise_os))
+        .route("/staff-self/business", get(staff_app_business))
+        .route(
+            "/staff-self/business/invoices/:id",
+            get(staff_app_business_invoice),
+        )
+        .route(
+            "/staff-self/workspace-preferences",
+            get(staff_app_workspace_preferences),
+        )
         .route("/staff/self/payslips/:run_id", get(self_payslip))
         .route("/staff/tips", get(list_tips))
         .route("/staff/tips/summary", get(tip_summary))
@@ -61,6 +72,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff/payroll-compliance/summary", get(statutory_summary))
         .route("/staff/payroll-compliance/export", post(compliance_export))
+        .route("/staff/salary-revisions", get(list_all_salary_revisions))
         .route(
             "/staff/:staff_id/salary-revisions",
             get(list_salary_revisions).post(create_salary_revision),
@@ -162,6 +174,24 @@ struct SelfQuery {
     date: Option<NaiveDate>,
 }
 #[derive(Deserialize)]
+struct StaffAppRangeQuery {
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    date: Option<NaiveDate>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StaffAppBusinessQuery {
+    date: Option<NaiveDate>,
+    from: Option<NaiveDate>,
+    to: Option<NaiveDate>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+    q: Option<String>,
+    status: Option<String>,
+    sort: Option<String>,
+}
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PeriodQuery {
     staff_id: Option<String>,
@@ -173,6 +203,12 @@ struct PeriodQuery {
 struct SummaryQuery {
     period_start: NaiveDate,
     period_end: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SalaryRevisionQuery {
+    staff_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -299,6 +335,109 @@ async fn list_audit(
         .await?,
     )))
 }
+async fn staff_app_workspace_preferences(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<serde_json::Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::workspace_preferences(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn staff_app_enterprise_os(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffAppRangeQuery>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
+        .date_naive();
+    let from = query.from.or(query.date).unwrap_or(today);
+    let to = query.to.or(query.date).unwrap_or(from);
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::enterprise_os(&state.db, &tenant_id, &branch_id, &claims.sub, from, to)
+            .await?,
+    )))
+}
+
+async fn staff_app_business(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffAppBusinessQuery>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
+        .date_naive();
+    let from = query.from.or(query.date).unwrap_or(today);
+    let to = query.to.or(query.date).unwrap_or(from);
+    let role = claims.role.to_ascii_lowercase();
+    let has = |permission: &str| claims.permissions.iter().any(|value| value == permission);
+    let billing_visible = matches!(role.as_str(), "owner" | "admin" | "accountant")
+        || [
+            "read:finance",
+            "read:sales",
+            "read:payments",
+            "read:invoices",
+        ]
+        .iter()
+        .any(|permission| has(permission));
+    let earnings_visible = billing_visible || has("read:payroll");
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::business(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            from,
+            to,
+            query.page.unwrap_or(1),
+            query.page_size.unwrap_or(25),
+            query.q.as_deref().unwrap_or(""),
+            query.status.as_deref().unwrap_or(""),
+            query.sort.as_deref().unwrap_or("desc"),
+            billing_visible,
+            earnings_visible,
+        )
+        .await?,
+    )))
+}
+
+async fn staff_app_business_invoice(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(invoice_id): Path<String>,
+) -> ApiResult<serde_json::Value> {
+    let role = claims.role.to_ascii_lowercase();
+    let allowed = matches!(role.as_str(), "owner" | "admin" | "accountant")
+        || claims.permissions.iter().any(|value| {
+            matches!(
+                value.as_str(),
+                "read:finance" | "read:sales" | "read:payments" | "read:invoices"
+            )
+        });
+    if !allowed {
+        return Err(AppError::forbidden("invoice permission is required"));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::business_invoice(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &invoice_id,
+        )
+        .await?,
+    )))
+}
+
 async fn self_dashboard(
     State(s): State<AppState>,
     Extension(c): Extension<AuthClaims>,
@@ -450,6 +589,24 @@ async fn list_salary_revisions(
     let (t, b) = tenant_branch(&h)?;
     Ok(Json(ApiResponse::ok(
         staff_enterprise_service::salary_revisions(&s.db, &t, &b, &staff).await?,
+    )))
+}
+async fn list_all_salary_revisions(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Query(q): Query<SalaryRevisionQuery>,
+) -> ApiResult<Vec<SalaryRevisionRecord>> {
+    payroll(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::salary_revisions(
+            &s.db,
+            &t,
+            &b,
+            q.staff_id.as_deref().unwrap_or("").trim(),
+        )
+        .await?,
     )))
 }
 async fn create_salary_revision(

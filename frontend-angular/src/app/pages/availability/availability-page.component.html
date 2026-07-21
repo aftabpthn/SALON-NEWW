@@ -25,7 +25,7 @@
       <div class="grid-head" *ngFor="let date of days">{{ dayLabel(date) }}</div>
       <ng-container *ngFor="let person of staff">
         <div class="employee-cell"><input type="checkbox" [checked]="selectedStaff.has(person.id)" (change)="toggleStaff(person.id, $any($event.target).checked)" [attr.aria-label]="'Select ' + person.name" /><span><strong>{{ person.name }}</strong><small>{{ totalHours(person) | number:'1.0-2' }} Hrs</small></span></div>
-        <button class="schedule-cell" *ngFor="let date of days" type="button" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span><small *ngIf="cell(person.id,date)?.notes">Note added</small></button>
+        <button class="schedule-cell" *ngFor="let date of days" type="button" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" [class.has-operation]="operationsFor(person.id,date).length > 0" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span><small *ngIf="cell(person.id,date)?.notes">Note added</small><small class="operation-chip" *ngFor="let block of operationsFor(person.id,date)">{{ operationLabel(block) }}<ng-container *ngIf="block.scheduledTime"> · {{ block.scheduledTime.slice(0,5) }}</ng-container></small></button>
       </ng-container>
     </div>
     <div class="empty" *ngIf="!loading && staff.length === 0">No records yet</div>

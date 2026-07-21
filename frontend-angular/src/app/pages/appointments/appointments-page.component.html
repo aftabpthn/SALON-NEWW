@@ -50,7 +50,16 @@
   <p class="status-action-error board-action-error" *ngIf="appointmentActionError && !selectedAppointment">{{ appointmentActionError }}</p>
 
   <section class="metrics" aria-label="Appointment summary">
-    <article *ngFor="let item of summary; trackBy: trackByIndex" [class]="item.tone">
+    <button
+      *ngFor="let item of summary; trackBy: trackByIndex"
+      type="button"
+      class="metric-card"
+      [ngClass]="item.tone"
+      [class.active-filter]="isSummaryFilterActive(item.statuses)"
+      [attr.aria-pressed]="isSummaryFilterActive(item.statuses)"
+      [disabled]="!item.statuses.length && !item.command"
+      (click)="openSummaryMetric(item.statuses, item.command)"
+    >
       <span class="metric-icon" aria-hidden="true" [ngSwitch]="item.icon">
         <svg *ngSwitchCase="'booked'" viewBox="0 0 24 24">
           <rect x="4" y="5" width="16" height="15" rx="3"></rect>
@@ -89,7 +98,7 @@
         <span class="metric-label">{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
       </span>
-    </article>
+    </button>
   </section>
 
   <section class="work-area">
@@ -161,7 +170,7 @@
       <ng-template #conflictMode>
         <section class="operational-view conflict-view-mode" *ngIf="activeStaffGridMode === 'Conflict View'; else calendarModes">
           <table *ngIf="conflictRows.length; else noConflicts">
-            <thead><tr><th>Type</th><th>Resource</th><th>Booking one</th><th>Booking two</th></tr></thead>
+            <thead><tr><th scope="col">Type</th><th scope="col">Resource</th><th scope="col">Booking one</th><th scope="col">Booking two</th></tr></thead>
             <tbody><tr *ngFor="let conflict of conflictRows; trackBy: trackByIndex"><td>{{ conflict.type }}</td><td>{{ conflict.target }}</td><td>{{ conflict.first }}</td><td>{{ conflict.second }}</td></tr></tbody>
           </table>
           <ng-template #noConflicts><p class="view-empty">No schedule conflicts</p></ng-template>
@@ -260,6 +269,7 @@
               <strong>{{ item.time }}</strong>
               <b>{{ item.client }}</b>
               <span>{{ item.service }}</span>
+              <em class="staff-request-badge" *ngIf="item.staffPreference !== 'any' && item.requestedStaffId">♥ {{ requestedStaffLabel(item) }} requested</em>
               <small>{{ statusLabel(item.status) }}</small>
             </button>
           </ng-container>
@@ -419,9 +429,18 @@
         </div>
       </section>
 
+      <section class="pending-reschedule-requests" *ngIf="selectedRescheduleRequests.length">
+        <strong>Client reschedule request</strong>
+        <article *ngFor="let request of selectedRescheduleRequests; trackBy: trackByIndex">
+          <span>{{ formatActivityTime(request.requestedStartAt) }}{{ request.reason ? ' · ' + request.reason : '' }}</span>
+          <button type="button" (click)="decideRescheduleRequest(request.id, true)">Approve</button><button type="button" (click)="decideRescheduleRequest(request.id, false)">Reject</button>
+        </article>
+      </section>
+
       <div class="drawer-actions">
         <button type="button" (click)="openEditAppointment(appointment)">Edit Booking</button>
-        <button type="button" [disabled]="!clientPhone(appointment.clientId)" (click)="sendClientSms(appointment)">SMS client</button>
+        <button type="button" (click)="openRescheduleAppointment(appointment)">Reschedule</button>
+        <button type="button" [disabled]="!clientPhone(appointment.clientId) || clientSmsSending" (click)="sendClientSms(appointment)">{{ clientSmsSending ? 'Queuing...' : 'SMS client' }}</button>
       </div>
     </section>
 
@@ -612,7 +631,7 @@
     <header>
       <div>
         <span class="section-label">Booking</span>
-        <h2>New booking</h2>
+        <h2>{{ rescheduleMode ? 'Reschedule booking' : (editingAppointmentId ? 'Edit booking' : 'New booking') }}</h2>
       </div>
       <button class="icon-button" type="button" aria-label="Close new booking" (click)="closeNewBooking()">×</button>
     </header>
@@ -643,6 +662,54 @@
         <a routerLink="/clients">Clients</a>
       </div>
 
+      <section class="booking-client-kpis" *ngIf="selectedClientId">
+        <p class="compact-empty" *ngIf="bookingClientKpiLoading">Loading client details...</p>
+        <ng-container *ngIf="bookingClientKpi as kpi">
+          <article><span>Wallet</span><strong>{{ kpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
+          <article><span>Unpaid</span><strong>{{ kpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
+          <article><span>Membership assigned</span><strong>{{ kpi.hasActiveMembership ? shortDate(kpi.membershipAssignDate || '') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
+          <article><span>Membership expires</span><strong>{{ kpi.hasActiveMembership ? shortDate(kpi.membershipExpireDate || '') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
+        </ng-container>
+      </section>
+
+      <section class="booking-intelligence-panel" *ngIf="bookingLines.length > 0">
+        <div class="service-line-head">
+          <strong>Booking intelligence</strong>
+          <button class="mini" type="button" [disabled]="bookingIntelligenceLoading" (click)="refreshBookingIntelligence()">
+            {{ bookingIntelligenceLoading ? 'Checking...' : 'Refresh plan' }}
+          </button>
+        </div>
+        <p class="inline-error" *ngIf="bookingIntelligenceError">{{ bookingIntelligenceError }}</p>
+        <ng-container *ngIf="bookingIntelligence as intelligence">
+          <div class="booking-intelligence-summary" *ngIf="intelligence.client as client">
+            <span>Risk <b>{{ client.riskLevel }} · {{ client.riskScore }}</b></span>
+            <span>Package credits <b>{{ client.packageCredits }}</b></span>
+            <span>Memberships <b>{{ client.activeMemberships }}</b></span>
+          </div>
+          <div class="booking-intelligence-summary" *ngIf="intelligence.deposit.required">
+            <span>Deposit required <b>{{ intelligence.deposit.depositPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</b></span>
+          </div>
+          <button class="mini" type="button" *ngIf="intelligence.plan.length > 1" (click)="applySequencePlan()">Apply sequence</button>
+          <article class="booking-plan-line" *ngFor="let plan of intelligence.plan; trackBy: trackByIndex">
+            <div>
+              <b>{{ plan.serviceName }}</b>
+              <small>{{ timeText(plan.startAt) }} · Active until {{ timeText(plan.activeEndsAt) }} · Buffer until {{ timeText(plan.busyUntil) }}</small>
+              <small *ngIf="plan.processingMinutes || plan.cleanupMinutes || plan.bufferMinutes">Processing {{ plan.processingMinutes }}m · Cleanup {{ plan.cleanupMinutes }}m · Buffer {{ plan.bufferMinutes }}m</small>
+            </div>
+            <small *ngIf="plan.staff.length">Eligible: {{ plan.staff[0].name }} · {{ plan.staff[0].verifiedSkills }} verified skills · {{ plan.staff[0].bookedMinutes }}m booked</small>
+            <small class="inline-error" *ngIf="(plan.consultation.required || plan.consultation.patchTestRequired) && !plan.consultation.current">Consultation{{ plan.consultation.patchTestRequired ? ' / patch test' : '' }} required before this service can be booked.</small>
+            <small *ngIf="(plan.consultation.required || plan.consultation.patchTestRequired) && plan.consultation.current">Consultation clearance is current.</small>
+            <div class="booking-alternatives" *ngFor="let alternative of intelligence.alternatives; trackBy: trackByIndex">
+              <ng-container *ngIf="alternative.lineId === plan.lineId">
+                <button class="mini" type="button" *ngFor="let slot of alternative.slots; trackBy: trackByIndex" (click)="applyAlternative(plan.lineId, slot)">
+                  {{ staffName(slot.staffId) }} · {{ timeText(slot.startAt) }}
+                </button>
+              </ng-container>
+            </div>
+          </article>
+        </ng-container>
+      </section>
+
       <label>
         Notes
         <textarea rows="3" [(ngModel)]="bookingNotes" name="bookingNotes"></textarea>
@@ -669,10 +736,39 @@
 
       <div class="service-line-head">
         <strong>Services</strong>
-        <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
+        <span>
+          <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
+          <button class="mini" type="button" (click)="addParallelServiceLine()">Add parallel</button>
+        </span>
       </div>
 
       <section class="service-card" *ngFor="let line of bookingLines; let lineIndex = index; trackBy: trackLine" aria-label="Service line">
+        <label class="toggle-line" *ngIf="rescheduleMode">
+          <input type="checkbox" [checked]="isRescheduleLineSelected(line)" (change)="toggleRescheduleLine(line, $any($event.target).checked)" />
+          Reschedule this service
+        </label>
+        <label class="smart-picker service-field-wide">
+          Guest
+          <input
+            type="search"
+            placeholder="Search guest"
+            [ngModel]="line.clientSearch"
+            [name]="'clientSearch' + line.id"
+            (focus)="line.clientOpen = true"
+            (ngModelChange)="setLineClientSearch(line, $event)"
+          />
+          <div class="picker-results" *ngIf="line.clientOpen">
+            <button
+              *ngFor="let client of filteredLineClients(line); trackBy: trackByIndex"
+              type="button"
+              (mousedown)="$event.preventDefault(); selectLineClient(line, client)"
+            >
+              <b>{{ client.name || client.phone || client.email }}</b>
+              <span>{{ client.phone || client.email }}</span>
+            </button>
+            <small *ngIf="filteredLineClients(line).length === 0">No clients</small>
+          </div>
+        </label>
         <label class="smart-picker service-field-wide">
           Service
           <input
@@ -726,11 +822,11 @@
             <button
               class="requested-staff-heart"
               type="button"
-              [class.active]="line.staffRequested"
+              [class.active]="line.staffPreference !== 'any'"
               [disabled]="!line.staffId"
-              [attr.aria-pressed]="line.staffRequested"
-              [attr.aria-label]="line.staffRequested ? 'Remove requested staff mark' : 'Mark selected staff as requested'"
-              [title]="line.staffRequested ? 'Requested staff' : 'Mark selected staff as requested'"
+              [attr.aria-pressed]="line.staffPreference !== 'any'"
+              [attr.aria-label]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
+              [title]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
               (click)="toggleStaffRequest(line)"
             >♥</button>
           </div>
@@ -745,6 +841,15 @@
             </button>
             <small *ngIf="filteredStaff(line).length === 0">No staff</small>
           </div>
+        </label>
+
+        <label class="staff-preference-field">
+          Staff preference
+          <select [ngModel]="line.staffPreference" [name]="'staffPreference' + line.id" (ngModelChange)="setStaffPreference(line, $any($event))">
+            <option value="any">Any available staff</option>
+            <option value="preferred">♥ Preferred staff</option>
+            <option value="required">♥ Required staff</option>
+          </select>
         </label>
 
         <label>
@@ -808,10 +913,25 @@
       <p class="inline-error" *ngIf="bookingError">{{ bookingError }}</p>
     </form>
 
+    <section class="staff-change-review" *ngIf="staffChangeReviewOpen">
+      <header><strong>Staff preference review</strong><button type="button" (click)="staffChangeReviewOpen = false">×</button></header>
+      <article *ngFor="let line of pendingStaffChanges(); trackBy: trackLine">
+        <b>{{ staffName(line.requestedStaffId) }} requested → {{ staffName(line.staffId) }}</b>
+        <small>{{ line.staffPreference === 'required' ? 'Required staff: client approval is mandatory.' : 'Preferred staff: client approval or manager override is required.' }}</small>
+        <select [(ngModel)]="line.staffChangeApproval" [name]="'staffChangeApproval' + line.id">
+          <option value="">Choose approval</option>
+          <option value="client-approved">Client approved</option>
+          <option *ngIf="line.staffPreference === 'preferred'" value="manager-override">Manager override</option>
+        </select>
+        <input *ngIf="line.staffChangeApproval === 'manager-override'" [(ngModel)]="line.staffChangeReason" [name]="'staffChangeReason' + line.id" placeholder="Manager override reason" />
+      </article>
+      <footer><button type="button" (click)="staffChangeReviewOpen = false">Back</button><button class="primary" type="button" (click)="confirmStaffChanges()">Continue saving</button></footer>
+    </section>
+
     <footer>
       <button type="button" (click)="closeNewBooking()">Cancel</button>
       <button class="primary" type="button" [disabled]="savingBooking" (click)="createBooking()">
-        {{ savingBooking ? 'Saving...' : editingAppointmentId ? 'Save booking' : 'Create booking' }}
+        {{ savingBooking ? 'Saving...' : rescheduleMode ? 'Reschedule selected' : editingAppointmentId ? 'Save booking' : 'Create booking' }}
       </button>
     </footer>
   </aside>

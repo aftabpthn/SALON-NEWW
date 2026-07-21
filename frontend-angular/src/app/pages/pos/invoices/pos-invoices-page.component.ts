@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../../shared/services/api.service';
 import { PosRealtimeService } from '../../../core/services/pos-realtime.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { downloadInvoiceDocument, printInvoiceDocument } from '../../../shared/utils/safe-invoice-print';
 import { Subscription } from 'rxjs';
 
@@ -19,7 +20,11 @@ interface InvoiceRow {
   totalPaise: number;
   paidPaise: number;
   balancePaise: number;
+  receivedDuePaise: number;
+  walletPaise: number;
 }
+
+type InvoiceKpiFilter = 'received-due' | 'due' | 'wallet';
 
 interface InvoiceTotals {
   totalRows: number;
@@ -31,12 +36,16 @@ interface InvoiceTotals {
 }
 
 interface InvoiceAction { id: string; action: string; recipient: string; createdAt: string; }
+interface InvoicePayment { id: string; method: string; label: string; amountPaise: number; reference: string; paidAt: string; }
 interface InvoiceDelivery { id: string; channel: string; recipient: string; status: string; attempts: number; lastError: string; deliveredAt: string | null; createdAt: string; }
 interface LedgerVerification { valid: boolean; events: number; headHash: string; failedAt: number | null; }
 interface PaymentLink { id: string; provider: string; amountPaise: number; status: string; url: string; expiresAt?: string; }
 interface PaymentReconciliation { paymentLinkId: string; providerStatus: string; providerAmountPaidPaise: number; requiresSignedWebhook: boolean; }
 interface PaymentInstrument { id: string; provider: string; methodType: string; brand: string; last4: string; recurringEnabled: boolean; status: string; }
 interface PaymentDispute { id: string; provider: string; providerDisputeId: string; amountPaise: number; currency: string; reason: string; status: string; evidenceDueAt?: string; openedAt: string; }
+interface PaymentMode { code: string; label: string; referenceRequired: boolean; }
+interface PendingPayment extends PaymentMode { amountPaise: number; reference: string; idempotencyKey: string; }
+interface InvoiceDeleteRequest { id: string; saleId: string; invoiceNumber: string; reason: string; status: string; requestedByUserId: string; decidedByUserId: string; decisionNote: string; requestedAt: string; decidedAt?: string; appliedAt?: string; }
 
 interface InvoiceLine {
   id: string;
@@ -70,12 +79,13 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   totals: InvoiceTotals = this.emptyTotals();
   selected: InvoiceRow | null = null;
   history: InvoiceAction[] = [];
+  paymentTimeline: InvoicePayment[] = [];
   invoiceLines: InvoiceLine[] = [];
   clientKpi: InvoiceClientKpi | null = null;
   detailsLoading = false;
   returnLines: ReturnLine[] = [];
   recipient = '';
-  deliveryChannel: 'email' | 'whatsapp' = 'email';
+  deliveryChannel: 'email' | 'sms' | 'whatsapp' = 'email';
   deliveries: InvoiceDelivery[] = [];
   reminderLoading = false;
   returnDrawerOpen = false;
@@ -88,6 +98,12 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   voidReason = '';
   voidIdempotencyKey = '';
   voidLoading = false;
+  deleteRequest: InvoiceDeleteRequest | null = null;
+  deleteDrawerOpen = false;
+  deleteReason = '';
+  deleteDecisionNote = '';
+  deleteLoading = false;
+  deleteDecisionLoading = false;
   creditNoteDrawerOpen = false;
   creditNoteReason = '';
   creditNoteNotes = '';
@@ -107,15 +123,46 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   paymentInstruments: PaymentInstrument[] = [];
   paymentDisputes: PaymentDispute[] = [];
   revokingInstrumentId = '';
+  paymentMethods: PaymentMode[] = [];
+  receivePaymentDrawerOpen = false;
+  receivePaymentInputs: Record<string, string> = {};
+  receivePaymentReferences: Record<string, string> = {};
+  receivePaymentIdempotencyKeys: Record<string, string> = {};
+  receivePaymentNotes = '';
+  receivePaymentLoading = false;
+  paymentMethodsLoading = false;
+  activeKpiFilter: InvoiceKpiFilter | null = null;
   error = '';
   message = '';
   private liveUpdates?: Subscription;
 
-  constructor(private readonly api: ApiService, private readonly realtime: PosRealtimeService) {}
+  constructor(
+    private readonly api: ApiService,
+    private readonly realtime: PosRealtimeService,
+    private readonly route: ActivatedRoute,
+    private readonly auth: AuthService,
+  ) {}
   ngOnInit(): void {
-    this.load();
+    const invoiceId = this.route.snapshot.queryParamMap.get('invoiceId')?.trim();
+    this.loadPaymentMethods();
+    this.load(invoiceId ? () => this.selectInvoiceById(invoiceId) : undefined);
     this.liveUpdates = this.realtime.events().subscribe((event) => {
       if (event.entityType === 'invoice') this.load();
+    });
+  }
+
+  private selectInvoiceById(invoiceId: string): void {
+    const listed = this.invoices.find((invoice) => invoice.id === invoiceId);
+    if (listed) { this.select(listed); return; }
+    this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}`).subscribe({
+      next: (response) => {
+        const data = response?.data ?? response;
+        const invoice = this.invoice(data?.invoice ?? data?.sale ?? data);
+        if (!invoice.id) { this.error = 'Invoice was not found'; return; }
+        this.invoices = [invoice, ...this.invoices];
+        this.select(invoice);
+      },
+      error: (error: any) => this.error = this.messageFor(error),
     });
   }
   ngOnDestroy(): void { this.liveUpdates?.unsubscribe(); }
@@ -134,22 +181,60 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     });
   }
 
+  get visibleInvoices(): InvoiceRow[] {
+    if (this.activeKpiFilter === 'received-due') return this.invoices.filter((invoice) => invoice.receivedDuePaise > 0);
+    if (this.activeKpiFilter === 'due') return this.invoices.filter((invoice) => invoice.balancePaise > 0);
+    if (this.activeKpiFilter === 'wallet') return this.invoices.filter((invoice) => invoice.walletPaise > 0);
+    return this.invoices;
+  }
+
+  toggleKpiFilter(filter: InvoiceKpiFilter): void {
+    this.activeKpiFilter = this.activeKpiFilter === filter ? null : filter;
+    if (this.selected && !this.visibleInvoices.some((invoice) => invoice.id === this.selected?.id)) {
+      this.selected = null;
+      this.closeReturnDrawer();
+      this.closeVoidDrawer();
+      this.closeDeleteDrawer();
+      this.closeCreditNoteDrawer();
+      this.closeReceivePaymentDrawer();
+      this.closePaymentLinkDrawer();
+    }
+  }
+
+  paidColumnLabel(): string {
+    if (this.activeKpiFilter === 'received-due') return 'Received due';
+    if (this.activeKpiFilter === 'wallet') return 'Wallet used';
+    return 'Paid';
+  }
+
+  displayedPaidPaise(invoice: InvoiceRow): number {
+    if (this.activeKpiFilter === 'received-due') return invoice.receivedDuePaise;
+    if (this.activeKpiFilter === 'wallet') return invoice.walletPaise;
+    return invoice.paidPaise;
+  }
+
   select(invoice: InvoiceRow): void {
     this.selected = invoice;
     this.recipient = invoice.clientPhone || '';
     this.history = [];
+    this.paymentTimeline = [];
     this.deliveries = [];
     this.invoiceLines = [];
     this.clientKpi = null;
     this.detailsLoading = true;
     this.closeReturnDrawer();
     this.closeVoidDrawer();
+    this.closeDeleteDrawer();
     this.closeCreditNoteDrawer();
+    this.closeReceivePaymentDrawer();
     this.ledgerVerification = null;
     this.paymentLinks = [];
     this.paymentInstruments = [];
     this.paymentDisputes = [];
     this.paymentReconciliation = null;
+    this.deleteRequest = null;
+    this.deleteDecisionNote = '';
+    if (this.canAccessDeleteRequests()) this.loadDeleteRequest(invoice.id);
     this.loadPaymentLinks(invoice.id);
     this.loadPaymentCompliance(invoice.id);
     this.loadDeliveries(invoice.id);
@@ -159,6 +244,11 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
         this.invoiceLines = this.rows(data?.lines).map((line) => ({
           id: String(line.id ?? ''), lineType: String(line.lineType ?? line.line_type ?? ''), itemName: String(line.itemName ?? line.item_name ?? ''),
           quantity: this.firstNumber(line, ['quantity']), lineTotalPaise: this.firstMoney(line, ['lineTotalPaise', 'line_total_paise']), staffId: String(line.staffId ?? line.staff_id ?? ''),
+        }));
+        this.paymentTimeline = this.rows(data?.payments).map((payment) => ({
+          id: String(payment.id ?? ''), method: String(payment.method ?? ''), label: String(payment.label ?? payment.method ?? 'Payment'),
+          amountPaise: this.firstMoney(payment, ['amountPaise', 'amount_paise']), reference: String(payment.methodReference ?? payment.method_reference ?? ''),
+          paidAt: String(payment.paidAt ?? payment.paid_at ?? payment.createdAt ?? payment.created_at ?? ''),
         }));
         const kpi = data?.clientKpi ?? data?.client_kpi;
         this.clientKpi = kpi ? {
@@ -243,6 +333,77 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     });
   }
 
+  canAccessDeleteRequests(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'super_admin', 'platform_admin') || this.auth.hasPermission('pos.manage');
+  }
+
+  canRequestDelete(invoice: InvoiceRow): boolean {
+    return this.canAccessDeleteRequests() && this.canVoid(invoice) && this.deleteRequest?.status !== 'pending';
+  }
+
+  canDecideDeleteRequest(): boolean {
+    if (!this.deleteRequest || this.deleteRequest.status !== 'pending') return false;
+    if (this.deleteRequest.requestedByUserId === this.auth.userId) return false;
+    return this.auth.hasRole('owner', 'admin', 'manager', 'super_admin', 'platform_admin') || this.auth.hasPermission('pos.void');
+  }
+
+  openDeleteDrawer(): void {
+    if (!this.selected || !this.canRequestDelete(this.selected)) return;
+    this.error = '';
+    this.deleteReason = '';
+    this.deleteDrawerOpen = true;
+  }
+
+  closeDeleteDrawer(): void {
+    this.deleteDrawerOpen = false;
+    this.deleteReason = '';
+    this.deleteLoading = false;
+  }
+
+  submitDeleteRequest(): void {
+    if (!this.selected || this.deleteLoading) return;
+    const reason = this.deleteReason.trim();
+    if (reason.length < 3) { this.error = 'Delete reason must contain at least 3 characters'; return; }
+    const selectedId = this.selected.id;
+    this.error = '';
+    this.deleteLoading = true;
+    this.api.post<any>(`/api/v1/pos/invoices/${selectedId}/delete-request`, { reason }).subscribe({
+      next: (response) => {
+        this.deleteRequest = this.invoiceDeleteRequest(response?.data ?? response);
+        this.closeDeleteDrawer();
+        this.message = 'Invoice delete request sent for approval';
+        this.loadHistory(this.selected!);
+      },
+      error: (error: any) => { this.deleteLoading = false; this.error = this.messageFor(error); },
+    });
+  }
+
+  decideDeleteRequest(status: 'approved' | 'rejected'): void {
+    if (!this.selected || !this.deleteRequest || !this.canDecideDeleteRequest() || this.deleteDecisionLoading) return;
+    const decisionNote = this.deleteDecisionNote.trim();
+    if (status === 'rejected' && decisionNote.length < 3) { this.error = 'Rejection reason must contain at least 3 characters'; return; }
+    const requestId = this.deleteRequest.id;
+    const selectedId = this.selected.id;
+    this.error = '';
+    this.deleteDecisionLoading = true;
+    this.api.post<any>(`/api/v1/pos/invoice-delete-requests/${requestId}/decision`, { status, decisionNote }).subscribe({
+      next: (response) => {
+        this.deleteRequest = this.invoiceDeleteRequest(response?.data ?? response);
+        this.deleteDecisionLoading = false;
+        this.deleteDecisionNote = '';
+        this.message = status === 'approved' ? 'Invoice soft-deleted' : 'Invoice delete request rejected';
+        if (status === 'approved') {
+          this.selected = null;
+          this.load();
+        } else {
+          this.loadHistory(this.selected!);
+          this.loadDeleteRequest(selectedId);
+        }
+      },
+      error: (error: any) => { this.deleteDecisionLoading = false; this.error = this.messageFor(error); },
+    });
+  }
+
   canCreditNote(invoice: InvoiceRow): boolean {
     return invoice.totalPaise > 0 && !['draft', 'voided', 'cancelled'].includes(invoice.status.toLowerCase());
   }
@@ -315,6 +476,61 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
 
   canCreatePaymentLink(invoice: InvoiceRow): boolean {
     return invoice.balancePaise > 0 && !['draft', 'paid', 'voided', 'cancelled'].includes(invoice.status.toLowerCase());
+  }
+
+  canReceivePayment(invoice: InvoiceRow): boolean {
+    return invoice.balancePaise > 0 && !['draft', 'paid', 'voided', 'cancelled', 'refunded'].includes(invoice.status.toLowerCase());
+  }
+
+  get receivePaymentTotalPaise(): number {
+    return this.paymentMethods.reduce((total, mode) => total + this.inputPaise(this.receivePaymentInputs[mode.code]), 0);
+  }
+
+  openReceivePaymentDrawer(): void {
+    if (!this.selected || !this.canReceivePayment(this.selected) || this.paymentMethodsLoading) return;
+    if (!this.paymentMethods.length) { this.error = 'No active payment modes are configured'; return; }
+    this.error = '';
+    this.receivePaymentInputs = Object.fromEntries(this.paymentMethods.map((mode) => [mode.code, '']));
+    this.receivePaymentReferences = Object.fromEntries(this.paymentMethods.map((mode) => [mode.code, '']));
+    this.receivePaymentIdempotencyKeys = {};
+    this.receivePaymentNotes = '';
+    this.receivePaymentDrawerOpen = true;
+  }
+
+  closeReceivePaymentDrawer(): void {
+    this.receivePaymentDrawerOpen = false;
+    this.receivePaymentInputs = {};
+    this.receivePaymentReferences = {};
+    this.receivePaymentIdempotencyKeys = {};
+    this.receivePaymentNotes = '';
+    this.receivePaymentLoading = false;
+  }
+
+  fillReceivePayment(mode: PaymentMode): void {
+    if (!this.selected) return;
+    const otherPayments = this.paymentMethods
+      .filter((item) => item.code !== mode.code)
+      .reduce((total, item) => total + this.inputPaise(this.receivePaymentInputs[item.code]), 0);
+    this.receivePaymentInputs[mode.code] = this.moneyInput(Math.max(this.selected.balancePaise - otherPayments, 0));
+  }
+
+  submitReceivePayment(): void {
+    if (!this.selected || this.receivePaymentLoading) return;
+    const payments = this.paymentMethods.map((mode) => ({
+      ...mode,
+      amountPaise: this.inputPaise(this.receivePaymentInputs[mode.code]),
+      reference: String(this.receivePaymentReferences[mode.code] ?? '').trim(),
+      idempotencyKey: this.receivePaymentIdempotencyKeys[mode.code] ||= this.newIdempotencyKey(),
+    })).filter((payment) => payment.amountPaise > 0);
+
+    if (!payments.length) { this.error = 'Enter at least one payment amount'; return; }
+    if (payments.reduce((total, payment) => total + payment.amountPaise, 0) > this.selected.balancePaise) { this.error = 'Payment total cannot exceed balance due'; return; }
+    const missingReference = payments.find((payment) => payment.referenceRequired && !payment.reference);
+    if (missingReference) { this.error = `${missingReference.label} reference is required`; return; }
+
+    this.error = '';
+    this.receivePaymentLoading = true;
+    this.savePendingPayments(this.selected.id, payments, 0);
   }
 
   openPaymentLinkDrawer(): void {
@@ -483,6 +699,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   paymentSummary(row: InvoiceRow): string { return row.paymentMode ? row.paymentMode : row.paidPaise > 0 ? 'Paid' : 'Unpaid'; }
   trackByInvoice(_: number, row: InvoiceRow): string { return row.id; }
   trackByHistory(_: number, row: InvoiceAction): string { return row.id; }
+  trackByPaymentTimeline(_: number, row: InvoicePayment): string { return row.id; }
   trackByDelivery(_: number, row: InvoiceDelivery): string { return row.id; }
   trackByLine(_: number, row: InvoiceLine): string { return row.id; }
   lineTypeLabel(value: string): string { return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -506,6 +723,27 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       totalPaise: this.firstMoney(row, ['totalPaise', 'total_paise', 'total']),
       paidPaise: this.firstMoney(row, ['paidPaise', 'paid_paise', 'paid']),
       balancePaise: this.firstMoney(row, ['balancePaise', 'balance_paise', 'balanceDuePaise', 'balance_due_paise', 'duePaise', 'due_paise']),
+      receivedDuePaise: this.firstMoney(row, ['receivedDuePaise', 'received_due_paise']),
+      walletPaise: this.firstMoney(row, ['walletPaise', 'wallet_paise']),
+    };
+  }
+
+  private loadDeleteRequest(invoiceId: string): void {
+    this.api.get<any>(`/api/v1/pos/invoice-delete-requests?status=all&saleId=${encodeURIComponent(invoiceId)}`).subscribe({
+      next: (response) => {
+        const latest = this.rows(response)[0];
+        this.deleteRequest = latest ? this.invoiceDeleteRequest(latest) : null;
+      },
+      error: (error: any) => this.error = this.messageFor(error),
+    });
+  }
+
+  private invoiceDeleteRequest(row: any): InvoiceDeleteRequest {
+    return {
+      id: String(row?.id ?? ''), saleId: String(row?.saleId ?? row?.sale_id ?? ''), invoiceNumber: String(row?.invoiceNumber ?? row?.invoice_number ?? ''),
+      reason: String(row?.reason ?? ''), status: String(row?.status ?? ''), requestedByUserId: String(row?.requestedByUserId ?? row?.requested_by_user_id ?? ''),
+      decidedByUserId: String(row?.decidedByUserId ?? row?.decided_by_user_id ?? ''), decisionNote: String(row?.decisionNote ?? row?.decision_note ?? ''),
+      requestedAt: String(row?.requestedAt ?? row?.requested_at ?? ''), decidedAt: row?.decidedAt ?? row?.decided_at, appliedAt: row?.appliedAt ?? row?.applied_at,
     };
   }
 
@@ -513,6 +751,52 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     this.api.get<any>(`/api/v1/pos/invoices/${invoiceId}/payment-links`).subscribe({
       next: (res) => this.paymentLinks = this.rows(res).map((row) => this.paymentLink(row)),
       error: (err: any) => this.error = this.messageFor(err),
+    });
+  }
+
+  private loadPaymentMethods(): void {
+    this.paymentMethodsLoading = true;
+    this.api.get<any>('/pos/payment-methods').subscribe({
+      next: (response) => {
+        this.paymentMethods = this.rows(response).map((row) => ({
+          code: String(row.code ?? '').trim(),
+          label: String(row.name ?? row.label ?? row.code ?? '').trim(),
+          referenceRequired: row.referenceRequired === true || row.reference_required === true,
+        })).filter((mode) => mode.code && mode.label);
+        this.paymentMethodsLoading = false;
+      },
+      error: (error: any) => { this.paymentMethodsLoading = false; this.error = this.messageFor(error); },
+    });
+  }
+
+  private savePendingPayments(invoiceId: string, payments: PendingPayment[], index: number): void {
+    if (index >= payments.length) {
+      this.closeReceivePaymentDrawer();
+      this.message = payments.length > 1 ? 'Split payment recorded' : 'Payment recorded';
+      this.load(() => {
+        const updated = this.invoices.find((invoice) => invoice.id === invoiceId);
+        if (updated) this.select(updated);
+      });
+      return;
+    }
+
+    const payment = payments[index];
+    this.api.post<any>(`/api/v1/pos/invoices/${invoiceId}/payments`, {
+      method: payment.code,
+      amountPaise: payment.amountPaise,
+      methodReference: payment.reference,
+      notes: this.receivePaymentNotes.trim(),
+      idempotencyKey: payment.idempotencyKey,
+    }).subscribe({
+      next: () => {
+        this.receivePaymentInputs[payment.code] = '';
+        this.savePendingPayments(invoiceId, payments, index + 1);
+      },
+      error: (error: any) => {
+        this.receivePaymentLoading = false;
+        this.error = index > 0 ? `Some payments were recorded. ${this.messageFor(error)}` : this.messageFor(error);
+        this.load();
+      },
     });
   }
 
@@ -571,7 +855,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       totalRows,
       totalPaise,
       paidPaise,
-      receivedDuePaise: this.firstMoney(raw, ['receivedDuePaise', 'received_due_paise', 'dueReceivedPaise', 'due_received_paise']) || paidPaise,
+      receivedDuePaise: this.firstMoney(raw, ['receivedDuePaise', 'received_due_paise', 'dueReceivedPaise', 'due_received_paise']),
       balancePaise: this.firstMoney(raw, ['balancePaise', 'balance_paise', 'duePaise', 'due_paise']) || rows.reduce((sum, row) => sum + row.balancePaise, 0),
       walletPaise: this.firstMoney(raw, ['walletPaise', 'wallet_paise']),
     };
@@ -588,6 +872,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   private messageFor(error: any): string { return error?.error?.message ?? error?.message ?? 'Unable to load invoice'; }
   private newIdempotencyKey(): string { return typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
   private moneyInput(valuePaise: number): string { return valuePaise > 0 ? (valuePaise / 100).toFixed(2).replace(/\.00$/, '') : ''; }
+  private inputPaise(value: string | undefined): number { const amount = Number(value); return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) : 0; }
   private firstMoney(obj: any, keys: string[]): number { for (const key of keys) if (obj?.[key] !== undefined && obj?.[key] !== null && obj?.[key] !== '') return Math.round(Number(obj[key]) || 0); return 0; }
   private firstNumber(obj: any, keys: string[]): number { for (const key of keys) if (obj?.[key] !== undefined && obj?.[key] !== null && obj?.[key] !== '') return Number(obj[key]) || 0; return 0; }
 }

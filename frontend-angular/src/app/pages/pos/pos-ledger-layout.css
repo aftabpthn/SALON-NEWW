@@ -56,6 +56,28 @@
   cursor: pointer;
 }
 
+.ledger-hero a,
+.ledger-hero button,
+.ledger-filter-bar button,
+.resume-button,
+.detail-resume {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ledger-hero a:focus-visible,
+.ledger-hero button:focus-visible,
+.ledger-filter-bar button:focus-visible,
+.resume-button:focus-visible,
+.detail-resume:focus-visible,
+.ledger-row:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .ledger-hero nav {
   display: flex;
   gap: 10px;
@@ -144,6 +166,20 @@
 .held-grid { grid-template-columns: 110px minmax(150px, 1.25fr) 64px 120px 100px 96px 108px; }
 .tip-grid { grid-template-columns: 132px minmax(150px, 1.2fr) minmax(130px, 1fr) 112px 118px 112px 94px; }
 
+.held-grid > :nth-child(3),
+.held-grid > :nth-child(4),
+.tip-grid > :nth-child(4) {
+  justify-self: end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.held-grid > :last-child,
+.tip-grid > :last-child {
+  justify-self: center;
+  text-align: center;
+}
+
 .table-head {
   min-height: 46px;
   padding: 0 16px;
@@ -170,6 +206,7 @@
 .ledger-row small { display: block; margin-top: 3px; color: var(--muted, #5d6b82); }
 
 .amount { color: #102346; font-weight: 700; }
+.amount, .ledger-kpi strong { font-variant-numeric: tabular-nums; }
 .payment-badge,
 .status-badge {
   display: inline-flex;
@@ -215,4 +252,11 @@
   .ledger-hero { align-items: flex-start; flex-direction: column; }
   .ledger-filter-bar { grid-template-columns: 1fr; }
   .ledger-kpis { grid-template-columns: 1fr 1fr; }
+  .ledger-hero nav { width: 100%; flex-wrap: wrap; }
+  .ledger-hero nav > * { flex: 1 1 auto; }
+}
+
+@media (max-width: 420px) {
+  .pos-ledger-page { padding: 10px; }
+  .ledger-kpis { grid-template-columns: 1fr; }
 }

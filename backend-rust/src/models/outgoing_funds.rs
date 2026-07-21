@@ -8,7 +8,26 @@ pub struct OutgoingFundLineRequest {
     pub amount_paise: i64,
     pub gst_treatment: Option<String>,
     pub gst_paise: Option<i64>,
+    pub subcategory: Option<String>,
+    pub cost_center_id: Option<String>,
+    pub department: Option<String>,
+    pub linked_party_type: Option<String>,
+    pub linked_party_id: Option<String>,
+    pub linked_party_name: Option<String>,
+    pub source_reference_type: Option<String>,
+    pub source_reference_id: Option<String>,
+    pub receipt_number: Option<String>,
+    pub tax_invoice: Option<bool>,
+    pub reimbursement: Option<bool>,
     pub remarks: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OutgoingFundAttachmentRequest {
+    pub line_number: Option<i32>,
+    pub file_url: String,
+    pub file_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -17,6 +36,8 @@ pub struct OutgoingFundCreateRequest {
     pub business_date: String,
     pub payment_account_code: String,
     pub payment_mode: String,
+    pub fund_source: Option<String>,
+    pub cash_drawer_till_id: Option<String>,
     pub reference_number: Option<String>,
     pub cheque_number: Option<String>,
     pub cheque_date: Option<String>,
@@ -29,6 +50,8 @@ pub struct OutgoingFundCreateRequest {
     pub idempotency_key: String,
     pub submit: Option<bool>,
     pub lines: Vec<OutgoingFundLineRequest>,
+    #[serde(default)]
+    pub attachments: Vec<OutgoingFundAttachmentRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +60,8 @@ pub struct OutgoingFundUpdateRequest {
     pub business_date: String,
     pub payment_account_code: String,
     pub payment_mode: String,
+    pub fund_source: Option<String>,
+    pub cash_drawer_till_id: Option<String>,
     pub reference_number: Option<String>,
     pub cheque_number: Option<String>,
     pub cheque_date: Option<String>,
@@ -48,6 +73,8 @@ pub struct OutgoingFundUpdateRequest {
     pub remarks: Option<String>,
     pub version: i64,
     pub lines: Vec<OutgoingFundLineRequest>,
+    #[serde(default)]
+    pub attachments: Vec<OutgoingFundAttachmentRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,10 +100,38 @@ pub struct OutgoingFundListQuery {
 pub struct OutgoingFundCategory {
     pub key: String,
     pub label: String,
+    pub category_bucket: String,
+    pub balance_sheet_impact: String,
+    pub operating: bool,
     pub account_code: Option<String>,
     pub manual_entry: bool,
     pub workflow_path: Option<String>,
     pub workflow_label: Option<String>,
+    pub requires_party: bool,
+    pub requires_bill_reference: bool,
+    pub requires_attachment: bool,
+    pub approval_threshold_paise: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutgoingFundAttachmentResponse {
+    pub id: String,
+    pub line_number: Option<i32>,
+    pub file_url: String,
+    pub file_type: Option<String>,
+    pub uploaded_by_user_id: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutgoingFundAuditEventResponse {
+    pub id: String,
+    pub event_type: String,
+    pub actor_user_id: String,
+    pub details: serde_json::Value,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,11 +141,25 @@ pub struct OutgoingFundLineResponse {
     pub line_number: i32,
     pub category_key: String,
     pub category_label: String,
+    pub category_bucket: String,
+    pub balance_sheet_impact: String,
+    pub operating: bool,
     pub account_code: String,
     pub amount_paise: i64,
     pub gst_treatment: String,
     pub gst_paise: i64,
     pub net_paise: i64,
+    pub subcategory: Option<String>,
+    pub cost_center_id: Option<String>,
+    pub department: Option<String>,
+    pub linked_party_type: String,
+    pub linked_party_id: Option<String>,
+    pub linked_party_name: Option<String>,
+    pub source_reference_type: Option<String>,
+    pub source_reference_id: Option<String>,
+    pub receipt_number: Option<String>,
+    pub tax_invoice: bool,
+    pub reimbursement: bool,
     pub remarks: Option<String>,
 }
 
@@ -103,6 +172,11 @@ pub struct OutgoingFundResponse {
     pub payment_account_code: String,
     pub payment_account_name: String,
     pub payment_mode: String,
+    pub fund_source: String,
+    pub cash_drawer_session_id: Option<String>,
+    pub cash_drawer_till_id: Option<String>,
+    pub opening_balance_paise: Option<i64>,
+    pub closing_balance_paise: Option<i64>,
     pub reference_number: Option<String>,
     pub cheque_number: Option<String>,
     pub cheque_date: Option<NaiveDate>,
@@ -117,6 +191,7 @@ pub struct OutgoingFundResponse {
     pub gst_paise: i64,
     pub journal_entry_id: Option<String>,
     pub reversal_journal_entry_id: Option<String>,
+    pub approval_policy_reason: Option<String>,
     pub version: i64,
     pub created_by_user_id: String,
     pub submitted_by_user_id: Option<String>,
@@ -132,6 +207,8 @@ pub struct OutgoingFundResponse {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub lines: Vec<OutgoingFundLineResponse>,
+    pub attachments: Vec<OutgoingFundAttachmentResponse>,
+    pub audit_events: Vec<OutgoingFundAuditEventResponse>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

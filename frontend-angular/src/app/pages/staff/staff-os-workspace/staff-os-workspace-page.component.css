@@ -8,7 +8,7 @@ h1 { display:flex; align-items:center; gap:10px; font-size:24px; }
 h2 { font-size:16px; }
 .header-actions { flex-wrap:wrap; justify-content:flex-end; gap:8px; }
 button { min-height:36px; display:inline-flex; align-items:center; gap:7px; padding:0 12px; border:1px solid #c9d5e5; border-radius:8px; background:#fff; color:#10254a; font:inherit; font-weight:600; cursor:pointer; }
-button:hover,button:focus-visible { border-color:#2563eb; background:#f3f8ff; outline:0; }
+button:hover,button:focus-visible { border-color:#2563eb; background:#f3f8ff; } button:focus-visible { outline:2px solid #2563eb;outline-offset:2px; }
 button:disabled { cursor:not-allowed; opacity:.55; }
 .data-card { margin-bottom:14px; overflow:hidden; border:1px solid #d7e1ed; border-radius:12px; background:#fff; box-shadow:0 8px 24px rgba(20,52,87,.06); }
 .data-card header { justify-content:space-between; gap:12px; min-height:46px; padding:0 14px; border-bottom:1px solid #e8eef5; background:#f8fbfe; }
@@ -16,6 +16,7 @@ button:disabled { cursor:not-allowed; opacity:.55; }
 .table-wrap { overflow:auto; }
 table { width:100%; min-width:820px; border-collapse:collapse; }
 th,td { min-height:42px; padding:11px 14px; border-bottom:1px solid #e8eef5; color:#52637d; font-size:12px; text-align:left; vertical-align:top; }
+th[data-column$='Paise'],td[data-column$='Paise'],th[data-column$='Count'],td[data-column$='Count'],th[data-column$='Hours'],td[data-column$='Hours'] { text-align:right;font-variant-numeric:tabular-nums; }
 th { background:#f8fbfe; color:#60708a; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 td { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; padding:14px; }

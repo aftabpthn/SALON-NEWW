@@ -5,39 +5,38 @@
     </div>
     <nav>
       <a routerLink="/pos">Checkout</a>
-      <a routerLink="/pos/sales">Sales register</a>
       <a routerLink="/reports/invoices">Reports</a>
       <a routerLink="/settings/invoice">Settings</a>
     </nav>
   </header>
 
-  <p class="message" *ngIf="message">{{ message }}</p>
-  <p class="error" *ngIf="error">{{ error }}</p>
+  <p class="message" role="status" *ngIf="message">{{ message }}</p>
+  <p class="error" role="alert" *ngIf="error">{{ error }}</p>
 
   <section class="kpi-grid" aria-label="Invoice KPIs">
     <article class="kpi-card cyan"><span>Invoices</span><strong>{{ totals.totalRows }}</strong></article>
     <article class="kpi-card pink"><span>Total billed</span><strong>{{ money(totals.totalPaise) }}</strong></article>
     <article class="kpi-card blue"><span>Collected</span><strong>{{ money(totals.paidPaise) }}</strong></article>
-    <article class="kpi-card mint"><span>Received due</span><strong>{{ money(totals.receivedDuePaise) }}</strong></article>
-    <article class="kpi-card peach"><span>Due</span><strong>{{ money(totals.balancePaise) }}</strong></article>
-    <article class="kpi-card sand"><span>Wallet</span><strong>{{ money(totals.walletPaise) }}</strong></article>
+    <button type="button" class="kpi-card mint filterable" [class.active]="activeKpiFilter === 'received-due'" [attr.aria-pressed]="activeKpiFilter === 'received-due'" (click)="toggleKpiFilter('received-due')"><span>Received due</span><strong>{{ money(totals.receivedDuePaise) }}</strong></button>
+    <button type="button" class="kpi-card peach filterable" [class.active]="activeKpiFilter === 'due'" [attr.aria-pressed]="activeKpiFilter === 'due'" (click)="toggleKpiFilter('due')"><span>Due</span><strong>{{ money(totals.balancePaise) }}</strong></button>
+    <button type="button" class="kpi-card sand filterable" [class.active]="activeKpiFilter === 'wallet'" [attr.aria-pressed]="activeKpiFilter === 'wallet'" (click)="toggleKpiFilter('wallet')"><span>Wallet</span><strong>{{ money(totals.walletPaise) }}</strong></button>
   </section>
 
   <main class="invoice-workspace">
     <section class="invoice-register">
-      <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Total</span><span>Paid</span><span>Due</span><span>Status</span></div>
-      <button type="button" class="invoice-row" *ngFor="let invoice of invoices; trackBy: trackByInvoice" [class.selected]="selected?.id === invoice.id" (click)="select(invoice)">
+      <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Total</span><span>{{ paidColumnLabel() }}</span><span>Due</span><span>Status</span></div>
+      <button type="button" class="invoice-row" *ngFor="let invoice of visibleInvoices; trackBy: trackByInvoice" [class.selected]="selected?.id === invoice.id" (click)="select(invoice)">
         <span><strong>{{ invoice.invoiceNumber }}</strong></span>
         <span>{{ formatDate(invoice.businessDate) }}</span>
         <span><strong>{{ invoice.clientName }}</strong><small *ngIf="invoice.clientPhone">{{ invoice.clientPhone }}</small></span>
         <span>{{ invoice.staffName || '-' }}</span>
         <span><mark>{{ paymentSummary(invoice) }}</mark></span>
         <span class="amount total">{{ money(invoice.totalPaise) }}</span>
-        <span class="amount paid">{{ money(invoice.paidPaise) }}</span>
+        <span class="amount paid">{{ money(displayedPaidPaise(invoice)) }}</span>
         <span class="amount due">{{ money(invoice.balancePaise) }}</span>
         <span><em>{{ invoice.status || '-' }}</em></span>
       </button>
-      <p class="empty" *ngIf="!invoices.length">No invoices yet</p>
+      <p class="empty" *ngIf="!visibleInvoices.length">{{ activeKpiFilter ? 'No matching invoices' : 'No invoices yet' }}</p>
     </section>
 
     <aside class="invoice-detail" *ngIf="selected">
@@ -62,6 +61,17 @@
       </div>
       <button type="button" class="return-items" *ngIf="canReturn(selected)" [disabled]="returnLoading" (click)="openReturnDrawer()">Return items</button>
       <button type="button" class="void-invoice" *ngIf="canVoid(selected)" [disabled]="voidLoading" (click)="openVoidDrawer()">Void invoice</button>
+      <button type="button" class="delete-request" *ngIf="canRequestDelete(selected)" [disabled]="deleteLoading" (click)="openDeleteDrawer()">Request delete</button>
+      <section class="delete-approval" *ngIf="deleteRequest?.status === 'pending'">
+        <div><span>Delete approval pending</span><strong>{{ deleteRequest?.reason }}</strong><small>{{ deleteRequest?.requestedAt | date:'dd/MM/yyyy, HH:mm' }}</small></div>
+        <ng-container *ngIf="canDecideDeleteRequest()">
+          <label><span>Decision note</span><input [(ngModel)]="deleteDecisionNote" name="deleteDecisionNote" maxlength="500" placeholder="Required when rejecting" /></label>
+          <div class="delete-decision-actions">
+            <button type="button" [disabled]="deleteDecisionLoading" (click)="decideDeleteRequest('rejected')">Reject</button>
+            <button type="button" class="approve" [disabled]="deleteDecisionLoading" (click)="decideDeleteRequest('approved')">Approve soft-delete</button>
+          </div>
+        </ng-container>
+      </section>
       <button type="button" class="credit-note" *ngIf="canCreditNote(selected)" [disabled]="creditNoteLoading" (click)="openCreditNoteDrawer()">Create credit note</button>
       <button type="button" class="ledger-check" [disabled]="ledgerLoading" (click)="verifyLedger()">{{ ledgerLoading ? 'Verifying…' : 'Verify ledger' }}</button>
       <div class="ledger-result" *ngIf="ledgerVerification" [class.invalid]="!ledgerVerification.valid">
@@ -69,6 +79,7 @@
         <span *ngIf="ledgerVerification.valid">{{ ledgerVerification.events }} events</span>
         <span *ngIf="!ledgerVerification.valid">Failed at event {{ ledgerVerification.failedAt }}</span>
       </div>
+      <button type="button" class="receive-payment" *ngIf="canReceivePayment(selected)" [disabled]="receivePaymentLoading || paymentMethodsLoading" (click)="openReceivePaymentDrawer()">Receive payment</button>
       <button type="button" class="payment-link-create" *ngIf="canCreatePaymentLink(selected)" [disabled]="paymentLinkLoading" (click)="openPaymentLinkDrawer()">Create payment link</button>
       <section class="payment-links" *ngIf="paymentLinks.length">
         <h3>Payment links</h3>
@@ -101,7 +112,7 @@
           <time>{{ formatDate(dispute.openedAt) }}</time>
         </article>
       </section>
-      <label><span>Delivery channel</span><select [(ngModel)]="deliveryChannel" name="deliveryChannel"><option value="email">Email</option><option value="whatsapp">WhatsApp</option></select></label>
+      <label><span>Delivery channel</span><select [(ngModel)]="deliveryChannel" name="deliveryChannel"><option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
       <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" [type]="deliveryChannel === 'email' ? 'email' : 'text'" [placeholder]="deliveryChannel === 'email' ? 'Email address' : 'Mobile number'" /></label>
       <button type="button" class="resend" (click)="requestResend()">Queue delivery</button>
       <button type="button" class="resend" [disabled]="reminderLoading" (click)="scheduleDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button>
@@ -109,6 +120,11 @@
         <h3>Delivery outbox</h3>
         <div *ngFor="let item of deliveries; trackBy: trackByDelivery"><strong>{{ item.channel }} · {{ item.status }}</strong><span>{{ item.recipient }}</span><small>Attempts {{ item.attempts }}<ng-container *ngIf="item.lastError"> · {{ item.lastError }}</ng-container></small></div>
         <p class="empty" *ngIf="!deliveries.length">No deliveries yet</p>
+      </section>
+      <section class="payment-timeline">
+        <h3>Payment timeline</h3>
+        <div *ngFor="let payment of paymentTimeline; trackBy: trackByPaymentTimeline"><strong>{{ payment.label }}</strong><span>{{ money(payment.amountPaise) }}</span><small *ngIf="payment.reference">{{ payment.reference }}</small><time>{{ payment.paidAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
+        <p class="empty" *ngIf="!detailsLoading && !paymentTimeline.length">No payments yet</p>
       </section>
       <section class="history">
         <h3>Action history</h3>
@@ -145,6 +161,50 @@
       <div><span>{{ selectedReturnCount() }} item line{{ selectedReturnCount() === 1 ? '' : 's' }}</span><strong>{{ money(selectedReturnAmount()) }}</strong></div>
       <button type="button" (click)="closeReturnDrawer()">Cancel</button>
       <button type="button" class="confirm-return" [disabled]="returnLoading || !returnLines.length" (click)="submitReturn()">{{ returnLoading ? 'Recording…' : 'Record return' }}</button>
+    </footer>
+  </aside>
+</div>
+
+<div class="return-drawer-backdrop" *ngIf="deleteDrawerOpen" (click)="closeDeleteDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="delete-request-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Approval required</span><h2 id="delete-request-title">Request delete · {{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close delete request" (click)="closeDeleteDrawer()">×</button>
+    </header>
+    <div class="return-drawer-body">
+      <p class="delete-warning">The invoice will remain unchanged until another manager or owner approves this request.</p>
+      <label class="return-reason"><span>Reason</span><input [(ngModel)]="deleteReason" name="deleteReason" maxlength="500" placeholder="Reason for deletion" /></label>
+    </div>
+    <footer class="return-drawer-footer">
+      <button type="button" (click)="closeDeleteDrawer()">Cancel</button>
+      <button type="button" class="confirm-delete-request" [disabled]="deleteLoading" (click)="submitDeleteRequest()">{{ deleteLoading ? 'Sending…' : 'Send for approval' }}</button>
+    </footer>
+  </aside>
+</div>
+
+<div class="return-drawer-backdrop" *ngIf="receivePaymentDrawerOpen" (click)="closeReceivePaymentDrawer()">
+  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="receive-payment-title" (click)="$event.stopPropagation()">
+    <header class="return-drawer-head">
+      <div><span>Payment collection</span><h2 id="receive-payment-title">{{ selected?.invoiceNumber }}</h2></div>
+      <button type="button" class="drawer-close" aria-label="Close receive payment" (click)="closeReceivePaymentDrawer()">×</button>
+    </header>
+
+    <div class="return-drawer-body">
+      <div class="payment-balance"><span>Balance due</span><strong>{{ money(selected?.balancePaise || 0) }}</strong></div>
+      <section class="receive-payment-modes" aria-label="Payment modes">
+        <article *ngFor="let mode of paymentMethods">
+          <div class="payment-mode-title"><strong>{{ mode.label }}</strong><button type="button" (click)="fillReceivePayment(mode)">Use balance</button></div>
+          <label><span>Amount</span><input [(ngModel)]="receivePaymentInputs[mode.code]" [name]="'paymentAmount-' + mode.code" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Amount" /></label>
+          <label><span>Reference{{ mode.referenceRequired ? '' : ' (optional)' }}</span><input [(ngModel)]="receivePaymentReferences[mode.code]" [name]="'paymentReference-' + mode.code" maxlength="120" [required]="mode.referenceRequired" placeholder="Reference" /></label>
+        </article>
+      </section>
+      <label class="return-reason"><span>Notes (optional)</span><input [(ngModel)]="receivePaymentNotes" name="receivePaymentNotes" maxlength="500" placeholder="Payment notes" /></label>
+    </div>
+
+    <footer class="return-drawer-footer">
+      <div><span>Collect now</span><strong>{{ money(receivePaymentTotalPaise) }}</strong></div>
+      <button type="button" (click)="closeReceivePaymentDrawer()">Cancel</button>
+      <button type="button" class="confirm-receive-payment" [disabled]="receivePaymentLoading || receivePaymentTotalPaise <= 0" (click)="submitReceivePayment()">{{ receivePaymentLoading ? 'Recording…' : 'Record payment' }}</button>
     </footer>
   </aside>
 </div>

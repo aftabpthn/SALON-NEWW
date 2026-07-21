@@ -180,6 +180,8 @@ pub struct StaffPerformanceRow {
     pub overtime_minutes: i64,
     pub late_minutes: i64,
     pub early_leave_minutes: i64,
+    pub operation_task_completed: i64,
+    pub operation_task_missed: i64,
     pub burnout_risk: Option<RiskSignal>,
     pub retention_risk: Option<RiskSignal>,
 }
@@ -284,6 +286,19 @@ pub struct MobileDeviceRegistration {
 pub struct MobilePushSubscriptionRequest {
     pub push_token: Option<String>,
     pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfPushSubscriptionRequest {
+    pub device_id: String,
+    pub endpoint: String,
+    pub platform: String,
+    pub provider: String,
+    pub auth_secret: String,
+    pub p256dh: String,
+    #[serde(default)]
+    pub metadata: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -972,10 +987,97 @@ pub async fn save_mobile_push_subscription(
         device_id,
         ciphertext.as_deref(),
         fingerprint.as_deref(),
+        &json!({}),
         enabled,
     )
     .await
     .map_err(internal("save mobile push subscription"))?
+    .ok_or_else(|| AppError::not_found("mobile device was not found"))
+}
+
+pub async fn register_self_push_device(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    device_uid: &str,
+    platform: &str,
+) -> Result<StaffMobileDeviceRecord, AppError> {
+    Ok(register_mobile_device(
+        db,
+        tenant_id,
+        branch_id,
+        MobileDeviceRequest {
+            staff_id: staff_id.to_string(),
+            device_uid: required_text(device_uid, 200, "device uid")?,
+            platform: required_enum(platform, MOBILE_PLATFORMS, "mobile platform")?,
+        },
+    )
+    .await?
+    .device)
+}
+
+pub async fn save_self_push_subscription(
+    db: &PgPool,
+    encryption_key: Option<&str>,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    request: SelfPushSubscriptionRequest,
+) -> Result<MobilePushSubscriptionRecord, AppError> {
+    let endpoint = request.endpoint.trim();
+    if endpoint.is_empty() || endpoint.chars().count() > 4_096 || !endpoint.starts_with("https://")
+    {
+        return Err(AppError::validation("web push endpoint is invalid"));
+    }
+    if request.platform.trim() != "web" || request.provider.trim() != "web-push" {
+        return Err(AppError::validation("web push provider is invalid"));
+    }
+    if request.auth_secret.trim().is_empty()
+        || request.p256dh.trim().is_empty()
+        || request.auth_secret.chars().count() > 1_024
+        || request.p256dh.chars().count() > 1_024
+    {
+        return Err(AppError::validation(
+            "web push subscription keys are invalid",
+        ));
+    }
+    let key = encryption_key.ok_or_else(|| {
+        AppError::service_unavailable(
+            "PUSH_ENCRYPTION_NOT_CONFIGURED",
+            "mobile push encryption is not configured",
+        )
+    })?;
+    repository::mobile_device_auth(db, tenant_id, branch_id, request.device_id.trim())
+        .await
+        .map_err(internal("validate self mobile push device"))?
+        .filter(|device| device.active && device.staff_id == staff_id)
+        .ok_or_else(|| AppError::not_found("mobile device was not found"))?;
+    let provider_metadata = json!({
+        "platform": "web",
+        "provider": "web-push",
+        "metadata": request.metadata,
+    });
+    let subscription = json!({
+        "endpoint": endpoint,
+        "keys": {"auth": request.auth_secret.trim(), "p256dh": request.p256dh.trim()},
+        "platform": "web",
+        "provider": "web-push",
+    });
+    let token = subscription.to_string();
+    let ciphertext = crate::services::security_service::encrypt_secret(key, &token)?;
+    repository::save_mobile_push_subscription(
+        db,
+        tenant_id,
+        branch_id,
+        &request.device_id,
+        Some(&ciphertext),
+        Some(&sha256_text(&token)),
+        &provider_metadata,
+        true,
+    )
+    .await
+    .map_err(internal("save self mobile push subscription"))?
     .ok_or_else(|| AppError::not_found("mobile device was not found"))
 }
 
@@ -1316,6 +1418,41 @@ pub async fn update_task(
         .ok_or_else(stale_record)
 }
 
+pub async fn self_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<Vec<IncentiveRuleRecord>, AppError> {
+    repository::self_targets(db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(internal("load staff targets"))
+}
+
+pub async fn update_self_task_status(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    id: &str,
+    status: &str,
+    version: i32,
+) -> Result<StaffTaskRecord, AppError> {
+    let status = required_enum(status, TASK_STATUSES, "task status")?;
+    repository::update_self_task_status(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        id.trim(),
+        required_version(Some(version))?,
+        &status,
+    )
+    .await
+    .map_err(internal("update staff task"))?
+    .ok_or_else(stale_record)
+}
+
 pub async fn add_task_comment(
     db: &PgPool,
     tenant_id: &str,
@@ -1485,6 +1622,8 @@ fn performance_row(source: PerformanceSourceRecord) -> StaffPerformanceRow {
         overtime_minutes: source.overtime_minutes,
         late_minutes: source.late_minutes,
         early_leave_minutes: source.early_leave_minutes,
+        operation_task_completed: source.operation_task_completed,
+        operation_task_missed: source.operation_task_missed,
         burnout_risk,
         retention_risk,
     }

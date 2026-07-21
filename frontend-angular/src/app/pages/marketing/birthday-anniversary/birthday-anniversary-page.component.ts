@@ -26,6 +26,12 @@ type Metrics = {
   pendingApprovals: number;
   queued: number;
   sent: number;
+  giftPrepared: number;
+  giftSent: number;
+  giftRedeemed: number;
+  giftExpired: number;
+  giftPreparedValuePaise: number;
+  giftRedeemedValuePaise: number;
 };
 
 type Occasion = {
@@ -42,6 +48,7 @@ type Occasion = {
   reminderStatus?: string;
   mostUsedServiceName?: string;
   mostUsedServiceVisits?: number;
+  giftRecommendation?: GiftRecommendation;
   whatsappOptIn?: boolean;
   smsOptIn?: boolean;
   emailOptIn?: boolean;
@@ -86,6 +93,7 @@ type Overview = {
 
 type Coupon = { id: string; code: string; active: boolean; startsAt?: string; endsAt?: string };
 type AuditLog = { id: string; clientName: string; action: string; actorUserId: string; createdAt: string };
+type GiftRecommendation = { title?: string; description?: string; segment?: string; giftType?: string; valuePaise?: number; serviceName?: string };
 type Suggestion = { id: string; text?: string; title?: string; serviceName?: string };
 type Campaign = { daysAhead: number; clients: Occasion[]; current: Occasion[]; upcoming: Occasion[]; messageSuggestions: Suggestion[]; offerSuggestions: Suggestion[] };
 
@@ -132,7 +140,19 @@ export class BirthdayAnniversaryPageComponent implements OnInit {
   overview: Overview = {
     date: this.selectedDate,
     settings: emptySettings(),
-    metrics: { todayBirthdays: 0, todayAnniversaries: 0, pendingApprovals: 0, queued: 0, sent: 0 },
+    metrics: {
+      todayBirthdays: 0,
+      todayAnniversaries: 0,
+      pendingApprovals: 0,
+      queued: 0,
+      sent: 0,
+      giftPrepared: 0,
+      giftSent: 0,
+      giftRedeemed: 0,
+      giftExpired: 0,
+      giftPreparedValuePaise: 0,
+      giftRedeemedValuePaise: 0,
+    },
     today: [], week: [], month: [], clients: [], reminders: [], vouchers: [],
   };
   settingsDraft = emptySettings();
@@ -333,6 +353,19 @@ export class BirthdayAnniversaryPageComponent implements OnInit {
     }, 'Campaign could not be queued');
   }
 
+  async prepareMonth() {
+    const channels = this.channels(this.campaignChannels);
+    if (!channels.length) return void (this.error = 'Select at least one channel');
+    await this.runAction(async () => {
+      const response = await firstValueFrom(this.api.post<ApiEnvelope<{ prepared: number; updated: number; skipped: number }>>('/birthday-campaign/prepare-month', {
+        date: this.selectedDate, channels, couponId: this.campaignCouponId || null,
+      }));
+      const data = response.data;
+      this.notice = `Month prepared: ${data?.prepared || 0} new, ${data?.updated || 0} updated, ${data?.skipped || 0} skipped`;
+      await this.refresh();
+    }, 'Birthday month could not be prepared');
+  }
+
   closeDrawer() { this.drawer = null; this.editingReminder = null; this.redeemVoucher = null; }
   @HostListener('document:keydown.escape') closeDrawerOnEscape() { if (this.drawer) this.closeDrawer(); }
   clientName(row: Occasion) { return `${row.firstName || ''} ${row.lastName || ''}`.trim() || row.clientId; }
@@ -347,6 +380,8 @@ export class BirthdayAnniversaryPageComponent implements OnInit {
   }
   providerReady(channel: string) { return !!this.providerStatus[`${channel}Delivery`]; }
   serviceName(row: Occasion) { return row.mostUsedServiceName?.trim() || '—'; }
+  giftTitle(row?: Occasion) { return row?.giftRecommendation?.title?.trim() || ''; }
+  money(value?: number) { return `₹${Math.round((value || 0) / 100).toLocaleString('en-IN')}`; }
   trackById(_: number, row: { id?: string; clientId?: string }) { return row.id || row.clientId || _; }
   applyCampaignMessage(suggestion: Suggestion) { if (suggestion.text) this.campaignMessage = suggestion.text; }
   applyCampaignOffer(suggestion: Suggestion) {
@@ -372,13 +407,14 @@ export class BirthdayAnniversaryPageComponent implements OnInit {
   private localSuggestions(row: Occasion | undefined, eventType: string): Suggestion[] {
     const occasion = eventType === 'anniversary' ? 'anniversary' : 'birthday';
     const service = row?.mostUsedServiceName?.trim() || 'favorite service';
+    const gift = this.giftTitle(row) || `${service} gift`;
     return [
-      `Happy ${occasion}! Your ${service} gift is ready for this month.`,
+      `Happy ${occasion}! Your ${gift} is ready for this month.`,
       `Wishing you a happy ${occasion}. Visit us for a special ${service} treat.`,
-      `Your ${occasion} gift is waiting: a special offer on ${service}.`,
+      `Your ${occasion} gift is waiting: ${gift}.`,
       `Happy ${occasion}! Celebrate with your favourite ${service} at AuraShine.`,
-      `This ${occasion} month, enjoy a handpicked ${service} gift from us.`,
-      `Best wishes on your ${occasion}. Your ${service} reward is ready.`,
+      `This ${occasion} month, enjoy ${gift} from us.`,
+      `Best wishes on your ${occasion}. Your ${gift} reward is ready.`,
       `Celebrate your ${occasion} with a special ${service} salon gift.`,
       `A warm ${occasion} wish from AuraShine. Your ${service} benefit is ready.`,
       `Happy ${occasion}! Book your ${service} visit and use your birthday gift.`,

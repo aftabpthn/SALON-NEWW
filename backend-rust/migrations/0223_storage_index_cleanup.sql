@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_appointments_tenant_branch_client_start;

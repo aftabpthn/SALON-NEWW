@@ -2,6 +2,7 @@
 
 :host { display: block; min-height: 100%; color: #0d1f3c; font-family: var(--font-sans); }
 button, input, select, textarea { font: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 .membership-workspace { min-height: 100%; background: #f5f8fc; }
 .workspace-toolbar, .workspace-heading, .desk-tabs { display: flex; align-items: center; padding-inline: 22px; background: #fff; border-bottom: 1px solid #d9e3f0; }
 .workspace-toolbar { min-height: 58px; justify-content: space-between; }
@@ -35,6 +36,7 @@ button, input, select, textarea { font: inherit; }
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 14px 16px; border-bottom: 1px solid #e2e9f2; text-align: left; white-space: nowrap; }
 th { background: #f6f9fd; color: #58677e; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+th.numeric, td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 td { color: #273852; font-size: 13px; }
 tbody tr { cursor: pointer; }
 tbody tr:hover, tbody tr.selected { background: #f1f6ff; }
@@ -142,4 +144,6 @@ tbody tr:hover, tbody tr.selected { background: #f1f6ff; }
   .catalog-tabs { gap: 20px; }
   .settings-grid, .split-tables { grid-template-columns: 1fr; }
   .split-tables .subtable + .subtable { border-left: 0; border-top: 1px solid #dce5f0; }
+  .membership-drawer, .sell-drawer, .member360-drawer { width: calc(100vw - 48px); }
 }
+.card-action{width:100%;margin:12px 0;padding:10px 12px;border:1px solid var(--border,#c9d8e8);border-radius:8px;background:#fff;color:#102a43;font-weight:600;cursor:pointer}.card-action:hover{background:#eef6ff}.membership-card{display:flex;align-items:center;gap:14px;padding:12px;border:1px solid var(--border,#c9d8e8);border-radius:10px;background:#f8fbff;margin-bottom:14px}.membership-card-qr{width:132px;height:132px;flex:0 0 132px}.membership-card-qr svg{display:block;width:100%;height:100%}.membership-card>div:last-child{display:grid;gap:5px}.membership-card a{color:#155eef;font-weight:600}

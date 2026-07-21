@@ -37,6 +37,8 @@ pub struct HappyHourApprovalRecord {
     pub requested_by: String,
     pub requested_role: String,
     pub requested_discount_bps: i32,
+    pub approval_limit_bps: i32,
+    pub rule_snapshot_json: Value,
     pub status: String,
     pub note: String,
     pub decision_note: String,
@@ -44,6 +46,77 @@ pub struct HappyHourApprovalRecord {
     pub decided_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct CouponEligibilityRecord {
+    pub prior_sale_count: i64,
+    pub coupon_use_count: i64,
+    pub referral_exists: bool,
+    pub client_segment: Option<String>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct CouponAnalyticsRecord {
+    pub coupon_id: String,
+    pub coupon_code: String,
+    pub offer_type: String,
+    pub redemptions: i64,
+    pub unique_clients: i64,
+    pub sales_value_paise: i64,
+    pub discount_paise: i64,
+    pub return_on_discount_bps: i64,
+}
+
+#[derive(Debug, FromRow)]
+pub struct DailyDiscountRecord {
+    pub business_date: NaiveDate,
+    pub sale_count: i64,
+    pub discount_paise: i64,
+}
+
+#[derive(Debug, FromRow)]
+pub struct ApprovalBypassRecord {
+    pub rule_id: String,
+    pub rule_name: String,
+    pub discount_bps: i32,
+    pub last_changed_by: String,
+    pub last_changed_by_role: String,
+    pub has_matching_approval: bool,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct FraudCaseRecord {
+    pub id: String,
+    pub fraud_type: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub risk_score: i32,
+    pub severity: String,
+    pub decision: String,
+    pub status: String,
+    pub title: String,
+    pub description: String,
+    pub evidence_json: Value,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub review_note: String,
+    pub detected_at: DateTime<Utc>,
+}
+
+pub struct NewFraudCase<'a> {
+    pub signature: &'a str,
+    pub fraud_type: &'a str,
+    pub subject_type: &'a str,
+    pub subject_id: &'a str,
+    pub risk_score: i32,
+    pub severity: &'a str,
+    pub decision: &'a str,
+    pub title: &'a str,
+    pub description: &'a str,
+    pub evidence: &'a Value,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1741,7 +1814,7 @@ pub async fn client_categories(
     .await
 }
 
-const APPROVAL_COLUMNS: &str = "approval.id,approval.rule_id,rule.name AS rule_name,approval.requested_by,approval.requested_role,approval.requested_discount_bps,approval.status,approval.note,approval.decision_note,approval.decided_by,approval.decided_at,approval.created_at,approval.updated_at";
+const APPROVAL_COLUMNS: &str = "approval.id,approval.rule_id,rule.name AS rule_name,approval.requested_by,approval.requested_role,approval.requested_discount_bps,approval.approval_limit_bps,approval.rule_snapshot_json,approval.status,approval.note,approval.decision_note,approval.decided_by,approval.decided_at,approval.created_at,approval.updated_at";
 
 pub async fn list_approvals(
     db: &PgPool,
@@ -1766,15 +1839,16 @@ pub async fn create_approval(
     rule_id: &str,
     actor: &str,
     role: &str,
+    approval_limit_bps: i32,
     note: &str,
 ) -> Result<Option<HappyHourApprovalRecord>, sqlx::Error> {
     let mut tx = db.begin().await?;
     sqlx::query("UPDATE pos_happy_hour_approval_requests SET status='superseded',decision_note='Superseded by a newer request',decided_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND rule_id=$3 AND status='pending'")
         .bind(tenant_id).bind(branch_id).bind(rule_id).execute(&mut *tx).await?;
     let row = sqlx::query_as(&format!(
-        "WITH inserted AS (INSERT INTO pos_happy_hour_approval_requests(tenant_id,branch_id,rule_id,requested_by,requested_role,requested_discount_bps,note) SELECT rule.tenant_id,rule.branch_id,rule.id,$4,$5,rule.discount_bps,$6 FROM pos_happy_hour_rules rule WHERE rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=$3 RETURNING *) SELECT {APPROVAL_COLUMNS} FROM inserted approval JOIN pos_happy_hour_rules rule ON rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=approval.rule_id"
+        "WITH inserted AS (INSERT INTO pos_happy_hour_approval_requests(tenant_id,branch_id,rule_id,requested_by,requested_role,requested_discount_bps,approval_limit_bps,rule_snapshot_json,note) SELECT rule.tenant_id,rule.branch_id,rule.id,$4,$5,rule.discount_bps,$6,jsonb_build_object('name',rule.name,'startTime',rule.start_time,'endTime',rule.end_time,'weekdays',rule.weekdays,'discountBps',rule.discount_bps,'eligibleLineTypes',rule.eligible_line_types,'eligibleItemIds',rule.eligible_item_ids,'eligibleClientCategories',rule.eligible_client_categories,'minMarginBps',rule.min_margin_bps,'blockOnUnknownCost',rule.block_on_unknown_cost),$7 FROM pos_happy_hour_rules rule WHERE rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=$3 RETURNING *) SELECT {APPROVAL_COLUMNS} FROM inserted approval JOIN pos_happy_hour_rules rule ON rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=approval.rule_id"
     ))
-    .bind(tenant_id).bind(branch_id).bind(rule_id).bind(actor).bind(role).bind(note)
+    .bind(tenant_id).bind(branch_id).bind(rule_id).bind(actor).bind(role).bind(approval_limit_bps).bind(note)
     .fetch_optional(&mut *tx).await?;
     tx.commit().await?;
     Ok(row)
@@ -1790,7 +1864,7 @@ pub async fn decide_approval(
     note: &str,
 ) -> Result<Option<HappyHourApprovalRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
-        "WITH decided AS (UPDATE pos_happy_hour_approval_requests SET status=$5,decision_note=$6,decided_by=$4,decided_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending' AND requested_by<>$4 RETURNING *), activated AS (UPDATE pos_happy_hour_rules rule SET active=TRUE,updated_at=NOW() FROM decided WHERE $5='approved' AND rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=decided.rule_id RETURNING rule.id) SELECT {APPROVAL_COLUMNS} FROM decided approval JOIN pos_happy_hour_rules rule ON rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=approval.rule_id"
+        "WITH decided AS (UPDATE pos_happy_hour_approval_requests approval SET status=$5,decision_note=$6,decided_by=$4,decided_at=NOW(),updated_at=NOW() WHERE approval.tenant_id=$1 AND approval.branch_id=$2 AND approval.id=$3 AND approval.status='pending' AND approval.requested_by<>$4 AND ($5='rejected' OR EXISTS(SELECT 1 FROM pos_happy_hour_rules rule WHERE rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=approval.rule_id AND jsonb_build_object('name',rule.name,'startTime',rule.start_time,'endTime',rule.end_time,'weekdays',rule.weekdays,'discountBps',rule.discount_bps,'eligibleLineTypes',rule.eligible_line_types,'eligibleItemIds',rule.eligible_item_ids,'eligibleClientCategories',rule.eligible_client_categories,'minMarginBps',rule.min_margin_bps,'blockOnUnknownCost',rule.block_on_unknown_cost)=approval.rule_snapshot_json)) RETURNING approval.*), activated AS (UPDATE pos_happy_hour_rules rule SET active=TRUE,updated_at=NOW() FROM decided WHERE $5='approved' AND rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=decided.rule_id RETURNING rule.id) SELECT {APPROVAL_COLUMNS} FROM decided approval JOIN pos_happy_hour_rules rule ON rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.id=approval.rule_id"
     ))
     .bind(tenant_id).bind(branch_id).bind(id).bind(actor).bind(status).bind(note)
     .fetch_optional(db).await
@@ -2122,4 +2196,163 @@ pub async fn resolve_coupon_abuse_alert(
     sqlx::query_as(
         "UPDATE pos_coupon_abuse_alerts alert SET status='resolved',resolved_by=$4,resolved_at=NOW(),resolution_note=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,client_id,COALESCE((SELECT CONCAT_WS(' ',first_name,last_name) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=alert.client_id),'') AS client_name,coupon_code,alert_type,severity,evidence_json,status,resolved_by,resolved_at,resolution_note,detected_at"
     ).bind(tenant_id).bind(branch_id).bind(id).bind(actor).bind(note).fetch_optional(db).await
+}
+
+pub async fn coupon_eligibility(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    coupon_code: &str,
+) -> Result<CouponEligibilityRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT
+          (SELECT COUNT(*)::BIGINT FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.client_id=$3 AND sale.finalized_at IS NOT NULL) AS prior_sale_count,
+          (SELECT COUNT(*)::BIGINT FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.client_id=$3 AND sale.coupon_code=$4 AND sale.finalized_at IS NOT NULL) AS coupon_use_count,
+          EXISTS(SELECT 1 FROM client_referrals referral WHERE referral.tenant_id=$1 AND referral.branch_id=$2 AND referral.referred_client_id=$3 AND referral.status<>'cancelled') AS referral_exists,
+          (SELECT snapshot.segment FROM client_intelligence_snapshots snapshot WHERE snapshot.tenant_id=$1 AND snapshot.branch_id=$2 AND snapshot.client_id=$3 ORDER BY snapshot.snapshot_date DESC,snapshot.calculated_at DESC LIMIT 1) AS client_segment"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(coupon_code)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn service_categories(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    service_ids: &[String],
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT category FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3) AND active=TRUE AND category<>''",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(service_ids)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn coupon_analytics(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<CouponAnalyticsRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT coupon.id AS coupon_id,coupon.code AS coupon_code,coupon.offer_type,
+          COUNT(sale.id)::BIGINT AS redemptions,
+          COUNT(DISTINCT NULLIF(sale.client_id,''))::BIGINT AS unique_clients,
+          COALESCE(SUM(sale.total_paise),0)::BIGINT AS sales_value_paise,
+          COALESCE(SUM(sale.coupon_discount_paise),0)::BIGINT AS discount_paise,
+          CASE WHEN COALESCE(SUM(sale.coupon_discount_paise),0)>0
+            THEN (COALESCE(SUM(sale.total_paise),0)*10000/COALESCE(SUM(sale.coupon_discount_paise),1))::BIGINT ELSE 0 END AS return_on_discount_bps
+        FROM pos_coupons coupon
+        LEFT JOIN pos_sales sale ON sale.tenant_id=coupon.tenant_id AND sale.branch_id=coupon.branch_id
+          AND sale.coupon_code=coupon.code AND sale.finalized_at IS NOT NULL
+        WHERE coupon.tenant_id=$1 AND coupon.branch_id=$2
+        GROUP BY coupon.id,coupon.code,coupon.offer_type
+        ORDER BY discount_paise DESC,coupon.code"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn daily_discount_usage(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<DailyDiscountRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT finalized_at::DATE AS business_date,COUNT(*)::BIGINT AS sale_count,
+          COALESCE(SUM(discount_paise),0)::BIGINT AS discount_paise
+        FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND finalized_at>=CURRENT_DATE-INTERVAL '30 days'
+        GROUP BY finalized_at::DATE ORDER BY business_date"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn approval_bypass_candidates(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<ApprovalBypassRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT rule.id AS rule_id,rule.name AS rule_name,rule.discount_bps,
+          rule.last_changed_by,rule.last_changed_by_role,
+          EXISTS(SELECT 1 FROM pos_happy_hour_approval_requests approval
+            WHERE approval.tenant_id=rule.tenant_id AND approval.branch_id=rule.branch_id
+              AND approval.rule_id=rule.id AND approval.status='approved'
+              AND approval.rule_snapshot_json=jsonb_build_object('name',rule.name,'startTime',rule.start_time,'endTime',rule.end_time,'weekdays',rule.weekdays,'discountBps',rule.discount_bps,'eligibleLineTypes',rule.eligible_line_types,'eligibleItemIds',rule.eligible_item_ids,'eligibleClientCategories',rule.eligible_client_categories,'minMarginBps',rule.min_margin_bps,'blockOnUnknownCost',rule.block_on_unknown_cost)
+          ) AS has_matching_approval
+        FROM pos_happy_hour_rules rule
+        WHERE rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.active=TRUE"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn upsert_fraud_case(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    input: NewFraudCase<'_>,
+) -> Result<FraudCaseRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"INSERT INTO pos_happy_hour_fraud_cases
+          (tenant_id,branch_id,signature,fraud_type,subject_type,subject_id,risk_score,severity,decision,title,description,evidence_json)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT(tenant_id,branch_id,signature) DO UPDATE SET
+          fraud_type=EXCLUDED.fraud_type,subject_type=EXCLUDED.subject_type,subject_id=EXCLUDED.subject_id,
+          risk_score=EXCLUDED.risk_score,severity=EXCLUDED.severity,decision=EXCLUDED.decision,
+          title=EXCLUDED.title,description=EXCLUDED.description,evidence_json=EXCLUDED.evidence_json,
+          detected_at=NOW(),status=CASE WHEN pos_happy_hour_fraud_cases.status='dismissed' THEN 'dismissed' ELSE 'open' END,updated_at=NOW()
+        RETURNING id,fraud_type,subject_type,subject_id,risk_score,severity,decision,status,title,description,evidence_json,reviewed_by,reviewed_at,review_note,detected_at"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(input.signature).bind(input.fraud_type)
+    .bind(input.subject_type).bind(input.subject_id).bind(input.risk_score).bind(input.severity)
+    .bind(input.decision).bind(input.title).bind(input.description).bind(input.evidence)
+    .fetch_one(db).await
+}
+
+pub async fn list_fraud_cases(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    status: &str,
+) -> Result<Vec<FraudCaseRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,fraud_type,subject_type,subject_id,risk_score,severity,decision,status,title,description,evidence_json,reviewed_by,reviewed_at,review_note,detected_at FROM pos_happy_hour_fraud_cases WHERE tenant_id=$1 AND branch_id=$2 AND ($3='' OR status=$3) ORDER BY risk_score DESC,detected_at DESC LIMIT 200")
+        .bind(tenant_id).bind(branch_id).bind(status).fetch_all(db).await
+}
+
+pub async fn review_fraud_case(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    status: &str,
+    actor: &str,
+    note: &str,
+) -> Result<Option<FraudCaseRecord>, sqlx::Error> {
+    sqlx::query_as("UPDATE pos_happy_hour_fraud_cases SET status=$4,reviewed_by=$5,reviewed_at=NOW(),review_note=$6,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,fraud_type,subject_type,subject_id,risk_score,severity,decision,status,title,description,evidence_json,reviewed_by,reviewed_at,review_note,detected_at")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(status).bind(actor).bind(note).fetch_optional(db).await
+}
+
+pub async fn has_blocking_fraud_case(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    subject_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pos_happy_hour_fraud_cases WHERE tenant_id=$1 AND branch_id=$2 AND subject_type='client_coupon' AND subject_id=$3 AND decision='block_until_review' AND status IN ('open','investigating'))")
+        .bind(tenant_id).bind(branch_id).bind(subject_id).fetch_one(db).await
 }

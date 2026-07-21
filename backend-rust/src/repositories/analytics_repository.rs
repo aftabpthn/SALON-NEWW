@@ -32,16 +32,28 @@ pub struct ProfitDimensionRecord {
 #[derive(Debug, Clone, FromRow)]
 pub struct MicroProfitLineRecord {
     pub branch_id: String,
+    pub branch_name: String,
     pub first_event_date: NaiveDate,
     pub last_event_date: NaiveDate,
     pub sale_id: String,
     pub sale_line_id: String,
+    pub invoice_number: String,
     pub reference_id: String,
+    pub appointment_id: String,
+    pub appointment_name: String,
+    pub channel: String,
+    pub journal_entry_id: String,
+    pub inventory_movement_ids: Vec<String>,
     pub line_type: String,
     pub item_id: String,
     pub item_name: String,
+    pub item_category: String,
+    pub unit_count: i64,
+    pub discount_paise: i64,
     pub staff_id: String,
+    pub staff_name: String,
     pub client_id: String,
+    pub client_name: String,
     pub recognized_revenue_paise: i64,
     pub product_cost_paise: i64,
     pub staff_cost_paise: i64,
@@ -64,11 +76,15 @@ pub struct MicroProfitLineRecord {
 pub struct MicroProfitReconciliationRecord {
     pub ledger_revenue_paise: i64,
     pub micro_revenue_paise: i64,
+    pub missing_invoice_journal_paise: i64,
     pub ledger_cogs_paise: i64,
     pub micro_product_cost_paise: i64,
+    pub ledger_payroll_paise: i64,
+    pub payroll_source_paise: i64,
     pub rounding_bridge_paise: i64,
     pub reportable_line_count: i64,
     pub complete_line_count: i64,
+    pub cost_complete_line_count: i64,
     pub missing_invoice_journal_count: i64,
     pub missing_product_cost_line_count: i64,
     pub missing_staff_cost_line_count: i64,
@@ -76,6 +92,54 @@ pub struct MicroProfitReconciliationRecord {
     pub missing_gateway_fee_line_count: i64,
     pub missing_refund_fee_line_count: i64,
     pub allocation_rule_count: i64,
+    pub unallocated_overhead_paise: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProfitCopilotVersionInsert<'a> {
+    pub tenant_id: &'a str,
+    pub branch_ids: &'a [String],
+    pub period_start: NaiveDate,
+    pub period_end: NaiveDate,
+    pub recommendation_key: &'a str,
+    pub fact_schema_version: &'a str,
+    pub fact_hash: &'a str,
+    pub provider: &'a str,
+    pub model: &'a str,
+    pub kind: &'a str,
+    pub title: &'a str,
+    pub message: &'a str,
+    pub impact_paise: i64,
+    pub source_type: &'a str,
+    pub source_id: &'a str,
+    pub evaluation_status: &'a str,
+    pub evaluation_json: &'a Value,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ProfitCopilotFeedbackRecord {
+    pub id: String,
+    pub recommendation_version_id: String,
+    pub decision: String,
+    pub comment: String,
+    pub actor_user_id: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct InvoiceJournalRepairRecord {
+    pub branch_id: String,
+    pub sale_id: String,
+    pub invoice_number: String,
+    pub business_date: NaiveDate,
+    pub total_paise: i64,
+    pub tax_paise: i64,
+    pub cgst_paise: i64,
+    pub sgst_paise: i64,
+    pub igst_paise: i64,
+    pub tip_paise: i64,
+    pub round_off_paise: i64,
+    pub period_status: String,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -99,6 +163,33 @@ pub struct RecipeVarianceRecord {
     pub recipe_item_count: i64,
     pub expected_cost_paise: i64,
     pub actual_cost_paise: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ProfitBookingDemandRecord {
+    pub service_id: String,
+    pub service_name: String,
+    pub local_hour: i32,
+    pub appointment_count: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ProfitLiabilityRecord {
+    pub source_type: String,
+    pub source_item_id: String,
+    pub plan_name: String,
+    pub sold_value_paise: i64,
+    pub recognized_value_paise: i64,
+    pub remaining_liability_paise: i64,
+    pub redeemed_value_paise: i64,
+    pub redeemed_cost_paise: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct DailyProfitRecord {
+    pub business_date: NaiveDate,
+    pub revenue_paise: i64,
+    pub direct_cost_paise: i64,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -245,7 +336,7 @@ pub async fn profit_dimensions(
           LEFT JOIN commission ON commission.sale_line_id=line.id
           WHERE line.tenant_id=$1 AND line.branch_id=ANY($2::TEXT[])
             AND sale.status NOT IN ('draft','open','voided','cancelled')
-            AND (COALESCE(sale.finalized_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+            AND sale.business_date BETWEEN $3 AND $4
         ), dimensions AS (
           SELECT 'service'::TEXT AS dimension, base.item_id AS entity_id,
                  COALESCE(service.name,base.item_name) AS entity_name,
@@ -356,11 +447,156 @@ pub async fn recipe_variance(
         LEFT JOIN actual_line ON actual_line.sale_line_id=line.id
         WHERE line.tenant_id=$1 AND line.branch_id=ANY($2::TEXT[]) AND line.line_type='service'
           AND sale.status NOT IN ('draft','open','voided','cancelled')
-          AND (COALESCE(sale.finalized_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+          AND sale.business_date BETWEEN $3 AND $4
         GROUP BY line.item_id, COALESCE(service.name,line.item_name)
         HAVING MAX(COALESCE(recipe_unit.recipe_item_count,0)) > 0
             OR SUM(COALESCE(actual_line.actual_cost_paise,0)) <> 0
         ORDER BY (SUM(COALESCE(actual_line.actual_cost_paise,0)) - SUM(line.quantity * COALESCE(recipe_unit.expected_unit_cost_paise,0))) DESC
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_ids.to_vec())
+    .bind(from_date)
+    .bind(to_date)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn profit_booking_demand(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    from_date: NaiveDate,
+    to_date: NaiveDate,
+) -> Result<Vec<ProfitBookingDemandRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT selected.service_id,
+               COALESCE(NULLIF(service.name,''),selected.service_id) AS service_name,
+               EXTRACT(HOUR FROM appointment.start_at AT TIME ZONE 'Asia/Kolkata')::INT AS local_hour,
+               COUNT(*)::BIGINT AS appointment_count
+          FROM appointments appointment
+          CROSS JOIN LATERAL jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB)='array'
+                 THEN COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB ELSE '[]'::JSONB END
+          ) selected(service_id)
+          LEFT JOIN services service ON service.tenant_id=appointment.tenant_id
+           AND service.branch_id=appointment.branch_id AND service.id=selected.service_id
+         WHERE appointment.tenant_id=$1 AND appointment.branch_id=ANY($2::TEXT[])
+           AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+           AND LOWER(appointment.status) NOT IN ('cancelled','canceled','no-show','voided')
+         GROUP BY selected.service_id,COALESCE(NULLIF(service.name,''),selected.service_id),
+                  EXTRACT(HOUR FROM appointment.start_at AT TIME ZONE 'Asia/Kolkata')
+         ORDER BY selected.service_id,appointment_count DESC,local_hour
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_ids.to_vec())
+    .bind(from_date)
+    .bind(to_date)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn profit_liability_exposure(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    to_date: NaiveDate,
+) -> Result<Vec<ProfitLiabilityRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH exposure AS (
+          SELECT source_type,source_item_id,
+                 SUM(total_paise)::BIGINT AS sold_value_paise,
+                 SUM(recognized_paise)::BIGINT AS recognized_value_paise,
+                 SUM(total_paise-recognized_paise)::BIGINT AS remaining_liability_paise
+            FROM accounting_deferred_revenue_schedules
+           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND start_date<=$3
+           GROUP BY source_type,source_item_id
+        ), redemption_lines AS (
+          SELECT 'package'::TEXT AS source_type,redemption.package_id AS source_item_id,
+                 redemption.package_name AS plan_name,line.id AS sale_line_id
+            FROM pos_package_redemptions redemption
+            JOIN LATERAL (
+              SELECT sale_line.id FROM pos_sale_lines sale_line
+               WHERE sale_line.tenant_id=redemption.tenant_id
+                 AND sale_line.branch_id=redemption.branch_id AND sale_line.sale_id=redemption.sale_id
+                 AND sale_line.line_type='package_redeem'
+                 AND sale_line.item_id=redemption.client_package_credit_id
+               ORDER BY sale_line.created_at,sale_line.id LIMIT 1
+            ) line ON TRUE
+           WHERE redemption.tenant_id=$1 AND redemption.branch_id=ANY($2::TEXT[])
+          UNION ALL
+          SELECT 'membership',redemption.membership_id,redemption.membership_name,line.id
+            FROM pos_membership_redemptions redemption
+            JOIN LATERAL (
+              SELECT sale_line.id FROM pos_sale_lines sale_line
+               WHERE sale_line.tenant_id=redemption.tenant_id
+                 AND sale_line.branch_id=redemption.branch_id AND sale_line.sale_id=redemption.sale_id
+                 AND sale_line.line_type='membership_redeem'
+                 AND sale_line.item_id=redemption.client_membership_credit_id
+               ORDER BY sale_line.created_at,sale_line.id LIMIT 1
+            ) line ON TRUE
+           WHERE redemption.tenant_id=$1 AND redemption.branch_id=ANY($2::TEXT[])
+        ), redemption AS (
+          SELECT line.source_type,line.source_item_id,MAX(line.plan_name) AS plan_name,
+                 COALESCE(SUM(event.recognized_revenue_paise),0)::BIGINT AS redeemed_value_paise,
+                 COALESCE(SUM(event.product_cost_paise+event.staff_cost_paise),0)::BIGINT AS redeemed_cost_paise
+            FROM redemption_lines line
+            LEFT JOIN micro_profit_events event ON event.tenant_id=$1
+             AND event.branch_id=ANY($2::TEXT[]) AND event.sale_line_id=line.sale_line_id
+           GROUP BY line.source_type,line.source_item_id
+        )
+        SELECT exposure.source_type,exposure.source_item_id,
+               COALESCE(NULLIF(redemption.plan_name,''),NULLIF(package.name,''),
+                        NULLIF(membership.name,''),exposure.source_item_id) AS plan_name,
+               exposure.sold_value_paise,exposure.recognized_value_paise,
+               exposure.remaining_liability_paise,
+               COALESCE(redemption.redeemed_value_paise,0)::BIGINT AS redeemed_value_paise,
+               COALESCE(redemption.redeemed_cost_paise,0)::BIGINT AS redeemed_cost_paise
+          FROM exposure
+          LEFT JOIN redemption USING(source_type,source_item_id)
+          LEFT JOIN packages package ON exposure.source_type='package'
+           AND package.tenant_id=$1 AND package.id=exposure.source_item_id
+          LEFT JOIN memberships membership ON exposure.source_type='membership'
+           AND membership.tenant_id=$1 AND membership.id=exposure.source_item_id
+         ORDER BY exposure.remaining_liability_paise DESC,plan_name
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_ids.to_vec())
+    .bind(to_date)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn daily_micro_profit(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    from_date: NaiveDate,
+    to_date: NaiveDate,
+) -> Result<Vec<DailyProfitRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH event AS (
+          SELECT business_date,SUM(recognized_revenue_paise)::BIGINT AS revenue_paise,
+                 SUM(product_cost_paise+staff_cost_paise)::BIGINT AS event_cost_paise
+            FROM micro_profit_events
+           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND business_date BETWEEN $3 AND $4
+           GROUP BY business_date
+        ), cost AS (
+          SELECT business_date,SUM(cost_paise)::BIGINT AS controllable_cost_paise
+            FROM micro_profit_cost_events
+           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND business_date BETWEEN $3 AND $4
+           GROUP BY business_date
+        )
+        SELECT COALESCE(event.business_date,cost.business_date) AS business_date,
+               COALESCE(event.revenue_paise,0)::BIGINT AS revenue_paise,
+               (COALESCE(event.event_cost_paise,0)+COALESCE(cost.controllable_cost_paise,0))::BIGINT AS direct_cost_paise
+          FROM event FULL JOIN cost USING(business_date)
+         ORDER BY business_date
         "#,
     )
     .bind(tenant_id)
@@ -380,6 +616,8 @@ pub async fn micro_profit_lines(
     to_date: NaiveDate,
     limit: i64,
     offset: i64,
+    dimension: &str,
+    entity_id: &str,
 ) -> Result<Vec<MicroProfitLineRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
@@ -409,10 +647,30 @@ pub async fn micro_profit_lines(
            GROUP BY tenant_id,branch_id,sale_id,sale_line_id
         ), facts AS (
           SELECT aggregated.*,
+                 COALESCE(branch.name,sale.branch_id) AS branch_name,
+                 sale.invoice_number,
                  COALESCE(sale.reference_id,'') AS reference_id,
-                 line.line_type,line.item_id,line.item_name,
+                 COALESCE(appointment.id,'') AS appointment_id,
+                 CASE WHEN appointment.id IS NULL THEN 'Direct sale'
+                      ELSE CONCAT('Appointment ',appointment.id) END AS appointment_name,
+                 COALESCE(NULLIF(appointment.source_channel,''),NULLIF(sale.source,''),'pos') AS channel,
+                 COALESCE((SELECT entry.id FROM accounting_journal_entries entry
+                            WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
+                              AND entry.source_type='invoice' AND entry.source_id=sale.id
+                            ORDER BY entry.created_at,entry.id LIMIT 1),'') AS journal_entry_id,
+                 COALESCE(ARRAY(SELECT stock.id FROM inventory_stock_ledger stock
+                                 WHERE stock.tenant_id=line.tenant_id AND stock.branch_id=line.branch_id
+                                   AND stock.sale_line_id=line.id
+                                 ORDER BY stock.created_at,stock.id),ARRAY[]::TEXT[]) AS inventory_movement_ids,
+                 line.line_type,COALESCE(service.id,line.item_id) AS item_id,
+                 COALESCE(NULLIF(service.name,''),line.item_name) AS item_name,
+                 COALESCE(NULLIF(service.category,''),'Uncategorized') AS item_category,
+                 line.quantity::BIGINT AS unit_count,
+                 line.discount_paise,
                  COALESCE(NULLIF(line.staff_id,''),NULLIF(sale.staff_id,''),'') AS staff_id,
+                 COALESCE(NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.middle_name,''),NULLIF(staff.last_name,''))),''),'Unassigned') AS staff_name,
                  COALESCE(sale.client_id,'') AS client_id,
+                 COALESCE(NULLIF(TRIM(CONCAT_WS(' ',client.first_name,NULLIF(client.last_name,''))),''),'Walk-in') AS client_name,
                  COALESCE(controllable_cost.staff_time_cost_paise,0)::BIGINT AS staff_time_cost_paise,
                  COALESCE(controllable_cost.gateway_fee_paise,0)::BIGINT AS gateway_fee_paise,
                  COALESCE(controllable_cost.refund_fee_paise,0)::BIGINT AS refund_fee_paise,
@@ -420,9 +678,9 @@ pub async fn micro_profit_lines(
                  COALESCE(controllable_cost.has_gateway_fee,FALSE) AS has_gateway_fee,
                  COALESCE(controllable_cost.has_refund_fee,FALSE) AS has_refund_fee,
                  COALESCE(service.duration_minutes,0)::BIGINT*GREATEST(line.quantity,1) AS service_minutes,
-                 CASE WHEN appointment.chair_room_id IS NOT NULL THEN
-                   GREATEST(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60,0)
-                   ELSE 0 END AS chair_resource_minutes,
+                  CASE WHEN appointment.chair_room_id IS NOT NULL THEN
+                    COALESCE(service.duration_minutes,0)::BIGINT*GREATEST(line.quantity,1)
+                    ELSE 0 END AS chair_resource_minutes,
                  (line.line_type='product' OR
                    (line.line_type='service' AND
                     jsonb_typeof(COALESCE(service.product_consumption_json,'[]'::JSONB))='array' AND
@@ -451,8 +709,8 @@ pub async fn micro_profit_lines(
                     WHERE gateway.tenant_id=sale.tenant_id AND gateway.branch_id=sale.branch_id
                       AND gateway.sale_id=sale.id AND gateway.status IN ('pending','processed')
                  ) AS requires_refund_fee,
-                 NOT EXISTS (
-                   SELECT 1 FROM accounting_journal_entries entry
+                  sale.total_paise<>0 AND NOT EXISTS (
+                    SELECT 1 FROM accounting_journal_entries entry
                     WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
                       AND entry.source_type='invoice' AND entry.source_id=sale.id
                  ) AS missing_invoice_journal
@@ -486,6 +744,14 @@ pub async fn micro_profit_lines(
             LEFT JOIN appointments appointment
               ON appointment.id=sale.reference_id AND appointment.tenant_id=sale.tenant_id
              AND appointment.branch_id=sale.branch_id
+            LEFT JOIN staff ON staff.id=COALESCE(NULLIF(line.staff_id,''),NULLIF(sale.staff_id,''))
+             AND staff.tenant_id=line.tenant_id AND staff.branch_id=line.branch_id
+            LEFT JOIN clients client ON client.id=sale.client_id
+             AND client.tenant_id=sale.tenant_id AND client.branch_id=sale.branch_id
+            LEFT JOIN tenants tenant
+              ON COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=sale.tenant_id
+            LEFT JOIN branches branch ON branch.tenant_id=tenant.id
+             AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=sale.branch_id
             LEFT JOIN controllable_cost
               ON controllable_cost.tenant_id=aggregated.tenant_id
              AND controllable_cost.branch_id=aggregated.branch_id
@@ -557,8 +823,10 @@ pub async fn micro_profit_lines(
             FROM configured_rule LEFT JOIN rule_pool ON TRUE
            GROUP BY configured_rule.rule_count
         )
-        SELECT branch_id,first_event_date,last_event_date,sale_id,sale_line_id,
-               reference_id,line_type,item_id,item_name,staff_id,client_id,
+        SELECT branch_id,branch_name,first_event_date,last_event_date,sale_id,sale_line_id,
+               invoice_number,reference_id,appointment_id,appointment_name,channel,
+               journal_entry_id,inventory_movement_ids,line_type,item_id,item_name,item_category,unit_count,discount_paise,
+               staff_id,staff_name,client_id,client_name,
                recognized_revenue_paise,product_cost_paise,staff_cost_paise,
                staff_time_cost_paise,gateway_fee_paise,refund_fee_paise,
                COALESCE(overhead_by_line.overhead_cost_paise,0)::BIGINT AS overhead_cost_paise,
@@ -579,6 +847,15 @@ pub async fn micro_profit_lines(
           FROM weighted_facts
           LEFT JOIN overhead_by_line USING(sale_line_id)
           CROSS JOIN allocation_state
+         WHERE $7='' OR
+               ($7='service' AND line_type IN ('service','package_redeem','membership_redeem') AND item_id=$8) OR
+               ($7='category' AND line_type IN ('service','package_redeem','membership_redeem') AND item_category=$8) OR
+               ($7='product' AND line_type='product' AND item_id=$8) OR
+               ($7='staff' AND COALESCE(NULLIF(staff_id,''),'unassigned')=$8) OR
+               ($7='customer' AND COALESCE(NULLIF(client_id,''),'walk_in')=$8) OR
+               ($7='appointment' AND COALESCE(NULLIF(appointment_id,''),'direct')=$8) OR
+               ($7='branch' AND branch_id=$8) OR
+               ($7='channel' AND channel=$8)
          ORDER BY (recognized_revenue_paise-product_cost_paise-staff_cost_paise
                    -staff_time_cost_paise-gateway_fee_paise-refund_fee_paise
                    -COALESCE(overhead_by_line.overhead_cost_paise,0)) ASC,
@@ -592,6 +869,8 @@ pub async fn micro_profit_lines(
     .bind(to_date)
     .bind(limit)
     .bind(offset)
+    .bind(dimension)
+    .bind(entity_id)
     .fetch_all(db)
     .await
 }
@@ -614,8 +893,10 @@ pub async fn micro_profit_reconciliation(
         ), ledger AS (
           SELECT COALESCE(SUM(CASE WHEN line.account_code IN ('SALES_REVENUE','SALES_RETURNS')
                               THEN line.credit_paise-line.debit_paise ELSE 0 END),0)::BIGINT AS revenue_paise,
-                 COALESCE(SUM(CASE WHEN line.account_code='COST_OF_GOODS_SOLD'
-                              THEN line.debit_paise-line.credit_paise ELSE 0 END),0)::BIGINT AS cogs_paise,
+                  COALESCE(SUM(CASE WHEN line.account_code='COST_OF_GOODS_SOLD'
+                               THEN line.debit_paise-line.credit_paise ELSE 0 END),0)::BIGINT AS cogs_paise,
+                  COALESCE(SUM(CASE WHEN line.account_code='PAYROLL_EXPENSE'
+                               THEN line.debit_paise-line.credit_paise ELSE 0 END),0)::BIGINT AS payroll_paise,
                  COALESCE(SUM(CASE WHEN line.account_code='ROUNDING_INCOME'
                               THEN line.credit_paise-line.debit_paise
                               WHEN line.account_code='ROUNDING_EXPENSE'
@@ -624,9 +905,26 @@ pub async fn micro_profit_reconciliation(
             JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
            WHERE entry.tenant_id=$1 AND entry.branch_id=ANY($2::TEXT[])
              AND entry.entry_date BETWEEN $3 AND $4
+        ), missing_invoice AS (
+          SELECT COALESCE(SUM(event.recognized_revenue_paise),0)::BIGINT AS revenue_paise
+            FROM micro_profit_events event
+            JOIN pos_sales sale ON sale.id=event.sale_id
+             AND sale.tenant_id=event.tenant_id AND sale.branch_id=event.branch_id
+           WHERE event.tenant_id=$1 AND event.branch_id=ANY($2::TEXT[])
+             AND event.business_date BETWEEN $3 AND $4 AND sale.total_paise<>0
+             AND NOT EXISTS (
+               SELECT 1 FROM accounting_journal_entries entry
+                WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
+                  AND entry.source_type='invoice' AND entry.source_id=sale.id
+             )
+        ), payroll_source AS (
+          SELECT COALESCE(SUM(gross_paise),0)::BIGINT AS gross_paise
+            FROM staff_payroll_runs
+           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
+             AND status IN ('finalized','paid') AND period_end BETWEEN $3 AND $4
         ), quality_rows AS (
           SELECT sale.id AS sale_id,line.id AS sale_line_id,
-                 NOT EXISTS (
+                  sale.total_paise<>0 AND NOT EXISTS (
                    SELECT 1 FROM accounting_journal_entries entry
                     WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
                       AND entry.source_type='invoice' AND entry.source_id=sale.id
@@ -648,8 +946,10 @@ pub async fn micro_profit_reconciliation(
                       WHERE commission.tenant_id=line.tenant_id AND commission.branch_id=line.branch_id
                         AND commission.sale_line_id=line.id
                     ) AS missing_staff_cost,
-                  line.line_type IN ('service','package_redeem','membership_redeem')
-                    AND COALESCE(NULLIF(line.staff_id,''),NULLIF(sale.staff_id,''),'')<>''
+                   line.line_type IN ('service','package_redeem','membership_redeem')
+                     AND (COALESCE(NULLIF(line.staff_id,''),NULLIF(sale.staff_id,''),'')<>'' OR
+                       (jsonb_typeof(COALESCE(line.staff_splits,'[]'::JSONB))='array' AND
+                        jsonb_array_length(COALESCE(line.staff_splits,'[]'::JSONB))>0))
                     AND NOT EXISTS (
                       SELECT 1 FROM micro_profit_cost_events cost
                        WHERE cost.tenant_id=line.tenant_id AND cost.branch_id=line.branch_id
@@ -691,6 +991,11 @@ pub async fn micro_profit_reconciliation(
                                      AND NOT missing_staff_time_cost
                                      AND NOT missing_gateway_fee
                                      AND NOT missing_refund_fee)::BIGINT AS complete_line_count,
+                  COUNT(*) FILTER (WHERE NOT missing_product_cost
+                                     AND NOT missing_staff_cost
+                                     AND NOT missing_staff_time_cost
+                                     AND NOT missing_gateway_fee
+                                     AND NOT missing_refund_fee)::BIGINT AS cost_complete_line_count,
                  COUNT(DISTINCT sale_id) FILTER (WHERE missing_invoice_journal)::BIGINT AS missing_invoice_journal_count,
                  COUNT(*) FILTER (WHERE missing_product_cost)::BIGINT AS missing_product_cost_line_count,
                   COUNT(*) FILTER (WHERE missing_staff_cost)::BIGINT AS missing_staff_cost_line_count,
@@ -702,23 +1007,90 @@ pub async fn micro_profit_reconciliation(
           SELECT COUNT(*)::BIGINT AS rule_count
             FROM micro_profit_allocation_rules
            WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
-             AND effective_from<=$4 AND COALESCE(effective_to,$4)>=$3
+              AND effective_from<=$4 AND COALESCE(effective_to,$4)>=$3
+        ), allocation_facts AS (
+          SELECT line.id AS sale_line_id,sale.id AS sale_id,
+                 COALESCE(NULLIF(line.staff_id,''),NULLIF(sale.staff_id,''),'') AS staff_id,
+                 COALESCE(service.duration_minutes,0)::BIGINT*GREATEST(line.quantity,1) AS service_minutes,
+                 appointment.chair_room_id IS NOT NULL AS has_chair,
+                 COALESCE(SUM(event.recognized_revenue_paise),0)::BIGINT AS revenue_paise,
+                 COALESCE(line.staff_splits,'[]'::JSONB) AS staff_splits
+            FROM micro_profit_events event
+            JOIN pos_sale_lines line ON line.id=event.sale_line_id
+             AND line.tenant_id=event.tenant_id AND line.branch_id=event.branch_id
+            JOIN pos_sales sale ON sale.id=event.sale_id
+             AND sale.tenant_id=event.tenant_id AND sale.branch_id=event.branch_id
+            LEFT JOIN services service ON service.id=CASE
+              WHEN line.line_type='package_redeem' THEN COALESCE((
+                SELECT redemption.service_id FROM pos_package_redemptions redemption
+                 WHERE redemption.tenant_id=line.tenant_id AND redemption.branch_id=line.branch_id
+                   AND redemption.sale_id=line.sale_id
+                   AND redemption.client_package_credit_id=line.item_id
+                 ORDER BY redemption.created_at,redemption.id LIMIT 1
+              ),line.item_id)
+              WHEN line.line_type='membership_redeem' THEN COALESCE((
+                SELECT redemption.service_id FROM pos_membership_redemptions redemption
+                 WHERE redemption.tenant_id=line.tenant_id AND redemption.branch_id=line.branch_id
+                   AND redemption.sale_id=line.sale_id
+                   AND redemption.client_membership_credit_id=line.item_id
+                 ORDER BY redemption.created_at,redemption.id LIMIT 1
+              ),line.item_id)
+              ELSE line.item_id END
+             AND service.tenant_id=line.tenant_id AND service.branch_id=line.branch_id
+            LEFT JOIN appointments appointment ON appointment.id=sale.reference_id
+             AND appointment.tenant_id=sale.tenant_id AND appointment.branch_id=sale.branch_id
+           WHERE event.tenant_id=$1 AND event.branch_id=ANY($2::TEXT[])
+             AND event.business_date BETWEEN $3 AND $4
+           GROUP BY line.id,sale.id,sale.staff_id,service.duration_minutes,appointment.chair_room_id
+        ), allocation_expense_rows AS (
+          SELECT rule.id,rule.driver,
+                 GREATEST(line.debit_paise-line.credit_paise,0)::BIGINT AS expense_paise,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY entry.id,line.id,rule.name ORDER BY rule.version DESC,rule.created_at DESC
+                 ) AS version_rank
+            FROM micro_profit_allocation_rules rule
+            JOIN accounting_journal_entries entry
+              ON entry.tenant_id=rule.tenant_id AND entry.branch_id=rule.branch_id
+             AND entry.entry_date BETWEEN GREATEST(rule.effective_from,$3)
+                                      AND LEAST(COALESCE(rule.effective_to,$4),$4)
+            JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+             AND line.account_code=ANY(rule.account_codes)
+           WHERE rule.tenant_id=$1 AND rule.branch_id=ANY($2::TEXT[])
+             AND rule.effective_from<=$4 AND COALESCE(rule.effective_to,$4)>=$3
+        ), allocation_pool AS (
+          SELECT id,driver,SUM(expense_paise)::BIGINT AS pool_paise
+            FROM allocation_expense_rows WHERE version_rank=1 GROUP BY id,driver
+        ), allocation_health AS (
+          SELECT COALESCE(SUM(pool.pool_paise) FILTER (WHERE NOT CASE pool.driver
+                   WHEN 'service_minutes' THEN EXISTS (SELECT 1 FROM allocation_facts WHERE service_minutes>0)
+                   WHEN 'chair_resource_minutes' THEN EXISTS (SELECT 1 FROM allocation_facts WHERE has_chair AND service_minutes>0)
+                   WHEN 'revenue_share' THEN EXISTS (SELECT 1 FROM allocation_facts WHERE revenue_paise>0)
+                   WHEN 'headcount' THEN EXISTS (SELECT 1 FROM allocation_facts WHERE staff_id<>'' OR
+                     (JSONB_TYPEOF(staff_splits)='array' AND JSONB_ARRAY_LENGTH(staff_splits)>0))
+                   WHEN 'transaction_count' THEN EXISTS (SELECT 1 FROM allocation_facts)
+                   ELSE FALSE END),0)::BIGINT AS unallocated_paise
+            FROM allocation_pool pool
          )
         SELECT ledger.revenue_paise AS ledger_revenue_paise,
                micro.revenue_paise AS micro_revenue_paise,
+               missing_invoice.revenue_paise AS missing_invoice_journal_paise,
                ledger.cogs_paise AS ledger_cogs_paise,
                micro.product_cost_paise AS micro_product_cost_paise,
+               ledger.payroll_paise AS ledger_payroll_paise,
+               payroll_source.gross_paise AS payroll_source_paise,
                ledger.rounding_paise AS rounding_bridge_paise,
                quality.line_count AS reportable_line_count,
                quality.complete_line_count,
+               quality.cost_complete_line_count,
                quality.missing_invoice_journal_count,
                quality.missing_product_cost_line_count,
                quality.missing_staff_cost_line_count,
                quality.missing_staff_time_cost_line_count,
                quality.missing_gateway_fee_line_count,
                quality.missing_refund_fee_line_count,
-               allocation.rule_count AS allocation_rule_count
-          FROM micro,ledger,quality,allocation
+               allocation.rule_count AS allocation_rule_count,
+               allocation_health.unallocated_paise AS unallocated_overhead_paise
+          FROM micro,ledger,missing_invoice,payroll_source,quality,allocation,allocation_health
         "#,
     )
     .bind(tenant_id)
@@ -726,6 +1098,117 @@ pub async fn micro_profit_reconciliation(
     .bind(from_date)
     .bind(to_date)
     .fetch_one(db)
+    .await
+}
+
+pub async fn upsert_profit_copilot_version(
+    db: &PgPool,
+    input: ProfitCopilotVersionInsert<'_>,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        INSERT INTO profit_copilot_recommendation_versions (
+          tenant_id,branch_ids,period_start,period_end,recommendation_key,
+          fact_schema_version,fact_hash,provider,model,kind,title,message,
+          impact_paise,source_type,source_id,evaluation_status,evaluation_json
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+        )
+        ON CONFLICT (tenant_id,fact_hash,recommendation_key) DO UPDATE SET
+          provider=EXCLUDED.provider,
+          model=EXCLUDED.model,
+          title=EXCLUDED.title,
+          message=EXCLUDED.message,
+          evaluation_status=EXCLUDED.evaluation_status,
+          evaluation_json=EXCLUDED.evaluation_json
+        RETURNING id
+        "#,
+    )
+    .bind(input.tenant_id)
+    .bind(input.branch_ids)
+    .bind(input.period_start)
+    .bind(input.period_end)
+    .bind(input.recommendation_key)
+    .bind(input.fact_schema_version)
+    .bind(input.fact_hash)
+    .bind(input.provider)
+    .bind(input.model)
+    .bind(input.kind)
+    .bind(input.title)
+    .bind(input.message)
+    .bind(input.impact_paise)
+    .bind(input.source_type)
+    .bind(input.source_id)
+    .bind(input.evaluation_status)
+    .bind(input.evaluation_json)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn create_profit_copilot_feedback(
+    db: &PgPool,
+    tenant_id: &str,
+    recommendation_version_id: &str,
+    decision: &str,
+    comment: &str,
+    actor_user_id: &str,
+) -> Result<Option<ProfitCopilotFeedbackRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        INSERT INTO profit_copilot_feedback (
+          tenant_id,recommendation_version_id,decision,comment,actor_user_id
+        )
+        SELECT $1,$2,$3,$4,$5
+          FROM profit_copilot_recommendation_versions version
+         WHERE version.id=$2 AND version.tenant_id=$1
+        RETURNING id,recommendation_version_id,decision,comment,actor_user_id,created_at
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(recommendation_version_id)
+    .bind(decision)
+    .bind(comment)
+    .bind(actor_user_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn invoice_journal_repair_queue(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    from_date: NaiveDate,
+    to_date: NaiveDate,
+    limit: i64,
+) -> Result<Vec<InvoiceJournalRepairRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT sale.branch_id,sale.id AS sale_id,sale.invoice_number,sale.business_date,
+               sale.total_paise,sale.tax_paise,sale.cgst_paise,sale.sgst_paise,
+               sale.igst_paise,sale.tip_paise,sale.round_off_paise,
+               COALESCE(period.status,'open') AS period_status
+          FROM pos_sales sale
+          LEFT JOIN accounting_periods period
+            ON period.tenant_id=sale.tenant_id AND period.branch_id=sale.branch_id
+           AND period.period_month=DATE_TRUNC('month',sale.business_date)::DATE
+         WHERE sale.tenant_id=$1 AND sale.branch_id=ANY($2::TEXT[])
+           AND sale.business_date BETWEEN $3 AND $4 AND sale.total_paise<>0
+           AND sale.status NOT IN ('draft','open','voided','cancelled')
+           AND NOT EXISTS (
+             SELECT 1 FROM accounting_journal_entries entry
+              WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
+                AND entry.source_type='invoice' AND entry.source_id=sale.id
+           )
+         ORDER BY sale.business_date,sale.id
+         LIMIT $5
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_ids.to_vec())
+    .bind(from_date)
+    .bind(to_date)
+    .bind(limit)
+    .fetch_all(db)
     .await
 }
 
@@ -934,7 +1417,7 @@ pub async fn custom_pivot(
                           WHEN 'invoiceCount' THEN COUNT(DISTINCT invoice_id)::BIGINT END AS value
              FROM base WHERE row_key IS NOT NULL AND column_key IS NOT NULL
             GROUP BY row_key,column_key ORDER BY row_key,column_key LIMIT 1000"#
-    } else {
+    } else if dataset == "appointments" {
         r#"WITH base AS (
              SELECT CASE $5
                       WHEN 'date' THEN TO_CHAR((appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,'YYYY-MM-DD')
@@ -960,6 +1443,42 @@ pub async fn custom_pivot(
            SELECT row_key,column_key,
                   CASE $7 WHEN 'appointmentCount' THEN COUNT(DISTINCT id)::BIGINT
                           WHEN 'durationMinutes' THEN COALESCE(SUM(duration_minutes),0)::BIGINT END AS value
+             FROM base WHERE row_key IS NOT NULL AND column_key IS NOT NULL
+            GROUP BY row_key,column_key ORDER BY row_key,column_key LIMIT 1000"#
+    } else {
+        r#"WITH base AS (
+             SELECT CASE $5
+                      WHEN 'date' THEN TO_CHAR(voucher.business_date,'YYYY-MM-DD')
+                      WHEN 'category' THEN COALESCE(NULLIF(line.category_key,''),'Other')
+                      WHEN 'status' THEN INITCAP(voucher.status)
+                      WHEN 'paymentMode' THEN COALESCE(NULLIF(voucher.payment_mode,''),'Other')
+                      WHEN 'fundSource' THEN INITCAP(REPLACE(COALESCE(NULLIF(voucher.fund_source,''),'other'),'_',' '))
+                      WHEN 'partyType' THEN INITCAP(COALESCE(NULLIF(voucher.linked_party_type,''),'none'))
+                      WHEN 'department' THEN COALESCE(NULLIF(line.department,''),'Unassigned')
+                    END AS row_key,
+                    CASE $6
+                      WHEN 'none' THEN 'Total'
+                      WHEN 'date' THEN TO_CHAR(voucher.business_date,'YYYY-MM-DD')
+                      WHEN 'category' THEN COALESCE(NULLIF(line.category_key,''),'Other')
+                      WHEN 'status' THEN INITCAP(voucher.status)
+                      WHEN 'paymentMode' THEN COALESCE(NULLIF(voucher.payment_mode,''),'Other')
+                      WHEN 'fundSource' THEN INITCAP(REPLACE(COALESCE(NULLIF(voucher.fund_source,''),'other'),'_',' '))
+                      WHEN 'partyType' THEN INITCAP(COALESCE(NULLIF(voucher.linked_party_type,''),'none'))
+                      WHEN 'department' THEN COALESCE(NULLIF(line.department,''),'Unassigned')
+                    END AS column_key,
+                    voucher.id AS voucher_id,line.id AS line_id,line.amount_paise,line.gst_paise
+               FROM outgoing_fund_lines line
+               JOIN outgoing_fund_vouchers voucher ON voucher.tenant_id=line.tenant_id AND voucher.branch_id=line.branch_id AND voucher.id=line.voucher_id
+              WHERE line.tenant_id=$1 AND line.branch_id=$2
+                AND voucher.business_date BETWEEN $3 AND $4
+                AND voucher.status NOT IN ('draft','cancelled')
+                AND ($8='' OR voucher.status=$8)
+           )
+           SELECT row_key,column_key,
+                  CASE $7 WHEN 'amountPaise' THEN COALESCE(SUM(amount_paise),0)::BIGINT
+                          WHEN 'gstPaise' THEN COALESCE(SUM(gst_paise),0)::BIGINT
+                          WHEN 'voucherCount' THEN COUNT(DISTINCT voucher_id)::BIGINT
+                          WHEN 'lineCount' THEN COUNT(DISTINCT line_id)::BIGINT END AS value
              FROM base WHERE row_key IS NOT NULL AND column_key IS NOT NULL
             GROUP BY row_key,column_key ORDER BY row_key,column_key LIMIT 1000"#
     };

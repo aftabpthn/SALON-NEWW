@@ -45,6 +45,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/reports/dashboard", axum::routing::get(report_dashboard))
         .route(
+            "/reports/advanced-summary",
+            axum::routing::get(report_advanced_summary),
+        )
+        .route(
             "/reports/revenue-forecast",
             axum::routing::get(report_revenue_forecast),
         )
@@ -61,12 +65,20 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(report_advanced_profit_intelligence),
         )
         .route(
+            "/profit-intelligence/copilot/recommendations/:id/feedback",
+            axum::routing::post(record_profit_copilot_feedback),
+        )
+        .route(
             "/profit-intelligence/micro-lines",
             axum::routing::get(report_micro_profit_lines),
         )
         .route(
             "/profit-intelligence/reconciliation",
             axum::routing::get(report_micro_profit_reconciliation),
+        )
+        .route(
+            "/profit-intelligence/reconciliation/invoice-repair-queue",
+            axum::routing::get(invoice_journal_repair_queue).post(repair_missing_invoice_journals),
         )
         .route(
             "/profit-intelligence/allocation-rules",
@@ -79,6 +91,10 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/profit-intelligence/governance/evaluate-discount",
+            axum::routing::post(evaluate_profit_discount),
+        )
+        .route(
+            "/profit-intelligence/pos-margin-check",
             axum::routing::post(evaluate_profit_discount),
         )
         .route(
@@ -145,6 +161,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/reports/invoices/service-clients",
             axum::routing::get(report_service_clients),
+        )
+        .route(
+            "/reports/products/sales",
+            axum::routing::get(report_product_sales),
+        )
+        .route(
+            "/reports/products/movements",
+            axum::routing::get(report_product_movements),
         )
         .route(
             "/reports/invoices/:id/follow-ups",
@@ -265,6 +289,32 @@ pub struct ReportSalesQuery {
     pub status: Option<String>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvancedReportSummary {
+    pub invoice_count: i64,
+    pub revenue_paise: i64,
+    pub paid_paise: i64,
+    pub due_paise: i64,
+    pub discount_paise: i64,
+    pub gst_paise: i64,
+    pub product_revenue_paise: i64,
+    pub service_revenue_paise: i64,
+    pub membership_revenue_paise: i64,
+    pub product_quantity: i64,
+    pub stock_value_paise: i64,
+    pub wallet_credit_paise: i64,
+    pub wallet_debit_paise: i64,
+    pub staff_count: i64,
+    pub active_days: i64,
+    pub average_daily_revenue_paise: i64,
+    pub deleted_invoice_count: i64,
+    pub staff_sales_paise: i64,
+    pub package_revenue_paise: i64,
+    pub appointment_count: i64,
+    pub reward_points: i64,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RevenueForecastQuery {
@@ -281,6 +331,8 @@ pub struct ProfitIntelligenceQuery {
     pub scope: Option<String>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
+    pub dimension: Option<String>,
+    pub entity_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -306,10 +358,21 @@ pub struct ServiceReportQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProductReportQuery {
+    pub date_from: Option<NaiveDate>,
+    pub date_to: Option<NaiveDate>,
+    pub product_id: Option<String>,
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FollowUpWriteRequest {
     pub action: Option<String>,
     pub note: Option<String>,
     pub status: Option<String>,
+    pub assigned_manager_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -433,6 +496,8 @@ pub struct DueRecoveryRow {
     pub ageing_days: i32,
     pub follow_up_count: i64,
     pub last_follow_up_at: Option<chrono::DateTime<Utc>>,
+    pub recovery_manager_id: String,
+    pub recovery_manager_name: String,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -516,6 +581,63 @@ pub struct ServiceClientReport {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct ProductSalesRow {
+    pub product_id: String,
+    pub product_name: String,
+    pub category: String,
+    pub sku: String,
+    pub quantity_sold: i64,
+    pub gross_sale_paise: i64,
+    pub discount_paise: i64,
+    pub net_sale_paise: i64,
+    pub gst_paise: i64,
+    pub product_cost_paise: i64,
+    pub gross_margin_paise: i64,
+    pub margin_bps: i64,
+    pub client_count: i64,
+    pub invoice_count: i64,
+    pub last_sold_at: chrono::DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSalesSummary {
+    pub total_products_sold: i64,
+    pub total_product_revenue_paise: i64,
+    pub average_product_price_paise: i64,
+    pub top_product: String,
+    pub discount_paise: i64,
+    pub gst_collected_paise: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductSalesReport {
+    pub summary: ProductSalesSummary,
+    pub rows: Vec<ProductSalesRow>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductMovementRow {
+    pub product_id: String,
+    pub product_name: String,
+    pub category: String,
+    pub sku: String,
+    pub current_stock: i64,
+    pub sold_quantity: i64,
+    pub returned_quantity: i64,
+    pub purchased_quantity: i64,
+    pub transfer_out_quantity: i64,
+    pub transfer_in_quantity: i64,
+    pub adjustment_quantity: i64,
+    pub consumed_quantity: i64,
+    pub current_stock_value_paise: i64,
+    pub last_movement_at: Option<chrono::DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct FollowUpRow {
     pub id: String,
     pub sale_id: String,
@@ -523,6 +645,7 @@ pub struct FollowUpRow {
     pub action: String,
     pub note: String,
     pub status: String,
+    pub assigned_manager_id: String,
     pub created_at: chrono::DateTime<Utc>,
 }
 
@@ -582,6 +705,118 @@ struct SaleRow {
 
 async fn report_catalog(State(_state): State<AppState>) -> ApiResult<Vec<ReportCatalogItem>> {
     let catalog = vec![
+        ReportCatalogItem {
+            id: "advanced-business",
+            title: "Advanced Business Report",
+            category: "Sales & Finance",
+            description: "Financial, product, stock, GST, discount, wallet and membership summary.",
+            icon: "dashboard",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "financial-summary",
+            title: "Financial Summary",
+            category: "Sales & Finance",
+            description: "Revenue, collection, due, GST and discount summary.",
+            icon: "balance",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "daily-revenue",
+            title: "Daily Revenue",
+            category: "Sales & Finance",
+            description: "Daily revenue and active business-day performance.",
+            icon: "sales",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "daily-sheet",
+            title: "Daily Sheet",
+            category: "Sales & Finance",
+            description: "Daily financial control values for the selected period.",
+            icon: "cash",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "deleted-invoices",
+            title: "Deleted Invoices",
+            category: "Sales & Finance",
+            description: "Cancelled and voided invoice count for the selected period.",
+            icon: "invoice",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "gst-summary",
+            title: "GST Summary",
+            category: "Sales & Finance",
+            description: "GST collected from completed sales.",
+            icon: "payment",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "discount-summary",
+            title: "Sales Discount",
+            category: "Sales & Finance",
+            description: "Discount total across completed sales.",
+            icon: "recovery",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "staff-sales",
+            title: "Staff Sales",
+            category: "Staff",
+            description: "Sales attributed to staff during the selected period.",
+            icon: "staff",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "wallet-ledger",
+            title: "Wallet Ledger",
+            category: "Customer",
+            description: "Wallet credit and redemption totals.",
+            icon: "payment",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "rewards-loyalty",
+            title: "Rewards & Loyalty",
+            category: "Customer",
+            description: "Reward points movement for the selected period.",
+            icon: "clients",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "membership-sales",
+            title: "Membership Sales",
+            category: "Customer",
+            description: "Membership sales revenue in the selected period.",
+            icon: "balance",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "package-sales",
+            title: "Package Sales",
+            category: "Packages",
+            description: "Package sales revenue in the selected period.",
+            icon: "balance",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "tips-payout",
+            title: "Tips & Payout",
+            category: "Staff",
+            description: "Staff payout reporting surface.",
+            icon: "staff",
+            path: "/reports/advanced-summary",
+        },
+        ReportCatalogItem {
+            id: "message-history",
+            title: "Message History",
+            category: "Customer",
+            description: "Message reporting surface.",
+            icon: "invoice",
+            path: "/reports/advanced-summary",
+        },
         ReportCatalogItem {
             id: "dashboard",
             title: "Dashboard snapshot",
@@ -654,6 +889,22 @@ async fn report_catalog(State(_state): State<AppState>) -> ApiResult<Vec<ReportC
             description: "Clients, staff and invoices linked to each sold service.",
             icon: "clients",
             path: "/reports/invoices/service-clients",
+        },
+        ReportCatalogItem {
+            id: "product-sales",
+            title: "Product Sales",
+            category: "Sales & Finance",
+            description: "Product revenue, quantity, discount, GST, cost and margin.",
+            icon: "product",
+            path: "/reports/products/sales",
+        },
+        ReportCatalogItem {
+            id: "product-movements",
+            title: "Product Stock Movement",
+            category: "Inventory",
+            description: "Product sales, returns, purchases, transfers and current stock.",
+            icon: "inventory",
+            path: "/reports/products/movements",
         },
         ReportCatalogItem {
             id: "payment-modes",
@@ -795,6 +1046,54 @@ async fn report_dashboard(
     })))
 }
 
+async fn report_advanced_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ReportSalesQuery>,
+) -> ApiResult<AdvancedReportSummary> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let start_at = query
+        .start_date
+        .as_deref()
+        .map(|raw| parse_day(raw, false))
+        .transpose()?
+        .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
+    let end_at = query
+        .end_date
+        .as_deref()
+        .map(|raw| parse_day(raw, true))
+        .transpose()?
+        .unwrap_or_else(|| Utc::now() + chrono::Duration::days(1));
+    let row = sqlx::query_as::<_, AdvancedReportSummary>(
+        r#"
+        SELECT
+          (SELECT COUNT(*)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) invoice_count,
+          (SELECT COALESCE(SUM(total_paise),0)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) revenue_paise,
+          (SELECT COALESCE(SUM(paid_paise),0)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) paid_paise,
+          (SELECT COALESCE(SUM(GREATEST(total_paise-paid_paise,0)),0)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) due_paise,
+          (SELECT COALESCE(SUM(l.discount_paise),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) discount_paise,
+          (SELECT COALESCE(SUM(l.gst_paise),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) gst_paise,
+          (SELECT COALESCE(SUM(l.taxable_paise) FILTER (WHERE l.line_type='product'),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) product_revenue_paise,
+          (SELECT COALESCE(SUM(l.taxable_paise) FILTER (WHERE l.line_type='service'),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) service_revenue_paise,
+          (SELECT COALESCE(SUM(l.taxable_paise) FILTER (WHERE l.line_type='membership'),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) membership_revenue_paise,
+          (SELECT COALESCE(SUM(l.quantity) FILTER (WHERE l.line_type='product'),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) product_quantity,
+          (SELECT COALESCE(SUM(stock_quantity::BIGINT*unit_cost_paise),0)::BIGINT FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2) stock_value_paise,
+          (SELECT COALESCE(SUM(GREATEST(delta_paise,0)),0)::BIGINT FROM wallet_transactions WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=$3 AND created_at<$4) wallet_credit_paise,
+          (SELECT COALESCE(SUM(ABS(LEAST(delta_paise,0))),0)::BIGINT FROM wallet_transactions WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=$3 AND created_at<$4) wallet_debit_paise,
+          (SELECT COUNT(*)::BIGINT FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=true) staff_count,
+          (SELECT COUNT(DISTINCT COALESCE(finalized_at,created_at)::DATE)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) active_days,
+          (SELECT CASE WHEN COUNT(DISTINCT COALESCE(finalized_at,created_at)::DATE)>0 THEN SUM(total_paise)/COUNT(DISTINCT COALESCE(finalized_at,created_at)::DATE) ELSE 0 END::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) average_daily_revenue_paise,
+          (SELECT COUNT(*)::BIGINT FROM pos_sales s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.status IN ('voided','cancelled') AND s.created_at>=$3 AND s.created_at<$4) deleted_invoice_count,
+          (SELECT COALESCE(SUM(l.taxable_paise),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND l.staff_id<>'' AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) staff_sales_paise,
+          (SELECT COALESCE(SUM(l.taxable_paise) FILTER (WHERE l.line_type='package'),0)::BIGINT FROM pos_sale_lines l JOIN pos_sales s ON s.id=l.sale_id WHERE l.tenant_id=$1 AND l.branch_id=$2 AND s.status NOT IN ('draft','voided','cancelled') AND COALESCE(s.finalized_at,s.created_at)>=$3 AND COALESCE(s.finalized_at,s.created_at)<$4) package_revenue_paise,
+          (SELECT COUNT(*)::BIGINT FROM appointments a WHERE a.tenant_id=$1 AND a.branch_id=$2 AND a.start_at>=$3 AND a.start_at<$4),
+          (SELECT COALESCE(SUM(points),0)::BIGINT FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=$3 AND created_at<$4) reward_points
+        "#,
+    ).bind(&tenant_id).bind(&branch_id).bind(start_at).bind(end_at).fetch_one(&state.db).await
+    .map_err(|_| AppError::internal("failed to load advanced report"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn report_revenue_forecast(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -862,10 +1161,35 @@ async fn report_advanced_profit_intelligence(
         to_date,
     )
     .await?;
-    let report =
-        analytics_service::enhance_profit_copilot(&state.settings, &tenant_id, &branch_ids, report)
-            .await;
+    let report = analytics_service::enhance_profit_copilot(
+        &state.db,
+        &state.settings,
+        &tenant_id,
+        &branch_ids,
+        report,
+    )
+    .await;
     Ok(Json(ApiResponse::ok(report)))
+}
+
+async fn record_profit_copilot_feedback(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<analytics_service::ProfitCopilotFeedbackRequest>,
+) -> ApiResult<analytics_service::ProfitCopilotFeedback> {
+    ensure_profit_governance_approver(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let feedback = analytics_service::record_profit_copilot_feedback(
+        &state.db,
+        &tenant_id,
+        &id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(feedback)))
 }
 
 async fn report_micro_profit_lines(
@@ -900,6 +1224,8 @@ async fn report_micro_profit_lines(
         to_date,
         query.page.unwrap_or(1),
         query.page_size.unwrap_or(50),
+        query.dimension.as_deref().unwrap_or(""),
+        query.entity_id.as_deref().unwrap_or(""),
     )
     .await?;
     Ok(Json(ApiResponse::ok(report)))
@@ -938,6 +1264,77 @@ async fn report_micro_profit_reconciliation(
     )
     .await?;
     Ok(Json(ApiResponse::ok(report)))
+}
+
+async fn invoice_journal_repair_queue(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<ProfitIntelligenceQuery>,
+) -> ApiResult<Vec<analytics_service::InvoiceJournalRepairItem>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let branch_scope = query.scope.as_deref().unwrap_or("branch");
+    let branch_ids =
+        profit_scope_branch_ids(&state, &claims, &tenant_id, &branch_id, branch_scope).await?;
+    let today = Utc::now().date_naive();
+    let from_date = query
+        .from_date
+        .as_deref()
+        .map(parse_profit_date)
+        .transpose()?
+        .unwrap_or(today - chrono::Duration::days(29));
+    let to_date = query
+        .to_date
+        .as_deref()
+        .map(parse_profit_date)
+        .transpose()?
+        .unwrap_or(today);
+    let rows = analytics_service::invoice_journal_repair_queue(
+        &state.db,
+        &tenant_id,
+        &branch_ids,
+        from_date,
+        to_date,
+        query.page_size.unwrap_or(100),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn repair_missing_invoice_journals(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<ProfitIntelligenceQuery>,
+) -> ApiResult<analytics_service::InvoiceJournalRepairRun> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let branch_scope = query.scope.as_deref().unwrap_or("branch");
+    let branch_ids =
+        profit_scope_branch_ids(&state, &claims, &tenant_id, &branch_id, branch_scope).await?;
+    let today = Utc::now().date_naive();
+    let from_date = query
+        .from_date
+        .as_deref()
+        .map(parse_profit_date)
+        .transpose()?
+        .unwrap_or(today - chrono::Duration::days(29));
+    let to_date = query
+        .to_date
+        .as_deref()
+        .map(parse_profit_date)
+        .transpose()?
+        .unwrap_or(today);
+    let result = analytics_service::repair_missing_invoice_journals(
+        &state.db,
+        &tenant_id,
+        &branch_ids,
+        &claims.sub,
+        from_date,
+        to_date,
+        query.page_size.unwrap_or(100),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 async fn list_micro_profit_allocation_rules(
@@ -1287,6 +1684,8 @@ async fn transition_profit_action(
         &claims.sub,
         next_status,
         payload.note,
+        payload.realized_impact_paise,
+        payload.evidence,
     )
     .await?;
     Ok(Json(ApiResponse::ok(action)))
@@ -1490,18 +1889,29 @@ async fn report_due_recovery(
         .unwrap_or_else(|| Utc::now() + chrono::Duration::days(1));
     let rows = sqlx::query_as::<_, DueRecoveryRow>(
         r#"
+        WITH latest_assignment AS (
+          SELECT DISTINCT ON (sale_id) sale_id, assigned_manager_id
+            FROM due_recovery_followups
+           WHERE tenant_id=$1 AND branch_id=$2 AND assigned_manager_id<>''
+           ORDER BY sale_id, created_at DESC
+        )
         SELECT ps.id AS invoice_id, ps.invoice_number, ps.client_id, TRIM(CONCAT_WS(' ', c.first_name, c.last_name)) AS client_name,
                ps.total_paise, ps.paid_paise, GREATEST(ps.total_paise - ps.paid_paise, 0) AS balance_paise,
                GREATEST(CURRENT_DATE - COALESCE(ps.finalized_at, ps.created_at)::DATE, 0)::INT AS ageing_days,
-               COUNT(drf.id)::BIGINT AS follow_up_count, MAX(drf.created_at) AS last_follow_up_at
+               COUNT(drf.id)::BIGINT AS follow_up_count, MAX(drf.created_at) AS last_follow_up_at,
+               COALESCE(assignment.assigned_manager_id,'') AS recovery_manager_id,
+               COALESCE(NULLIF(manager.appointment_display_name,''), NULLIF(BTRIM(CONCAT_WS(' ',manager.first_name,manager.last_name)),''), '') AS recovery_manager_name
           FROM pos_sales ps
           LEFT JOIN clients c ON c.id=ps.client_id AND c.tenant_id=ps.tenant_id AND c.branch_id=ps.branch_id
           LEFT JOIN due_recovery_followups drf ON drf.sale_id=ps.id AND drf.tenant_id=ps.tenant_id AND drf.branch_id=ps.branch_id
+          LEFT JOIN latest_assignment assignment ON assignment.sale_id=ps.id
+          LEFT JOIN staff manager ON manager.id=assignment.assigned_manager_id AND manager.tenant_id=ps.tenant_id AND manager.branch_id=ps.branch_id
          WHERE ps.tenant_id=$1 AND ps.branch_id=$2
            AND COALESCE(ps.finalized_at, ps.created_at) >= $3 AND COALESCE(ps.finalized_at, ps.created_at) < $4
            AND ps.status NOT IN ('draft','voided','cancelled')
            AND ps.paid_paise < ps.total_paise
-         GROUP BY ps.id, ps.invoice_number, ps.client_id, client_name, ps.total_paise, ps.paid_paise, ps.finalized_at, ps.created_at
+         GROUP BY ps.id, ps.invoice_number, ps.client_id, client_name, ps.total_paise, ps.paid_paise, ps.finalized_at, ps.created_at,
+                  assignment.assigned_manager_id, manager.appointment_display_name, manager.first_name, manager.last_name
          ORDER BY ageing_days DESC, balance_paise DESC
          LIMIT 500
         "#,
@@ -1646,7 +2056,127 @@ async fn report_service_clients(
     Ok(Json(ApiResponse::ok(ServiceClientReport { summary, rows })))
 }
 
+async fn report_product_sales(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ProductReportQuery>,
+) -> ApiResult<ProductSalesReport> {
+    validate_product_report_range(&query)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_as::<_, ProductSalesRow>(
+        r#"
+        WITH line_cost AS (
+          SELECT sale_line_id, COALESCE(SUM(ABS(quantity_delta)::BIGINT * unit_cost_paise),0)::BIGINT AS cost_paise
+            FROM inventory_stock_ledger
+           WHERE tenant_id=$1 AND branch_id=$2 AND movement_type='sale' AND sale_line_id IS NOT NULL
+           GROUP BY sale_line_id
+        )
+        SELECT line.item_id AS product_id, line.item_name AS product_name,
+               COALESCE(item.category,'') AS category, COALESCE(item.sku,'') AS sku,
+               SUM(line.quantity)::BIGINT AS quantity_sold, SUM(line.gross_paise)::BIGINT AS gross_sale_paise,
+               SUM(line.discount_paise)::BIGINT AS discount_paise, SUM(line.taxable_paise)::BIGINT AS net_sale_paise,
+               SUM(line.gst_paise)::BIGINT AS gst_paise, COALESCE(SUM(cost.cost_paise),0)::BIGINT AS product_cost_paise,
+               (SUM(line.taxable_paise)-COALESCE(SUM(cost.cost_paise),0))::BIGINT AS gross_margin_paise,
+               CASE WHEN SUM(line.taxable_paise)>0 THEN ((SUM(line.taxable_paise)-COALESCE(SUM(cost.cost_paise),0))*10000/SUM(line.taxable_paise))::BIGINT ELSE 0 END AS margin_bps,
+               COUNT(DISTINCT NULLIF(sale.client_id,''))::BIGINT AS client_count,
+               COUNT(DISTINCT sale.id)::BIGINT AS invoice_count, MAX(COALESCE(sale.finalized_at,sale.created_at)) AS last_sold_at
+          FROM pos_sale_lines line
+          JOIN pos_sales sale ON sale.id=line.sale_id AND sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id
+          LEFT JOIN inventory_items item ON item.id=line.item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id
+          LEFT JOIN line_cost cost ON cost.sale_line_id=line.id
+         WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='product'
+           AND sale.status NOT IN ('draft','voided','cancelled')
+           AND ($3::DATE IS NULL OR COALESCE(sale.finalized_at,sale.created_at)::DATE >= $3)
+           AND ($4::DATE IS NULL OR COALESCE(sale.finalized_at,sale.created_at)::DATE <= $4)
+           AND ($5='' OR line.item_id=$5)
+           AND ($6='' OR line.item_name ILIKE '%'||$6||'%' OR COALESCE(item.category,'') ILIKE '%'||$6||'%' OR COALESCE(item.sku,'') ILIKE '%'||$6||'%')
+         GROUP BY line.item_id,line.item_name,item.category,item.sku
+         ORDER BY net_sale_paise DESC, product_name
+         LIMIT $7
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(query.date_from)
+    .bind(query.date_to)
+    .bind(query.product_id.unwrap_or_default())
+    .bind(query.q.unwrap_or_default().trim().to_string())
+    .bind(query.limit.unwrap_or(500).clamp(1, 1000))
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load product sales report"))?;
+    let quantity = rows.iter().map(|row| row.quantity_sold).sum::<i64>();
+    let revenue = rows.iter().map(|row| row.net_sale_paise).sum::<i64>();
+    let summary = ProductSalesSummary {
+        total_products_sold: quantity,
+        total_product_revenue_paise: revenue,
+        average_product_price_paise: if quantity > 0 { revenue / quantity } else { 0 },
+        top_product: rows
+            .first()
+            .map(|row| row.product_name.clone())
+            .unwrap_or_default(),
+        discount_paise: rows.iter().map(|row| row.discount_paise).sum(),
+        gst_collected_paise: rows.iter().map(|row| row.gst_paise).sum(),
+    };
+    Ok(Json(ApiResponse::ok(ProductSalesReport { summary, rows })))
+}
+
+async fn report_product_movements(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ProductReportQuery>,
+) -> ApiResult<Vec<ProductMovementRow>> {
+    validate_product_report_range(&query)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_as::<_, ProductMovementRow>(
+        r#"
+        SELECT item.id AS product_id, item.name AS product_name, item.category, item.sku,
+               item.stock_quantity::BIGINT AS current_stock,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='sale' THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS sold_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='return' THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS returned_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='purchase' THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS purchased_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='transfer_out' THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS transfer_out_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type IN ('transfer_in','transfer_reversal') THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS transfer_in_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='adjustment' THEN ledger.quantity_delta ELSE 0 END),0)::BIGINT AS adjustment_quantity,
+               COALESCE(SUM(CASE WHEN ledger.movement_type='consumption' THEN ABS(ledger.quantity_delta) ELSE 0 END),0)::BIGINT AS consumed_quantity,
+               (item.stock_quantity::BIGINT * item.unit_cost_paise)::BIGINT AS current_stock_value_paise,
+               MAX(ledger.created_at) AS last_movement_at
+          FROM inventory_items item
+          LEFT JOIN inventory_stock_ledger ledger ON ledger.inventory_item_id=item.id AND ledger.tenant_id=item.tenant_id AND ledger.branch_id=item.branch_id
+            AND ($3::DATE IS NULL OR ledger.created_at::DATE >= $3) AND ($4::DATE IS NULL OR ledger.created_at::DATE <= $4)
+         WHERE item.tenant_id=$1 AND item.branch_id=$2
+           AND ($5='' OR item.id=$5)
+           AND ($6='' OR item.name ILIKE '%'||$6||'%' OR item.category ILIKE '%'||$6||'%' OR item.sku ILIKE '%'||$6||'%')
+         GROUP BY item.id,item.name,item.category,item.sku,item.stock_quantity,item.unit_cost_paise
+         ORDER BY product_name
+         LIMIT $7
+        "#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(query.date_from)
+    .bind(query.date_to)
+    .bind(query.product_id.unwrap_or_default())
+    .bind(query.q.unwrap_or_default().trim().to_string())
+    .bind(query.limit.unwrap_or(500).clamp(1, 1000))
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load product movement report"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
 fn validate_service_report_range(query: &ServiceReportQuery) -> Result<(), AppError> {
+    if query
+        .date_from
+        .zip(query.date_to)
+        .is_some_and(|(from, to)| from > to)
+    {
+        return Err(AppError::validation("dateFrom cannot be after dateTo"));
+    }
+    Ok(())
+}
+
+fn validate_product_report_range(query: &ProductReportQuery) -> Result<(), AppError> {
     if query
         .date_from
         .zip(query.date_to)
@@ -1690,7 +2220,7 @@ async fn list_invoice_followups(
 ) -> ApiResult<Vec<FollowUpRow>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rows = sqlx::query_as::<_, FollowUpRow>(
-        "SELECT id, sale_id, actor_user_id, action, note, status, created_at FROM due_recovery_followups WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 ORDER BY created_at DESC",
+        "SELECT id, sale_id, actor_user_id, action, note, status, assigned_manager_id, created_at FROM due_recovery_followups WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 ORDER BY created_at DESC",
     )
     .bind(&tenant_id).bind(&branch_id).bind(&id)
     .fetch_all(&state.db)
@@ -1709,17 +2239,54 @@ async fn create_invoice_followup(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let actor = claims.sub;
     let action = payload.action.unwrap_or_else(|| "follow_up".to_string());
+    let action = action.trim();
+    if !matches!(action, "follow_up" | "call_done" | "assign_manager") {
+        return Err(AppError::validation("unsupported follow-up action"));
+    }
     let note = payload.note.unwrap_or_default();
-    let status = payload.status.unwrap_or_else(|| "open".to_string());
+    if note.chars().count() > 1000 {
+        return Err(AppError::validation(
+            "follow-up note cannot exceed 1000 characters",
+        ));
+    }
+    let assigned_manager_id = payload.assigned_manager_id.unwrap_or_default();
+    let assigned_manager_id = assigned_manager_id.trim();
+    if action == "assign_manager" && assigned_manager_id.is_empty() {
+        return Err(AppError::validation("assignedManagerId is required"));
+    }
+    if !assigned_manager_id.is_empty() {
+        let manager_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status<>'inactive')",
+        )
+        .bind(&tenant_id).bind(&branch_id).bind(assigned_manager_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to validate recovery manager"))?;
+        if !manager_exists {
+            return Err(AppError::validation(
+                "recovery manager is not active in this branch",
+            ));
+        }
+    }
+    let status = match action {
+        "assign_manager" => "call_pending",
+        "call_done" => "completed",
+        _ => payload
+            .status
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| matches!(*value, "open" | "pending" | "completed"))
+            .unwrap_or("open"),
+    };
     let row = sqlx::query_as::<_, FollowUpRow>(
         r#"
-        INSERT INTO due_recovery_followups (tenant_id, branch_id, sale_id, actor_user_id, action, note, status)
-        SELECT $1,$2,id,$4,$5,$6,$7 FROM pos_sales
+        INSERT INTO due_recovery_followups (tenant_id, branch_id, sale_id, actor_user_id, action, note, status, assigned_manager_id)
+        SELECT $1,$2,id,$4,$5,$6,$7,$8 FROM pos_sales
          WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND paid_paise < total_paise AND status NOT IN ('draft','voided','cancelled')
-        RETURNING id, sale_id, actor_user_id, action, note, status, created_at
+        RETURNING id, sale_id, actor_user_id, action, note, status, assigned_manager_id, created_at
         "#,
     )
-    .bind(&tenant_id).bind(&branch_id).bind(&id).bind(actor).bind(action.trim()).bind(note.trim()).bind(status.trim())
+    .bind(&tenant_id).bind(&branch_id).bind(&id).bind(actor).bind(action).bind(note.trim()).bind(status).bind(assigned_manager_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to create invoice follow-up"))?

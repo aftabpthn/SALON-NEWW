@@ -34,9 +34,13 @@ pub fn router() -> Router<AppState> {
         .route("/finance/outgoing-funds/:id/reverse", post(reverse))
 }
 
-async fn categories(headers: HeaderMap) -> ApiResult<Vec<OutgoingFundCategory>> {
-    tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(outgoing_funds_service::categories())))
+async fn categories(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<OutgoingFundCategory>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = outgoing_funds_service::categories(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn list(

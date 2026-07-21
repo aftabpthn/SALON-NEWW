@@ -1,15 +1,17 @@
 # POS Old Project To Rust Safe-Port Audit
 
-Date: 13/07/2026
+Date: 15/07/2026
 
 ## Source Boundary
 
-- Reference only: `C:\Users\Aftab Ahamad\OneDrive - digi\Documents\New project`
+- Reference only: [Aurashine-Infitech/New-project](https://github.com/Aurashine-Infitech/New-project) at `main@1befb42ad197a575de818bbb2e0b01f460d9e554`
 - Target: `C:\Users\Aftab Ahamad\OneDrive - digi\Documents\AuraShine CRM Rust`
-- Legacy frontend billing module: 70 files / 2,442 lines under `src/app/features/billing/`
-- Directly named legacy POS/billing backend set: 54 files / 11,053 lines across routes, services, controller, validation and migrations
+- Legacy frontend billing module: 37 files / 2,467 lines under `src/app/features/billing/`
+- Directly named legacy POS/billing backend set: 57 files / 10,672 lines across routes, services, controller, validation and provider adapters
 - Full legacy file inventory: `docs/POS_LEGACY_FULL_INVENTORY.md`
 - No legacy file is copied directly. SQLite/Express code is translated only when a capability is missing from the PostgreSQL/Axum implementation.
+
+The verified Git `main` snapshot adds no unported operational POS capability beyond the coverage matrix below. Current Rust remains authoritative for money, inventory, accounting, invoice lifecycle and provider webhook truth.
 
 ## Safe-Port Rules
 

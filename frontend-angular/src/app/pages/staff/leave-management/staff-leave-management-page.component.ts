@@ -1,4 +1,6 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -42,11 +44,12 @@ type CalendarDay = { iso: string; day: number; inMonth: boolean };
 @Component({
   selector: 'page-staff-leave-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './staff-leave-management-page.component.html',
   styleUrls: ['./staff-leave-management-page.component.css'],
 })
 export class StaffLeaveManagementPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
 
@@ -112,7 +115,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
     try {
       await Promise.all([this.loadRequests(), this.loadBalances()]);
     } catch (error) {
-      this.error = this.message(error, 'Leave data could not be loaded');
+      this.error = this.message(error, this.language.text('staff.message.10ffb1ebb7'));
     } finally {
       this.loading = false;
     }
@@ -139,7 +142,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   async createRequest() {
     const endDate = this.form.endDate || this.form.startDate;
     if (!this.form.staffId || !this.form.leaveType || !this.form.startDate || !endDate) {
-      this.error = 'Employee, leave type and date range are required';
+      this.error = this.language.text('staff.message.bf8f7f9753');
       return;
     }
     this.saving = true;
@@ -157,7 +160,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
       this.success = 'Leave request saved';
       await this.reload();
     } catch (error) {
-      this.error = this.message(error, 'Leave request could not be saved');
+      this.error = this.message(error, this.language.text('staff.message.77e28c7a1f'));
     } finally {
       this.saving = false;
     }
@@ -166,7 +169,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   async decide(decision: 'approve' | 'reject') {
     if (!this.selectedRequest) return;
     if (decision === 'reject' && !this.reviewNote.trim()) {
-      this.error = 'Rejection note is required';
+      this.error = this.language.text('staff.message.4ef4f1ffc6');
       return;
     }
     this.saving = true;
@@ -195,7 +198,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   exportCsv() {
     if (!this.requests.length) return;
     const rows = [
-      ['Employee', 'Code', 'Leave type', 'Start date', 'End date', 'Days', 'Reason', 'Status', 'Review note'],
+      [...['employee', 'code', 'leaveType', 'startDate', 'endDate', 'days', 'reason', 'status', 'reviewNote'].map((key) => this.language.text(`staff.export.${key}`))],
       ...this.requests.map((row) => [row.staffName, row.employeeCode || '', row.leaveType, row.startDate, row.endDate, row.days, row.reason, row.status, row.reviewNote]),
     ];
     const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -219,7 +222,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffListPage>>('/staff/list?page=1&pageSize=100&active=true&sortBy=firstName&sortDirection=asc'));
       this.staff = this.unwrap(result, 'Employees could not be loaded').items;
     } catch (error) {
-      this.error = this.message(error, 'Employees could not be loaded');
+      this.error = this.message(error, this.language.text('staff.message.5000550f07'));
     }
   }
 

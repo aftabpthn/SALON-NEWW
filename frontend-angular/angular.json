@@ -34,8 +34,14 @@
             "scripts": []
           },
           "configurations": {
+            "development": {
+              "sourceMap": false,
+              "aot": false,
+              "buildOptimizer": false
+            },
             "production": {
               "optimization": true,
+              "outputHashing": "all",
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
@@ -48,7 +54,7 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "buildTarget": "aura-shine-frontend:build",
+            "buildTarget": "aura-shine-frontend:build:development",
             "proxyConfig": "proxy.conf.json"
           }
         },
@@ -62,6 +68,11 @@
     }
   },
   "cli": {
+    "cache": {
+      "enabled": true,
+      "environment": "local",
+      "path": "C:/tmp/aura-shine-angular-cache"
+    },
     "analytics": "fd906daf-1b9a-49ad-b1d4-b6efc1aa19e2"
   }
 }

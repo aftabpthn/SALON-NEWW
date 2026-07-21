@@ -41,6 +41,9 @@ pub struct AttendanceSourceRecord {
     pub status: String,
     pub worked_minutes: i32,
     pub overtime_minutes: i32,
+    pub late_minutes: i32,
+    pub early_leave_minutes: i32,
+    pub break_minutes: i32,
     pub penalty_paise: i64,
 }
 
@@ -65,6 +68,23 @@ pub struct SaleLineSourceRecord {
 pub struct CommissionSnapshotSourceRecord {
     pub staff_id: String,
     pub commission_paise: i64,
+}
+
+#[derive(Debug, FromRow)]
+pub struct TipSourceRecord {
+    pub staff_id: String,
+    pub tip_paise: i64,
+}
+
+#[derive(Debug, FromRow)]
+pub struct PayrollAdjustmentRuleSource {
+    pub id: String,
+    pub kind: String,
+    pub name: String,
+    pub amount_paise: i64,
+    pub trigger_type: String,
+    pub trigger_count: i32,
+    pub application_mode: String,
 }
 
 #[derive(Debug, Clone)]
@@ -266,7 +286,7 @@ pub async fn attendance_sources(
     if staff_ids.is_empty() {
         return Ok(vec![]);
     }
-    sqlx::query_as("SELECT staff_id,business_date,status,worked_minutes,overtime_minutes,penalty_paise FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
+    sqlx::query_as("SELECT staff_id,business_date,status,worked_minutes,overtime_minutes,late_minutes,early_leave_minutes,break_minutes,penalty_paise FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
         .bind(tenant_id).bind(branch_id).bind(staff_ids).bind(period_start).bind(period_end).fetch_all(db).await
 }
 
@@ -346,6 +366,60 @@ pub async fn commission_snapshots(
     .bind(staff_ids)
     .bind(period_start)
     .bind(period_end)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn tip_sources(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_ids: &[String],
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+) -> Result<Vec<TipSourceRecord>, sqlx::Error> {
+    if staff_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_as(
+        r#"
+        SELECT s.staff_id,COALESCE(SUM(s.tip_paise),0)::BIGINT AS tip_paise
+          FROM pos_sales s
+         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.staff_id=ANY($3)
+           AND s.business_date BETWEEN $4 AND $5
+           AND s.tip_paise > 0
+           AND LOWER(s.status) NOT IN ('draft','void','voided','refunded','cancelled')
+           AND NOT EXISTS (
+             SELECT 1 FROM staff_tip_payout_items item
+              WHERE item.tenant_id=s.tenant_id AND item.branch_id=s.branch_id AND item.sale_id=s.id
+           )
+         GROUP BY s.staff_id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_ids)
+    .bind(period_start)
+    .bind(period_end)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn payroll_adjustment_rules(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<PayrollAdjustmentRuleSource>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT id,kind,name,amount_paise,trigger_type,trigger_count,application_mode
+          FROM staff_payroll_adjustment_rules
+         WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND auto_apply=TRUE
+         ORDER BY kind,name
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
     .fetch_all(db)
     .await
 }
@@ -444,30 +518,126 @@ pub async fn replace_calculated_run(
     .execute(&mut *tx)
     .await?;
     for item in items {
-        sqlx::query(
-            r#"
-            INSERT INTO staff_payroll_items(
-              tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,
-              attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,
-              earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,
-              deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status
-            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated')
-            "#,
-        )
-        .bind(tenant_id).bind(branch_id).bind(&run.id).bind(&item.staff_id).bind(&item.staff_name)
-        .bind(&item.employee_code).bind(&item.pay_rate_type).bind(item.pay_rate_paise)
-        .bind(item.attendance_days_x2).bind(item.paid_leave_days_x2).bind(item.weekly_off_days_x2).bind(item.holiday_days_x2)
-        .bind(item.worked_minutes).bind(item.overtime_minutes).bind(item.earned_salary_paise)
-        .bind(item.overtime_paise).bind(item.commission_paise).bind(item.adjustment_paise)
-        .bind(item.penalty_paise).bind(item.gross_paise).bind(item.deductions_paise).bind(item.net_paise)
-        .bind(&item.validation_errors).bind(&item.validation_warnings).bind(&item.calculation_json).bind(&item.notes)
-        .execute(&mut *tx).await?;
+        insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
     }
     sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.calculated',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
         .bind(serde_json::json!({"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
+}
+
+pub async fn replace_selected_calculated_items(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    actor_user_id: &str,
+    items: &[PayrollItemDraft],
+) -> Result<PayrollRunRecord, sqlx::Error> {
+    let gross_paise = items.iter().map(|item| item.gross_paise).sum::<i64>();
+    let deductions_paise = items.iter().map(|item| item.deductions_paise).sum::<i64>();
+    let net_paise = items.iter().map(|item| item.net_paise).sum::<i64>();
+    let invalid_count = items
+        .iter()
+        .filter(|item| {
+            item.validation_errors
+                .as_array()
+                .is_some_and(|errors| !errors.is_empty())
+        })
+        .count() as i32;
+    let staff_ids = items
+        .iter()
+        .map(|item| item.staff_id.clone())
+        .collect::<Vec<_>>();
+    let mut tx = db.begin().await?;
+    let run: PayrollRunRecord = sqlx::query_as(
+        r#"
+        INSERT INTO staff_payroll_runs(tenant_id,branch_id,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by)
+        VALUES($1,$2,$3,$4,'calculated',$5,$6,$7,$8,$9,$10)
+        ON CONFLICT (tenant_id,branch_id,cycle,period_start,period_end)
+        DO UPDATE SET status='calculated',reviewed_by=NULL,reviewed_at=NULL,updated_at=NOW()
+        RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end)
+    .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
+    .fetch_one(&mut *tx).await?;
+    sqlx::query(
+        "DELETE FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&run.id)
+    .bind(&staff_ids)
+    .execute(&mut *tx)
+    .await?;
+    for item in items {
+        insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
+    }
+    let run: PayrollRunRecord = sqlx::query_as(
+        r#"
+        UPDATE staff_payroll_runs r SET
+          gross_paise=x.gross_paise,
+          deductions_paise=x.deductions_paise,
+          net_paise=x.net_paise,
+          staff_count=x.staff_count,
+          invalid_count=x.invalid_count,
+          updated_at=NOW()
+        FROM (
+          SELECT COALESCE(SUM(gross_paise),0)::BIGINT AS gross_paise,
+                 COALESCE(SUM(deductions_paise),0)::BIGINT AS deductions_paise,
+                 COALESCE(SUM(net_paise),0)::BIGINT AS net_paise,
+                 COUNT(*)::INTEGER AS staff_count,
+                 COUNT(*) FILTER (
+                   WHERE jsonb_typeof(validation_errors)='array' AND jsonb_array_length(validation_errors) > 0
+                 )::INTEGER AS invalid_count
+            FROM staff_payroll_items
+           WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3
+        ) x
+        WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.id=$3
+        RETURNING r.id,r.cycle,r.period_start,r.period_end,r.status,r.gross_paise,r.deductions_paise,r.net_paise,r.staff_count,r.invalid_count,r.created_by,r.reviewed_at,r.finalized_at,r.paid_at,r.created_at,r.updated_at
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&run.id)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.selected_staff_regenerated',$4,$5)")
+        .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
+        .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(run)
+}
+
+async fn insert_payroll_item(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    item: &PayrollItemDraft,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO staff_payroll_items(
+          tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,
+          attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,
+          earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,
+          deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated')
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(run_id).bind(&item.staff_id).bind(&item.staff_name)
+    .bind(&item.employee_code).bind(&item.pay_rate_type).bind(item.pay_rate_paise)
+    .bind(item.attendance_days_x2).bind(item.paid_leave_days_x2).bind(item.weekly_off_days_x2).bind(item.holiday_days_x2)
+    .bind(item.worked_minutes).bind(item.overtime_minutes).bind(item.earned_salary_paise)
+    .bind(item.overtime_paise).bind(item.commission_paise).bind(item.adjustment_paise)
+    .bind(item.penalty_paise).bind(item.gross_paise).bind(item.deductions_paise).bind(item.net_paise)
+    .bind(&item.validation_errors).bind(&item.validation_warnings).bind(&item.calculation_json).bind(&item.notes)
+    .execute(&mut **tx).await?;
+    Ok(())
 }
 
 pub async fn list_holidays(
@@ -516,10 +686,10 @@ pub async fn update_adjustments(
     for entry in entries {
         sqlx::query(
             r#"
-            UPDATE staff_payroll_items SET adjustment_paise=$4,notes=$5,
-              gross_paise=earned_salary_paise+overtime_paise+commission_paise+GREATEST($4,0),
-              deductions_paise=penalty_paise+GREATEST(-$4,0),
-              net_paise=GREATEST(earned_salary_paise+overtime_paise+commission_paise+$4-penalty_paise,0),
+            UPDATE staff_payroll_items SET adjustment_paise=COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4,notes=$5,
+              gross_paise=earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+GREATEST($4,0),
+              deductions_paise=penalty_paise+COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)+GREATEST(-$4,0),
+              net_paise=GREATEST(earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4-penalty_paise-COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0),0),
               updated_at=NOW()
             WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$6
             "#,
@@ -565,8 +735,9 @@ pub async fn transition_run(
     if run.is_some() {
         sqlx::query("UPDATE staff_payroll_items SET status=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3")
             .bind(tenant_id).bind(branch_id).bind(run_id).bind(status).execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,'{}'::JSONB)")
-            .bind(tenant_id).bind(branch_id).bind(run_id).bind(format!("payroll.{status}")).bind(actor_user_id).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,$6)")
+            .bind(tenant_id).bind(branch_id).bind(run_id).bind(format!("payroll.{status}")).bind(actor_user_id)
+            .bind(serde_json::json!({"status":status,"action":"status_transition"})).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(run)

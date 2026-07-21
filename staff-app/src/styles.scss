@@ -1,0 +1,165 @@
+@import "@ionic/angular/css/core.css";
+@import "@ionic/angular/css/normalize.css";
+@import "@ionic/angular/css/structure.css";
+@import "@ionic/angular/css/typography.css";
+@import "@ionic/angular/css/display.css";
+@import "@ionic/angular/css/padding.css";
+@import "@ionic/angular/css/flex-utils.css";
+
+:root {
+  --ion-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: light;
+  --ion-color-primary: #0b4f8a;
+  --ion-color-primary-rgb: 11, 79, 138;
+  --ion-color-primary-shade: #083d72;
+  --ion-color-primary-tint: #2563eb;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-background-color: #f3f6fa;
+  --ion-text-color: #122033;
+  --staff-primary: #0b4f8a;
+  --staff-primary-hover: #083d72;
+  --staff-primary-light: #eaf2ff;
+  --staff-background: #f3f6fa;
+  --staff-surface: #ffffff;
+  --staff-surface-secondary: #f8fafc;
+  --staff-surface-glass: rgba(255, 255, 255, .9);
+  --staff-border: #dbe3ee;
+  --staff-border-accent: #c9d5e5;
+  --staff-text: #122033;
+  --staff-text-secondary: #6b7280;
+  --staff-text-placeholder: #8a97ad;
+  --staff-text-inverse: #ffffff;
+  --staff-on-primary: #ffffff;
+  --staff-disabled: #a9b6cc;
+  --staff-track: #e8eef8;
+  --staff-success: #10b981;
+  --staff-warning: #f59e0b;
+  --staff-error: #ef4444;
+  --staff-info: #1677ff;
+  --staff-success-surface: #e9fbf5;
+  --staff-success-border: #b8f0dc;
+  --staff-success-text: #047857;
+  --staff-error-surface: #fff1f2;
+  --staff-error-border: #fecdd3;
+  --staff-error-text: #be123c;
+  --staff-overlay: rgba(16, 42, 86, .36);
+  --staff-focus-ring: rgba(37, 99, 235, .18);
+  --staff-decoration-one: #dbeafe;
+  --staff-decoration-two: #ffe9f0;
+  --staff-shadow: 0 14px 34px rgba(18, 32, 51, .08);
+  --staff-shadow-elevated: 0 26px 70px rgba(18, 32, 51, .14);
+  --staff-space-1: 8px;
+  --staff-space-2: 16px;
+  --staff-space-3: 24px;
+  --staff-space-4: 32px;
+  --staff-card-padding: 20px;
+  --staff-control-height: 48px;
+  --staff-header-height: 54px;
+  --staff-mobile-nav-height: 72px;
+  --staff-mobile-nav-offset: 8px;
+  --staff-bottom-clearance: calc(var(--staff-mobile-nav-height) + var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom) + 16px);
+  --staff-radius-control: 14px;
+  --staff-radius-card: 20px;
+  --staff-input-background: #ffffff;
+  --staff-input-border: rgba(98, 126, 170, .22);
+  --staff-input-text: #102a56;
+  --staff-input-placeholder: #8a97ad;
+  --staff-input-label: #445876;
+  --staff-input-disabled-background: #f3f6fb;
+  --staff-input-disabled-text: #94a3b8;
+  --staff-input-focus: #2563eb;
+  --staff-input-focus-ring: rgba(37, 99, 235, .16);
+  --staff-input-error-background: #fff1f2;
+  --staff-input-radius: 18px;
+  --staff-input-height: 56px;
+  --staff-motion-fast: 180ms;
+  --staff-motion-standard: 220ms;
+  --staff-motion-ease: cubic-bezier(.2,.8,.2,1);
+}
+
+html[data-staff-theme="dark"] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+ion-app {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(219, 234, 254, .72), transparent 32%),
+    radial-gradient(circle at 96% 8%, rgba(234, 242, 255, .68), transparent 28%),
+    var(--staff-background);
+  color: var(--staff-text);
+  font-family: var(--ion-font-family);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--staff-focus-ring);
+  outline-offset: 2px;
+}
+
+html.staff-overlay-open,
+html.staff-overlay-open body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.staff-overlay-open .staff-main-shell,
+html.staff-overlay-open .staff-content,
+html:has(.detail-drawer) .staff-main-shell,
+html:has(.detail-drawer) .staff-content {
+  overflow: hidden;
+}
+
+button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:not(:disabled), a { transition: scale var(--staff-motion-fast) var(--staff-motion-ease), transform var(--staff-motion-fast) var(--staff-motion-ease), background-color var(--staff-motion-fast) var(--staff-motion-ease), border-color var(--staff-motion-fast) var(--staff-motion-ease), color var(--staff-motion-fast) var(--staff-motion-ease), box-shadow var(--staff-motion-fast) var(--staff-motion-ease), opacity var(--staff-motion-fast) var(--staff-motion-ease); }
+button:not(:disabled):active, a:active { scale: .98; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+@media(max-width:599px){
+  :root{
+    --staff-card-padding:16px;
+    --staff-control-height:44px;
+    --staff-input-height:50px;
+    --staff-radius-card:18px;
+    --staff-radius-control:12px;
+  }
+
+  body{
+    background:
+      radial-gradient(circle at 8% 0%, rgba(219,234,254,.66), transparent 30%),
+      var(--staff-background);
+  }
+
+  .page{
+    width:100%;
+    padding-inline:12px;
+  }
+
+  .panel,
+  .state,
+  .notice,
+  .kpi,
+  .today-hero,
+  .overview-card{
+    border-radius:18px;
+    box-shadow:0 10px 24px rgba(18,32,51,.08);
+  }
+}

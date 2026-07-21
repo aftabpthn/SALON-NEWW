@@ -3,30 +3,30 @@
     <input
       type="text"
       inputmode="numeric"
-      placeholder="DD/MM/YYYY"
+      [placeholder]="datePlaceholder"
       #dateInput
-      [attr.aria-label]="ariaLabel"
+      [attr.aria-label]="ariaLabel || ('datePicker.date' | translate)"
       [disabled]="disabled"
       [value]="draft"
       [readOnly]="rangeMode"
       (input)="!rangeMode && setDraft($any($event.target).value)"
       (blur)="normalizeDraft()"
     />
-    <button type="button" aria-label="Open calendar" [disabled]="disabled" (click)="toggle()">▦</button>
+    <button type="button" [attr.aria-label]="'datePicker.openCalendar' | translate" [disabled]="disabled" (click)="toggle()">▦</button>
   </div>
 
-  <section class="calendar-popover" *ngIf="open" aria-label="Calendar">
+  <section class="calendar-popover" *ngIf="open" role="dialog" aria-modal="false" [attr.aria-label]="'datePicker.calendar' | translate">
     <div class="shortcut-rail">
-      <button type="button" (click)="today()">Today</button>
-      <button type="button" (click)="tomorrow()">Tomorrow</button>
-      <button type="button" (click)="thisWeek()">This week</button>
+      <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
+      <button type="button" (click)="tomorrow()">{{ 'datePicker.tomorrow' | translate }}</button>
+      <button type="button" (click)="thisWeek()">{{ 'datePicker.thisWeek' | translate }}</button>
     </div>
 
     <div class="calendar-main">
       <header>
-        <button type="button" aria-label="Previous month" (click)="shiftMonth(-1)">‹</button>
+        <button type="button" [attr.aria-label]="'datePicker.previousMonth' | translate" (click)="shiftMonth(-1)">‹</button>
         <strong>{{ monthLabel }}</strong>
-        <button type="button" aria-label="Next month" (click)="shiftMonth(1)">›</button>
+        <button type="button" [attr.aria-label]="'datePicker.nextMonth' | translate" (click)="shiftMonth(1)">›</button>
       </header>
 
       <div class="weekday-row">
@@ -41,6 +41,7 @@
           [class.selected]="day.selected"
           [class.today]="day.today"
           [class.in-range]="day.inRange"
+          [attr.aria-pressed]="day.selected"
           (click)="selectDate(day.iso)"
         >
           {{ day.label }}
@@ -48,10 +49,10 @@
       </div>
 
       <footer>
-        <button type="button" (click)="clear()">Clear</button>
+        <button type="button" (click)="clear()">{{ 'common.clear' | translate }}</button>
         <span></span>
-        <button type="button" (click)="today()">Today</button>
-        <button class="apply" type="button" (click)="apply()">Apply</button>
+        <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
+        <button class="apply" type="button" (click)="apply()">{{ 'common.apply' | translate }}</button>
       </footer>
     </div>
   </section>

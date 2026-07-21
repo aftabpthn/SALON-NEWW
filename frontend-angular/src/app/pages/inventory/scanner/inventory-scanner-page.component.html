@@ -1,16 +1,16 @@
 <section class="scanner-page">
   <header class="page-head">
     <div class="title-row">
-      <h1>Inventory Scanner</h1>
+      <h1>{{ 'inventory.ui.e4564b92b1' | translate }}</h1>
       <span class="data-pill" [class.online]="matched">{{ loading ? 'Loading' : matched ? 'Product matched' : 'Ready' }}</span>
     </div>
     <div class="head-actions">
-      <select aria-label="Inventory branch"><option>Current branch</option></select>
+      <select [attr.aria-label]="'inventory.ui.869a6367ca' | translate"><option>{{ 'inventory.ui.c07d898423' | translate }}</option></select>
       <button type="button" (click)="historyOpen = !historyOpen">{{ historyOpen ? 'Matched product' : 'Scan history' }}</button>
     </div>
   </header>
 
-  <nav class="workflow-tabs" aria-label="Scanner workflow">
+  <nav class="workflow-tabs" [attr.aria-label]="'inventory.ui.37ff367a5f' | translate">
     <button *ngFor="let row of workflows" type="button" [class.active]="workflow === row.id" (click)="setWorkflow(row.id)">{{ row.label }}</button>
   </nav>
 
@@ -19,19 +19,19 @@
 
   <section class="scanner-grid">
     <article class="scan-panel">
-      <h2>Scan product</h2>
+      <h2>{{ 'inventory.ui.f672bd7525' | translate }}</h2>
       <div class="scan-zone">
         <video #camera *ngIf="cameraActive" muted playsinline></video>
         <ng-container *ngIf="!cameraActive">
           <span class="scan-icon" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
-          <strong>Ready to scan</strong>
-          <small>Use camera or enter SKU / barcode.</small>
-          <button type="button" (click)="openCamera()"><i class="bi bi-camera"></i> Use camera</button>
+          <strong>{{ 'inventory.ui.ed20050dce' | translate }}</strong>
+          <small>{{ 'inventory.ui.35eab7a329' | translate }}</small>
+          <button type="button" (click)="openCamera()"><i class="bi bi-camera"></i>{{ 'inventory.ui.c34a61328e' | translate }}</button>
         </ng-container>
-        <button class="camera-stop" *ngIf="cameraActive" type="button" (click)="stopCamera()">Stop camera</button>
+        <button class="camera-stop" *ngIf="cameraActive" type="button" (click)="stopCamera()">{{ 'inventory.ui.53e9605469' | translate }}</button>
       </div>
       <form class="match-row" (ngSubmit)="match()">
-        <input name="code" [(ngModel)]="code" autocomplete="off" autofocus placeholder="SKU or barcode" aria-label="SKU or barcode" />
+        <input name="code" [(ngModel)]="code" autocomplete="off" autofocus [attr.placeholder]="'inventory.ui.03e7d8bec6' | translate" [attr.aria-label]="'inventory.ui.03e7d8bec6' | translate" />
         <button class="primary" type="submit" [disabled]="loading">{{ loading ? 'Matching' : 'Match' }}</button>
       </form>
     </article>
@@ -45,12 +45,12 @@
           <div><strong>{{ row.itemName || 'No product matched' }}</strong><span>{{ row.code }} · {{ row.workflow }}</span></div>
           <time>{{ row.at | date:'HH:mm:ss' }}</time>
         </article>
-        <div class="empty-result compact" *ngIf="!history.length"><strong>No scans yet</strong></div>
+        <div class="empty-result compact" *ngIf="!history.length"><strong>{{ 'inventory.ui.0e960d30ea' | translate }}</strong></div>
       </div>
 
       <div class="empty-result" *ngIf="!historyOpen && !matched">
         <span class="result-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
-        <strong>No product matched</strong>
+        <strong>{{ 'inventory.ui.d7aa2bb20f' | translate }}</strong>
       </div>
 
       <div class="product-result" *ngIf="!historyOpen && matched as item">
@@ -59,9 +59,9 @@
           <span class="stock">{{ item.stockQuantity }} {{ item.unit }}</span>
         </header>
         <dl>
-          <div><dt>Reorder point</dt><dd>{{ item.reorderPoint }}</dd></div>
-          <div><dt>Unit cost</dt><dd>{{ money(item.unitCostPaise) }}</dd></div>
-          <div><dt>Status</dt><dd>{{ item.active ? 'Active' : 'Inactive' }}</dd></div>
+          <div><dt>{{ 'inventory.ui.d1fed43097' | translate }}</dt><dd>{{ item.reorderPoint }}</dd></div>
+          <div><dt>{{ 'inventory.ui.b16e07e0bb' | translate }}</dt><dd>{{ money(item.unitCostPaise) }}</dd></div>
+          <div><dt>{{ 'inventory.ui.bae7d5be70' | translate }}</dt><dd>{{ item.active ? 'Active' : 'Inactive' }}</dd></div>
         </dl>
 
         <form class="workflow-form" *ngIf="workflow !== 'lookup'" (ngSubmit)="applyWorkflow()">
@@ -76,7 +76,7 @@
           </label>
           <label *ngIf="workflow === 'count'" class="wide">Stock audit session
             <select name="auditSessionId" [(ngModel)]="auditSessionId" required>
-              <option value="">Select active count session</option>
+              <option value="">{{ 'inventory.ui.a65035c2c9' | translate }}</option>
               <option *ngFor="let audit of audits" [value]="audit.id">{{ audit.name }}</option>
             </select>
           </label>

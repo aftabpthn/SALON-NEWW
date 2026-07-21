@@ -147,6 +147,8 @@ pub struct PerformanceSourceRecord {
     pub late_minutes: i64,
     pub early_leave_minutes: i64,
     pub scheduled_minutes: i64,
+    pub operation_task_completed: i64,
+    pub operation_task_missed: i64,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -887,6 +889,14 @@ pub async fn performance_sources(
           FROM staff_schedules
           WHERE tenant_id=$1 AND branch_id=$2 AND schedule_date BETWEEN $3 AND $4
           GROUP BY staff_id
+        ), operation_task_metrics AS (
+          SELECT task.staff_id,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('deep_cleaning','hygiene_audit','cleaning_task') AND task.status IN ('completed','approved'))::BIGINT AS operation_task_completed,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('deep_cleaning','hygiene_audit','cleaning_task') AND task.status='missed')::BIGINT AS operation_task_missed
+          FROM staff_operation_tasks task
+          JOIN staff_operation_schedules schedule ON schedule.tenant_id=task.tenant_id AND schedule.branch_id=task.branch_id AND schedule.id=task.operation_id
+          WHERE task.tenant_id=$1 AND task.branch_id=$2 AND schedule.scheduled_date BETWEEN $3 AND $4
+          GROUP BY task.staff_id
         )
         SELECT s.id AS staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),s.id) AS staff_name,
@@ -902,7 +912,9 @@ pub async fn performance_sources(
           COALESCE(am.overtime_minutes,0)::BIGINT AS overtime_minutes,
           COALESCE(am.late_minutes,0)::BIGINT AS late_minutes,
           COALESCE(am.early_leave_minutes,0)::BIGINT AS early_leave_minutes,
-          COALESCE(scm.scheduled_minutes,0)::BIGINT AS scheduled_minutes
+          COALESCE(scm.scheduled_minutes,0)::BIGINT AS scheduled_minutes,
+          COALESCE(otm.operation_task_completed,0)::BIGINT AS operation_task_completed,
+          COALESCE(otm.operation_task_missed,0)::BIGINT AS operation_task_missed
         FROM staff s
         LEFT JOIN staff_profiles p ON p.staff_id=s.id AND p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id
         LEFT JOIN appointment_metrics a ON a.staff_id=s.id
@@ -910,6 +922,7 @@ pub async fn performance_sources(
         LEFT JOIN repeat_metrics rm ON rm.staff_id=s.id
         LEFT JOIN attendance_metrics am ON am.staff_id=s.id
         LEFT JOIN schedule_metrics scm ON scm.staff_id=s.id
+        LEFT JOIN operation_task_metrics otm ON otm.staff_id=s.id
         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.active=TRUE
           AND ($5='' OR s.id=$5)
         ORDER BY staff_name,s.id
@@ -1464,12 +1477,13 @@ pub async fn save_mobile_push_subscription(
     device_id: &str,
     token_ciphertext: Option<&str>,
     token_fingerprint: Option<&str>,
+    subscription_json: &Value,
     enabled: bool,
 ) -> Result<Option<MobilePushSubscriptionRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"UPDATE staff_mobile_devices
-              SET push_token_ciphertext=$4,push_token_fingerprint=$5,push_enabled=$6,
-                  push_registered_at=CASE WHEN $6 THEN NOW() ELSE push_registered_at END,
+              SET push_token_ciphertext=$4,push_token_fingerprint=$5,push_subscription_json=$6,push_enabled=$7,
+                  push_registered_at=CASE WHEN $7 THEN NOW() ELSE push_registered_at END,
                   updated_at=NOW(),version=version+1
             WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE
             RETURNING id AS device_id,push_enabled,push_registered_at"#,
@@ -1479,6 +1493,7 @@ pub async fn save_mobile_push_subscription(
     .bind(device_id)
     .bind(token_ciphertext)
     .bind(token_fingerprint)
+    .bind(subscription_json)
     .bind(enabled)
     .fetch_optional(db)
     .await
@@ -1602,6 +1617,60 @@ pub async fn mobile_targets(
     .bind(&device.branch_id)
     .bind(&device.staff_id)
     .fetch_all(db)
+    .await
+}
+
+pub async fn self_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<Vec<IncentiveRuleRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT id,target_type,assignee_type,assignee_id,assignee_name,role_scope,slabs,notes,
+          active,version,created_at,updated_at
+        FROM staff_incentive_rules
+        WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE
+          AND ((assignee_type='staff' AND assignee_id=$3) OR assignee_type IN ('branch','standard'))
+        ORDER BY target_type,assignee_type,created_at DESC
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn update_self_task_status(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    id: &str,
+    version: i32,
+    status: &str,
+) -> Result<Option<StaffTaskRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        UPDATE staff_tasks SET
+          status=$6,
+          completed_at=CASE WHEN $6='completed' THEN NOW() ELSE NULL END,
+          version=version+1,
+          updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND version=$5
+        RETURNING id,staff_id,''::TEXT AS staff_name,title,description,task_type,priority,due_at,status,
+          assigned_by,completed_at,version,created_at,updated_at
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(id)
+    .bind(version)
+    .bind(status)
+    .fetch_optional(db)
     .await
 }
 

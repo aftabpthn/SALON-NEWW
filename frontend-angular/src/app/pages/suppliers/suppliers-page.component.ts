@@ -1,8 +1,10 @@
+import { LanguageService } from '../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { isOpenOrderStatus, supplierCompleteness, supplierPurchaseMetrics } from './supplier-metrics';
 
 type Supplier = {
@@ -36,11 +38,12 @@ type QuickFilter = 'all' | 'gstin' | 'openPo';
 @Component({
   selector: 'page-suppliers',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './suppliers-page.component.html',
   styleUrls: ['./suppliers-page.component.css'],
 })
 export class SuppliersPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
 
   suppliers: Supplier[] = [];
@@ -121,7 +124,7 @@ export class SuppliersPageComponent implements OnInit {
       this.orders = [];
       this.payables = [];
       this.ordersLoaded = false;
-      this.error = this.message(error, 'Suppliers could not be loaded');
+      this.error = this.message(error, this.language.text('inventory.message.b4783cda79'));
     } finally {
       this.loading = false;
     }
@@ -176,15 +179,15 @@ export class SuppliersPageComponent implements OnInit {
     const paymentTermsDays = Number(this.draft.paymentTermsDays || 0);
 
     if (!code || !name) {
-      this.error = 'Supplier code and name are required';
+      this.error = this.language.text('inventory.message.95cc5800c3');
       return;
     }
     if (gstin && !/^[A-Z0-9]{15}$/.test(gstin)) {
-      this.error = 'GSTIN must be 15 alphanumeric characters';
+      this.error = this.language.text('inventory.message.a505d1cc1c');
       return;
     }
     if (paymentTermsDays < 0 || paymentTermsDays > 3650) {
-      this.error = 'Payment terms must be between 0 and 3650 days';
+      this.error = this.language.text('inventory.message.23f19e5fba');
       return;
     }
 
@@ -212,9 +215,9 @@ export class SuppliersPageComponent implements OnInit {
       }
       this.drawerOpen = false;
       await this.reload();
-      this.notice = 'Supplier saved';
+      this.notice = this.language.text('inventory.message.3c86510382');
     } catch (error) {
-      this.error = this.message(error, 'Supplier could not be saved');
+      this.error = this.message(error, this.language.text('inventory.message.ca25e4bd64'));
     } finally {
       this.saving = false;
     }

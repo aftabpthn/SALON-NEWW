@@ -1,4 +1,6 @@
+import { LanguageService } from '../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -26,8 +28,9 @@ type StaffRecord = {
 type StaffListPage = { items: StaffRecord[]; total: number; page: number; pageSize: number; jobs: string[] };
 type StaffForm = Omit<StaffRecord, 'id' | 'branchId'>;
 type StaffColumn = 'employeeCode' | 'firstName' | 'lastName' | 'mobilePhone' | 'jobTitle' | 'active' | 'branchId';
-type StaffTab = 'General' | 'HR Profile' | 'Documents' | 'History' | 'Employee Roles' | 'Branch Access' | 'Services' | 'Products' | 'Memberships' | 'Packages' | 'Commissions' | 'Payrates' | 'Catalog' | 'Leave Policies';
+type StaffTab = 'General' | 'HR Profile' | 'Documents' | 'History' | 'Operations' | 'Employee Roles' | 'Branch Access' | 'Services' | 'Products' | 'Memberships' | 'Packages' | 'Commissions' | 'Payrates' | 'Catalog' | 'Leave Policies';
 type MasterTab = 'Categories' | 'Leave Policies' | 'Attendance Rules' | 'Shift Templates';
+type OperationView = 'upcoming' | 'meetings' | 'deepCleaning' | 'checklists' | 'history';
 type CatalogType = 'service' | 'product' | 'membership' | 'package';
 type ProfileForm = {
   categoryId: string;
@@ -107,6 +110,43 @@ type StaffHistory = {
   id: string; userId: string | null; eventType: string; outcome: string;
   detailsJson: Record<string, unknown>; createdAt: string;
 };
+type StaffOperationType = 'opening_checklist' | 'closing_checklist' | 'tool_sanitization' | 'stock_linen_check' | 'cleaning_task' | 'staff_meeting' | 'performance_review' | 'training_session' | 'deep_cleaning' | 'hygiene_audit' | 'custom';
+type StaffOperationSchedule = {
+  id: string; title: string; operationType: StaffOperationType | string; frequency: string; scheduledDate: string;
+  scheduledTime: string | null; assignedStaffIds: string[] | string; status: string; checklistJson: unknown; notes: string;
+  createdAt: string; updatedAt: string | null; completedAt: string | null; cancelledAt: string | null;
+};
+type StaffOperationTask = {
+  id: string; operationId: string; staffId: string; staffName: string; taskTitle: string; status: string;
+  proofUrl: string; notes: string; completedAt: string | null; approvedBy: string | null; approvedAt: string | null;
+  createdAt: string; updatedAt: string | null;
+};
+type StaffOperationAttendance = {
+  id: string; operationId: string; staffId: string; staffName: string; status: string; notes: string; recordedAt: string;
+};
+
+type OperationReportOperationRow = {
+  id: string; title: string; operationType: string; scheduledDate: string; scheduledTime: string | null;
+  status: string; assignedStaffCount: number; completedTaskCount: number; missedTaskCount: number; pendingApprovalCount: number;
+};
+type OperationMeetingAttendanceRow = { staffId: string; staffName: string; presentCount: number; absentCount: number; lateCount: number; excusedCount: number };
+type OperationCleaningScoreRow = { staffId: string; staffName: string; completedCount: number; missedCount: number; score: number };
+type OperationHygieneComplianceRow = { operationType: string; plannedCount: number; completedCount: number; missedCount: number; compliancePercent: number };
+type OperationReportResponse = {
+  dateFrom: string; dateTo: string;
+  summary: {
+    completedCount: number; missedCount: number; pendingApprovalCount: number; meetingPresentCount: number;
+    meetingAbsentCount: number; averageCleaningScore: number; hygieneCompliancePercent: number;
+  };
+  completedOperations: OperationReportOperationRow[];
+  missedOperations: OperationReportOperationRow[];
+  pendingApprovals: OperationReportOperationRow[];
+  meetingAttendance: OperationMeetingAttendanceRow[];
+  cleaningScores: OperationCleaningScoreRow[];
+  hygieneCompliance: OperationHygieneComplianceRow[];
+};
+type OperationAutomationRunResponse = { escalationsQueued: number; meetingRemindersQueued: number; cleaningRemindersQueued: number; monthlySummariesQueued: number };
+type OperationForm = { title: string; operationType: StaffOperationType; frequency: string; scheduledDate: string; scheduledTime: string; notes: string; checklistText: string };
 type BulkStaffRow = {
   employeeCode: string; firstName: string; lastName?: string; email?: string; mobilePhone?: string;
   jobTitle?: string; active?: boolean; photoUrl?: string; dateOfBirth?: string; joiningDate?: string;
@@ -182,6 +222,7 @@ const emptyDocument = (): StaffDocumentForm => ({
   expiryDate: '', notes: '',
 });
 const emptyConfiguration = (): StaffConfiguration => ({ roles: [], catalog: [], commissionRules: [], payRates: [], leavePolicies: [] });
+const emptyOperationForm = (): OperationForm => ({ title: '', operationType: 'staff_meeting', frequency: 'fortnightly', scheduledDate: new Date().toISOString().slice(0, 10), scheduledTime: '', notes: '', checklistText: '' });
 const emptyBranchAccess = (): StaffBranchAccess => ({
   linkedLogin: false, loginId: null, email: null, mustChangePassword: false, branches: [], roles: [],
 });
@@ -196,11 +237,12 @@ const emptyMasters = (): StaffMasters => ({ categories: [], shiftTemplates: [], 
 @Component({
   selector: 'page-staff',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './staff-page.component.html',
   styleUrls: ['./staff-page.component.css'],
 })
 export class StaffPageComponent implements OnInit, OnDestroy {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
@@ -215,7 +257,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     employeeCode: true, firstName: true, lastName: true, mobilePhone: true, jobTitle: true, active: true, branchId: true,
   };
   readonly staffTabs: StaffTab[] = [
-    'General', 'HR Profile', 'Documents', 'History', 'Employee Roles',
+    'General', 'HR Profile', 'Documents', 'History', 'Operations', 'Employee Roles',
     ...(this.auth.hasRole('owner', 'admin') ? ['Branch Access' as StaffTab] : []),
     'Services', 'Products', 'Memberships', 'Packages', 'Commissions', 'Payrates', 'Catalog', 'Leave Policies',
   ];
@@ -289,6 +331,21 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   history: StaffHistory[] = [];
   historyLoading = false;
   historyError = '';
+  operationView: OperationView = 'upcoming';
+  operationSchedules: StaffOperationSchedule[] = [];
+  operationTasks: StaffOperationTask[] = [];
+  operationAttendance: StaffOperationAttendance[] = [];
+  operationForm = emptyOperationForm();
+  operationTaskTitle = '';
+  operationsLoaded = false;
+  operationsLoading = false;
+  operationsSaving = false;
+  operationsError = '';
+  operationsMissedOnly = false;
+  operationReport: OperationReportResponse | null = null;
+  operationReportLoading = false;
+  operationReportError = '';
+  operationAutomationResult: OperationAutomationRunResponse | null = null;
   bulkDrawerOpen = false;
   bulkFileName = '';
   bulkRows: BulkStaffRow[] = [];
@@ -371,9 +428,9 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   exportVisible() {
-    const csv = [['Code', 'First name', 'Last name', 'Phone number', 'Job', 'Active', 'Center'], ...this.employees.map((employee) => [
+    const csv = [[...['code', 'firstName', 'lastName', 'phone', 'job', 'active', 'center'].map((key) => this.language.text(`staff.export.${key}`))], ...this.employees.map((employee) => [
       employee.employeeCode, employee.firstName, employee.lastName, employee.mobilePhone, employee.jobTitle,
-      employee.active ? 'Yes' : 'No', employee.branchId,
+      employee.active ? this.language.text('common.yes') : this.language.text('common.no'), employee.branchId,
     ])].map((row) => row.map((value) => `"${String(value || '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -391,6 +448,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.setPhotoPreview('');
     this.configuration = emptyConfiguration();
     this.resetBranchAccess();
+    this.resetOperations();
     this.activeTab = 'General';
     this.configurationError = '';
     this.documents = [];
@@ -503,6 +561,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.profileForm = emptyProfile();
     this.configuration = emptyConfiguration();
     this.resetBranchAccess();
+    this.resetOperations();
     this.activeTab = 'General';
     this.configurationError = '';
     this.saveError = '';
@@ -540,7 +599,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       };
       this.applyConfiguration(configurationResult.data);
       await Promise.all([
-        this.loadManagerOptions(), this.loadDocuments(), this.loadHistory(),
+        this.loadManagerOptions(), this.loadDocuments(), this.loadHistory(), this.loadOperations(),
         this.loadPhotoPreview(result.data.photoUrl || ''),
       ]);
     } catch (error) {
@@ -625,7 +684,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async terminateEmployee() {
-    if (!window.confirm('Terminate this employee? Their staff record and linked login will be deactivated.')) return;
+    if (!window.confirm(this.language.text('staff.message.739e12df2f'))) return;
     this.actionError = '';
     this.actionSaving = true;
     try {
@@ -651,10 +710,13 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     if (tab === 'Branch Access' && !this.branchAccessLoaded && !this.branchAccessLoading) {
       void this.loadBranchAccess();
     }
+    if (tab === 'Operations' && !this.operationsLoaded && !this.operationsLoading) {
+      void this.loadOperations();
+    }
   }
 
   isProfileTab() { return this.activeTab === 'General' || this.activeTab === 'HR Profile'; }
-  isConfigurationTab() { return !['General', 'HR Profile', 'Documents', 'History', 'Branch Access'].includes(this.activeTab); }
+  isConfigurationTab() { return !['General', 'HR Profile', 'Documents', 'History', 'Operations', 'Branch Access'].includes(this.activeTab); }
   async saveCurrentTab() {
     if (this.isProfileTab()) await this.save();
     else if (this.activeTab === 'Branch Access') {
@@ -1192,6 +1254,248 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     if (!value) return 'No expiry';
     const [year, month, day] = value.slice(0, 10).split('-');
     return year && month && day ? `${day}/${month}/${year}` : '—';
+  }
+
+  get selectedOperationSchedules() {
+    return this.operationSchedules.filter((item) => this.matchesOperationView(item));
+  }
+
+  get missedOperationsCount() {
+    return this.operationSchedules.filter((item) => item.status === 'missed').length + this.operationTasks.filter((item) => item.status === 'missed').length;
+  }
+
+  get operationReportCards() {
+    const summary = this.operationReport?.summary;
+    return [
+      { label: 'Completed', value: summary?.completedCount ?? 0 },
+      { label: 'Missed', value: summary?.missedCount ?? 0 },
+      { label: 'Pending approvals', value: summary?.pendingApprovalCount ?? 0 },
+      { label: 'Cleaning score', value: `${summary?.averageCleaningScore ?? 0}%` },
+      { label: 'Meeting present', value: summary?.meetingPresentCount ?? 0 },
+      { label: 'Hygiene compliance', value: `${summary?.hygieneCompliancePercent ?? 0}%` },
+    ];
+  }
+
+  operationTaskCount(operationId: string) { return this.operationTasks.filter((task) => task.operationId === operationId).length; }
+  operationAttendanceStatus(operationId: string) { return this.operationAttendance.find((entry) => entry.operationId === operationId)?.status || 'pending'; }
+  operationStatusLabel(status: string) { return this.titleCase(status.replace(/_/g, ' ')); }
+  operationTypeLabel(type: string) { return this.titleCase(type.replace(/_/g, ' ')); }
+
+  operationScheduleTasks(operationId: string) {
+    return this.operationTasks.filter((task) => task.operationId === operationId);
+  }
+
+  viewMissedOperations() {
+    this.operationView = 'history';
+    this.operationsMissedOnly = true;
+  }
+
+  setOperationView(view: OperationView) {
+    this.operationView = view;
+    this.operationsMissedOnly = false;
+  }
+
+  async addOperation() {
+    if (!this.editingId) return;
+    const title = this.operationForm.title.trim();
+    if (!title) { this.operationsError = 'Operation title is required'; return; }
+    if (!this.operationForm.scheduledDate) { this.operationsError = 'Operation date is required'; return; }
+    this.operationsSaving = true;
+    this.operationsError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffOperationSchedule[]>>('/staff/operations/schedules', {
+        title,
+        operationType: this.operationForm.operationType,
+        frequency: this.operationForm.frequency,
+        scheduledDate: this.operationForm.scheduledDate,
+        scheduledTime: this.operationForm.scheduledTime || null,
+        assignedStaffIds: [this.editingId],
+        checklistJson: this.operationChecklistItems(),
+        notes: this.operationForm.notes.trim() || undefined,
+        occurrences: 1,
+      }));
+      if (!result.success) throw new Error(result.error?.message || 'Unable to add operation');
+      this.operationForm = emptyOperationForm();
+      await this.loadOperations(true);
+    } catch (error) {
+      this.operationsError = error instanceof Error ? error.message : 'Unable to add operation';
+    } finally { this.operationsSaving = false; }
+  }
+
+  async assignOperationTask(operationId: string) {
+    if (!this.editingId) return;
+    const taskTitle = this.operationTaskTitle.trim();
+    if (!taskTitle) { this.operationsError = 'Task title is required'; return; }
+    this.operationsSaving = true;
+    this.operationsError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffOperationTask>>(`/staff/operations/${operationId}/tasks`, {
+        staffId: this.editingId,
+        taskTitle,
+      }));
+      if (!result.success) throw new Error(result.error?.message || 'Unable to assign task');
+      this.operationTaskTitle = '';
+      await this.loadOperations(true);
+    } catch (error) {
+      this.operationsError = error instanceof Error ? error.message : 'Unable to assign task';
+    } finally { this.operationsSaving = false; }
+  }
+
+  async completeOperationTask(task: StaffOperationTask) {
+    await this.updateOperationTask(task.id, { status: 'completed', proofUrl: task.proofUrl || undefined, notes: task.notes || undefined });
+  }
+
+  async approveOperationTask(task: StaffOperationTask) {
+    await this.updateOperationTask(task.id, { status: 'approved' });
+  }
+
+  async markOperationAttendance(operationId: string, status: 'present' | 'absent') {
+    if (!this.editingId) return;
+    this.operationsSaving = true;
+    this.operationsError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffOperationAttendance>>(`/staff/operations/${operationId}/attendance`, {
+        staffId: this.editingId,
+        status,
+      }));
+      if (!result.success) throw new Error(result.error?.message || 'Unable to save attendance');
+      await this.loadOperations(true);
+    } catch (error) {
+      this.operationsError = error instanceof Error ? error.message : 'Unable to save attendance';
+    } finally { this.operationsSaving = false; }
+  }
+
+  private async updateOperationTask(id: string, payload: { status?: string; proofUrl?: string; notes?: string }) {
+    this.operationsSaving = true;
+    this.operationsError = '';
+    try {
+      const result = await firstValueFrom(this.api.patch<ApiEnvelope<StaffOperationTask>>(`/staff/operations/tasks/${id}`, payload));
+      if (!result.success) throw new Error(result.error?.message || 'Unable to update task');
+      await this.loadOperations(true);
+    } catch (error) {
+      this.operationsError = error instanceof Error ? error.message : 'Unable to update task';
+    } finally { this.operationsSaving = false; }
+  }
+
+  async loadOperations(force = false) {
+    if (!this.editingId || (this.operationsLoaded && !force)) return;
+    this.operationsLoading = true;
+    this.operationsError = '';
+    try {
+      const from = this.addDaysIso(-30);
+      const to = this.addDaysIso(90);
+      const staffQuery = encodeURIComponent(this.editingId);
+      const [schedules, tasks, attendance, report] = await Promise.all([
+        firstValueFrom(this.api.get<ApiEnvelope<StaffOperationSchedule[]>>(`/staff/operations/schedules?from=${from}&to=${to}`)),
+        firstValueFrom(this.api.get<ApiEnvelope<StaffOperationTask[]>>(`/staff/operations/tasks?staffId=${staffQuery}`)),
+        firstValueFrom(this.api.get<ApiEnvelope<StaffOperationAttendance[]>>(`/staff/operations/attendance?staffId=${staffQuery}`)),
+        firstValueFrom(this.api.get<ApiEnvelope<OperationReportResponse>>(`/staff/operations/reports?from=${from}&to=${to}&staffId=${staffQuery}`)),
+      ]);
+      if (!schedules.success || !schedules.data) throw new Error(schedules.error?.message || 'Unable to load operations');
+      if (!tasks.success || !tasks.data) throw new Error(tasks.error?.message || 'Unable to load operation tasks');
+      if (!attendance.success || !attendance.data) throw new Error(attendance.error?.message || 'Unable to load operation attendance');
+      if (!report.success || !report.data) throw new Error(report.error?.message || 'Unable to load operation report');
+      this.operationSchedules = schedules.data.filter((item) => this.operationAssignedToCurrentStaff(item));
+      this.operationTasks = tasks.data;
+      this.operationAttendance = attendance.data;
+      this.operationReport = report.data;
+      this.operationReportError = '';
+      this.operationsLoaded = true;
+    } catch (error) {
+      this.operationSchedules = [];
+      this.operationTasks = [];
+      this.operationAttendance = [];
+      this.operationReport = null;
+      this.operationReportError = error instanceof Error ? error.message : 'Unable to load operation report';
+      this.operationsError = error instanceof Error ? error.message : 'Unable to load operations';
+    } finally { this.operationsLoading = false; }
+  }
+
+  private resetOperations() {
+    this.operationView = 'upcoming';
+    this.operationSchedules = [];
+    this.operationTasks = [];
+    this.operationAttendance = [];
+    this.operationForm = emptyOperationForm();
+    this.operationTaskTitle = '';
+    this.operationsLoaded = false;
+    this.operationsLoading = false;
+    this.operationsSaving = false;
+    this.operationsError = '';
+    this.operationsMissedOnly = false;
+    this.operationReport = null;
+    this.operationReportLoading = false;
+    this.operationReportError = '';
+    this.operationAutomationResult = null;
+  }
+
+  async exportOperationReportCsv() {
+    if (!this.operationReport) return;
+    const rows = [
+      ['Section', 'Name', 'Type', 'Date', 'Status', 'Completed', 'Missed', 'Pending'],
+      ...this.operationReport.completedOperations.map((item) => ['Completed', item.title, this.operationTypeLabel(item.operationType), this.formatDate(item.scheduledDate), this.operationStatusLabel(item.status), item.completedTaskCount, item.missedTaskCount, item.pendingApprovalCount]),
+      ...this.operationReport.missedOperations.map((item) => ['Missed', item.title, this.operationTypeLabel(item.operationType), this.formatDate(item.scheduledDate), this.operationStatusLabel(item.status), item.completedTaskCount, item.missedTaskCount, item.pendingApprovalCount]),
+      ...this.operationReport.pendingApprovals.map((item) => ['Pending approval', item.title, this.operationTypeLabel(item.operationType), this.formatDate(item.scheduledDate), this.operationStatusLabel(item.status), item.completedTaskCount, item.missedTaskCount, item.pendingApprovalCount]),
+      ...this.operationReport.cleaningScores.map((item) => ['Cleaning score', item.staffName, '', '', '', item.completedCount, item.missedCount, `${item.score}%`]),
+      ...this.operationReport.meetingAttendance.map((item) => ['Meeting attendance', item.staffName, '', '', '', item.presentCount, item.absentCount, item.lateCount]),
+      ...this.operationReport.hygieneCompliance.map((item) => ['Hygiene compliance', this.operationTypeLabel(item.operationType), '', '', '', item.completedCount, item.missedCount, `${item.compliancePercent}%`]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = `staff-operations-report-${this.operationReport.dateFrom}-${this.operationReport.dateTo}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  async runOperationAutomations() {
+    if (!this.editingId) return;
+    this.operationReportLoading = true;
+    this.operationReportError = '';
+    this.operationAutomationResult = null;
+    try {
+      const from = this.addDaysIso(-30);
+      const to = this.addDaysIso(90);
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<OperationAutomationRunResponse>>('/staff/operations/automations/run', { from, to }));
+      if (!result.success || !result.data) throw new Error(result.error?.message || 'Unable to run operation automations');
+      this.operationAutomationResult = result.data;
+      await this.loadOperations(true);
+    } catch (error) {
+      this.operationReportError = error instanceof Error ? error.message : 'Unable to run operation automations';
+    } finally { this.operationReportLoading = false; }
+  }
+
+  private matchesOperationView(item: StaffOperationSchedule) {
+    const operationType = item.operationType;
+    const isHistory = item.status === 'completed' || item.status === 'missed' || item.status === 'cancelled' || item.scheduledDate < this.todayIso();
+    if (this.operationView === 'history') return this.operationsMissedOnly ? this.isMissedOperation(item) : isHistory;
+    if (isHistory) return false;
+    if (this.operationView === 'meetings') return operationType === 'staff_meeting' || operationType === 'performance_review' || operationType === 'training_session';
+    if (this.operationView === 'deepCleaning') return operationType === 'deep_cleaning' || operationType === 'hygiene_audit';
+    if (this.operationView === 'checklists') return ['opening_checklist', 'closing_checklist', 'tool_sanitization', 'stock_linen_check', 'cleaning_task'].includes(operationType);
+    return true;
+  }
+
+  private isMissedOperation(item: StaffOperationSchedule) {
+    return item.status === 'missed' || this.operationTasks.some((task) => task.operationId === item.id && task.status === 'missed');
+  }
+
+  private operationAssignedToCurrentStaff(item: StaffOperationSchedule) {
+    if (!this.editingId) return false;
+    const assigned = Array.isArray(item.assignedStaffIds) ? item.assignedStaffIds : [];
+    return assigned.length === 0 || assigned.includes(this.editingId);
+  }
+
+  private operationChecklistItems() {
+    return this.operationForm.checklistText.split('\n').map((item) => item.trim()).filter(Boolean);
+  }
+
+  private todayIso() { return this.addDaysIso(0); }
+
+  private addDaysIso(days: number) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
   }
 
   private async loadManagerOptions() {

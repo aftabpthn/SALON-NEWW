@@ -5,6 +5,10 @@ import test from 'node:test';
 const routes = readFileSync('src/app/app.routes.ts', 'utf8');
 const sidebar = readFileSync('src/app/layout/app-sidebar.component.ts', 'utf8');
 const page = readFileSync('src/app/pages/finance/balance-sheet/balance-sheet-page.component.ts', 'utf8');
+const template = readFileSync('src/app/pages/finance/balance-sheet/balance-sheet-page.component.html', 'utf8');
+const styles = readFileSync('src/app/pages/finance/balance-sheet/balance-sheet-page.component.css', 'utf8');
+const backendRoute = readFileSync('../backend-rust/src/routes/balance_sheet.rs', 'utf8');
+const backendRepository = readFileSync('../backend-rust/src/repositories/balance_sheet_repository.rs', 'utf8');
 
 test('Balance Sheet route and sidebar open the finance page', () => {
   assert.match(routes, /path: 'finance',[\s\S]*balance-sheet-page\.component/);
@@ -44,4 +48,22 @@ test('Balance Sheet writes automatically reload affected API data', () => {
     assert.notEqual(actionIndex, -1, `${action} is not wired`);
     assert.ok(page.slice(actionIndex, actionIndex + 900).includes(reload), `${action} does not reload affected data`);
   }
+});
+
+test('Phase 7 reuses live balances for comparison, evidence and native exports', () => {
+  assert.match(page, /currentPaise - comparisonPaise/);
+  assert.match(page, /new Blob\(\[`\\uFEFF\$\{csv\}`\]/);
+  assert.match(page, /window\.print\(\)/);
+  assert.match(template, /Comparative Balance Sheet/);
+  assert.match(template, /toggleLedgerEvidence\(row\)/);
+  assert.match(template, /Audit CSV/);
+  assert.match(styles, /@media print/);
+});
+
+test('Phase 7 tenant scope is role-gated and aggregates only authorized branches', () => {
+  assert.match(template, /All authorized branches/);
+  assert.match(page, /scope: this\.comparisonScope/);
+  assert.match(backendRoute, /multi-branch Balance Sheet access requires owner, admin, manager, or analyst role/);
+  assert.match(backendRoute, /auth_repository::list_branch_access/);
+  assert.match(backendRepository, /entry\.branch_id=ANY\(\$2\)/);
 });

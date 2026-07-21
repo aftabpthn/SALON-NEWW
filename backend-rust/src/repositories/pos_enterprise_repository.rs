@@ -398,7 +398,7 @@ pub async fn claim_next_print_job(
     branch: &str,
     terminal_id: &str,
 ) -> Result<Option<PrintJob>, sqlx::Error> {
-    sqlx::query_as("WITH candidate AS (SELECT j.id FROM pos_print_jobs j WHERE j.tenant_id=$1 AND j.branch_id=$2 AND j.terminal_id=$3 AND j.status='queued' AND j.attempts<5 ORDER BY j.created_at FOR UPDATE SKIP LOCKED LIMIT 1), updated AS (UPDATE pos_print_jobs j SET status='processing',attempts=attempts+1,updated_at=NOW() FROM candidate c WHERE j.id=c.id RETURNING j.*) SELECT j.id,j.terminal_id,j.device_id,j.sale_id,s.invoice_number,j.format,j.status,j.attempts,j.last_error,j.created_at FROM updated j JOIN pos_sales s ON s.id=j.sale_id AND s.tenant_id=j.tenant_id AND s.branch_id=j.branch_id")
+    sqlx::query_as("WITH candidate AS (SELECT j.id FROM pos_print_jobs j WHERE j.tenant_id=$1 AND j.branch_id=$2 AND j.terminal_id=$3 AND (j.status='queued' OR (j.status='processing' AND j.updated_at<NOW()-INTERVAL '5 minutes')) AND j.attempts<5 ORDER BY j.created_at FOR UPDATE SKIP LOCKED LIMIT 1), updated AS (UPDATE pos_print_jobs j SET status='processing',attempts=attempts+1,updated_at=NOW() FROM candidate c WHERE j.id=c.id RETURNING j.*) SELECT j.id,j.terminal_id,j.device_id,j.sale_id,s.invoice_number,j.format,j.status,j.attempts,j.last_error,j.created_at FROM updated j JOIN pos_sales s ON s.id=j.sale_id AND s.tenant_id=j.tenant_id AND s.branch_id=j.branch_id")
         .bind(tenant).bind(branch).bind(terminal_id).fetch_optional(db).await
 }
 

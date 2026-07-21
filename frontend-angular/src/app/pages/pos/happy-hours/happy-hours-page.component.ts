@@ -42,7 +42,14 @@ type Intelligence = {
 type Coupon = {
   id: string; code: string; discountType: 'amount' | 'percent'; discountValuePaise: number; discountBps: number;
   minSubtotalPaise: number; maxDiscountPaise: number; active: boolean; startsAt: string | null; endsAt: string | null;
-  usageLimit: number | null; usedCount: number;
+  usageLimit: number | null; usedCount: number; perClientLimit: number;
+  offerType: 'generic' | 'first_visit' | 'referral' | 'branch_specific' | 'service_specific' | 'segment';
+  targetServiceIds: string[]; targetServiceCategories: string[]; targetClientSegments: string[];
+  firstVisitOnly: boolean; referralRequired: boolean;
+};
+type CouponAnalytics = {
+  couponId: string; couponCode: string; offerType: string; redemptions: number; uniqueClients: number;
+  salesValuePaise: number; discountPaise: number; returnOnDiscountBps: number;
 };
 
 type AudienceCriteria = { inactiveDaysGte?: number; visitCountGte?: number; totalSpendPaiseGte?: number; birthdayMonth?: number; clientType?: 'new' | 'existing' };
@@ -139,7 +146,7 @@ type SimulationResult = {
 };
 type HappyHourApproval = {
   id: string; ruleId: string; ruleName: string; requestedBy: string; requestedRole: string;
-  requestedDiscountBps: number; status: string; note: string; decisionNote: string;
+  requestedDiscountBps: number; approvalLimitBps: number; ruleSnapshotJson: Record<string, any>; status: string; note: string; decisionNote: string;
   decidedBy: string | null; decidedAt: string | null; createdAt: string;
 };
 type DiscountApproval = {
@@ -155,6 +162,11 @@ type CouponAbuseAlert = {
 type HappyHourAnomaly = {
   id: string; anomalyType: string; severity: string; status: string; title: string; description: string;
   evidenceJson: Record<string, any>; detectedAt: string; reviewedBy: string | null; reviewedAt: string | null; reviewNote: string;
+};
+type FraudCase = {
+  id: string; fraudType: string; subjectType: string; subjectId: string; riskScore: number; severity: string;
+  decision: 'allow' | 'manager_review' | 'block_until_review'; status: string; title: string; description: string;
+  evidenceJson: Record<string, any>; reviewedBy: string | null; reviewedAt: string | null; reviewNote: string; detectedAt: string;
 };
 type HappyHourBudget = {
   id: string; periodStart: string; periodEnd: string; budgetPaise: number; spentPaise: number;
@@ -181,7 +193,8 @@ type RuleDraft = {
 
 type CouponDraft = {
   code: string; discountType: 'amount' | 'percent'; discountValue: string; minSubtotal: string;
-  maxDiscount: string; startDate: string; endDate: string; usageLimit: string; active: boolean;
+  maxDiscount: string; startDate: string; endDate: string; usageLimit: string; perClientLimit: string; active: boolean;
+  offerType: Coupon['offerType']; targetServiceIds: string[]; serviceCategories: string; clientSegments: string;
 };
 
 type AudienceDraft = {
@@ -215,6 +228,7 @@ export class HappyHoursPageComponent implements OnInit {
 
   rules: HappyHourRule[] = [];
   coupons: Coupon[] = [];
+  couponAnalytics: CouponAnalytics[] = [];
   audiences: Audience[] = [];
   campaignLinks: CampaignLink[] = [];
   marketObservations: MarketObservation[] = [];
@@ -243,6 +257,8 @@ export class HappyHoursPageComponent implements OnInit {
   couponAbuseStatus = 'open';
   anomalies: HappyHourAnomaly[] = [];
   anomalyStatus = 'open';
+  fraudCases: FraudCase[] = [];
+  fraudStatus = 'open';
   budget: HappyHourBudget | null = null;
   budgetDraft = { periodStart: '', periodEnd: '', budget: '', alertThresholdPercent: '', approvalAbovePercent: '' };
   auditLog: HappyHourAudit[] = [];
@@ -317,6 +333,10 @@ export class HappyHoursPageComponent implements OnInit {
     this.api.get<any>('/api/v1/pos/coupons').subscribe({
       next: (response) => this.coupons = this.rows(response),
       error: () => this.coupons = [],
+    });
+    this.api.get<any>('/api/v1/pos/coupons/analytics').subscribe({
+      next: (response) => this.couponAnalytics = this.rows(response),
+      error: () => this.couponAnalytics = [],
     });
   }
 
@@ -460,6 +480,7 @@ export class HappyHoursPageComponent implements OnInit {
     this.loadDiscountApprovals();
     this.loadCouponAbuseAlerts();
     this.loadAnomalies();
+    this.loadFraudCases();
     this.loadBudget();
     this.loadAudit();
     this.loadWebhooks();
@@ -570,6 +591,29 @@ export class HappyHoursPageComponent implements OnInit {
     );
   }
 
+  loadFraudCases(): void {
+    this.api.get<any>(`/api/v1/pos/happy-hours/fraud-guard/cases?status=${encodeURIComponent(this.fraudStatus)}`).subscribe({
+      next: (response) => this.fraudCases = this.rows(response),
+      error: () => this.fraudCases = [],
+    });
+  }
+
+  scanFraudCases(): void {
+    this.run(
+      this.api.post('/api/v1/pos/happy-hours/fraud-guard/scan', {}),
+      'Fraud guard scan completed', false,
+      () => { this.loadFraudCases(); this.loadAnomalies(); this.loadAudit(); },
+    );
+  }
+
+  reviewFraudCase(row: FraudCase, status: 'investigating' | 'resolved' | 'dismissed'): void {
+    this.run(
+      this.api.patch(`/api/v1/pos/happy-hours/fraud-guard/cases/${encodeURIComponent(row.id)}`, { status, note: '' }),
+      `Fraud case ${status}`, false,
+      () => { this.loadFraudCases(); this.loadAudit(); },
+    );
+  }
+
   loadBudget(): void {
     this.api.get<any>('/api/v1/pos/happy-hours/budget').subscribe({
       next: (response) => {
@@ -633,7 +677,7 @@ export class HappyHoursPageComponent implements OnInit {
     this.api.post<any>('/api/v1/settings/integrations/webhooks', {
       name: this.webhookDraft.name.trim(),
       endpointUrl: this.webhookDraft.endpointUrl.trim(),
-      events: ['happy_hours.rule.created', 'happy_hours.rule.updated', 'happy_hours.approval.requested', 'happy_hours.approval.approved', 'happy_hours.approval.rejected', 'happy_hours.discount_approval.requested', 'happy_hours.discount_approval.approved', 'happy_hours.discount_approval.rejected', 'happy_hours.coupon_abuse.scanned', 'happy_hours.coupon_abuse.resolved', 'happy_hours.anomalies.scanned', 'happy_hours.anomaly.reviewed', 'happy_hours.budget.updated'],
+      events: ['happy_hours.rule.created', 'happy_hours.rule.updated', 'happy_hours.approval.requested', 'happy_hours.approval.approved', 'happy_hours.approval.rejected', 'happy_hours.discount_approval.requested', 'happy_hours.discount_approval.approved', 'happy_hours.discount_approval.rejected', 'happy_hours.coupon_abuse.scanned', 'happy_hours.coupon_abuse.resolved', 'happy_hours.anomalies.scanned', 'happy_hours.anomaly.reviewed', 'happy_hours.fraud.scanned', 'happy_hours.fraud.reviewed', 'happy_hours.budget.updated'],
     }).subscribe({
       next: (response) => {
         this.busy = false;
@@ -923,6 +967,12 @@ export class HappyHoursPageComponent implements OnInit {
   couponDiscount(coupon: Coupon): string {
     return coupon.discountType === 'percent' ? `${coupon.discountBps / 100}%` : `₹${this.money(coupon.discountValuePaise).toFixed(2)}`;
   }
+  couponTarget(coupon: Coupon): string {
+    if (coupon.offerType === 'service_specific') return `${coupon.targetServiceIds.length} services · ${coupon.targetServiceCategories.length} categories`;
+    if (coupon.offerType === 'segment') return coupon.targetClientSegments.join(', ') || 'Segment';
+    if (coupon.offerType === 'branch_specific') return 'Current branch';
+    return this.actionLabel(coupon.offerType);
+  }
   displayDate(value: string | null): string {
     const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return match ? `${match[3]}/${match[2]}/${match[1]}` : '—';
@@ -982,9 +1032,18 @@ export class HappyHoursPageComponent implements OnInit {
     const minSubtotalPaise = this.toPaise(draft.minSubtotal);
     const maxDiscountPaise = this.toPaise(draft.maxDiscount);
     const usageLimit = draft.usageLimit === '' ? null : Number(draft.usageLimit);
-    if (!draft.code.trim() || !Number.isFinite(value) || value <= 0 || (draft.discountType === 'percent' && value > 100) || !Number.isFinite(minSubtotalPaise) || !Number.isFinite(maxDiscountPaise) || (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit <= 0)) || (draft.startDate && draft.endDate && draft.endDate < draft.startDate)) {
+    const perClientLimit = draft.perClientLimit === '' ? 0 : Number(draft.perClientLimit);
+    const targetServiceCategories = draft.serviceCategories.split(',').map((item) => item.trim()).filter(Boolean);
+    const targetClientSegments = draft.clientSegments.split(',').map((item) => item.trim()).filter(Boolean);
+    if (!draft.code.trim() || !Number.isFinite(value) || value <= 0 || (draft.discountType === 'percent' && value > 100) || !Number.isFinite(minSubtotalPaise) || !Number.isFinite(maxDiscountPaise) || (usageLimit !== null && (!Number.isInteger(usageLimit) || usageLimit <= 0)) || !Number.isInteger(perClientLimit) || perClientLimit < 0 || (draft.startDate && draft.endDate && draft.endDate < draft.startDate)) {
       this.error = 'Code and a valid discount are required';
       return null;
+    }
+    if (draft.offerType === 'service_specific' && !draft.targetServiceIds.length && !targetServiceCategories.length) {
+      this.error = 'Select a service or enter a service category'; return null;
+    }
+    if (draft.offerType === 'segment' && !targetClientSegments.length) {
+      this.error = 'Enter at least one client segment'; return null;
     }
     return {
       code: draft.code.trim(), discountType: draft.discountType,
@@ -993,7 +1052,10 @@ export class HappyHoursPageComponent implements OnInit {
       minSubtotalPaise, maxDiscountPaise, active: draft.active,
       startsAt: draft.startDate ? `${draft.startDate}T00:00:00Z` : null,
       endsAt: draft.endDate ? `${draft.endDate}T23:59:59Z` : null,
-      usageLimit,
+      usageLimit, perClientLimit, offerType: draft.offerType,
+      targetServiceIds: draft.targetServiceIds,
+      targetServiceCategories,
+      targetClientSegments,
     };
   }
 
@@ -1142,7 +1204,7 @@ export class HappyHoursPageComponent implements OnInit {
   }
 
   private emptyCouponDraft(): CouponDraft {
-    return { code: '', discountType: 'percent', discountValue: '', minSubtotal: '', maxDiscount: '', startDate: '', endDate: '', usageLimit: '', active: true };
+    return { code: '', discountType: 'percent', discountValue: '', minSubtotal: '', maxDiscount: '', startDate: '', endDate: '', usageLimit: '', perClientLimit: '', offerType: 'generic', targetServiceIds: [], serviceCategories: '', clientSegments: '', active: true };
   }
 
   private emptyAudienceDraft(): AudienceDraft {

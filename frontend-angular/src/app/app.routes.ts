@@ -5,6 +5,35 @@ import { authGuard } from './core/guards/auth.guard';
 const packageReportRedirect = (tab: string): CanActivateFn => () =>
   inject(Router).createUrlTree(['/packages'], { queryParams: { tab } });
 
+const invoiceDetailRedirect: CanActivateFn = (route) =>
+  inject(Router).createUrlTree(['/pos/invoices'], { queryParams: { invoiceId: route.paramMap.get('id') } });
+
+const invoiceActivityRedirect: CanActivateFn = () =>
+  inject(Router).createUrlTree(['/reports/invoices'], { queryParams: { report: 'invoice-activity' } });
+
+const legacyInvoiceReportRedirect: CanActivateFn = (route) => {
+  const report = route.paramMap.get('reportId') ?? 'sale-summary';
+  const directRoutes: Record<string, string> = {
+    payments: '/pos/invoices', wallet: '/pos/invoices', audit: '/pos/invoices',
+    'deleted-invoice-approvals': '/pos/invoices', delivery: '/pos/invoices',
+    'branch-closing': '/pos/cash-drawer', gst: '/pos/enterprise',
+    memberships: '/memberships', 'package-liability': '/memberships',
+    commission: '/reports/staff-bookings', 'staff-services': '/reports/staff-bookings',
+    'staff-discounts': '/reports/staff-bookings', 'sales-discount-intelligence': '/reports',
+    'discount-approval': '/reports', 'client-profit': '/reports', 'leakage-ai': '/reports',
+    'line-audit': '/pos/invoices',
+  };
+  const directRoute = directRoutes[report];
+  if (directRoute) return inject(Router).createUrlTree([directRoute]);
+  const tabs: Record<string, string> = {
+    'sale-summary': 'invoices', overview: 'invoices', 'invoice-activity': 'invoice-activity',
+    'due-recovery': 'due-recovery', 'due-aging': 'due-recovery', 'staff-unpaid': 'due-recovery',
+    'service-trends': 'service-trends', 'service-clients': 'service-clients',
+    products: 'product-sales', 'product-sales': 'product-sales', 'product-movements': 'product-movements',
+  };
+  return inject(Router).createUrlTree(['/reports/invoices'], { queryParams: { report: tabs[report] ?? 'invoices' } });
+};
+
 export const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'login', loadComponent: () => import('./pages/security/login/login-page.component').then((m) => m.LoginPageComponent) },
@@ -30,14 +59,26 @@ export const routes: Routes = [
   { path: 'appointments/activities', loadComponent: () => import('./pages/appointments/activities/appointment-activities-page.component').then((m) => m.AppointmentActivitiesPageComponent), canActivate: [authGuard] },
   { path: 'availability', loadComponent: () => import('./pages/availability/availability-page.component').then((m) => m.AvailabilityPageComponent), canActivate: [authGuard] },
   { path: 'pos', loadComponent: () => import('./pages/pos/pos-page.component').then((m) => m.PosPageComponent), canActivate: [authGuard] },
-  { path: 'pos/sales', loadComponent: () => import('./pages/pos/sales/pos-sales-page.component').then((m) => m.PosSalesPageComponent), canActivate: [authGuard] },
+  { path: 'pos/sales', redirectTo: 'pos/invoices', pathMatch: 'full' },
+  { path: 'pos/invoice-activity', canActivate: [invoiceActivityRedirect], children: [] },
+  { path: 'pos/payment-mode-report', redirectTo: 'pos/invoices', pathMatch: 'full' },
   { path: 'pos/payment-modes', loadComponent: () => import('./pages/pos/payment-modes/pos-payment-modes-page.component').then((m) => m.PosPaymentModesPageComponent), canActivate: [authGuard] },
   { path: 'pos/invoices', loadComponent: () => import('./pages/pos/invoices/pos-invoices-page.component').then((m) => m.PosInvoicesPageComponent), canActivate: [authGuard] },
   { path: 'pos/holds', loadComponent: () => import('./pages/pos/holds/pos-holds-page.component').then((m) => m.PosHoldsPageComponent), canActivate: [authGuard] },
   { path: 'pos/tips', loadComponent: () => import('./pages/pos/tips/pos-tips-page.component').then((m) => m.PosTipsPageComponent), canActivate: [authGuard] },
   { path: 'pos/cash-drawer', loadComponent: () => import('./pages/pos/cash-drawer/pos-cash-drawer-page.component').then((m) => m.PosCashDrawerPageComponent), canActivate: [authGuard] },
+  { path: 'pos/cash-drawer-eod', redirectTo: 'pos/cash-drawer', pathMatch: 'full' },
+  { path: 'cash-drawer-eod', redirectTo: 'pos/cash-drawer', pathMatch: 'full' },
   { path: 'pos/happy-hours', loadComponent: () => import('./pages/pos/happy-hours/happy-hours-page.component').then((m) => m.HappyHoursPageComponent), canActivate: [authGuard] },
   { path: 'pos/enterprise', loadComponent: () => import('./pages/pos/enterprise/pos-enterprise-page.component').then((m) => m.PosEnterprisePageComponent), canActivate: [authGuard] },
+  { path: 'billing', redirectTo: 'billing/core-money-flow', pathMatch: 'full' },
+  { path: 'billing/core-money-flow', redirectTo: 'pos/enterprise', pathMatch: 'full' },
+  { path: 'billing/pos', redirectTo: 'pos', pathMatch: 'full' },
+  { path: 'billing/invoices', redirectTo: 'pos/invoices', pathMatch: 'full' },
+  { path: 'billing/invoices/:id', canActivate: [invoiceDetailRedirect], children: [] },
+  { path: 'billing/refunds', redirectTo: 'pos/invoices', pathMatch: 'full' },
+  { path: 'billing/daily-closing', redirectTo: 'pos/enterprise', pathMatch: 'full' },
+  { path: 'billing/reconciliation', redirectTo: 'pos/cash-drawer', pathMatch: 'full' },
   { path: 'cash-drawer-approval/:token', loadComponent: () => import('./pages/pos/cash-drawer-approval/cash-drawer-approval-page.component').then((m) => m.CashDrawerApprovalPageComponent) },
   { path: 'inventory/gl-reconciliation', loadComponent: () => import('./pages/inventory/gl-reconciliation/gl-reconciliation-page.component').then((m) => m.GlReconciliationPageComponent), canActivate: [authGuard] },
   { path: 'inventory/advanced-controls', loadComponent: () => import('./pages/inventory/advanced-controls/advanced-controls-page.component').then((m) => m.AdvancedControlsPageComponent), canActivate: [authGuard] },
@@ -68,9 +109,11 @@ export const routes: Routes = [
   { path: 'reports/expired-packages', canActivate: [packageReportRedirect('expired')], children: [] },
   { path: 'reports/completed-packages', canActivate: [packageReportRedirect('completed')], children: [] },
   { path: 'reports', loadComponent: () => import('./pages/reports/reports-page.component').then((m) => m.ReportsPageComponent), canActivate: [authGuard] },
+  { path: 'reports/advanced', loadComponent: () => import('./pages/reports/advanced/advanced-report-page.component').then((m) => m.AdvancedReportPageComponent), canActivate: [authGuard] },
   { path: 'appointment-reports', loadComponent: () => import('./pages/reports/appointments/appointment-reports-page.component').then((m) => m.AppointmentReportsPageComponent), canActivate: [authGuard] },
   { path: 'reports/staff-bookings', loadComponent: () => import('./pages/reports/staff-bookings/staff-bookings-report-page.component').then((m) => m.StaffBookingsReportPageComponent), canActivate: [authGuard] },
   { path: 'reports/invoices', loadComponent: () => import('./pages/reports/invoices/invoice-reports-page.component').then((m) => m.InvoiceReportsPageComponent), canActivate: [authGuard] },
+  { path: 'reports/invoices/:reportId', canActivate: [legacyInvoiceReportRedirect], children: [] },
   {
     path: 'finance',
     loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent),
@@ -82,11 +125,15 @@ export const routes: Routes = [
     },
   },
   { path: 'sms-center', loadComponent: () => import('./pages/notifications/notifications-page.component').then((m) => m.NotificationsPageComponent), canActivate: [authGuard] },
-  { path: 'notifications', loadComponent: () => import('./pages/notifications/notifications-page.component').then((m) => m.NotificationsPageComponent), canActivate: [authGuard] },
+  { path: 'notifications', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'messaging/whatsapp', loadComponent: () => import('./pages/messaging/whatsapp-automation-page.component').then((m) => m.WhatsAppAutomationPageComponent), canActivate: [authGuard] },
   { path: 'marketing/birthdays', loadComponent: () => import('./pages/marketing/birthday-anniversary/birthday-anniversary-page.component').then((m) => m.BirthdayAnniversaryPageComponent), canActivate: [authGuard] },
   { path: 'marketing', loadComponent: () => import('./pages/marketing/marketing-leads-page.component').then((m) => m.MarketingLeadsPageComponent), canActivate: [authGuard] },
+  { path: 'operations', loadComponent: () => import('./pages/marketplace/operations-page.component').then((m) => m.OperationsPageComponent), canActivate: [authGuard], data: { roles: ['owner', 'admin', 'manager'], deniedRedirect: '/dashboard' } },
   { path: 'settings', loadComponent: () => import('./pages/settings/settings-page.component').then((m) => m.SettingsPageComponent), canActivate: [authGuard] },
   { path: 'settings/invoice', loadComponent: () => import('./pages/settings/invoice/invoice-settings-page.component').then((m) => m.InvoiceSettingsPageComponent), canActivate: [authGuard] },
+  { path: 'settings/taxes', redirectTo: 'settings/invoice', pathMatch: 'full' },
+  { path: 'settings/payment-methods', redirectTo: 'pos/payment-modes', pathMatch: 'full' },
   { path: 'settings/integrations-data', loadComponent: () => import('./pages/data-migration/integrations-data-page.component').then((m) => m.IntegrationsDataPageComponent), canActivate: [authGuard] },
   { path: 'saas', loadComponent: () => import('./pages/platform/saas-admin/saas-admin-page.component').then((m) => m.SaasAdminPageComponent), canActivate: [authGuard], data: { roles: ['owner', 'admin', 'manager'], deniedRedirect: '/dashboard' } },
   { path: 'platform/saas-admin', loadComponent: () => import('./pages/platform/saas-admin/saas-admin-page.component').then((m) => m.SaasAdminPageComponent), canActivate: [authGuard], data: { roles: ['superadmin', 'super-admin'], deniedRedirect: '/dashboard' } },

@@ -22,6 +22,9 @@ pub struct ActiveMembershipRecord {
     pub auto_renew_enabled: bool,
     pub auto_renew_status: String,
     pub pending_membership_id: Option<String>,
+    pub frozen_at: Option<DateTime<Utc>>,
+    pub frozen_until: Option<chrono::NaiveDate>,
+    pub freeze_reason: String,
 }
 
 #[derive(FromRow, Serialize)]
@@ -186,7 +189,8 @@ const BASE_SQL: &str = r#"
    cm.source_sale_id, cm.assigned_at, cm.expires_at,
    cm.active, cm.cancelled_at, cm.cancel_reason,
    COALESCE(SUM(cmc.remaining_qty) FILTER (WHERE cmc.active AND (cmc.expires_at IS NULL OR cmc.expires_at >= CURRENT_DATE)), 0)::BIGINT AS remaining_credits
-   , cm.auto_renew_enabled, cm.auto_renew_status, cm.pending_membership_id
+   , cm.auto_renew_enabled, cm.auto_renew_status, cm.pending_membership_id,
+     cm.frozen_at, cm.frozen_until, cm.freeze_reason
  FROM client_memberships cm
  JOIN clients c ON c.id=cm.client_id AND c.tenant_id=cm.tenant_id AND c.branch_id=cm.branch_id
  JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id
@@ -198,7 +202,7 @@ pub async fn list(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<ActiveMembershipRecord>, sqlx::Error> {
-    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent ORDER BY cm.assigned_at DESC"))
+    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent, cm.frozen_at, cm.frozen_until, cm.freeze_reason ORDER BY cm.assigned_at DESC"))
         .bind(tenant_id).bind(branch_id).fetch_all(db).await
 }
 
@@ -208,7 +212,7 @@ pub async fn by_source_sale(
     branch_id: &str,
     source_sale_id: &str,
 ) -> Result<Option<ActiveMembershipRecord>, sqlx::Error> {
-    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.source_sale_id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent LIMIT 1"))
+    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.source_sale_id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent, cm.frozen_at, cm.frozen_until, cm.freeze_reason LIMIT 1"))
         .bind(tenant_id).bind(branch_id).bind(source_sale_id).fetch_optional(db).await
 }
 
@@ -218,7 +222,7 @@ pub async fn by_id(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<ActiveMembershipRecord>, sqlx::Error> {
-    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent LIMIT 1"))
+    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent, cm.frozen_at, cm.frozen_until, cm.freeze_reason LIMIT 1"))
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
 }
 
@@ -228,7 +232,7 @@ pub async fn history_for_client(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Vec<ActiveMembershipRecord>, sqlx::Error> {
-    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.client_id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent ORDER BY cm.assigned_at DESC"))
+    sqlx::query_as::<_, ActiveMembershipRecord>(&format!("{BASE_SQL} WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.client_id=$3 GROUP BY cm.id, c.first_name, c.last_name, m.name, m.price_paise, m.discount_percent, cm.frozen_at, cm.frozen_until, cm.freeze_reason ORDER BY cm.assigned_at DESC"))
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 
@@ -252,6 +256,84 @@ pub async fn cancel(
         .bind(tenant_id).bind(branch_id).bind(client_id).bind(membership_id).bind(&source_sale_id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO membership_lifecycle_ledger (tenant_id, branch_id, client_membership_id, event_type, source_sale_id, reason) VALUES ($1,$2,$3,'cancelled',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(id).bind(source_sale_id).bind(reason).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn freeze(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    days: i32,
+    reason: &str,
+) -> Result<bool, sqlx::Error> {
+    if !(1..=366).contains(&days) {
+        return Ok(false);
+    }
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as::<_, (String, String, String, Option<DateTime<Utc>>)>(
+        "SELECT client_id, membership_id, source_sale_id, frozen_at FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((_client_id, _membership_id, source_sale_id, frozen_at)) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    if frozen_at.is_some() {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query("UPDATE client_memberships SET frozen_at=NOW(), frozen_until=CURRENT_DATE + $4, freeze_reason=$5, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(days).bind(reason.trim())
+        .execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO membership_lifecycle_ledger (tenant_id,branch_id,client_membership_id,event_type,source_sale_id,reason) VALUES ($1,$2,$3,'frozen',$4,$5)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(source_sale_id).bind(reason.trim())
+        .execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn resume(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as::<_, (String, String, String, Option<DateTime<Utc>>)>(
+        "SELECT client_id, membership_id, source_sale_id, frozen_at FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((client_id, membership_id, source_sale_id, frozen_at)) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let Some(frozen_at) = frozen_at else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let elapsed_days = (Utc::now().date_naive() - frozen_at.date_naive())
+        .num_days()
+        .max(0);
+    sqlx::query("UPDATE client_memberships SET expires_at=CASE WHEN expires_at IS NULL THEN NULL ELSE expires_at + ($4::BIGINT * INTERVAL '1 day') END, frozen_at=NULL, frozen_until=NULL, freeze_reason='', updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(elapsed_days)
+        .execute(&mut *tx).await?;
+    sqlx::query("UPDATE client_membership_credits SET expires_at=CASE WHEN expires_at IS NULL THEN NULL ELSE expires_at + ($6::BIGINT * INTERVAL '1 day') END, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND membership_id=$4 AND source_sale_id=$5 AND active=TRUE")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(membership_id).bind(&source_sale_id).bind(elapsed_days)
+        .execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO membership_lifecycle_ledger (tenant_id,branch_id,client_membership_id,event_type,source_sale_id,reason) VALUES ($1,$2,$3,'resumed',$4,$5)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(source_sale_id)
+        .bind(format!("resumed after {elapsed_days} day(s) frozen"))
+        .execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -282,7 +364,7 @@ pub async fn renewal_queue(
     branch_id: &str,
     days: i64,
 ) -> Result<Vec<RenewalQueueRecord>, sqlx::Error> {
-    sqlx::query_as::<_, RenewalQueueRecord>("SELECT cm.id, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, m.name AS membership_name, cm.expires_at, EXTRACT(DAY FROM cm.expires_at - NOW())::BIGINT AS days_until_expiry, cm.auto_renew_status, cm.auto_renew_failure_count AS failure_count FROM client_memberships cm JOIN clients c ON c.id=cm.client_id JOIN memberships m ON m.id=cm.membership_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.active=TRUE AND cm.auto_renew_enabled=TRUE AND cm.auto_renew_status <> 'paused' AND cm.expires_at IS NOT NULL AND cm.expires_at <= NOW() + ($3::INT * INTERVAL '1 day') AND (cm.next_renewal_at IS NULL OR cm.next_renewal_at<=NOW()+($3::INT*INTERVAL '1 day')) ORDER BY cm.expires_at ASC")
+    sqlx::query_as::<_, RenewalQueueRecord>("SELECT cm.id, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, m.name AS membership_name, cm.expires_at, EXTRACT(DAY FROM cm.expires_at - NOW())::BIGINT AS days_until_expiry, cm.auto_renew_status, cm.auto_renew_failure_count AS failure_count FROM client_memberships cm JOIN clients c ON c.id=cm.client_id JOIN memberships m ON m.id=cm.membership_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.active=TRUE AND cm.frozen_at IS NULL AND cm.auto_renew_enabled=TRUE AND cm.auto_renew_status <> 'paused' AND cm.expires_at IS NOT NULL AND cm.expires_at <= NOW() + ($3::INT * INTERVAL '1 day') AND (cm.next_renewal_at IS NULL OR cm.next_renewal_at<=NOW()+($3::INT*INTERVAL '1 day')) ORDER BY cm.expires_at ASC")
         .bind(tenant_id).bind(branch_id).bind(days).fetch_all(db).await
 }
 
@@ -292,7 +374,7 @@ pub async fn reminders(
     branch_id: &str,
     days: i64,
 ) -> Result<Vec<RenewalQueueRecord>, sqlx::Error> {
-    sqlx::query_as::<_, RenewalQueueRecord>("SELECT cm.id, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, m.name AS membership_name, cm.expires_at, EXTRACT(DAY FROM cm.expires_at - NOW())::BIGINT AS days_until_expiry, cm.auto_renew_status, cm.auto_renew_failure_count AS failure_count FROM client_memberships cm JOIN clients c ON c.id=cm.client_id JOIN memberships m ON m.id=cm.membership_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.active=TRUE AND cm.expires_at IS NOT NULL AND cm.expires_at >= NOW() AND cm.expires_at <= NOW() + ($3::INT * INTERVAL '1 day') ORDER BY cm.expires_at ASC")
+    sqlx::query_as::<_, RenewalQueueRecord>("SELECT cm.id, CONCAT_WS(' ', c.first_name, c.last_name) AS client_name, m.name AS membership_name, cm.expires_at, EXTRACT(DAY FROM cm.expires_at - NOW())::BIGINT AS days_until_expiry, cm.auto_renew_status, cm.auto_renew_failure_count AS failure_count FROM client_memberships cm JOIN clients c ON c.id=cm.client_id JOIN memberships m ON m.id=cm.membership_id WHERE cm.tenant_id=$1 AND cm.branch_id=$2 AND cm.active=TRUE AND cm.frozen_at IS NULL AND cm.expires_at IS NOT NULL AND cm.expires_at >= NOW() AND cm.expires_at <= NOW() + ($3::INT * INTERVAL '1 day') ORDER BY cm.expires_at ASC")
         .bind(tenant_id).bind(branch_id).bind(days).fetch_all(db).await
 }
 
@@ -359,7 +441,7 @@ pub async fn client_eligibility(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Option<ClientMembershipEligibilityRecord>, sqlx::Error> {
-    sqlx::query_as::<_, ClientMembershipEligibilityRecord>("SELECT cm.membership_id, m.name AS membership_name, m.plan_type, m.discount_percent, m.service_ids_json AS service_ids, cm.expires_at FROM client_memberships cm JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id AND m.active=TRUE WHERE cm.tenant_id=$1 AND ((cm.branch_id=$2 AND (cm.client_id=$3 OR (COALESCE((SELECT (settings_json#>>'{redemptionRules,allowFamilySharing}')::BOOLEAN FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2),TRUE) AND EXISTS (SELECT 1 FROM membership_family_members fm WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.client_membership_id=cm.id AND fm.member_client_id=$3 AND fm.active=TRUE)))) OR membership_cross_location_allowed($1,cm.branch_id,$2,cm.client_id,$3,'discount')) AND cm.active=TRUE AND cm.assigned_at<=NOW() AND (cm.expires_at IS NULL OR cm.expires_at>=NOW()) ORDER BY (cm.branch_id=$2) DESC,cm.assigned_at DESC LIMIT 1")
+    sqlx::query_as::<_, ClientMembershipEligibilityRecord>("SELECT cm.membership_id, m.name AS membership_name, m.plan_type, m.discount_percent, m.service_ids_json AS service_ids, cm.expires_at FROM client_memberships cm JOIN memberships m ON m.id=cm.membership_id AND m.tenant_id=cm.tenant_id AND m.branch_id=cm.branch_id AND m.active=TRUE WHERE cm.tenant_id=$1 AND ((cm.branch_id=$2 AND (cm.client_id=$3 OR (COALESCE((SELECT (settings_json#>>'{redemptionRules,allowFamilySharing}')::BOOLEAN FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2),TRUE) AND EXISTS (SELECT 1 FROM membership_family_members fm WHERE fm.tenant_id=$1 AND fm.branch_id=$2 AND fm.client_membership_id=cm.id AND fm.member_client_id=$3 AND fm.active=TRUE)))) OR membership_cross_location_allowed($1,cm.branch_id,$2,cm.client_id,$3,'discount')) AND cm.active=TRUE AND cm.frozen_at IS NULL AND cm.assigned_at<=NOW() AND (cm.expires_at IS NULL OR cm.expires_at>=NOW()) ORDER BY (cm.branch_id=$2) DESC,cm.assigned_at DESC LIMIT 1")
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(db).await
 }
 

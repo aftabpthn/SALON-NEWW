@@ -1,0 +1,56 @@
+$aura-breakpoints: (
+  mobile: 0,
+  phablet: 600px,
+  tablet: 768px,
+  desktop: 1024px,
+  wide: 1440px
+);
+
+@mixin aura-up($breakpoint) {
+  $value: map-get($aura-breakpoints, $breakpoint);
+
+  @if $value == null {
+    @error "Unknown AuraSalon breakpoint: #{$breakpoint}";
+  }
+
+  @media (min-width: $value) {
+    @content;
+  }
+}
+
+@mixin aura-between($from, $to) {
+  $min: map-get($aura-breakpoints, $from);
+  $max: map-get($aura-breakpoints, $to);
+
+  @if $min == null or $max == null {
+    @error "Unknown AuraSalon breakpoint range: #{$from} to #{$to}";
+  }
+
+  @media (min-width: $min) and (max-width: ($max - 1px)) {
+    @content;
+  }
+}
+
+@mixin aura-card-grid($mobile: 1, $tablet: 2, $desktop: 3, $wide: 4) {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat($mobile, minmax(0, 1fr));
+
+  @include aura-up(tablet) {
+    grid-template-columns: repeat($tablet, minmax(0, 1fr));
+  }
+
+  @include aura-up(desktop) {
+    grid-template-columns: repeat($desktop, minmax(0, 1fr));
+  }
+
+  @include aura-up(wide) {
+    grid-template-columns: repeat($wide, minmax(0, 1fr));
+  }
+}
+
+@mixin aura-safe-page {
+  width: min(calc(100% - (var(--page-gutter) * 2)), var(--container-desktop));
+  margin-inline: auto;
+  padding-block: var(--page-top) var(--page-bottom);
+}

@@ -135,7 +135,7 @@ The row numbers in this table map directly to the AuraShine layer audit in the n
 | 4 | Walk-ins, waitlist and queue | Waitlist and smart-booking actions are integrated into the appointment page. | Waitlist promotion, booking groups, queue prediction and QR check-in exist in [appointments.rs](../backend-rust/src/routes/appointments.rs). | `appointment_waitlist`, `booking_groups`, `smart_booking_requests`, `booking_wizard_state`. | Partial | Replace heuristic queue prediction, normalize group members, and add a durable capacity-aware front-desk queue. |
 | 5 | Online/social/Google booking | No `/book` route; `pages/booking/` has no implementation. | Public v1/v2 booking and token actions exist in [booking_portal.rs](../backend-rust/src/routes/booking_portal.rs), [booking_portal_v2.rs](../backend-rust/src/routes/booking_portal_v2.rs), and [booking_extensions.rs](../backend-rust/src/routes/booking_extensions.rs). | Appointments plus Redis OTP/holds; no durable portal session, abandonment or deposit model. | Backend-only | OTP delivery is now provider-truthful, but production credentials/live-number certification, guest identity, deposits and social/Google flows remain pending. A new public page requires visual approval. |
 | 6 | Client CRM, history, family and notes | `/clients` supports working search/create/edit, real histories, benefit summaries, structured complaint/recovery notes, durable family links and a Forms & consent workspace in [clients-page.component.html](../frontend-angular/src/app/pages/clients/clients-page.component.html). | Existing client detail returns the Client 360 aggregate; family compatibility routes now use the same tenant/branch-scoped repository instead of placeholders. | `clients`, `client_notes`, `client_family_links`, clinical profiles, immutable form versions/submissions, private treatment-photo bytes and the `last_visit_at` trigger. | **Core E2E** | Cross-location family policy remains an enterprise governance extension, not a missing core CRM workflow. |
-| 7 | Leads, enquiries and pipeline | `pages/leads/` and `pages/engagement/` have no implementation or route. | No mounted lead/enquiry router. | No lead, enquiry, pipeline or follow-up tables. | **Missing** | Define lead source, owner, stage, follow-up, conversion and attribution model; then preview any new route-level UI before implementation. |
+| 7 | Leads, enquiries and pipeline | Existing `/marketing` Leads workspace now loads and mutates real lead records, stage/owner/qualification/score fields and an activity drawer. | Mounted `marketing_leads` router provides list/create/update, owner lookup, activity timeline, and appointment/client conversion actions with permission checks and audit events. | Migration `0199_marketing_lead_crm.sql` adds tenant/branch-scoped `marketing_leads` and `marketing_lead_activities` with stage, owner, score, follow-up, conversion and duplicate-active-phone protection. | **Core E2E** | Provider-driven nurture journeys, attribution reporting and automated follow-up delivery remain part of the Marketing Journeys phase. |
 
 ### Commerce, payments and retention
 
@@ -388,10 +388,10 @@ The order below protects existing data and unlocks already-built work before add
 
 | Reference surface | AuraShine reuse target | Current decision |
 |---|---|---|
-| Direct web booking | Existing `/book/:tenantSlug` and `frontend-angular/src/app/pages/booking/public-booking-page.*` | Improve the existing route; do not create a duplicate booking page. Before any frontend file is changed, show an Appointment-baseline image preview with desktop/mobile hierarchy, actions, loading and real empty states, then wait for explicit approval. |
-| Fresha/Salonist-style customer marketplace app | Existing customer-safe Rust marketplace/auth APIs; standalone customer frontend remains a separate product surface | New customer app/page code is pending visual approval. Proposed preview must cover discovery, business profile, service/staff/slot selection, booking summary and customer account without invented records. |
+| Direct web booking | Existing `/book/:tenantSlug` and `frontend-angular/src/app/pages/booking/public-booking-page.*` | Existing approved page improved in place; no duplicate booking route or payment engine was created. |
+| Fresha/Salonist-style customer marketplace app | Existing customer-safe Rust marketplace/auth APIs and the standalone `customer-app` product surface | Existing app audited and wired to real AuraShine contracts. Demo fallbacks and hardcoded pay-at-venue behavior were removed; Android and iOS projects now exist. |
 | Customer rewards, wallet, memberships, packages, gift cards, payments and invoices | Existing retention, membership, package, POS/payment and customer portal contracts | Reuse current APIs and ledgers. Never show local demo fallback when an API returns no rows; render a real empty state. |
-| Staff operations app | Existing `/staff-os`, staff attendance, leave, payroll, realtime team chat and mobile push paths | Extend the existing Staff OS after preview approval; do not create a parallel staff PWA or duplicate backend. Native packaging is a later separately approved distribution phase. |
+| Staff operations app | Existing `/staff-os`, staff attendance, leave, payroll, realtime team chat and mobile push paths | Existing standalone `staff-app` reuses the current permission-scoped APIs. Secure shell caching and Android/iOS packaging are now present; no parallel staff backend was added. |
 
 ##### Backend lane — Rust/PostgreSQL reuse first
 
@@ -404,13 +404,68 @@ The order below protects existing data and unlocks already-built work before add
 | Booking funnel, recovery, no-show/churn/rebooking and upsell intelligence | Existing reporting, engagement, happy-hours and governed AI surfaces | Add only source-backed missing metrics or actions after a focused parity audit. Deterministic rules must not be labelled AI. |
 | Staff attendance, roster, performance, payroll, leave, notifications and chat | Existing staff, payroll, realtime and team-chat services | Reuse current permission-scoped routes. Do not port demo staff-session behavior. |
 
-**Explicit exclusions:** fake customer/staff/account records, demo fallback data, hardcoded LAN API URLs, blank credentials presented as live, a second booking database, and unapproved Android/iOS packaging. Provider credentials and store signing remain activation work, not application-complete claims.
+**Explicit exclusions:** fake customer/staff/account records, demo fallback data, hardcoded LAN API URLs, blank credentials presented as live and a second booking database. Provider credentials, native build synchronization and store signing remain activation/distribution work, not application-complete claims.
 
-**Implementation gate:** backend parity/API mapping first. Every frontend implementation starts only after its image preview is shown and approved; frontend and backend work remain separately tracked and verified.
+**Implementation gate:** backend parity/API mapping first. The existing Public Booking visual and the already-present customer/staff app surfaces were approved for implementation; any genuinely new route-level screen remains separately approval gated.
+
+##### Web Booking Phase 1 — payment and customer self-service completed 15/07/2026
+
+| Area | Verified implementation |
+|---|---|
+| Deposit/payment | Booking confirmation persists the authoritative booked-price snapshot, calculates the branch deposit from server data, creates an idempotent Razorpay payment link and exposes real issued/paid/expired/cancelled/failed/refunded status. |
+| Webhook/reconciliation | The existing signed Razorpay webhook is reused. Provider events are deduplicated, payment and appointment confirmation update transactionally, and manual status refresh reconciles the provider state. |
+| Refund | Paid deposits use a provider-safe idempotency key, durable refund record and appointment activity. Missing Razorpay credentials remain an explicit live-activation blocker instead of a fake success. |
+| My Bookings | The existing `/book/:tenantSlug` page stores only short-lived customer action tokens in session storage, loads API-backed bookings, and provides owner-scoped cancel, reschedule, payment refresh and eligible refund actions. No demo booking records are shown. |
+| UI | The existing Appointment-baseline page was extended; no duplicate route/page was created. Confirmation, payment actions, compact booking records, empty/loading/error states and the right-side reschedule drawer are responsive. |
+| Verification | Backend `cargo check`, direct Angular TypeScript check, Angular template compiler and `git diff --check` pass. The focused Rust test command exceeded the local five-minute limit; provider E2E remains pending real Razorpay credentials and webhook delivery. |
+
+##### Three-product completion update — audited and wired 15/07/2026
+
+| Product | Completed application work | Exact remaining boundary |
+|---|---|---|
+| Web Online Booking | Existing payment/self-service flow retained. Durable funnel sessions/events, conversion/abandonment state, source-backed no-show/churn/rebooking metrics and idempotent recovery delivery now use PostgreSQL and the shared provider service. Verified mobile is stored separately and removed from analytics event JSON. Cloudflare Turnstile is capability-driven in the public response, rendered only when configured and always validated server-side before OTP delivery. Existing variants/add-ons remain the customer-safe upsell UI; individual risk scores stay staff-protected by design. | Live Turnstile, Razorpay, OTP and recovery delivery require production credentials/webhooks and provider E2E verification. |
+| Customer App | Marketplace endpoints now match the Rust contracts; real services/staff/availability, capability-driven payment mode, booking payment-link retry, customer-owned history and account ledgers are wired. Membership purchase, gift-card purchase/redeem and invoice payment links now reuse the existing POS, membership, gift-card, accounting and signed-webhook transactions. Favorites, waitlist, reviews, support tickets, referrals, family profiles, corporate benefits, private gallery metadata and beauty goals are durable/customer-owned. Demo fallback rows were removed. Android and iOS projects exist. | Production payment/Firebase/push credentials, native sync/signing and store release remain activation/distribution. |
+| Staff App | Existing secure auth and offline mutation queue were retained. A PWA manifest/service worker now caches only shell/static files and never API/business data. Android and iOS Capacitor projects exist and reuse the current Staff APIs. | Native build sync/signing, Apple/Google store setup, production push credentials and device certification remain distribution work. |
+
+**Verification:** Direct TypeScript checks and Angular template compilation pass for the main frontend, Customer App and Staff App. Rust `cargo check` passed after the customer/recovery changes; the final Turnstile retry was blocked by a concurrent partial `reports.rs` edit (`report_advanced_summary` route observed before its handler was written), not by a changed booking file. `git diff --check` passes. No demo business records were introduced.
+
+##### Customer Commerce Phase 1 — implementation complete 15/07/2026; focused test gate blocked
+
+| Area | Verified implementation |
+|---|---|
+| Membership checkout | Customer-safe plan ownership, authoritative branch price and membership tax policy feed an idempotent POS invoice. Paid/free plans activate through the existing membership-credit transaction; unpaid plans do not grant benefits. |
+| Gift-card checkout | The customer chooses a real marketplace branch and amount. The existing POS sale and gift-card ledger issue the card only after full verified payment; no pending/demo card is inserted. |
+| Invoice payment and gift-card redemption | Customer invoice/card ownership, tenant/branch scope, payable balance, active status and replay key are validated. Gift-card balance, POS payment, invoice status and accounting update in one existing transaction. |
+| Provider settlement | Razorpay, Cashfree and PhonePe signed webhook paths call one idempotent deferred-benefit settlement helper inside the payment transaction. Missing provider/webhook credentials return explicit activation-required/service-unavailable state. |
+| Customer UI | Existing Customer Hub reuses real marketplace branches and account invoices, exposes secure payment actions and reloads API-backed records after activation/redemption. No new route/page or local fallback record was added. |
+| Verification | Rust formatting/source parse and `cargo check` pass. Customer App direct TypeScript and Angular template compiler checks pass. Focused deferred-benefit/value policy tests are included; their current test-binary build is blocked by the unrelated concurrent `analytics_service.rs` test reference to missing `block_unreconciled_recommendations`. |
+
+##### Customer Support/Profile Phase 2 — implementation complete 15/07/2026; backend cargo gate pending
+
+| Area | Implementation |
+|---|---|
+| Support | Customer-owned support tickets and customer messages now persist in dedicated customer portal tables, scoped through the authenticated customer account and linked branch/client context. |
+| Referrals | Customer app can load existing referral code/history and create a branch-scoped referral code through the existing retention referral service. |
+| Family, corporate and gallery | Existing CRM family links, POS corporate account members and private treatment-photo metadata are exposed as read-only customer-owned views. No duplicate CRM/POS tables were added. |
+| Beauty goals | Customer-owned beauty goals persist with branch/client scope, type, target date, notes and status. |
+| Customer UI | Existing Customer Hub loads support/referrals/family/corporate/gallery/goals from real APIs. Support ticket, referral-code and beauty-goal actions reload the affected API-backed module. Gallery now uses the hub instead of the wishlist page. |
+| Verification | Customer App direct TypeScript check and Angular template compiler pass. Rust formatting passes. Backend `cargo check` was blocked by repeated concurrent `cargo check`/`cargo run` compilation processes and needs one clean rerun. |
+
+**Current three-product position:** the high-value shared foundation, core booking/mobile workflows, customer commerce and customer-safe support/profile extensions are implemented. Provider credentials, native-store release and one clean backend cargo verification rerun are tracked separately from application backlog.
+
+##### Dedicated Lead CRM Phase — implementation complete 15/07/2026
+
+| Area | Verified implementation |
+|---|---|
+| Durable lead model | Migration `0199_marketing_lead_crm.sql` adds tenant/branch-scoped leads with source, stage, qualification status, score, owner, follow-up date, optional client/appointment links and notes. Active phone duplicates are rejected per tenant/branch. |
+| Activity timeline | Lead notes, calls, messages, follow-ups, qualification and conversion activities persist in `marketing_lead_activities`; activity writes and follow-up updates are transactional. |
+| API and security | Existing Marketing Leads surface reuses `GET/POST/PATCH /marketing/leads`, owner lookup, activity timeline and conversion endpoints. Owner/client/appointment references are branch-validated; marketing/client permissions and audit events are enforced. |
+| Frontend | Existing `/marketing` page now uses real lead APIs, empty/loading/error states, stage and owner controls, score/qualification fields, activity drawer and conversion action. No duplicate page or route was created. |
+| Boundary | Automated campaign journeys, provider delivery, attribution analytics and reputation automation remain separate Marketing phase work; this phase does not claim live provider activation. |
 
 ### Recommended immediate slice
 
-**Optional implementation backlog:** None. Remaining items in this document are provider credentials, native app distribution, live certification or separately approved advanced enhancements.
+**Immediate implementation backlog:** no known SALON-NEWW application phase remains in this slice. Provider credentials, native sync/signing, store release, live certification and a clean backend cargo verification rerun are separate activation/distribution/verification work.
 
 ## Further Decisions Needed
 

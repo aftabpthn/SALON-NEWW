@@ -2073,8 +2073,9 @@ pub(crate) fn encrypt_secret(encryption_key: &str, secret: &str) -> Result<Strin
         .map_err(|_| AppError::internal("failed to initialize MFA encryption"))?;
     let mut nonce = [0_u8; 12];
     OsRng.fill_bytes(&mut nonce);
+    let nonce = Nonce::from(nonce);
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce), secret.as_bytes())
+        .encrypt(&nonce, secret.as_bytes())
         .map_err(|_| AppError::internal("failed to encrypt MFA secret"))?;
     let mut stored = nonce.to_vec();
     stored.extend(ciphertext);
@@ -2091,8 +2092,12 @@ pub(crate) fn decrypt_secret(encryption_key: &str, stored: &str) -> Result<Strin
     let key = Sha256::digest(encryption_key.as_bytes());
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|_| AppError::internal("failed to initialize MFA encryption"))?;
+    let nonce: [u8; 12] = stored[..12]
+        .try_into()
+        .map_err(|_| AppError::internal("stored MFA secret is invalid"))?;
+    let nonce = Nonce::from(nonce);
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&stored[..12]), &stored[12..])
+        .decrypt(&nonce, &stored[12..])
         .map_err(|_| AppError::internal("failed to decrypt MFA secret"))?;
     String::from_utf8(plaintext).map_err(|_| AppError::internal("stored MFA secret is invalid"))
 }

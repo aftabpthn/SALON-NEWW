@@ -256,11 +256,19 @@ pub struct SecurityCounts {
 #[serde(rename_all = "camelCase")]
 pub struct ComplianceEvidenceCounts {
     pub mfa_enabled_users: i64,
+    pub active_api_clients: i64,
+    pub trusted_devices: i64,
+    pub active_privileged_sessions: i64,
+    pub field_audit_events: i64,
+    pub open_fraud_risks: i64,
+    pub active_fraud_warnings: i64,
     pub active_playbooks: i64,
     pub open_privacy_requests: i64,
     pub new_disclosure_reports: i64,
     pub pending_approvals: i64,
     pub active_access_rules: i64,
+    pub policy_enabled_sso_providers: i64,
+    pub enforced_sso_roles: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -603,11 +611,19 @@ pub async fn compliance_evidence_counts(
         r#"
         SELECT
           (SELECT COUNT(*) FROM auth_mfa_factors WHERE tenant_id=$1 AND enabled=TRUE) AS mfa_enabled_users,
+          (SELECT COUNT(*) FROM integration_api_keys WHERE tenant_id=$1 AND branch_id=$2 AND status='active' AND (expires_at IS NULL OR expires_at > NOW())) AS active_api_clients,
+          (SELECT COUNT(*) FROM security_trusted_devices WHERE tenant_id=$1 AND branch_id=$2 AND status='trusted') AS trusted_devices,
+          (SELECT COUNT(*) FROM security_privileged_sessions WHERE tenant_id=$1 AND branch_id=$2 AND revoked_at IS NULL AND expires_at > NOW()) AS active_privileged_sessions,
+          (SELECT COUNT(*) FROM security_field_audit_events WHERE tenant_id=$1 AND branch_id=$2) AS field_audit_events,
+          (SELECT COUNT(*) FROM pos_financial_risk_cases WHERE tenant_id=$1 AND branch_id=$2 AND status='open') AS open_fraud_risks,
+          (SELECT COUNT(*) FROM security_fraud_warnings WHERE tenant_id=$1 AND branch_id=$2 AND status='active') AS active_fraud_warnings,
           (SELECT COUNT(*) FROM security_incident_playbooks WHERE tenant_id=$1 AND branch_id=$2 AND status='active') AS active_playbooks,
           (SELECT COUNT(*) FROM security_privacy_requests WHERE tenant_id=$1 AND branch_id=$2 AND status='open') AS open_privacy_requests,
           (SELECT COUNT(*) FROM security_disclosure_reports WHERE tenant_id=$1 AND branch_id=$2 AND status='new') AS new_disclosure_reports,
           (SELECT COUNT(*) FROM security_approval_requests WHERE tenant_id=$1 AND branch_id=$2 AND status='pending') AS pending_approvals,
-          (SELECT COUNT(*) FROM security_access_rules WHERE tenant_id=$1 AND branch_id=$2 AND status='active') AS active_access_rules
+          (SELECT COUNT(*) FROM security_access_rules WHERE tenant_id=$1 AND branch_id=$2 AND status='active') AS active_access_rules,
+          COALESCE((SELECT (google_enabled::INT + microsoft_enabled::INT + saml_enabled::INT)::BIGINT FROM auth_sso_policies WHERE tenant_id=$1), 0) AS policy_enabled_sso_providers,
+          COALESCE((SELECT CARDINALITY(enforced_roles)::BIGINT FROM auth_sso_policies WHERE tenant_id=$1), 0) AS enforced_sso_roles
         "#,
     )
     .bind(tenant_id)

@@ -55,6 +55,7 @@ pub struct PayrollPreview {
     pub deductions_paise: i64,
     pub net_paise: i64,
     pub items: Vec<PayrollPreviewItem>,
+    pub salary_rows: Vec<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,6 +64,7 @@ pub struct PayrollRunDetail {
     pub run: repository::PayrollRunRecord,
     pub items: Vec<repository::PayrollItemRecord>,
     pub events: Vec<repository::PayrollEventRecord>,
+    pub salary_rows: Vec<Value>,
 }
 
 #[derive(Debug)]
@@ -79,11 +81,35 @@ pub struct PayrollPayoutInput {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffHolidayInput {
     pub holiday_date: NaiveDate,
     pub name: String,
     pub is_paid: Option<bool>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct CommissionBreakdown {
+    invoice_sales_paise: i64,
+    service_sales_paise: i64,
+    product_sales_paise: i64,
+    membership_sales_paise: i64,
+    package_sales_paise: i64,
+    service_commission_paise: i64,
+    product_commission_paise: i64,
+    membership_commission_paise: i64,
+    package_commission_paise: i64,
+    snapshot_commission_paise: i64,
+    total_commission_paise: i64,
+}
+
+#[derive(Debug, Default)]
+struct AdjustmentBreakdown {
+    allowance_paise: i64,
+    deduction_paise: i64,
+    fine_paise: i64,
+    rows: Vec<Value>,
 }
 
 pub async fn preview(
@@ -97,7 +123,7 @@ pub async fn preview(
     let (period_start, period_end) = period(year, month)?;
     let staff = repository::staff_sources(db, tenant_id, branch_id, staff_id, period_end)
         .await
-        .map_err(|error| AppError::internal(format!("failed to load payroll staff: {error}")))?;
+        .map_err(|_| AppError::internal("failed to load payroll staff"))?;
     let staff_ids = staff
         .iter()
         .map(|row| row.staff_id.clone())
@@ -111,6 +137,8 @@ pub async fn preview(
         schedules,
         commission_snapshots,
         sale_lines,
+        tips,
+        adjustment_rules,
         holidays,
     ) = tokio::try_join!(
         repository::commission_rules(db, tenant_id, branch_id, &staff_ids, period_end),
@@ -141,9 +169,18 @@ pub async fn preview(
             period_end
         ),
         repository::sale_lines(db, tenant_id, branch_id, period_start, period_end),
+        repository::tip_sources(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start,
+            period_end
+        ),
+        repository::payroll_adjustment_rules(db, tenant_id, branch_id),
         repository::list_holidays(db, tenant_id, branch_id, period_start, period_end),
     )
-    .map_err(|error| AppError::internal(format!("failed to load payroll sources: {error}")))?;
+    .map_err(|_| AppError::internal("failed to load payroll sources"))?;
 
     let mut rules_by_staff: HashMap<String, Vec<(String, i32)>> = HashMap::new();
     for rule in rules {
@@ -193,8 +230,14 @@ pub async fn preview(
 
     let target_staff = staff_ids.iter().cloned().collect::<HashSet<_>>();
     let mut commission_by_staff = HashMap::<String, i64>::new();
+    let mut commission_breakdown_by_staff = HashMap::<String, CommissionBreakdown>::new();
     for row in commission_snapshots {
-        *commission_by_staff.entry(row.staff_id).or_default() += row.commission_paise;
+        *commission_by_staff.entry(row.staff_id.clone()).or_default() += row.commission_paise;
+        let breakdown = commission_breakdown_by_staff
+            .entry(row.staff_id)
+            .or_default();
+        breakdown.snapshot_commission_paise += row.commission_paise;
+        breakdown.total_commission_paise += row.commission_paise;
     }
     for line in sale_lines {
         for (line_staff_id, split_bps) in line_attributions(&line.staff_id, &line.staff_splits) {
@@ -218,10 +261,40 @@ pub async fn preview(
                 })
                 .unwrap_or(0);
             let attributed = multiply_divide(line.taxable_paise, split_bps, 10_000);
-            *commission_by_staff.entry(line_staff_id).or_default() +=
-                multiply_divide(attributed, i64::from(rate), 100);
+            let commission_paise = multiply_divide(attributed, i64::from(rate), 100);
+            *commission_by_staff
+                .entry(line_staff_id.clone())
+                .or_default() += commission_paise;
+            let breakdown = commission_breakdown_by_staff
+                .entry(line_staff_id)
+                .or_default();
+            breakdown.invoice_sales_paise += attributed;
+            breakdown.total_commission_paise += commission_paise;
+            match line.line_type.as_str() {
+                "service" => {
+                    breakdown.service_sales_paise += attributed;
+                    breakdown.service_commission_paise += commission_paise;
+                }
+                "product" => {
+                    breakdown.product_sales_paise += attributed;
+                    breakdown.product_commission_paise += commission_paise;
+                }
+                "membership" => {
+                    breakdown.membership_sales_paise += attributed;
+                    breakdown.membership_commission_paise += commission_paise;
+                }
+                "package" => {
+                    breakdown.package_sales_paise += attributed;
+                    breakdown.package_commission_paise += commission_paise;
+                }
+                _ => {}
+            }
         }
     }
+    let tips_by_staff = tips
+        .into_iter()
+        .map(|row| (row.staff_id, row.tip_paise))
+        .collect::<HashMap<_, _>>();
 
     let days_in_month = i64::from(period_end.day());
     let paid_holidays = holidays
@@ -232,12 +305,13 @@ pub async fn preview(
     let items = staff
         .into_iter()
         .map(|staff_row| {
+            let staff_id = staff_row.staff_id.clone();
             let attendance_rows = attendance_by_staff
-                .get(&staff_row.staff_id)
+                .get(&staff_id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let schedule_rows = schedules_by_staff
-                .get(&staff_row.staff_id)
+                .get(&staff_id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
 
@@ -249,6 +323,20 @@ pub async fn preview(
                     _ => 0,
                 })
                 .sum::<i32>();
+            let absent_days_x2 = attendance_rows
+                .iter()
+                .filter(|row| row.status == "absent")
+                .count() as i32
+                * 2;
+            let half_day_count = attendance_rows
+                .iter()
+                .filter(|row| row.status == "half_day")
+                .count() as i64;
+            let leave_attendance_days_x2 = attendance_rows
+                .iter()
+                .filter(|row| matches!(row.status.as_str(), "leave" | "special_leave"))
+                .count() as i32
+                * 2;
             let worked_minutes = attendance_rows
                 .iter()
                 .map(|row| row.worked_minutes)
@@ -261,12 +349,29 @@ pub async fn preview(
                 .iter()
                 .map(|row| row.penalty_paise)
                 .sum::<i64>();
+            let late_minutes = attendance_rows
+                .iter()
+                .map(|row| row.late_minutes)
+                .sum::<i32>();
+            let early_leave_minutes = attendance_rows
+                .iter()
+                .map(|row| row.early_leave_minutes)
+                .sum::<i32>();
+            let break_minutes = attendance_rows
+                .iter()
+                .map(|row| row.break_minutes)
+                .sum::<i32>();
+            let late_count = attendance_rows
+                .iter()
+                .filter(|row| row.late_minutes > 0)
+                .count() as i64;
             let open_clock_ins = attendance_rows
                 .iter()
                 .filter(|row| row.status == "clocked_in")
                 .count();
 
             let mut paid_leave_days_x2 = 0;
+            let mut unpaid_leave_days_x2 = leave_attendance_days_x2;
             let mut weekly_off_days_x2 = 0;
             let mut scheduled_minutes = 0_i64;
             let mut compensated_schedule_dates = HashSet::new();
@@ -276,9 +381,11 @@ pub async fn preview(
                     weekly_off_days_x2 += 2;
                     compensated_schedule_dates.insert(schedule.schedule_date);
                 } else if let Some(leave_type) = schedule_leave_type(&schedule.status) {
-                    if policy_set.contains(&(staff_row.staff_id.clone(), leave_type.to_string())) {
+                    if policy_set.contains(&(staff_id.clone(), leave_type.to_string())) {
                         paid_leave_days_x2 += 2;
                         compensated_schedule_dates.insert(schedule.schedule_date);
+                    } else {
+                        unpaid_leave_days_x2 += 2;
                     }
                 }
             }
@@ -293,6 +400,8 @@ pub async fn preview(
                 &compensated_schedule_dates,
                 staff_row.joining_date,
             );
+            let short_minutes = (scheduled_minutes - i64::from(worked_minutes)).max(0);
+            let short_hours = (short_minutes + 59) / 60;
 
             let mut validation_errors = Vec::new();
             let mut validation_warnings = Vec::new();
@@ -312,9 +421,7 @@ pub async fn preview(
             if schedule_rows.is_empty() {
                 validation_warnings.push("Schedule is not configured".to_string());
             }
-            if !rules_by_staff.contains_key(&staff_row.staff_id)
-                && !catalog_staff.contains(&staff_row.staff_id)
-            {
+            if !rules_by_staff.contains_key(&staff_id) && !catalog_staff.contains(&staff_id) {
                 validation_warnings.push("Commission rule is not configured".to_string());
             }
 
@@ -344,13 +451,82 @@ pub async fn preview(
                 Some("hourly") => multiply_divide(rate, i64::from(overtime_minutes), 60),
                 _ => 0,
             };
-            let commission_paise = commission_by_staff
-                .get(&staff_row.staff_id)
-                .copied()
-                .unwrap_or(0);
-            let gross_paise = earned_salary_paise + overtime_paise + commission_paise;
-            let deductions_paise = penalty_paise;
+            let commission_paise = commission_by_staff.get(&staff_id).copied().unwrap_or(0);
+            let commission_breakdown = commission_breakdown_by_staff
+                .get(&staff_id)
+                .cloned()
+                .unwrap_or_default();
+            let tip_paise = tips_by_staff.get(&staff_id).copied().unwrap_or(0);
+            let rule_adjustments = auto_adjustments(
+                &adjustment_rules,
+                late_count,
+                i64::from(absent_days_x2 / 2),
+                half_day_count,
+                short_hours,
+                open_clock_ins as i64,
+                i64::from(unpaid_leave_days_x2 / 2),
+            );
+            let advance_recovery_paise = 0_i64;
+            let auto_deduction_paise = rule_adjustments.deduction_paise
+                + rule_adjustments.fine_paise
+                + advance_recovery_paise;
+            let generated_positive_paise = tip_paise + rule_adjustments.allowance_paise;
+            let gross_paise =
+                earned_salary_paise + overtime_paise + commission_paise + generated_positive_paise;
+            let deductions_paise = penalty_paise + auto_deduction_paise;
             let net_paise = (gross_paise - deductions_paise).max(0);
+            let salary_row = json!({
+                "staffId": staff_id,
+                "staffName": staff_row.staff_name,
+                "employeeCode": staff_row.employee_code,
+                "payRateType": staff_row.pay_rate_type,
+                "payRatePaise": staff_row.pay_rate_paise,
+                "attendanceDaysX2": attendance_days_x2,
+                "presentDaysX2": attendance_days_x2,
+                "absentDaysX2": absent_days_x2,
+                "halfDayCount": half_day_count,
+                "paidLeaveDaysX2": paid_leave_days_x2,
+                "unpaidLeaveDaysX2": unpaid_leave_days_x2,
+                "weeklyOffDaysX2": weekly_off_days_x2,
+                "holidayDaysX2": holiday_days_x2,
+                "payableDaysX2": payable_days_x2,
+                "workedMinutes": worked_minutes,
+                "scheduledMinutes": scheduled_minutes,
+                "shortMinutes": short_minutes,
+                "overtimeMinutes": overtime_minutes,
+                "lateMinutes": late_minutes,
+                "earlyLeaveMinutes": early_leave_minutes,
+                "breakMinutes": break_minutes,
+                "baseSalaryPaise": rate,
+                "earnedSalaryPaise": earned_salary_paise,
+                "overtimePaise": overtime_paise,
+                "invoiceSalesPaise": commission_breakdown.invoice_sales_paise,
+                "serviceSalesPaise": commission_breakdown.service_sales_paise,
+                "productSalesPaise": commission_breakdown.product_sales_paise,
+                "membershipSalesPaise": commission_breakdown.membership_sales_paise,
+                "packageSalesPaise": commission_breakdown.package_sales_paise,
+                "serviceCommissionPaise": commission_breakdown.service_commission_paise,
+                "productCommissionPaise": commission_breakdown.product_commission_paise,
+                "membershipCommissionPaise": commission_breakdown.membership_commission_paise,
+                "packageCommissionPaise": commission_breakdown.package_commission_paise,
+                "snapshotCommissionPaise": commission_breakdown.snapshot_commission_paise,
+                "commissionPaise": commission_paise,
+                "tipsPaise": tip_paise,
+                "allowancePaise": rule_adjustments.allowance_paise,
+                "attendancePenaltyPaise": penalty_paise,
+                "ruleFinePaise": rule_adjustments.fine_paise,
+                "ruleDeductionPaise": rule_adjustments.deduction_paise,
+                "advanceRecoveryPaise": advance_recovery_paise,
+                "advanceSource": "not_configured",
+                "grossPaise": gross_paise,
+                "deductionsPaise": deductions_paise,
+                "netPaise": net_paise,
+                "autoAdjustmentRules": rule_adjustments.rows,
+                "sourceCounts": {
+                    "attendance": attendance_rows.len(),
+                    "schedule": schedule_rows.len()
+                }
+            });
 
             PayrollPreviewItem {
                 calculation_json: json!({
@@ -359,8 +535,11 @@ pub async fn preview(
                     "scheduledMinutes": scheduled_minutes,
                     "payableDaysX2": payable_days_x2,
                     "holidayDaysX2": holiday_days_x2,
+                    "generatedPositiveAdjustmentPaise": generated_positive_paise,
+                    "generatedAutoDeductionPaise": auto_deduction_paise,
+                    "salaryRow": salary_row,
                 }),
-                staff_id: staff_row.staff_id,
+                staff_id,
                 staff_name: staff_row.staff_name,
                 employee_code: staff_row.employee_code,
                 pay_rate_type: staff_row.pay_rate_type,
@@ -374,7 +553,7 @@ pub async fn preview(
                 earned_salary_paise,
                 overtime_paise,
                 commission_paise,
-                adjustment_paise: 0,
+                adjustment_paise: generated_positive_paise,
                 penalty_paise,
                 gross_paise,
                 deductions_paise,
@@ -386,6 +565,7 @@ pub async fn preview(
             }
         })
         .collect::<Vec<_>>();
+    let salary_rows = items.iter().map(preview_salary_row).collect::<Vec<_>>();
 
     Ok(PayrollPreview {
         cycle: "monthly",
@@ -400,6 +580,7 @@ pub async fn preview(
         deductions_paise: items.iter().map(|item| item.deductions_paise).sum(),
         net_paise: items.iter().map(|item| item.net_paise).sum(),
         items,
+        salary_rows,
     })
 }
 
@@ -426,7 +607,7 @@ pub async fn run_payroll(
         result.period_end,
     )
     .await
-    .map_err(|error| AppError::internal(format!("failed to check payroll run: {error}")))?
+    .map_err(|_| AppError::internal("failed to check payroll run"))?
     {
         if matches!(existing.status.as_str(), "finalized" | "paid") {
             return Err(AppError::conflict(
@@ -439,17 +620,31 @@ pub async fn run_payroll(
         .into_iter()
         .map(preview_item_to_draft)
         .collect::<Vec<_>>();
-    let run = repository::replace_calculated_run(
-        db,
-        tenant_id,
-        branch_id,
-        result.period_start,
-        result.period_end,
-        actor_user_id,
-        &drafts,
-    )
-    .await
-    .map_err(|error| AppError::internal(format!("failed to save payroll run: {error}")))?;
+    let run = if staff_id.trim().is_empty() {
+        repository::replace_calculated_run(
+            db,
+            tenant_id,
+            branch_id,
+            result.period_start,
+            result.period_end,
+            actor_user_id,
+            &drafts,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to save payroll run"))?
+    } else {
+        repository::replace_selected_calculated_items(
+            db,
+            tenant_id,
+            branch_id,
+            result.period_start,
+            result.period_end,
+            actor_user_id,
+            &drafts,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?
+    };
     detail(db, tenant_id, branch_id, &run.id).await
 }
 
@@ -460,7 +655,7 @@ pub async fn list_runs(
 ) -> Result<Vec<repository::PayrollRunRecord>, AppError> {
     repository::list_runs(db, tenant_id, branch_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to load payroll history: {error}")))
+        .map_err(|_| AppError::internal("failed to load payroll history"))
 }
 
 pub async fn detail(
@@ -471,14 +666,20 @@ pub async fn detail(
 ) -> Result<PayrollRunDetail, AppError> {
     let run = repository::get_run(db, tenant_id, branch_id, run_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to load payroll run: {error}")))?
+        .map_err(|_| AppError::internal("failed to load payroll run"))?
         .ok_or_else(|| AppError::not_found("payroll run not found"))?;
     let (items, events) = tokio::try_join!(
         repository::get_items(db, tenant_id, branch_id, run_id),
         repository::get_events(db, tenant_id, branch_id, run_id),
     )
-    .map_err(|error| AppError::internal(format!("failed to load payroll details: {error}")))?;
-    Ok(PayrollRunDetail { run, items, events })
+    .map_err(|_| AppError::internal("failed to load payroll details"))?;
+    let salary_rows = items.iter().map(item_salary_row).collect::<Vec<_>>();
+    Ok(PayrollRunDetail {
+        run,
+        items,
+        events,
+        salary_rows,
+    })
 }
 
 pub async fn payslip_pdf(
@@ -535,7 +736,7 @@ pub async fn save_adjustments(
 ) -> Result<PayrollRunDetail, AppError> {
     let run = repository::get_run(db, tenant_id, branch_id, run_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to load payroll run: {error}")))?
+        .map_err(|_| AppError::internal("failed to load payroll run"))?
         .ok_or_else(|| AppError::not_found("payroll run not found"))?;
     if run.status != "calculated" {
         return Err(AppError::conflict(
@@ -569,7 +770,7 @@ pub async fn save_adjustments(
         .collect::<Result<Vec<_>, AppError>>()?;
     repository::update_adjustments(db, tenant_id, branch_id, run_id, actor_user_id, &inputs)
         .await
-        .map_err(|error| AppError::internal(format!("failed to save payroll draft: {error}")))?;
+        .map_err(|_| AppError::internal("failed to save payroll draft"))?;
     detail(db, tenant_id, branch_id, run_id).await
 }
 
@@ -653,20 +854,18 @@ pub async fn record_payout(
     let mut tx = db
         .begin()
         .await
-        .map_err(|error| AppError::internal(format!("failed to start payroll payout: {error}")))?;
+        .map_err(|_| AppError::internal("failed to start payroll payout"))?;
     let run = repository::lock_run_for_payout(&mut tx, tenant_id, branch_id, run_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to lock payroll payout: {error}")))?
+        .map_err(|_| AppError::internal("failed to lock payroll payout"))?
         .ok_or_else(|| AppError::not_found("payroll run not found"))?;
     if run.status == "paid" {
         let replay = repository::payout_replay_exists(&mut tx, tenant_id, branch_id, run_id, key)
             .await
-            .map_err(|error| {
-                AppError::internal(format!("failed to check payroll payout retry: {error}"))
-            })?;
-        tx.rollback().await.map_err(|error| {
-            AppError::internal(format!("failed to finish payroll payout retry: {error}"))
-        })?;
+            .map_err(|_| AppError::internal("failed to check payroll payout retry"))?;
+        tx.rollback()
+            .await
+            .map_err(|_| AppError::internal("failed to finish payroll payout retry"))?;
         if replay {
             return detail(db, tenant_id, branch_id, run_id).await;
         }
@@ -688,7 +887,7 @@ pub async fn record_payout(
         actor_user_id,
     )
     .await
-    .map_err(|error| AppError::conflict(format!("failed to record payroll payout: {error}")))?;
+    .map_err(|_| AppError::conflict("failed to record payroll payout"))?;
     if rows != run.staff_count as u64 {
         return Err(AppError::conflict(
             "payroll payout items do not match the finalized run",
@@ -714,7 +913,7 @@ pub async fn record_payout(
         reference,
     )
     .await
-    .map_err(|error| AppError::internal(format!("failed to complete payroll payout: {error}")))?
+    .map_err(|_| AppError::internal("failed to complete payroll payout"))?
     {
         return Err(AppError::conflict(
             "payroll status changed; reload and try again",
@@ -722,7 +921,7 @@ pub async fn record_payout(
     }
     tx.commit()
         .await
-        .map_err(|error| AppError::internal(format!("failed to commit payroll payout: {error}")))?;
+        .map_err(|_| AppError::internal("failed to commit payroll payout"))?;
     detail(db, tenant_id, branch_id, run_id).await
 }
 
@@ -915,7 +1114,7 @@ async fn transition(
 ) -> Result<PayrollRunDetail, AppError> {
     let run = repository::get_run(db, tenant_id, branch_id, run_id)
         .await
-        .map_err(|error| AppError::internal(format!("failed to load payroll run: {error}")))?
+        .map_err(|_| AppError::internal("failed to load payroll run"))?
         .ok_or_else(|| AppError::not_found("payroll run not found"))?;
     if run.status != expected {
         return Err(AppError::conflict(format!(
@@ -929,7 +1128,7 @@ async fn transition(
     }
     repository::transition_run(db, tenant_id, branch_id, run_id, actor_user_id, next)
         .await
-        .map_err(|error| AppError::internal(format!("failed to update payroll status: {error}")))?
+        .map_err(|_| AppError::internal("failed to update payroll status"))?
         .ok_or_else(|| AppError::not_found("payroll run not found"))?;
     detail(db, tenant_id, branch_id, run_id).await
 }
@@ -959,6 +1158,117 @@ fn preview_item_to_draft(item: PayrollPreviewItem) -> PayrollItemDraft {
         validation_warnings: json!(item.validation_warnings),
         calculation_json: item.calculation_json,
         notes: item.notes,
+    }
+}
+
+fn preview_salary_row(item: &PayrollPreviewItem) -> Value {
+    salary_row_from_json(&item.calculation_json).unwrap_or_else(|| {
+        json!({
+            "staffId": item.staff_id,
+            "staffName": item.staff_name,
+            "employeeCode": item.employee_code,
+            "attendanceDaysX2": item.attendance_days_x2,
+            "paidLeaveDaysX2": item.paid_leave_days_x2,
+            "weeklyOffDaysX2": item.weekly_off_days_x2,
+            "holidayDaysX2": item.holiday_days_x2,
+            "workedMinutes": item.worked_minutes,
+            "overtimeMinutes": item.overtime_minutes,
+            "earnedSalaryPaise": item.earned_salary_paise,
+            "overtimePaise": item.overtime_paise,
+            "commissionPaise": item.commission_paise,
+            "grossPaise": item.gross_paise,
+            "deductionsPaise": item.deductions_paise,
+            "netPaise": item.net_paise
+        })
+    })
+}
+
+fn item_salary_row(item: &repository::PayrollItemRecord) -> Value {
+    salary_row_from_json(&item.calculation_json).unwrap_or_else(|| {
+        json!({
+            "staffId": item.staff_id,
+            "staffName": item.staff_name,
+            "employeeCode": item.employee_code,
+            "attendanceDaysX2": item.attendance_days_x2,
+            "paidLeaveDaysX2": item.paid_leave_days_x2,
+            "weeklyOffDaysX2": item.weekly_off_days_x2,
+            "holidayDaysX2": item.holiday_days_x2,
+            "workedMinutes": item.worked_minutes,
+            "overtimeMinutes": item.overtime_minutes,
+            "earnedSalaryPaise": item.earned_salary_paise,
+            "overtimePaise": item.overtime_paise,
+            "commissionPaise": item.commission_paise,
+            "grossPaise": item.gross_paise,
+            "deductionsPaise": item.deductions_paise,
+            "netPaise": item.net_paise
+        })
+    })
+}
+
+fn salary_row_from_json(calculation_json: &Value) -> Option<Value> {
+    calculation_json.get("salaryRow").cloned()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn auto_adjustments(
+    rules: &[repository::PayrollAdjustmentRuleSource],
+    late_count: i64,
+    absent_days: i64,
+    half_day_count: i64,
+    short_hours: i64,
+    no_clock_out_count: i64,
+    unpaid_week_off_days: i64,
+) -> AdjustmentBreakdown {
+    let mut result = AdjustmentBreakdown::default();
+    for rule in rules {
+        let metric = match rule.trigger_type.as_str() {
+            "late_count" => late_count,
+            "absent_day" => absent_days,
+            "half_day" => half_day_count,
+            "short_hours" => short_hours,
+            "no_clock_out" => no_clock_out_count,
+            "unpaid_week_off" => unpaid_week_off_days,
+            "fixed" => 1,
+            _ => 0,
+        };
+        let occurrences = rule_occurrences(metric, rule.trigger_count, &rule.application_mode);
+        if occurrences == 0 || rule.amount_paise <= 0 {
+            continue;
+        }
+        let amount_paise = rule.amount_paise.saturating_mul(occurrences);
+        match rule.kind.as_str() {
+            "allowance" => result.allowance_paise += amount_paise,
+            "fine" => result.fine_paise += amount_paise,
+            "deduction" => result.deduction_paise += amount_paise,
+            _ => continue,
+        }
+        result.rows.push(json!({
+            "ruleId": rule.id,
+            "kind": rule.kind,
+            "name": rule.name,
+            "triggerType": rule.trigger_type,
+            "triggerCount": rule.trigger_count,
+            "applicationMode": rule.application_mode,
+            "metric": metric,
+            "occurrences": occurrences,
+            "amountPaise": amount_paise
+        }));
+    }
+    result
+}
+
+fn rule_occurrences(metric: i64, trigger_count: i32, application_mode: &str) -> i64 {
+    if metric <= 0 {
+        return 0;
+    }
+    let trigger_count = i64::from(trigger_count.max(1));
+    if metric < trigger_count {
+        return 0;
+    }
+    if application_mode == "fixed" {
+        1
+    } else {
+        metric / trigger_count
     }
 }
 

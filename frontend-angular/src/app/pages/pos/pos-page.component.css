@@ -1746,6 +1746,27 @@ input, select { min-height: 38px; padding: 0 10px; border-radius: 7px; font-weig
   background: #f5f7fb;
   color: #9aa6b8;
 }
+
+.items-head > :nth-child(n + 4):nth-child(-n + 8),
+.item-row > :nth-child(n + 4):nth-child(-n + 8),
+.summary-total strong,
+.balance-due strong {
+  justify-content: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 620px) {
+  .pos-page { padding: 8px; }
+  .pos-tabs { align-items: stretch; flex-direction: column; gap: 6px; padding: 8px; }
+  .pos-tabs .tab-links, .hero-actions { width: 100%; margin-left: 0; overflow-x: auto; }
+  .pos-tabs .tab-links { gap: 8px; }
+  .hero-actions { flex-wrap: nowrap; justify-content: flex-start; }
+  .hero-actions .secondary-action { min-width: max-content; }
+  .payment-grid { grid-template-columns: 1fr; }
+  .payment-grid .gift-card-method { grid-column: auto; }
+  .client-drawer { width: calc(100vw - 48px); }
+}
 .unpaid-option {
   display: flex;
   justify-content: space-between;
@@ -1762,3 +1783,33 @@ input, select { min-height: 38px; padding: 0 10px; border-radius: 7px; font-weig
 .reward-redemption span { display:flex; flex-direction:column; font-weight:600; color:#12233f; }
 .reward-redemption small { font-weight:400; color:#64748b; }
 .reward-redemption input { width:100%; }
+.balance-settlement {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.balance-settlement button {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  text-align: left;
+  cursor: pointer;
+}
+.balance-settlement button.active {
+  border-color: #0f7a4f;
+  background: #ecfdf5;
+  color: #065f46;
+  box-shadow: 0 0 0 2px rgba(15, 122, 79, 0.12);
+}
+.balance-settlement span { font-size: 12px; font-weight: 600; }
+.balance-settlement strong { font-size: 16px; font-weight: 700; }
+.settlement-error { margin: 8px 0 0; color: #b42318; font-size: 12px; font-weight: 600; }
+.roundoff-line { display: block; margin-top: 4px; color: #0f7a4f; font-size: 11px; font-weight: 600; }
+@media (max-width: 620px) {
+  .balance-settlement { grid-template-columns: 1fr; }
+}

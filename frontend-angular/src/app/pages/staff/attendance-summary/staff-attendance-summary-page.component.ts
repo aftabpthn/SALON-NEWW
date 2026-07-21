@@ -1,4 +1,6 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -6,7 +8,7 @@ import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
 type AttendanceColumn =
   | 'name' | 'code' | 'salary' | 'workingDays' | 'leaveBalance' | 'specialLeaveBalance'
-  | 'leaveAvailed' | 'specialLeaveAvailed' | 'penalty' | 'leavesAccrued'
+  | 'leaveAvailed' | 'specialLeaveAvailed' | 'operationMeetings' | 'operationTasks' | 'penalty' | 'leavesAccrued'
   | 'weeklyOffAdjustment' | 'specialLeaveAdjustment' | 'revisedLeaveBalance'
   | 'revisedSpecialLeaveBalance' | 'comments';
 
@@ -21,6 +23,10 @@ type AttendanceSummaryRow = {
   leaveAvailed: number;
   specialLeaveAvailed: number;
   penaltyPaise: number;
+  operationMeetingPresent: number;
+  operationMeetingAbsent: number;
+  operationTaskCompleted: number;
+  operationTaskMissed: number;
   leavesAccrued: number;
   weeklyOffAdjustment: number;
   specialLeaveAdjustment: number;
@@ -48,9 +54,11 @@ type AttendanceDetail = {
   correctionReason: string;
   correctedAt: string | null;
   breaks: AttendanceBreak[];
+  operations: AttendanceOperation[];
 };
 
 type AttendanceBreak = { id?: string; startedAt: string; endedAt: string; comments: string };
+type AttendanceOperation = { id: string; title: string; operationType: string; status: string; attendanceStatus?: string; taskStatus?: string };
 type CorrectionForm = {
   clockInAt: string; clockOutAt: string; manualStatus: string; penaltyRupees: number | null;
   comments: string; correctionReason: string;
@@ -62,11 +70,12 @@ type StaffListPage = { items: Array<{ id: string; firstName: string; lastName: s
 @Component({
   selector: 'app-staff-attendance-summary-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './staff-attendance-summary-page.component.html',
   styleUrls: ['./staff-attendance-summary-page.component.css'],
 })
 export class StaffAttendanceSummaryPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly today = new Date();
 
@@ -79,7 +88,8 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     { key: 'name', label: 'Name' }, { key: 'code', label: 'Code' }, { key: 'salary', label: 'Salary' },
     { key: 'workingDays', label: 'Working Days' }, { key: 'leaveBalance', label: 'Leave Balance' },
     { key: 'specialLeaveBalance', label: 'Special Leave Balance' }, { key: 'leaveAvailed', label: 'Leave Availed' },
-    { key: 'specialLeaveAvailed', label: 'Special Leave Availed' }, { key: 'penalty', label: 'Penalty' },
+    { key: 'specialLeaveAvailed', label: 'Special Leave Availed' }, { key: 'operationMeetings', label: 'Meeting Attendance' },
+    { key: 'operationTasks', label: 'Cleaning Tasks' }, { key: 'penalty', label: 'Penalty' },
     { key: 'leavesAccrued', label: 'Leaves Accrued' }, { key: 'weeklyOffAdjustment', label: 'Weekly Off Adjustment' },
     { key: 'specialLeaveAdjustment', label: 'Special Leave Adjustment' }, { key: 'revisedLeaveBalance', label: 'Revised Leave Balance' },
     { key: 'revisedSpecialLeaveBalance', label: 'Revised Special Leave Balance' }, { key: 'comments', label: 'Comments' },
@@ -122,7 +132,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<AttendanceSummaryRow[]>>(`/staff-attendance/summary?${this.query()}`));
       this.rows = result.data || [];
     } catch (error) {
-      this.error = this.message(error, 'Attendance summary could not be loaded.');
+      this.error = this.message(error, this.language.text('staff.message.9106518826'));
       this.rows = [];
     } finally {
       this.loading = false;
@@ -136,7 +146,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.post<ApiEnvelope<AttendanceSummaryRow[]>>(`/staff-attendance/summary/recalculate?${this.query()}`, {}));
       this.rows = result.data || [];
     } catch (error) {
-      this.error = this.message(error, 'Attendance summary could not be recalculated.');
+      this.error = this.message(error, this.language.text('staff.message.27f3e64dcf'));
     } finally {
       this.recalculating = false;
     }
@@ -159,7 +169,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       }));
       this.rows = result.data || [];
     } catch (error) {
-      this.error = this.message(error, 'Attendance summary could not be saved.');
+      this.error = this.message(error, this.language.text('staff.message.1ceeaacac7'));
     } finally {
       this.saving = false;
     }
@@ -175,7 +185,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<AttendanceDetail[]>>(`/staff-attendance/${encodeURIComponent(row.staffId)}/details?${this.query(false)}`));
       this.details = result.data || [];
     } catch (error) {
-      this.error = this.message(error, 'Attendance details could not be loaded.');
+      this.error = this.message(error, this.language.text('staff.message.66ba4df2e4'));
     } finally {
       this.detailLoading = false;
     }
@@ -209,8 +219,8 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   async saveCorrection() {
     if (!this.selectedRow || !this.correctionDetail || !this.correctionForm) return;
     const form = this.correctionForm;
-    if (!form.correctionReason.trim()) { this.error = 'Correction reason is required.'; return; }
-    if (form.breaks.some((item) => !item.startedAt || !item.endedAt)) { this.error = 'Complete every break entry.'; return; }
+    if (!form.correctionReason.trim()) { this.error = this.language.text('staff.message.051f58a1a3'); return; }
+    if (form.breaks.some((item) => !item.startedAt || !item.endedAt)) { this.error = this.language.text('staff.message.b226d82122'); return; }
     this.correctionSaving = true;
     this.error = '';
     try {
@@ -231,7 +241,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       this.cancelCorrection();
       await Promise.all([this.openDetails(selected), this.loadSummary()]);
     } catch (error) {
-      this.error = this.message(error, 'Attendance correction could not be saved.');
+      this.error = this.message(error, this.language.text('staff.message.dd3fd5a7fb'));
     } finally { this.correctionSaving = false; }
   }
 
@@ -241,6 +251,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     const lines = this.rows.map((row) => [
       row.name, row.employeeCode || '', this.money(row.salaryPaise), row.workingDays,
       row.leaveBalance, row.specialLeaveBalance, row.leaveAvailed, row.specialLeaveAvailed,
+      `${row.operationMeetingPresent}/${row.operationMeetingAbsent}`, `${row.operationTaskCompleted}/${row.operationTaskMissed}`,
       this.money(row.penaltyPaise), row.leavesAccrued, row.weeklyOffAdjustment,
       row.specialLeaveAdjustment, row.revisedLeaveBalance, row.revisedSpecialLeaveBalance, row.comments,
     ].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','));
@@ -272,6 +283,11 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
 
   statusLabel(detail: AttendanceDetail) {
     return (detail.attendanceStatus || detail.scheduledStatus || 'Not recorded').replaceAll('_', ' ');
+  }
+
+  operationLabel(operation: AttendanceOperation) {
+    const status = operation.attendanceStatus || operation.taskStatus || operation.status;
+    return `${operation.title} · ${operation.operationType.replaceAll('_', ' ')} · ${status || 'planned'}`;
   }
 
   private toLocalInput(value: string | null) {

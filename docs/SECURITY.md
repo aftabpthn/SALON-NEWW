@@ -45,6 +45,7 @@ live in `docs/security-hardening.md`; the live permission matrix in `docs/permis
 - Secrets come from environment (`.env`, contract in `.env.example`) or encrypted settings — **never** hard-coded, committed, or logged.
 - Tenant-level integration credentials (WhatsApp, Razorpay, SMS/email providers) are stored encrypted and scoped per tenant.
 - API keys for the public API are hashed at rest, shown once at creation, rotatable without downtime (`docs/integrations-api.md`).
+- API-client metadata requires `security.read`; create, rotate, and revoke require `security.manage` (or Owner/Admin/SuperAdmin).
 
 ## 7. Input & Transport
 
@@ -253,6 +254,11 @@ flowchart LR
 - Geographic impossible-travel enforcement requires a trusted GeoIP source;
   client-supplied coordinates are never accepted as a security signal.
 
+The read-only `backend-rust/scripts/tenant-isolation-readiness.ps1` probe verifies
+the real API rejects forged tenant and branch headers without creating business
+records. Native PostgreSQL RLS remains a separate migration because enabling it
+requires request-scoped transaction context on every pooled query.
+
 ## 26. Incident-Response Playbooks
 
 - Incident playbooks are tenant and branch scoped and contain a stable key,
@@ -282,7 +288,9 @@ flowchart LR
 - Security managers can export a tenant and branch scoped JSON evidence bundle
   for SOC 2 and ISO 27001 review from the existing Security Center.
 - The bundle contains current security counts, MFA/governance counts, the
-  verified audit-chain status, generation scope, timestamp, and exporter.
+  verified audit-chain status, API-client/device/privileged-session evidence,
+  field-audit and fraud counts, SSO policy counts, generation scope, timestamp,
+  and exporter.
 - Every export is recorded in the tamper-evident audit chain. The endpoint is
   `GET /api/security/compliance-evidence/export`.
 

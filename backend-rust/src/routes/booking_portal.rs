@@ -264,6 +264,8 @@ async fn booking_portal_confirm(
     let request = AppointmentCreatePayload {
         tenant_id: Some(tenant_id.clone()),
         branch_id: Some(branch_id.clone()),
+        requested_staff_id: staff_id.clone(),
+        staff_preference: "preferred".to_string(),
         staff_id,
         client_id: client_id.clone(),
         service_ids: services.clone(),
@@ -341,10 +343,14 @@ async fn booking_portal_reschedule(
         end_at: requested_end,
         reason: payload.reason.unwrap_or_default(),
         staff_id: slot.and_then(|s| s.staff_id).unwrap_or_default(),
+        staff_change_approval: "client-approved".to_string(),
+        staff_change_reason: String::new(),
         service_ids: Vec::new(),
         branch_id: payload.branch_id.unwrap_or_default(),
         chair_room_id: String::new(),
         booking_group_id: String::new(),
+        change_mode: "official".to_string(),
+        actor_source: "client".to_string(),
     };
     let response =
         appointments::reschedule_appointment(State(state), headers, Path(id), Json(reschedule))

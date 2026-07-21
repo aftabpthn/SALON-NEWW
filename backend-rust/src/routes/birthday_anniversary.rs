@@ -54,6 +54,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/birthday-anniversary/audit-logs", get(list_audit_logs))
         .route("/birthday-campaign/summary", get(campaign_summary))
+        .route("/birthday-campaign/prepare-month", post(prepare_month))
         .route("/birthday-campaign/send", post(send_campaign))
         .route("/birthday-campaign/send-bulk", post(send_campaign_bulk))
 }
@@ -171,6 +172,14 @@ struct CampaignSendRequest {
     channels: Option<Vec<String>>,
     coupon_id: Option<String>,
     scheduled_send_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MonthPrepareRequest {
+    date: Option<NaiveDate>,
+    channels: Option<Vec<String>>,
+    coupon_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -497,6 +506,29 @@ async fn send_campaign(
                 channels: payload.channels,
                 coupon_id: payload.coupon_id,
                 scheduled_send_at: payload.scheduled_send_at,
+            },
+        )
+        .await?,
+    )))
+}
+
+async fn prepare_month(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<MonthPrepareRequest>,
+) -> ApiResult<service::MonthPrepareResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        service::prepare_month_campaign(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            service::MonthPrepareInput {
+                date: payload.date,
+                channels: payload.channels,
+                coupon_id: payload.coupon_id,
             },
         )
         .await?,

@@ -14,7 +14,9 @@ const contextMigration = readFileSync('../backend-rust/migrations/0131_happy_hou
 const autoSunsetMigration = readFileSync('../backend-rust/migrations/0134_happy_hours_auto_sunset.sql', 'utf8');
 const governanceMigration = readFileSync('../backend-rust/migrations/0139_happy_hours_governance.sql', 'utf8');
 const couponApprovalMigration = readFileSync('../backend-rust/migrations/0140_happy_hours_coupon_abuse_approval.sql', 'utf8');
+const advancedCouponFraudMigration = readFileSync('../backend-rust/migrations/0182_happy_hours_advanced_coupon_fraud.sql', 'utf8');
 const backendMain = readFileSync('../backend-rust/src/main.rs', 'utf8');
+const tenantMiddleware = readFileSync('../backend-rust/src/middleware/tenant.rs', 'utf8');
 
 test('Happy Hours management is wired to the existing POS rule engine', () => {
   assert.match(routes, /path: 'pos\/happy-hours'/);
@@ -104,4 +106,19 @@ test('Happy Hours management is wired to the existing POS rule engine', () => {
   assert.match(couponApprovalMigration, /INTERVAL '15 minutes'/);
   assert.match(template, /Invoice discount approvals/);
   assert.match(template, /Coupon abuse alerts/);
+  assert.match(page, /\/api\/v1\/pos\/coupons\/analytics/);
+  assert.match(page, /\/api\/v1\/pos\/happy-hours\/fraud-guard\/cases/);
+  assert.match(backend, /rule_approval_assessment/);
+  assert.match(backend, /coupon per-client usage limit is reached/);
+  assert.match(intelligence, /role_discount_limit_bps/);
+  assert.match(intelligence, /statistical_discount_anomaly/);
+  assert.match(intelligence, /scan_fraud_cases/);
+  assert.match(advancedCouponFraudMigration, /per_client_limit/);
+  assert.match(advancedCouponFraudMigration, /target_client_segments/);
+  assert.match(advancedCouponFraudMigration, /rule_snapshot_json/);
+  assert.match(advancedCouponFraudMigration, /pos_happy_hour_fraud_cases/);
+  assert.match(advancedCouponFraudMigration, /Regional Head/);
+  assert.match(tenantMiddleware, /regional_head/);
+  assert.match(template, /Risk-scored fraud guard/);
+  assert.match(template, /Coupon return on discount/);
 });

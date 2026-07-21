@@ -8,7 +8,7 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 type DeskTab = 'overview' | 'catalog' | 'active' | 'lifecycle' | 'family' | 'selfService' | 'autoRenew' | 'reminders' | 'commission' | 'risk' | 'rewards' | 'reports' | 'settings';
 type PlanType = 'discount' | 'prepaid_credit' | 'visit_pack' | 'service_credit' | 'combo' | 'unlimited' | 'family' | 'corporate' | 'tiered';
 type Membership = { id: string; name: string; code: string; planType: PlanType; pricePaise: number; pointsRequired: number; discountPercent: number; validityDays: number; notes: string; serviceIds: string[]; benefitRules: Record<string, unknown>; active: boolean };
-type ActiveMembership = { id: string; clientId: string; clientName: string; membershipId: string; membershipName: string; pricePaise: number; discountPercent: number; sourceSaleId: string; assignedAt: string; expiresAt?: string; active: boolean; status: string; remainingCredits: number; autoRenewEnabled: boolean; autoRenewStatus: string; pendingMembershipId?: string };
+type ActiveMembership = { id: string; clientId: string; clientName: string; membershipId: string; membershipName: string; pricePaise: number; discountPercent: number; sourceSaleId: string; assignedAt: string; expiresAt?: string; active: boolean; status: string; remainingCredits: number; autoRenewEnabled: boolean; autoRenewStatus: string; pendingMembershipId?: string; frozenAt?: string; frozenUntil?: string; freezeReason?: string };
 type LifecycleRow = { id: string; clientMembershipId: string; clientName: string; membershipName: string; eventType: string; sourceSaleId: string; reason: string; createdAt: string };
 type MembershipWalletCredit = { membershipId: string; membershipName: string; serviceId: string; serviceName: string; totalQty: number; remainingQty: number; expiresAt?: string };
 type Membership360Overview = { membership: ActiveMembership; client: { id: string; name: string; phone: string; email: string; walletBalancePaise: number }; wallet: MembershipWalletCredit[]; ledger: LifecycleRow[] };
@@ -20,6 +20,7 @@ type SelfServiceRequest = { id: string; clientMembershipId: string; clientName: 
 type AutoRenewAttempt = { id: string; clientMembershipId: string; clientName: string; membershipName: string; attemptNumber: number; status: string; errorMessage: string; nextRetryAt?: string; createdAt: string };
 type CheckoutIntent = { clientId: string; planId: string; pricePaise: number; referenceId: string };
 type StatusLink = { token: string };
+type MembershipCard = { token: string; statusPath: string; statusUrl: string; clientName: string; membershipName: string; expiresAt?: string; qrSvg: string };
 type Service = { id: string; name: string; active: boolean };
 type Client = { id: string; firstName: string; lastName: string; phone: string; active: boolean };
 type Reminder = { id: string; clientMembershipId?: string; clientId: string; clientName: string; membershipName: string; reminderType: string; dueOn: string; daysBefore: number; status: string; message: string; approvedBy: string; approvedAt?: string; createdAt: string };
@@ -109,14 +110,15 @@ export class MembershipsPageComponent implements OnInit {
   member360Open = false;
   member360Loading = false;
   member360: Membership360Overview | null = null;
-  workflowDrawer: '' | 'change' | 'family' | 'request' = '';
+  membershipCard: MembershipCard | null = null;
+  workflowDrawer: '' | 'change' | 'family' | 'request' | 'freeze' = '';
   saving = false;
   error = '';
   message = '';
   editingId = '';
   form = this.blankForm();
   sellForm = { clientId: '', planId: '' };
-  workflowForm = { targetMembershipId: '', effectiveAt: 'now', memberClientId: '', relationship: '', requestType: 'renew', reason: '', creditDelta: '' as string | number, serviceId: '', paymentReference: '' };
+  workflowForm = { targetMembershipId: '', effectiveAt: 'now', memberClientId: '', relationship: '', requestType: 'renew', reason: '', creditDelta: '' as string | number, serviceId: '', paymentReference: '', freezeDays: 30 as string | number, freezeReason: '' };
   selfServiceLink = '';
 
   ngOnInit() { void this.loadWorkspace(); }
@@ -162,6 +164,7 @@ export class MembershipsPageComponent implements OnInit {
   openPlanChange(effectiveAt = 'now') { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, targetMembershipId: '', effectiveAt, reason: '' }; this.workflowDrawer = 'change'; this.error = ''; }
   openFamily() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, memberClientId: '', relationship: '' }; this.workflowDrawer = 'family'; this.error = ''; }
   openRequest() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, requestType: 'renew', targetMembershipId: '', reason: '', creditDelta: '', serviceId: '', paymentReference: '' }; this.workflowDrawer = 'request'; this.error = ''; }
+  openFreeze() { if (!this.selectedMember) return; this.workflowForm = { ...this.workflowForm, freezeDays: 30, freezeReason: '' }; this.workflowDrawer = 'freeze'; this.error = ''; }
   async openMembership360(item: ActiveMembership) {
     this.selectMember(item); this.member360Open = true; this.member360Loading = true; this.member360 = null; this.error = '';
     try {
@@ -171,13 +174,23 @@ export class MembershipsPageComponent implements OnInit {
     } catch (error) { this.error = error instanceof Error ? error.message : 'Membership 360 failed to load'; }
     finally { this.member360Loading = false; }
   }
+  async openMembershipCard() {
+    if (!this.selectedMember) return;
+    this.error = '';
+    try {
+      const origin = encodeURIComponent(location.origin);
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<MembershipCard>>(`/membership-enterprise/memberships/${this.selectedMember.id}/card?origin=${origin}`));
+      if (!result.success || !result.data) throw new Error(result.error?.message || 'Membership card failed to load');
+      this.membershipCard = result.data;
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Membership card failed to load'; }
+  }
   openEdit(item: Membership) {
     this.editingId = item.id;
     const rules = item.benefitRules || {};
     this.form = { name: item.name, code: item.code || '', planType: item.planType, specialOfferPrice: item.pricePaise ? item.pricePaise / 100 : '', actualPrice: Number(rules['actualPricePaise'] || 0) ? Number(rules['actualPricePaise']) / 100 : '', pointsRequired: item.pointsRequired || '', discountPercent: item.discountPercent || '', validityDays: item.validityDays || '', creditAmount: Number(rules['creditAmount'] || 0) || '', familyLimit: Number(rules['familyLimit'] || 0) || '', gstPercent: Number(rules['gstPercent'] || 0) || '', notes: item.notes, serviceIds: [...item.serviceIds], mobileVisible: rules['mobileVisible'] === true, bookingPageVisible: rules['bookingPageVisible'] === true, birthdayBenefit: rules['birthdayBenefit'] === true, anniversaryBenefit: rules['anniversaryBenefit'] === true, priorityBooking: rules['priorityBooking'] === true, active: item.active };
     this.error = ''; this.drawerOpen = true;
   }
-  closeDrawer() { this.drawerOpen = false; this.sellDrawerOpen = false; this.member360Open = false; this.member360 = null; this.workflowDrawer = ''; }
+  closeDrawer() { this.drawerOpen = false; this.sellDrawerOpen = false; this.member360Open = false; this.member360 = null; this.membershipCard = null; this.workflowDrawer = ''; }
   toggleService(id: string) { this.form.serviceIds = this.form.serviceIds.includes(id) ? this.form.serviceIds.filter((value) => value !== id) : [...this.form.serviceIds, id]; }
   titleCase(value: string) { return value.split(' ').map((word) => word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word).join(' '); }
 
@@ -226,6 +239,36 @@ export class MembershipsPageComponent implements OnInit {
       await Promise.all([this.loadActiveMemberships(), this.loadLifecycle()]);
       this.message = 'Membership cancelled';
     } catch (error) { this.error = error instanceof Error ? error.message : 'Membership cancel failed'; }
+  }
+
+  async submitFreeze() {
+    if (!this.selectedMember) return;
+    const days = Number(this.workflowForm.freezeDays);
+    if (!Number.isInteger(days) || days < 1 || days > 366) { this.error = 'Freeze days must be between 1 and 366'; return; }
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/membership-enterprise/active/${this.selectedMember.id}/freeze`, { days, reason: this.workflowForm.freezeReason.trim() }));
+      if (!result.success) throw new Error(result.error?.message || 'Membership freeze failed');
+      const id = this.selectedMember.id;
+      await Promise.all([this.loadActiveMemberships(), this.loadLifecycle()]);
+      this.selectedMember = this.activeMemberships.find((item) => item.id === id) || null;
+      this.closeDrawer(); this.message = 'Membership frozen';
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Membership freeze failed'; }
+    finally { this.saving = false; }
+  }
+
+  async resumeSelected() {
+    if (!this.selectedMember) return;
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/membership-enterprise/active/${this.selectedMember.id}/resume`, {}));
+      if (!result.success) throw new Error(result.error?.message || 'Membership resume failed');
+      const id = this.selectedMember.id;
+      await Promise.all([this.loadActiveMemberships(), this.loadLifecycle()]);
+      this.selectedMember = this.activeMemberships.find((item) => item.id === id) || null;
+      this.message = 'Membership resumed';
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Membership resume failed'; }
+    finally { this.saving = false; }
   }
 
   async remove(item: Membership) {

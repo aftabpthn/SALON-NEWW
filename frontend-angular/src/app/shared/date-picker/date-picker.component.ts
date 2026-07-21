@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { LanguageService } from '../../core/i18n/language.service';
+import { TranslatePipe } from '../pipes/translate.pipe';
 
 type CalendarDay = {
   iso: string;
@@ -14,13 +16,14 @@ type CalendarDay = {
 @Component({
   selector: 'as-date-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslatePipe],
   templateUrl: './date-picker.component.html',
   styleUrls: ['./date-picker.component.css'],
 })
 export class DatePickerComponent implements OnChanges {
+  readonly language = inject(LanguageService);
   @Input() value = '';
-  @Input() ariaLabel = 'Date';
+  @Input() ariaLabel = '';
   @Input() disabled = false;
   @Input() rangeMode = false;
   @Input() rangeEnd = '';
@@ -32,8 +35,6 @@ export class DatePickerComponent implements OnChanges {
   viewDate = this.startOfMonth(new Date());
   private selectingRangeEnd = false;
 
-  readonly weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
   ngOnChanges(changes: SimpleChanges) {
     if ('value' in changes || 'rangeEnd' in changes) {
       this.draft = this.displayValue();
@@ -43,7 +44,15 @@ export class DatePickerComponent implements OnChanges {
   }
 
   get monthLabel() {
-    return this.viewDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return this.language.formatDate(this.viewDate, { month: 'long', year: 'numeric' });
+  }
+
+  get datePlaceholder() { return this.language.preferences().dateFormat; }
+
+  get weekDays() {
+    const formatter = new Intl.DateTimeFormat(this.language.locale(), { weekday: 'short' });
+    const sunday = new Date(2026, 0, 4);
+    return Array.from({ length: 7 }, (_, index) => formatter.format(new Date(2026, 0, sunday.getDate() + index)));
   }
 
   days(): CalendarDay[] {
@@ -166,6 +175,9 @@ export class DatePickerComponent implements OnChanges {
   private toDisplayDate(value: string) {
     const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!match) return '';
+    const format = this.language.preferences().dateFormat;
+    if (format === 'MM/DD/YYYY') return `${match[2]}/${match[3]}/${match[1]}`;
+    if (format === 'YYYY-MM-DD') return `${match[1]}-${match[2]}-${match[3]}`;
     return `${match[3]}/${match[2]}/${match[1]}`;
   }
 
@@ -176,13 +188,17 @@ export class DatePickerComponent implements OnChanges {
   }
 
   private fromDisplayDate(value: string) {
-    const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    const format = this.language.preferences().dateFormat;
+    const expression = format === 'YYYY-MM-DD' ? /^(\d{4})-(\d{2})-(\d{2})$/ : /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    const match = String(value || '').trim().match(expression);
     if (!match) return '';
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    const year = Number(match[3]);
+    const [year, month, day] = format === 'YYYY-MM-DD'
+      ? [Number(match[1]), Number(match[2]), Number(match[3])]
+      : format === 'MM/DD/YYYY'
+        ? [Number(match[3]), Number(match[1]), Number(match[2])]
+        : [Number(match[3]), Number(match[2]), Number(match[1])];
     const date = new Date(year, month - 1, day);
     if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
-    return `${match[3]}-${match[2]}-${match[1]}`;
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 }

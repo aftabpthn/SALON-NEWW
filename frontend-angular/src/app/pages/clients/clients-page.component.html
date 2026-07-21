@@ -61,8 +61,8 @@
       </button>
     </div>
 
-    <div class="client-list-state" *ngIf="loadingClients">Loading...</div>
-    <div class="client-list-state error" *ngIf="!loadingClients && clientListError">{{ clientListError }}</div>
+    <div class="client-list-state" role="status" *ngIf="loadingClients">Loading...</div>
+    <div class="client-list-state error" role="alert" *ngIf="!loadingClients && clientListError">{{ clientListError }}</div>
     <div class="client-list-state" *ngIf="!loadingClients && !clientListError && clientRows.length === 0">No records yet</div>
   </section>
 
@@ -195,7 +195,7 @@
       </section>
 
       <section class="profile-tab forms-consent-tab" *ngIf="activeTab === 'Growth'">
-        <header class="tab-toolbar"><h2>Growth &amp; win-back</h2><div><button type="button" [disabled]="!selectedClient" (click)="showDiscountDecision()">Evaluate discount</button><button type="button" [disabled]="!selectedClient" (click)="showWinBackOffer()">Issue offer</button><button type="button" [disabled]="!selectedClient" (click)="loadGrowth()">Refresh</button></div></header>
+        <header class="tab-toolbar"><h2>Growth &amp; win-back</h2><div><button type="button" [disabled]="!selectedClient" (click)="showDiscountDecision()">Evaluate discount</button><button type="button" [disabled]="!selectedClient" (click)="showWinBackOffer()">Issue offer</button><button type="button" [disabled]="!selectedClient || savingWorkspace" (click)="rebuildMemoryGraph()">Rebuild memory</button><button type="button" [disabled]="!selectedClient" (click)="loadGrowth()">Refresh</button></div></header>
         <p class="form-error" *ngIf="growthError">{{ growthError }}</p>
         <div class="loading-state compact-loading" *ngIf="loadingGrowth"><i class="bi bi-arrow-repeat"></i><strong>Loading...</strong></div>
         <div class="compact-empty" *ngIf="!loadingGrowth && !selectedClient">Select a client</div>
@@ -264,6 +264,7 @@
               <option [ngValue]="365">365 days</option>
             </select>
             <button type="button" (click)="loadClientReport()">Refresh</button>
+            <button type="button" [disabled]="!reportRows.length" (click)="exportCurrentReport()">Export report</button>
             <button type="button" *ngIf="isBestClientsReport" (click)="exportBestClientsReport()">Export Best clients</button>
             <button type="button" [disabled]="!selectedClient" (click)="exportClient360()">Export Client 360</button>
           </div>
@@ -276,9 +277,22 @@
           <label><span>Limit</span><input type="number" inputmode="numeric" min="1" max="500" [(ngModel)]="reportLimit" (keyup.enter)="loadClientReport()" /></label>
           <label class="report-check"><input type="checkbox" [(ngModel)]="reportIncludeUnpaid" (change)="loadClientReport()" /><span>Include unpaid</span></label>
         </div>
+        <div class="report-filters return-tracker-filters" *ngIf="isReturnTrackerReport">
+          <label>
+            <span>Status</span>
+            <select [(ngModel)]="reportReturnStatus" (change)="loadClientReport()">
+              <option value="">All statuses</option>
+              <option value="issued">Issued</option>
+              <option value="redeemed">Redeemed</option>
+              <option value="returned">Returned</option>
+              <option value="expired">Expired</option>
+            </select>
+          </label>
+          <label><span>Limit</span><input type="number" inputmode="numeric" min="1" max="500" [(ngModel)]="reportLimit" (keyup.enter)="loadClientReport()" /></label>
+        </div>
         <p class="form-error" *ngIf="reportError">{{ reportError }}</p>
         <div class="loading-state compact-loading" *ngIf="loadingReport"><i class="bi bi-arrow-repeat"></i><strong>Loading report...</strong></div>
-        <div class="report-table-wrap" *ngIf="!loadingReport && reportRows.length"><table><thead><tr><th *ngFor="let column of reportColumns">{{ reportHeader(column) }}</th></tr></thead><tbody><tr *ngFor="let row of reportRows"><td *ngFor="let column of reportColumns">{{ reportValue(column, row[column]) }}</td></tr></tbody></table></div>
+        <div class="report-table-wrap" *ngIf="!loadingReport && reportRows.length"><table><thead><tr><th scope="col" *ngFor="let column of reportColumns" [attr.data-column]="column">{{ reportHeader(column) }}</th></tr></thead><tbody><tr *ngFor="let row of reportRows"><td *ngFor="let column of reportColumns" [attr.data-column]="column"><button type="button" class="table-link" *ngIf="column === 'clientName' && row.clientId; else reportCellText" (click)="openReportClient(row)">{{ reportValue(column, row[column]) }}</button><ng-template #reportCellText>{{ reportValue(column, row[column]) }}</ng-template></td></tr></tbody></table></div>
         <div class="compact-empty" *ngIf="!loadingReport && !reportRows.length && !reportError">No records yet</div>
       </section>
 

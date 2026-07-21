@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "ng serve",
+    "start:stable": "ng serve --watch=false",
     "build": "ng build",
     "build:prod": "ng build --configuration production",
     "test": "ng test",

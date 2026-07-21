@@ -71,6 +71,8 @@ h2 {
 
 .title-actions {
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .data-state,
@@ -102,7 +104,6 @@ h2 {
 .dashboard-titlebar button:focus-visible {
   border-color: var(--dashboard-blue);
   background: #f3f8ff;
-  outline: none;
 }
 
 .dashboard-titlebar button:disabled {
@@ -195,6 +196,11 @@ h2 {
   border-bottom: 1px solid var(--dashboard-line);
 }
 
+.panel-heading > div,
+.panel-heading h2 {
+  min-width: 0;
+}
+
 .panel-heading > i {
   color: var(--brand);
   font-size: 20px;
@@ -213,7 +219,6 @@ h2 {
 .panel-heading a:hover,
 .panel-heading a:focus-visible {
   text-decoration: underline;
-  outline: none;
 }
 
 .headline-value {
@@ -318,6 +323,16 @@ progress::-webkit-progress-value {
   font-weight: 600;
 }
 
+.today-panel dd,
+.sales-total,
+.financial-summary strong,
+.trend-list b,
+.collection-title strong,
+.payment-list strong,
+.due-list b {
+  font-variant-numeric: tabular-nums;
+}
+
 .quick-panel nav {
   display: grid;
   padding: 5px 10px 10px;
@@ -355,7 +370,6 @@ progress::-webkit-progress-value {
 .quick-panel a:focus-visible {
   border-radius: 6px;
   background: #f3f8ff;
-  outline: none;
 }
 
 .snapshot-panel {
@@ -373,6 +387,8 @@ progress::-webkit-progress-value {
 
 table {
   width: 100%;
+  min-width: 480px;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -382,6 +398,17 @@ td {
   border-bottom: 1px solid var(--dashboard-line);
   text-align: left;
   white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  width: 46%;
+}
+
+th:nth-child(n + 2),
+td:nth-child(n + 2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 th {
@@ -449,7 +476,6 @@ tbody tr:last-child td {
 .period-switch button.active {
   background: #eaf2ff;
   color: var(--dashboard-blue);
-  outline: none;
 }
 
 .financial-summary {
@@ -583,7 +609,6 @@ tbody tr:last-child td {
 .activity-list a:hover,
 .activity-list a:focus-visible {
   background: #f3f8ff;
-  outline: none;
 }
 
 .activity-list > a > i {
@@ -664,6 +689,15 @@ tbody tr:last-child td {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 7px;
+}
+
+.collection-title > * {
+  min-width: 0;
+}
+
+.collection-title strong {
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .collection-title strong {
@@ -752,14 +786,18 @@ tbody tr:last-child td {
     flex-direction: column;
   }
 
-  .title-actions,
-  .dashboard-titlebar button {
+  .title-actions {
     width: 100%;
   }
 
-  .data-state,
-  .dashboard-titlebar button {
+  .title-actions > * {
+    flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .panel-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
   .metric-strip {
@@ -792,6 +830,11 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 460px) {
+  .title-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .metric-strip {
     grid-template-columns: 1fr;
   }

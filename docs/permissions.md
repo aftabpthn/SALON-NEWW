@@ -15,10 +15,21 @@ The runtime catalog is defined in `backend-rust/src/services/auth_service.rs` an
 | Staff | `staff.read`, `staff.attendance.read`, `staff.leave.read`, `staff.schedule.read`, `staff.payroll.read`, `staff.analytics.read` | `staff.manage`, `staff.attendance.manage`, `staff.leave.manage`, `staff.schedule.manage`, `staff.payroll.manage`, `staff.self_manage` |
 | Finance and reports | `reports.read`, `finance.read` | `reports.export`, `finance.write` |
 | Notifications | `notifications.read` | `notifications.manage` |
+| Marketing lead CRM | `marketing.read`, `analytics.read`, `clients.read` | `marketing.manage`, `marketing.approve`, `marketing.send`, `offers.approve`, `templates.manage`, `clients.manage` |
 | Settings | `settings.read` | `settings.manage` |
+| Data migration | `data_migration.read` | `data_migration.manage`, `data_migration.export` |
 | Security | `security.read` | `security.manage` |
 
 Legacy permissions `tenant.read`, `front_desk.write`, `management.write`, `inventory.write`, and `staff_self.write` remain accepted for existing roles. New custom roles should use the domain permissions above.
+
+Built-in tenant roles are Owner, Admin, Manager, Regional Head, Receptionist, Front Desk,
+Cashier, Accountant, Inventory Manager, Marketing Lead, Analyst, and Staff.
+They are system-managed permission templates and remain explicitly assigned per
+branch. A pre-existing same-name custom role keeps its custom denies, masks and
+limits while receiving the safe baseline grants. Stylist, Senior Stylist,
+Therapist, Floor Manager, and similar labels
+are employee job roles, not authentication roles. Customer access stays in the
+separate customer portal and never enters tenant RBAC.
 
 Enforcement is centralized in `backend-rust/src/middleware/tenant.rs`. Built-in roles keep their existing access bundles; custom roles must carry an accepted named permission for the requested domain and action. Sensitive handlers add a second check where required. Unknown protected endpoints fail closed.
 

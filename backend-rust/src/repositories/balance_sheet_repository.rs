@@ -140,7 +140,7 @@ pub struct FinanceReconciliationRecord {
 pub async fn account_totals(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     as_of_date: NaiveDate,
 ) -> Result<Vec<AccountTotalRecord>, sqlx::Error> {
     sqlx::query_as(
@@ -151,14 +151,14 @@ pub async fn account_totals(
         FROM accounting_journal_entries entry
         JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
         WHERE entry.tenant_id=$1
-          AND entry.branch_id=$2
+          AND entry.branch_id=ANY($2)
           AND entry.entry_date<=$3
         GROUP BY line.account_code
         ORDER BY line.account_code
         "#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(branch_ids.to_vec())
     .bind(as_of_date)
     .fetch_all(db)
     .await

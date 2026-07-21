@@ -18,9 +18,14 @@ const TENANT_ROLES: &[&str] = &[
     "owner",
     "admin",
     "manager",
+    "regional head",
+    "regional_head",
+    "regionalHead",
+    "regionalhead",
     "analyst",
     "accountant",
     "receptionist",
+    "cashier",
     "frontDesk",
     "front-desk",
     "front_desk",
@@ -29,9 +34,20 @@ const TENANT_ROLES: &[&str] = &[
     "inventory manager",
     "inventory_manager",
     "inventoryManager",
+    "marketing lead",
+    "marketing_lead",
+    "marketingLead",
 ];
 
-const MANAGEMENT_ROLES: &[&str] = &["owner", "admin", "manager"];
+const MANAGEMENT_ROLES: &[&str] = &[
+    "owner",
+    "admin",
+    "manager",
+    "regional head",
+    "regional_head",
+    "regionalHead",
+    "regionalhead",
+];
 const OWNER_ROLES: &[&str] = &["owner"];
 const AUTH_ADMIN_ROLES: &[&str] = &["owner", "admin", "superadmin", "superAdmin", "super-admin"];
 const FRONT_DESK_WRITE_ROLES: &[&str] = &[
@@ -53,6 +69,7 @@ const INVENTORY_WRITE_ROLES: &[&str] = &[
     "inventoryManager",
 ];
 const FINANCE_WRITE_ROLES: &[&str] = &["owner", "admin", "manager", "accountant"];
+const PAYROLL_ROLES: &[&str] = &["owner", "admin", "accountant"];
 const STAFF_SELF_WRITE_ROLES: &[&str] = &["owner", "admin", "manager", "staff"];
 const REPORT_READ_ROLES: &[&str] = &["owner", "admin", "manager", "analyst", "accountant"];
 
@@ -253,8 +270,38 @@ pub async fn require_route_role(
             )
             .await;
         }
+    } else if is_mutation_method(&audit_method) {
+        if let (Ok(response), Some(claims)) = (&result, audit_claims.as_ref()) {
+            if response.status().is_success() {
+                let _ = auth_repository::audit(
+                    &state.db,
+                    AuthAuditInput {
+                        tenant_id: &claims.tenant_id,
+                        user_id: Some(&claims.sub),
+                        session_id: (!claims.session_id.is_empty())
+                            .then_some(claims.session_id.as_str()),
+                        branch_id: claims.branch_id.as_deref(),
+                        identity: None,
+                        event_type: "api.mutation",
+                        outcome: "success",
+                        ip_address: None,
+                        user_agent: None,
+                        details: serde_json::json!({
+                            "method": audit_method,
+                            "path": audit_path,
+                            "status": response.status().as_u16()
+                        }),
+                    },
+                )
+                .await;
+            }
+        }
     }
     result
+}
+
+fn is_mutation_method(method: &str) -> bool {
+    matches!(method, "POST" | "PUT" | "PATCH" | "DELETE")
 }
 
 fn normalize_route_path(path: &str) -> &str {
@@ -359,19 +406,11 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     {
         return Some(if is_read_method(method) {
             access(
-                FINANCE_WRITE_ROLES,
-                &[
-                    "staff.payroll.read",
-                    "staff.payroll.manage",
-                    "finance.read",
-                    "tenant.read",
-                ],
+                PAYROLL_ROLES,
+                &["staff.payroll.read", "staff.payroll.manage"],
             )
         } else {
-            access(
-                FINANCE_WRITE_ROLES,
-                &["staff.payroll.manage", "finance.write"],
-            )
+            access(PAYROLL_ROLES, &["staff.payroll.manage"])
         });
     }
     if path_starts_with(path, "/staff-attendance") {
@@ -443,8 +482,15 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     }
     if path_starts_with(path, "/staff/mobile")
         || path_starts_with(path, "/staff/self")
+        || path_starts_with(path, "/staff-self")
         || path_starts_with(path, "/staff/approvals")
     {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &["staff.self_manage", "staff_self.write", "tenant.read"],
+        ));
+    }
+    if path_starts_with(path, "/team-chat") {
         return Some(access(
             STAFF_SELF_WRITE_ROLES,
             &["staff.self_manage", "staff_self.write", "tenant.read"],
@@ -571,6 +617,24 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             access(MANAGEMENT_ROLES, &["pos.manage", "management.write"])
         });
     }
+    if path_starts_with(path, "/settings/integrations/import")
+        || path.starts_with("/settings/integrations/import-")
+    {
+        let is_sensitive_export = (path.contains("/proof-pack")
+            || path.contains("/failed-rows")
+            || path.contains("/evidence"))
+            && is_read_method(method);
+        return Some(if is_sensitive_export {
+            access(AUTH_ADMIN_ROLES, &["data_migration.export"])
+        } else if is_read_method(method) {
+            access(
+                MANAGEMENT_ROLES,
+                &["data_migration.read", "data_migration.manage"],
+            )
+        } else {
+            access(MANAGEMENT_ROLES, &["data_migration.manage"])
+        });
+    }
     if path_starts_with(path, "/settings") || path_starts_with(path, "/jobs") {
         return Some(domain_access(
             method,
@@ -589,13 +653,26 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             &["settings.manage", "management.write"],
         ));
     }
-    if path_starts_with(path, "/notifications") {
+    if path_starts_with(path, "/notifications") || path_starts_with(path, "/whatsapp") {
         return Some(domain_access(
             method,
             TENANT_ROLES,
             FRONT_DESK_WRITE_ROLES,
-            &["notifications.read", "notifications.manage", "tenant.read"],
-            &["notifications.manage", "front_desk.write"],
+            &[
+                "notifications.read",
+                "notifications.manage",
+                "marketing.read",
+                "analytics.read",
+                "tenant.read",
+            ],
+            &[
+                "notifications.manage",
+                "marketing.manage",
+                "marketing.approve",
+                "marketing.send",
+                "templates.manage",
+                "front_desk.write",
+            ],
         ));
     }
     if path_starts_with(path, "/birthday-anniversary")
@@ -630,6 +707,28 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
                 "clients.manage",
                 "memberships.manage",
                 "pos.manage",
+                "management.write",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/marketing") {
+        return Some(domain_access(
+            method,
+            TENANT_ROLES,
+            MANAGEMENT_ROLES,
+            &[
+                "marketing.read",
+                "analytics.read",
+                "clients.read",
+                "tenant.read",
+            ],
+            &[
+                "marketing.manage",
+                "marketing.approve",
+                "marketing.send",
+                "offers.approve",
+                "templates.manage",
+                "clients.manage",
                 "management.write",
             ],
         ));
@@ -908,6 +1007,7 @@ pub async fn require_platform_admin(req: Request<Body>, next: Next) -> Result<Re
 mod tests {
     use super::{
         normalize_route_path, role_or_permissions_allowed, route_access, MANAGEMENT_ROLES,
+        TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
@@ -969,6 +1069,16 @@ mod tests {
                 Method::GET,
                 "reports.read",
             ),
+            (
+                "/api/v1/profit-intelligence/allocation-rules",
+                Method::POST,
+                "finance.write",
+            ),
+            (
+                "/api/v1/profit-intelligence/governance/approvals/1/approve",
+                Method::POST,
+                "finance.write",
+            ),
             ("/api/v1/balance-sheet/live", Method::GET, "finance.read"),
             (
                 "/api/v1/balance-sheet/journals",
@@ -1007,6 +1117,26 @@ mod tests {
                 Method::POST,
                 "marketing.manage",
             ),
+            (
+                "/api/v1/settings/integrations/import-jobs",
+                Method::GET,
+                "data_migration.read",
+            ),
+            (
+                "/api/v1/settings/integrations/import-jobs",
+                Method::POST,
+                "data_migration.manage",
+            ),
+            (
+                "/api/v1/settings/integrations/import-jobs/job-1/proof-pack",
+                Method::GET,
+                "data_migration.export",
+            ),
+            (
+                "/api/v1/settings/integrations/import-source-files/file-1/evidence",
+                Method::GET,
+                "data_migration.export",
+            ),
         ] {
             let access = route_access(normalize_route_path(path), &method)
                 .unwrap_or_else(|| panic!("{path} is not permission mapped"));
@@ -1015,6 +1145,46 @@ mod tests {
                 "{path} must require {permission}"
             );
         }
+    }
+
+    #[test]
+    fn manager_needs_explicit_payroll_permission() {
+        let access = route_access(
+            normalize_route_path("/api/v1/staff-payroll/runs"),
+            &Method::POST,
+        )
+        .expect("staff payroll route is mapped");
+        let mut claims = AuthClaims {
+            sub: "user-1".into(),
+            tenant_id: "tenant-1".into(),
+            branch_id: Some("branch-1".into()),
+            role: "manager".into(),
+            role_id: None,
+            permissions: Vec::new(),
+            denied_permissions: Vec::new(),
+            masked_fields: Vec::new(),
+            max_discount_paise: None,
+            max_refund_paise: None,
+            max_cash_movement_paise: None,
+            permission_version: 1,
+            session_id: "session-1".into(),
+            mfa_enrollment_required: false,
+            token_type: "access".into(),
+            jti: "token-1".into(),
+            iat: 1,
+            exp: usize::MAX,
+        };
+        assert!(!role_or_permissions_allowed(
+            &claims,
+            access.roles,
+            access.permissions
+        ));
+        claims.permissions.push("staff.payroll.manage".into());
+        assert!(role_or_permissions_allowed(
+            &claims,
+            access.roles,
+            access.permissions
+        ));
     }
 
     #[test]
@@ -1061,5 +1231,11 @@ mod tests {
             MANAGEMENT_ROLES,
             &["staff.manage", "management.write"]
         ));
+
+        for role in ["Cashier", "Marketing Lead"] {
+            claims.role = role.into();
+            claims.denied_permissions.clear();
+            assert!(role_or_permissions_allowed(&claims, TENANT_ROLES, &[]));
+        }
     }
 }

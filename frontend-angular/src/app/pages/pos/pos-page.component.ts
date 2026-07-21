@@ -12,6 +12,14 @@ type CatalogLineType = 'service' | 'product';
 type AddonSaleType = 'membership' | 'package' | 'gift_card';
 type DiscountType = 'amount' | 'percent';
 type SaleStatus = 'draft' | 'finalized';
+type BalanceSettlement = 'unpaid' | 'round_off';
+
+interface SettlementDiscountPlan {
+  allocations: Map<string, number>;
+  discountPaise: number;
+  totalPaise: number;
+  error: string;
+}
 
 interface PosLine {
   id: string;
@@ -168,8 +176,10 @@ export class PosPageComponent implements OnInit, OnDestroy {
   couponCode = '';
   tipAmount = '';
   walletCreditAmount = '';
+  bookingAdvancePaise = 0;
   rewardPointsToRedeem = '';
   roundTotal = false;
+  balanceSettlement: BalanceSettlement = 'unpaid';
 
   saleLines: PosLine[] = [];
   clientKpi: ClientKpi = this.emptyKpi();
@@ -249,12 +259,20 @@ export class PosPageComponent implements OnInit, OnDestroy {
   get totalBeforeRoundPaise(): number { return Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.billDiscountPaise + this.gstPaise + this.tipPaise); }
   get totalPaise(): number { return this.roundTotal ? Math.round(this.totalBeforeRoundPaise / 100) * 100 : this.totalBeforeRoundPaise; }
   get paidNowPaise(): number { return this.paymentMethods.reduce((s, m) => s + this.toPaise(this.num(this.paymentInputs[m.code])), 0); }
-  get invoicePaidPaise(): number { return Math.min(this.totalPaise, this.paidNowPaise); }
+  get invoicePaidPaise(): number { return Math.min(this.totalPaise, this.bookingAdvanceAppliedPaise + this.paidNowPaise); }
   get balanceDuePaise(): number { return Math.max(0, this.totalPaise - this.invoicePaidPaise); }
-  get walletCreditPaise(): number { return this.toPaise(this.num(this.walletCreditAmount)); }
-  get unappliedOverpayPaise(): number { return Math.max(0, this.paidNowPaise - this.totalPaise - this.walletCreditPaise); }
-  get advanceAdjustedPaise(): number { return this.walletCreditPaise; }
-  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption() && !this.hasInvalidRewardRedemption() && !this.giftCardRedemptionError() && !this.paymentAllocationError(); }
+  get partialBalancePaise(): number { const baseTotal = this.baseTotalPaise(); return Math.max(0, baseTotal - this.bookingAdvanceAppliedPaise - Math.min(baseTotal, this.paidNowPaise)); }
+  get roundOffDiscountPaise(): number { return this.activeSettlementPlan().discountPaise; }
+  get roundOffError(): string { return this.balanceSettlement === 'round_off' ? this.activeSettlementPlan().error : ''; }
+  get bookingAdvanceAppliedPaise(): number { return Math.min(this.totalPaise, Math.max(0, this.bookingAdvancePaise)); }
+  get walletCreditPaise(): number {
+    return this.num(this.walletCreditAmount) > 0
+      ? Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise))
+      : 0;
+  }
+  get unappliedOverpayPaise(): number { return Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise) - this.walletCreditPaise); }
+  get advanceAdjustedPaise(): number { return this.bookingAdvanceAppliedPaise; }
+  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.roundOffError && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption() && !this.hasInvalidRewardRedemption() && !this.giftCardRedemptionError() && !this.paymentAllocationError(); }
   get itemCount(): number { return this.saleLines.filter((line) => this.isLineReady(line)).length; }
   get offlineConflictCount(): number { return this.offlineCheckouts.filter((item) => item.status === 'conflict').length; }
   get offlineConflictMessage(): string { return this.offlineCheckouts.find((item) => item.status === 'conflict')?.lastError || ''; }
@@ -272,6 +290,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
 
   clearSaleLines(): void {
     this.saleLines = [];
+    this.balanceSettlement = 'unpaid';
   }
 
   loadClients(): void { this.loadList('/api/v1/clients', (rows) => { this.clients = rows; const routeClientId = this.route.snapshot.queryParamMap.get('clientId'); if (routeClientId && !this.selectedClientId) this.onClientChange(routeClientId); const client = rows.find((item) => String(item.id) === String(this.selectedClientId)); if (client) this.clientSearchText = this.recordName(client); this.applyMembershipFromRoute(); this.applyAppointmentFromRoute(); }); }
@@ -417,6 +436,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
   setCompletedAppointment(appointmentId: string): void {
     this.source = appointmentId ? 'appointment' : 'Counter';
     this.reference = appointmentId;
+    this.bookingAdvancePaise = 0;
+    if (appointmentId) this.loadBookingAdvance(appointmentId);
     const appointment = this.appointments.find((item) => String(item.id) === String(appointmentId));
     if (!appointment) return;
     const clientId = appointment.clientId ?? appointment.client_id ?? appointment.customerId ?? appointment.customer_id ?? null;
@@ -451,6 +472,16 @@ export class PosPageComponent implements OnInit, OnDestroy {
         return line;
       });
     }
+  }
+
+  private loadBookingAdvance(appointmentId: string): void {
+    this.api.get<any>(`/api/v1/pos/appointments/${appointmentId}/deposit`).subscribe({
+      next: (response) => {
+        const data = response?.data ?? response;
+        if (this.source === 'appointment' && this.reference === appointmentId) this.bookingAdvancePaise = this.firstMoney(data, ['availablePaise', 'available_paise']);
+      },
+      error: () => { if (this.reference === appointmentId) this.bookingAdvancePaise = 0; },
+    });
   }
 
   private applyAppointmentFromRoute(): void {
@@ -705,7 +736,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (this.selectedClient) this.clientKpi = this.kpiFrom(this.selectedClient);
     this.api.get<any>(`/api/v1/pos/clients/${clientId}/kpi`).subscribe({
       next: (res: any) => {
-        this.clientKpi = this.kpiFrom(res?.kpi ?? res);
+        const kpi = res?.data?.kpi ?? res?.data ?? res?.kpi ?? res;
+        this.clientKpi = this.kpiFrom(kpi);
         this.membershipRedeemRows = this.clientKpi.membershipCredits;
         this.packageRedeemRows = this.clientKpi.packageCredits;
       },
@@ -837,7 +869,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     });
   }
 
-  fillPayment(method: PaymentMode): void { if (this.balanceDuePaise > 0) this.paymentInputs[method.code] = String(Math.round(this.balanceDuePaise / 100)); }
+  fillPayment(method: PaymentMode): void { if (this.balanceDuePaise > 0) this.paymentInputs[method.code] = this.paiseToInput(this.balanceDuePaise); }
   applyOverpayToWallet(): void { if (this.unappliedOverpayPaise > 0) this.walletCreditAmount = this.paiseToInput(this.walletCreditPaise + this.unappliedOverpayPaise); }
   applyOverpayToTip(): void { if (this.unappliedOverpayPaise > 0) this.tipAmount = this.paiseToInput(this.tipPaise + this.unappliedOverpayPaise); }
   clearPayments(): void {
@@ -849,7 +881,14 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.ensurePaymentInputs();
   }
   holdInvoice(): void { this.saveSale('draft'); }
-  finalizeSale(): void { this.saveSale('finalized'); }
+  finalizeSale(): void {
+    if (this.paidNowPaise === 0) {
+      if (!window.confirm('No payment collected. Save invoice as unpaid?')) return;
+      this.clearPayments();
+      this.balanceSettlement = 'unpaid';
+    }
+    this.saveSale('finalized');
+  }
 
   syncOfflineCheckouts(): void {
     const queued = this.offlineCheckouts.find((item) => item.status === 'pending');
@@ -889,6 +928,18 @@ export class PosPageComponent implements OnInit, OnDestroy {
   setLineDiscount(line: PosLine, value: string): void { line.discount = value; line.discountSource = ''; }
   setLineDiscountType(line: PosLine, value: DiscountType): void { line.discountType = value; line.discountSource = ''; }
   lineDiscountPaiseValue(line: PosLine): number {
+    return Math.min(this.lineSubtotalPaise(line), this.baseLineDiscountPaise(line) + this.settlementDiscountForLine(line));
+  }
+  settlementDiscountForLine(line: PosLine): number { return this.activeSettlementPlan().allocations.get(line.id) ?? 0; }
+  selectBalanceSettlement(value: BalanceSettlement): void {
+    if (value === 'round_off') {
+      const plan = this.buildSettlementDiscountPlan();
+      if (plan.error) { this.error = plan.error; return; }
+    }
+    this.error = '';
+    this.balanceSettlement = value;
+  }
+  private baseLineDiscountPaise(line: PosLine): number {
     return Math.min(this.lineSubtotalPaise(line), this.manualLineDiscountPaise(line) + this.membershipLineDiscountPaise(line));
   }
   private manualLineDiscountPaise(line: PosLine): number {
@@ -904,6 +955,77 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (this.clientKpi.membershipServiceIds.length && !this.clientKpi.membershipServiceIds.includes(String(line.itemId))) return 0;
     if (!benefits.allowBenefitStacking && (this.hasManualDiscount() || this.num(this.rewardPointsToRedeem) > 0)) return 0;
     return Math.round(this.lineSubtotalPaise(line) * Math.min(100, this.clientKpi.membershipDiscountPercent) / 100);
+  }
+  private baseTotalPaise(): number { return this.totalWithSettlementDiscounts(new Map()).totalPaise; }
+  private activeSettlementPlan(): SettlementDiscountPlan {
+    return this.balanceSettlement === 'round_off'
+      ? this.buildSettlementDiscountPlan()
+      : { allocations: new Map(), discountPaise: 0, totalPaise: this.baseTotalPaise(), error: '' };
+  }
+  private buildSettlementDiscountPlan(): SettlementDiscountPlan {
+    const empty = new Map<string, number>();
+    const baseTotal = this.totalWithSettlementDiscounts(empty).totalPaise;
+    if (this.paidNowPaise <= 0 || this.paidNowPaise >= baseTotal) {
+      return { allocations: empty, discountPaise: 0, totalPaise: baseTotal, error: '' };
+    }
+
+    const targetTotal = this.paidNowPaise;
+    const allocations = new Map<string, number>();
+    const services = this.saleLines.filter((line) => line.lineType === 'service' && this.isLineReady(line));
+    if (!services.length) {
+      return { allocations, discountPaise: 0, totalPaise: baseTotal, error: 'Round off needs at least one service line' };
+    }
+
+    for (const line of services) {
+      const available = Math.max(0, this.lineSubtotalPaise(line) - this.baseLineDiscountPaise(line));
+      if (!available) continue;
+      const before = this.totalWithSettlementDiscounts(allocations).totalPaise;
+      if (before === targetTotal) break;
+      allocations.set(line.id, available);
+      const afterFull = this.totalWithSettlementDiscounts(allocations).totalPaise;
+      if (afterFull > targetTotal) continue;
+
+      let low = 0;
+      let high = available;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        allocations.set(line.id, middle);
+        const candidate = this.totalWithSettlementDiscounts(allocations).totalPaise;
+        if (candidate > targetTotal) low = middle + 1;
+        else high = middle;
+      }
+      for (const candidateDiscount of [low, Math.max(0, low - 1)]) {
+        allocations.set(line.id, candidateDiscount);
+        if (this.totalWithSettlementDiscounts(allocations).totalPaise === targetTotal) {
+          const discountPaise = [...allocations.values()].reduce((sum, value) => sum + value, 0);
+          return { allocations, discountPaise, totalPaise: targetTotal, error: '' };
+        }
+      }
+      allocations.set(line.id, Math.max(0, low - 1));
+    }
+
+    const finalTotal = this.totalWithSettlementDiscounts(allocations).totalPaise;
+    if (finalTotal !== targetTotal) {
+      return { allocations: new Map(), discountPaise: 0, totalPaise: baseTotal, error: 'The unpaid balance cannot be allocated exactly to service discount' };
+    }
+    const discountPaise = [...allocations.values()].reduce((sum, value) => sum + value, 0);
+    return { allocations, discountPaise, totalPaise: finalTotal, error: '' };
+  }
+  private totalWithSettlementDiscounts(additional: Map<string, number>): { totalPaise: number } {
+    const lineDiscount = this.saleLines.reduce((sum, line) => sum + Math.min(this.lineSubtotalPaise(line), this.baseLineDiscountPaise(line) + (additional.get(line.id) ?? 0)), 0);
+    const discountBase = Math.max(0, this.subtotalPaise - lineDiscount);
+    const manualValue = this.num(this.billDiscount);
+    const manualBillDiscount = this.billDiscountType === 'percent'
+      ? Math.min(discountBase, Math.round(discountBase * Math.min(100, Math.max(0, manualValue)) / 100))
+      : Math.min(discountBase, this.toPaise(manualValue));
+    const rewardRequested = Math.floor(this.num(this.rewardPointsToRedeem)) * Math.max(0, this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise));
+    const billDiscount = manualBillDiscount + Math.min(Math.max(0, discountBase - manualBillDiscount), rewardRequested);
+    const gst = this.saleLines.reduce((sum, line) => {
+      const taxable = Math.max(0, this.lineSubtotalPaise(line) - Math.min(this.lineSubtotalPaise(line), this.baseLineDiscountPaise(line) + (additional.get(line.id) ?? 0)));
+      return sum + Math.round(taxable * Math.max(0, this.num(line.taxPercent)) / 100);
+    }, 0);
+    const beforeRound = Math.max(0, this.subtotalPaise - lineDiscount - billDiscount + gst + this.tipPaise);
+    return { totalPaise: this.roundTotal ? Math.round(beforeRound / 100) * 100 : beforeRound };
   }
   private hasManualDiscount(): boolean {
     return this.saleLines.some((line) => this.manualLineDiscountPaise(line) > 0) || this.num(this.billDiscount) > 0 || !!this.couponCode.trim();
@@ -1040,6 +1162,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (rewardError) { this.error = rewardError; return; }
     const paymentError = this.paymentAllocationError();
     if (paymentError) { this.error = paymentError; return; }
+    if (this.roundOffError) { this.error = this.roundOffError; return; }
     if (status === 'draft' && this.walletCreditPaise > 0) { this.error = 'Client advance can only be applied when finalizing the invoice'; return; }
     if (!this.canSave) { this.error = 'Add at least one item'; return; }
     if (status !== 'draft' && this.hasMembershipSaleLine() && !this.membershipSettings.paymentBilling.allowDueOnMembershipSale && this.paidNowPaise < this.totalPaise) {
@@ -1069,7 +1192,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
   }
 
   private completeSave(res: any, status: SaleStatus): void {
-    this.selectedSale = res?.sale ?? res?.invoice ?? res;
+    const data = res?.data ?? res;
+    this.selectedSale = data?.sale ?? data?.invoice ?? data;
     this.draftId = status === 'draft' ? String(this.selectedSale?.id ?? this.draftId) : null;
     this.message = status === 'draft' ? 'Invoice held' : 'Invoice saved';
     this.saving = false;
@@ -1119,7 +1243,9 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.couponCode = '';
     this.tipAmount = '';
     this.walletCreditAmount = '';
+    this.bookingAdvancePaise = 0;
     this.roundTotal = false;
+    this.balanceSettlement = 'unpaid';
     this.clearPayments();
   }
 
@@ -1188,6 +1314,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
         this.ensurePaymentInputs();
         if (this.giftCardPaymentCode) this.verifyGiftCard();
         this.refreshClientKpi(this.selectedClientId);
+        if (String(sale.source ?? '').toLowerCase() === 'appointment' && this.reference) this.loadBookingAdvance(this.reference);
         this.message = 'Held invoice restored';
       },
       error: (err: any) => this.error = err?.error?.message ?? err?.message ?? 'Unable to restore held invoice',
@@ -1213,8 +1340,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
       const staffSplits = this.payloadStaffSplits(line);
       const manualDiscountPaise = this.manualLineDiscountPaise(line);
       const membershipDiscountPaise = this.membershipLineDiscountPaise(line);
-      const discountSource = line.discountSource || (membershipDiscountPaise > 0 ? (manualDiscountPaise > 0 ? 'membership_stacked' : 'membership') : line.discountType);
-      const fixedDiscountPaise = discountSource.startsWith('membership') ? manualDiscountPaise + membershipDiscountPaise : line.discountType === 'amount' ? manualDiscountPaise : null;
+      const settlementDiscountPaise = this.settlementDiscountForLine(line);
+      const discountSource = settlementDiscountPaise > 0 ? 'amount' : line.discountSource || (membershipDiscountPaise > 0 ? (manualDiscountPaise > 0 ? 'membership_stacked' : 'membership') : line.discountType);
+      const fixedDiscountPaise = settlementDiscountPaise > 0
+        ? manualDiscountPaise + membershipDiscountPaise + settlementDiscountPaise
+        : discountSource.startsWith('membership') ? manualDiscountPaise + membershipDiscountPaise : line.discountType === 'amount' ? manualDiscountPaise : null;
       return {
         lineType: line.lineType,
         line_type: line.lineType,
@@ -1301,9 +1431,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       tipPaise: this.tipPaise,
       tip_paise: this.tipPaise,
       walletCreditPaise: this.walletCreditPaise,
-      wallet_credit_paise: this.walletCreditPaise,
-      roundTotal: this.roundTotal,
-      round_total: this.roundTotal,
+      roundToNearestRupee: this.roundTotal,
       paymentSplit,
       payment_split: paymentSplit,
       payments: paymentSplit,
@@ -1341,7 +1469,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     return '';
   }
   private paymentAllocationError(): string {
-    const overpayPaise = Math.max(0, this.paidNowPaise - this.totalPaise);
+    const overpayPaise = Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise));
     if (this.walletCreditPaise > 0 && !this.selectedClientId) return 'Select a client before adding advance to wallet';
     if (this.walletCreditPaise > overpayPaise) return 'Wallet credit cannot exceed the extra payment';
     if (this.walletCreditPaise < overpayPaise) return 'Apply the extra payment to client wallet or staff tip';
@@ -1407,7 +1535,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     }));
   }
   private cappedPaymentSplit(): any[] {
-    let remainingPaise = this.totalPaise + this.walletCreditPaise;
+    let remainingPaise = Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise) + this.walletCreditPaise;
     const payments: any[] = [];
 
     for (const method of this.paymentMethods) {

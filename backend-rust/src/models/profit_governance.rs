@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::FromRow;
@@ -153,12 +153,30 @@ pub struct ProfitActionCreateRequest {
     pub source_type: String,
     pub source_id: String,
     pub payload: Option<Value>,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: Option<NaiveDate>,
+    pub rule_key: Option<String>,
+    pub owner_user_id: Option<String>,
+    pub due_at: Option<DateTime<Utc>>,
+    pub sla_minutes: Option<i32>,
+    pub notes: Option<String>,
+    pub evidence: Option<Value>,
+    pub baseline_impact_paise: Option<i64>,
+    pub expected_impact_paise: Option<i64>,
+    #[serde(skip)]
+    pub action_key: Option<String>,
+    #[serde(skip)]
+    pub recurrence_key: Option<String>,
+    #[serde(skip)]
+    pub generated_by: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProfitActionTransitionRequest {
     pub note: Option<String>,
+    pub evidence: Option<Value>,
+    pub realized_impact_paise: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -175,6 +193,23 @@ pub struct ProfitAction {
     pub status: String,
     pub source_type: String,
     pub source_id: String,
+    pub action_key: String,
+    pub period_start: Option<NaiveDate>,
+    pub period_end: Option<NaiveDate>,
+    pub rule_key: String,
+    pub owner_user_id: Option<String>,
+    pub owner_name: Option<String>,
+    pub due_at: Option<DateTime<Utc>>,
+    pub sla_minutes: Option<i32>,
+    pub notes: String,
+    pub evidence_json: Value,
+    pub baseline_impact_paise: i64,
+    pub expected_impact_paise: i64,
+    pub realized_impact_paise: i64,
+    pub recurrence_key: Option<String>,
+    pub occurrence_number: i32,
+    pub generated_by: String,
+    pub last_observed_at: Option<DateTime<Utc>>,
     pub payload_json: Value,
     pub created_by_user_id: String,
     pub reviewed_by_user_id: Option<String>,

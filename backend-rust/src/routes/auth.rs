@@ -1,5 +1,7 @@
+use std::net::SocketAddr;
+
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::Redirect,
     routing::{get, post},
@@ -170,8 +172,16 @@ pub struct SsoExchangeRequest {
     pub device_id: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CsrfResponse {
+    pub csrf_token: String,
+    pub expires_at: String,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/auth/csrf", get(csrf))
         .route("/auth/login", post(login))
         .route("/auth/sso/providers", get(sso_providers))
         .route("/auth/sso/:provider/start", get(start_sso))
@@ -187,6 +197,12 @@ pub fn router() -> Router<AppState> {
         .route("/auth/me", get(me))
 }
 
+pub async fn csrf() -> ApiResult<CsrfResponse> {
+    Ok(Json(ApiResponse::ok(CsrfResponse {
+        csrf_token: Uuid::new_v4().to_string(),
+        expires_at: (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
+    })))
+}
 pub async fn sso_providers(
     State(state): State<AppState>,
     Query(query): Query<SsoProvidersQuery>,
@@ -288,11 +304,13 @@ pub fn protected_router() -> Router<AppState> {
 
 pub async fn dev_session(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> ApiResult<auth_service::TokenPair> {
     if !is_local_env(&state.settings.app_env) || !state.settings.enable_dev_session {
         return Err(AppError::not_found("auth dev session is not available"));
     }
+    require_loopback_dev_request(peer)?;
     let expected = state
         .settings
         .dev_session_secret
@@ -860,7 +878,11 @@ pub async fn logout(
     )
 }
 
-pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<MeResponse> {
+pub async fn me(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> ApiResult<MeResponse> {
     let token = bearer_token(&headers)?;
     let claims = auth_service::decode_access_token(token, &state.settings.jwt_access_secret)
         .map_err(|_| AppError::unauthenticated("invalid or expired bearer token"))?;
@@ -871,6 +893,7 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<
         && state.settings.enable_dev_session
         && claims.sub == "dev-admin"
     {
+        require_loopback_dev_request(peer)?;
         return Ok(Json(ApiResponse::ok(MeResponse {
             user_id: claims.sub,
             tenant_id: claims.tenant_id,
@@ -917,6 +940,14 @@ pub async fn me(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<
         branches,
         must_change_password: user.must_change_password,
     })))
+}
+
+fn require_loopback_dev_request(peer: SocketAddr) -> Result<(), AppError> {
+    if peer.ip().is_loopback() {
+        Ok(())
+    } else {
+        Err(AppError::not_found("auth dev session is not available"))
+    }
 }
 
 pub async fn change_password(

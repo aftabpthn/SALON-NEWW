@@ -4,8 +4,8 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::NaiveDate;
-use serde::Deserialize;
+use chrono::{NaiveDate, NaiveTime};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
@@ -28,9 +28,10 @@ use crate::{
             IncentiveCopyRequest, IncentiveRuleRequest, MobileDashboardResponse,
             MobileDeviceRegistration, MobileDeviceRequest, MobilePushSubscriptionRequest,
             MobileSyncRequest, MobileSyncResponse, MobileTodayResponse,
-            PayrollAdjustmentRuleRequest, PayrollStructureRequest, StaffPerformanceResponse,
-            StaffTaskRequest,
+            PayrollAdjustmentRuleRequest, PayrollStructureRequest, SelfPushSubscriptionRequest,
+            StaffPerformanceResponse, StaffTaskRequest,
         },
+        staff_enterprise_service,
     },
     state::AppState,
 };
@@ -60,6 +61,24 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff/tasks", get(list_tasks).post(create_task))
         .route("/staff/tasks/:id", axum::routing::patch(update_task))
+        .route("/staff/self/targets", get(get_self_targets))
+        .route("/staff/self/mobile/push-config", get(get_self_push_config))
+        .route(
+            "/staff/self/mobile/devices",
+            post(register_self_push_device),
+        )
+        .route(
+            "/staff/self/mobile/push-subscriptions",
+            post(save_self_push_subscription),
+        )
+        .route(
+            "/staff/self/tasks/:id/status",
+            axum::routing::patch(update_self_task_status),
+        )
+        .route(
+            "/staff-self/calendar/:id",
+            axum::routing::patch(update_self_schedule),
+        )
         .route("/staff/tasks/:id/comments", post(add_task_comment))
         .route("/staff/performance", get(get_performance))
         .route("/staff/performance/:staff_id", get(get_staff_performance))
@@ -160,6 +179,36 @@ struct TaskCommentRequest {
 #[serde(rename_all = "camelCase")]
 struct VersionRequest {
     version: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct SelfTaskStatusRequest {
+    status: String,
+    version: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct SelfPushDeviceRequest {
+    id: String,
+    platform: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SelfPushConfigResponse {
+    configured: bool,
+    public_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SelfScheduleUpdateRequest {
+    version: i32,
+    schedule_date: Option<NaiveDate>,
+    start_time: Option<String>,
+    end_time: Option<String>,
+    status: Option<String>,
+    notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -907,6 +956,209 @@ async fn update_task(
         .await?;
     audit(&state, &claims, &branch_id, "staff.task.updated", &row.id).await;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn get_self_targets(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<IncentiveRuleRecord>> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let rows =
+        staff_advanced_service::self_targets(&state.db, &tenant_id, &branch_id, &staff_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn get_self_push_config(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+) -> ApiResult<SelfPushConfigResponse> {
+    ensure_mobile_access(&claims)?;
+    let public_key = state
+        .settings
+        .mobile_push_public_key
+        .clone()
+        .unwrap_or_default();
+    Ok(Json(ApiResponse::ok(SelfPushConfigResponse {
+        configured: state.settings.mobile_push_provider_enabled() && !public_key.is_empty(),
+        public_key,
+    })))
+}
+
+async fn register_self_push_device(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<SelfPushDeviceRequest>,
+) -> ApiResult<crate::repositories::staff_advanced_repository::StaffMobileDeviceRecord> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_advanced_service::register_self_push_device(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &payload.id,
+        &payload.platform,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_self_push_subscription(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<SelfPushSubscriptionRequest>,
+) -> ApiResult<crate::repositories::staff_advanced_repository::MobilePushSubscriptionRecord> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_advanced_service::save_self_push_subscription(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_self_task_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<SelfTaskStatusRequest>,
+) -> ApiResult<StaffTaskRecord> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_advanced_service::update_self_task_status(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &id,
+        &payload.status,
+        payload.version,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.task.self_updated",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_self_schedule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(schedule_id): Path<String>,
+    Json(payload): Json<SelfScheduleUpdateRequest>,
+) -> ApiResult<serde_json::Value> {
+    ensure_mobile_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    if payload.version < 1 {
+        return Err(AppError::validation("schedule version is invalid"));
+    }
+    let start_time = parse_self_schedule_time(payload.start_time.as_deref(), "startTime")?;
+    let end_time = parse_self_schedule_time(payload.end_time.as_deref(), "endTime")?;
+    if start_time.is_some() != end_time.is_some()
+        || matches!((start_time, end_time), (Some(start), Some(end)) if start >= end)
+    {
+        return Err(AppError::validation(
+            "schedule start and end time are invalid",
+        ));
+    }
+    let status = payload.status.as_deref().map(str::trim).unwrap_or("");
+    if !status.is_empty()
+        && !matches!(
+            status,
+            "working"
+                | "annual_leave"
+                | "jury_duty"
+                | "leave"
+                | "sick_leave"
+                | "special_leave"
+                | "weekly_off"
+                | "working_other_center"
+                | "not_set"
+        )
+    {
+        return Err(AppError::validation("schedule status is invalid"));
+    }
+    let notes = payload
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("")
+        .chars()
+        .take(500)
+        .collect::<String>();
+    let row = sqlx::query_scalar::<_, serde_json::Value>(
+        r#"UPDATE staff_schedules SET
+              schedule_date=COALESCE($6,schedule_date),
+              shift1_start=CASE WHEN $7::TIME IS NULL THEN shift1_start ELSE $7 END,
+              shift1_end=CASE WHEN $8::TIME IS NULL THEN shift1_end ELSE $8 END,
+              status=CASE WHEN $9='' THEN status ELSE $9 END,
+              notes=CASE WHEN $10='' THEN notes ELSE $10 END,
+              version=version+1,updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND version=$5
+            RETURNING jsonb_build_object(
+              'id',id,'staffId',staff_id,'scheduleDate',schedule_date,
+              'startTime',shift1_start,'endTime',shift1_end,'status',status,'notes',notes,'version',version
+            )"#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&staff_id)
+    .bind(schedule_id.trim())
+    .bind(payload.version)
+    .bind(payload.schedule_date)
+    .bind(start_time)
+    .bind(end_time)
+    .bind(status)
+    .bind(notes)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to update staff schedule"))?
+    .ok_or_else(|| AppError::conflict("schedule changed; reload and try again"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+fn parse_self_schedule_time(
+    value: Option<&str>,
+    field: &'static str,
+) -> Result<Option<NaiveTime>, AppError> {
+    let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    NaiveTime::parse_from_str(value, "%H:%M")
+        .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M:%S"))
+        .map(Some)
+        .map_err(|_| AppError::validation(format!("{field} must be HH:mm")))
 }
 
 async fn add_task_comment(

@@ -140,6 +140,35 @@ class CustomerAiRequest(BaseModel):
     feedback: list[CustomerRecommendationFeedback] = Field(default_factory=list, max_length=100)
 
 
+class MarketingAdvisorClient(BaseModel):
+    client_id: str
+    client_name: str
+    inactive_days: int = Field(ge=0)
+    visit_frequency_days: float | None = None
+    last_service: str = ""
+    favourite_services: str = ""
+    average_spend_paise: int = Field(default=0, ge=0)
+    lifetime_value_paise: int = Field(default=0, ge=0)
+    no_show_rate_bps: int = Field(default=0, ge=0, le=10_000)
+    cancellation_rate_bps: int = Field(default=0, ge=0, le=10_000)
+    preferred_channel: str = ""
+    consent_status: str = ""
+    membership_status: str = ""
+    loyalty_points: int = Field(default=0, ge=0)
+    churn_risk_score: int = Field(default=0, ge=0, le=100)
+    next_best_action: str = ""
+    next_best_action_reason: str = ""
+    segment_keys: list[str] = Field(default_factory=list, max_length=50)
+
+
+class MarketingAdvisorRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=120)
+    branch_id: str = Field(min_length=1, max_length=120)
+    scope: Literal["client", "segment"]
+    scope_id: str = Field(min_length=1, max_length=120)
+    clients: list[MarketingAdvisorClient] = Field(min_length=1, max_length=500)
+
+
 class ProfitCopilotCandidate(BaseModel):
     kind: str = Field(min_length=1, max_length=80)
     title: str = Field(min_length=1, max_length=120)
@@ -149,11 +178,32 @@ class ProfitCopilotCandidate(BaseModel):
     source_id: str = Field(min_length=1, max_length=180)
 
 
+class ProfitCopilotFacts(BaseModel):
+    fact_schema_version: Literal["micro-pnl-reconciled-v1"]
+    period_start: str = Field(min_length=10, max_length=10)
+    period_end: str = Field(min_length=10, max_length=10)
+    branch_count: int = Field(ge=1)
+    ledger_revenue_paise: int
+    micro_revenue_paise: int
+    revenue_variance_paise: int
+    ledger_cogs_paise: int
+    micro_product_cost_paise: int
+    cogs_variance_paise: int
+    ledger_payroll_paise: int
+    payroll_source_paise: int
+    payroll_variance_paise: int
+    cost_completeness_bps: int = Field(ge=0, le=10_000)
+    reportable_line_count: int = Field(ge=0)
+    reconciled: Literal[True]
+    branch_period_close_ready: Literal[True]
+
+
 class ProfitCopilotRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=120)
     branch_ids: list[str] = Field(min_length=1, max_length=500)
     from_date: str = Field(min_length=10, max_length=10)
     to_date: str = Field(min_length=10, max_length=10)
+    facts: ProfitCopilotFacts
     candidates: list[ProfitCopilotCandidate] = Field(default_factory=list, max_length=20)
 
 
@@ -188,6 +238,19 @@ class ConciergeGovernance(BaseModel):
     redact_sensitive_data: bool = True
 
 
+class ConciergeOperationalContext(BaseModel):
+    business_date: str = Field(min_length=10, max_length=10)
+    today_appointments: int = Field(default=0, ge=0)
+    open_appointments: int = Field(default=0, ge=0)
+    active_clients: int = Field(default=0, ge=0)
+    active_services: int = Field(default=0, ge=0)
+    today_sales_paise: int | None = Field(default=None, ge=0)
+    open_sales: int | None = Field(default=None, ge=0)
+    recent_completed_appointments: int = Field(default=0, ge=0)
+    low_stock_items: int = Field(default=0, ge=0)
+    financials_visible: bool = False
+
+
 class ConciergeRequest(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=120)
     branch_id: str = Field(min_length=1, max_length=120)
@@ -196,15 +259,55 @@ class ConciergeRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     recent_messages: list[ConciergeTurn] = Field(default_factory=list, max_length=20)
     candidate_services: list[ConciergeServiceCandidate] = Field(default_factory=list, max_length=100)
+    operational_context: ConciergeOperationalContext | None = None
     governance: ConciergeGovernance = Field(default_factory=ConciergeGovernance)
 
 
 class ConciergeModelOutput(BaseModel):
-    reply_text: str = Field(min_length=1, max_length=1200)
+    reply_text: str = Field(min_length=1, max_length=3000)
     intent: Literal["general", "booking", "handoff"]
     service_id: str = Field(default="", max_length=120)
     handoff_required: bool = False
     safety_flags: list[str] = Field(default_factory=list, max_length=10)
+
+
+class MigrationMappingTarget(BaseModel):
+    field: str = Field(min_length=1, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=50)
+
+
+class MigrationMappingRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=120)
+    branch_id: str = Field(min_length=1, max_length=120)
+    entity: str = Field(min_length=1, max_length=80)
+    source_columns: list[str] = Field(min_length=1, max_length=500)
+    targets: list[MigrationMappingTarget] = Field(min_length=1, max_length=500)
+
+
+class MigrationMappingChoice(BaseModel):
+    source: str = Field(min_length=1, max_length=200)
+    target: str = Field(min_length=1, max_length=120)
+
+
+class MigrationMappingModelOutput(BaseModel):
+    suggestions: list[MigrationMappingChoice] = Field(default_factory=list, max_length=500)
+
+
+class MigrationFailureRequest(BaseModel):
+    tenant_id: str = Field(min_length=1, max_length=120)
+    branch_id: str = Field(min_length=1, max_length=120)
+    job_id: str = Field(min_length=1, max_length=120)
+    entity: str = Field(min_length=1, max_length=80)
+    status: str = Field(min_length=1, max_length=40)
+    last_error: str = Field(default="", max_length=500)
+    error_rows: int = Field(default=0, ge=0)
+    failed_chunks: int = Field(default=0, ge=0)
+    approval_status: str = Field(default="not_required", max_length=40)
+    recovery_recommendations: list[str] = Field(default_factory=list, max_length=20)
+
+
+class MigrationFailureModelOutput(BaseModel):
+    recommendations: list[str] = Field(default_factory=list, max_length=8)
 
 
 @app.get("/health")
@@ -296,6 +399,64 @@ def customer_ai_recommendations(payload: CustomerAiRequest):
             + (5 if metrics.open_appointments > 0 else 0),
         ),
     )
+
+
+@app.post("/api/v1/marketing-advisor/recommendation")
+def marketing_advisor_recommendation(payload: MarketingAdvisorRequest):
+    clients = payload.clients
+    inactive = round(mean(client.inactive_days for client in clients))
+    churn = round(mean(client.churn_risk_score for client in clients))
+    service_counts: dict[str, int] = {}
+    channel_counts: dict[str, int] = {}
+    for client in clients:
+        if client.last_service:
+            service_counts[client.last_service] = service_counts.get(client.last_service, 0) + 1
+        if client.preferred_channel and client.consent_status != "No marketing consent":
+            channel_counts[client.preferred_channel] = channel_counts.get(client.preferred_channel, 0) + 1
+    due_service = max(service_counts, key=service_counts.get) if service_counts else "Next suitable service"
+    best_channel = max(channel_counts, key=channel_counts.get) if channel_counts else "No consented channel"
+    negative_recovery = any("negative_review_recovery" in client.segment_keys for client in clients)
+    new_clients = any("new_without_second_visit" in client.segment_keys for client in clients)
+    vip_clients = any("high_value_vip" in client.segment_keys for client in clients)
+    safe_discount_bps = 0 if negative_recovery else 500 if new_clients or vip_clients else 1000 if inactive >= 90 else 500
+    benefit_type = "complimentary_benefit" if negative_recovery or vip_clients else "discount"
+    probable_reason = (
+        "A recent negative review requires service recovery before promotion"
+        if negative_recovery
+        else f"The client audience is overdue by about {inactive} days based on saved visit history"
+    )
+    offer = (
+        f"Complimentary consultation or add-on with {due_service}"
+        if benefit_type == "complimentary_benefit"
+        else f"Up to {safe_discount_bps / 100:g}% off {due_service}, subject to manager approval"
+    )
+    avoid = "Avoid promotional discount until the service concern is reviewed" if negative_recovery else "Avoid unrelated services and discounts above the safe ceiling"
+    audience_name = clients[0].client_name if payload.scope == "client" else "selected clients"
+    message = f"Hi {audience_name}, it may be time for your {due_service}. {offer}. Contact us to choose a suitable appointment time."
+    evidence = [
+        f"{len(clients)} real CRM client record(s) evaluated",
+        f"Average inactivity: {inactive} days",
+        f"Average churn risk: {churn}/100",
+        f"Most relevant saved service: {due_service}",
+        f"Consented preferred channel: {best_channel}",
+    ]
+    return envelope({
+        "source": "crm_marketing_policy_v1",
+        "scope": payload.scope,
+        "scopeId": payload.scope_id,
+        "probableReason": probable_reason,
+        "dueService": due_service,
+        "recommendedOffer": offer,
+        "avoidOffer": avoid,
+        "safeDiscountBps": safe_discount_bps,
+        "benefitType": benefit_type,
+        "bestChannel": best_channel,
+        "bestSendingTime": "11:00 local branch time; adjust after response-time history is available",
+        "suggestedMessage": message,
+        "expectedOutcome": "Measure rebooking and completed-sale conversion within 30 days; no outcome is guaranteed",
+        "evidence": evidence,
+        "requiresApproval": True,
+    })
     churn_reasons = []
     if metrics.inactive_days >= 90:
         churn_reasons.append(f"No completed visit for {metrics.inactive_days} days")
@@ -348,15 +509,14 @@ async def profit_copilot_recommendations(payload: ProfitCopilotRequest):
     request_body = {
         "model": model,
         "instructions": (
-            "You are a salon profitability copilot. Rank and rewrite only the supplied "
-            "real-data candidates into concise operational actions. Never invent money, "
+            "You are a salon profitability copilot. Use only the supplied reconciled Micro P&L "
+            "fact set and allow-listed candidates. Rank and rewrite candidates into concise actions. Never invent money, "
             "entities, causes, or source identifiers. Return source fields and kind exactly "
             "as supplied. Prefer the highest recorded impact and avoid duplicates."
         ),
         "input": json.dumps(
             {
-                "period": {"from": payload.from_date, "to": payload.to_date},
-                "branchCount": len(payload.branch_ids),
+                "reconciledMicroPnlFacts": payload.facts.model_dump(),
                 "candidates": [candidate.model_dump() for candidate in payload.candidates],
             },
             separators=(",", ":"),
@@ -413,7 +573,12 @@ async def profit_copilot_recommendations(payload: ProfitCopilotRequest):
 @app.post("/api/v1/concierge/respond")
 async def concierge_respond(payload: ConciergeRequest):
     fallback = concierge_fallback(payload)
-    if os.getenv("AI_PROVIDER", "local").strip().lower() != "openai":
+    provider = os.getenv("AI_PROVIDER", "local").strip().lower()
+    if provider == "anthropic":
+        return envelope(await anthropic_concierge_response(payload, fallback))
+    if provider == "ollama":
+        return envelope(await ollama_concierge_response(payload, fallback))
+    if provider != "openai":
         return envelope(fallback)
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -421,25 +586,9 @@ async def concierge_respond(payload: ConciergeRequest):
     model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
     request_body = {
         "model": model,
-        "instructions": (
-            "You are an enterprise salon receptionist. Use only the supplied service catalog and "
-            "conversation. Never invent availability, price, policy, staff, client, or booking IDs. "
-            "Never provide medical advice or expose sensitive data. A booking is only a draft until "
-            "the CRM confirms it; do not claim confirmation. Escalate ambiguity, complaints, payments, "
-            "medical questions, cancellations, or unsupported requests to a human. Keep replies concise."
-        ),
-        "input": json.dumps(
-            {
-                "channel": payload.channel,
-                "locale": payload.locale,
-                "message": payload.message,
-                "recentMessages": [item.model_dump() for item in payload.recent_messages],
-                "candidateServices": [item.model_dump() for item in payload.candidate_services],
-                "governance": payload.governance.model_dump(),
-            },
-            separators=(",", ":"),
-        ),
-        "max_output_tokens": 900,
+        "instructions": concierge_instructions(payload),
+        "input": json.dumps(concierge_context(payload), separators=(",", ":")),
+        "max_output_tokens": 1800,
         "text": {"format": concierge_json_schema()},
     }
     try:
@@ -465,6 +614,107 @@ async def concierge_respond(payload: ConciergeRequest):
         "serviceId": parsed.service_id,
         "handoffRequired": parsed.handoff_required,
         "safetyFlags": parsed.safety_flags,
+    })
+
+
+@app.post("/api/v1/migrations/mapping-suggestions")
+async def migration_mapping_suggestions(payload: MigrationMappingRequest):
+    fallback = migration_mapping_fallback(payload)
+    if os.getenv("AI_PROVIDER", "local").strip().lower() != "openai":
+        return envelope(fallback)
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return envelope(fallback)
+    model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
+    request_body = {
+        "model": model,
+        "instructions": (
+            "Map source columns to the allow-listed migration targets using names and aliases only. "
+            "Never invent, duplicate, or rename source or target fields. Omit uncertain mappings."
+        ),
+        "input": json.dumps({
+            "entity": payload.entity,
+            "sourceColumns": payload.source_columns,
+            "targets": [target.model_dump() for target in payload.targets],
+        }, separators=(",", ":")),
+        "max_output_tokens": 1800,
+        "text": {"format": migration_mapping_json_schema()},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=request_body,
+            )
+            response.raise_for_status()
+        parsed = MigrationMappingModelOutput.model_validate_json(extract_response_text(response.json()))
+    except (httpx.HTTPError, ValueError, KeyError):
+        return envelope(fallback)
+
+    suggestions = dict(fallback["suggestions"])
+    valid_sources = set(payload.source_columns)
+    valid_targets = {target.field for target in payload.targets}
+    used_targets = set(suggestions.values())
+    ai_added = False
+    for item in parsed.suggestions:
+        if item.source not in valid_sources or item.target not in valid_targets:
+            continue
+        if item.source in suggestions or item.target in used_targets:
+            continue
+        suggestions[item.source] = item.target
+        used_targets.add(item.target)
+        ai_added = True
+    if not ai_added:
+        return envelope(fallback)
+    return envelope({
+        "entity": payload.entity,
+        "source": "openai_responses",
+        "model": model,
+        "suggestions": suggestions,
+        "unmatchedColumns": [column for column in payload.source_columns if column not in suggestions],
+    })
+
+
+@app.post("/api/v1/migrations/failure-assistant")
+async def migration_failure_assistant(payload: MigrationFailureRequest):
+    fallback = migration_failure_fallback(payload)
+    if os.getenv("AI_PROVIDER", "local").strip().lower() != "openai":
+        return envelope(fallback)
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return envelope(fallback)
+    model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
+    request_body = {
+        "model": model,
+        "instructions": (
+            "Give concise, dependency-safe recovery steps for this migration failure. Use only supplied facts. "
+            "Never recommend bypassing validation, tenant isolation, approval, evidence, reconciliation, or rollback preflight."
+        ),
+        "input": json.dumps(payload.model_dump(), separators=(",", ":")),
+        "max_output_tokens": 1200,
+        "text": {"format": migration_failure_json_schema()},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/responses",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=request_body,
+            )
+            response.raise_for_status()
+        parsed = MigrationFailureModelOutput.model_validate_json(extract_response_text(response.json()))
+    except (httpx.HTTPError, ValueError, KeyError):
+        return envelope(fallback)
+    recommendations = [item.strip() for item in parsed.recommendations if item.strip()]
+    if not recommendations:
+        return envelope(fallback)
+    return envelope({
+        "jobId": payload.job_id,
+        "source": "openai_responses",
+        "model": model,
+        "summary": migration_failure_summary(payload),
+        "recommendations": recommendations,
     })
 
 
@@ -599,6 +849,8 @@ def profit_copilot_fallback(payload: ProfitCopilotRequest):
         "tenantId": payload.tenant_id,
         "source": "python_deterministic",
         "model": "local-profit-policy-v1",
+        "factSchemaVersion": payload.facts.fact_schema_version,
+        "evaluationStatus": "passed",
         "recommendations": [
             {
                 "kind": candidate.kind,
@@ -650,30 +902,328 @@ def profit_copilot_json_schema():
 
 def concierge_fallback(payload: ConciergeRequest):
     normalized = payload.message.casefold()
-    handoff = any(word in normalized for word in ("complaint", "refund", "cancel", "allergy", "medical", "doctor", "payment"))
-    booking = any(word in normalized for word in ("book", "appointment", "slot", "schedule"))
+    handoff = any(word in normalized for word in ("complaint", "refund", "cancel", "allergy", "medical", "doctor"))
+    handoff = handoff or (payload.operational_context is None and "payment" in normalized)
+    booking = normalized == "book" or any(
+        phrase in normalized
+        for phrase in ("book ", "want to book", "schedule ", "available slot", "new appointment")
+    )
     matched = next((item for item in payload.candidate_services if item.name.casefold() in normalized), None)
     if handoff:
         reply = "I will hand this request to the salon team for a safe follow-up."
         intent = "handoff"
     elif booking and matched:
-        reply = f"I found {matched.name}. Please continue to the secure booking flow to choose and confirm an available time."
+        reply = (
+            f"{matched.name} is available in the current catalog: {matched.duration_minutes} minutes "
+            f"at {format_rupees(matched.price_paise)}. Continue to the secure booking flow to choose "
+            "an available time; the booking remains a draft and requires CRM confirmation."
+        )
         intent = "booking"
     elif booking:
-        reply = "Which service would you like to book? I will use the salon's current service list."
+        names = ", ".join(item.name for item in payload.candidate_services[:8])
+        reply = f"Which service would you like to book? Current options include: {names}." if names else "No active services are available in this branch yet."
         intent = "booking"
+    elif payload.operational_context:
+        reply = operational_reply(payload, normalized, matched)
+        intent = "general"
+    elif matched:
+        reply = f"{matched.name} takes {matched.duration_minutes} minutes and currently costs {format_rupees(matched.price_paise)}. Availability must be checked in the secure booking flow."
+        intent = "general"
+    elif any(word in normalized for word in ("service", "menu", "price", "cost")):
+        reply = service_catalog_reply(payload.candidate_services)
+        intent = "general"
     else:
-        reply = "I can help with services and booking, or hand your request to the salon team."
+        reply = "I can answer from the current service catalog, explain prices and duration, prepare a booking draft, or hand sensitive requests to the salon team. Ask a specific question for a detailed answer."
         intent = "general"
     return {
         "source": "python_deterministic",
-        "model": "local-reception-policy-v1",
+        "model": "local-operations-policy-v2" if payload.operational_context else "local-reception-policy-v2",
         "promptVersion": payload.governance.prompt_version,
         "replyText": reply,
         "intent": intent,
         "serviceId": matched.id if matched else "",
         "handoffRequired": handoff,
         "safetyFlags": ["human_handoff"] if handoff else [],
+    }
+
+
+def concierge_instructions(payload: ConciergeRequest):
+    if payload.operational_context:
+        return (
+            "You are AuraShine's advanced operations copilot for an authenticated salon user. "
+            "Answer the exact question completely using only the supplied real branch metrics, service "
+            "catalog and conversation. Explain relevant figures and give a practical next step when useful. "
+            "Never infer unavailable data; say what is unavailable. Financial fields are present only when "
+            "the role is authorized. Never expose sensitive data, invent records, or claim a booking is "
+            "confirmed. Do not present booking confirmation as one of your capabilities. Prepare only a "
+            "booking draft and escalate complaints, refunds, cancellations, or "
+            "medical questions. Match the user's language and requested level of detail."
+        )
+    return (
+        "You are an enterprise salon receptionist. Use only the supplied service catalog and conversation. "
+        "Never invent availability, price, policy, staff, client, or booking IDs. Never provide medical "
+        "advice or expose sensitive data. Do not present booking confirmation as one of your capabilities. "
+        "A booking is only a draft until the CRM confirms it. Escalate "
+        "complaints, payments, medical questions, cancellations, or unsupported requests to a human."
+    )
+
+
+def concierge_context(payload: ConciergeRequest):
+    return {
+        "channel": payload.channel,
+        "locale": payload.locale,
+        "message": payload.message,
+        "recentMessages": [item.model_dump() for item in payload.recent_messages],
+        "candidateServices": [item.model_dump() for item in payload.candidate_services],
+        "operationalContext": payload.operational_context.model_dump() if payload.operational_context else None,
+        "governance": payload.governance.model_dump(),
+    }
+
+
+async def ollama_concierge_response(payload: ConciergeRequest, fallback: dict):
+    # Transactional intent and action fields stay deterministic; the model supplies safe conversational text only.
+    if fallback["intent"] != "general":
+        return fallback
+    model = os.getenv("OLLAMA_MODEL", "llama3.2:1b").strip() or "llama3.2:1b"
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            response = await client.post(
+                f"{base_url}/api/chat",
+                json={
+                    "model": model,
+                    "stream": False,
+                    "messages": [
+                        {"role": "system", "content": concierge_instructions(payload)},
+                        {
+                            "role": "user",
+                            "content": json.dumps(concierge_context(payload), separators=(",", ":")),
+                        },
+                    ],
+                    "format": concierge_json_schema()["schema"],
+                    "options": {"temperature": 0.1, "num_predict": 700},
+                    "keep_alive": "30m",
+                },
+            )
+            response.raise_for_status()
+        parsed = ConciergeModelOutput.model_validate_json(response.json()["message"]["content"])
+    except (httpx.HTTPError, ValueError, KeyError):
+        return fallback
+
+    return merge_concierge_model_reply(fallback, parsed, "ollama_chat", model)
+
+
+async def anthropic_concierge_response(payload: ConciergeRequest, fallback: dict):
+    if fallback["intent"] != "general":
+        return fallback
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return fallback
+    model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                json={
+                    "model": model,
+                    "max_tokens": 1800,
+                    "temperature": 0.1,
+                    "system": concierge_instructions(payload),
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": json.dumps(concierge_context(payload), separators=(",", ":")),
+                        }
+                    ],
+                    "output_config": {
+                        "format": {
+                            "type": "json_schema",
+                            "schema": concierge_json_schema()["schema"],
+                        }
+                    },
+                },
+            )
+            response.raise_for_status()
+        parsed = ConciergeModelOutput.model_validate_json(extract_anthropic_text(response.json()))
+    except (httpx.HTTPError, ValueError, KeyError):
+        return fallback
+    return merge_concierge_model_reply(fallback, parsed, "anthropic_messages", model)
+
+
+def merge_concierge_model_reply(fallback: dict, parsed: ConciergeModelOutput, source: str, model: str):
+    reply = parsed.reply_text.strip()
+    normalized_reply = reply.casefold()
+    mentions_booking_confirmation = (
+        any(word in normalized_reply for word in ("booking", "appointment"))
+        and "confirm" in normalized_reply
+    )
+    if any(
+        phrase in normalized_reply
+        for phrase in (
+            "booking is confirmed",
+            "appointment is confirmed",
+            "booking confirmed",
+            "appointment confirmed",
+        )
+    ) or mentions_booking_confirmation:
+        return fallback
+    return {
+        **fallback,
+        "source": source,
+        "model": model,
+        "replyText": reply,
+    }
+
+
+def operational_reply(payload: ConciergeRequest, message: str, matched: ConciergeServiceCandidate | None):
+    context = payload.operational_context
+    if any(word in message for word in ("overview", "summary", "dashboard", "how are we", "business status")):
+        sales = ""
+        if context.financials_visible:
+            sales = f"\nToday sales: {format_rupees(context.today_sales_paise or 0)} | Open sales: {context.open_sales or 0}"
+        return (
+            f"Branch overview for {context.business_date}:\n"
+            f"Appointments today: {context.today_appointments} | Open: {context.open_appointments}\n"
+            f"Active clients: {context.active_clients} | Active services: {context.active_services}\n"
+            f"Completed in last 7 days: {context.recent_completed_appointments} | "
+            f"Low-stock items: {context.low_stock_items}{sales}"
+        )
+    if any(word in message for word in ("appointment", "booking today", "bookings today")):
+        return (
+            f"For {context.business_date} there are {context.today_appointments} appointments, with "
+            f"{context.open_appointments} currently open. {context.recent_completed_appointments} "
+            "appointments were completed in the last 7 days."
+        )
+    if any(word in message for word in ("sale", "revenue", "payment", "collection")):
+        if not context.financials_visible:
+            return "Financial figures are not available for your current role."
+        return f"Today's recorded sales are {format_rupees(context.today_sales_paise or 0)}, with {context.open_sales or 0} open or partially paid sales."
+    if any(word in message for word in ("client", "customer")):
+        return f"This branch currently has {context.active_clients} active clients."
+    if any(word in message for word in ("inventory", "stock", "reorder")):
+        return f"{context.low_stock_items} active inventory items are at or below their reorder point."
+    if matched:
+        return f"{matched.name} takes {matched.duration_minutes} minutes and currently costs {format_rupees(matched.price_paise)}. I can prepare a booking draft if you want."
+    if any(word in message for word in ("service", "menu", "price", "cost")):
+        return service_catalog_reply(payload.candidate_services)
+    return "I can use live branch data for appointments, sales, clients, services and low-stock counts. I can also explain service price/duration and prepare a booking draft. Ask for an overview or name the metric you need."
+
+
+def service_catalog_reply(services: list[ConciergeServiceCandidate]):
+    if not services:
+        return "No active services are available in this branch yet."
+    rows = [f"• {item.name} — {item.duration_minutes} min — {format_rupees(item.price_paise)}" for item in services[:8]]
+    return "Current services:\n" + "\n".join(rows)
+
+
+def format_rupees(paise: int):
+    return f"₹{paise // 100}.{abs(paise % 100):02d}"
+
+
+def migration_key(value: str):
+    return "".join(character.casefold() for character in value if character.isalnum())
+
+
+def migration_mapping_fallback(payload: MigrationMappingRequest):
+    target_by_key = {}
+    for target in payload.targets:
+        for name in [target.field, *target.aliases]:
+            target_by_key.setdefault(migration_key(name), target.field)
+    suggestions = {}
+    used_targets = set()
+    for source in payload.source_columns:
+        target = target_by_key.get(migration_key(source))
+        if target and target not in used_targets:
+            suggestions[source] = target
+            used_targets.add(target)
+    return {
+        "entity": payload.entity,
+        "source": "python_deterministic",
+        "model": "local-mapping-policy-v1",
+        "suggestions": suggestions,
+        "unmatchedColumns": [column for column in payload.source_columns if column not in suggestions],
+    }
+
+
+def migration_failure_summary(payload: MigrationFailureRequest):
+    if payload.failed_chunks:
+        return f"{payload.failed_chunks} migration chunks failed"
+    if payload.error_rows:
+        return f"{payload.error_rows} source rows need correction"
+    if payload.last_error:
+        return payload.last_error
+    return f"Migration job is {payload.status}"
+
+
+def migration_failure_fallback(payload: MigrationFailureRequest):
+    recommendations = []
+    error = payload.last_error.casefold()
+    if payload.approval_status == "pending":
+        recommendations.append("Complete the assigned owner approval before commit")
+    if "checksum" in error or "integrity" in error:
+        recommendations.append("Stop retrying, verify the source SHA-256 evidence, then restage the affected chunk")
+    if "zip" in error or "xlsx" in error or "csv" in error or "source" in error:
+        recommendations.append("Correct or re-export the original source file, then upload it as new read-only evidence")
+    if payload.error_rows:
+        recommendations.append("Export failed rows, correct only those source records, then run a new dry-run")
+    if payload.failed_chunks:
+        recommendations.append("After the cause is fixed, use retry-failed so completed chunks remain untouched")
+    for recommendation in payload.recovery_recommendations:
+        if recommendation and recommendation not in recommendations:
+            recommendations.append(recommendation)
+    if not recommendations:
+        recommendations.append("Review the governance proof pack and rollback impact before changing the job")
+    return {
+        "jobId": payload.job_id,
+        "source": "python_deterministic",
+        "model": "local-migration-recovery-v1",
+        "summary": migration_failure_summary(payload),
+        "recommendations": recommendations[:8],
+    }
+
+
+def migration_mapping_json_schema():
+    return {
+        "type": "json_schema",
+        "name": "migration_mapping_suggestions",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "suggestions": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                        "type": "object",
+                        "properties": {"source": {"type": "string"}, "target": {"type": "string"}},
+                        "required": ["source", "target"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["suggestions"],
+            "additionalProperties": False,
+        },
+    }
+
+
+def migration_failure_json_schema():
+    return {
+        "type": "json_schema",
+        "name": "migration_failure_recommendations",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "recommendations": {"type": "array", "items": {"type": "string"}, "maxItems": 8}
+            },
+            "required": ["recommendations"],
+            "additionalProperties": False,
+        },
     }
 
 
@@ -703,6 +1253,13 @@ def extract_response_text(response: dict):
             if content.get("type") == "output_text" and content.get("text"):
                 return content["text"]
     raise ValueError("OpenAI response did not contain output text")
+
+
+def extract_anthropic_text(response: dict):
+    for content in response.get("content", []):
+        if content.get("type") == "text" and content.get("text"):
+            return content["text"]
+    raise ValueError("Anthropic response did not contain output text")
 
 
 def envelope(data):

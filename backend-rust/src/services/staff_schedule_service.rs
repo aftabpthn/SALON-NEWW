@@ -9,7 +9,8 @@ use crate::{
     repositories::{
         staff_repository,
         staff_schedule_repository::{
-            self, ScheduleEntryInput, ScheduleEntryRecord, ScheduleRoleRecord, ScheduleStaffRecord,
+            self, ScheduleEntryInput, ScheduleEntryRecord, ScheduleOperationBlockRecord,
+            ScheduleRoleRecord, ScheduleStaffRecord,
         },
     },
 };
@@ -33,6 +34,7 @@ pub struct ScheduleData {
     pub entries: Vec<ScheduleEntryRecord>,
     pub roles: Vec<ScheduleRoleRecord>,
     pub jobs: Vec<String>,
+    pub operation_blocks: Vec<ScheduleOperationBlockRecord>,
 }
 
 pub async fn load(
@@ -53,16 +55,21 @@ pub async fn load(
     )
     .map_err(|_| AppError::internal("failed to load employee schedule"))?;
     let staff_ids = staff.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
-    let entries = staff_schedule_repository::list_entries(
-        db, tenant_id, branch_id, date_from, date_to, &staff_ids,
+    let (entries, operation_blocks) = tokio::try_join!(
+        staff_schedule_repository::list_entries(
+            db, tenant_id, branch_id, date_from, date_to, &staff_ids
+        ),
+        staff_schedule_repository::list_operation_blocks(
+            db, tenant_id, branch_id, date_from, date_to, &staff_ids
+        ),
     )
-    .await
     .map_err(|_| AppError::internal("failed to load employee schedule"))?;
     Ok(ScheduleData {
         staff,
         entries,
         roles,
         jobs,
+        operation_blocks,
     })
 }
 

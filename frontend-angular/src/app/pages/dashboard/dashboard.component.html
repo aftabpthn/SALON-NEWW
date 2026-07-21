@@ -16,8 +16,8 @@
     </div>
   </header>
 
-  <p class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Loading dashboard</p>
-  <p class="error-state" *ngIf="error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{ error }}</p>
+  <p class="loading-state" role="status" *ngIf="loading"><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Loading dashboard</p>
+  <p class="error-state" role="alert" *ngIf="error"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> {{ error }}</p>
 
   <ng-container *ngIf="!loading && !error">
     <section class="metric-strip" aria-label="Business summary">
@@ -228,7 +228,7 @@
         </header>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Area</th><th>Current</th><th>Overall</th></tr></thead>
+            <thead><tr><th scope="col">Area</th><th scope="col">Current</th><th scope="col">Overall</th></tr></thead>
             <tbody>
               <tr><td><i class="bi bi-calendar2-week" aria-hidden="true"></i> Appointments</td><td>{{ snapshot.openAppointments | number }} open</td><td>{{ snapshot.totalAppointments | number }}</td></tr>
               <tr><td><i class="bi bi-check2-circle" aria-hidden="true"></i> Completed</td><td>Last 7 days</td><td>{{ snapshot.recentCompletedAppointments | number }}</td></tr>

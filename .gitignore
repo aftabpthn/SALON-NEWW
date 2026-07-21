@@ -7,6 +7,7 @@
 # Dependencies and build output
 node_modules/
 dist/
+www/
 .angular/
 target/
 .codex-target/
@@ -33,6 +34,8 @@ tmp_zip_extract/
 graphify-out/cache/
 graphify-out/[0-9][0-9][0-9][0-9]-*/
 graphify-out/*.tmp.json
+customer-app/graphify-out/
+staff-app/graphify-out/
 
 # OS/editor files
 .DS_Store

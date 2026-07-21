@@ -2,6 +2,7 @@
 
 :host { display: block; min-height: 100%; color: #0d1f3c; font-family: var(--font-sans); }
 button, input, select, textarea { font: inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 .package-workspace { min-height: 100%; background: #f5f8fc; }
 .workspace-toolbar, .workspace-heading, .desk-tabs { display: flex; align-items: center; padding-inline: 22px; background: #fff; border-bottom: 1px solid #d9e3f0; }
 .workspace-toolbar { min-height: 58px; justify-content: space-between; }
@@ -22,6 +23,7 @@ button, input, select, textarea { font: inherit; }
 .notice.error { border-color: #f0b7bd; background: #fff4f5; color: #a51d2d; }
 .workspace-body { padding: 18px 22px; }
 .data-panel, .settings-panel { overflow: hidden; border: 1px solid #d4dfed; border-radius: 13px; background: #fff; box-shadow: 0 7px 20px rgba(18, 44, 82, .05); }
+th.numeric, td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 .panel-toolbar { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 16px; border-bottom: 1px solid #dce5f0; }
 .panel-title { display: flex; align-items: center; gap: 10px; }
 .panel-title h2 { margin: 0; font-size: 17px; }
@@ -73,4 +75,4 @@ tbody tr:hover { background: #f1f6ff; }
 .preset-row button:hover { border-color: #2563eb; background: #eef5ff; }
 
 @media (max-width: 800px) { .panel-toolbar, .workspace-heading { align-items: flex-start; flex-direction: column; padding-block: 14px; } .panel-controls { width: 100%; flex-wrap: wrap; } .panel-controls input { flex: 1; min-width: 180px; width: auto; } .summary-list, .settings-grid { grid-template-columns: 1fr 1fr; } .service-row { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .workspace-toolbar, .workspace-heading, .desk-tabs { padding-inline: 14px; } .workspace-body { padding: 12px 14px; } .workspace-heading h1 { font-size: 20px; } .summary-list, .settings-grid, .price-summary { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .workspace-toolbar, .workspace-heading, .desk-tabs { padding-inline: 14px; } .workspace-body { padding: 12px 14px; } .workspace-heading h1 { font-size: 20px; } .summary-list, .settings-grid, .price-summary { grid-template-columns: 1fr; } .package-drawer { width: calc(100vw - 48px); } }

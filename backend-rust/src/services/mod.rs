@@ -1,10 +1,13 @@
 pub mod accounting_service;
 pub mod ai_concierge_service;
 pub mod analytics_service;
+pub mod appointment_reporting_service;
 pub mod auth_service;
 pub mod balance_sheet_service;
 pub mod benefit_notification_service;
 pub mod birthday_anniversary_service;
+pub mod booking_intelligence_service;
+pub mod booking_service;
 pub mod branch_service;
 pub mod cash_drawer_service;
 pub mod client_service;
@@ -15,12 +18,14 @@ pub mod integration_service;
 pub mod inventory_adjustment_service;
 pub mod inventory_controls_service;
 pub mod inventory_governance_service;
-pub mod inventory_reorder_forecast_service;
 pub mod inventory_transfer_service;
 pub mod invoice_delivery;
 pub mod invoice_numbering_service;
 pub mod invoice_pdf;
+pub mod language_settings_service;
 pub mod laundry_service;
+pub mod live_consultation_service;
+pub mod marketing_advisor_service;
 pub mod membership_auto_renew_service;
 pub mod membership_service;
 pub mod migration_adapter_service;
@@ -40,8 +45,10 @@ pub mod saas_service;
 pub mod security_service;
 pub mod service_pricing_service;
 pub mod service_settings_service;
+pub mod sms_center_service;
 pub mod sso_service;
 pub mod staff_advanced_service;
+pub mod staff_app_service;
 pub mod staff_attendance_service;
 pub mod staff_enterprise_service;
 pub mod staff_leave_service;
@@ -56,3 +63,5 @@ pub mod webauthn_service;
 
 #[cfg(test)]
 mod staff_lifecycle_chain_tests;
+
+pub mod inventory_reorder_forecast_service;

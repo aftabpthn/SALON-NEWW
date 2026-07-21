@@ -15,8 +15,9 @@ use crate::{
         common::{ApiResponse, ApiResult, AppError},
         migration::{
             AnalyzeMigrationRequest, CreateImportJobRequest, CreateLargeImportJobRequest,
-            ImportJob, MigrationAnalysisReport, MigrationImportChunk, MigrationMapping,
-            MigrationRecoveryReport, MigrationTemplate, SaveMigrationMappingRequest,
+            ImportJob, MigrationAnalysisReport, MigrationApprovalRequest, MigrationImportChunk,
+            MigrationMapping, MigrationMappingSuggestionRequest, MigrationRecoveryReport,
+            MigrationTemplate, SaveMigrationMappingRequest,
         },
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
@@ -24,7 +25,10 @@ use crate::{
             MigrationUploadSession,
         },
     },
-    routes::context::tenant_branch,
+    routes::{
+        context::tenant_branch,
+        security::{require_security_manage, require_security_read},
+    },
     services::{
         auth_service::AuthClaims, integration_service, migration_file_service,
         migration_large_import_service, migration_service,
@@ -33,6 +37,8 @@ use crate::{
 };
 
 pub fn router() -> Router<AppState> {
+    const IMPORT_JSON_BODY_LIMIT_BYTES: usize = 12 * 1024 * 1024;
+
     Router::new()
         .route(
             "/settings/integrations/api-keys",
@@ -89,7 +95,9 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/settings/integrations/import-jobs",
-            get(list_import_jobs).post(create_import_job),
+            get(list_import_jobs)
+                .post(create_import_job)
+                .layer(DefaultBodyLimit::max(IMPORT_JSON_BODY_LIMIT_BYTES)),
         )
         .route(
             "/settings/integrations/import-templates",
@@ -100,8 +108,12 @@ pub fn router() -> Router<AppState> {
             get(list_import_mappings).post(save_import_mapping),
         )
         .route(
+            "/settings/integrations/import-mapping-suggestions",
+            post(import_mapping_suggestions),
+        )
+        .route(
             "/settings/integrations/import-jobs/analyze",
-            post(analyze_import),
+            post(analyze_import).layer(DefaultBodyLimit::max(IMPORT_JSON_BODY_LIMIT_BYTES)),
         )
         .route(
             "/settings/integrations/import-jobs/from-source",
@@ -134,6 +146,34 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/import-jobs/:id/recovery",
             get(import_recovery_report),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/approval",
+            post(decide_import_approval),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/governance",
+            get(import_governance_report),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/failure-assistant",
+            post(import_failure_assistant),
+        )
+        .route(
+            "/settings/integrations/import-monitoring",
+            get(import_monitoring),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/proof-pack",
+            get(download_import_proof_pack),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/failed-rows",
+            get(download_import_failed_rows),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/rollback-impact",
+            get(import_rollback_impact),
         )
         .route(
             "/settings/integrations/import-uploads",
@@ -217,8 +257,10 @@ struct ConnectorCallbackQuery {
 
 async fn list_api_keys(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<crate::repositories::integration_repository::ApiKeyRecord>> {
+    require_security_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::list_api_keys(&s.db, &t, &b).await?,
@@ -333,6 +375,7 @@ async fn create_api_key(
     headers: HeaderMap,
     Json(p): Json<ApiKeyWrite>,
 ) -> ApiResult<integration_service::ApiKeyCreated> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::create_api_key(
@@ -354,6 +397,7 @@ async fn rotate_api_key(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<integration_service::ApiKeyCreated> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::rotate_api_key(&s.db, &t, &b, &c.sub, &id).await?,
@@ -365,6 +409,7 @@ async fn revoke_api_key(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     integration_service::revoke_api_key(&s.db, &t, &b, &c.sub, &id).await?;
     Ok(Json(ApiResponse::ok(json!({"revoked":true}))))
@@ -469,6 +514,18 @@ async fn save_import_mapping(
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::save_mapping(&s.db, &t, &b, &c.sub, request).await?,
+    )))
+}
+
+async fn import_mapping_suggestions(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<MigrationMappingSuggestionRequest>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::mapping_suggestions(&s.db, &s.settings, &t, &b, &c.sub, request).await?,
     )))
 }
 async fn analyze_import(
@@ -578,6 +635,108 @@ async fn import_recovery_report(
     Ok(Json(ApiResponse::ok(
         migration_service::recovery_report(&s.db, &t, &b, &id).await?,
     )))
+}
+
+async fn decide_import_approval(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<MigrationApprovalRequest>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    let approved = request.approved;
+    migration_service::decide_approval(&s.db, &t, &b, &id, &c.sub, request).await?;
+    Ok(Json(ApiResponse::ok(json!({"approved":approved}))))
+}
+
+async fn import_governance_report(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::governance_report(&s.db, &t, &b, &id).await?,
+    )))
+}
+
+async fn import_failure_assistant(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::failure_assistant(&s.db, &s.settings, &t, &b, &id).await?,
+    )))
+}
+
+async fn import_monitoring(State(s): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::monitoring(&s.db, &t, &b).await?,
+    )))
+}
+
+async fn import_rollback_impact(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::rollback_impact(&s.db, &t, &b, &id).await?,
+    )))
+}
+
+async fn download_import_proof_pack(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    let (t, b) = tenant_branch(&headers)?;
+    let pack = migration_service::proof_pack(&s.db, &t, &b, &id).await?;
+    let content = serde_json::to_vec_pretty(&pack)
+        .map_err(|_| AppError::internal("failed to serialize import proof pack"))?;
+    attachment_response(content, "application/json", "migration-proof-pack.json")
+}
+
+async fn download_import_failed_rows(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    let (t, b) = tenant_branch(&headers)?;
+    let content = migration_service::failed_rows_csv(&s.db, &t, &b, &id).await?;
+    attachment_response(
+        content.into_bytes(),
+        "text/csv; charset=utf-8",
+        "migration-failed-rows.csv",
+    )
+}
+
+fn attachment_response(
+    content: Vec<u8>,
+    content_type: &str,
+    file_name: &str,
+) -> Result<Response, AppError> {
+    let mut response = Response::new(Body::from(content));
+    for (name, value) in [
+        (header::CONTENT_TYPE, content_type.to_string()),
+        (
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{file_name}\""),
+        ),
+        (header::CACHE_CONTROL, "private, no-store".to_string()),
+    ] {
+        response.headers_mut().insert(
+            name,
+            HeaderValue::from_str(&value)
+                .map_err(|_| AppError::internal("invalid migration download header"))?,
+        );
+    }
+    Ok(response)
 }
 
 async fn create_import_upload(

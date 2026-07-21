@@ -4,8 +4,8 @@
     <a routerLink="/pos">Back to checkout</a>
   </header>
 
-  <p class="status success" *ngIf="message">{{ message }}</p>
-  <p class="status error" *ngIf="error">{{ error }}</p>
+  <p class="status success" role="status" *ngIf="message">{{ message }}</p>
+  <p class="status error" role="alert" *ngIf="error">{{ error }}</p>
 
   <section class="editor-card">
     <div class="section-head"><h2>{{ editingId ? 'Edit payment mode' : 'Add custom payment mode' }}</h2><button type="button" *ngIf="editingId" (click)="reset()">Cancel</button></div>

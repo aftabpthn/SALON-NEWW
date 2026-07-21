@@ -1,11 +1,11 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
     Extension, Json, Router,
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/ai/concierge/sessions", post(open_session))
         .route("/ai/concierge/sessions/:id/messages", post(send_message))
         .route("/ai/concierge/sessions/:id/transcript", get(get_transcript))
+        .route("/ai/concierge/calls/report", get(call_report))
 }
 
 pub fn public_router() -> Router<AppState> {
@@ -102,6 +103,7 @@ async fn send_message(
             &tenant_id,
             &branch_id,
             &claims.sub,
+            &claims.role,
             &session_id,
             payload,
         )
@@ -124,20 +126,35 @@ async fn get_transcript(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct VoiceWebhookRequest {
-    tenant_id: String,
-    branch_id: String,
-    call_id: String,
-    event_id: String,
-    from: String,
-    transcript: String,
-    locale: Option<String>,
+struct CallReportQuery {
+    start_date: Option<String>,
+    end_date: Option<String>,
+}
+
+async fn call_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<CallReportQuery>,
+) -> ApiResult<ai_concierge_service::VoiceCallReport> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_concierge_service::voice_call_report(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            query.start_date.as_deref(),
+            query.end_date.as_deref(),
+        )
+        .await?,
+    )))
 }
 
 async fn voice_webhook(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<VoiceWebhookRequest>,
+    Json(payload): Json<ai_concierge_service::VoiceWebhookRequest>,
 ) -> ApiResult<Value> {
     verify_voice_provider(&state, &headers)?;
     if !ai_concierge_repository::active_branch_exists(
@@ -158,21 +175,15 @@ async fn voice_webhook(
     )
     .await
     .map_err(|_| AppError::internal("failed to resolve voice caller"))?;
-    let response = ai_concierge_service::process_external_message(
+    let response = ai_concierge_service::record_voice_call_event(
         &state.db,
         &state.settings,
-        &payload.tenant_id,
-        &payload.branch_id,
-        client_id.as_deref(),
-        "voice",
-        &payload.call_id,
-        payload.locale.as_deref().unwrap_or("en-IN"),
-        &payload.transcript,
-        Some(&payload.event_id),
+        payload,
+        client_id,
     )
     .await?;
     Ok(Json(ApiResponse::ok(
-        json!({"sessionId":response.session.id,"replyText":response.assistant_message.body,"actionType":response.action_type,"action":response.action_payload}),
+        serde_json::to_value(response).unwrap_or_default(),
     )))
 }
 
@@ -201,7 +212,15 @@ fn verify_voice_provider(state: &AppState, headers: &HeaderMap) -> Result<(), Ap
 fn require_ai_read(claims: &AuthClaims) -> Result<(), AppError> {
     if matches!(
         claims.role.to_ascii_lowercase().as_str(),
-        "owner" | "admin" | "manager" | "staff" | "frontdesk" | "receptionist"
+        "owner"
+            | "admin"
+            | "manager"
+            | "staff"
+            | "frontdesk"
+            | "receptionist"
+            | "accountant"
+            | "analyst"
+            | "inventorymanager"
     ) {
         Ok(())
     } else {

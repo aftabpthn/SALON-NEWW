@@ -25,14 +25,17 @@ tenant’s books is an existential failure.
 
 ## 4. Schedule & Retention
 
-- **Daily** automated backup (retain 14), **weekly** (retain 8), **monthly** (retain 12).
+- **Daily** automated backup (retain 7), **weekly** (retain 4), **monthly** (retain 12).
+- PostgreSQL point-in-time recovery retains 35 days of continuous recovery points.
+- Private file storage keeps versioning enabled, moves current objects to Standard-IA after 30 days and Glacier after 90 days, and expires noncurrent versions after 365 days.
 - **Event-driven:** before every deploy containing migrations, and before any approved destructive operation.
 - Copies: local + encrypted offsite. Encryption mandatory; keys managed outside the backup store.
 
 ## 5. Verification
 
 - Post-backup: checksum recorded and compared on copy.
-- **Monthly drill:** restore latest backup to a scratch PostgreSQL instance → run integrity checks + API health checks (`/api/health`) → sample tenant spot-check → drill logged.
+- **Monthly drill:** restore latest backup to a scratch PostgreSQL instance → run integrity checks + API health checks (`/api/health`) → sample tenant spot-check → drill logged. Use `backend-rust/scripts/postgres-restore-readiness.ps1` for the database restore check.
+- Completed appointments are retained. Add yearly partitioning or archival only after measured table growth requires it; archival must preserve API contracts and tenant scope.
 - A backup that has never been restored is treated as nonexistent.
 
 ## 6. Recovery Decision Tree (summary — full steps in docs/restore.md)

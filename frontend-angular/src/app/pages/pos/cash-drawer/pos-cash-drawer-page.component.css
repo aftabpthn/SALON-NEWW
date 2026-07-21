@@ -19,7 +19,8 @@ input, select, textarea, button, .command-actions a { border: 1px solid var(--li
 input, select { min-height: 38px; padding: 0 11px; }
 textarea { padding: 10px 11px; resize: vertical; }
 button { min-height: 38px; padding: 0 14px; cursor: pointer; }
-button:hover, button:focus, input:focus, select:focus, textarea:focus, .command-actions a:hover { border-color: var(--brand); outline: none; background: var(--bg); }
+button:hover, button:focus, input:focus, select:focus, textarea:focus, .command-actions a:hover { border-color: var(--brand); background: var(--bg); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .command-actions a:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 button:disabled { cursor: wait; opacity: .6; }
 .primary { border-color: var(--brand); background: var(--brand); color: var(--panel); }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 12px; align-items: start; }
@@ -33,6 +34,7 @@ form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12p
 .summary div, .report-list div { display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 dt { color: var(--muted); font-size: 12px; font-weight: 600; }
 dd { margin: 0; font-weight: 700; }
+dd, .count-total strong, .payment-summary strong { text-align: right; font-variant-numeric: tabular-nums; }
 .action-block { border-top: 1px solid var(--line); }
 .action-block h3 { margin-bottom: 12px; }
 .denomination-grid { display: grid; grid-template-columns: repeat(5, minmax(80px, 1fr)); gap: 8px; }
@@ -72,4 +74,5 @@ dd { margin: 0; font-weight: 700; }
   form, .summary { grid-template-columns: 1fr; }
   .wide { grid-column: auto; }
   .denomination-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .command-actions > * { flex: 1 1 140px; }
 }

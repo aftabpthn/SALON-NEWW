@@ -16,16 +16,23 @@ the platform super admin.
 | --- | --- | --- |
 | owner | Full control of the tenant | All branches |
 | manager | Operations, approvals, reports | All branches |
+| regional head | Regional operations across assigned region/cluster branches | Explicit region/cluster branch grants |
 | analyst | Read-heavy reporting/analytics | All branches |
 | accountant | Finance, accounting, reports | All branches |
 | receptionist / front-desk | Booking, POS, clients | Assigned branch only |
 | staff | Own calendar, own performance | Assigned branch only |
 | inventory manager | Stock, purchases, suppliers | Assigned branch (configurable) |
+| cashier | POS, invoices and client checkout | Assigned branch only |
+| marketing lead | Campaigns, notifications and client engagement | Assigned branches only |
 | custom roles | Composed from named permissions | As configured |
 
 **Platform role:** `superAdmin` (`x-user-role: superAdmin`) — SaaS console only
 (tenant management, plans, suspensions, feature toggles). Super admin actions are
 recorded in `super_admin_audit` and never bypass tenant data rules for business operations.
+
+Customer sessions use the separate fixed `customer` claim and customer-portal
+session tables. Customer identities are never tenant roles and cannot be assigned
+through `user_branch_roles`.
 
 ## 3. Permission Model
 

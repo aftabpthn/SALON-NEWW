@@ -49,6 +49,7 @@ pub struct TokenBundle {
     pub expires_in: u64,
     pub refresh_expires_at: String,
     pub session_id: String,
+    #[serde(rename = "customer")]
     pub account: AccountRecord,
 }
 
@@ -58,6 +59,38 @@ pub struct PendingChallenge {
     pub target: String,
     pub target_type: String,
     pub purpose: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirebaseLookupResponse {
+    #[serde(default)]
+    users: Vec<FirebaseLookupUser>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirebaseLookupUser {
+    local_id: String,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    email_verified: bool,
+    #[serde(default)]
+    phone_number: String,
+    #[serde(default)]
+    display_name: String,
+    #[serde(default)]
+    disabled: bool,
+    #[serde(default)]
+    provider_user_info: Vec<FirebaseProviderIdentity>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FirebaseProviderIdentity {
+    #[serde(default)]
+    provider_id: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -158,6 +191,99 @@ pub async fn verify_login(
             .await
             .map_err(|_| AppError::internal("failed to link customer profile"))?;
     }
+    issue_new_session(db, settings, account, device, user_agent, ip_hash).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn exchange_firebase_token(
+    db: &PgPool,
+    settings: &Settings,
+    id_token: &str,
+    requested_provider: &str,
+    device: &DeviceInput,
+    user_agent: &str,
+    ip_hash: &str,
+) -> Result<TokenBundle, AppError> {
+    let id_token = id_token.trim();
+    if id_token.is_empty() || id_token.len() > 16_384 {
+        return Err(AppError::unauthenticated("Firebase ID token is required"));
+    }
+    let provider = canonical_firebase_provider(requested_provider)?;
+    let api_key = settings
+        .customer_firebase_api_key
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "FIREBASE_NOT_CONFIGURED",
+                "customer Firebase authentication is not configured",
+            )
+        })?;
+    let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(8))
+        .build()
+        .map_err(|_| AppError::internal("failed to initialize Firebase verification"))?;
+    let response = client
+        .post(format!(
+            "https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={api_key}"
+        ))
+        .json(&json!({"idToken":id_token}))
+        .send()
+        .await
+        .map_err(|_| {
+            AppError::service_unavailable(
+                "FIREBASE_UNAVAILABLE",
+                "Firebase verification is unavailable",
+            )
+        })?;
+    if !response.status().is_success() {
+        return Err(AppError::unauthenticated(
+            "Firebase token is invalid or expired",
+        ));
+    }
+    let lookup = response
+        .json::<FirebaseLookupResponse>()
+        .await
+        .map_err(|_| AppError::unauthenticated("Firebase token response is invalid"))?;
+    let user = lookup
+        .users
+        .into_iter()
+        .next()
+        .filter(|user| !user.disabled && !user.local_id.trim().is_empty())
+        .ok_or_else(|| AppError::unauthenticated("Firebase customer is unavailable"))?;
+    if !firebase_provider_matches(&user, provider) {
+        return Err(AppError::unauthenticated(
+            "Firebase sign-in provider does not match the request",
+        ));
+    }
+    let verified_email = if user.email_verified && !user.email.trim().is_empty() {
+        normalize_target("email", &user.email)?
+    } else {
+        String::new()
+    };
+    let verified_phone = if user.phone_number.trim().is_empty() {
+        String::new()
+    } else {
+        normalize_target("phone", &user.phone_number)?
+    };
+    if verified_email.is_empty() && verified_phone.is_empty() {
+        return Err(AppError::unauthenticated(
+            "Firebase account has no verified email or phone",
+        ));
+    }
+    let (first_name, last_name) = split_customer_name(&user.display_name);
+    let account = repo::upsert_federated_account(
+        db,
+        provider,
+        user.local_id.trim(),
+        &first_name,
+        &last_name,
+        &verified_email,
+        !verified_email.is_empty(),
+        &verified_phone,
+    )
+    .await
+    .map_err(|_| AppError::conflict("Firebase identity is already linked"))?;
     issue_new_session(db, settings, account, device, user_agent, ip_hash).await
 }
 
@@ -327,6 +453,63 @@ pub async fn ensure_client_link(
         .map_err(|_| AppError::internal("failed to link customer to booking branch"))
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn issue_dev_session(
+    db: &PgPool,
+    settings: &Settings,
+    raw_email: &str,
+    raw_phone: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    first_name: &str,
+    last_name: &str,
+    device: &DeviceInput,
+    user_agent: &str,
+    ip_hash: &str,
+) -> Result<TokenBundle, AppError> {
+    if !repo::branch_exists(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate customer branch"))?
+    {
+        return Err(AppError::not_found("customer branch was not found"));
+    }
+    let email = raw_email.trim();
+    let phone = raw_phone.trim();
+    let (target_type, target) = if !email.is_empty() {
+        ("email", normalize_target("email", email)?)
+    } else {
+        ("phone", normalize_target("phone", phone)?)
+    };
+    let account = repo::upsert_verified_account(
+        db,
+        target_type,
+        &target,
+        &clean_name(first_name),
+        &clean_name(last_name),
+    )
+    .await
+    .map_err(|_| AppError::conflict("verified contact is already used by another customer"))?;
+    let account = if target_type == "email" && !phone.is_empty() {
+        let verified_phone = normalize_target("phone", phone)?;
+        repo::update_verified_target(db, &account.id, "phone", &verified_phone)
+            .await
+            .map_err(|_| AppError::conflict("verified phone is already used by another customer"))?
+            .ok_or_else(|| AppError::not_found("customer profile was not found"))?
+    } else if target_type == "phone" && !email.is_empty() {
+        let verified_email = normalize_target("email", email)?;
+        repo::update_verified_target(db, &account.id, "email", &verified_email)
+            .await
+            .map_err(|_| AppError::conflict("verified email is already used by another customer"))?
+            .ok_or_else(|| AppError::not_found("customer profile was not found"))?
+    } else {
+        account
+    };
+    repo::ensure_client_link(db, &account, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to link customer to branch"))?;
+    issue_new_session(db, settings, account, device, user_agent, ip_hash).await
+}
+
 pub async fn customer_ai(
     db: &PgPool,
     settings: &Settings,
@@ -338,14 +521,22 @@ pub async fn customer_ai(
         .await
         .map_err(|_| AppError::internal("failed to load customer AI scope"))?
         .ok_or_else(|| AppError::not_found("customer is not linked to this business"))?;
-    let (summary, recent_services, feedback, candidate_services) = tokio::try_join!(
-        clients_repository::summary(db, tenant_id, branch_id, &client_id),
-        clients_repository::service_history(db, tenant_id, branch_id, &client_id),
-        clients_repository::recommendation_feedback(db, tenant_id, branch_id, &client_id),
-        repo::business_services(db, branch_id),
-    )
-    .map_err(|_| AppError::internal("failed to build customer AI context"))?;
-    let fallback = customer_ai_fallback(&client_id, &summary, &recent_services, &feedback);
+    let (summary, recent_services, feedback, candidate_services, recovery_offers) =
+        tokio::try_join!(
+            clients_repository::summary(db, tenant_id, branch_id, &client_id),
+            clients_repository::service_history(db, tenant_id, branch_id, &client_id),
+            clients_repository::recommendation_feedback(db, tenant_id, branch_id, &client_id),
+            repo::business_services(db, branch_id),
+            repo::active_recovery_offers(db, account_id, tenant_id, branch_id),
+        )
+        .map_err(|_| AppError::internal("failed to build customer AI context"))?;
+    let fallback = customer_ai_fallback(
+        &client_id,
+        &summary,
+        &recent_services,
+        &feedback,
+        &recovery_offers,
+    );
     let (Some(url), Some(token)) = (
         settings.ai_service_url.as_deref(),
         settings.ai_service_token.as_deref(),
@@ -389,6 +580,8 @@ pub async fn customer_ai(
             "decision":item.decision,
             "comment":item.comment,
         })).collect::<Vec<_>>(),
+        "recovery_offers":recovery_offers,
+        "safety":{"requiresExplicitBookingConfirmation":true,"medicalDiagnosisAllowed":false,"guaranteedResultsAllowed":false},
     });
     let Ok(client) = reqwest::Client::builder()
         .timeout(StdDuration::from_secs(3))
@@ -421,6 +614,10 @@ pub async fn customer_ai(
         return Ok(fallback);
     };
     result_object.insert("aiAvailable".into(), Value::Bool(true));
+    result_object.insert(
+        "bookingConfirmationSafety".into(),
+        json!({"requiresExplicitBookingConfirmation":true,"bookingOnlyAfterRealSlot":true,"medicalDiagnosisAllowed":false,"guaranteedResultsAllowed":false}),
+    );
     Ok(result)
 }
 
@@ -429,6 +626,7 @@ fn customer_ai_fallback(
     summary: &clients_repository::ClientSummaryRecord,
     services: &[clients_repository::ClientServiceHistoryRecord],
     feedback: &[clients_repository::ClientRecommendationFeedbackRecord],
+    recovery_offers: &[Value],
 ) -> Value {
     let health_score = (100
         - summary.churn_risk_score
@@ -460,9 +658,13 @@ fn customer_ai_fallback(
         "healthScore":health_score,
         "healthExplanation":if health_score>=75 {"Customer engagement is healthy based on current CRM signals."} else {"Health needs attention based on current retention signals."},
         "churnRisk":{"score":summary.churn_risk_score,"explanation":[summary.next_best_action_reason]},
+        "churnRecoveryOffers":recovery_offers,
         "nextBestActions":[{"action":summary.next_best_action,"reason":summary.next_best_action_reason,"priority":100}],
         "rebookingRecommendations":rebooking,
+        "smartRebooking":rebooking.first().map(|item| json!({"status":"ready","serviceId":item["serviceId"],"serviceName":item["serviceName"],"recommendedInDays":item["recommendedInDays"],"requiresExplicitConfirmation":true})).unwrap_or_else(|| json!({"status":"not_needed","requiresExplicitConfirmation":true})),
         "upsellRecommendations":[],
+        "multilingual":{"defaultLanguage":"en-IN","supportedLanguages":["en-IN","hi-IN"],"source":"customer_app"},
+        "bookingConfirmationSafety":{"requiresExplicitBookingConfirmation":true,"bookingOnlyAfterRealSlot":true,"medicalDiagnosisAllowed":false,"guaranteedResultsAllowed":false},
         "learningContext":{
             "acceptedCount":feedback.iter().filter(|item|item.decision=="accepted").count(),
             "rejectedCount":feedback.iter().filter(|item|item.decision=="rejected").count(),
@@ -655,6 +857,45 @@ fn normalize_target(target_type: &str, value: &str) -> Result<String, AppError> 
     Ok(normalized)
 }
 
+fn canonical_firebase_provider(value: &str) -> Result<&'static str, AppError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "google" | "google.com" => Ok("google"),
+        "apple" | "apple.com" => Ok("apple"),
+        "facebook" | "facebook.com" => Ok("facebook"),
+        "phone" => Ok("phone"),
+        "password" => Ok("password"),
+        "firebase" | "" => Ok("firebase"),
+        _ => Err(AppError::validation("unsupported Firebase provider")),
+    }
+}
+
+fn firebase_provider_matches(user: &FirebaseLookupUser, provider: &str) -> bool {
+    let provider_id = match provider {
+        "google" => "google.com",
+        "apple" => "apple.com",
+        "facebook" => "facebook.com",
+        "phone" => "phone",
+        "password" => "password",
+        _ => return true,
+    };
+    if provider == "phone" {
+        return !user.phone_number.trim().is_empty();
+    }
+    if provider == "password" {
+        return user.email_verified && !user.email.trim().is_empty();
+    }
+    user.provider_user_info
+        .iter()
+        .any(|identity| identity.provider_id == provider_id)
+}
+
+fn split_customer_name(value: &str) -> (String, String) {
+    let mut parts = value.split_whitespace();
+    let first = clean_name(parts.next().unwrap_or("Customer"));
+    let last = clean_name(&parts.collect::<Vec<_>>().join(" "));
+    (first, last)
+}
+
 fn clean_name(value: &str) -> String {
     value.trim().chars().take(120).collect()
 }
@@ -796,7 +1037,7 @@ mod tests {
             rfm_score: 6,
             intelligence_calculated_at: None,
         };
-        let result = customer_ai_fallback("client-1", &summary, &[], &[]);
+        let result = customer_ai_fallback("client-1", &summary, &[], &[], &[]);
         assert_eq!(result["aiAvailable"], false);
         assert_eq!(
             result["nextBestActions"][0]["action"],

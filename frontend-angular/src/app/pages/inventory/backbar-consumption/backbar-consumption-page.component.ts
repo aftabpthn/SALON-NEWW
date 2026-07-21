@@ -1,3 +1,4 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -5,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type RecipeLine = { productId?: string; itemId?: string; inventoryItemId?: string; standardQty?: number; quantity?: number; qty?: number };
 type Service = { id: string; name: string; active: boolean; productConsumption: RecipeLine[] };
@@ -17,11 +19,12 @@ type Container = { id: string; inventoryItemId: string; productName: string; bar
 @Component({
   selector: 'page-backbar-consumption',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './backbar-consumption-page.component.html',
   styleUrls: ['./backbar-consumption-page.component.css'],
 })
 export class BackbarConsumptionPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   items: Item[] = [];
@@ -86,7 +89,7 @@ export class BackbarConsumptionPageComponent implements OnInit {
       this.items = items.filter((item) => item.active);
       this.services = services.filter((service) => service.active !== false).map((service) => ({ id: String(service.id), name: String(service.name), active: true, productConsumption: Array.isArray(service.productConsumption) ? service.productConsumption : [] }));
       this.staff = staff.filter((row) => row.active); this.usage = usage; this.containers = containers;
-    } catch (error) { this.error = this.message(error, 'Backbar usage could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.130bf2c64b')); }
     finally { this.loading = false; }
   }
 
@@ -106,7 +109,7 @@ export class BackbarConsumptionPageComponent implements OnInit {
   async save() {
     const item = this.items.find((row) => row.id === this.draft.inventoryItemId);
     const actual = Number(this.draft.actualQuantity);
-    if (!item || !Number.isInteger(actual) || actual <= 0) { this.error = 'Product and positive whole actual quantity are required'; return; }
+    if (!item || !Number.isInteger(actual) || actual <= 0) { this.error = this.language.text('inventory.message.99f1439ca5'); return; }
     this.saving = true; this.clearFeedback();
     try {
       const response: any = await firstValueFrom(this.api.post('/inventory/backbar-usage', {
@@ -115,7 +118,7 @@ export class BackbarConsumptionPageComponent implements OnInit {
       }));
       this.drawerOpen = false; await this.load();
       this.notice = response?.data?.status === 'pending_approval' ? 'Sent for owner approval' : 'Backbar usage recorded';
-    } catch (error) { this.error = this.message(error, 'Backbar usage could not be recorded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.28b3d8f473')); }
     finally { this.saving = false; }
   }
 
@@ -126,13 +129,13 @@ export class BackbarConsumptionPageComponent implements OnInit {
     try {
       await firstValueFrom(this.api.patch(`/inventory/backbar-usage/${row.id}/review`, { decision, reviewNote: reviewNote || '' }));
       await this.load(); this.notice = decision === 'approve' ? 'Usage approved and stock updated' : 'Usage rejected';
-    } catch (error) { this.error = this.message(error, 'Backbar review could not be saved'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.b646c3516a')); }
     finally { this.saving = false; }
   }
 
   async createContainer() {
     const quantity = Number(this.containerDraft.capacityQuantity);
-    if (!this.containerDraft.inventoryItemId || !this.containerDraft.barcode.trim() || !Number.isInteger(quantity) || quantity <= 0) { this.error = 'Product, barcode and capacity are required'; return; }
+    if (!this.containerDraft.inventoryItemId || !this.containerDraft.barcode.trim() || !Number.isInteger(quantity) || quantity <= 0) { this.error = this.language.text('inventory.message.12caca39ed'); return; }
     await this.containerAction(async () => this.api.post('/inventory/backbar-containers', { ...this.containerDraft, capacityQuantity: quantity, idempotencyKey: crypto.randomUUID() }), 'Container created');
     this.containerDraft = { inventoryItemId: '', barcode: '', capacityQuantity: null, unit: 'ml' };
   }
@@ -143,7 +146,7 @@ export class BackbarConsumptionPageComponent implements OnInit {
   private async containerAction(action: () => any, message: string) { this.saving = true; this.clearFeedback(); try { await firstValueFrom(action()); await this.load(); this.notice = message; } catch (error) { this.error = this.message(error, message); } finally { this.saving = false; } }
   exportCsv() {
     const rows = this.visibleUsage.map((row) => [this.date(row.createdAt), row.itemName, row.source, row.serviceName, row.staffName, row.expectedQuantity, row.actualQuantity, row.varianceQuantity, row.unit, row.status]);
-    const csv = [['Date', 'Product', 'Invoice / Source', 'Service', 'Staff', 'Expected', 'Actual', 'Variance', 'Unit', 'Status'], ...rows]
+    const csv = [['Date', 'Product', 'Invoice / Source', 'Service', 'Staff', 'Expected', 'Actual', 'Variance', 'Unit', 'Status'].map((value) => this.language.textValue(value)), ...rows]
       .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `backbar-usage-${this.filterDate || 'all'}.csv`; link.click(); URL.revokeObjectURL(url);

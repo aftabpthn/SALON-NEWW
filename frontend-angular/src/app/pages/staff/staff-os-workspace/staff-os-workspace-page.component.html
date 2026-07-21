@@ -9,7 +9,7 @@
         <i class="bi" [ngClass]="action.icon"></i>{{ action.label }}
       </button>
       <button type="button" (click)="refresh()" [disabled]="loading"><i class="bi bi-arrow-repeat"></i>{{ loading ? 'Loading…' : 'Refresh' }}</button>
-      <button type="button" (click)="back()"><i class="bi bi-arrow-left"></i>Staff</button>
+      <button type="button" (click)="back()"><i class="bi bi-arrow-left"></i>{{ 'staff.ui.a4730a22cf' | translate }}</button>
     </div>
   </header>
 
@@ -35,16 +35,16 @@
     <div class="table-wrap" *ngIf="section.rows.length">
       <table>
         <thead>
-          <tr><th *ngFor="let column of section.columns; trackBy: trackColumn">{{ label(column) }}</th></tr>
+          <tr><th scope="col" *ngFor="let column of section.columns; trackBy: trackColumn" [attr.data-column]="column">{{ label(column) }}</th></tr>
         </thead>
         <tbody>
           <tr *ngFor="let row of section.rows; trackBy: trackRow">
-            <td *ngFor="let column of section.columns; trackBy: trackColumn">{{ display(row[column]) }}</td>
+            <td *ngFor="let column of section.columns; trackBy: trackColumn" [attr.data-column]="column">{{ display(row[column]) }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <div class="empty-state" *ngIf="!section.rows.length && !section.summary.length && !section.error">No records yet</div>
+    <div class="empty-state" *ngIf="!section.rows.length && !section.summary.length && !section.error">{{ 'staff.ui.e619c5b961' | translate }}</div>
   </section>
 </section>

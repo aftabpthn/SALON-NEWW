@@ -1,0 +1,141 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AuraShine POS production alarms
+
+Parameters:
+  AlbFullName:
+    Type: String
+    Description: ALB dimension value, for example app/aurashine/abc123
+  TargetGroupFullName:
+    Type: String
+    Description: Target group dimension value, for example targetgroup/api/abc123
+  EcsClusterName:
+    Type: String
+  EcsServiceName:
+    Type: String
+  RdsInstanceIdentifier:
+    Type: String
+  CacheClusterId:
+    Type: String
+  AlarmTopicArn:
+    Type: String
+    Default: ''
+
+Conditions:
+  HasAlarmTopic: !Not [!Equals [!Ref AlarmTopicArn, '']]
+
+Resources:
+  Alb5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-alb-5xx
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AlbFullName
+        - Name: TargetGroup
+          Value: !Ref TargetGroupFullName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  AlbLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-alb-p95-latency
+      Namespace: AWS/ApplicationELB
+      MetricName: TargetResponseTime
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AlbFullName
+        - Name: TargetGroup
+          Value: !Ref TargetGroupFullName
+      ExtendedStatistic: p95
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: 2
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  UnhealthyTargetAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-unhealthy-targets
+      Namespace: AWS/ApplicationELB
+      MetricName: UnHealthyHostCount
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AlbFullName
+        - Name: TargetGroup
+          Value: !Ref TargetGroupFullName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  EcsTaskCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-ecs-no-running-task
+      Namespace: ECS/ContainerInsights
+      MetricName: RunningTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref EcsClusterName
+        - Name: ServiceName
+          Value: !Ref EcsServiceName
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  RdsCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-rds-cpu
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref RdsInstanceIdentifier
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+  RedisEvictionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: aurashine-pos-redis-evictions
+      Namespace: AWS/ElastiCache
+      MetricName: Evictions
+      Dimensions:
+        - Name: CacheClusterId
+          Value: !Ref CacheClusterId
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmTopic, [!Ref AlarmTopicArn], !Ref AWS::NoValue]
+
+Outputs:
+  AlarmCount:
+    Value: '6'

@@ -104,6 +104,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     { key: 'occasions', label: 'Occasions' },
     { key: 'service-wise', label: 'Service-wise clients' },
     { key: 'revenue', label: 'Client revenue' },
+    { key: 'return-summary', label: 'Return tracker summary' },
+    { key: 'return-clients', label: 'Return tracker clients' },
+    { key: 'return-offers', label: 'Return tracker offers' },
+    { key: 'return-roi', label: 'Return tracker ROI' },
   ];
 
   clientRows: ClientRow[] = [];
@@ -152,6 +156,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   reportSegment = '';
   reportMaxChurnRisk = '';
   reportIncludeUnpaid = true;
+  reportReturnStatus = '';
   loadingReport = false;
   reportError = '';
   growth: any = this.emptyGrowth();
@@ -322,6 +327,18 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
         'invoiceCount',
       ];
     }
+    if (this.selectedReportType === 'return-summary') {
+      return ['days', 'issuedCount', 'redeemedCount', 'returnedCount', 'winBackSuccessRateBps', 'revenueAfterReturnPaise', 'discountCostPaise', 'offerRoiBps'];
+    }
+    if (this.selectedReportType === 'return-clients') {
+      return ['clientName', 'offerCount', 'redeemedCount', 'returnedCount', 'revenueAfterReturnPaise', 'discountCostPaise', 'offerRoiBps'];
+    }
+    if (this.selectedReportType === 'return-offers') {
+      return ['clientName', 'offerCode', 'title', 'status', 'offeredDiscountBps', 'discountCostPaise', 'returnWindowDays', 'issuedAt', 'returnedAt', 'revenueAfterReturnPaise', 'offerRoiBps'];
+    }
+    if (this.selectedReportType === 'return-roi') {
+      return ['periodStart', 'issuedCount', 'returnedCount', 'revenueAfterReturnPaise', 'discountCostPaise', 'offerRoiBps'];
+    }
     return this.reportRows.length ? Object.keys(this.reportRows[0]) : [];
   }
 
@@ -331,6 +348,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
 
   get isBestClientsReport() {
     return this.selectedReportType === 'best-clients';
+  }
+
+  get isReturnTrackerReport() {
+    return this.selectedReportType.startsWith('return-');
   }
 
   get selectedMasterLabel() {
@@ -432,6 +453,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   changeClientReportType() {
     if (this.isBestClientsReport && this.reportDays === 90) this.reportDays = 0;
     if (!this.isBestClientsReport && this.reportDays === 0) this.reportDays = 90;
+    if (!this.isReturnTrackerReport) this.reportReturnStatus = '';
     void this.loadClientReport();
   }
 
@@ -1093,9 +1115,12 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.loadingReport = true;
     this.reportError = '';
     try {
-      const result = await firstValueFrom(this.api.get<ApiEnvelope<any[]>>(`/clients/reports/${this.selectedReportType}?${this.reportQueryString()}`));
-      if (!result.success || !Array.isArray(result.data)) throw new Error(result?.error?.message || 'Client report could not be loaded');
-      this.reportRows = result.data;
+      const path = this.isReturnTrackerReport
+        ? `/clients/return-tracker/${this.returnTrackerView()}?${this.reportQueryString()}`
+        : `/clients/reports/${this.selectedReportType}?${this.reportQueryString()}`;
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<any[] | Record<string, unknown>>>(path));
+      if (!result.success) throw new Error(result?.error?.message || 'Client report could not be loaded');
+      this.reportRows = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
     } catch (error) {
       this.reportRows = [];
       this.reportError = this.errorMessage(error, 'Client report could not be loaded');
@@ -1116,6 +1141,21 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       this.growth = this.emptyGrowth();
       this.growthError = this.errorMessage(error, 'Client growth data could not be loaded');
     } finally { this.loadingGrowth = false; }
+  }
+
+  async rebuildMemoryGraph() {
+    if (!this.selectedClient) return;
+    this.savingWorkspace = true;
+    this.growthError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>(`/clients/${this.selectedClient.id}/memory-graph`, {}));
+      if (!result.success || !result.data) throw new Error(result.error?.message || 'Memory graph could not be rebuilt');
+      this.memoryGraph = { ...this.emptyMemoryGraph(), ...result.data };
+    } catch (error) {
+      this.growthError = this.errorMessage(error, 'Memory graph could not be rebuilt');
+    } finally {
+      this.savingWorkspace = false;
+    }
   }
 
   async saveRecommendationFeedback(decision: 'accepted' | 'rejected') {
@@ -1224,6 +1264,39 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  exportCurrentReport() {
+    if (!this.reportRows.length) return;
+    const columns = this.reportColumns;
+    const escapeCsv = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const lines = [
+      columns.map((column) => escapeCsv(this.reportHeader(column))).join(','),
+      ...this.reportRows.map((row) => columns.map((column) => escapeCsv(this.reportValue(column, row[column]))).join(',')),
+    ];
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${this.selectedReportType}-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async openReportClient(row: any) {
+    const clientId = String(row?.clientId || '').trim();
+    if (!clientId) return;
+    this.reportError = '';
+    try {
+      let client = this.clientRows.find((item) => item.id === clientId);
+      if (!client) {
+        const result = await firstValueFrom(this.api.get<ApiEnvelope<any>>(`/clients/${encodeURIComponent(clientId)}`));
+        if (!result.success || !result.data) throw new Error(result.error?.message || 'Client could not be loaded');
+        client = this.toClientRow(result.data.client || result.data);
+      }
+      this.selectClient(client);
+    } catch (error) {
+      this.reportError = this.errorMessage(error, 'Client could not be loaded');
+    }
+  }
+
   reportHeader(column: string) {
     const labels: Record<string, string> = {
       clientName: 'Client',
@@ -1239,14 +1312,34 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       churnRiskScore: 'Churn risk',
       unpaidPaise: 'Unpaid',
       invoiceCount: 'Invoices',
+      days: 'Period days',
+      issuedCount: 'Offers issued',
+      redeemedCount: 'Redeemed',
+      returnedCount: 'Returned',
+      winBackSuccessRateBps: 'Success rate',
+      revenueAfterReturnPaise: 'Return revenue',
+      discountCostPaise: 'Discount cost',
+      offerRoiBps: 'Offer ROI',
+      clientId: 'Client ID',
+      offerId: 'Offer ID',
+      offerCode: 'Offer code',
+      title: 'Offer',
+      status: 'Status',
+      offeredDiscountBps: 'Discount',
+      returnWindowDays: 'Return window',
+      issuedAt: 'Issued',
+      redeemedAt: 'Redeemed at',
+      returnedAt: 'Returned at',
+      periodStart: 'Period',
     };
     return labels[column] || column.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (value) => value.toUpperCase());
   }
 
   reportValue(column: string, value: unknown) {
     if (value === null || value === undefined || value === '') return '—';
+    if (/bps$/i.test(column)) return `${((Number(value) || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`;
     if (/paise$/i.test(column)) return this.money(Number(value));
-    if (/At$|Date$|birthday|anniversary/i.test(column)) return this.formatDateTime(String(value));
+    if (/At$|Date$|periodStart|birthday|anniversary/i.test(column)) return this.formatDateTime(String(value));
     return String(value);
   }
 
@@ -1254,6 +1347,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     const query = new URLSearchParams();
     query.set('days', String(this.reportDays));
     query.set('limit', String(this.reportLimit));
+    if (this.isReturnTrackerReport && this.reportReturnStatus) query.set('status', this.reportReturnStatus);
     if (this.isBestClientsReport) {
       const minLifetimeValuePaise = Math.round((Number(this.reportMinLifetimeValue) || 0) * 100);
       const minVisits = Math.max(0, Math.floor(Number(this.reportMinVisits) || 0));
@@ -1265,6 +1359,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       query.set('include_unpaid', String(this.reportIncludeUnpaid));
     }
     return query.toString();
+  }
+
+  private returnTrackerView() {
+    return this.selectedReportType.replace('return-', '') || 'summary';
   }
 
   bookAppointment() {

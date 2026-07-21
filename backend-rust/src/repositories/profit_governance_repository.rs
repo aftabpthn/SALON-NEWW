@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool};
 
@@ -9,7 +10,32 @@ use crate::models::profit_governance::{
 const RULE_COLUMNS: &str = "id, rule_type, title, description, enabled, min_margin_bps, max_discount_bps, max_impact_paise, approval_required, auto_execute_allowed, audit_required, severity, created_by_user_id, updated_by_user_id, created_at, updated_at";
 const DECISION_COLUMNS: &str = "id, rule_id, decision_type, source_type, source_id, action_type, decision, status, gross_amount_paise, discount_paise, product_cost_paise, staff_cost_paise, membership_redemption_paise, estimated_profit_paise, margin_bps, discount_bps, impact_paise, reason_codes, message, requested_by_user_id, idempotency_key, created_at, updated_at";
 const APPROVAL_COLUMNS: &str = "approval.id, approval.decision_id, decision.decision_type, decision.source_type, decision.source_id, decision.action_type, decision.decision, approval.status, decision.gross_amount_paise, decision.discount_paise, decision.estimated_profit_paise, decision.margin_bps, decision.discount_bps, decision.impact_paise, decision.reason_codes, decision.message, approval.requested_by_user_id, approval.reviewed_by_user_id, approval.review_note, approval.requested_at, approval.reviewed_at";
-const ACTION_COLUMNS: &str = "action.id, action.governance_decision_id, approval.id AS approval_id, action.action_type, action.title, action.message, action.impact_paise, action.priority, action.status, action.source_type, action.source_id, action.payload_json, action.created_by_user_id, action.reviewed_by_user_id, action.completed_by_user_id, action.created_at, action.updated_at, action.approved_at, action.completed_at, action.dismissed_at";
+const ACTION_COLUMNS: &str = "action.id, action.governance_decision_id, approval.id AS approval_id, action.action_type, action.title, action.message, action.impact_paise, action.priority, action.status, action.source_type, action.source_id, action.action_key, action.period_start, action.period_end, action.rule_key, action.owner_user_id, COALESCE(NULLIF(owner.full_name,''), owner.email) AS owner_name, action.due_at, action.sla_minutes, action.notes, action.evidence_json, action.baseline_impact_paise, action.expected_impact_paise, action.realized_impact_paise, action.recurrence_key, action.occurrence_number, action.generated_by, action.last_observed_at, action.payload_json, action.created_by_user_id, action.reviewed_by_user_id, action.completed_by_user_id, action.created_at, action.updated_at, action.approved_at, action.completed_at, action.dismissed_at";
+
+#[derive(FromRow)]
+pub struct ProfitScanTarget {
+    pub tenant_id: String,
+    pub branch_id: String,
+}
+
+pub struct AutomatedActionObservation<'a> {
+    pub governance_decision_id: &'a str,
+    pub action_key: &'a str,
+    pub recurrence_key: &'a str,
+    pub rule_key: &'a str,
+    pub action_type: &'a str,
+    pub title: &'a str,
+    pub message: &'a str,
+    pub impact_paise: i64,
+    pub priority: &'a str,
+    pub source_type: &'a str,
+    pub source_id: &'a str,
+    pub period_start: NaiveDate,
+    pub period_end: NaiveDate,
+    pub owner_user_id: &'a str,
+    pub sla_minutes: i32,
+    pub evidence: Value,
+}
 
 pub struct NewGovernanceDecision<'a> {
     pub rule_id: Option<&'a str>,
@@ -266,7 +292,9 @@ pub async fn record_evaluation(
             )
             .await?;
         }
-        if matches!(decision.status.as_str(), "pending_approval" | "blocked") {
+        if decision.decision_type == "action"
+            || matches!(decision.status.as_str(), "pending_approval" | "blocked")
+        {
             let action_type = if decision.action_type.is_empty() {
                 "profit_governance_approval"
             } else {
@@ -282,10 +310,19 @@ pub async fn record_evaluation(
                 INSERT INTO profit_action_queue (
                   tenant_id, branch_id, governance_decision_id, action_type, title,
                   message, impact_paise, priority, source_type, source_id,
-                  payload_json, created_by_user_id
+                  action_key, rule_key, owner_user_id, due_at, sla_minutes,
+                  baseline_impact_paise, expected_impact_paise, recurrence_key,
+                  generated_by, last_observed_at, payload_json, created_by_user_id,
+                  status, approved_at
                 ) VALUES (
                   $1,$2,$3,$4,$5,$6,$7,$8,'governance_decision',$3,
-                  jsonb_build_object('decisionId',$3,'reasonCodes',$9::JSONB),$10
+                  'governance:'||$3,'governance',$10,
+                  NOW()+MAKE_INTERVAL(mins => CASE WHEN $8='high' THEN 1440 ELSE 4320 END),
+                  CASE WHEN $8='high' THEN 1440 ELSE 4320 END,$7,$7,
+                  'governance:'||$4,'governance',NOW(),
+                  jsonb_build_object('decisionId',$3,'reasonCodes',$9::JSONB),$10,
+                  CASE WHEN $11='allowed' THEN 'approved' ELSE 'pending' END,
+                  CASE WHEN $11='allowed' THEN NOW() ELSE NULL END
                 )
                 ON CONFLICT DO NOTHING
                 RETURNING id
@@ -305,6 +342,7 @@ pub async fn record_evaluation(
             })
             .bind(decision.reason_codes.to_string())
             .bind(input.requested_by_user_id)
+            .bind(&decision.status)
             .fetch_optional(&mut *tx)
             .await?;
             if let Some(action_id) = inserted_action_id {
@@ -507,6 +545,137 @@ pub async fn summary(
     .await
 }
 
+pub async fn claim_profit_scan_targets(
+    db: &PgPool,
+    limit: i64,
+) -> Result<Vec<ProfitScanTarget>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query(
+        r#"
+        INSERT INTO profit_action_scan_state (tenant_id, branch_id)
+        SELECT tenant.id::TEXT, branch.id::TEXT
+        FROM branches branch
+        JOIN tenants tenant ON tenant.id=branch.tenant_id
+        WHERE branch.active AND tenant.status='active'
+        ON CONFLICT (tenant_id, branch_id) DO NOTHING
+        "#,
+    )
+    .execute(&mut *tx)
+    .await?;
+    let targets = sqlx::query_as::<_, ProfitScanTarget>(
+        r#"
+        WITH due AS (
+          SELECT tenant_id, branch_id
+          FROM profit_action_scan_state
+          WHERE next_scan_at<=NOW() AND (locked_until IS NULL OR locked_until<NOW())
+          ORDER BY next_scan_at, tenant_id, branch_id
+          FOR UPDATE SKIP LOCKED
+          LIMIT $1
+        )
+        UPDATE profit_action_scan_state state
+        SET locked_until=NOW()+INTERVAL '10 minutes', last_started_at=NOW(), last_error=''
+        FROM due
+        WHERE state.tenant_id=due.tenant_id AND state.branch_id=due.branch_id
+        RETURNING state.tenant_id, state.branch_id
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(targets)
+}
+
+pub async fn finish_profit_scan(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    action_count: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE profit_action_scan_state
+        SET next_scan_at=NOW()+INTERVAL '15 minutes', locked_until=NULL,
+            last_completed_at=NOW(), last_period_start=$3, last_period_end=$4,
+            last_action_count=$5, last_error=''
+        WHERE tenant_id=$1 AND branch_id=$2
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(action_count)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn fail_profit_scan(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    error: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE profit_action_scan_state
+        SET next_scan_at=NOW()+INTERVAL '5 minutes', locked_until=NULL, last_error=$3
+        WHERE tenant_id=$1 AND branch_id=$2
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(error.chars().take(1000).collect::<String>())
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn profit_action_owner(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT users.id
+        FROM users
+        LEFT JOIN roles ON roles.tenant_id=users.tenant_id AND roles.id=users.role_id
+        WHERE users.tenant_id=$1 AND users.active
+          AND (users.branch_id=$2 OR users.branch_id IS NULL)
+        ORDER BY
+          CASE REGEXP_REPLACE(LOWER(COALESCE(roles.name,users.role_name)), '[-_ ]', '', 'g')
+            WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 WHEN 'analyst' THEN 3 ELSE 4 END,
+          CASE WHEN users.branch_id=$2 THEN 0 ELSE 1 END,
+          users.created_at, users.id
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn user_can_own_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=$1 AND id=$3 AND active AND (branch_id=$2 OR branch_id IS NULL))",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(user_id)
+    .fetch_one(db)
+    .await
+}
+
 pub async fn list_actions(
     db: &PgPool,
     tenant_id: &str,
@@ -521,6 +690,8 @@ pub async fn list_actions(
         FROM profit_action_queue action
         LEFT JOIN profit_governance_approvals approval
           ON approval.decision_id=action.governance_decision_id
+        LEFT JOIN users owner
+          ON owner.tenant_id=action.tenant_id AND owner.id=action.owner_user_id
         WHERE action.tenant_id=$1 AND action.branch_id=$2
           AND ($3='all' OR ($3='active' AND action.status NOT IN ('completed','dismissed')) OR action.status=$3)
           AND ($4='' OR action.priority=$4)
@@ -550,6 +721,8 @@ pub async fn action_by_id(
         FROM profit_action_queue action
         LEFT JOIN profit_governance_approvals approval
           ON approval.decision_id=action.governance_decision_id
+        LEFT JOIN users owner
+          ON owner.tenant_id=action.tenant_id AND owner.id=action.owner_user_id
         WHERE action.tenant_id=$1 AND action.branch_id=$2 AND action.id=$3
         "#
     ))
@@ -558,6 +731,117 @@ pub async fn action_by_id(
     .bind(action_id)
     .fetch_optional(db)
     .await
+}
+
+pub async fn action_by_key(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_key: &str,
+) -> Result<Option<ProfitAction>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        SELECT {ACTION_COLUMNS}
+        FROM profit_action_queue action
+        LEFT JOIN profit_governance_approvals approval
+          ON approval.decision_id=action.governance_decision_id
+        LEFT JOIN users owner
+          ON owner.tenant_id=action.tenant_id AND owner.id=action.owner_user_id
+        WHERE action.tenant_id=$1 AND action.branch_id=$2 AND action.action_key=$3
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(action_key)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn refresh_automated_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_key: &str,
+    title: &str,
+    message: &str,
+    impact_paise: i64,
+    evidence: Value,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query(
+        r#"
+        UPDATE profit_action_queue
+        SET title=$4, message=$5, impact_paise=$6,
+            realized_impact_paise=GREATEST(baseline_impact_paise-$6,0),
+            evidence_json=evidence_json || $7, last_observed_at=NOW(), updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND action_key=$3
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(action_key)
+    .bind(title)
+    .bind(message)
+    .bind(impact_paise)
+    .bind(evidence)
+    .execute(db)
+    .await?
+    .rows_affected()
+        == 1)
+}
+
+pub async fn enrich_automated_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    observation: AutomatedActionObservation<'_>,
+) -> Result<Option<ProfitAction>, sqlx::Error> {
+    let action_id = sqlx::query_scalar::<_, String>(
+        r#"
+        UPDATE profit_action_queue action
+        SET action_type=$5, title=$6, message=$7, impact_paise=$8, priority=$9,
+            source_type=$10, source_id=$11, action_key=$12, period_start=$13,
+            period_end=$14, rule_key=$15, owner_user_id=$16,
+            due_at=COALESCE(action.due_at,NOW()+MAKE_INTERVAL(mins => $17)),
+            sla_minutes=$17, evidence_json=$18, baseline_impact_paise=$8,
+            expected_impact_paise=$8, recurrence_key=$19,
+            occurrence_number=1+COALESCE((
+              SELECT MAX(previous.occurrence_number)
+              FROM profit_action_queue previous
+              WHERE previous.tenant_id=$1 AND previous.branch_id=$2
+                AND previous.recurrence_key=$19 AND previous.id<>action.id
+            ),0),
+            generated_by='automated_scan', last_observed_at=NOW(), updated_at=NOW()
+        WHERE action.tenant_id=$1 AND action.branch_id=$2
+          AND action.governance_decision_id=$3 AND action.created_by_user_id=$4
+        RETURNING action.id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(observation.governance_decision_id)
+    .bind(actor_user_id)
+    .bind(observation.action_type)
+    .bind(observation.title)
+    .bind(observation.message)
+    .bind(observation.impact_paise)
+    .bind(observation.priority)
+    .bind(observation.source_type)
+    .bind(observation.source_id)
+    .bind(observation.action_key)
+    .bind(observation.period_start)
+    .bind(observation.period_end)
+    .bind(observation.rule_key)
+    .bind(observation.owner_user_id)
+    .bind(observation.sla_minutes)
+    .bind(&observation.evidence)
+    .bind(observation.recurrence_key)
+    .fetch_optional(db)
+    .await?;
+    match action_id {
+        Some(id) => action_by_id(db, tenant_id, branch_id, &id).await,
+        None => action_by_key(db, tenant_id, branch_id, observation.action_key).await,
+    }
 }
 
 pub async fn create_action(
@@ -572,9 +856,16 @@ pub async fn create_action(
         r#"
         INSERT INTO profit_action_queue (
           tenant_id, branch_id, action_type, title, message, impact_paise,
-          priority, source_type, source_id, payload_json, created_by_user_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-        ON CONFLICT (tenant_id, branch_id, source_type, source_id) DO NOTHING
+          priority, source_type, source_id, action_key, period_start, period_end,
+          rule_key, owner_user_id, due_at, sla_minutes, notes, evidence_json,
+          baseline_impact_paise, expected_impact_paise, recurrence_key, generated_by,
+          last_observed_at, payload_json, created_by_user_id
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+          COALESCE($15,NOW()+MAKE_INTERVAL(mins => $16)),$16,$17,$18,$19,$20,$21,$22,
+          NOW(),$23,$24
+        )
+        ON CONFLICT (tenant_id, branch_id, action_key) DO NOTHING
         RETURNING id
         "#,
     )
@@ -587,6 +878,27 @@ pub async fn create_action(
     .bind(payload.priority.as_deref().unwrap_or("medium"))
     .bind(&payload.source_type)
     .bind(&payload.source_id)
+    .bind(payload.action_key.as_deref().unwrap_or_default())
+    .bind(payload.period_start)
+    .bind(payload.period_end)
+    .bind(payload.rule_key.as_deref().unwrap_or("manual"))
+    .bind(payload.owner_user_id.as_deref().unwrap_or(actor_user_id))
+    .bind(payload.due_at)
+    .bind(payload.sla_minutes.unwrap_or(4320))
+    .bind(payload.notes.as_deref().unwrap_or_default().trim())
+    .bind(payload.evidence.clone().unwrap_or_else(|| json!({})))
+    .bind(
+        payload
+            .baseline_impact_paise
+            .unwrap_or(payload.impact_paise.unwrap_or(0)),
+    )
+    .bind(
+        payload
+            .expected_impact_paise
+            .unwrap_or(payload.impact_paise.unwrap_or(0)),
+    )
+    .bind(payload.recurrence_key.as_deref())
+    .bind(payload.generated_by.as_deref().unwrap_or("manual"))
     .bind(payload.payload.clone().unwrap_or_else(|| json!({})))
     .bind(actor_user_id)
     .fetch_optional(&mut *tx)
@@ -618,6 +930,8 @@ pub async fn transition_action(
     actor_user_id: &str,
     next_status: &str,
     note: &str,
+    realized_impact_paise: Option<i64>,
+    evidence: Option<Value>,
 ) -> Result<ActionTransitionOutcome, sqlx::Error> {
     let mut tx = db.begin().await?;
     let locked = sqlx::query_as::<_, ActionLock>(
@@ -648,13 +962,16 @@ pub async fn transition_action(
         return Ok(ActionTransitionOutcome::SelfApproval);
     }
     sqlx::query(
-        "UPDATE profit_action_queue SET status=$4, reviewed_by_user_id=CASE WHEN $4 IN ('approved','dismissed') THEN $5 ELSE reviewed_by_user_id END, completed_by_user_id=CASE WHEN $4='completed' THEN $5 ELSE completed_by_user_id END, approved_at=CASE WHEN $4='approved' THEN NOW() ELSE approved_at END, completed_at=CASE WHEN $4='completed' THEN NOW() ELSE completed_at END, dismissed_at=CASE WHEN $4='dismissed' THEN NOW() ELSE dismissed_at END, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        "UPDATE profit_action_queue SET status=$4, reviewed_by_user_id=CASE WHEN $4 IN ('approved','dismissed') THEN $5 ELSE reviewed_by_user_id END, completed_by_user_id=CASE WHEN $4='completed' THEN $5 ELSE completed_by_user_id END, approved_at=CASE WHEN $4='approved' THEN NOW() ELSE approved_at END, completed_at=CASE WHEN $4='completed' THEN NOW() ELSE completed_at END, dismissed_at=CASE WHEN $4='dismissed' THEN NOW() ELSE dismissed_at END, realized_impact_paise=CASE WHEN $4='completed' THEN COALESCE($6,realized_impact_paise) ELSE realized_impact_paise END, evidence_json=CASE WHEN $7::JSONB IS NULL THEN evidence_json ELSE evidence_json || $7::JSONB END, notes=CASE WHEN $8='' THEN notes WHEN notes='' THEN $8 ELSE notes || E'\n' || $8 END, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(&locked.id)
     .bind(next_status)
     .bind(actor_user_id)
+    .bind(realized_impact_paise)
+    .bind(evidence)
+    .bind(note)
     .execute(&mut *tx)
     .await?;
     insert_audit(

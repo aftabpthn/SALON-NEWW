@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use sqlx::{Postgres, Transaction};
 
 use crate::models::common::AppError;
@@ -29,6 +29,74 @@ pub async fn post_invoice(
     igst_paise: i64,
     tip_paise: i64,
     round_off_paise: i64,
+) -> Result<(), AppError> {
+    post_invoice_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        sale_id,
+        total_paise,
+        tax_paise,
+        cgst_paise,
+        sgst_paise,
+        igst_paise,
+        tip_paise,
+        round_off_paise,
+        None,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn post_invoice_backfill(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    total_paise: i64,
+    tax_paise: i64,
+    cgst_paise: i64,
+    sgst_paise: i64,
+    igst_paise: i64,
+    tip_paise: i64,
+    round_off_paise: i64,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+) -> Result<(), AppError> {
+    post_invoice_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        sale_id,
+        total_paise,
+        tax_paise,
+        cgst_paise,
+        sgst_paise,
+        igst_paise,
+        tip_paise,
+        round_off_paise,
+        Some(business_date),
+        Some(actor_user_id),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn post_invoice_entry(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    total_paise: i64,
+    tax_paise: i64,
+    cgst_paise: i64,
+    sgst_paise: i64,
+    igst_paise: i64,
+    tip_paise: i64,
+    round_off_paise: i64,
+    business_date: Option<NaiveDate>,
+    actor_user_id: Option<&str>,
 ) -> Result<(), AppError> {
     let invoice_revenue_paise = total_paise
         .saturating_sub(tax_paise)
@@ -130,13 +198,15 @@ pub async fn post_invoice(
             credit_paise: 0,
         });
     }
-    post_entry(
+    write_entry(
         tx,
         tenant_id,
         branch_id,
         "invoice",
         sale_id,
         "POS invoice",
+        business_date,
+        actor_user_id,
         lines,
     )
     .await?;
@@ -158,6 +228,41 @@ pub async fn post_payment(
         "payment",
         payment_id,
         "POS payment",
+        vec![
+            JournalLine {
+                account_code: payment_account(method),
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: "ACCOUNTS_RECEIVABLE",
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
+    )
+    .await
+}
+
+pub async fn post_payment_backfill(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    payment_id: &str,
+    method: &str,
+    amount_paise: i64,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+) -> Result<Option<String>, AppError> {
+    write_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "payment",
+        payment_id,
+        "Migrated POS payment",
+        Some(business_date),
+        Some(actor_user_id),
         vec![
             JournalLine {
                 account_code: payment_account(method),
@@ -313,6 +418,65 @@ pub async fn post_purchase_grn(
         receipt_id,
         "Purchase goods receipt",
         lines,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn post_purchase_grn_backfill(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    receipt_id: &str,
+    taxable_paise: i64,
+    cgst_paise: i64,
+    sgst_paise: i64,
+    igst_paise: i64,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+) -> Result<Option<String>, AppError> {
+    let total = taxable_paise
+        .saturating_add(cgst_paise)
+        .saturating_add(sgst_paise)
+        .saturating_add(igst_paise);
+    if taxable_paise < 0 || cgst_paise < 0 || sgst_paise < 0 || igst_paise < 0 || total == 0 {
+        return Err(AppError::validation("GRN accounting totals are invalid"));
+    }
+    let mut lines = vec![
+        ManualJournalLine {
+            account_code: INVENTORY_ASSET_ACCOUNT.into(),
+            debit_paise: taxable_paise,
+            credit_paise: 0,
+        },
+        ManualJournalLine {
+            account_code: "ACCOUNTS_PAYABLE".into(),
+            debit_paise: 0,
+            credit_paise: total,
+        },
+    ];
+    for (account, amount) in [
+        ("INPUT_CGST", cgst_paise),
+        ("INPUT_SGST", sgst_paise),
+        ("INPUT_IGST", igst_paise),
+    ] {
+        if amount > 0 {
+            lines.push(ManualJournalLine {
+                account_code: account.into(),
+                debit_paise: amount,
+                credit_paise: 0,
+            });
+        }
+    }
+    post_control_journal(
+        tx,
+        tenant_id,
+        branch_id,
+        "purchase_grn",
+        receipt_id,
+        business_date,
+        "Migrated historical purchase bill",
+        actor_user_id,
+        &lines,
     )
     .await
 }
@@ -632,6 +796,53 @@ pub async fn post_control_journal(
     .await
 }
 
+pub async fn reverse_journal(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    journal_entry_id: &str,
+    reversal_source_id: &str,
+    created_by_user_id: &str,
+) -> Result<Option<String>, AppError> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM accounting_journal_entries WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+    ).bind(tenant_id).bind(branch_id).bind(journal_entry_id).fetch_one(&mut **tx).await
+     .map_err(|_| AppError::internal("failed to find journal for reversal"))?;
+    if !exists {
+        return Err(AppError::not_found("journal entry not found"));
+    }
+    let lines: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT account_code,debit_paise,credit_paise FROM accounting_journal_lines WHERE journal_entry_id=$1 ORDER BY id",
+    ).bind(journal_entry_id).fetch_all(&mut **tx).await
+     .map_err(|_| AppError::internal("failed to read journal lines for reversal"))?;
+    let reversal = reverse_lines(lines);
+    post_control_journal(
+        tx,
+        tenant_id,
+        branch_id,
+        "migration_rollback",
+        reversal_source_id,
+        Utc::now().date_naive(),
+        "Migration rollback journal reversal",
+        created_by_user_id,
+        &reversal,
+    )
+    .await
+}
+
+fn reverse_lines(lines: Vec<(String, i64, i64)>) -> Vec<ManualJournalLine> {
+    lines
+        .into_iter()
+        .map(
+            |(account_code, debit_paise, credit_paise)| ManualJournalLine {
+                account_code,
+                debit_paise: credit_paise,
+                credit_paise: debit_paise,
+            },
+        )
+        .collect()
+}
+
 pub async fn post_royalty_accrual(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -862,7 +1073,7 @@ fn payment_account(method: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{customer_credit_lines, is_balanced, JournalLine};
+    use super::{customer_credit_lines, is_balanced, reverse_lines, JournalLine};
 
     #[test]
     fn journal_requires_equal_debits_and_credits() {
@@ -909,5 +1120,18 @@ mod tests {
             &customer_credit_lines(-500, "ACCOUNTS_RECEIVABLE").unwrap()
         ));
         assert!(customer_credit_lines(0, "BANK_CLEARING").is_err());
+    }
+
+    #[test]
+    fn rollback_reversal_swaps_balanced_journal_sides() {
+        let reversed = reverse_lines(vec![("AR".into(), 11800, 0), ("REVENUE".into(), 0, 11800)]);
+        assert_eq!(
+            (reversed[0].debit_paise, reversed[0].credit_paise),
+            (0, 11800)
+        );
+        assert_eq!(
+            (reversed[1].debit_paise, reversed[1].credit_paise),
+            (11800, 0)
+        );
     }
 }

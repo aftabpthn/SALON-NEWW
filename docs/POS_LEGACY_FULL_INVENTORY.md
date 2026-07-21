@@ -1,19 +1,21 @@
 # Legacy POS Full Inventory
 
-Source: `C:\Users\Aftab Ahamad\OneDrive - digi\Documents\New project`
+Source: [Aurashine-Infitech/New-project](https://github.com/Aurashine-Infitech/New-project)
 
-Scan date: 13/07/2026
+Verified ref: `main@1befb42ad197a575de818bbb2e0b01f460d9e554`
+
+Scan date: 15/07/2026
 
 ## Verified Size
 
 | Area | Files | Lines |
 | --- | ---: | ---: |
-| Angular billing feature | 70 | 2,442 |
-| Directly named backend billing/POS files | 54 | 11,053 |
+| Angular billing feature | 37 | 2,467 |
+| Directly named backend billing/POS files | 57 | 10,672 |
 | Angular billing store specs | 4 | 147 |
 | Additional POS/billing integration tests | 28 | Not counted |
 
-The backend count covers files whose names directly contain billing, payment, invoice, refund, cash-drawer or POS. Cross-module dependencies such as offline sync, daily closing, reconciliation, gift cards, terminals, print devices and Z reports are listed separately.
+The backend count covers the Git snapshot's directly named billing, payment, invoice, refund, cash-drawer, POS, credit, corporate, reconciliation, terminal and print files, including payment-provider adapters. Cross-module dependencies are listed separately.
 
 ## Angular Routes And Pages
 
@@ -49,43 +51,31 @@ The backend count covers files whose names directly contain billing, payment, in
 ## Angular Page Files
 
 - `pages/pos-page/pos-page.component.ts`
-- `pages/pos-page/pos-page.component.html`
-- `pages/pos-page/pos-page.component.css`
 - `pages/invoice-list-page/invoice-list-page.component.ts`
-- `pages/invoice-list-page/invoice-list-page.component.html`
-- `pages/invoice-list-page/invoice-list-page.component.css`
 - `pages/invoice-detail-page/invoice-detail-page.component.ts`
-- `pages/invoice-detail-page/invoice-detail-page.component.html`
-- `pages/invoice-detail-page/invoice-detail-page.component.css`
 - `pages/refunds-page/refunds-page.component.ts`
-- `pages/refunds-page/refunds-page.component.html`
-- `pages/refunds-page/refunds-page.component.css`
 - `pages/daily-closing-page/daily-closing-page.component.ts`
-- `pages/daily-closing-page/daily-closing-page.component.html`
-- `pages/daily-closing-page/daily-closing-page.component.css`
 - `pages/reconciliation-page/reconciliation-page.component.ts`
-- `pages/reconciliation-page/reconciliation-page.component.html`
-- `pages/reconciliation-page/reconciliation-page.component.css`
 - `pages/core-money-flow-page/core-money-flow-page.component.ts`
-- `pages/core-money-flow-page/core-money-flow-page.component.html`
-- `pages/core-money-flow-page/core-money-flow-page.component.css`
+
+The verified Git snapshot uses single-file standalone Angular components for these legacy pages.
 
 ## Angular Reusable POS Components
 
 | Component | Files | Responsibility |
 | --- | ---: | --- |
-| Barcode input | 3 | Barcode entry and scan action. |
-| Customer panel | 2 | Selected customer summary. |
-| Daily closing panel | 2 | Compact close-day action. |
-| Invoice cart | 3 | Cart lines, quantity, discount and totals. |
-| Invoice preview | 2 | Invoice preview output. |
-| Payment modal | 3 | Payment capture shell. |
-| Print settings | 3 | Printer/format controls. |
-| Refund modal | 2 | Refund reason/amount action. |
-| Service/product picker | 2 | Catalog item selection. |
-| Split payment | 3 | Multiple payment lines. |
-| Tax breakdown | 2 | Tax component rows. |
-| Void invoice modal | 3 | Manager reason and void action. |
+| Barcode input | 1 | Barcode entry and scan action. |
+| Customer panel | 1 | Selected customer summary. |
+| Daily closing panel | 1 | Compact close-day action. |
+| Invoice cart | 1 | Cart lines, quantity, discount and totals. |
+| Invoice preview | 1 | Invoice preview output. |
+| Payment modal | 1 | Payment capture shell. |
+| Print settings | 1 | Printer/format controls. |
+| Refund modal | 1 | Refund reason/amount action. |
+| Service/product picker | 1 | Catalog item selection. |
+| Split payment | 1 | Multiple payment lines. |
+| Tax breakdown | 1 | Tax component rows. |
+| Void invoice modal | 1 | Manager reason and void action. |
 
 ## Angular Tests
 
@@ -119,6 +109,9 @@ The repository also contains billing/POS integration tests for paise safety, ten
 - `server/routes/payment-method-settings.routes.js`
 - `server/routes/payment.routes.js`
 - `server/routes/pos-settings.routes.js`
+- `server/routes/print-device.routes.js`
+- `server/routes/reconciliation.routes.js`
+- `server/routes/terminal.routes.js`
 
 ## Core Invoice Route Contract
 
@@ -156,7 +149,9 @@ The repository also contains billing/POS integration tests for paise safety, ten
 - `server/services/invoice-number.service.js` — invoice sequences.
 - `server/services/invoice-void.service.js` — void validation and recording.
 - `server/services/refund.service.js` — refund workflow.
+- `server/services/credit-note.service.js` — credit-note generation.
 - `server/services/credit-billing.service.js` — credit invoice/payment behavior.
+- `server/services/corporate-account.service.js` — corporate account and member controls.
 - `server/services/billing-compatibility-schema.service.js` — legacy schema compatibility.
 
 ### Payments and providers
@@ -191,6 +186,8 @@ The repository also contains billing/POS integration tests for paise safety, ten
 - `server/services/billing-fraud-detection.service.js`
 - `server/services/pos-profit-guard.service.js`
 - `server/services/pos-settings.service.js`
+- `server/services/print-device.service.js`
+- `server/services/terminal.service.js`
 - `server/services/offline-pos-sync.service.js`
 
 ### Cash drawer and EOD

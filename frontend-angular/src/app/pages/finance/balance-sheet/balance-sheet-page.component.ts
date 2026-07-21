@@ -3,10 +3,11 @@ import { Component, HostListener, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
-type Tab = 'overview' | 'ledger' | 'fixedAssets' | 'deferredRevenue' | 'periods';
+type Tab = 'overview' | 'comparison' | 'ledger' | 'fixedAssets' | 'deferredRevenue' | 'periods';
 type Drawer = 'journal' | 'asset' | 'depreciation' | 'recognition' | 'closePeriod' | 'reopenPeriod' | 'costCenter' | 'tagCostCenter' | null;
 type AccountGroup = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense' | 'unclassified';
 
@@ -15,6 +16,7 @@ type AccountBalance = { code: string; name: string; group: AccountGroup; balance
 type BalanceSheetReport = {
   asOfDate: string;
   branchId: string;
+  branchCount: number;
   balanced: boolean;
   totals: { assetsPaise: number; liabilitiesPaise: number; equityPaise: number; accountingEquationDifferencePaise: number };
   sections: { assets: AccountBalance[]; liabilities: AccountBalance[]; equity: AccountBalance[] };
@@ -23,6 +25,7 @@ type BalanceSheetReport = {
 type WorkingCapitalReport = {
   asOfDate: string;
   branchId: string;
+  branchCount: number;
   currentAssetsPaise: number;
   currentLiabilitiesPaise: number;
   workingCapitalPaise: number;
@@ -98,6 +101,7 @@ type HardeningStatus = {
   checks: ReconciliationCheck[];
 };
 type JournalDraftLine = { accountCode: string; debitRupees: string; creditRupees: string };
+type ComparisonRow = AccountDefinition & { currentPaise: number; comparisonPaise: number; variancePaise: number };
 
 @Component({
   selector: 'page-balance-sheet',
@@ -108,10 +112,12 @@ type JournalDraftLine = { accountCode: string; debitRupees: string; creditRupees
 })
 export class BalanceSheetPageComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
 
   readonly tabs: Array<{ id: Tab; label: string; icon: string }> = [
     { id: 'overview', label: 'Overview', icon: 'bi-grid-1x2' },
+    { id: 'comparison', label: 'Comparison', icon: 'bi-bar-chart-line' },
     { id: 'ledger', label: 'Ledger', icon: 'bi-journal-text' },
     { id: 'fixedAssets', label: 'Fixed Assets', icon: 'bi-building' },
     { id: 'deferredRevenue', label: 'Deferred Revenue', icon: 'bi-hourglass-split' },
@@ -123,6 +129,10 @@ export class BalanceSheetPageComponent implements OnInit {
   report: BalanceSheetReport | null = null;
   workingCapital: WorkingCapitalReport | null = null;
   hardening: HardeningStatus | null = null;
+  comparisonCurrentReport: BalanceSheetReport | null = null;
+  comparisonCurrentWorkingCapital: WorkingCapitalReport | null = null;
+  comparisonReport: BalanceSheetReport | null = null;
+  comparisonWorkingCapital: WorkingCapitalReport | null = null;
   accounts: AccountDefinition[] = [];
   ledger: LedgerPage | null = null;
   fixedAssets: FixedAsset[] = [];
@@ -141,6 +151,9 @@ export class BalanceSheetPageComponent implements OnInit {
   ledgerToDate = this.today();
   ledgerPage = 1;
   ledgerPageSize = 25;
+  comparisonDate = this.previousMonthEnd(this.asOfDate);
+  comparisonScope: 'branch' | 'tenant' = 'branch';
+  expandedLedgerLineId = '';
 
   journalDraft = this.emptyJournalDraft();
   assetDraft = this.emptyAssetDraft();
@@ -156,16 +169,11 @@ export class BalanceSheetPageComponent implements OnInit {
   selectedLedgerRow: LedgerEntry | null = null;
 
   get canWrite(): boolean {
-    try {
-      const token = localStorage.getItem('aurashine_access_token') ?? '';
-      const segment = token.split('.')[1] ?? '';
-      const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
-      const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as { role?: string; permissions?: string[] };
-      return ['owner', 'admin', 'manager', 'accountant'].includes(claims.role?.toLowerCase() ?? '')
-        || claims.permissions?.includes('finance.write') === true;
-    } catch {
-      return false;
-    }
+    return this.auth.hasRole('owner', 'admin', 'manager', 'accountant') || this.auth.hasPermission('finance.write');
+  }
+
+  get canViewTenantScope(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager', 'analyst');
   }
 
   get differencePaise(): number {
@@ -178,6 +186,16 @@ export class BalanceSheetPageComponent implements OnInit {
 
   get ledgerPages(): number {
     return Math.max(1, Math.ceil((this.ledger?.total ?? 0) / this.ledgerPageSize));
+  }
+
+  get comparisonRows(): ComparisonRow[] {
+    const current = this.accountBalanceMap(this.comparisonCurrentReport);
+    const comparison = this.accountBalanceMap(this.comparisonReport);
+    return this.accounts.map((account) => {
+      const currentPaise = current.get(account.code) ?? 0;
+      const comparisonPaise = comparison.get(account.code) ?? 0;
+      return { ...account, currentPaise, comparisonPaise, variancePaise: currentPaise - comparisonPaise };
+    }).filter((row) => row.currentPaise !== 0 || row.comparisonPaise !== 0);
   }
 
   ngOnInit(): void {
@@ -217,8 +235,19 @@ export class BalanceSheetPageComponent implements OnInit {
 
   async onAsOfDateChange(value: string): Promise<void> {
     this.asOfDate = value || this.today();
+    if (this.comparisonDate >= this.asOfDate) this.comparisonDate = this.previousMonthEnd(this.asOfDate);
     this.ledgerToDate = this.asOfDate;
     await this.refresh();
+  }
+
+  async onComparisonDateChange(value: string): Promise<void> {
+    this.comparisonDate = value;
+    await this.loadComparison();
+  }
+
+  async onComparisonScopeChange(): Promise<void> {
+    if (this.comparisonScope === 'tenant' && !this.canViewTenantScope) this.comparisonScope = 'branch';
+    await this.loadComparison();
   }
 
   async selectTab(tab: Tab): Promise<void> {
@@ -256,6 +285,41 @@ export class BalanceSheetPageComponent implements OnInit {
   openLedger(account: AccountBalance): void {
     this.ledgerAccountCode = account.code;
     void this.selectTab('ledger');
+  }
+
+  toggleLedgerEvidence(row: LedgerEntry): void {
+    this.expandedLedgerLineId = this.expandedLedgerLineId === row.journalLineId ? '' : row.journalLineId;
+  }
+
+  printComparison(): void {
+    if (this.comparisonCurrentReport && this.comparisonReport) window.print();
+  }
+
+  exportComparisonCsv(): void {
+    if (!this.comparisonCurrentReport || !this.comparisonReport) return;
+    const rows: Array<Array<string | number>> = [
+      ['Balance Sheet Audit Evidence'],
+      ['Scope', this.comparisonScope],
+      ['Branch count', this.comparisonCurrentReport.branchCount],
+      ['Branch', this.comparisonCurrentReport.branchId],
+      ['Current as of', this.comparisonCurrentReport.asOfDate],
+      ['Compared with', this.comparisonReport.asOfDate],
+      ['Equation balanced', this.comparisonCurrentReport.balanced ? 'Yes' : 'No'],
+      ['Control status', this.hardening?.status ?? 'Unavailable'],
+      [],
+      ['Group', 'Code', 'Account', 'Current paise', 'Comparison paise', 'Variance paise'],
+      ...this.comparisonRows.map((row) => [row.group, row.code, row.name, row.currentPaise, row.comparisonPaise, row.variancePaise]),
+      [],
+      ['Reconciliation', 'Status', 'Source paise', 'Ledger paise', 'Variance paise', 'Details'],
+      ...(this.hardening?.checks ?? []).map((check) => [check.key, check.status, check.sourceBalancePaise, check.ledgerBalancePaise, check.variancePaise, check.detailCount]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `balance-sheet-${this.asOfDate}-vs-${this.comparisonDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   openJournal(): void {
@@ -491,10 +555,42 @@ export class BalanceSheetPageComponent implements OnInit {
   }
 
   private async loadActiveTab(): Promise<void> {
+    if (this.activeTab === 'comparison') return this.loadComparison();
     if (this.activeTab === 'ledger') return this.loadLedger();
     if (this.activeTab === 'fixedAssets') return this.loadFixedAssets();
     if (this.activeTab === 'deferredRevenue') return this.loadDeferredRevenue();
     if (this.activeTab === 'periods') return this.loadPeriods();
+  }
+
+  async loadComparison(): Promise<void> {
+    if (!this.comparisonDate || this.comparisonDate >= this.asOfDate) {
+      this.comparisonReport = null;
+      this.comparisonWorkingCapital = null;
+      this.comparisonCurrentReport = null;
+      this.comparisonCurrentWorkingCapital = null;
+      this.errorMessage = 'Comparison date must be before the Balance Sheet as-of date.';
+      return;
+    }
+    this.loadingTab = true;
+    this.errorMessage = '';
+    try {
+      const currentQuery = new URLSearchParams({ asOfDate: this.asOfDate, scope: this.comparisonScope });
+      const comparisonQuery = new URLSearchParams({ asOfDate: this.comparisonDate, scope: this.comparisonScope });
+      [this.comparisonCurrentReport, this.comparisonCurrentWorkingCapital, this.comparisonReport, this.comparisonWorkingCapital] = await Promise.all([
+        this.request<BalanceSheetReport>(`/balance-sheet/live?${currentQuery}`),
+        this.request<WorkingCapitalReport>(`/balance-sheet/working-capital?${currentQuery}`),
+        this.request<BalanceSheetReport>(`/balance-sheet/live?${comparisonQuery}`),
+        this.request<WorkingCapitalReport>(`/balance-sheet/working-capital?${comparisonQuery}`),
+      ]);
+    } catch (error) {
+      this.comparisonCurrentReport = null;
+      this.comparisonCurrentWorkingCapital = null;
+      this.comparisonReport = null;
+      this.comparisonWorkingCapital = null;
+      this.errorMessage = this.errorText(error, 'Comparison data could not be loaded.');
+    } finally {
+      this.loadingTab = false;
+    }
   }
 
   private async loadAccounts(): Promise<void> {
@@ -627,6 +723,17 @@ export class BalanceSheetPageComponent implements OnInit {
       usefulLifeMonths: '',
       purchaseOffsetAccount: '',
     };
+  }
+
+  private accountBalanceMap(report: BalanceSheetReport | null): Map<string, number> {
+    return new Map(report ? [...report.sections.assets, ...report.sections.liabilities, ...report.sections.equity].map((row) => [row.code, row.balancePaise]) : []);
+  }
+
+  private previousMonthEnd(value: string): string {
+    const [year, month] = value.split('-').map(Number);
+    const date = new Date(year, month - 1, 1);
+    date.setDate(0);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private today(): string {

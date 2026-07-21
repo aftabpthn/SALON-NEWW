@@ -89,7 +89,7 @@
     <ng-container *ngIf="!loading()">
       <div class="table-wrap" *ngIf="activeTab() === 'entries' && rows().length">
         <table>
-          <thead><tr><th>Date</th><th>Voucher</th><th>Category / Payee</th><th>Payment</th><th>Status</th><th class="number">GST</th><th class="number">Amount</th><th></th></tr></thead>
+          <thead><tr><th scope="col">Date</th><th scope="col">Voucher</th><th scope="col">Category / Payee</th><th scope="col">Payment</th><th scope="col">Status</th><th scope="col" class="number">GST</th><th scope="col" class="number">Amount</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
           <tbody>
             <tr *ngFor="let voucher of rows()" (click)="openVoucher(voucher)" [class.selected]="selected()?.id === voucher.id">
               <td>{{ displayDate(voucher.businessDate) }}</td>
@@ -105,14 +105,22 @@
         </table>
       </div>
 
+      <div class="micro-report-strip" *ngIf="activeTab() === 'report' && reportLines().length">
+        <span>Categories <strong>{{ reportCategoryCount() }}</strong></span>
+        <span>Operating <strong>{{ money(operatingOutgoingPaise()) }}</strong></span>
+        <span>Balance sheet only <strong>{{ money(balanceSheetOnlyOutgoingPaise()) }}</strong></span>
+        <span>Review lines <strong>{{ reviewLineCount() }}</strong></span>
+      </div>
+
       <div class="table-wrap report-table" *ngIf="activeTab() === 'report' && reportLines().length">
         <table>
-          <thead><tr><th>Date</th><th>Voucher</th><th>Category</th><th>Linked party</th><th>Payment</th><th>Status</th><th class="number">GST</th><th class="number">Amount</th><th>Bill / Remarks</th></tr></thead>
+          <thead><tr><th scope="col">Date</th><th scope="col">Voucher</th><th scope="col">Category</th><th scope="col">Impact</th><th scope="col">Linked party</th><th scope="col">Payment</th><th scope="col">Status</th><th scope="col" class="number">GST</th><th scope="col" class="number">Amount</th><th scope="col">Bill / Remarks</th></tr></thead>
           <tbody>
             <tr *ngFor="let line of reportLines()" (click)="openVoucherById(line.voucherId)">
               <td>{{ displayDate(line.businessDate) }}</td>
               <td>{{ line.voucherNumber }}</td>
-              <td><strong>{{ line.categoryLabel }}</strong><small>{{ line.accountCode }}</small></td>
+              <td><strong>{{ line.categoryLabel }}</strong><small>{{ line.categoryBucket || line.accountCode }}</small></td>
+              <td><strong>{{ line.operating ? 'Operating' : 'Balance sheet' }}</strong><small>{{ line.balanceSheetImpact }}</small></td>
               <td>{{ line.linkedPartyName || '-' }}</td>
               <td><strong>{{ line.paymentAccountName }}</strong><small>{{ line.paymentMode }}</small></td>
               <td><span class="status-pill" [attr.data-status]="line.status">{{ statusLabel(line.status) }}</span></td>
@@ -161,12 +169,16 @@
         <span class="status-pill" [attr.data-status]="voucher.status">{{ statusLabel(voucher.status) }}</span>
         <span *ngIf="voucher.journalEntryId">Journal {{ voucher.journalEntryId | slice:-8 }}</span>
         <span *ngIf="voucher.reversalJournalEntryId">Reversal {{ voucher.reversalJournalEntryId | slice:-8 }}</span>
+        <span *ngIf="voucher.approvalPolicyReason">{{ voucher.approvalPolicyReason }}</span>
+        <span *ngIf="voucher.cashDrawerSessionId">Cash {{ money(voucher.openingBalancePaise || 0) }} → {{ money(voucher.closingBalancePaise || 0) }}</span>
       </section>
 
       <div class="form-grid">
         <label><span>Voucher date</span><as-date-picker ariaLabel="Outgoing voucher date" [(value)]="draft.businessDate" [disabled]="!canEditSelected()"></as-date-picker></label>
-        <label><span>Payment account</span><select [(ngModel)]="draft.paymentAccountCode" [disabled]="!canEditSelected()"><option value="">Select cash / bank</option><option *ngFor="let account of paymentAccounts()" [value]="account.code">{{ account.name }}</option></select></label>
+        <label><span>Payment account</span><select [(ngModel)]="draft.paymentAccountCode" (ngModelChange)="paymentAccountChanged()" [disabled]="!canEditSelected()"><option value="">Select cash / bank</option><option *ngFor="let account of paymentAccounts()" [value]="account.code">{{ account.name }}</option></select></label>
         <label><span>Payment mode</span><select [(ngModel)]="draft.paymentMode" (ngModelChange)="paymentModeChanged()" [disabled]="!canEditSelected()"><option>Cash</option><option>Bank Transfer</option><option>UPI</option><option>Card</option><option>Cheque</option><option>NEFT</option><option>RTGS</option><option>IMPS</option><option>Wallet</option><option>Other</option></select></label>
+        <label><span>Fund source</span><select [(ngModel)]="draft.fundSource" [disabled]="!canEditSelected()"><option value="business_cash">Business cash</option><option value="petty_cash_balance">Petty cash balance</option><option value="bank">Bank</option><option value="other">Other</option></select></label>
+        <label *ngIf="draft.paymentAccountCode === 'CASH_ON_HAND'"><span>Till ID</span><input type="text" [(ngModel)]="draft.cashDrawerTillId" [disabled]="!canEditSelected()" /></label>
         <label><span>Reference number</span><input type="text" [(ngModel)]="draft.referenceNumber" [disabled]="!canEditSelected()" /></label>
         <label *ngIf="draft.paymentMode === 'Cheque'"><span>Cheque number</span><input type="text" [(ngModel)]="draft.chequeNumber" [disabled]="!canEditSelected()" /></label>
         <label *ngIf="draft.paymentMode === 'Cheque'"><span>Cheque date</span><as-date-picker ariaLabel="Cheque date" [(value)]="draft.chequeDate" [disabled]="!canEditSelected()"></as-date-picker></label>
@@ -179,6 +191,16 @@
           <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="line.amount" [disabled]="!canEditSelected()" placeholder="Amount" /></label>
           <label><span>GST treatment</span><select [(ngModel)]="line.gstTreatment" (ngModelChange)="gstChanged(line)" [disabled]="!canEditSelected()"><option value="none">No GST</option><option value="cgst_sgst">CGST + SGST</option><option value="igst">IGST</option></select></label>
           <label *ngIf="line.gstTreatment !== 'none'"><span>GST amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="line.gstAmount" [disabled]="!canEditSelected()" placeholder="GST" /></label>
+          <label><span>Subcategory</span><input type="text" [(ngModel)]="line.subcategory" [disabled]="!canEditSelected()" /></label>
+          <label><span>Department</span><input type="text" [(ngModel)]="line.department" [disabled]="!canEditSelected()" /></label>
+          <label><span>Cost center</span><input type="text" [(ngModel)]="line.costCenterId" [disabled]="!canEditSelected()" /></label>
+          <label><span>Line party</span><select [(ngModel)]="line.linkedPartyType" (ngModelChange)="linePartyChanged(line)" [disabled]="!canEditSelected()"><option value="voucher">Use voucher party</option><option value="none">None</option><option value="vendor">Vendor</option><option value="staff">Staff</option><option value="client">Client</option><option value="owner">Owner</option><option value="other">Other</option></select></label>
+          <label *ngIf="line.linkedPartyType !== 'voucher' && line.linkedPartyType !== 'none'"><span>Line party name</span><input type="text" [(ngModel)]="line.linkedPartyName" [disabled]="!canEditSelected()" /></label>
+          <label><span>Source type</span><input type="text" [(ngModel)]="line.sourceReferenceType" [disabled]="!canEditSelected()" /></label>
+          <label><span>Source ID</span><input type="text" [(ngModel)]="line.sourceReferenceId" [disabled]="!canEditSelected()" /></label>
+          <label><span>Receipt number</span><input type="text" [(ngModel)]="line.receiptNumber" [disabled]="!canEditSelected()" /></label>
+          <label class="check-control"><input type="checkbox" [(ngModel)]="line.taxInvoice" [disabled]="!canEditSelected()" /><span>Tax invoice</span></label>
+          <label class="check-control"><input type="checkbox" [(ngModel)]="line.reimbursement" [disabled]="!canEditSelected()" /><span>Reimbursement</span></label>
           <label class="wide"><span>Line remarks</span><input type="text" [(ngModel)]="line.remarks" [disabled]="!canEditSelected()" /></label>
           <button type="button" class="remove-line" aria-label="Remove expense line" (click)="removeLine(index)" [disabled]="!canEditSelected()">×</button>
         </article>
@@ -198,6 +220,29 @@
         <label><span>Attachment URL</span><input type="url" [(ngModel)]="draft.attachmentUrl" [disabled]="!canEditSelected()" placeholder="https://" /></label>
         <label class="full"><span>Remarks</span><textarea rows="3" [(ngModel)]="draft.remarks" [disabled]="!canEditSelected()"></textarea></label>
       </div>
+
+      <section class="attachment-section">
+        <div class="section-title"><h3>Evidence</h3><button type="button" (click)="addAttachment()" [disabled]="!canEditSelected()">＋ Add file URL</button></div>
+        <article class="attachment-card" *ngFor="let attachment of draft.attachments; let index = index">
+          <label><span>Line</span><input type="number" min="1" [max]="draft.lines.length" [(ngModel)]="attachment.lineNumber" [disabled]="!canEditSelected()" /></label>
+          <label class="wide"><span>File URL</span><input type="url" [(ngModel)]="attachment.fileUrl" [disabled]="!canEditSelected()" placeholder="https://" /></label>
+          <label><span>File type</span><input type="text" [(ngModel)]="attachment.fileType" [disabled]="!canEditSelected()" /></label>
+          <button type="button" class="remove-line" aria-label="Remove evidence" (click)="removeAttachment(index)" [disabled]="!canEditSelected()">×</button>
+        </article>
+        <div class="saved-files" *ngIf="selected()?.attachments?.length">
+          <a *ngFor="let attachment of selected()?.attachments" [href]="attachment.fileUrl" target="_blank" rel="noreferrer">Line {{ attachment.lineNumber || 'voucher' }} · {{ attachment.fileType || 'file' }}</a>
+        </div>
+      </section>
+
+      <section class="audit-section" *ngIf="selected()?.auditEvents?.length">
+        <h3>Audit timeline</h3>
+        <ol>
+          <li *ngFor="let event of selected()?.auditEvents">
+            <strong>{{ statusLabel(event.eventType) }}</strong>
+            <span>{{ event.actorUserId | slice:-8 }} · {{ displayDateTime(event.createdAt) }}</span>
+          </li>
+        </ol>
+      </section>
 
       <section class="decision-box" *ngIf="decisionMode()">
         <label><span>{{ decisionMode() === 'reject' ? 'Rejection reason' : 'Reversal reason' }}</span><textarea rows="3" [(ngModel)]="decisionReason"></textarea></label>

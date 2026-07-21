@@ -9,6 +9,7 @@ type ViewMode = 'day' | 'week' | 'month';
 type ScheduleStatus = 'working' | 'annual_leave' | 'jury_duty' | 'leave' | 'sick_leave' | 'special_leave' | 'weekly_off' | 'working_other_center' | 'not_set';
 type ScheduleStaff = { id: string; name: string; jobTitle: string; roleIds: string[] };
 type ScheduleRole = { id: string; name: string };
+type ScheduleOperationBlock = { id: string; staffId: string; scheduledDate: string; scheduledTime: string | null; title: string; operationType: string; status: string };
 type ScheduleEntry = {
   id?: string;
   staffId: string;
@@ -20,7 +21,7 @@ type ScheduleEntry = {
   status: ScheduleStatus;
   notes: string;
 };
-type ScheduleData = { staff: ScheduleStaff[]; entries: ScheduleEntry[]; roles: ScheduleRole[]; jobs: string[] };
+type ScheduleData = { staff: ScheduleStaff[]; entries: ScheduleEntry[]; roles: ScheduleRole[]; jobs: string[]; operationBlocks?: ScheduleOperationBlock[] };
 
 const STATUS_OPTIONS: Array<{ value: ScheduleStatus; label: string }> = [
   { value: 'working', label: 'Working' }, { value: 'annual_leave', label: 'Annual Leave' },
@@ -53,6 +54,7 @@ export class AvailabilityPageComponent implements OnInit {
   staff: ScheduleStaff[] = [];
   employeeOptions: ScheduleStaff[] = [];
   entries = new Map<string, ScheduleEntry>();
+  operationBlocks = new Map<string, ScheduleOperationBlock[]>();
   selectedStaff = new Set<string>();
   loading = false;
   saving = false;
@@ -130,6 +132,8 @@ export class AvailabilityPageComponent implements OnInit {
   }
 
   cell(staffId: string, date: string) { return this.entries.get(this.key(staffId, date)); }
+  operationsFor(staffId: string, date: string) { return this.operationBlocks.get(this.key(staffId, date)) || []; }
+  operationLabel(block: ScheduleOperationBlock) { return block.operationType.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
   openEditor(person: ScheduleStaff, date: string) {
     const existing = this.cell(person.id, date);
@@ -250,11 +254,17 @@ export class AvailabilityPageComponent implements OnInit {
         const normalized = { ...entry, shift1Start: this.time(entry.shift1Start), shift1End: this.time(entry.shift1End), shift2Start: this.time(entry.shift2Start), shift2End: this.time(entry.shift2End) };
         return [this.key(entry.staffId, entry.scheduleDate), normalized];
       }));
+      this.operationBlocks = new Map();
+      for (const block of result.data.operationBlocks || []) {
+        const key = this.key(block.staffId, block.scheduledDate);
+        this.operationBlocks.set(key, [...(this.operationBlocks.get(key) || []), block]);
+      }
       this.selectedStaff = new Set(this.staff.map((person) => person.id));
       this.dirty = false;
     } catch (error) {
       this.staff = [];
       this.entries.clear();
+      this.operationBlocks.clear();
       this.error = error instanceof Error ? error.message : 'Unable to load employee schedule';
     } finally {
       this.loading = false;

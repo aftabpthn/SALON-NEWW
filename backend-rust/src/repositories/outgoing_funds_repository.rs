@@ -9,6 +9,11 @@ pub struct OutgoingFundRecord {
     pub business_date: NaiveDate,
     pub payment_account_code: String,
     pub payment_mode: String,
+    pub fund_source: String,
+    pub cash_drawer_session_id: Option<String>,
+    pub cash_drawer_till_id: Option<String>,
+    pub opening_balance_paise: Option<i64>,
+    pub closing_balance_paise: Option<i64>,
     pub reference_number: Option<String>,
     pub cheque_number: Option<String>,
     pub cheque_date: Option<NaiveDate>,
@@ -21,6 +26,7 @@ pub struct OutgoingFundRecord {
     pub status: String,
     pub journal_entry_id: Option<String>,
     pub reversal_journal_entry_id: Option<String>,
+    pub approval_policy_reason: Option<String>,
     pub version: i64,
     pub created_by_user_id: String,
     pub submitted_by_user_id: Option<String>,
@@ -36,6 +42,22 @@ pub struct OutgoingFundRecord {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub lines_json: Value,
+    pub attachments_json: Value,
+    pub audit_json: Value,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct OutgoingFundCategoryRecord {
+    pub category_key: String,
+    pub label: String,
+    pub account_code: Option<String>,
+    pub manual_entry: bool,
+    pub workflow_path: Option<String>,
+    pub workflow_label: Option<String>,
+    pub requires_party: bool,
+    pub requires_bill_reference: bool,
+    pub requires_attachment: bool,
+    pub approval_threshold_paise: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -45,13 +67,33 @@ pub struct NewOutgoingFundLine {
     pub amount_paise: i64,
     pub gst_treatment: String,
     pub gst_paise: i64,
+    pub subcategory: Option<String>,
+    pub cost_center_id: Option<String>,
+    pub department: Option<String>,
+    pub linked_party_type: String,
+    pub linked_party_id: Option<String>,
+    pub linked_party_name: Option<String>,
+    pub source_reference_type: Option<String>,
+    pub source_reference_id: Option<String>,
+    pub receipt_number: Option<String>,
+    pub tax_invoice: bool,
+    pub reimbursement: bool,
     pub remarks: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewOutgoingFundAttachment {
+    pub line_number: Option<i32>,
+    pub file_url: String,
+    pub file_type: Option<String>,
 }
 
 pub struct NewOutgoingFundVoucher<'a> {
     pub business_date: NaiveDate,
     pub payment_account_code: &'a str,
     pub payment_mode: &'a str,
+    pub fund_source: &'a str,
+    pub cash_drawer_till_id: Option<&'a str>,
     pub reference_number: Option<&'a str>,
     pub cheque_number: Option<&'a str>,
     pub cheque_date: Option<NaiveDate>,
@@ -69,6 +111,8 @@ pub struct UpdateOutgoingFundVoucher<'a> {
     pub business_date: NaiveDate,
     pub payment_account_code: &'a str,
     pub payment_mode: &'a str,
+    pub fund_source: &'a str,
+    pub cash_drawer_till_id: Option<&'a str>,
     pub reference_number: Option<&'a str>,
     pub cheque_number: Option<&'a str>,
     pub cheque_date: Option<NaiveDate>,
@@ -83,9 +127,11 @@ pub struct UpdateOutgoingFundVoucher<'a> {
 
 const RECORD_SELECT: &str = r#"
   SELECT v.id,v.voucher_number,v.business_date,v.payment_account_code,v.payment_mode,
+         v.fund_source,v.cash_drawer_session_id,v.cash_drawer_till_id,
+         v.opening_balance_paise,v.closing_balance_paise,
          v.reference_number,v.cheque_number,v.cheque_date,v.linked_party_type,
          v.linked_party_id,v.linked_party_name,v.bill_reference,v.attachment_url,v.remarks,
-         v.status,v.journal_entry_id,v.reversal_journal_entry_id,v.version,
+         v.status,v.journal_entry_id,v.reversal_journal_entry_id,v.approval_policy_reason,v.version,
          v.created_by_user_id,v.submitted_by_user_id,v.approved_by_user_id,
          v.rejected_by_user_id,v.reversed_by_user_id,v.submitted_at,v.approved_at,
          v.rejected_at,v.reversed_at,v.rejection_reason,v.reversal_reason,
@@ -95,13 +141,54 @@ const RECORD_SELECT: &str = r#"
              'id',line.id,'lineNumber',line.line_number,'categoryKey',line.category_key,
              'accountCode',line.account_code,'amountPaise',line.amount_paise,
              'gstTreatment',line.gst_treatment,'gstPaise',line.gst_paise,
+             'subcategory',line.subcategory,'costCenterId',line.cost_center_id,
+             'department',line.department,'linkedPartyType',line.line_party_type,
+             'linkedPartyId',line.line_party_id,'linkedPartyName',line.line_party_name,
+             'sourceReferenceType',line.source_reference_type,
+             'sourceReferenceId',line.source_reference_id,'receiptNumber',line.receipt_number,
+             'taxInvoice',line.tax_invoice,'reimbursement',line.reimbursement,
              'remarks',line.remarks
            ) ORDER BY line.line_number)
            FROM outgoing_fund_lines line
            WHERE line.tenant_id=v.tenant_id AND line.branch_id=v.branch_id AND line.voucher_id=v.id
-         ), '[]'::JSONB) AS lines_json
+         ), '[]'::JSONB) AS lines_json,
+         COALESCE((
+           SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+             'id',attachment.id,'lineNumber',attachment.line_number,
+             'fileUrl',attachment.file_url,'fileType',attachment.file_type,
+             'uploadedByUserId',attachment.uploaded_by_user_id,'createdAt',attachment.created_at
+           ) ORDER BY attachment.created_at DESC)
+           FROM outgoing_fund_attachments attachment
+           WHERE attachment.tenant_id=v.tenant_id AND attachment.branch_id=v.branch_id AND attachment.voucher_id=v.id
+         ), '[]'::JSONB) AS attachments_json,
+         COALESCE((
+           SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+             'id',event.id,'eventType',event.event_type,'actorUserId',event.actor_user_id,
+             'details',event.details_json,'createdAt',event.created_at
+           ) ORDER BY event.created_at DESC)
+           FROM outgoing_fund_audit_events event
+           WHERE event.tenant_id=v.tenant_id AND event.branch_id=v.branch_id AND event.voucher_id=v.id
+         ), '[]'::JSONB) AS audit_json
   FROM outgoing_fund_vouchers v
 "#;
+
+pub async fn list_categories(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<OutgoingFundCategoryRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT category_key,label,account_code,manual_entry,workflow_path,workflow_label,
+                  requires_party,requires_bill_reference,requires_attachment,approval_threshold_paise
+           FROM outgoing_fund_categories
+           WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE
+           ORDER BY label"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn list(
@@ -281,18 +368,20 @@ pub async fn create(
     actor_user_id: &str,
     input: NewOutgoingFundVoucher<'_>,
     lines: &[NewOutgoingFundLine],
+    attachments: &[NewOutgoingFundAttachment],
 ) -> Result<String, sqlx::Error> {
     let id = sqlx::query_scalar::<_, String>(
         r#"INSERT INTO outgoing_fund_vouchers(
              tenant_id,branch_id,voucher_number,business_date,payment_account_code,payment_mode,
+             fund_source,cash_drawer_till_id,
              reference_number,cheque_number,cheque_date,linked_party_type,linked_party_id,
              linked_party_name,bill_reference,attachment_url,remarks,status,idempotency_key,
              created_by_user_id,submitted_by_user_id,submitted_at
            ) VALUES(
              $1,$2,'OF-'||TO_CHAR($4,'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),
-             $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$3,
-             CASE WHEN $16='pending' THEN $3 ELSE NULL END,
-             CASE WHEN $16='pending' THEN NOW() ELSE NULL END
+             $4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$3,
+             CASE WHEN $18='pending' THEN $3 ELSE NULL END,
+             CASE WHEN $18='pending' THEN NOW() ELSE NULL END
            ) RETURNING id"#,
     )
     .bind(tenant_id)
@@ -301,6 +390,8 @@ pub async fn create(
     .bind(input.business_date)
     .bind(input.payment_account_code)
     .bind(input.payment_mode)
+    .bind(input.fund_source)
+    .bind(input.cash_drawer_till_id)
     .bind(input.reference_number)
     .bind(input.cheque_number)
     .bind(input.cheque_date)
@@ -315,6 +406,7 @@ pub async fn create(
     .fetch_one(&mut **tx)
     .await?;
     insert_lines(tx, tenant_id, branch_id, &id, lines).await?;
+    insert_attachments(tx, tenant_id, branch_id, &id, actor_user_id, attachments).await?;
     audit(
         tx,
         tenant_id,
@@ -336,12 +428,14 @@ pub async fn update_draft(
     actor_user_id: &str,
     input: UpdateOutgoingFundVoucher<'_>,
     lines: &[NewOutgoingFundLine],
+    attachments: &[NewOutgoingFundAttachment],
 ) -> Result<bool, sqlx::Error> {
     let updated = sqlx::query(
         r#"UPDATE outgoing_fund_vouchers SET
-             business_date=$5,payment_account_code=$6,payment_mode=$7,reference_number=$8,
-             cheque_number=$9,cheque_date=$10,linked_party_type=$11,linked_party_id=$12,
-             linked_party_name=$13,bill_reference=$14,attachment_url=$15,remarks=$16,
+             business_date=$5,payment_account_code=$6,payment_mode=$7,fund_source=$8,
+             cash_drawer_till_id=$9,reference_number=$10,
+             cheque_number=$11,cheque_date=$12,linked_party_type=$13,linked_party_id=$14,
+             linked_party_name=$15,bill_reference=$16,attachment_url=$17,remarks=$18,
              status='draft',rejected_by_user_id=NULL,rejected_at=NULL,rejection_reason=NULL,
              version=version+1,updated_at=NOW()
            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status IN ('draft','rejected')"#,
@@ -353,6 +447,8 @@ pub async fn update_draft(
     .bind(input.business_date)
     .bind(input.payment_account_code)
     .bind(input.payment_mode)
+    .bind(input.fund_source)
+    .bind(input.cash_drawer_till_id)
     .bind(input.reference_number)
     .bind(input.cheque_number)
     .bind(input.cheque_date)
@@ -377,7 +473,16 @@ pub async fn update_draft(
     .bind(id)
     .execute(&mut **tx)
     .await?;
+    sqlx::query(
+        "DELETE FROM outgoing_fund_attachments WHERE tenant_id=$1 AND branch_id=$2 AND voucher_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .execute(&mut **tx)
+    .await?;
     insert_lines(tx, tenant_id, branch_id, id, lines).await?;
+    insert_attachments(tx, tenant_id, branch_id, id, actor_user_id, attachments).await?;
     audit(
         tx,
         tenant_id,
@@ -400,7 +505,7 @@ async fn insert_lines(
 ) -> Result<(), sqlx::Error> {
     for (index, line) in lines.iter().enumerate() {
         sqlx::query(
-            "INSERT INTO outgoing_fund_lines(tenant_id,branch_id,voucher_id,line_number,category_key,account_code,amount_paise,gst_treatment,gst_paise,remarks) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+            "INSERT INTO outgoing_fund_lines(tenant_id,branch_id,voucher_id,line_number,category_key,account_code,amount_paise,gst_treatment,gst_paise,subcategory,cost_center_id,department,line_party_type,line_party_id,line_party_name,source_reference_type,source_reference_id,receipt_number,tax_invoice,reimbursement,remarks) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)",
         )
         .bind(tenant_id)
         .bind(branch_id)
@@ -411,9 +516,43 @@ async fn insert_lines(
         .bind(line.amount_paise)
         .bind(&line.gst_treatment)
         .bind(line.gst_paise)
+        .bind(line.subcategory.as_deref())
+        .bind(line.cost_center_id.as_deref())
+        .bind(line.department.as_deref())
+        .bind(&line.linked_party_type)
+        .bind(line.linked_party_id.as_deref())
+        .bind(line.linked_party_name.as_deref())
+        .bind(line.source_reference_type.as_deref())
+        .bind(line.source_reference_id.as_deref())
+        .bind(line.receipt_number.as_deref())
+        .bind(line.tax_invoice)
+        .bind(line.reimbursement)
         .bind(line.remarks.as_deref())
         .execute(&mut **tx)
         .await?;
+    }
+    Ok(())
+}
+
+async fn insert_attachments(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    voucher_id: &str,
+    actor_user_id: &str,
+    attachments: &[NewOutgoingFundAttachment],
+) -> Result<(), sqlx::Error> {
+    for attachment in attachments {
+        sqlx::query("INSERT INTO outgoing_fund_attachments(tenant_id,branch_id,voucher_id,line_number,file_url,file_type,uploaded_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7)")
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(voucher_id)
+            .bind(attachment.line_number)
+            .bind(&attachment.file_url)
+            .bind(attachment.file_type.as_deref())
+            .bind(actor_user_id)
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }
@@ -449,9 +588,17 @@ pub async fn mark_approved(
     id: &str,
     actor: &str,
     journal_entry_id: &str,
+    cash_drawer_session_id: Option<&str>,
+    cash_drawer_till_id: Option<&str>,
+    opening_balance_paise: Option<i64>,
+    closing_balance_paise: Option<i64>,
+    approval_policy_reason: Option<&str>,
 ) -> Result<bool, sqlx::Error> {
-    let changed = sqlx::query("UPDATE outgoing_fund_vouchers SET status='approved',journal_entry_id=$5,approved_by_user_id=$4,approved_at=NOW(),updated_at=NOW(),version=version+1 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending'")
-        .bind(tenant_id).bind(branch_id).bind(id).bind(actor).bind(journal_entry_id).execute(&mut **tx).await?.rows_affected()==1;
+    let changed = sqlx::query("UPDATE outgoing_fund_vouchers SET status='approved',journal_entry_id=$5,cash_drawer_session_id=$6,cash_drawer_till_id=COALESCE($7,cash_drawer_till_id),opening_balance_paise=$8,closing_balance_paise=$9,approval_policy_reason=$10,approved_by_user_id=$4,approved_at=NOW(),updated_at=NOW(),version=version+1 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending'")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(actor).bind(journal_entry_id)
+        .bind(cash_drawer_session_id).bind(cash_drawer_till_id).bind(opening_balance_paise)
+        .bind(closing_balance_paise).bind(approval_policy_reason)
+        .execute(&mut **tx).await?.rows_affected()==1;
     if changed {
         audit(
             tx,

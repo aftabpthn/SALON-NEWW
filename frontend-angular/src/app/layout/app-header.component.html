@@ -8,7 +8,7 @@
       <button
         class="branch-trigger"
         type="button"
-        aria-label="Current branch"
+        [attr.aria-label]="'header.currentBranch' | translate"
         aria-haspopup="listbox"
         [attr.aria-expanded]="branchMenuOpen"
         [disabled]="branches.length < 2"
@@ -21,12 +21,12 @@
       <div class="branch-menu" *ngIf="branchMenuOpen">
         <input
           type="search"
-          aria-label="Search branches"
-          placeholder="Search branches"
+          [attr.aria-label]="'header.searchBranches' | translate"
+          [placeholder]="'header.searchBranches' | translate"
           autocomplete="off"
           [(ngModel)]="branchSearch"
         />
-        <div class="branch-list" role="listbox" aria-label="Assigned branches">
+        <div class="branch-list" role="listbox" [attr.aria-label]="'header.assignedBranches' | translate">
           <button
             *ngFor="let branch of filteredBranches"
             type="button"
@@ -40,36 +40,58 @@
               <strong>{{ branch.branchName }}</strong>
               <small>{{ branch.regionName || branch.branchId }}<ng-container *ngIf="branch.zoneName"> · {{ branch.zoneName }}</ng-container><ng-container *ngIf="branch.clusterName"> · {{ branch.clusterName }}</ng-container></small>
             </span>
-            <small>{{ switchingBranchId === branch.branchId ? 'Switching…' : branch.roleName }}</small>
+            <small>{{ switchingBranchId === branch.branchId ? ('header.switching' | translate) : branch.roleName }}</small>
           </button>
-          <div class="branch-empty" *ngIf="!filteredBranches.length">No branches found</div>
+          <div class="branch-empty" *ngIf="!filteredBranches.length">{{ 'header.noBranches' | translate }}</div>
         </div>
         <div class="branch-error" role="alert" *ngIf="branchError">{{ branchError }}</div>
       </div>
     </div>
 
-    <button class="notification-button" type="button" aria-label="Notifications">!</button>
+    <div class="language-switcher">
+      <button
+        class="language-trigger"
+        type="button"
+        [attr.aria-label]="'header.language' | translate"
+        aria-haspopup="menu"
+        [attr.aria-expanded]="languageMenuOpen"
+        [disabled]="languageSaving || language.settings()?.tenantDefault?.allowUserOverride === false"
+        (click)="toggleLanguageMenu()"
+      >
+        <span aria-hidden="true">🌐</span><span>{{ languageSaving ? ('common.loading' | translate) : languageLabel }}</span><span aria-hidden="true">⌄</span>
+      </button>
+      <div class="language-menu" role="menu" *ngIf="languageMenuOpen">
+        <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'en-IN', displayMode: 'single' })">English</button>
+        <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'hi-IN', displayMode: 'single' })">हिन्दी</button>
+        <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'en-IN', secondaryLanguage: 'hi-IN', displayMode: 'bilingual' })">English + हिन्दी</button>
+      </div>
+      <small class="language-error" role="alert" *ngIf="languageError">{{ languageError }}</small>
+    </div>
+
+    <span class="notification-button" role="img" [attr.aria-label]="'header.notifications' | translate">
+      <i class="bi bi-bell" aria-hidden="true"></i>
+    </span>
     <span class="user-pill">AA</span>
     <b class="topbar-brand-name">{{ appName }}</b>
-    <button class="ai-assistant-button" type="button" aria-label="AI Assistant" title="AI Assistant" [attr.aria-expanded]="assistantOpen" (click)="toggleAssistant()">
+    <button class="ai-assistant-button" type="button" [attr.aria-label]="'header.aiAssistant' | translate" [title]="'header.aiAssistant' | translate" [attr.aria-expanded]="assistantOpen" (click)="toggleAssistant()">
       <img src="/assets/ai-assistant-sidebar.png" alt="" aria-hidden="true" />
     </button>
   </div>
 </header>
 
-<aside class="assistant-drawer" *ngIf="assistantOpen" aria-label="AI Assistant">
-  <header><div><strong>AI Receptionist</strong><small>{{ assistantSession?.status || 'Connecting' }}</small></div><button type="button" aria-label="Close AI Assistant" (click)="assistantOpen = false">×</button></header>
+<aside class="assistant-drawer" *ngIf="assistantOpen" [attr.aria-label]="'header.aiAssistant' | translate">
+  <header><div><strong>{{ 'header.aiReceptionist' | translate }}</strong><small>{{ assistantSession?.status || ('header.connecting' | translate) }}</small></div><button type="button" [attr.aria-label]="'header.closeAiAssistant' | translate" (click)="assistantOpen = false">×</button></header>
   <div class="assistant-error" *ngIf="assistantError">{{ assistantError }}</div>
   <div class="assistant-transcript">
     <article *ngFor="let message of assistantMessages" [class.assistant]="message.role === 'assistant'">
-      <p>{{ message.body }}</p><small>{{ message.role === 'assistant' ? (message.modelName || 'Governed assistant') : 'You' }} · {{ formatTime(message.createdAt) }}</small>
+      <p>{{ message.body }}</p><small>{{ message.role === 'assistant' ? (message.modelName || ('header.governedAssistant' | translate)) : ('header.you' | translate) }} · {{ formatTime(message.createdAt) }}</small>
     </article>
-    <div class="assistant-empty" *ngIf="!assistantBusy && !assistantMessages.length">No conversation yet</div>
-    <div class="assistant-empty" *ngIf="assistantBusy && !assistantMessages.length">Connecting…</div>
+    <div class="assistant-empty" *ngIf="!assistantBusy && !assistantMessages.length">{{ 'header.noConversation' | translate }}</div>
+    <div class="assistant-empty" *ngIf="assistantBusy && !assistantMessages.length">{{ 'header.connecting' | translate }}…</div>
   </div>
   <div class="assistant-action" *ngIf="assistantAction?.type === 'booking_draft'">
-    <span>Booking confirmation required</span><button type="button" (click)="continueBooking()">Continue</button>
+    <span>{{ 'header.bookingConfirmationRequired' | translate }}</span><button type="button" (click)="continueBooking()">{{ 'header.continue' | translate }}</button>
   </div>
-  <div class="assistant-action" *ngIf="assistantAction?.type === 'human_handoff'"><span>Salon team follow-up required</span></div>
-  <footer><textarea [(ngModel)]="assistantDraft" rows="2" maxlength="4000" placeholder="Ask about services or booking"></textarea><button type="button" (click)="sendAssistantMessage()" [disabled]="assistantBusy || !assistantDraft.trim() || !assistantSession">{{ assistantBusy ? 'Working…' : 'Send' }}</button></footer>
+  <div class="assistant-action" *ngIf="assistantAction?.type === 'human_handoff'"><span>{{ 'header.humanFollowUpRequired' | translate }}</span></div>
+  <footer><textarea [(ngModel)]="assistantDraft" rows="2" maxlength="4000" [placeholder]="'header.askServicesBooking' | translate"></textarea><button type="button" (click)="sendAssistantMessage()" [disabled]="assistantBusy || !assistantDraft.trim() || !assistantSession">{{ assistantBusy ? ('header.working' | translate) : ('header.send' | translate) }}</button></footer>
 </aside>

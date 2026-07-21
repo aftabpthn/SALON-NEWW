@@ -8,9 +8,9 @@ use crate::{
         },
     },
     repositories::migration_repository,
-    services::client_service,
+    services::{client_service, outgoing_funds_service},
 };
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::{json, Map, Value};
 use sqlx::PgPool;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -317,6 +317,133 @@ const PACKAGE_COLUMNS: &[ColumnContract] = &[
     column!("active", false, ["active", "status"]),
 ];
 
+const APPOINTMENT_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "appointment id"]
+    ),
+    column!("client", true, ["client", "client id", "customer id"]),
+    column!("staff", true, ["staff", "staff id", "employee id"]),
+    column!("services", true, ["services", "service ids", "service"]),
+    column!(
+        "startAt",
+        true,
+        ["start at", "start", "appointment date time"]
+    ),
+    column!("endAt", true, ["end at", "end"]),
+    column!("status", false, ["status"]),
+    column!("notes", false, ["notes", "remarks"]),
+];
+
+const SALE_COLUMNS: &[ColumnContract] = &[
+    column!("oldExternalId", true, ["external id", "old id", "sale id"]),
+    column!("client", true, ["client", "client id", "customer id"]),
+    column!("staff", false, ["staff", "staff id", "employee id"]),
+    column!(
+        "invoiceNumber",
+        true,
+        ["invoice number", "invoice no", "bill no"]
+    ),
+    column!("lineType", false, ["line type", "type"]),
+    column!("item", false, ["item", "item id", "product", "service"]),
+    column!("itemName", true, ["item name", "description"]),
+    column!("quantity", true, ["quantity", "qty"]),
+    column!("unitPricePaise", true, ["unit price paise", "price paise"]),
+    column!("subtotalPaise", true, ["subtotal paise"]),
+    column!("discountPaise", false, ["discount paise"]),
+    column!("taxPaise", false, ["tax paise", "gst paise"]),
+    column!("cgstPaise", false, ["cgst paise"]),
+    column!("sgstPaise", false, ["sgst paise"]),
+    column!("igstPaise", false, ["igst paise"]),
+    column!("totalPaise", true, ["total paise", "amount paise"]),
+    column!("status", false, ["status"]),
+    column!("businessDate", true, ["business date", "sale date"]),
+];
+
+const INVOICE_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "invoice id"]
+    ),
+    column!("sale", false, ["sale", "sale id"]),
+    column!("client", true, ["client", "client id", "customer id"]),
+    column!(
+        "invoiceNumber",
+        true,
+        ["invoice number", "invoice no", "bill no"]
+    ),
+    column!("itemName", false, ["item name", "description"]),
+    column!("subtotalPaise", true, ["subtotal paise"]),
+    column!("discountPaise", false, ["discount paise"]),
+    column!("taxPaise", false, ["tax paise", "gst paise"]),
+    column!("cgstPaise", false, ["cgst paise"]),
+    column!("sgstPaise", false, ["sgst paise"]),
+    column!("igstPaise", false, ["igst paise"]),
+    column!("totalPaise", true, ["total paise", "amount paise"]),
+    column!("status", false, ["status"]),
+    column!("businessDate", true, ["business date", "invoice date"]),
+];
+
+const PAYMENT_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "payment id"]
+    ),
+    column!(
+        "invoice",
+        true,
+        ["invoice", "invoice id", "invoice number", "sale id"]
+    ),
+    column!("method", true, ["method", "payment method", "mode"]),
+    column!("amountPaise", true, ["amount paise", "payment paise"]),
+    column!("reference", false, ["reference", "transaction id"]),
+    column!("paidAt", true, ["paid at", "payment date time"]),
+];
+
+const EXPENSE_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "expense id"]
+    ),
+    column!("category", true, ["category", "expense category"]),
+    column!("amountPaise", true, ["amount paise", "expense paise"]),
+    column!("gstPaise", false, ["gst paise", "tax paise"]),
+    column!("paymentMethod", true, ["payment method", "mode"]),
+    column!("businessDate", true, ["business date", "expense date"]),
+    column!("vendor", false, ["vendor", "supplier"]),
+    column!("reference", false, ["reference", "bill reference"]),
+    column!("notes", false, ["notes", "remarks"]),
+];
+
+const PURCHASE_BILL_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "purchase bill id"]
+    ),
+    column!("supplierName", true, ["supplier name", "vendor name"]),
+    column!("supplierGstin", false, ["supplier gstin", "gstin"]),
+    column!(
+        "invoiceNumber",
+        true,
+        ["invoice number", "invoice no", "bill no"]
+    ),
+    column!("receivedDate", true, ["received date", "bill date"]),
+    column!("product", true, ["product", "product id", "sku"]),
+    column!("quantity", true, ["quantity", "qty"]),
+    column!("unitCostPaise", true, ["unit cost paise", "cost paise"]),
+    column!("taxablePaise", true, ["taxable paise"]),
+    column!("cgstPaise", false, ["cgst paise"]),
+    column!("sgstPaise", false, ["sgst paise"]),
+    column!("igstPaise", false, ["igst paise"]),
+    column!("totalPaise", true, ["total paise"]),
+    column!("gstPercent", false, ["gst percent", "gst rate"]),
+];
+
 pub fn templates() -> Vec<MigrationTemplate> {
     [
         MigrationEntity::Clients,
@@ -327,6 +454,12 @@ pub fn templates() -> Vec<MigrationTemplate> {
         MigrationEntity::Inventory,
         MigrationEntity::Memberships,
         MigrationEntity::Packages,
+        MigrationEntity::Appointments,
+        MigrationEntity::Sales,
+        MigrationEntity::Invoices,
+        MigrationEntity::Payments,
+        MigrationEntity::Expenses,
+        MigrationEntity::PurchaseBills,
     ]
     .into_iter()
     .map(|entity| MigrationTemplate {
@@ -1179,6 +1312,31 @@ pub async fn prepare_table(
                     ),
                 ]);
             }
+            MigrationEntity::Appointments
+            | MigrationEntity::Sales
+            | MigrationEntity::Invoices
+            | MigrationEntity::Payments
+            | MigrationEntity::Expenses
+            | MigrationEntity::PurchaseBills => {
+                let prepared = prepare_transaction_row(
+                    db,
+                    tenant,
+                    branch,
+                    entity,
+                    source_row,
+                    &field_indexes,
+                    line,
+                    &external_id,
+                    duplicate_decisions,
+                    &mut seen,
+                    &mut row_errors,
+                    &mut row_warnings,
+                )
+                .await?;
+                payload = prepared.payload;
+                duplicate_target_id = prepared.duplicate_target_id;
+                duplicate_decision = prepared.duplicate_decision;
+            }
         }
 
         payload.insert("source_row_number".into(), json!(line));
@@ -1277,6 +1435,436 @@ pub async fn prepare_table(
     })
 }
 
+struct PreparedTransactionRow {
+    payload: Map<String, Value>,
+    duplicate_target_id: Option<String>,
+    duplicate_decision: Option<MigrationDuplicateDecision>,
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn prepare_transaction_row(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: MigrationEntity,
+    source_row: &[String],
+    indexes: &HashMap<&'static str, usize>,
+    line: i32,
+    external_id: &str,
+    duplicate_decisions: &BTreeMap<String, MigrationDuplicateDecision>,
+    seen: &mut HashSet<String>,
+    errors: &mut Vec<MigrationRowIssue>,
+    warnings: &mut Vec<MigrationRowIssue>,
+) -> Result<PreparedTransactionRow, AppError> {
+    let cell = |field| mapped_cell(source_row, indexes, field);
+    if external_id.is_empty() {
+        push_issue(errors, "REQUIRED_FIELD", "oldExternalId is required");
+    } else if !seen.insert(format!("external:{}", external_id.to_ascii_lowercase())) {
+        push_issue(
+            errors,
+            "DUPLICATE_SOURCE_KEY",
+            "oldExternalId appears twice in CSV",
+        );
+    }
+    let resolve = |dependency: MigrationEntity, reference: String| async move {
+        if reference.is_empty() {
+            return Ok(None);
+        }
+        migration_repository::resolve_migration_reference(
+            db, tenant, branch, dependency, &reference,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to resolve migration dependency"))
+    };
+    let mut payload = Map::new();
+    let business_key = match entity {
+        MigrationEntity::Appointments => {
+            let client_ref = cell("client");
+            let staff_ref = cell("staff");
+            let client_id = resolve(MigrationEntity::Clients, client_ref.clone()).await?;
+            let staff_id = resolve(MigrationEntity::Staff, staff_ref.clone()).await?;
+            if client_id.is_none() || staff_id.is_none() {
+                push_issue(
+                    errors,
+                    "DEPENDENCY_NOT_FOUND",
+                    "client and staff must exist before appointments",
+                );
+            }
+            let mut service_ids = Vec::new();
+            for reference in split_list(&cell("services")) {
+                match resolve(MigrationEntity::Services, reference.clone()).await? {
+                    Some(id) => service_ids.push(id),
+                    None => push_issue(
+                        errors,
+                        "DEPENDENCY_NOT_FOUND",
+                        &format!("service '{reference}' was not found"),
+                    ),
+                }
+            }
+            if service_ids.is_empty() {
+                push_issue(errors, "REQUIRED_FIELD", "at least one service is required");
+            }
+            let start_at = parse_required_datetime(&cell("startAt"), "startAt", errors);
+            let end_at = parse_required_datetime(&cell("endAt"), "endAt", errors);
+            if start_at
+                .as_deref()
+                .zip(end_at.as_deref())
+                .is_some_and(|(start, end)| start >= end)
+            {
+                push_issue(errors, "INVALID_DATE", "endAt must be after startAt");
+            }
+            let status = default_text(&cell("status"), "booked").to_ascii_lowercase();
+            if !matches!(
+                status.as_str(),
+                "draft"
+                    | "booked"
+                    | "confirmed"
+                    | "arrived"
+                    | "waiting"
+                    | "in-service"
+                    | "completed"
+                    | "billed"
+                    | "paid"
+                    | "cancelled"
+                    | "no-show"
+                    | "rescheduled"
+            ) {
+                push_issue(errors, "INVALID_VALUE", "appointment status is invalid");
+            }
+            payload.extend([
+                ("client_id".into(), json!(client_id.unwrap_or_default())),
+                ("staff_id".into(), json!(staff_id.unwrap_or_default())),
+                ("service_ids_json".into(), json!(service_ids)),
+                ("start_at".into(), json!(start_at)),
+                ("end_at".into(), json!(end_at)),
+                ("status".into(), json!(status)),
+                ("notes".into(), json!(cell("notes"))),
+            ]);
+            format!("{}:{}:{}", client_ref, staff_ref, cell("startAt"))
+        }
+        MigrationEntity::Sales | MigrationEntity::Invoices => {
+            let client_ref = cell("client");
+            let client_id = resolve(MigrationEntity::Clients, client_ref).await?;
+            if client_id.is_none() {
+                push_issue(
+                    errors,
+                    "DEPENDENCY_NOT_FOUND",
+                    "client must exist before sales or invoices",
+                );
+            }
+            let sale_ref = cell("sale");
+            let linked_sale_id = if entity == MigrationEntity::Invoices && !sale_ref.is_empty() {
+                resolve(MigrationEntity::Sales, sale_ref).await?
+            } else {
+                None
+            };
+            if entity == MigrationEntity::Invoices
+                && !cell("sale").is_empty()
+                && linked_sale_id.is_none()
+            {
+                push_issue(
+                    errors,
+                    "DEPENDENCY_NOT_FOUND",
+                    "referenced sale was not found",
+                );
+            }
+            let line_type = default_text(&cell("lineType"), "custom").to_ascii_lowercase();
+            if entity == MigrationEntity::Sales
+                && !matches!(line_type.as_str(), "service" | "product" | "custom")
+            {
+                push_issue(
+                    errors,
+                    "INVALID_VALUE",
+                    "lineType must be service, product or custom",
+                );
+            }
+            let item_ref = cell("item");
+            let item_id = if item_ref.is_empty() {
+                None
+            } else {
+                let dependency = if line_type == "product" {
+                    MigrationEntity::Products
+                } else {
+                    MigrationEntity::Services
+                };
+                resolve(dependency, item_ref).await?
+            };
+            if entity == MigrationEntity::Sales && line_type != "custom" && item_id.is_none() {
+                push_issue(errors, "DEPENDENCY_NOT_FOUND", "sale item was not found");
+            }
+            let subtotal = parse_i64_field(&cell("subtotalPaise"), "subtotalPaise", 0, errors);
+            let quantity = if entity == MigrationEntity::Sales {
+                parse_i64_field(&cell("quantity"), "quantity", 1, errors)
+            } else {
+                1
+            };
+            let unit_price = if entity == MigrationEntity::Sales {
+                parse_i64_field(&cell("unitPricePaise"), "unitPricePaise", 0, errors)
+            } else {
+                subtotal
+            };
+            let discount =
+                parse_i64_field_default(&cell("discountPaise"), "discountPaise", 0, 0, errors);
+            let tax = parse_i64_field_default(&cell("taxPaise"), "taxPaise", 0, 0, errors);
+            let cgst = parse_i64_field_default(&cell("cgstPaise"), "cgstPaise", 0, 0, errors);
+            let sgst = parse_i64_field_default(&cell("sgstPaise"), "sgstPaise", 0, 0, errors);
+            let igst = parse_i64_field_default(&cell("igstPaise"), "igstPaise", 0, 0, errors);
+            let total = parse_i64_field(&cell("totalPaise"), "totalPaise", 0, errors);
+            if subtotal < discount || subtotal.saturating_sub(discount).saturating_add(tax) != total
+            {
+                push_issue(
+                    errors,
+                    "UNBALANCED_TOTAL",
+                    "subtotalPaise - discountPaise + taxPaise must equal totalPaise",
+                );
+            }
+            if cgst + sgst + igst != tax {
+                push_issue(errors, "UNBALANCED_GST", "GST split must equal taxPaise");
+            }
+            let business_date = parse_required_date(&cell("businessDate"), "businessDate", errors);
+            let invoice_number = cell("invoiceNumber");
+            let status = default_text(&cell("status"), "open").to_ascii_lowercase();
+            payload.extend([
+                ("client_id".into(), json!(client_id.unwrap_or_default())),
+                (
+                    "linked_sale_id".into(),
+                    json!(linked_sale_id.unwrap_or_default()),
+                ),
+                ("invoice_number".into(), json!(invoice_number)),
+                ("line_type".into(), json!(line_type)),
+                ("item_id".into(), json!(item_id.unwrap_or_default())),
+                ("item_name".into(), json!(cell("itemName"))),
+                ("quantity".into(), json!(quantity)),
+                ("unit_price_paise".into(), json!(unit_price)),
+                ("subtotal_paise".into(), json!(subtotal)),
+                ("discount_paise".into(), json!(discount)),
+                ("tax_paise".into(), json!(tax)),
+                ("cgst_paise".into(), json!(cgst)),
+                ("sgst_paise".into(), json!(sgst)),
+                ("igst_paise".into(), json!(igst)),
+                ("total_paise".into(), json!(total)),
+                ("status".into(), json!(status)),
+                ("business_date".into(), json!(business_date)),
+            ]);
+            invoice_number
+        }
+        MigrationEntity::Payments => {
+            let invoice_ref = cell("invoice");
+            let sale_id = resolve(MigrationEntity::Invoices, invoice_ref.clone()).await?;
+            if sale_id.is_none() {
+                push_issue(
+                    errors,
+                    "DEPENDENCY_NOT_FOUND",
+                    "invoice must exist before payment",
+                );
+            }
+            let amount = parse_i64_field(&cell("amountPaise"), "amountPaise", 1, errors);
+            let method = cell("method").to_ascii_lowercase();
+            if method.is_empty() {
+                push_issue(errors, "REQUIRED_FIELD", "method is required");
+            }
+            let paid_at = parse_required_datetime(&cell("paidAt"), "paidAt", errors);
+            let migration_reference = format!("migration:{external_id}");
+            payload.extend([
+                ("sale_id".into(), json!(sale_id.unwrap_or_default())),
+                ("method".into(), json!(method)),
+                ("amount_paise".into(), json!(amount)),
+                ("reference".into(), json!(migration_reference)),
+                ("source_reference".into(), json!(cell("reference"))),
+                ("paid_at".into(), json!(paid_at)),
+            ]);
+            format!("migration:{external_id}")
+        }
+        MigrationEntity::Expenses => {
+            let category = cell("category").to_ascii_lowercase();
+            let category_meta = outgoing_funds_service::static_categories()
+                .into_iter()
+                .find(|item| {
+                    item.key.eq_ignore_ascii_case(&category) && item.account_code.is_some()
+                });
+            if category_meta.is_none() {
+                push_issue(
+                    errors,
+                    "INVALID_VALUE",
+                    "expense category is not a manual accounting category",
+                );
+            }
+            let amount = parse_i64_field(&cell("amountPaise"), "amountPaise", 1, errors);
+            let gst = parse_i64_field_default(&cell("gstPaise"), "gstPaise", 0, 0, errors);
+            if gst > amount {
+                push_issue(
+                    errors,
+                    "INVALID_NUMBER",
+                    "gstPaise cannot exceed amountPaise",
+                );
+            }
+            let method = cell("paymentMethod").to_ascii_lowercase();
+            let business_date = parse_required_date(&cell("businessDate"), "businessDate", errors);
+            payload.extend([
+                ("category".into(), json!(category)),
+                (
+                    "account_code".into(),
+                    json!(category_meta
+                        .and_then(|item| item.account_code)
+                        .unwrap_or_default()),
+                ),
+                ("amount_paise".into(), json!(amount)),
+                ("gst_paise".into(), json!(gst)),
+                ("payment_method".into(), json!(method)),
+                ("business_date".into(), json!(business_date)),
+                ("vendor".into(), json!(cell("vendor"))),
+                ("reference".into(), json!(cell("reference"))),
+                ("notes".into(), json!(cell("notes"))),
+            ]);
+            external_id.to_string()
+        }
+        MigrationEntity::PurchaseBills => {
+            let product_ref = cell("product");
+            let item_id = resolve(MigrationEntity::Products, product_ref).await?;
+            if item_id.is_none() {
+                push_issue(
+                    errors,
+                    "DEPENDENCY_NOT_FOUND",
+                    "product must exist before purchase bills",
+                );
+            }
+            let quantity = parse_i64_field(&cell("quantity"), "quantity", 1, errors);
+            let unit_cost = parse_i64_field(&cell("unitCostPaise"), "unitCostPaise", 0, errors);
+            let taxable = parse_i64_field(&cell("taxablePaise"), "taxablePaise", 0, errors);
+            let cgst = parse_i64_field_default(&cell("cgstPaise"), "cgstPaise", 0, 0, errors);
+            let sgst = parse_i64_field_default(&cell("sgstPaise"), "sgstPaise", 0, 0, errors);
+            let igst = parse_i64_field_default(&cell("igstPaise"), "igstPaise", 0, 0, errors);
+            let total = parse_i64_field(&cell("totalPaise"), "totalPaise", 0, errors);
+            if taxable + cgst + sgst + igst != total {
+                push_issue(
+                    errors,
+                    "UNBALANCED_TOTAL",
+                    "purchase taxable and GST paise must equal totalPaise",
+                );
+            }
+            if quantity.saturating_mul(unit_cost) != taxable {
+                push_issue(
+                    errors,
+                    "UNBALANCED_TOTAL",
+                    "quantity * unitCostPaise must equal taxablePaise",
+                );
+            }
+            let invoice_number = cell("invoiceNumber");
+            let gstin = cell("supplierGstin").to_ascii_uppercase();
+            let received_date = parse_required_date(&cell("receivedDate"), "receivedDate", errors);
+            payload.extend([
+                ("supplier_name".into(), json!(cell("supplierName"))),
+                ("supplier_gstin".into(), json!(gstin)),
+                ("invoice_number".into(), json!(invoice_number)),
+                ("received_date".into(), json!(received_date)),
+                (
+                    "inventory_item_id".into(),
+                    json!(item_id.unwrap_or_default()),
+                ),
+                ("quantity".into(), json!(quantity)),
+                ("unit_cost_paise".into(), json!(unit_cost)),
+                ("taxable_paise".into(), json!(taxable)),
+                ("cgst_paise".into(), json!(cgst)),
+                ("sgst_paise".into(), json!(sgst)),
+                ("igst_paise".into(), json!(igst)),
+                ("total_paise".into(), json!(total)),
+                (
+                    "gst_percent".into(),
+                    json!(parse_i32_field_default(
+                        &cell("gstPercent"),
+                        "gstPercent",
+                        0,
+                        0,
+                        errors
+                    )),
+                ),
+            ]);
+            format!(
+                "{}:{}",
+                cell("supplierGstin").to_ascii_uppercase(),
+                cell("invoiceNumber")
+            )
+        }
+        _ => return Err(AppError::internal("unsupported transactional entity")),
+    };
+    let duplicate_target_id = if errors.is_empty() {
+        migration_repository::find_transaction_duplicate(
+            db,
+            tenant,
+            branch,
+            entity,
+            external_id,
+            &business_key,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to analyze transaction duplicates"))?
+    } else {
+        None
+    };
+    let duplicate_decision = duplicate_target_id.as_ref().and_then(|_| {
+        decision_for(
+            duplicate_decisions,
+            entity,
+            line,
+            external_id,
+            &business_key,
+        )
+    });
+    if duplicate_target_id.is_some() && duplicate_decision.is_none() {
+        push_issue(
+            warnings,
+            "DUPLICATE_DECISION_REQUIRED",
+            "choose keep or link",
+        );
+    }
+    if duplicate_decision == Some(MigrationDuplicateDecision::Merge) {
+        push_issue(
+            errors,
+            "IMMUTABLE_TRANSACTION",
+            "transaction duplicates cannot be merged; choose keep or link",
+        );
+    }
+    Ok(PreparedTransactionRow {
+        payload,
+        duplicate_target_id,
+        duplicate_decision,
+    })
+}
+
+fn parse_required_date(
+    value: &str,
+    field: &str,
+    errors: &mut Vec<MigrationRowIssue>,
+) -> Option<String> {
+    match parse_optional_date(value, errors, field) {
+        Some(date) => Some(date.to_string()),
+        None => {
+            if value.trim().is_empty() {
+                push_issue(errors, "REQUIRED_FIELD", &format!("{field} is required"));
+            }
+            None
+        }
+    }
+}
+
+fn parse_required_datetime(
+    value: &str,
+    field: &str,
+    errors: &mut Vec<MigrationRowIssue>,
+) -> Option<String> {
+    if value.trim().is_empty() {
+        push_issue(errors, "REQUIRED_FIELD", &format!("{field} is required"));
+        return None;
+    }
+    match DateTime::parse_from_rfc3339(value.trim()) {
+        Ok(value) => Some(value.with_timezone(&Utc).to_rfc3339()),
+        Err(_) => {
+            push_issue(errors, "INVALID_DATE", &format!("{field} must be RFC3339"));
+            None
+        }
+    }
+}
+
 fn contracts(entity: MigrationEntity) -> &'static [ColumnContract] {
     match entity {
         MigrationEntity::Clients => CLIENT_COLUMNS,
@@ -1287,7 +1875,22 @@ fn contracts(entity: MigrationEntity) -> &'static [ColumnContract] {
         MigrationEntity::Inventory => INVENTORY_COLUMNS,
         MigrationEntity::Memberships => MEMBERSHIP_COLUMNS,
         MigrationEntity::Packages => PACKAGE_COLUMNS,
+        MigrationEntity::Appointments => APPOINTMENT_COLUMNS,
+        MigrationEntity::Sales => SALE_COLUMNS,
+        MigrationEntity::Invoices => INVOICE_COLUMNS,
+        MigrationEntity::Payments => PAYMENT_COLUMNS,
+        MigrationEntity::Expenses => EXPENSE_COLUMNS,
+        MigrationEntity::PurchaseBills => PURCHASE_BILL_COLUMNS,
     }
+}
+
+pub fn suggest_mapping(
+    entity: MigrationEntity,
+    headers: &[String],
+    provided: &BTreeMap<String, String>,
+) -> Result<(BTreeMap<String, String>, Vec<String>), AppError> {
+    let (mapping, _, unmatched) = resolve_mapping(entity, headers, provided)?;
+    Ok((mapping, unmatched))
 }
 
 fn resolve_mapping(
@@ -1666,6 +2269,12 @@ mod tests {
                 MigrationEntity::Inventory,
                 MigrationEntity::Memberships,
                 MigrationEntity::Packages,
+                MigrationEntity::Appointments,
+                MigrationEntity::Sales,
+                MigrationEntity::Invoices,
+                MigrationEntity::Payments,
+                MigrationEntity::Expenses,
+                MigrationEntity::PurchaseBills,
             ]
         );
         assert!(contracts(MigrationEntity::Inventory)
@@ -1674,6 +2283,12 @@ mod tests {
         assert!(contracts(MigrationEntity::Packages)
             .iter()
             .any(|column| column.field == "services" && column.required));
+        assert!(contracts(MigrationEntity::Payments)
+            .iter()
+            .any(|column| column.field == "amountPaise" && column.required));
+        assert!(contracts(MigrationEntity::PurchaseBills)
+            .iter()
+            .any(|column| column.field == "unitCostPaise" && column.required));
     }
 
     #[sqlx::test(migrations = false)]

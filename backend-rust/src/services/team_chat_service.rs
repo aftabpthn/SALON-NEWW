@@ -24,6 +24,305 @@ pub struct TeamChatMessage {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffChatConversation {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub conversation_type: String,
+    pub title: String,
+    pub branch_id: String,
+    pub participant_user_ids: Option<Vec<String>>,
+    pub message_count: i64,
+    pub last_message_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffConversationMessage {
+    pub id: String,
+    pub conversation_id: String,
+    #[serde(rename = "type")]
+    pub conversation_type: String,
+    pub sender_user_id: String,
+    pub sender_name: String,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+pub async fn conversations(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+) -> Result<Vec<StaffChatConversation>, AppError> {
+    let team_id = format!("team:{branch_id}");
+    let team = sqlx::query_as::<_, StaffChatConversation>(
+        r#"SELECT $3::TEXT AS id,'team'::TEXT AS conversation_type,
+                  COALESCE(NULLIF(branch.name,''),'Branch team')::TEXT AS title,
+                  branch.id::TEXT AS branch_id,NULL::TEXT[] AS participant_user_ids,
+                  COUNT(message.id)::BIGINT AS message_count,MAX(message.created_at) AS last_message_at,
+                  COALESCE(branch.created_at,NOW()) AS created_at,
+                  COALESCE(MAX(message.created_at),branch.updated_at,branch.created_at,NOW()) AS updated_at
+             FROM branches branch
+             LEFT JOIN team_chat_messages message
+               ON message.tenant_id=$1 AND message.branch_id=$2 AND message.deleted_at IS NULL
+            WHERE branch.tenant_id::TEXT=$1 AND branch.id::TEXT=$2 AND branch.active=TRUE
+            GROUP BY branch.id,branch.name,branch.created_at,branch.updated_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(team_id)
+    .fetch_optional(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load team conversation"))?
+    .ok_or_else(|| AppError::not_found("active staff branch was not found"))?;
+    let mut rows = vec![team];
+    let mut private_rows = sqlx::query_as::<_, StaffChatConversation>(
+        r#"SELECT conversation.id,'private-owner'::TEXT AS conversation_type,
+                  COALESCE(NULLIF(owner.full_name,''),owner.email,'Owner')::TEXT AS title,
+                  conversation.branch_id,
+                  ARRAY(SELECT participant.user_id FROM staff_private_conversation_participants participant
+                         WHERE participant.conversation_id=conversation.id ORDER BY participant.user_id) AS participant_user_ids,
+                  COUNT(message.id)::BIGINT AS message_count,MAX(message.created_at) AS last_message_at,
+                  conversation.created_at,
+                  GREATEST(conversation.updated_at,COALESCE(MAX(message.created_at),conversation.created_at)) AS updated_at
+             FROM staff_private_conversations conversation
+             JOIN staff_private_conversation_participants current_participant
+               ON current_participant.conversation_id=conversation.id
+              AND current_participant.tenant_id=$1 AND current_participant.branch_id=$2
+              AND current_participant.user_id=$3
+             JOIN users owner ON owner.id=conversation.owner_user_id AND owner.tenant_id=$1 AND owner.active=TRUE
+             LEFT JOIN staff_private_chat_messages message ON message.conversation_id=conversation.id
+            WHERE conversation.tenant_id=$1 AND conversation.branch_id=$2
+            GROUP BY conversation.id,conversation.branch_id,conversation.created_at,conversation.updated_at,
+                     owner.full_name,owner.email
+            ORDER BY GREATEST(conversation.updated_at,COALESCE(MAX(message.created_at),conversation.created_at)) DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load private conversations"))?;
+    rows.append(&mut private_rows);
+    Ok(rows)
+}
+
+pub async fn start_private_owner(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+) -> Result<StaffChatConversation, AppError> {
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start private chat transaction"))?;
+    let staff_user_id = sqlx::query_scalar::<_, String>(
+        "SELECT users.id FROM users JOIN staff ON staff.user_id=users.id AND staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE WHERE users.tenant_id=$1 AND users.id=$3 AND users.active=TRUE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to validate staff chat identity"))?
+    .ok_or_else(|| AppError::forbidden("an active staff profile is required"))?;
+    let owner_user_id = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM users WHERE tenant_id=$1 AND active=TRUE AND REPLACE(REPLACE(LOWER(role_name),'-',''),'_','') IN ('owner','superadmin') ORDER BY CASE WHEN branch_id IS NULL OR branch_id='' THEN 0 WHEN branch_id=$2 THEN 1 ELSE 2 END,created_at LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to find business owner"))?
+    .ok_or_else(|| AppError::not_found("active business owner was not found"))?;
+    let conversation_id = sqlx::query_scalar::<_, String>(
+        r#"INSERT INTO staff_private_conversations(tenant_id,branch_id,staff_user_id,owner_user_id)
+           VALUES($1,$2,$3,$4)
+           ON CONFLICT(tenant_id,branch_id,staff_user_id,owner_user_id)
+           DO UPDATE SET updated_at=staff_private_conversations.updated_at
+           RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&staff_user_id)
+    .bind(&owner_user_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to create private owner conversation"))?;
+    for (participant_id, participant_role) in [
+        (staff_user_id.as_str(), "staff"),
+        (owner_user_id.as_str(), "owner"),
+    ] {
+        sqlx::query(
+            "INSERT INTO staff_private_conversation_participants(conversation_id,tenant_id,branch_id,user_id,participant_role) VALUES($1,$2,$3,$4,$5) ON CONFLICT(conversation_id,user_id) DO NOTHING",
+        )
+        .bind(&conversation_id)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(participant_id)
+        .bind(participant_role)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to secure private chat participants"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit private owner conversation"))?;
+    conversations(db, tenant_id, branch_id, user_id)
+        .await?
+        .into_iter()
+        .find(|row| row.id == conversation_id)
+        .ok_or_else(|| AppError::internal("private owner conversation was not returned"))
+}
+
+pub async fn conversation_messages(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    conversation_id: &str,
+) -> Result<Vec<StaffConversationMessage>, AppError> {
+    if conversation_id == format!("team:{branch_id}") {
+        return sqlx::query_as::<_, StaffConversationMessage>(
+            r#"SELECT id,$3::TEXT AS conversation_id,'team'::TEXT AS conversation_type,
+                      sender_user_id,sender_name,body,created_at
+                 FROM team_chat_messages
+                WHERE tenant_id=$1 AND branch_id=$2 AND deleted_at IS NULL
+                ORDER BY created_at,id LIMIT 500"#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(conversation_id)
+        .fetch_all(db)
+        .await
+        .map_err(|_| AppError::internal("failed to load team conversation messages"));
+    }
+    sqlx::query_as::<_, StaffConversationMessage>(
+        r#"SELECT message.id,message.conversation_id,'private-owner'::TEXT AS conversation_type,
+                  message.sender_user_id,message.sender_name,message.body,message.created_at
+             FROM staff_private_chat_messages message
+             JOIN staff_private_conversation_participants participant
+               ON participant.conversation_id=message.conversation_id AND participant.user_id=$4
+            WHERE message.tenant_id=$1 AND message.branch_id=$2 AND message.conversation_id=$3
+            ORDER BY message.created_at,message.id LIMIT 500"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(conversation_id)
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load private conversation messages"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn send_conversation_message(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    conversation_id: &str,
+    body: &str,
+    idempotency_key: Option<&str>,
+) -> Result<StaffConversationMessage, AppError> {
+    if conversation_id == format!("team:{branch_id}") {
+        let message = send(
+            db,
+            tenant_id,
+            branch_id,
+            user_id,
+            TeamChatRequest {
+                body: body.to_string(),
+                reply_to_message_id: None,
+                idempotency_key: idempotency_key.map(str::to_string),
+            },
+        )
+        .await?;
+        return Ok(StaffConversationMessage {
+            id: message.id,
+            conversation_id: conversation_id.to_string(),
+            conversation_type: "team".to_string(),
+            sender_user_id: message.sender_user_id,
+            sender_name: message.sender_name,
+            body: message.body,
+            created_at: message.created_at,
+        });
+    }
+    let body = validate_body(body)?;
+    let idempotency_key = optional_limited(idempotency_key, 200)?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start private message transaction"))?;
+    let row = sqlx::query_as::<_, StaffConversationMessage>(
+        r#"WITH sender AS (
+              SELECT id,COALESCE(NULLIF(full_name,''),email) AS sender_name FROM users
+               WHERE tenant_id=$1 AND id=$4 AND active=TRUE
+                 AND EXISTS(SELECT 1 FROM staff_private_conversation_participants participant
+                             WHERE participant.conversation_id=$3 AND participant.tenant_id=$1
+                               AND participant.branch_id=$2 AND participant.user_id=$4)
+            ), inserted AS (
+              INSERT INTO staff_private_chat_messages(
+                tenant_id,branch_id,conversation_id,sender_user_id,sender_name,body,idempotency_key
+              ) SELECT $1,$2,$3,sender.id,sender.sender_name,$5,$6 FROM sender
+              ON CONFLICT(tenant_id,conversation_id,sender_user_id,idempotency_key)
+                WHERE idempotency_key IS NOT NULL DO NOTHING
+              RETURNING id,conversation_id,'private-owner'::TEXT AS conversation_type,
+                        sender_user_id,sender_name,body,created_at
+            )
+            SELECT * FROM inserted
+            UNION ALL
+            SELECT id,conversation_id,'private-owner'::TEXT,sender_user_id,sender_name,body,created_at
+              FROM staff_private_chat_messages
+             WHERE tenant_id=$1 AND conversation_id=$3 AND sender_user_id=$4 AND idempotency_key=$6
+            LIMIT 1"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(conversation_id)
+    .bind(user_id)
+    .bind(body)
+    .bind(idempotency_key)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to send private message"))?
+    .ok_or_else(|| AppError::forbidden("private conversation access is required"))?;
+    sqlx::query("UPDATE staff_private_conversations SET updated_at=NOW() WHERE id=$1")
+        .bind(conversation_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to update private conversation"))?;
+    sqlx::query(
+        r#"INSERT INTO mobile_push_deliveries(tenant_id,branch_id,device_id,source_type,source_id,payload_json)
+           SELECT $1,$2,device.id,'private_chat',$3,$4
+             FROM staff_private_conversation_participants participant
+             JOIN staff ON staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.user_id=participant.user_id
+             JOIN staff_mobile_devices device ON device.tenant_id=$1 AND device.branch_id=$2
+                                             AND device.staff_id=staff.id AND device.active=TRUE
+                                             AND device.push_enabled=TRUE AND device.push_token_ciphertext IS NOT NULL
+            WHERE participant.conversation_id=$5 AND participant.user_id<>$6
+           ON CONFLICT(tenant_id,device_id,source_type,source_id) DO NOTHING"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&row.id)
+    .bind(json!({"type":"private_chat","conversationId":conversation_id,"messageId":row.id,"senderName":row.sender_name,"body":row.body}))
+    .bind(conversation_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to queue private chat push"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit private message"))?;
+    Ok(row)
+}
+
 pub async fn list(
     db: &PgPool,
     tenant_id: &str,

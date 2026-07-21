@@ -28,6 +28,10 @@ pub struct AttendanceSummaryRow {
     pub leaves_accrued: f64,
     pub weekly_off_adjustment: f64,
     pub special_leave_adjustment: f64,
+    pub operation_meeting_present: i64,
+    pub operation_meeting_absent: i64,
+    pub operation_task_completed: i64,
+    pub operation_task_missed: i64,
     pub revised_leave_balance: f64,
     pub revised_special_leave_balance: f64,
     pub comments: String,
@@ -181,6 +185,50 @@ pub async fn clock_out(
     .ok_or_else(|| AppError::validation("active attendance record was not found"))
 }
 
+pub async fn start_break(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+) -> Result<staff_attendance_repository::AttendanceBreakRecord, AppError> {
+    ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    staff_attendance_repository::start_break(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        business_date,
+        Utc::now(),
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to start attendance break"))?
+    .ok_or_else(|| AppError::validation("active attendance or break state was not found"))
+}
+
+pub async fn end_break(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
+    ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    staff_attendance_repository::end_break(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        business_date,
+        Utc::now(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to end attendance break"))?
+    .ok_or_else(|| AppError::validation("active attendance break was not found"))
+}
+
 pub async fn correct_attendance(
     db: &PgPool,
     tenant_id: &str,
@@ -281,6 +329,10 @@ fn calculate_row(row: AttendanceSummaryBaseRecord) -> AttendanceSummaryRow {
         leaves_accrued,
         weekly_off_adjustment: row.weekly_off_adjustment,
         special_leave_adjustment: row.special_leave_adjustment,
+        operation_meeting_present: row.operation_meeting_present,
+        operation_meeting_absent: row.operation_meeting_absent,
+        operation_task_completed: row.operation_task_completed,
+        operation_task_missed: row.operation_task_missed,
         comments: row.comments,
     }
 }
@@ -362,6 +414,10 @@ mod tests {
             annual_leave_days: 12.0,
             weekly_off_adjustment: 1.0,
             special_leave_adjustment: 0.5,
+            operation_meeting_present: 0,
+            operation_meeting_absent: 0,
+            operation_task_completed: 0,
+            operation_task_missed: 0,
             comments: String::new(),
         });
         assert_eq!(row.leaves_accrued, 1.0);

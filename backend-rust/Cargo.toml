@@ -2,6 +2,7 @@
 name = "aura-shine-backend"
 version = "0.1.0"
 edition = "2021"
+default-run = "aura-shine-backend"
 
 [dependencies]
 anyhow = "1.0"
@@ -14,9 +15,9 @@ dotenvy = "0.15"
 redis = { version = "0.25", features = ["tokio-comp"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-rustls", "macros", "chrono"] }
+sqlx = { version = "0.8.1", features = ["postgres", "runtime-tokio-rustls", "macros", "chrono"] }
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.5", features = ["compression-br", "compression-gzip", "cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
@@ -26,9 +27,15 @@ sha2 = "0.10"
 sha1 = "0.10"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 csv = "1.3"
-calamine = "0.35"
+calamine = "0.36.0"
 futures-util = "0.3"
 hmac = "0.12"
 qrcodegen = "1.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 passkey-auth = "0.1.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

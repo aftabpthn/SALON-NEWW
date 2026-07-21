@@ -6,6 +6,7 @@ use std::{
 };
 
 use axum::body::Bytes;
+use calamine::{open_workbook_auto, Reader as CalamineReader};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -32,6 +33,7 @@ const MAX_ZIP_ENTRIES: usize = 300;
 const MAX_ZIP_ENTRY_BYTES: u64 = 250 * 1024 * 1024;
 const MAX_ZIP_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 200;
+const MAX_MAPPING_PREVIEW_XLSX_BYTES: u64 = 64 * 1024 * 1024;
 
 struct PreparedArtifact {
     id: String,
@@ -432,6 +434,111 @@ pub async fn worker_sources(
         ));
     }
     Ok((row.original_file_name, row.sha256, sources))
+}
+
+pub async fn source_columns(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+) -> Result<Vec<String>, AppError> {
+    let (_, _, sources) = worker_sources(db, tenant_id, branch_id, id).await?;
+    let columns = tokio::task::spawn_blocking(move || source_columns_blocking(&sources))
+        .await
+        .map_err(|_| AppError::internal("migration source header reader stopped"))??;
+    migration_file_repository::audit_evidence_read(db, tenant_id, branch_id, actor, id)
+        .await
+        .map_err(|_| AppError::internal("failed to audit migration source header access"))?;
+    Ok(columns)
+}
+
+fn source_columns_blocking(sources: &[WorkerSource]) -> Result<Vec<String>, AppError> {
+    let mut columns = Vec::new();
+    let mut seen = HashSet::new();
+    for source in sources {
+        let headers = match source.format.as_str() {
+            "csv" => {
+                let mut reader = csv::ReaderBuilder::new()
+                    .flexible(true)
+                    .from_path(&source.path)
+                    .map_err(|_| AppError::validation("CSV source header could not be read"))?;
+                reader
+                    .headers()
+                    .map_err(|_| AppError::validation("CSV source header is invalid"))?
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            }
+            "xlsx" => xlsx_source_columns(source)?,
+            _ => return Err(AppError::validation("unsupported migration source format")),
+        };
+        let mut source_seen = HashSet::new();
+        for header in headers {
+            let header = header.trim().to_string();
+            let key = header.to_ascii_lowercase();
+            if header.is_empty() || header.chars().count() > 200 || !source_seen.insert(key.clone())
+            {
+                return Err(AppError::validation(
+                    "migration source contains invalid or duplicate columns",
+                ));
+            }
+            if seen.insert(key) {
+                columns.push(header);
+                if columns.len() > 500 {
+                    return Err(AppError::validation(
+                        "migration source contains more than 500 columns",
+                    ));
+                }
+            }
+        }
+    }
+    if columns.is_empty() {
+        return Err(AppError::validation(
+            "migration source contains no header columns",
+        ));
+    }
+    Ok(columns)
+}
+
+fn xlsx_source_columns(source: &WorkerSource) -> Result<Vec<String>, AppError> {
+    let size = fs::metadata(&source.path)
+        .map_err(|_| AppError::not_found("XLSX source is unavailable"))?
+        .len();
+    if size > MAX_MAPPING_PREVIEW_XLSX_BYTES {
+        return Err(AppError::validation(
+            "XLSX mapping preview is limited to 64 MB; use a saved mapping or automatic worker mapping",
+        ));
+    }
+    let mut workbook = open_workbook_auto(&source.path)
+        .map_err(|_| AppError::validation("XLSX source header could not be read"))?;
+    let mut headers = Vec::new();
+    let mut seen = HashSet::new();
+    for sheet_name in workbook.sheet_names().to_vec() {
+        let range = workbook
+            .worksheet_range(&sheet_name)
+            .map_err(|_| AppError::validation("XLSX worksheet header could not be read"))?;
+        let Some(row) = range.rows().next() else {
+            continue;
+        };
+        let current = row.iter().map(ToString::to_string).collect::<Vec<_>>();
+        if current.iter().all(|cell| cell.trim().is_empty()) {
+            continue;
+        }
+        let mut sheet_seen = HashSet::new();
+        for header in current {
+            let key = header.trim().to_ascii_lowercase();
+            if !sheet_seen.insert(key.clone()) {
+                return Err(AppError::validation(
+                    "XLSX worksheet contains duplicate header columns",
+                ));
+            }
+            if seen.insert(key) {
+                headers.push(header);
+            }
+        }
+    }
+    Ok(headers)
 }
 
 fn session_model(
@@ -1155,7 +1262,13 @@ async fn remove_session_parts(tenant_id: &str, branch_id: &str, id: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{assert_safe_ratio, has_binary_magic, normalize_sha256, validate_file_name};
+    use super::{
+        assert_safe_ratio, extract_zip, has_binary_magic, normalize_sha256,
+        source_columns_blocking, validate_csv, validate_file_name, validate_xlsx, WorkerSource,
+    };
+    use std::{fs, io::Write, path::PathBuf};
+    use uuid::Uuid;
+    use zip::{write::SimpleFileOptions, ZipWriter};
 
     #[test]
     fn file_intake_rejects_traversal_reserved_names_bad_hashes_and_zip_bombs() {
@@ -1169,5 +1282,90 @@ mod tests {
         assert!(assert_safe_ratio(201, 1).is_err());
         assert!(has_binary_magic(b"%PDF-1.7"));
         assert!(!has_binary_magic(b"name,email\r\n"));
+    }
+
+    #[test]
+    fn file_intake_rejects_malicious_csv_xlsx_and_zip_content() {
+        let root = test_dir();
+        let csv = root.join("malicious.csv");
+        fs::write(&csv, b"%PDF-1.7\0not-csv").unwrap();
+        assert!(validate_csv(&csv).is_err());
+
+        let xlsx = root.join("malicious.xlsx");
+        write_zip(
+            &xlsx,
+            &[
+                ("[Content_Types].xml", b"content"),
+                ("_rels/.rels", b"rels"),
+                ("xl/workbook.xml", b"workbook"),
+                ("../escape.xml", b"escape"),
+            ],
+        );
+        assert!(validate_xlsx(&xlsx).is_err());
+
+        let zip = root.join("malicious.zip");
+        write_zip(&zip, &[("../escape.csv", b"name,email\r\nA,B\r\n")]);
+        assert!(extract_zip(&zip, &root.join("artifacts"), "test/artifacts").is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn csv_validation_streams_a_large_source_without_loading_it_whole() {
+        let root = test_dir();
+        let path = root.join("large.csv");
+        let mut file = fs::File::create(&path).unwrap();
+        file.write_all(b"externalId,firstName,phone\r\n").unwrap();
+        let row = b"legacy-000001,Customer,+919999999999\r\n";
+        for _ in 0..750_000 {
+            file.write_all(row).unwrap();
+        }
+        file.sync_all().unwrap();
+        assert!(fs::metadata(&path).unwrap().len() > 25 * 1024 * 1024);
+        assert!(validate_csv(&path).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn mapping_preview_reads_verified_csv_headers_and_rejects_ambiguity() {
+        let root = test_dir();
+        let path = root.join("headers.csv");
+        fs::write(
+            &path,
+            b"External ID,First Name,Phone\r\n1,A,+919999999999\r\n",
+        )
+        .unwrap();
+        let source = WorkerSource {
+            name: "headers.csv".into(),
+            format: "csv".into(),
+            path: path.clone(),
+        };
+        assert_eq!(
+            source_columns_blocking(&[source]).unwrap(),
+            vec!["External ID", "First Name", "Phone"]
+        );
+        fs::write(&path, b"Phone,phone\r\n1,2\r\n").unwrap();
+        let duplicate = WorkerSource {
+            name: "headers.csv".into(),
+            format: "csv".into(),
+            path,
+        };
+        assert!(source_columns_blocking(&[duplicate]).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn test_dir() -> PathBuf {
+        let path = std::env::temp_dir().join(format!("aurashine-migration-{}", Uuid::new_v4()));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) {
+        let file = fs::File::create(path).unwrap();
+        let mut zip = ZipWriter::new(file);
+        for (name, content) in entries {
+            zip.start_file(*name, SimpleFileOptions::default()).unwrap();
+            zip.write_all(content).unwrap();
+        }
+        zip.finish().unwrap();
     }
 }

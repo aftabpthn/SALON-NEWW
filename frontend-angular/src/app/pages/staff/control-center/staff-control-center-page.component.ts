@@ -1,4 +1,6 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -12,11 +14,12 @@ type Row = Record<string, any>;
 @Component({
   selector: 'page-staff-control-center',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
+  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './staff-control-center-page.component.html',
   styleUrls: ['./staff-control-center-page.component.css'],
 })
 export class StaffControlCenterPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
 
@@ -290,7 +293,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       try {
         payload = JSON.parse(rawPayload);
       } catch {
-        this.error = 'Payload JSON is invalid';
+        this.error = this.language.text('staff.message.67ef55faf5');
         return;
       }
     }
@@ -411,7 +414,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       else this.loading = false;
       return data;
     } catch (error) {
-      this.error = this.message(error, 'Action failed');
+      this.error = this.message(error, this.language.text('staff.message.57af949595'));
       this.loading = false;
       return null;
     }
@@ -427,7 +430,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       else this.loading = false;
       return data;
     } catch (error) {
-      this.error = this.message(error, 'Action failed');
+      this.error = this.message(error, this.language.text('staff.message.57af949595'));
       this.loading = false;
       return null;
     }

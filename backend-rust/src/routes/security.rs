@@ -1506,7 +1506,7 @@ async fn scim_token_status(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
 ) -> ApiResult<sso_repository::ScimTokenStatus> {
-    require_security_manage(&claims)?;
+    require_security_read(&claims)?;
     let status = sso_repository::scim_token_status(&state.db, &claims.tenant_id)
         .await
         .map_err(|_| AppError::internal("failed to load SCIM token status"))?;
@@ -1517,7 +1517,7 @@ async fn sso_policy(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
 ) -> ApiResult<sso_service::SsoPolicyView> {
-    require_security_manage(&claims)?;
+    require_security_read(&claims)?;
     Ok(Json(ApiResponse::ok(
         sso_service::policy_view(&state.db, &state.settings, &claims.tenant_id).await?,
     )))
@@ -1599,7 +1599,7 @@ async fn revoke_scim_token(
     Ok(Json(ApiResponse::ok(MutationResult { updated: true })))
 }
 
-fn require_security_read(claims: &AuthClaims) -> Result<(), AppError> {
+pub(crate) fn require_security_read(claims: &AuthClaims) -> Result<(), AppError> {
     if security_role(claims)
         || claims
             .permissions
@@ -1612,7 +1612,7 @@ fn require_security_read(claims: &AuthClaims) -> Result<(), AppError> {
     }
 }
 
-fn require_security_manage(claims: &AuthClaims) -> Result<(), AppError> {
+pub(crate) fn require_security_manage(claims: &AuthClaims) -> Result<(), AppError> {
     if security_role(claims)
         || claims
             .permissions
@@ -1679,6 +1679,7 @@ mod tests {
         assert!(require_security_manage(&claims("super-admin", &[])).is_ok());
         assert!(require_security_read(&claims("custom", &["security.read"])).is_ok());
         assert!(require_security_manage(&claims("custom", &["security.manage"])).is_ok());
+        assert!(require_security_manage(&claims("custom", &["security.read"])).is_err());
         assert!(require_security_read(&claims("manager", &[])).is_err());
     }
 }

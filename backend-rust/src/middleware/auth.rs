@@ -1,8 +1,8 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, net::SocketAddr};
 
 use axum::{
     body::{to_bytes, Body},
-    extract::{Request, State},
+    extract::{ConnectInfo, Request, State},
     http::{header, HeaderValue},
     middleware::Next,
     response::Response,
@@ -40,10 +40,12 @@ pub async fn require_auth(
         return Err(AppError::unauthenticated("invalid token type"));
     }
 
-    if !(is_local_env(&state.settings.app_env)
+    let is_local_dev_admin = is_local_env(&state.settings.app_env)
         && state.settings.enable_dev_session
-        && claims.sub == "dev-admin")
-    {
+        && claims.sub == "dev-admin";
+    if is_local_dev_admin {
+        require_loopback_dev_claim(&req)?;
+    } else {
         let user = auth_repository::find_user_by_id(&state.db, &claims.tenant_id, &claims.sub)
             .await
             .map_err(|_| AppError::internal("failed to validate user session"))?
@@ -160,6 +162,19 @@ pub async fn require_auth(
         &masked_fields,
     )
     .await
+}
+
+fn require_loopback_dev_claim(req: &Request<Body>) -> Result<(), AppError> {
+    let is_loopback = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|connect_info| connect_info.0.ip().is_loopback())
+        .unwrap_or(false);
+    if is_loopback {
+        Ok(())
+    } else {
+        Err(AppError::unauthenticated("invalid or expired bearer token"))
+    }
 }
 
 async fn mask_json_response(

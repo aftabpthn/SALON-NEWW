@@ -1,40 +1,41 @@
 <main class="attendance-page">
   <header class="page-header">
-    <div><span class="section-label">Employee</span><h1>Employee Attendance Summary</h1></div>
+    <div><span class="section-label">{{ 'staff.ui.079711ea16' | translate }}</span><h1>{{ 'staff.ui.56f4144272' | translate }}</h1></div>
   </header>
 
-  <section class="filter-bar" aria-label="Attendance summary filters">
-    <label>Cycle<select [(ngModel)]="cycle" (ngModelChange)="loadSummary()"><option value="monthly">Monthly</option></select></label>
-    <label>Month<select [(ngModel)]="month" (ngModelChange)="loadSummary()"><option *ngFor="let name of months; let index = index" [ngValue]="index + 1">{{ name }}</option></select></label>
-    <label>Year<select [(ngModel)]="year" (ngModelChange)="loadSummary()"><option *ngFor="let item of years" [ngValue]="item">{{ item }}</option></select></label>
-    <label class="employee-filter">Employee<select [(ngModel)]="staffId" (ngModelChange)="loadSummary()"><option value="">All employees</option><option *ngFor="let staff of staffOptions" [value]="staff.id">{{ staff.name }}</option></select></label>
-    <button type="button" (click)="loadSummary()" [disabled]="loading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh</button>
+  <section class="filter-bar" [attr.aria-label]="'staff.ui.9cf058ad1b' | translate">
+    <label>{{ 'staff.ui.f5eda1b11a' | translate }}<select [(ngModel)]="cycle" (ngModelChange)="loadSummary()"><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option></select></label>
+    <label>{{ 'staff.ui.082bc378cd' | translate }}<select [(ngModel)]="month" (ngModelChange)="loadSummary()"><option *ngFor="let name of months; let index = index" [ngValue]="index + 1">{{ name }}</option></select></label>
+    <label>{{ 'staff.ui.879e32326c' | translate }}<select [(ngModel)]="year" (ngModelChange)="loadSummary()"><option *ngFor="let item of years" [ngValue]="item">{{ item }}</option></select></label>
+    <label class="employee-filter">{{ 'staff.ui.079711ea16' | translate }}<select [(ngModel)]="staffId" (ngModelChange)="loadSummary()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option><option *ngFor="let staff of staffOptions" [value]="staff.id">{{ staff.name }}</option></select></label>
+    <button type="button" (click)="loadSummary()" [disabled]="loading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ 'staff.ui.56e3badc4e' | translate }}</button>
     <span class="toolbar-spacer"></span>
     <button class="recalculate" type="button" (click)="recalculate()" [disabled]="loading || recalculating"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{ recalculating ? 'Recalculating…' : 'Recalculate' }}</button>
-    <button type="button" (click)="exportCsv()" [disabled]="!rows.length"><i class="bi bi-download" aria-hidden="true"></i>Export CSV</button>
-    <button type="button" (click)="printPdf()" [disabled]="!rows.length"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Export PDF</button>
+    <button type="button" (click)="exportCsv()" [disabled]="!rows.length"><i class="bi bi-download" aria-hidden="true"></i>{{ 'staff.ui.5755f9ac0a' | translate }}</button>
+    <button type="button" (click)="printPdf()" [disabled]="!rows.length"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>{{ 'staff.ui.3dd7d56a8e' | translate }}</button>
     <div class="column-control">
-      <button type="button" (click)="columnMenuOpen = !columnMenuOpen" [attr.aria-expanded]="columnMenuOpen"><i class="bi bi-layout-three-columns" aria-hidden="true"></i>Columns</button>
+      <button type="button" (click)="columnMenuOpen = !columnMenuOpen" [attr.aria-expanded]="columnMenuOpen"><i class="bi bi-layout-three-columns" aria-hidden="true"></i>{{ 'staff.ui.cf723c59b6' | translate }}</button>
       <div class="column-menu" *ngIf="columnMenuOpen"><label *ngFor="let column of columns"><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label></div>
     </div>
   </section>
 
-  <aside class="calculation-note"><i class="bi bi-info-circle" aria-hidden="true"></i>Attendance summary is calculated from saved schedules and attendance records.</aside>
+  <aside class="calculation-note"><i class="bi bi-info-circle" aria-hidden="true"></i>{{ 'staff.ui.cdcc65a655' | translate }}</aside>
   <p class="error" *ngIf="error">{{ error }}</p>
 
   <section class="summary-card">
     <div class="table-scroll">
       <table>
         <thead><tr>
-          <th class="sticky-name" *ngIf="isVisible('name')">Name <i class="bi bi-arrow-up" aria-hidden="true"></i><small>Click name to view details</small></th>
-          <th class="sticky-code" *ngIf="isVisible('code')">Code</th>
-          <th *ngIf="isVisible('salary')">Salary</th><th *ngIf="isVisible('workingDays')">Working Days</th>
-          <th *ngIf="isVisible('leaveBalance')">Leave Balance</th><th *ngIf="isVisible('specialLeaveBalance')">Special Leave Balance</th>
-          <th *ngIf="isVisible('leaveAvailed')">Leave Availed</th><th *ngIf="isVisible('specialLeaveAvailed')">Special Leave Availed</th>
-          <th *ngIf="isVisible('penalty')">Penalty</th><th *ngIf="isVisible('leavesAccrued')">Leaves Accrued</th>
-          <th *ngIf="isVisible('weeklyOffAdjustment')">Weekly Off Adjustment</th><th *ngIf="isVisible('specialLeaveAdjustment')">Special Leave Adjustment</th>
-          <th *ngIf="isVisible('revisedLeaveBalance')">Revised Leave Balance</th><th *ngIf="isVisible('revisedSpecialLeaveBalance')">Revised Special Leave Balance</th>
-          <th *ngIf="isVisible('comments')">Comments</th>
+          <th scope="col" class="sticky-name" *ngIf="isVisible('name')">{{ 'staff.ui.709a23220f' | translate }}<i class="bi bi-arrow-up" aria-hidden="true"></i><small>{{ 'staff.ui.1150f30864' | translate }}</small></th>
+          <th scope="col" class="sticky-code" *ngIf="isVisible('code')">{{ 'staff.ui.adac69379a' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('salary')">{{ 'staff.ui.595a803cf3' | translate }}</th><th scope="col" *ngIf="isVisible('workingDays')">{{ 'staff.ui.97511b3920' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('leaveBalance')">{{ 'staff.ui.59debc4c71' | translate }}</th><th scope="col" *ngIf="isVisible('specialLeaveBalance')">{{ 'staff.ui.afd91a6ed8' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('leaveAvailed')">{{ 'staff.ui.63fbbe5e3b' | translate }}</th><th scope="col" *ngIf="isVisible('specialLeaveAvailed')">{{ 'staff.ui.9fd7e7ef76' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('operationMeetings')">{{ 'staff.ui.9c9b2c40f9' | translate }}</th><th scope="col" *ngIf="isVisible('operationTasks')">{{ 'staff.ui.5a9f93fb85' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('penalty')">{{ 'staff.ui.de32215507' | translate }}</th><th scope="col" *ngIf="isVisible('leavesAccrued')">{{ 'staff.ui.02de5a91b7' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('weeklyOffAdjustment')">{{ 'staff.ui.0859c4e638' | translate }}</th><th scope="col" *ngIf="isVisible('specialLeaveAdjustment')">{{ 'staff.ui.85df79b862' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('revisedLeaveBalance')">{{ 'staff.ui.dc823a6f93' | translate }}</th><th scope="col" *ngIf="isVisible('revisedSpecialLeaveBalance')">{{ 'staff.ui.b5184d02cf' | translate }}</th>
+          <th scope="col" *ngIf="isVisible('comments')">{{ 'staff.ui.fce06e20e5' | translate }}</th>
         </tr></thead>
         <tbody>
           <tr *ngFor="let row of rows">
@@ -43,6 +44,8 @@
             <td *ngIf="isVisible('salary')">{{ money(row.salaryPaise) }}</td><td *ngIf="isVisible('workingDays')">{{ row.workingDays }}</td>
             <td *ngIf="isVisible('leaveBalance')">{{ row.leaveBalance }}</td><td *ngIf="isVisible('specialLeaveBalance')">{{ row.specialLeaveBalance }}</td>
             <td *ngIf="isVisible('leaveAvailed')">{{ row.leaveAvailed }}</td><td *ngIf="isVisible('specialLeaveAvailed')">{{ row.specialLeaveAvailed }}</td>
+            <td *ngIf="isVisible('operationMeetings')"><strong>{{ row.operationMeetingPresent }}</strong><small>present · {{ row.operationMeetingAbsent }} absent</small></td>
+            <td *ngIf="isVisible('operationTasks')"><strong>{{ row.operationTaskCompleted }}</strong><small>done · {{ row.operationTaskMissed }} missed</small></td>
             <td *ngIf="isVisible('penalty')">{{ money(row.penaltyPaise) }}</td><td *ngIf="isVisible('leavesAccrued')">{{ row.leavesAccrued }}</td>
             <td *ngIf="isVisible('weeklyOffAdjustment')"><input class="number-input" type="number" min="-31" max="31" step="0.5" [(ngModel)]="row.weeklyOffAdjustment" /></td>
             <td *ngIf="isVisible('specialLeaveAdjustment')"><input class="number-input" type="number" min="-31" max="31" step="0.5" [(ngModel)]="row.specialLeaveAdjustment" /></td>
@@ -51,38 +54,38 @@
           </tr>
         </tbody>
       </table>
-      <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>Loading attendance…</div>
-      <div class="empty-state" *ngIf="!loading && !rows.length"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><strong>No attendance records yet</strong><span>There are no attendance records for the selected filters.</span><button type="button" (click)="loadSummary()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh attendance</button></div>
+      <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin" aria-hidden="true"></i>{{ 'staff.ui.42bf4aae7f' | translate }}</div>
+      <div class="empty-state" *ngIf="!loading && !rows.length"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><strong>{{ 'staff.ui.9f039e153d' | translate }}</strong><span>{{ 'staff.ui.5e6d4473be' | translate }}</span><button type="button" (click)="loadSummary()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ 'staff.ui.192473528d' | translate }}</button></div>
     </div>
   </section>
 
-  <footer class="action-bar"><button type="button" (click)="loadSummary()" [disabled]="loading || saving">Cancel</button><button class="primary" type="button" (click)="save()" [disabled]="!rows.length || saving">{{ saving ? 'Saving…' : 'Save summary' }}</button></footer>
+  <footer class="action-bar"><button type="button" (click)="loadSummary()" [disabled]="loading || saving">{{ 'staff.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" (click)="save()" [disabled]="!rows.length || saving">{{ saving ? 'Saving…' : 'Save summary' }}</button></footer>
 </main>
 
 <div class="drawer-backdrop" *ngIf="selectedRow" (click)="closeDetails()"></div>
-<aside class="detail-drawer" *ngIf="selectedRow" role="dialog" aria-modal="true" aria-label="Attendance details">
-  <header><div><span class="section-label">Attendance details</span><h2>{{ selectedRow.name }}</h2><small>{{ months[month - 1] }} {{ year }}</small></div><button type="button" aria-label="Close attendance details" (click)="closeDetails()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+<aside class="detail-drawer" *ngIf="selectedRow" role="dialog" aria-modal="true" [attr.aria-label]="'staff.ui.7442607f41' | translate">
+  <header><div><span class="section-label">{{ 'staff.ui.7442607f41' | translate }}</span><h2>{{ selectedRow.name }}</h2><small>{{ months[month - 1] }} {{ year }}</small></div><button type="button" [attr.aria-label]="'staff.ui.cb1965bb7e' | translate" (click)="closeDetails()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
   <div class="detail-body">
     <section class="correction-card" *ngIf="correctionDetail && correctionForm as form">
-      <div class="correction-heading"><strong>Correct {{ displayDate(correctionDetail.businessDate) }}</strong><button type="button" (click)="cancelCorrection()">Cancel</button></div>
+      <div class="correction-heading"><strong>Correct {{ displayDate(correctionDetail.businessDate) }}</strong><button type="button" (click)="cancelCorrection()">{{ 'staff.ui.77dfd2135f' | translate }}</button></div>
       <div class="correction-grid">
-        <label>Check-in<input type="datetime-local" [(ngModel)]="form.clockInAt" /></label>
-        <label>Check-out<input type="datetime-local" [(ngModel)]="form.clockOutAt" /></label>
-        <label>Status<select [(ngModel)]="form.manualStatus"><option value="">Automatic</option><option value="present">Present</option><option value="absent">Absent</option><option value="half_day">Half day</option><option value="leave">Leave</option><option value="special_leave">Special leave</option><option value="weekly_off">Weekly off</option></select></label>
-        <label>Penalty (₹)<input type="number" min="0" step="0.01" [(ngModel)]="form.penaltyRupees" /></label>
-        <label class="wide">Comments<input maxlength="500" [(ngModel)]="form.comments" /></label>
-        <label class="wide">Correction reason<input maxlength="300" [(ngModel)]="form.correctionReason" /></label>
+        <label>{{ 'staff.ui.48431e7fc6' | translate }}<input type="datetime-local" [(ngModel)]="form.clockInAt" /></label>
+        <label>{{ 'staff.ui.f4e37e6c33' | translate }}<input type="datetime-local" [(ngModel)]="form.clockOutAt" /></label>
+        <label>{{ 'staff.ui.bae7d5be70' | translate }}<select [(ngModel)]="form.manualStatus"><option value="">{{ 'staff.ui.ac9041e768' | translate }}</option><option value="present">{{ 'staff.ui.4e9f7a31ee' | translate }}</option><option value="absent">{{ 'staff.ui.e92452c8d3' | translate }}</option><option value="half_day">{{ 'staff.ui.3caf6fdd8c' | translate }}</option><option value="leave">{{ 'staff.ui.7e3520a973' | translate }}</option><option value="special_leave">{{ 'staff.ui.f043481946' | translate }}</option><option value="weekly_off">{{ 'staff.ui.52db9a1926' | translate }}</option></select></label>
+        <label>{{ 'staff.ui.3fc97842d0' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="form.penaltyRupees" /></label>
+        <label class="wide">{{ 'staff.ui.fce06e20e5' | translate }}<input maxlength="500" [(ngModel)]="form.comments" /></label>
+        <label class="wide">{{ 'staff.ui.a09190993d' | translate }}<input maxlength="300" [(ngModel)]="form.correctionReason" /></label>
       </div>
-      <div class="break-heading"><strong>Breaks</strong><button type="button" (click)="addBreak()">Add break</button></div>
+      <div class="break-heading"><strong>{{ 'staff.ui.50f88da05c' | translate }}</strong><button type="button" (click)="addBreak()">{{ 'staff.ui.fe87b9f56e' | translate }}</button></div>
       <div class="break-row" *ngFor="let item of form.breaks; let index = index">
-        <label>Start<input type="datetime-local" [(ngModel)]="item.startedAt" /></label><label>End<input type="datetime-local" [(ngModel)]="item.endedAt" /></label><label>Comments<input maxlength="200" [(ngModel)]="item.comments" /></label><button type="button" (click)="removeBreak(index)">Remove</button>
+        <label>{{ 'staff.ui.952f375412' | translate }}<input type="datetime-local" [(ngModel)]="item.startedAt" /></label><label>{{ 'staff.ui.a2bb9d34b8' | translate }}<input type="datetime-local" [(ngModel)]="item.endedAt" /></label><label>{{ 'staff.ui.fce06e20e5' | translate }}<input maxlength="200" [(ngModel)]="item.comments" /></label><button type="button" (click)="removeBreak(index)">{{ 'staff.ui.e963907dac' | translate }}</button>
       </div>
       <button class="primary save-correction" type="button" [disabled]="correctionSaving" (click)="saveCorrection()">{{ correctionSaving ? 'Saving…' : 'Save correction' }}</button>
     </section>
-    <div class="detail-head"><span>Day</span><span>In</span><span>Out</span><span>Worked</span><span>Break</span><span>Late</span><span>Early</span><span>OT</span><span>Status</span><span></span></div>
-    <div class="detail-row" *ngFor="let detail of details"><span>{{ displayDate(detail.businessDate) }}</span><span>{{ displayTime(detail.clockInAt) }}</span><span>{{ displayTime(detail.clockOutAt) }}</span><span>{{ hours(detail.workedMinutes) }}</span><span>{{ hours(detail.breakMinutes) }}</span><span>{{ hours(detail.lateMinutes) }}</span><span>{{ hours(detail.earlyLeaveMinutes) }}</span><span>{{ hours(detail.overtimeMinutes) }}</span><span class="detail-status">{{ statusLabel(detail) }}</span><button type="button" (click)="editAttendance(detail)">Edit</button><small *ngIf="detail.comments || detail.correctionReason">{{ detail.comments }}<b *ngIf="detail.correctionReason">Correction: {{ detail.correctionReason }}</b></small></div>
-    <div class="loading-state compact" *ngIf="detailLoading">Loading details…</div>
-    <div class="empty-state compact" *ngIf="!detailLoading && !details.length"><i class="bi bi-calendar3" aria-hidden="true"></i><strong>No daily records yet</strong></div>
+    <div class="detail-head"><span>{{ 'staff.ui.987b9ced08' | translate }}</span><span>{{ 'staff.ui.aef36502d6' | translate }}</span><span>{{ 'staff.ui.220e06ba2f' | translate }}</span><span>{{ 'staff.ui.55bd39660c' | translate }}</span><span>{{ 'staff.ui.7c9d6bf311' | translate }}</span><span>{{ 'staff.ui.4310ed540c' | translate }}</span><span>{{ 'staff.ui.fe4a84952c' | translate }}</span><span>{{ 'staff.ui.b5441c8918' | translate }}</span><span>{{ 'staff.ui.bae7d5be70' | translate }}</span><span></span></div>
+    <div class="detail-row" *ngFor="let detail of details"><span>{{ displayDate(detail.businessDate) }}</span><span>{{ displayTime(detail.clockInAt) }}</span><span>{{ displayTime(detail.clockOutAt) }}</span><span>{{ hours(detail.workedMinutes) }}</span><span>{{ hours(detail.breakMinutes) }}</span><span>{{ hours(detail.lateMinutes) }}</span><span>{{ hours(detail.earlyLeaveMinutes) }}</span><span>{{ hours(detail.overtimeMinutes) }}</span><span class="detail-status">{{ statusLabel(detail) }}</span><button type="button" (click)="editAttendance(detail)">{{ 'staff.ui.5301648dcf' | translate }}</button><small *ngIf="detail.comments || detail.correctionReason || detail.operations.length"><ng-container *ngIf="detail.comments">{{ detail.comments }}</ng-container><b *ngIf="detail.correctionReason">Correction: {{ detail.correctionReason }}</b><b *ngFor="let operation of detail.operations">Operation: {{ operationLabel(operation) }}</b></small></div>
+    <div class="loading-state compact" *ngIf="detailLoading">{{ 'staff.ui.d6b61171cd' | translate }}</div>
+    <div class="empty-state compact" *ngIf="!detailLoading && !details.length"><i class="bi bi-calendar3" aria-hidden="true"></i><strong>{{ 'staff.ui.643d31984f' | translate }}</strong></div>
   </div>
-  <footer><button type="button" (click)="closeDetails()">Close</button></footer>
+  <footer><button type="button" (click)="closeDetails()">{{ 'staff.ui.bbfa773e5a' | translate }}</button></footer>
 </aside>

@@ -4,6 +4,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json, Router,
 };
+use qrcodegen::{QrCode, QrCodeEcc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -35,6 +36,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/membership-enterprise/active/:id/cancel",
             axum::routing::post(cancel_membership),
+        )
+        .route(
+            "/membership-enterprise/active/:id/freeze",
+            axum::routing::post(freeze_membership),
+        )
+        .route(
+            "/membership-enterprise/active/:id/resume",
+            axum::routing::post(resume_membership),
         )
         .route(
             "/membership-enterprise/renewals/:source_sale_id",
@@ -153,6 +162,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(membership_360),
         )
         .route(
+            "/membership-enterprise/memberships/:id/card",
+            axum::routing::get(membership_card),
+        )
+        .route(
             "/membership-enterprise/plan-changes",
             axum::routing::get(list_plan_changes),
         )
@@ -261,6 +274,13 @@ struct CancelRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct FreezeRequest {
+    days: i32,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ListQuery {
     days: Option<i64>,
     limit: Option<i64>,
@@ -290,6 +310,11 @@ struct StatusLinkRequest {
 #[derive(Deserialize)]
 struct ExportQuery {
     format: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CardQuery {
+    origin: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -376,6 +401,9 @@ struct ActiveMembershipResponse {
     auto_renew_enabled: bool,
     auto_renew_status: String,
     pending_membership_id: Option<String>,
+    frozen_at: Option<chrono::DateTime<chrono::Utc>>,
+    frozen_until: Option<chrono::NaiveDate>,
+    freeze_reason: String,
 }
 
 #[derive(Serialize)]
@@ -498,6 +526,50 @@ async fn cancel_membership(
     }
     Ok(Json(ApiResponse::ok(
         serde_json::json!({ "cancelled": true, "id": id }),
+    )))
+}
+
+async fn freeze_membership(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<FreezeRequest>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let frozen = membership_service::freeze_membership(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        payload.days,
+        payload.reason.as_deref().unwrap_or(""),
+    )
+    .await?;
+    if !frozen {
+        return Err(AppError::validation(
+            "membership is already frozen or no longer active",
+        ));
+    }
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({ "frozen": true, "id": id, "days": payload.days }),
+    )))
+}
+
+async fn resume_membership(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let resumed =
+        membership_service::resume_membership(&state.db, &tenant_id, &branch_id, &id).await?;
+    if !resumed {
+        return Err(AppError::validation(
+            "membership is not frozen or no longer active",
+        ));
+    }
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({ "resumed": true, "id": id }),
     )))
 }
 
@@ -1013,6 +1085,64 @@ async fn membership_360(
     }))))
 }
 
+async fn membership_card(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<CardQuery>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let membership = membership_service::active_memberships(&state.db, &tenant_id, &branch_id)
+        .await?
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| AppError::not_found("membership was not found"))?;
+    let status = membership_service::create_status_link(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &membership.client_id,
+        Some(&membership.id),
+    )
+    .await?;
+    let status_path = format!("/membership-status/{}", status.token);
+    let status_url = query
+        .origin
+        .as_deref()
+        .map(|origin| origin.trim_end_matches('/'))
+        .filter(|origin| !origin.is_empty())
+        .map(|origin| format!("{origin}{status_path}"))
+        .unwrap_or_else(|| status_path.clone());
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "token": status.token,
+        "statusPath": status_path,
+        "statusUrl": status_url.clone(),
+        "clientName": membership.client_name,
+        "membershipName": membership.membership_name,
+        "expiresAt": membership.expires_at,
+        "qrSvg": membership_qr_svg(&status_url)?,
+    }))))
+}
+
+fn membership_qr_svg(value: &str) -> Result<String, AppError> {
+    let code = QrCode::encode_text(value, QrCodeEcc::Medium)
+        .map_err(|_| AppError::internal("failed to generate membership QR code"))?;
+    let border = 4;
+    let size = code.size();
+    let view = size + border * 2;
+    let mut path = String::new();
+    for y in 0..size {
+        for x in 0..size {
+            if code.get_module(x, y) {
+                path.push_str(&format!("M{} {}h1v1h-1z", x + border, y + border));
+            }
+        }
+    }
+    Ok(format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {view} {view}\" role=\"img\" aria-label=\"Membership QR code\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/><path fill=\"#102a43\" d=\"{path}\"/></svg>"
+    ))
+}
+
 async fn sale_checkout_intent(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1349,7 +1479,7 @@ impl From<crate::repositories::membership_lifecycle_repository::ActiveMembership
     fn from(
         value: crate::repositories::membership_lifecycle_repository::ActiveMembershipRecord,
     ) -> Self {
-        let status = membership_status(value.active, value.expires_at);
+        let status = membership_status(value.active, value.expires_at, value.frozen_at.is_some());
         Self {
             id: value.id,
             client_id: value.client_id,
@@ -1369,6 +1499,9 @@ impl From<crate::repositories::membership_lifecycle_repository::ActiveMembership
             auto_renew_enabled: value.auto_renew_enabled,
             auto_renew_status: value.auto_renew_status,
             pending_membership_id: value.pending_membership_id,
+            frozen_at: value.frozen_at,
+            frozen_until: value.frozen_until,
+            freeze_reason: value.freeze_reason,
         }
     }
 }
@@ -1376,9 +1509,12 @@ impl From<crate::repositories::membership_lifecycle_repository::ActiveMembership
 fn membership_status(
     active: bool,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    frozen: bool,
 ) -> &'static str {
     if !active {
         "cancelled"
+    } else if frozen {
+        "frozen"
     } else if expires_at.is_some_and(|date| date < chrono::Utc::now()) {
         "expired"
     } else {
@@ -1392,21 +1528,24 @@ fn eligibility_active(expires_at: Option<chrono::DateTime<chrono::Utc>>) -> bool
 
 #[cfg(test)]
 mod tests {
-    use super::{checkout_intent_response, eligibility_active, membership_status};
+    use super::{
+        checkout_intent_response, eligibility_active, membership_qr_svg, membership_status,
+    };
     use crate::services::membership_service::MembershipCheckoutIntent;
     use chrono::{Duration, Utc};
 
     #[test]
     fn lifecycle_status_prioritizes_cancellation_and_expiry() {
-        assert_eq!(membership_status(false, None), "cancelled");
+        assert_eq!(membership_status(false, None, false), "cancelled");
         assert_eq!(
-            membership_status(true, Some(Utc::now() - Duration::days(1))),
+            membership_status(true, Some(Utc::now() - Duration::days(1)), false),
             "expired"
         );
         assert_eq!(
-            membership_status(true, Some(Utc::now() + Duration::days(1))),
+            membership_status(true, Some(Utc::now() + Duration::days(1)), false),
             "active"
         );
+        assert_eq!(membership_status(true, None, true), "frozen");
     }
 
     #[test]
@@ -1414,6 +1553,13 @@ mod tests {
         assert!(eligibility_active(None));
         assert!(eligibility_active(Some(Utc::now() + Duration::days(1))));
         assert!(!eligibility_active(Some(Utc::now() - Duration::days(1))));
+    }
+
+    #[test]
+    fn membership_card_qr_is_svg() {
+        let svg = membership_qr_svg("/membership-status/test-token").expect("qr svg");
+        assert!(svg.starts_with("<svg "));
+        assert!(svg.contains("Membership QR code"));
     }
 
     #[test]

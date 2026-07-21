@@ -9,6 +9,7 @@ dl div { display: flex; min-height: 54px; align-items: center; justify-content: 
 dt { color: #617089; font-weight: 600; } dd { margin: 0; font-weight: 700; }
 .pill { padding: 5px 9px; border-radius: 999px; background: #e9f8f1; color: #087d4d; text-transform: capitalize; }
 button { width: 100%; min-height: 42px; border: 0; border-radius: 9px; background: #087d4d; color: #fff; font-weight: 600; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 .loading, .error, .success { margin: 18px; padding: 12px; border-radius: 8px; }
 .loading { color: #617089; } .error { background: #fff4f5; color: #a51d2d; } .success { background: #effaf5; color: #087d4d; }

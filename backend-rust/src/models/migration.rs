@@ -46,6 +46,12 @@ string_enum!(MigrationEntity {
     Inventory => "inventory",
     Memberships => "memberships",
     Packages => "packages",
+    Appointments => "appointments",
+    Sales => "sales",
+    Invoices => "invoices",
+    Payments => "payments",
+    Expenses => "expenses",
+    PurchaseBills => "purchase-bills",
 });
 
 string_enum!(MigrationMode {
@@ -96,6 +102,7 @@ pub struct CreateImportJobRequest {
     #[serde(default)]
     pub duplicate_decisions: BTreeMap<String, MigrationDuplicateDecision>,
     pub mapping_id: Option<String>,
+    pub owner_user_id: Option<String>,
 }
 
 fn default_chunk_size() -> i32 {
@@ -113,6 +120,7 @@ pub struct CreateLargeImportJobRequest {
     #[serde(default)]
     pub duplicate_decisions: BTreeMap<String, MigrationDuplicateDecision>,
     pub mapping_id: Option<String>,
+    pub owner_user_id: Option<String>,
     #[serde(default = "default_chunk_size")]
     pub chunk_size: i32,
     #[serde(default)]
@@ -150,10 +158,24 @@ pub struct ImportJob {
     pub total_chunks: i32,
     pub completed_chunks: i32,
     pub failed_chunks: i32,
+    pub owner_user_id: String,
+    pub approval_status: String,
+    pub approval_requested_at: Option<DateTime<Utc>>,
+    pub approval_decided_at: Option<DateTime<Utc>>,
+    pub approval_decided_by: Option<String>,
+    pub approval_note: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub rolled_back_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MigrationApprovalRequest {
+    pub approved: bool,
+    #[serde(default)]
+    pub note: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -250,6 +272,15 @@ pub struct AnalyzeMigrationRequest {
     #[serde(default)]
     pub duplicate_decisions: BTreeMap<String, MigrationDuplicateDecision>,
     pub mapping_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MigrationMappingSuggestionRequest {
+    pub entity: MigrationEntity,
+    #[serde(default)]
+    pub source_columns: Vec<String>,
+    pub source_file_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

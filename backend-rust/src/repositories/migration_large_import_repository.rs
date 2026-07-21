@@ -97,7 +97,7 @@ pub async fn create_job(
 ) -> Result<ImportJob, sqlx::Error> {
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, super::migration_repository::ImportJobRow>(&format!(
-        "INSERT INTO integration_import_jobs(tenant_id,branch_id,entity,file_name,mode,status,source_hash,source_type,source_file_id,chunk_size,allow_partial_import,mapping_id,mapping_json,duplicate_decisions_json,worker_phase,created_by) VALUES($1,$2,$3,$4,$5,'staging',$6,'server-file',$7,$8,$9,$10,$11,$12,'staging',$13) RETURNING {}",
+        "INSERT INTO integration_import_jobs(tenant_id,branch_id,entity,file_name,mode,status,source_hash,source_type,source_file_id,chunk_size,allow_partial_import,mapping_id,mapping_json,duplicate_decisions_json,worker_phase,created_by,owner_user_id,approval_status,approval_requested_at) VALUES($1,$2,$3,$4,$5,'staging',$6,'server-file',$7,$8,$9,$10,$11,$12,'staging',$13,$13,CASE WHEN $5='commit' THEN 'pending' ELSE 'not_required' END,CASE WHEN $5='commit' THEN NOW() ELSE NULL END) RETURNING {}",
         super::migration_repository::COLUMNS
     ))
     .bind(tenant)
@@ -248,9 +248,9 @@ pub async fn stage_chunk(
 
 pub async fn finish_staging(db: &PgPool, job: &LargeStagingJob) -> Result<(), sqlx::Error> {
     let mut tx = db.begin().await?;
-    let counts: Option<(i32, i32)> = sqlx::query_as("SELECT source_row_count,error_row_count FROM integration_import_jobs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='processing' AND worker_phase='staging' FOR UPDATE")
+    let counts: Option<(i32, i32, String)> = sqlx::query_as("SELECT source_row_count,error_row_count,approval_status FROM integration_import_jobs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='processing' AND worker_phase='staging' FOR UPDATE")
         .bind(&job.tenant_id).bind(&job.branch_id).bind(&job.id).fetch_optional(&mut *tx).await?;
-    let Some((source_rows, error_rows)) = counts else {
+    let Some((source_rows, error_rows, approval_status)) = counts else {
         tx.rollback().await?;
         return Ok(());
     };
@@ -258,8 +258,10 @@ pub async fn finish_staging(db: &PgPool, job: &LargeStagingJob) -> Result<(), sq
         "failed"
     } else if job.mode == MigrationMode::DryRun {
         "validated"
-    } else {
+    } else if approval_status == "approved" {
         "queued"
+    } else {
+        "validated"
     };
     if status == "queued" {
         sqlx::query("UPDATE integration_import_chunks SET status=CASE WHEN ready_rows>0 THEN 'pending' ELSE 'completed' END,completed_at=CASE WHEN ready_rows=0 THEN NOW() ELSE NULL END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3")

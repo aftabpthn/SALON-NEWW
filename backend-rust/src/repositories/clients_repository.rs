@@ -1352,7 +1352,7 @@ pub async fn automation_candidates(
 ) -> Result<Vec<ClientAutomationCandidate>, sqlx::Error> {
     sqlx::query_as(
         r#"WITH active_clients AS (
-             SELECT * FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND merged_into_client_id IS NULL AND ((whatsapp_opt_in IS TRUE AND phone<>'') OR (email_opt_in IS TRUE AND email<>''))
+             SELECT * FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND merged_into_client_id IS NULL AND ((whatsapp_opt_in IS TRUE AND phone<>'') OR (sms_opt_in IS TRUE AND phone<>'') OR (email_opt_in IS TRUE AND email<>''))
            ), latest AS (
              SELECT DISTINCT ON (client_id) client_id,recency_days FROM client_intelligence_snapshots WHERE tenant_id=$1 AND branch_id=$2 ORDER BY client_id,snapshot_date DESC
            )
@@ -1371,8 +1371,31 @@ pub async fn automation_candidates(
              SELECT client.tenant_id,client.branch_id,'review_recovery',review.id,client.id,client.phone,client.email,'We are sorry your recent experience fell short. Reply so the team can help resolve it.',CONCAT_WS(' ',client.first_name,client.last_name)
                FROM active_clients client JOIN client_review_links review ON review.tenant_id=client.tenant_id AND review.branch_id=client.branch_id AND review.client_id=client.id AND review.rating<=2 AND COALESCE(review.reviewed_at,review.created_at)>=NOW()-INTERVAL '14 days'
              UNION ALL
+             SELECT client.tenant_id,client.branch_id,'no_show_recovery',appointment.id,client.id,client.phone,client.email,'We missed you today. Reply to choose a new appointment time.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client JOIN appointments appointment ON appointment.tenant_id=client.tenant_id AND appointment.branch_id=client.branch_id AND appointment.client_id=client.id AND appointment.status='no-show' AND appointment.updated_at>=NOW()-INTERVAL '24 hours'
+               WHERE NOT EXISTS(SELECT 1 FROM appointments upcoming WHERE upcoming.tenant_id=client.tenant_id AND upcoming.branch_id=client.branch_id AND upcoming.client_id=client.id AND upcoming.start_at>NOW() AND upcoming.status NOT IN ('cancelled','no-show'))
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'post_visit_thank_you',appointment.id,client.id,client.phone,client.email,'Thank you for visiting us.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client JOIN appointments appointment ON appointment.tenant_id=client.tenant_id AND appointment.branch_id=client.branch_id AND appointment.client_id=client.id AND appointment.status IN ('completed','billed','paid') AND appointment.updated_at BETWEEN NOW()-INTERVAL '24 hours' AND NOW()-INTERVAL '30 minutes'
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'new_client_second_visit',client.id||':'||TO_CHAR(CURRENT_DATE,'YYYY-MM'),client.id,client.phone,client.email,'We would love to welcome you for your next visit.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client WHERE (SELECT COUNT(*) FROM appointments visit WHERE visit.tenant_id=client.tenant_id AND visit.branch_id=client.branch_id AND visit.client_id=client.id AND visit.status IN ('completed','billed','paid'))=1 AND NOT EXISTS(SELECT 1 FROM appointments upcoming WHERE upcoming.tenant_id=client.tenant_id AND upcoming.branch_id=client.branch_id AND upcoming.client_id=client.id AND upcoming.start_at>NOW() AND upcoming.status NOT IN ('cancelled','no-show'))
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'loyal_client_reward',client.id||':'||TO_CHAR(CURRENT_DATE,'YYYY-MM'),client.id,client.phone,client.email,'Thank you for your loyalty.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client WHERE COALESCE((SELECT balance_after FROM membership_reward_ledger reward WHERE reward.tenant_id=client.tenant_id AND reward.branch_id=client.branch_id AND reward.client_id=client.id ORDER BY reward.created_at DESC,reward.id DESC LIMIT 1),0)>=500
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'service_rebooking',client.id||':'||TO_CHAR(CURRENT_DATE,'YYYY-MM'),client.id,client.phone,client.email,'It may be time to rebook your usual service.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client JOIN latest ON latest.client_id=client.id AND latest.recency_days>=30 WHERE NOT EXISTS(SELECT 1 FROM appointments upcoming WHERE upcoming.tenant_id=client.tenant_id AND upcoming.branch_id=client.branch_id AND upcoming.client_id=client.id AND upcoming.start_at>NOW() AND upcoming.status NOT IN ('cancelled','no-show'))
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'abandoned_booking',session.id,client.id,client.phone,client.email,'Complete your booking when you are ready.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client JOIN public_booking_sessions session ON session.tenant_id=client.tenant_id AND session.branch_id=client.branch_id AND session.client_id=client.id AND session.status IN ('active','abandoned') AND COALESCE(session.abandoned_at,session.last_event_at) BETWEEN NOW()-INTERVAL '24 hours' AND NOW()-INTERVAL '30 minutes' WHERE session.appointment_id=''
+             UNION ALL
+             SELECT client.tenant_id,client.branch_id,'slow_day_campaign',client.id||':'||rule.id||':'||TO_CHAR(CURRENT_DATE,'YYYY-MM-DD'),client.id,client.phone,client.email,'Appointments are available during today''s quieter hours.',CONCAT_WS(' ',client.first_name,client.last_name)
+               FROM active_clients client JOIN pos_happy_hour_rules rule ON rule.tenant_id=client.tenant_id AND rule.branch_id=client.branch_id AND rule.active=TRUE AND EXTRACT(ISODOW FROM CURRENT_DATE)::SMALLINT=ANY(rule.weekdays) AND CURRENT_TIME<=rule.end_time
+               WHERE NOT EXISTS(SELECT 1 FROM appointments upcoming WHERE upcoming.tenant_id=client.tenant_id AND upcoming.branch_id=client.branch_id AND upcoming.client_id=client.id AND upcoming.start_at>=NOW() AND upcoming.start_at<CURRENT_DATE+INTERVAL '1 day' AND upcoming.status NOT IN ('cancelled','no-show'))
+             UNION ALL
              SELECT client.tenant_id,client.branch_id,'win_back',client.id||':'||TO_CHAR(CURRENT_DATE,'YYYY-MM'),client.id,client.phone,client.email,'We have missed you. Reply to find a suitable time for your next appointment.',CONCAT_WS(' ',client.first_name,client.last_name)
-               FROM active_clients client JOIN latest ON latest.client_id=client.id AND latest.recency_days>=90 WHERE NOT EXISTS(SELECT 1 FROM appointments appointment WHERE appointment.tenant_id=client.tenant_id AND appointment.branch_id=client.branch_id AND appointment.client_id=client.id AND appointment.start_at>NOW() AND appointment.status NOT IN ('cancelled','no-show'))
+               FROM active_clients client JOIN latest ON latest.client_id=client.id AND latest.recency_days>=30 WHERE NOT EXISTS(SELECT 1 FROM appointments appointment WHERE appointment.tenant_id=client.tenant_id AND appointment.branch_id=client.branch_id AND appointment.client_id=client.id AND appointment.start_at>NOW() AND appointment.status NOT IN ('cancelled','no-show'))
            ) candidates ORDER BY source_type,source_id LIMIT 1000"#,
     )
     .bind(tenant_id)
@@ -1387,7 +1410,7 @@ pub async fn automation_history(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT JSONB_BUILD_OBJECT('id',id,'type',source_type,'sourceId',source_id,'channel',channel,'status',status,'attempts',attempts,'scheduledAt',created_at,'sentAt',sent_at,'lastError',last_error) FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_type IN ('win_back','occasion_campaign','membership_renewal','wallet_reminder','review_recovery') ORDER BY created_at DESC LIMIT 200")
+    sqlx::query_scalar("SELECT JSONB_BUILD_OBJECT('id',id,'type',source_type,'sourceId',source_id,'channel',channel,'status',status,'attempts',attempts,'scheduledAt',created_at,'sentAt',sent_at,'lastError',last_error) FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_type IN ('win_back','occasion_campaign','membership_renewal','wallet_reminder','review_recovery','review_request') ORDER BY created_at DESC LIMIT 200")
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 

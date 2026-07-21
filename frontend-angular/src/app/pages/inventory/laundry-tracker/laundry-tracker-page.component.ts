@@ -1,9 +1,11 @@
+import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type Summary = { activeOrders: number; dueToday: number; overdue: number; ready: number; openIssues: number };
 type Order = { id: string; orderNumber: string; ownerType: string; clientId?: string; clientName: string; supplierId?: string; supplierName: string; status: string; priority: string; intakeAt: string; dueAt?: string; totalItems: number; totalWeightGrams?: number; estimatedCostPaise: number; actualCostPaise: number; notes: string; openIssues: number };
@@ -17,10 +19,11 @@ type Supplier = { id: string; name: string; active: boolean };
 type DraftItem = { itemName: string; category: string; quantity: string; barcode: string; color: string; material: string; conditionIn: string };
 
 @Component({
-  selector: 'page-laundry-tracker', standalone: true, imports: [CommonModule, FormsModule, DatePickerComponent],
+  selector: 'page-laundry-tracker', standalone: true, imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
   templateUrl: './laundry-tracker-page.component.html', styleUrls: ['./laundry-tracker-page.component.css'],
 })
 export class LaundryTrackerPageComponent implements OnInit {
+  private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   readonly statuses = ['', 'received', 'sorting', 'washing', 'drying', 'finishing', 'outsourced', 'received_from_vendor', 'quality_check', 'rework', 'ready', 'returned', 'cancelled'];
   readonly categories = ['towel', 'cape', 'sheet', 'uniform', 'garment', 'other'];
@@ -45,7 +48,7 @@ export class LaundryTrackerPageComponent implements OnInit {
         firstValueFrom(this.api.get<ApiEnvelope<Supplier[]>>('/purchases/suppliers')),
       ]);
       this.summary = summary.data || this.summary; this.orders = orders.data || []; this.clients = clients.data || []; this.suppliers = (suppliers.data || []).filter((row) => row.active);
-    } catch (error) { this.error = this.message(error, 'Laundry data could not be loaded'); }
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.ffe4abe68e')); }
     finally { this.loading = false; }
   }
   openCreate() { this.draft = this.emptyDraft(); this.clientSearch = ''; this.drawer = 'create'; }
@@ -65,7 +68,7 @@ export class LaundryTrackerPageComponent implements OnInit {
   async scanBarcode() { const barcode = this.scanValue.trim(); if (!barcode) return; await this.action(async () => { const result = await firstValueFrom(this.api.get<ApiEnvelope<ScanResult>>(`/inventory/laundry/items/scan/${encodeURIComponent(barcode)}`)); if (!result.data) throw new Error('Laundry barcode was not found'); await this.loadDetail(result.data.orderId); this.drawer = 'detail'; this.scanValue = ''; }, 'Laundry barcode was not found'); }
   async searchClients() { const query = this.clientSearch.trim(); await this.action(async () => { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>(`/clients?pageSize=100${query ? `&q=${encodeURIComponent(query)}` : ''}`)); this.clients = result.data || []; }, 'Clients could not be loaded'); }
   exportCsv() {
-    const rows: Array<Array<string | number>> = [['Order','Owner','Status','Items','Intake','Due','Vendor','Open issues','Estimated cost','Actual cost'], ...this.orders.map((row) => [row.orderNumber, row.ownerType === 'client' ? row.clientName : 'Salon', row.status, row.totalItems, this.formatDate(row.intakeAt), this.formatDate(row.dueAt), row.supplierName || '', row.openIssues, row.estimatedCostPaise / 100, row.actualCostPaise / 100])];
+    const rows: Array<Array<string | number>> = [['Order','Owner','Status','Items','Intake','Due','Vendor','Open issues','Estimated cost','Actual cost'].map((value) => this.language.textValue(value)), ...this.orders.map((row) => [row.orderNumber, row.ownerType === 'client' ? row.clientName : 'Salon', row.status, row.totalItems, this.formatDate(row.intakeAt), this.formatDate(row.dueAt), row.supplierName || '', row.openIssues, row.estimatedCostPaise / 100, row.actualCostPaise / 100])];
     const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"','""')}"`).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `laundry-register-${new Date().toISOString().slice(0,10)}.csv`; link.click(); URL.revokeObjectURL(url);
   }

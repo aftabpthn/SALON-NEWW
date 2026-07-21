@@ -9,12 +9,13 @@ use crate::{
     repositories::happy_hours_repository::{
         self, AudienceCriteriaQuery, AutoSunsetDecisionRecord, AutoSunsetOfferRecord,
         AutoSunsetPolicyRecord, BranchOfferPerformanceRecord, ClientReturnRecord,
-        ContextOfferSuggestionRecord, CouponAbuseAlertRecord, DiscountApprovalRecord,
-        ElasticityBandRecord, HappyHourAnomalyRecord, HappyHourApprovalRecord,
-        HappyHourAudienceRecord, HappyHourBudgetRecord, HappyHourCampaignLinkRecord,
-        HappyHourPerformanceRecord, HappyHourRuleAnalysisRecord, HappyHourSimulationServiceRecord,
-        InventoryOfferRecord, MarketPriceObservationRecord, MarketSuggestionRecord,
-        NewAutoSunsetDecision, NewCampaignLink, NewContextOfferSuggestion, NewHappyHourAnomaly,
+        ContextOfferSuggestionRecord, CouponAbuseAlertRecord, CouponAbuseCandidate,
+        DailyDiscountRecord, DiscountApprovalRecord, ElasticityBandRecord, FraudCaseRecord,
+        HappyHourAnomalyRecord, HappyHourApprovalRecord, HappyHourAudienceRecord,
+        HappyHourBudgetRecord, HappyHourCampaignLinkRecord, HappyHourPerformanceRecord,
+        HappyHourRuleAnalysisRecord, HappyHourSimulationServiceRecord, InventoryOfferRecord,
+        MarketPriceObservationRecord, MarketSuggestionRecord, NewAutoSunsetDecision,
+        NewCampaignLink, NewContextOfferSuggestion, NewFraudCase, NewHappyHourAnomaly,
         NewMarketPriceObservation, NewMarketSuggestion, NoShowRiskRecord, StaffOfferRecord,
         UpsertAudience, UpsertAutoSunsetPolicy,
     },
@@ -149,6 +150,27 @@ pub struct BudgetResponse {
 pub struct AnomalyScanResponse {
     pub detected: usize,
     pub anomalies: Vec<HappyHourAnomalyRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FraudCaseReviewRequest {
+    pub status: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FraudScanResponse {
+    pub detected: usize,
+    pub cases: Vec<FraudCaseRecord>,
+}
+
+#[derive(Debug)]
+pub struct RuleApprovalAssessment {
+    pub required: bool,
+    pub role_limit_bps: i32,
+    pub policy_limit_bps: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2320,8 +2342,16 @@ pub async fn request_approval(
             "active rule does not require activation approval",
         ));
     }
+    let approval_limit_bps = role_discount_limit_bps(role);
     let approval = happy_hours_repository::create_approval(
-        db, tenant_id, branch_id, rule_id, actor, role, &note,
+        db,
+        tenant_id,
+        branch_id,
+        rule_id,
+        actor,
+        role,
+        approval_limit_bps,
+        &note,
     )
     .await
     .map_err(|_| AppError::internal("failed to request Happy Hour approval"))?
@@ -2347,9 +2377,6 @@ pub async fn decide_approval(
     id: &str,
     input: ApprovalDecisionRequest,
 ) -> Result<HappyHourApprovalRecord, AppError> {
-    if !matches!(role, "owner" | "admin" | "manager") {
-        return Err(AppError::forbidden("manager approval is required"));
-    }
     let decision = input.decision.trim().to_ascii_lowercase();
     if !matches!(decision.as_str(), "approved" | "rejected") {
         return Err(AppError::validation(
@@ -2367,6 +2394,11 @@ pub async fn decide_approval(
     if current.requested_by == actor {
         return Err(AppError::forbidden(
             "requester cannot approve their own discount",
+        ));
+    }
+    if role_discount_limit_bps(role) < current.requested_discount_bps {
+        return Err(AppError::forbidden(
+            "approver discount limit is below the requested discount",
         ));
     }
     let approval = happy_hours_repository::decide_approval(
@@ -2571,6 +2603,7 @@ pub async fn scan_coupon_abuse(
         happy_hours_repository::upsert_coupon_abuse_alert(db, tenant_id, branch_id, candidate)
             .await
             .map_err(|_| AppError::internal("failed to persist coupon abuse alert"))?;
+        persist_coupon_fraud_case(db, tenant_id, branch_id, candidate).await?;
     }
     security_service::record_audit(
         db,
@@ -2603,7 +2636,53 @@ pub async fn scan_coupon_abuse_for_sale(
     happy_hours_repository::upsert_coupon_abuse_alert(db, tenant_id, branch_id, &candidate)
         .await
         .map_err(|_| AppError::internal("failed to persist coupon abuse alert"))?;
+    persist_coupon_fraud_case(db, tenant_id, branch_id, &candidate).await?;
     Ok(true)
+}
+
+async fn persist_coupon_fraud_case(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    candidate: &CouponAbuseCandidate,
+) -> Result<FraudCaseRecord, AppError> {
+    let score = (45
+        + candidate.usage_count.saturating_mul(10)
+        + if candidate.total_discount_paise >= 10_000 {
+            10
+        } else {
+            0
+        })
+    .clamp(0, 100) as i32;
+    let (severity, decision) = fraud_outcome(score);
+    let subject_id = format!("{}:{}", candidate.client_id, candidate.coupon_code);
+    let signature = format!("coupon_reuse:{subject_id}");
+    let evidence = serde_json::json!({
+        "clientId": candidate.client_id,
+        "couponCode": candidate.coupon_code,
+        "usageCount": candidate.usage_count,
+        "totalDiscountPaise": candidate.total_discount_paise,
+        "latestSaleId": candidate.latest_sale_id,
+    });
+    happy_hours_repository::upsert_fraud_case(
+        db,
+        tenant_id,
+        branch_id,
+        NewFraudCase {
+            signature: &signature,
+            fraud_type: "coupon_reuse",
+            subject_type: "client_coupon",
+            subject_id: &subject_id,
+            risk_score: score,
+            severity,
+            decision,
+            title: "Repeated coupon usage",
+            description: "Observed finalized sales require coupon usage review",
+            evidence: &evidence,
+        },
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to persist coupon fraud case"))
 }
 
 pub async fn resolve_coupon_abuse_alert(
@@ -2691,15 +2770,23 @@ pub async fn save_budget(
     Ok(budget_response(budget))
 }
 
-pub async fn rule_requires_approval(
+pub async fn rule_approval_assessment(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    role: &str,
     discount_bps: i32,
-) -> Result<bool, AppError> {
-    Ok(current_budget(db, tenant_id, branch_id)
+) -> Result<RuleApprovalAssessment, AppError> {
+    let role_limit_bps = role_discount_limit_bps(role);
+    let policy_limit_bps = current_budget(db, tenant_id, branch_id)
         .await?
-        .is_some_and(|budget| discount_bps > budget.approval_above_bps))
+        .map(|budget| budget.approval_above_bps);
+    Ok(RuleApprovalAssessment {
+        required: discount_bps > role_limit_bps
+            || policy_limit_bps.is_some_and(|limit| discount_bps > limit),
+        role_limit_bps,
+        policy_limit_bps,
+    })
 }
 
 pub async fn list_anomalies(
@@ -2756,6 +2843,32 @@ pub async fn scan_anomalies(
             });
         }
     }
+    let daily_usage = happy_hours_repository::daily_discount_usage(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to scan statistical discount usage"))?;
+    if let Some(candidate) = statistical_discount_anomaly(&daily_usage, Utc::now().date_naive()) {
+        candidates.push(candidate);
+    }
+    let bypasses = happy_hours_repository::approval_bypass_candidates(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to scan approval bypasses"))?;
+    for row in bypasses {
+        let role_limit_bps = role_discount_limit_bps(&row.last_changed_by_role);
+        if row.discount_bps > role_limit_bps && !row.has_matching_approval {
+            candidates.push(AnomalyCandidate {
+                signature: format!("approval_bypass:{}:{}", row.rule_id, row.discount_bps),
+                anomaly_type: "approval_bypass",
+                severity: "critical",
+                title: format!("Approval bypass: {}", row.rule_name),
+                description: format!(
+                    "{}% discount is active above the {}% role limit without a matching approved snapshot",
+                    row.discount_bps / 100,
+                    role_limit_bps / 100
+                ),
+                evidence: serde_json::json!({"ruleId":row.rule_id,"discountBps":row.discount_bps,"role":row.last_changed_by_role,"roleLimitBps":role_limit_bps,"changedBy":row.last_changed_by}),
+            });
+        }
+    }
     if let Some(budget) = current_budget(db, tenant_id, branch_id).await? {
         if budget.threshold_reached {
             candidates.push(AnomalyCandidate {
@@ -2798,6 +2911,133 @@ pub async fn scan_anomalies(
         detected: candidates.len(),
         anomalies: list_anomalies(db, tenant_id, branch_id, "open").await?,
     })
+}
+
+pub async fn list_fraud_cases(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    status: &str,
+) -> Result<Vec<FraudCaseRecord>, AppError> {
+    if !matches!(
+        status,
+        "" | "open" | "investigating" | "resolved" | "dismissed"
+    ) {
+        return Err(AppError::validation("fraud case status is invalid"));
+    }
+    happy_hours_repository::list_fraud_cases(db, tenant_id, branch_id, status)
+        .await
+        .map_err(|_| AppError::internal("failed to load fraud cases"))
+}
+
+pub async fn scan_fraud_cases(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+) -> Result<FraudScanResponse, AppError> {
+    let coupon_candidates =
+        happy_hours_repository::coupon_abuse_candidates(db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to scan coupon risk"))?;
+    let mut cases = Vec::new();
+    for candidate in coupon_candidates {
+        cases.push(persist_coupon_fraud_case(db, tenant_id, branch_id, &candidate).await?);
+    }
+    for row in happy_hours_repository::approval_bypass_candidates(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to scan approval bypass risk"))?
+    {
+        let role_limit_bps = role_discount_limit_bps(&row.last_changed_by_role);
+        if row.discount_bps <= role_limit_bps || row.has_matching_approval {
+            continue;
+        }
+        let signature = format!("approval_bypass:{}:{}", row.rule_id, row.discount_bps);
+        let evidence = serde_json::json!({"ruleId":row.rule_id,"discountBps":row.discount_bps,"role":row.last_changed_by_role,"roleLimitBps":role_limit_bps,"changedBy":row.last_changed_by});
+        cases.push(happy_hours_repository::upsert_fraud_case(db, tenant_id, branch_id, NewFraudCase {
+            signature: &signature, fraud_type: "approval_bypass", subject_type: "rule", subject_id: &row.rule_id,
+            risk_score: 95, severity: "critical", decision: "block_until_review",
+            title: "Rule activation approval bypass", description: "Active rule exceeds the actor role limit without an approved matching snapshot", evidence: &evidence,
+        }).await.map_err(|_| AppError::internal("failed to save approval bypass case"))?);
+    }
+    if let Some(candidate) = statistical_discount_anomaly(
+        &happy_hours_repository::daily_discount_usage(db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to scan statistical fraud risk"))?,
+        Utc::now().date_naive(),
+    ) {
+        let evidence = candidate.evidence;
+        cases.push(
+            happy_hours_repository::upsert_fraud_case(
+                db,
+                tenant_id,
+                branch_id,
+                NewFraudCase {
+                    signature: &candidate.signature,
+                    fraud_type: "statistical_discount_spike",
+                    subject_type: "branch",
+                    subject_id: branch_id,
+                    risk_score: 70,
+                    severity: "high",
+                    decision: "manager_review",
+                    title: &candidate.title,
+                    description: &candidate.description,
+                    evidence: &evidence,
+                },
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to save statistical fraud case"))?,
+        );
+    }
+    security_service::record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor,
+        "happy_hours.fraud.scanned",
+        serde_json::json!({"detected":cases.len()}),
+    )
+    .await?;
+    Ok(FraudScanResponse {
+        detected: cases.len(),
+        cases: list_fraud_cases(db, tenant_id, branch_id, "open").await?,
+    })
+}
+
+pub async fn review_fraud_case(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+    input: FraudCaseReviewRequest,
+) -> Result<FraudCaseRecord, AppError> {
+    let status = input.status.trim().to_ascii_lowercase();
+    if !matches!(status.as_str(), "investigating" | "resolved" | "dismissed") {
+        return Err(AppError::validation("fraud case status is invalid"));
+    }
+    let row = happy_hours_repository::review_fraud_case(
+        db,
+        tenant_id,
+        branch_id,
+        id,
+        &status,
+        actor,
+        &clean_note(input.note.as_deref()),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to review fraud case"))?
+    .ok_or_else(|| AppError::not_found("fraud case was not found"))?;
+    security_service::record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor,
+        "happy_hours.fraud.reviewed",
+        serde_json::json!({"caseId":row.id,"status":row.status}),
+    )
+    .await?;
+    Ok(row)
 }
 
 pub async fn review_anomaly(
@@ -2863,6 +3103,76 @@ fn budget_response(row: HappyHourBudgetRecord) -> BudgetResponse {
         exceeded: row.budget_paise > 0 && row.spent_paise >= row.budget_paise,
         updated_at: row.updated_at,
     }
+}
+
+pub fn role_discount_limit_bps(role: &str) -> i32 {
+    let normalized = role
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    match normalized.as_str() {
+        "cashier" | "receptionist" | "frontdesk" | "staff" => 1_000,
+        "manager" | "branchmanager" => 2_500,
+        "regionalhead" | "regionalmanager" => 4_000,
+        "owner" | "admin" | "superadmin" => 10_000,
+        _ => 1_000,
+    }
+}
+
+fn fraud_outcome(score: i32) -> (&'static str, &'static str) {
+    if score >= 85 {
+        ("critical", "block_until_review")
+    } else if score >= 60 {
+        ("high", "manager_review")
+    } else if score >= 30 {
+        ("medium", "allow")
+    } else {
+        ("low", "allow")
+    }
+}
+
+fn statistical_discount_anomaly(
+    rows: &[DailyDiscountRecord],
+    today: NaiveDate,
+) -> Option<AnomalyCandidate> {
+    let current = rows.iter().find(|row| row.business_date == today)?;
+    let baseline = rows
+        .iter()
+        .filter(|row| row.business_date < today)
+        .map(|row| row.discount_paise as f64)
+        .collect::<Vec<_>>();
+    if baseline.len() < 7 || current.discount_paise < 10_000 {
+        return None;
+    }
+    let mean = baseline.iter().sum::<f64>() / baseline.len() as f64;
+    let variance = baseline
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / baseline.len() as f64;
+    let standard_deviation = variance.sqrt();
+    let threshold = mean + 3.0 * standard_deviation.max(mean * 0.10);
+    if current.discount_paise as f64 <= threshold || current.discount_paise as f64 <= mean * 2.0 {
+        return None;
+    }
+    Some(AnomalyCandidate {
+        signature: format!("statistical_discount_spike:{}", today),
+        anomaly_type: "statistical_discount_spike",
+        severity: "high",
+        title: "Statistical discount spike".into(),
+        description: "Today's finalized discount value is above the 30-day statistical baseline"
+            .into(),
+        evidence: serde_json::json!({
+            "businessDate": today,
+            "saleCount": current.sale_count,
+            "discountPaise": current.discount_paise,
+            "baselineDays": baseline.len(),
+            "meanDiscountPaise": mean.round() as i64,
+            "standardDeviationPaise": standard_deviation.round() as i64,
+            "thresholdPaise": threshold.round() as i64,
+        }),
+    })
 }
 
 fn clean_note(value: Option<&str>) -> String {
@@ -3863,13 +4173,14 @@ mod tests {
     use super::{
         audience_key, auto_sunset_candidates, branch_leaderboard_grade, branch_leaderboard_score,
         budget_response, build_client_return_tracker, build_elasticity_pricing,
-        build_rule_conflicts, context_offer_decision, health, market_decision,
-        member_wallet_decision, no_show_signal, ratio_bps, time_ranges_overlap,
-        validate_audience_criteria, AudienceCriteria, AutoSunsetPolicyResponse,
+        build_rule_conflicts, context_offer_decision, fraud_outcome, health, market_decision,
+        member_wallet_decision, no_show_signal, ratio_bps, role_discount_limit_bps,
+        statistical_discount_anomaly, time_ranges_overlap, validate_audience_criteria,
+        AudienceCriteria, AutoSunsetPolicyResponse,
     };
     use crate::repositories::happy_hours_repository::{
-        AutoSunsetOfferRecord, ClientReturnRecord, ElasticityBandRecord, HappyHourBudgetRecord,
-        HappyHourRuleAnalysisRecord, NoShowRiskRecord,
+        AutoSunsetOfferRecord, ClientReturnRecord, DailyDiscountRecord, ElasticityBandRecord,
+        HappyHourBudgetRecord, HappyHourRuleAnalysisRecord, NoShowRiskRecord,
     };
     use chrono::{Duration, NaiveTime, Utc};
 
@@ -3931,6 +4242,40 @@ mod tests {
         assert_eq!(budget.used_bps, 8_500);
         assert!(budget.threshold_reached);
         assert!(!budget.exceeded);
+    }
+
+    #[test]
+    fn role_limits_and_fraud_decisions_follow_governance_policy() {
+        assert_eq!(role_discount_limit_bps("cashier"), 1_000);
+        assert_eq!(role_discount_limit_bps("branch_manager"), 2_500);
+        assert_eq!(role_discount_limit_bps("regional-head"), 4_000);
+        assert_eq!(role_discount_limit_bps("owner"), 10_000);
+        assert_eq!(fraud_outcome(59).1, "allow");
+        assert_eq!(fraud_outcome(60).1, "manager_review");
+        assert_eq!(fraud_outcome(85).1, "block_until_review");
+    }
+
+    #[test]
+    fn statistical_anomaly_requires_a_real_baseline_and_material_spike() {
+        let today = Utc::now().date_naive();
+        let mut rows = (1..=8)
+            .map(|days| DailyDiscountRecord {
+                business_date: today - Duration::days(days),
+                sale_count: 2,
+                discount_paise: 1_000,
+            })
+            .collect::<Vec<_>>();
+        rows.push(DailyDiscountRecord {
+            business_date: today,
+            sale_count: 4,
+            discount_paise: 30_000,
+        });
+        assert_eq!(
+            statistical_discount_anomaly(&rows, today)
+                .expect("spike")
+                .anomaly_type,
+            "statistical_discount_spike"
+        );
     }
 
     #[test]

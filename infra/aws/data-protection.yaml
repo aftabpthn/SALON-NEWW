@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AuraShine encrypted backups, PostgreSQL PITR, and private file retention
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+  ProtectedResourceArn:
+    Type: String
+    Description: ARN of the RDS database or cluster protected by AWS Backup
+  BackupRoleArn:
+    Type: String
+    Description: IAM role ARN used by AWS Backup
+
+Resources:
+  DataProtectionKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub AuraShine ${Environment} backup and file encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: kms:*
+            Resource: '*'
+
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BackupVaultName: !Sub aurashine-${Environment}
+      EncryptionKeyArn: !GetAtt DataProtectionKey.Arn
+
+  BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub aurashine-${Environment}
+        BackupPlanRule:
+          - RuleName: continuous-pitr
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 0 ? * * *)
+            EnableContinuousBackup: true
+            Lifecycle:
+              DeleteAfterDays: 35
+          - RuleName: daily-7
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 1 ? * * *)
+            Lifecycle:
+              DeleteAfterDays: 7
+          - RuleName: weekly-4
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 2 ? * SUN *)
+            Lifecycle:
+              DeleteAfterDays: 28
+          - RuleName: monthly-12
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: cron(0 3 1 * ? *)
+            Lifecycle:
+              DeleteAfterDays: 365
+
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref BackupPlan
+      BackupSelection:
+        SelectionName: !Sub aurashine-${Environment}-database
+        IamRoleArn: !Ref BackupRoleArn
+        Resources:
+          - !Ref ProtectedResourceArn
+
+  FileBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt DataProtectionKey.Arn
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: archive-old-files
+            Status: Enabled
+            Transitions:
+              - StorageClass: STANDARD_IA
+                TransitionInDays: 30
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+            NoncurrentVersionTransitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 365
+
+  FileBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FileBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt FileBucket.Arn
+              - !Sub ${FileBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+Outputs:
+  BackupVaultName:
+    Value: !Ref BackupVault
+  FileBucketName:
+    Value: !Ref FileBucket
+  EncryptionKeyArn:
+    Value: !GetAtt DataProtectionKey.Arn

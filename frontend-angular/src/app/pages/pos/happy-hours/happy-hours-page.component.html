@@ -196,7 +196,7 @@
       <button type="button" (click)="requestApproval()" [disabled]="busy">Request approval</button>
     </div>
     <div class="table-wrap compact-table"><table><thead><tr><th>Rule</th><th>Discount</th><th>Requested by</th><th>Status</th><th>Requested</th><th>Actions</th></tr></thead><tbody>
-      <tr *ngFor="let row of approvals"><td><strong>{{ row.ruleName }}</strong><small>{{ row.note || row.decisionNote }}</small></td><td>{{ percent(row.requestedDiscountBps) }}</td><td>{{ row.requestedBy }}<small>{{ row.requestedRole }}</small></td><td><span class="status" [class.active]="row.status === 'approved'">{{ actionLabel(row.status) }}</span></td><td>{{ displayDate(row.createdAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'rejected')" [disabled]="busy">Reject</button></td></tr>
+      <tr *ngFor="let row of approvals"><td><strong>{{ row.ruleName }}</strong><small>{{ row.note || row.decisionNote }}</small></td><td>{{ percent(row.requestedDiscountBps) }}<small>Role limit {{ percent(row.approvalLimitBps) }}</small></td><td>{{ row.requestedBy }}<small>{{ row.requestedRole }}</small></td><td><span class="status" [class.active]="row.status === 'approved'">{{ actionLabel(row.status) }}</span></td><td>{{ displayDate(row.createdAt) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'approved')" [disabled]="busy">Approve</button><button type="button" *ngIf="row.status === 'pending'" (click)="decideApproval(row, 'rejected')" [disabled]="busy">Reject</button></td></tr>
       <tr *ngIf="!approvals.length"><td class="empty" colspan="6">No records yet</td></tr>
     </tbody></table></div>
 
@@ -220,6 +220,16 @@
     <div class="table-wrap compact-table"><table><thead><tr><th>Coupon</th><th>Client</th><th>Uses</th><th>Discount</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>
       <tr *ngFor="let row of couponAbuseAlerts"><td><strong>{{ row.couponCode }}</strong></td><td>{{ row.clientName || row.clientId }}</td><td>{{ row.evidenceJson.usageCount || 0 }}</td><td>{{ money(row.evidenceJson.totalDiscountPaise || 0) | currency:'INR':'symbol':'1.0-2' }}</td><td><span class="health" data-status="at_risk">{{ row.severity }}</span></td><td>{{ actionLabel(row.status) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'open'" (click)="resolveCouponAbuse(row)" [disabled]="busy">Resolve</button></td></tr>
       <tr *ngIf="!couponAbuseAlerts.length"><td class="empty" colspan="7">No records yet</td></tr>
+    </tbody></table></div>
+
+    <div class="subsection-title"><strong>Risk-scored fraud guard</strong></div>
+    <div class="market-toolbar governance-actions">
+      <label><span>Status</span><select [(ngModel)]="fraudStatus" (change)="loadFraudCases()"><option value="open">Open</option><option value="investigating">Investigating</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="">All</option></select></label>
+      <button type="button" (click)="scanFraudCases()" [disabled]="busy">Scan</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Case</th><th>Subject</th><th>Risk</th><th>Decision</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      <tr *ngFor="let row of fraudCases"><td><strong>{{ row.title }}</strong><small>{{ row.description }}</small></td><td>{{ actionLabel(row.subjectType) }}<small>{{ row.subjectId }}</small></td><td><span class="health" [attr.data-status]="row.riskScore >= 60 ? 'at_risk' : 'monitor'">{{ row.riskScore }} · {{ row.severity }}</span></td><td>{{ actionLabel(row.decision) }}</td><td>{{ actionLabel(row.status) }}</td><td class="row-actions"><button type="button" *ngIf="row.status === 'open'" (click)="reviewFraudCase(row, 'investigating')" [disabled]="busy">Review</button><button type="button" *ngIf="row.status === 'open' || row.status === 'investigating'" (click)="reviewFraudCase(row, 'resolved')" [disabled]="busy">Resolve</button><button type="button" *ngIf="row.status === 'open' || row.status === 'investigating'" (click)="reviewFraudCase(row, 'dismissed')" [disabled]="busy">Dismiss</button></td></tr>
+      <tr *ngIf="!fraudCases.length"><td class="empty" colspan="6">No records yet</td></tr>
     </tbody></table></div>
 
     <div class="subsection-title"><strong>Anomaly inbox</strong></div>
@@ -313,9 +323,14 @@
 
   <section class="rules-card" *ngIf="tab === 'coupons'">
     <header><h2>Coupons</h2><div class="row-actions"><button type="button" (click)="loadCoupons()" [disabled]="busy">Refresh</button><button class="primary" type="button" (click)="openCoupon()">Add coupon</button></div></header>
-    <div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Minimum bill</th><th>Maximum discount</th><th>Validity</th><th>Usage</th><th>Status</th></tr></thead><tbody>
-      <tr *ngFor="let coupon of coupons"><td><strong>{{ coupon.code }}</strong></td><td>{{ couponDiscount(coupon) }}</td><td>{{ money(coupon.minSubtotalPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ coupon.maxDiscountPaise ? (money(coupon.maxDiscountPaise) | currency:'INR':'symbol':'1.0-2') : '—' }}</td><td>{{ displayDate(coupon.startsAt) }} – {{ displayDate(coupon.endsAt) }}</td><td>{{ coupon.usedCount }}<span *ngIf="coupon.usageLimit">/{{ coupon.usageLimit }}</span></td><td><span class="status" [class.active]="coupon.active">{{ coupon.active ? 'Active' : 'Inactive' }}</span></td></tr>
-      <tr *ngIf="!coupons.length"><td class="empty" colspan="7">No records yet</td></tr>
+    <div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Target</th><th>Minimum bill</th><th>Validity</th><th>Usage</th><th>Client limit</th><th>Status</th></tr></thead><tbody>
+      <tr *ngFor="let coupon of coupons"><td><strong>{{ coupon.code }}</strong></td><td>{{ couponDiscount(coupon) }}</td><td>{{ couponTarget(coupon) }}</td><td>{{ money(coupon.minSubtotalPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ displayDate(coupon.startsAt) }} – {{ displayDate(coupon.endsAt) }}</td><td>{{ coupon.usedCount }}<span *ngIf="coupon.usageLimit">/{{ coupon.usageLimit }}</span></td><td>{{ coupon.perClientLimit || 'Unlimited' }}</td><td><span class="status" [class.active]="coupon.active">{{ coupon.active ? 'Active' : 'Inactive' }}</span></td></tr>
+      <tr *ngIf="!coupons.length"><td class="empty" colspan="8">No records yet</td></tr>
+    </tbody></table></div>
+    <div class="subsection-title"><strong>Coupon return on discount</strong></div>
+    <div class="table-wrap compact-table"><table><thead><tr><th>Coupon</th><th>Type</th><th>Redemptions</th><th>Clients</th><th>Sales value</th><th>Discount</th><th>Return</th></tr></thead><tbody>
+      <tr *ngFor="let row of couponAnalytics"><td><strong>{{ row.couponCode }}</strong></td><td>{{ actionLabel(row.offerType) }}</td><td>{{ row.redemptions }}</td><td>{{ row.uniqueClients }}</td><td>{{ money(row.salesValuePaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ money(row.discountPaise) | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ efficiency(row.returnOnDiscountBps) }}</td></tr>
+      <tr *ngIf="!couponAnalytics.length"><td class="empty" colspan="7">No records yet</td></tr>
     </tbody></table></div>
   </section>
 
@@ -471,7 +486,11 @@
     <label><span>{{ couponDraft.discountType === 'percent' ? 'Discount %' : 'Discount amount' }}</span><input type="number" min="0.01" step="0.01" [(ngModel)]="couponDraft.discountValue" /></label>
     <div class="two-fields"><label><span>Minimum bill</span><input type="number" min="0" step="0.01" [(ngModel)]="couponDraft.minSubtotal" /></label><label><span>Maximum discount</span><input type="number" min="0" step="0.01" [(ngModel)]="couponDraft.maxDiscount" /></label></div>
     <div class="two-fields"><label><span>Start date</span><as-date-picker [value]="couponDraft.startDate" (valueChange)="couponDraft.startDate = $event" ariaLabel="Coupon start date"></as-date-picker></label><label><span>End date</span><as-date-picker [value]="couponDraft.endDate" (valueChange)="couponDraft.endDate = $event" ariaLabel="Coupon end date"></as-date-picker></label></div>
-    <label><span>Usage limit</span><input type="number" min="1" step="1" [(ngModel)]="couponDraft.usageLimit" /></label>
+    <div class="two-fields"><label><span>Usage limit</span><input type="number" min="1" step="1" placeholder="Unlimited" [(ngModel)]="couponDraft.usageLimit" /></label><label><span>Per-client limit</span><input type="number" min="1" step="1" placeholder="Unlimited" [(ngModel)]="couponDraft.perClientLimit" /></label></div>
+    <label><span>Offer type</span><select [(ngModel)]="couponDraft.offerType"><option value="generic">Generic</option><option value="first_visit">First visit</option><option value="referral">Referral</option><option value="branch_specific">Current branch</option><option value="service_specific">Service-specific</option><option value="segment">Client segment</option></select></label>
+    <label *ngIf="couponDraft.offerType === 'service_specific'"><span>Services</span><select multiple [(ngModel)]="couponDraft.targetServiceIds"><option *ngFor="let service of services" [value]="service.id">{{ catalogName(service) }}</option></select></label>
+    <label *ngIf="couponDraft.offerType === 'service_specific'"><span>Service categories</span><input type="text" [(ngModel)]="couponDraft.serviceCategories" placeholder="Comma separated" /></label>
+    <label *ngIf="couponDraft.offerType === 'segment'"><span>Client segments</span><input type="text" [(ngModel)]="couponDraft.clientSegments" placeholder="Comma separated" /></label>
     <label class="check-row"><input type="checkbox" [(ngModel)]="couponDraft.active" /><span>Active</span></label>
   </div>
   <div class="drawer-body" *ngIf="drawerMode === 'audience'">

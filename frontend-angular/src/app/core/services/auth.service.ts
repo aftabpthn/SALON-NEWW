@@ -341,11 +341,11 @@ export class AuthService {
   }
 
   private tryLocalDevSession(): Observable<boolean> {
-    const devSecret = environment.localDevSessionSecret
-      || localStorage.getItem('aurashine_dev_session_secret')
-      || '';
+    const devSecret = (localStorage.getItem('aurashine_dev_session_secret') || '').trim();
+    const devSessionEnabled = environment.enableLocalDevSession
+      || localStorage.getItem('aurashine_enable_dev_session') === 'true';
     const localHost = ['127.0.0.1', 'localhost'].includes(location.hostname);
-    if (environment.production || !environment.enableLocalDevSession || !localHost || !devSecret) {
+    if (environment.production || !devSessionEnabled || !localHost || !devSecret) {
       return of(false);
     }
 

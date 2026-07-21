@@ -12,7 +12,10 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::benefit_notification_repository::{self, NewBenefitDelivery},
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, client_service, team_chat_service},
+    services::{
+        auth_service::AuthClaims, client_service, security_service, sms_center_service,
+        team_chat_service,
+    },
     state::{AppState, TeamChatEvent},
 };
 
@@ -32,6 +35,19 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(list_team_chat).post(send_team_chat),
         )
         .route(
+            "/team-chat/conversations",
+            axum::routing::get(list_staff_chat_conversations),
+        )
+        .route(
+            "/team-chat/private-owner",
+            axum::routing::post(start_private_owner_chat),
+        )
+        .route(
+            "/team-chat/conversations/:id/messages",
+            axum::routing::get(list_staff_conversation_messages)
+                .post(send_staff_conversation_message),
+        )
+        .route(
             "/notifications/inbox/:client_id/reply",
             axum::routing::post(reply_to_client),
         )
@@ -44,8 +60,40 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(marketing_insights),
         )
         .route(
+            "/notifications/marketing-coverage",
+            axum::routing::get(marketing_coverage),
+        )
+        .route(
+            "/notifications/marketing-test",
+            axum::routing::post(marketing_test),
+        )
+        .route(
+            "/notifications/marketing-events",
+            axum::routing::post(marketing_event),
+        )
+        .route(
+            "/notifications/:id/campaign-approval",
+            axum::routing::post(approve_campaign),
+        )
+        .route(
+            "/notifications/:id/campaign-send",
+            axum::routing::post(send_campaign),
+        )
+        .route(
+            "/notifications/sms-center",
+            axum::routing::get(sms_center_summary),
+        )
+        .route(
+            "/notifications/sms-center/campaigns",
+            axum::routing::post(create_sms_center_campaign),
+        )
+        .route(
             "/notifications/:id",
             axum::routing::get(get_notification).patch(mark_notification_read),
+        )
+        .route(
+            "/staff-self/notifications/:id",
+            axum::routing::patch(update_self_notification),
         )
 }
 
@@ -73,8 +121,39 @@ pub struct NotificationWriteRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct MarketingCoverageQuery {
+    audience: String,
+    channels: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MarketingTestRequest {
+    client_id: String,
+    channel: String,
+    subject: String,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MarketingEventRequest {
+    campaign_id: String,
+    client_id: String,
+    channel: String,
+    event_type: String,
+    provider_event_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NotificationReadPayload {
     pub is_read: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SelfNotificationStatusPayload {
+    status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +174,18 @@ struct InboxReplyRequest {
 #[serde(rename_all = "camelCase")]
 struct TeamChatQuery {
     before: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StaffConversationMessageRequest {
+    body: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SmsCenterQuery {
+    audience: Option<String>,
+    channel: Option<String>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -143,6 +234,77 @@ async fn send_team_chat(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row =
         team_chat_service::send(&state.db, &tenant_id, &branch_id, &claims.sub, payload).await?;
+    let _ = state.team_chat_events.send(TeamChatEvent {
+        tenant_id,
+        branch_id,
+        message_id: row.id.clone(),
+        sender_user_id: row.sender_user_id.clone(),
+    });
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_staff_chat_conversations(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<team_chat_service::StaffChatConversation>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        team_chat_service::conversations(&state.db, &tenant_id, &branch_id, &claims.sub).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn start_private_owner_chat(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<team_chat_service::StaffChatConversation> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row =
+        team_chat_service::start_private_owner(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_staff_conversation_messages(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(conversation_id): Path<String>,
+) -> ApiResult<Vec<team_chat_service::StaffConversationMessage>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = team_chat_service::conversation_messages(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &conversation_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn send_staff_conversation_message(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(conversation_id): Path<String>,
+    Json(payload): Json<StaffConversationMessageRequest>,
+) -> ApiResult<team_chat_service::StaffConversationMessage> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let idempotency_key = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok());
+    let row = team_chat_service::send_conversation_message(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &conversation_id,
+        &payload.body,
+        idempotency_key,
+    )
+    .await?;
     let _ = state.team_chat_events.send(TeamChatEvent {
         tenant_id,
         branch_id,
@@ -334,6 +496,255 @@ async fn provider_status(State(state): State<AppState>, headers: HeaderMap) -> A
     }))))
 }
 
+async fn marketing_coverage(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<MarketingCoverageQuery>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if !matches!(claims.role.as_str(), "owner" | "admin" | "manager")
+        && !claims
+            .permissions
+            .iter()
+            .any(|p| matches!(p.as_str(), "marketing.read" | "marketing.manage"))
+    {
+        return Err(AppError::forbidden("marketing permission is required"));
+    }
+    let channels = query
+        .channels
+        .split(',')
+        .map(str::trim)
+        .filter(|c| matches!(*c, "whatsapp" | "sms" | "email"))
+        .collect::<Vec<_>>();
+    if channels.is_empty() {
+        return Err(AppError::validation("campaign channel is required"));
+    }
+    let clients = crate::repositories::marketing_leads_repository::client_intelligence(
+        &state.db, &tenant_id, &branch_id, "", 500,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to calculate consent coverage"))?;
+    let audience = query.audience.trim();
+    let selected = clients
+        .into_iter()
+        .filter(|client| audience == "all" || client.segment_keys.iter().any(|key| key == audience))
+        .collect::<Vec<_>>();
+    let channel_count = |channel: &str| {
+        selected
+            .iter()
+            .filter(|client| client.consent_status.to_ascii_lowercase().contains(channel))
+            .count()
+    };
+    Ok(Json(ApiResponse::ok(json!({
+        "audienceCount": selected.len(),
+        "whatsapp": if channels.contains(&"whatsapp") { channel_count("whatsapp") } else { 0 },
+        "sms": if channels.contains(&"sms") { channel_count("sms") } else { 0 },
+        "email": if channels.contains(&"email") { channel_count("email") } else { 0 }
+    }))))
+}
+
+async fn marketing_test(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(body): Json<MarketingTestRequest>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    require_marketing_permission(&claims, "marketing.send")?;
+    let channel = body.channel.trim().to_ascii_lowercase();
+    if !matches!(channel.as_str(), "whatsapp" | "sms" | "email") || body.message.trim().is_empty() {
+        return Err(AppError::validation(
+            "test message channel or content is invalid",
+        ));
+    }
+    let recipient = sqlx::query_as::<_, (String,String)>("SELECT CASE $4 WHEN 'email' THEN COALESCE(email,'') ELSE COALESCE(phone,'') END,CONCAT_WS(' ',first_name,last_name) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND merged_into_client_id IS NULL")
+        .bind(&tenant_id).bind(&branch_id).bind(body.client_id.trim()).bind(&channel).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to load test recipient"))?.ok_or_else(|| AppError::not_found("test client was not found"))?;
+    if recipient.0.trim().is_empty()
+        || !client_service::communication_allowed(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            body.client_id.trim(),
+            &channel,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to verify test consent"))?
+    {
+        return Err(AppError::conflict(
+            "test client contact or consent is missing",
+        ));
+    }
+    let source_id = format!("marketing-test:{}", Uuid::new_v4());
+    let payload = json!({"channel":channel,"recipient":recipient.0,"message":body.message.trim(),"subject":body.subject.trim(),"clientName":recipient.1,"templateKind":"marketing_test"});
+    benefit_notification_repository::enqueue(
+        &state.db,
+        NewBenefitDelivery {
+            tenant_id: &tenant_id,
+            branch_id: &branch_id,
+            source_type: "marketing_test",
+            source_id: &source_id,
+            client_id: body.client_id.trim(),
+            channel: &channel,
+            recipient: payload["recipient"].as_str().unwrap_or_default(),
+            payload: &payload,
+        },
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to queue test message"))?;
+    Ok(Json(ApiResponse::ok(
+        json!({"queued":true,"sourceId":source_id}),
+    )))
+}
+
+async fn marketing_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<MarketingEventRequest>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let channel = body.channel.trim().to_ascii_lowercase();
+    let event_type = body.event_type.trim().to_ascii_lowercase();
+    if !matches!(channel.as_str(), "whatsapp" | "sms" | "email")
+        || !matches!(event_type.as_str(), "opened" | "clicked" | "opted_out")
+        || body.campaign_id.trim().is_empty()
+        || body.client_id.trim().is_empty()
+    {
+        return Err(AppError::validation("campaign event is invalid"));
+    }
+    let valid = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND channel=$4 AND source_type='marketing_campaign' AND payload_json->>'campaignId'=$5)")
+        .bind(&tenant_id).bind(&branch_id).bind(body.client_id.trim()).bind(&channel).bind(body.campaign_id.trim()).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to validate campaign event"))?;
+    if !valid {
+        return Err(AppError::not_found("campaign recipient was not found"));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to record campaign event"))?;
+    sqlx::query("INSERT INTO marketing_campaign_events(tenant_id,branch_id,campaign_id,client_id,channel,event_type,provider_event_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING")
+        .bind(&tenant_id).bind(&branch_id).bind(body.campaign_id.trim()).bind(body.client_id.trim()).bind(&channel).bind(&event_type).bind(body.provider_event_id.as_deref().unwrap_or("").trim()).execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save campaign event"))?;
+    if event_type == "opted_out" {
+        let column = match channel.as_str() {
+            "whatsapp" => "whatsapp_opt_in",
+            "sms" => "sms_opt_in",
+            _ => "email_opt_in",
+        };
+        sqlx::query(&format!("UPDATE clients SET {column}=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")).bind(&tenant_id).bind(&branch_id).bind(body.client_id.trim()).execute(&mut *tx).await.map_err(|_| AppError::internal("failed to apply campaign opt-out"))?;
+        sqlx::query("INSERT INTO client_consent_events(tenant_id,branch_id,client_id,channel,opted_in,source,reason,recorded_by) VALUES($1,$2,$3,$4,FALSE,'provider','marketing unsubscribe','provider')")
+            .bind(&tenant_id).bind(&branch_id).bind(body.client_id.trim()).bind(&channel).execute(&mut *tx).await.map_err(|_| AppError::internal("failed to record campaign opt-out"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to record campaign event"))?;
+    Ok(Json(ApiResponse::ok(json!({"recorded":true}))))
+}
+
+async fn approve_campaign(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_marketing_permission(&claims, "marketing.approve")?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let updated = sqlx::query_scalar::<_, Value>(r#"UPDATE notifications SET metadata_json=jsonb_set(jsonb_set(metadata_json,'{approvalStatus}','\"approved\"'::JSONB,TRUE),'{status}','\"approved\"'::JSONB,TRUE),updated_at=NOW()
+      WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND notification_type='marketing_campaign' AND metadata_json->>'approvalStatus'='pending' AND COALESCE(metadata_json->>'scheduledAt','')<>''
+        AND (COALESCE(metadata_json->>'offerId','')='' OR EXISTS(SELECT 1 FROM pos_coupons offer WHERE offer.tenant_id=$2 AND offer.branch_id=$3 AND offer.id=metadata_json->>'offerId' AND offer.active=TRUE AND offer.approval_status='approved' AND (offer.ends_at IS NULL OR offer.ends_at>=NOW()))) RETURNING metadata_json"#)
+      .bind(id.trim()).bind(&tenant_id).bind(&branch_id).fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to approve campaign"))?.ok_or_else(|| AppError::validation("pending campaign with a schedule was not found"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.campaign.approved",
+        json!({"campaignId":id.trim()}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(updated)))
+}
+
+async fn send_campaign(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_marketing_permission(&claims, "marketing.send")?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if !state.settings.benefit_delivery_configured() {
+        return Err(AppError::service_unavailable(
+            "DELIVERY_NOT_CONFIGURED",
+            "marketing delivery provider is not configured",
+        ));
+    }
+    let updated = sqlx::query_scalar::<_, Value>(r#"UPDATE notifications SET metadata_json=jsonb_set(metadata_json,'{status}','\"scheduled\"'::JSONB,TRUE),updated_at=NOW()
+      WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND notification_type='marketing_campaign' AND metadata_json->>'approvalStatus'='approved' AND metadata_json->>'status'='approved' AND COALESCE(metadata_json->>'scheduledAt','')<>'' RETURNING metadata_json"#)
+        .bind(id.trim()).bind(&tenant_id).bind(&branch_id).fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to schedule campaign delivery"))?.ok_or_else(|| AppError::validation("approved campaign was not found or already scheduled"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.campaign.sent",
+        json!({"campaignId":id.trim()}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(updated)))
+}
+
+async fn sms_center_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SmsCenterQuery>,
+) -> ApiResult<sms_center_service::SmsCenterSummary> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let audience = query
+        .audience
+        .as_deref()
+        .unwrap_or("clients_all")
+        .trim()
+        .to_ascii_lowercase();
+    let channel = query
+        .channel
+        .as_deref()
+        .unwrap_or("sms")
+        .trim()
+        .to_ascii_lowercase();
+    Ok(Json(ApiResponse::ok(
+        sms_center_service::summary(&state.db, &tenant_id, &branch_id, &audience, &channel).await?,
+    )))
+}
+
+async fn create_sms_center_campaign(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<sms_center_service::SmsCenterCampaignRequest>,
+) -> ApiResult<crate::repositories::sms_center_repository::SmsCenterHistoryRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if state.settings.invoice_delivery_webhook_url.is_none() {
+        return Err(AppError::service_unavailable(
+            "DELIVERY_NOT_CONFIGURED",
+            "SMS and email delivery provider is not configured",
+        ));
+    }
+    let row =
+        sms_center_service::create_campaign(&state.db, &tenant_id, &branch_id, &claims, payload)
+            .await?;
+    let _ = security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "sms-center.campaign.created",
+        json!({"campaignId":row.id}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn marketing_insights(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let consent = sqlx::query_as::<_, (i64, i64, i64, i64)>(
@@ -406,7 +817,7 @@ async fn list_notifications(
         r#"
         SELECT
             id, tenant_id, branch_id, user_id, created_by, notification_type, title, body,
-            resource_type, resource_id, is_read, metadata_json, created_at, updated_at
+            resource_type, resource_id, is_read, COALESCE(metadata_json::text, '{}') AS metadata_json, created_at, updated_at
         FROM notifications
         WHERE tenant_id = $1
           AND branch_id = $2
@@ -487,7 +898,7 @@ async fn get_notification(
 ) -> ApiResult<NotificationResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = sqlx::query_as::<_, NotificationRow>(
-        "SELECT id, tenant_id, branch_id, user_id, created_by, notification_type, title, body, resource_type, resource_id, is_read, metadata_json, created_at, updated_at FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        "SELECT id, tenant_id, branch_id, user_id, created_by, notification_type, title, body, resource_type, resource_id, is_read, COALESCE(metadata_json::text, '{}') AS metadata_json, created_at, updated_at FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -538,10 +949,24 @@ async fn create_notification(
     let user_id = payload.user_id.unwrap_or_default();
     let resource_type = payload.resource_type.unwrap_or_default();
     let resource_id = payload.resource_id.unwrap_or_default();
-    let created_by = claims.sub;
+    let created_by = claims.sub.clone();
     let metadata = payload.metadata.unwrap_or_else(|| json!({}));
     if notification_type == "marketing_campaign" {
+        require_marketing_permission(&claims, "marketing.manage")?;
         validate_campaign_metadata(&metadata)?;
+        if let Some(offer_id) = metadata
+            .get("offerId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+        {
+            let approved = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pos_coupons WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND approval_status='approved' AND (ends_at IS NULL OR ends_at>=NOW()))")
+                .bind(&tenant_id).bind(&branch_id).bind(offer_id.trim()).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to validate campaign offer"))?;
+            if !approved {
+                return Err(AppError::validation(
+                    "campaign offer is not approved or has expired",
+                ));
+            }
+        }
     }
 
     let row = sqlx::query_as::<_, NotificationRow>(
@@ -573,6 +998,17 @@ async fn create_notification(
 
     let metadata = serde_json::from_str(row.metadata_json.as_deref().unwrap_or("{}"))
         .map_err(|_| AppError::internal("invalid notification metadata"))?;
+    if notification_type == "marketing_campaign" {
+        security_service::record_audit(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            "marketing.campaign.created",
+            json!({"campaignId":&row.id}),
+        )
+        .await?;
+    }
 
     Ok(Json(ApiResponse::ok(NotificationResponse {
         id: row.id,
@@ -590,6 +1026,18 @@ async fn create_notification(
         created_at: row.created_at,
         updated_at: row.updated_at,
     })))
+}
+
+fn require_marketing_permission(claims: &AuthClaims, permission: &str) -> Result<(), AppError> {
+    if matches!(claims.role.as_str(), "owner" | "admin")
+        || claims.permissions.iter().any(|value| value == permission)
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(format!(
+            "{permission} permission is required"
+        )))
+    }
 }
 
 async fn mark_notification_read(
@@ -640,6 +1088,35 @@ async fn mark_notification_read(
     })))
 }
 
+async fn update_self_notification(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<SelfNotificationStatusPayload>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = payload.status.trim();
+    if !matches!(status, "read" | "unread" | "archived") {
+        return Err(AppError::validation("notification status is invalid"));
+    }
+    let updated = sqlx::query_scalar::<_, String>(
+        r#"UPDATE notifications SET is_read=$5,updated_at=NOW()
+            WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND (user_id='' OR user_id=$4)
+            RETURNING id"#,
+    )
+    .bind(id.trim())
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&claims.sub)
+    .bind(status != "unread")
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to update staff notification"))?
+    .ok_or_else(|| AppError::not_found("notification was not found"))?;
+    Ok(Json(ApiResponse::ok(json!({"id":updated,"status":status}))))
+}
+
 async fn count_unread_notifications(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -681,23 +1158,52 @@ fn required_text(value: Option<&str>, message: &'static str) -> Result<String, A
 }
 
 fn validate_campaign_metadata(metadata: &Value) -> Result<(), AppError> {
-    let channel = metadata
-        .get("channel")
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let channels = metadata
+        .get("channels")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+        .unwrap_or_else(|| {
+            metadata
+                .get("channel")
+                .and_then(Value::as_str)
+                .map(|channel| vec![channel])
+                .unwrap_or_default()
+        });
     let audience = metadata
         .get("audience")
         .and_then(Value::as_str)
         .unwrap_or("");
     let status = metadata.get("status").and_then(Value::as_str).unwrap_or("");
-    if !matches!(channel, "whatsapp" | "sms" | "email") {
+    if channels.is_empty()
+        || channels
+            .iter()
+            .any(|channel| !matches!(*channel, "whatsapp" | "sms" | "email"))
+    {
         return Err(AppError::validation("campaign channel is invalid"));
     }
-    if !matches!(audience, "all" | "active" | "at-risk") {
+    if audience.is_empty() {
         return Err(AppError::validation("campaign audience is invalid"));
     }
     if !matches!(status, "draft" | "scheduled") {
         return Err(AppError::validation("campaign status is invalid"));
+    }
+    if !matches!(
+        metadata
+            .get("deliveryMode")
+            .and_then(Value::as_str)
+            .unwrap_or("or"),
+        "and" | "or"
+    ) {
+        return Err(AppError::validation("campaign delivery mode is invalid"));
+    }
+    if !matches!(
+        metadata
+            .get("recurrence")
+            .and_then(Value::as_str)
+            .unwrap_or("once"),
+        "once" | "daily" | "weekly" | "monthly"
+    ) {
+        return Err(AppError::validation("campaign recurrence is invalid"));
     }
     if status == "scheduled" {
         let scheduled_at = metadata

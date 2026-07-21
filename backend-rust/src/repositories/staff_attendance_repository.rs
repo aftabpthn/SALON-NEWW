@@ -18,6 +18,10 @@ pub struct AttendanceSummaryBaseRecord {
     pub annual_leave_days: f64,
     pub weekly_off_adjustment: f64,
     pub special_leave_adjustment: f64,
+    pub operation_meeting_present: i64,
+    pub operation_meeting_absent: i64,
+    pub operation_task_completed: i64,
+    pub operation_task_missed: i64,
     pub comments: String,
 }
 
@@ -42,6 +46,7 @@ pub struct AttendanceDetailRecord {
     pub correction_reason: String,
     pub corrected_at: Option<DateTime<Utc>>,
     pub breaks: Value,
+    pub operations: Value,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -64,6 +69,16 @@ pub struct AttendanceRecord {
     pub comments: String,
     pub correction_reason: String,
     pub corrected_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceBreakRecord {
+    pub id: String,
+    pub attendance_id: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub comments: String,
 }
 
 pub struct AttendanceBreakInput {
@@ -122,6 +137,22 @@ pub async fn summary_rows(
           FROM staff_leave_policies
           WHERE tenant_id=$1 AND branch_id=$2
           GROUP BY staff_id
+        ), operation_attendance AS (
+          SELECT attendance.staff_id,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('staff_meeting','performance_review','training_session') AND attendance.status='present')::BIGINT AS operation_meeting_present,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('staff_meeting','performance_review','training_session') AND attendance.status IN ('absent','late'))::BIGINT AS operation_meeting_absent
+          FROM staff_operation_attendance attendance
+          JOIN staff_operation_schedules schedule ON schedule.tenant_id=attendance.tenant_id AND schedule.branch_id=attendance.branch_id AND schedule.id=attendance.operation_id
+          WHERE attendance.tenant_id=$1 AND attendance.branch_id=$2 AND schedule.scheduled_date BETWEEN $3 AND $4
+          GROUP BY attendance.staff_id
+        ), operation_tasks AS (
+          SELECT task.staff_id,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('deep_cleaning','hygiene_audit','cleaning_task') AND task.status IN ('completed','approved'))::BIGINT AS operation_task_completed,
+                 COUNT(*) FILTER (WHERE schedule.operation_type IN ('deep_cleaning','hygiene_audit','cleaning_task') AND task.status='missed')::BIGINT AS operation_task_missed
+          FROM staff_operation_tasks task
+          JOIN staff_operation_schedules schedule ON schedule.tenant_id=task.tenant_id AND schedule.branch_id=task.branch_id AND schedule.id=task.operation_id
+          WHERE task.tenant_id=$1 AND task.branch_id=$2 AND schedule.scheduled_date BETWEEN $3 AND $4
+          GROUP BY task.staff_id
         )
         SELECT s.id AS staff_id,
                TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS name,
@@ -136,12 +167,18 @@ pub async fn summary_rows(
                COALESCE(pol.annual_leave_days,0)::DOUBLE PRECISION AS annual_leave_days,
                COALESCE(adj.weekly_off_adjustment,0)::DOUBLE PRECISION AS weekly_off_adjustment,
                COALESCE(adj.special_leave_adjustment,0)::DOUBLE PRECISION AS special_leave_adjustment,
+               COALESCE(oa.operation_meeting_present,0)::BIGINT AS operation_meeting_present,
+               COALESCE(oa.operation_meeting_absent,0)::BIGINT AS operation_meeting_absent,
+               COALESCE(ot.operation_task_completed,0)::BIGINT AS operation_task_completed,
+               COALESCE(ot.operation_task_missed,0)::BIGINT AS operation_task_missed,
                COALESCE(adj.comments,'') AS comments
         FROM staff s
         LEFT JOIN attendance a ON a.staff_id=s.id
         LEFT JOIN schedule_usage su ON su.staff_id=s.id
         LEFT JOIN staff_profiles p ON p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id AND p.staff_id=s.id
         LEFT JOIN policies pol ON pol.staff_id=s.id
+        LEFT JOIN operation_attendance oa ON oa.staff_id=s.id
+        LEFT JOIN operation_tasks ot ON ot.staff_id=s.id
         LEFT JOIN staff_attendance_summary_adjustments adj
           ON adj.tenant_id=s.tenant_id AND adj.branch_id=s.branch_id AND adj.staff_id=s.id
          AND adj.summary_year=$5 AND adj.summary_month=$6
@@ -154,7 +191,7 @@ pub async fn summary_rows(
         ) pay ON true
         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.active=true
           AND ($7='' OR s.id=$7)
-          AND (a.staff_id IS NOT NULL OR su.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL)
+          AND (a.staff_id IS NOT NULL OR su.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL OR oa.staff_id IS NOT NULL OR ot.staff_id IS NOT NULL)
         ORDER BY s.first_name,s.last_name,s.id
         "#,
     )
@@ -231,7 +268,19 @@ pub async fn detail_rows(
                  ) ORDER BY b.started_at)
                  FROM staff_attendance_breaks b
                  WHERE b.tenant_id=a.tenant_id AND b.branch_id=a.branch_id AND b.attendance_id=a.id
-               ),'[]'::jsonb) AS breaks
+               ),'[]'::jsonb) AS breaks,
+               COALESCE((
+                 SELECT jsonb_agg(jsonb_build_object(
+                   'id',op.id,'title',op.title,'operationType',op.operation_type,'status',op.status,
+                   'attendanceStatus',oa.status,'taskStatus',task.status
+                 ) ORDER BY op.scheduled_time NULLS LAST,op.title)
+                 FROM staff_operation_schedules op
+                 LEFT JOIN staff_operation_attendance oa ON oa.tenant_id=op.tenant_id AND oa.branch_id=op.branch_id AND oa.operation_id=op.id AND oa.staff_id=$3
+                 LEFT JOIN staff_operation_tasks task ON task.tenant_id=op.tenant_id AND task.branch_id=op.branch_id AND task.operation_id=op.id AND task.staff_id=$3
+                 WHERE op.tenant_id=$1 AND op.branch_id=$2 AND op.scheduled_date=COALESCE(a.business_date,s.schedule_date)
+                   AND op.status <> 'cancelled'
+                   AND (jsonb_array_length(op.assigned_staff_ids)=0 OR op.assigned_staff_ids ? $3 OR oa.id IS NOT NULL OR task.id IS NOT NULL)
+               ),'[]'::jsonb) AS operations
         FROM staff_attendance_records a
         FULL OUTER JOIN staff_schedules s
           ON s.tenant_id=a.tenant_id AND s.branch_id=a.branch_id AND s.staff_id=a.staff_id
@@ -362,6 +411,70 @@ async fn recalculate(
         .bind(business_date)
         .fetch_one(db)
         .await
+}
+
+pub async fn start_break(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+    started_at: DateTime<Utc>,
+    created_by: &str,
+) -> Result<Option<AttendanceBreakRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        INSERT INTO staff_attendance_breaks(
+          tenant_id,branch_id,staff_id,attendance_id,started_at,ended_at,comments,created_by
+        )
+        SELECT $1,$2,$3,a.id,$5,NULL,'',$6
+        FROM staff_attendance_records a
+        WHERE a.tenant_id=$1 AND a.branch_id=$2 AND a.staff_id=$3 AND a.business_date=$4
+          AND a.clock_in_at IS NOT NULL AND a.clock_out_at IS NULL
+        ON CONFLICT (attendance_id) WHERE ended_at IS NULL DO NOTHING
+        RETURNING id,attendance_id,started_at,ended_at,comments
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(business_date)
+    .bind(started_at)
+    .bind(created_by)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn end_break(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+    ended_at: DateTime<Utc>,
+) -> Result<Option<AttendanceRecord>, sqlx::Error> {
+    let updated = sqlx::query_scalar::<_, String>(
+        r#"
+        UPDATE staff_attendance_breaks b SET ended_at=$5,updated_at=NOW()
+        FROM staff_attendance_records a
+        WHERE a.id=b.attendance_id AND b.tenant_id=$1 AND b.branch_id=$2 AND b.staff_id=$3
+          AND a.business_date=$4 AND b.ended_at IS NULL AND $5>=b.started_at
+        RETURNING b.id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(business_date)
+    .bind(ended_at)
+    .fetch_optional(db)
+    .await?;
+    if updated.is_none() {
+        return Ok(None);
+    }
+    recalculate(db, tenant_id, branch_id, staff_id, business_date)
+        .await
+        .map(Some)
 }
 
 pub async fn save_correction(

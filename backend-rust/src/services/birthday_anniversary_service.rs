@@ -110,6 +110,7 @@ pub struct OccasionView {
     pub occasion: OccasionRecord,
     pub event_window: String,
     pub is_vip: bool,
+    pub gift_recommendation: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,6 +126,11 @@ pub struct OverviewMetrics {
     pub sent: usize,
     pub failed: usize,
     pub gift_sent: usize,
+    pub gift_prepared: usize,
+    pub gift_redeemed: usize,
+    pub gift_expired: usize,
+    pub gift_prepared_value_paise: i64,
+    pub gift_redeemed_value_paise: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -264,6 +270,23 @@ pub struct CampaignBulkResult {
     pub results: Vec<CampaignBulkItem>,
 }
 
+#[derive(Debug, Clone)]
+pub struct MonthPrepareInput {
+    pub date: Option<NaiveDate>,
+    pub channels: Option<Vec<String>>,
+    pub coupon_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthPrepareResult {
+    pub month: NaiveDate,
+    pub prepared: usize,
+    pub updated: usize,
+    pub skipped: usize,
+    pub drafts: Vec<ReminderRecord>,
+}
+
 pub async fn settings(
     db: &PgPool,
     tenant_id: &str,
@@ -395,6 +418,24 @@ pub async fn overview(
             .iter()
             .filter(|row| matches!(row.status.as_str(), "sent" | "redeemed"))
             .count(),
+        gift_prepared: vouchers.len(),
+        gift_redeemed: vouchers
+            .iter()
+            .filter(|row| row.status == "redeemed" || row.redeemed_at.is_some())
+            .count(),
+        gift_expired: vouchers
+            .iter()
+            .filter(|row| row.status == "expired")
+            .count(),
+        gift_prepared_value_paise: vouchers
+            .iter()
+            .map(|row| row.discount_value_paise.max(0))
+            .sum(),
+        gift_redeemed_value_paise: vouchers
+            .iter()
+            .filter(|row| row.status == "redeemed" || row.redeemed_at.is_some())
+            .map(|row| row.discount_value_paise.max(0))
+            .sum(),
     };
 
     Ok(Overview {
@@ -1180,6 +1221,75 @@ pub async fn send_campaign_bulk(
     })
 }
 
+pub async fn prepare_month_campaign(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    input: MonthPrepareInput,
+) -> Result<MonthPrepareResult, AppError> {
+    let settings = settings(db, tenant_id, branch_id).await?;
+    let date = resolve_date(db, input.date, &settings.timezone).await?;
+    let channels = validate_channels(input.channels.unwrap_or(settings.channels))?;
+    let occasions = repository::list_occasions(
+        db,
+        tenant_id,
+        branch_id,
+        date,
+        month_end(date)?,
+        "birthday",
+        1000,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load birthday month clients"))?;
+    let mut result = MonthPrepareResult {
+        month: NaiveDate::from_ymd_opt(date.year(), date.month(), 1)
+            .ok_or_else(|| AppError::validation("date range is invalid"))?,
+        prepared: 0,
+        updated: 0,
+        skipped: 0,
+        drafts: Vec::new(),
+    };
+    for occasion in occasions {
+        let options = message_suggestions_for(&[occasion.clone()], "birthday");
+        let selected_message = first_message(&options).unwrap_or("");
+        let existed = occasion.reminder_id.is_some();
+        let Some(draft) = repository::upsert_draft(
+            db,
+            DraftWrite {
+                tenant_id,
+                branch_id,
+                client_id: &occasion.client_id,
+                event_type: "birthday",
+                event_date: occasion.event_date,
+                channels: channels.clone(),
+                message_options_json: &options,
+                selected_message,
+                coupon_id: clean_optional(input.coupon_id.as_deref()),
+                scheduled_send_at: None,
+                actor_user_id,
+            },
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to prepare birthday month draft"))?
+        else {
+            result.skipped += 1;
+            continue;
+        };
+        if draft.status != "draft" {
+            result.skipped += 1;
+            continue;
+        }
+        if existed {
+            result.updated += 1;
+        } else {
+            result.prepared += 1;
+        }
+        result.drafts.push(draft);
+    }
+    Ok(result)
+}
+
 async fn get_reminder(
     db: &PgPool,
     tenant_id: &str,
@@ -1240,12 +1350,15 @@ fn message_suggestion_rows(rows: &[OccasionRecord], event_type: &str) -> Vec<Val
 }
 
 fn offer_suggestions_for_views(rows: &[OccasionView]) -> Vec<Value> {
-    let service = top_service_name(
-        &rows
-            .iter()
-            .map(|row| row.occasion.clone())
-            .collect::<Vec<_>>(),
-    );
+    let occasions = rows
+        .iter()
+        .map(|row| row.occasion.clone())
+        .collect::<Vec<_>>();
+    let service = top_service_name(&occasions);
+    let gift = occasions
+        .first()
+        .map(gift_recommendation)
+        .unwrap_or_else(|| json!({"title":"Birthday Gift","giftType":"free_addon"}));
     [
         ("service_discount", format!("Discount on {service}")),
         ("free_addon", format!("Free add-on with {service}")),
@@ -1271,14 +1384,70 @@ fn offer_suggestions_for_views(rows: &[OccasionView]) -> Vec<Value> {
     .enumerate()
     .map(|(index, (kind, title))| {
         json!({
-            "id": format!("service-offer-{}", index + 1),
+        "id": format!("service-offer-{}", index + 1),
             "kind": kind,
             "source": "service-history",
             "serviceName": service,
+            "recommendedGift": gift.clone(),
             "title": title,
         })
     })
     .collect()
+}
+
+fn gift_recommendation(row: &OccasionRecord) -> Value {
+    let service = row.most_used_service_name.trim();
+    let service = if service.is_empty() {
+        "favorite service"
+    } else {
+        service
+    };
+    let inactive_days = row
+        .last_visit_at
+        .map(|last| (Utc::now() - last).num_days())
+        .unwrap_or(999);
+    let (segment, gift_type, title, description, value_paise) = if inactive_days > 90 {
+        (
+            "inactive",
+            "comeback_offer",
+            format!("{service} Comeback Gift"),
+            format!("Free consultation plus a comeback benefit on {service}"),
+            150_000,
+        )
+    } else if row.lifetime_value_paise >= 100_000 || row.completed_visits >= 12 {
+        (
+            "high_spender",
+            "premium_service",
+            format!("Premium {service} Gift"),
+            format!("Complimentary upgrade or premium benefit on {service}"),
+            250_000,
+        )
+    } else if row.lifetime_value_paise >= 30_000 || row.completed_visits >= 5 {
+        (
+            "medium_spender",
+            "discount_coupon",
+            format!("{service} Priority Discount"),
+            format!("Priority birthday discount on {service}"),
+            100_000,
+        )
+    } else {
+        (
+            "low_spender",
+            "free_addon",
+            format!("Free Add-on With {service}"),
+            format!("Complimentary add-on with the next {service} visit"),
+            50_000,
+        )
+    };
+    json!({
+        "segment": segment,
+        "giftType": gift_type,
+        "title": title,
+        "description": description,
+        "valuePaise": value_paise,
+        "serviceId": row.most_used_service_id.as_deref(),
+        "serviceName": service,
+    })
 }
 
 fn top_service_name(rows: &[OccasionRecord]) -> String {
@@ -1312,6 +1481,7 @@ async fn occasion_views(
             .map(|occasion| OccasionView {
                 event_window: event_window(occasion.days_until, occasion.event_date, from_date),
                 is_vip: is_vip(&occasion.categories_json),
+                gift_recommendation: gift_recommendation(&occasion),
                 occasion,
             })
             .collect()
