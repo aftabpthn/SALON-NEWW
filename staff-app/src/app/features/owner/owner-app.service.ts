@@ -410,6 +410,7 @@ export class OwnerAppService {
   }
 
   private errorMessage(error: unknown, fallback: string): string {
+    if (this.isNetworkError(error)) return "No internet connection. Please check your network and try again.";
     if (error instanceof HttpErrorResponse) {
       const body = error.error as ApiEnvelope<unknown> | { message?: string } | string | undefined;
       if (this.isProxyBadRequest(body)) return "Session request was rejected. Please sign in again.";
@@ -421,6 +422,20 @@ export class OwnerAppService {
       }
     }
     return error instanceof Error ? error.message : fallback;
+  }
+
+  private isNetworkError(error: unknown): boolean {
+    if (!navigator.onLine) return true;
+    if (!(error instanceof Error)) return false;
+    const msg = (error.message || "").toLowerCase();
+    return msg.includes("no address associated with hostname") ||
+      msg.includes("unable to host") ||
+      msg.includes("failed to fetch") ||
+      msg.includes("networkerror") ||
+      msg.includes("err_network") ||
+      msg.includes("err_name_not_resolved") ||
+      msg.includes("fetch failed") ||
+      msg.includes("network request failed");
   }
 
   private isTotpChallenge(error: unknown): boolean {
