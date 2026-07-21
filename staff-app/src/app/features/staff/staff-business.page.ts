@@ -1164,6 +1164,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   });
   private clockTimer?: ReturnType<typeof setInterval>;
   private drawerTrigger: HTMLElement | null = null;
+  private invoiceRequest = 0;
+  private selectedInvoiceId = "";
   readonly appointmentGroups = computed(() => {
     const data = this.business();
     if (!data) return [];
@@ -1189,6 +1191,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.loadGeneration++;
+    this.invoiceRequest++;
     if (this.clockTimer) clearInterval(this.clockTimer);
   }
 
@@ -1321,6 +1325,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   async openInvoice(item: StaffBusinessAppointment, event: Event) {
     const invoiceId = item.billing?.invoiceId;
     if (!invoiceId || !this.business()?.permissions.invoiceDetail) return;
+    const request = ++this.invoiceRequest;
+    this.selectedInvoiceId = invoiceId;
     this.drawerTrigger = event.currentTarget as HTMLElement;
     this.selectedAppointment.set(null);
     this.invoiceDrawerOpen.set(true);
@@ -1329,11 +1335,12 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     this.invoiceLoading.set(true);
     setTimeout(() => document.getElementById("business-invoice-drawer")?.focus());
     try {
-      this.invoiceDetail.set(await this.staff.businessInvoice(invoiceId));
+      const detail = await this.staff.businessInvoice(invoiceId);
+      if (request === this.invoiceRequest && this.invoiceDrawerOpen() && this.selectedInvoiceId === invoiceId) this.invoiceDetail.set(detail);
     } catch {
-      this.invoiceError.set(this.staff.error() || "Unable to load invoice detail.");
+      if (request === this.invoiceRequest && this.invoiceDrawerOpen() && this.selectedInvoiceId === invoiceId) this.invoiceError.set(this.staff.error() || "Unable to load invoice detail.");
     } finally {
-      this.invoiceLoading.set(false);
+      if (request === this.invoiceRequest && this.invoiceDrawerOpen() && this.selectedInvoiceId === invoiceId) this.invoiceLoading.set(false);
     }
   }
 
@@ -1342,9 +1349,12 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   }
 
   closeDrawers() {
+    this.invoiceRequest++;
+    this.selectedInvoiceId = "";
     this.selectedAppointment.set(null);
     this.invoiceDrawerOpen.set(false);
     this.invoiceDetail.set(null);
+    this.invoiceLoading.set(false);
     this.invoiceError.set("");
     const trigger = this.drawerTrigger;
     this.drawerTrigger = null;

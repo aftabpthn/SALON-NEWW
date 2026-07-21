@@ -20,7 +20,7 @@ import {
   OwnerAppointmentStatusPayload,
   OwnerAppointmentWritePayload
 } from "./owner-appointments.models";
-import { OwnerAttendance, OwnerLeave, OwnerLeaveDetail, OwnerListResponse, OwnerPayroll, OwnerPayrollDetail, OwnerShiftSwap, OwnerStaff, OwnerStaffDetail, OwnerStaffWrite } from "./owner-people.models";
+import { OwnerAttendance, OwnerAttendanceDevice, OwnerAttendanceEvidence, OwnerAttendancePolicy, OwnerLeave, OwnerLeaveDetail, OwnerListResponse, OwnerPayroll, OwnerPayrollDetail, OwnerShiftSwap, OwnerStaff, OwnerStaffDetail, OwnerStaffWrite } from "./owner-people.models";
 import { OwnerExportFile, OwnerFinanceDrilldown, OwnerFinanceOverview, OwnerFinanceQuery, OwnerReportCatalogue, OwnerReportData } from "./owner-finance-reports.models";
 import { OwnerCampaign, OwnerChatConversation, OwnerChatMessage, OwnerChatMessagesResponse, OwnerChatReceiptResponse, OwnerClient, OwnerClientDetail, OwnerInventoryDetail, OwnerInventoryResponse, OwnerNotification, OwnerNotificationReceipt, OwnerOperationsQuery, OwnerOperationsResponse } from "./owner-operations.models";
 import { OwnerAccessAdministration, OwnerAdministrationRole, OwnerAdministrationUser, OwnerBranchCatalogue, OwnerBranchMutation, OwnerBranchWrite, OwnerRoleWrite, OwnerSettingsResponse, OwnerUserWrite } from "./owner-administration.models";
@@ -192,6 +192,11 @@ export class OwnerAppService {
   calculateOwnerCommission(id: string, payload: { periodStart: string; periodEnd: string; baseAmountPaise: number; rate: number; commissionType: string }): Promise<OwnerRecord> { return this.post(`/owner-console/people/staff/${encodeURIComponent(id)}/commissions`, payload); }
   ownerAttendance(params: Record<string, string | number | boolean>): Promise<OwnerListResponse<OwnerAttendance>> { return this.get("/owner-console/people/attendance", params); }
   correctOwnerAttendance(id: string, payload: { reason: string; patch: Record<string, string> }): Promise<OwnerRecord> { return this.post(`/owner-console/people/attendance/${encodeURIComponent(id)}/corrections`, payload); }
+  ownerAttendancePolicy(branchId: string): Promise<OwnerAttendancePolicy> { return this.get(`/attendance-verification/branches/${encodeURIComponent(branchId)}/policy`); }
+  saveOwnerAttendancePolicy(branchId: string, policy: OwnerAttendancePolicy): Promise<OwnerAttendancePolicy> { return this.put(`/attendance-verification/branches/${encodeURIComponent(branchId)}/policy`, policy); }
+  ownerAttendanceDevices(params: { branchId: string; status?: string }): Promise<OwnerAttendanceDevice[]> { return this.get<{ items: OwnerAttendanceDevice[] }>("/attendance-verification/devices", params).then((response) => response.items); }
+  setOwnerAttendanceDeviceStatus(id: string, decision: "approved" | "revoked", version: number, reason: string): Promise<OwnerAttendanceDevice> { return this.post(`/attendance-verification/devices/${encodeURIComponent(id)}/reviews`, { decision, version, reason }); }
+  ownerAttendanceEvidence(params: { branchId: string; from: string; to: string; decision?: string }): Promise<OwnerAttendanceEvidence[]> { return this.get<{ items: OwnerAttendanceEvidence[] }>("/attendance-verification/evidence", params).then((response) => response.items); }
   ownerLeaves(params: Record<string, string | number | boolean>): Promise<OwnerListResponse<OwnerLeave>> { return this.get("/owner-console/people/leaves", params); }
   ownerLeaveDetail(id: string): Promise<OwnerLeaveDetail> { return this.get(`/owner-console/people/leaves/${encodeURIComponent(id)}`); }
   decideOwnerLeave(id: string, decision: "approve" | "reject", payload: { version: number; reason?: string }): Promise<OwnerLeave> { return this.patch(`/owner-console/people/leaves/${encodeURIComponent(id)}/${decision}`, payload); }

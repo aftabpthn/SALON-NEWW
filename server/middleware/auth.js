@@ -10,6 +10,14 @@ function bearerToken(req) {
   return scheme?.toLowerCase() === "bearer" ? token : "";
 }
 
+function isBiometricGatewayRequest(req) {
+  const path = String(req.path || "").replace(/^\/api\/v1/, "");
+  return req.method === "POST"
+    && /^\/staff-os\/biometric\/gateway\/[^/]+\/(?:heartbeat|events)\/?$/.test(path)
+    && Boolean(req.get("x-tenant-id"))
+    && Boolean(req.get("x-gateway-api-key"));
+}
+
 let clientsHasTenantId;
 
 function clientsWhereClause() {
@@ -70,6 +78,10 @@ export function authenticateJwt({ required = true } = {}) {
   return (req, _res, next) => {
     const token = bearerToken(req);
     if (!token) {
+      if (isBiometricGatewayRequest(req)) {
+        next();
+        return;
+      }
       if (required) {
         next(unauthorized());
         return;

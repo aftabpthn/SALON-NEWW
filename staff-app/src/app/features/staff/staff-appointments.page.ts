@@ -6,7 +6,7 @@ import { businessDate } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
-type AppointmentView = "today" | "upcoming" | "live" | "completed" | "cancelled";
+type AppointmentView = "today" | "upcoming" | "live" | "completed" | "cancelled" | "unresolved";
 
 const LIVE_STATUSES = new Set(["booked", "confirmed", "checked-in", "arrived", "in-service", "started"]);
 const TERMINAL_STATUSES = new Set(["completed", "checked-out", "cancelled", "no-show"]);
@@ -41,7 +41,8 @@ function istDateKey(value: string | Date): string {
         <nav class="queue-tabs" aria-label="Appointment queues">
           <button class="link-button" [class.active-toggle]="activeView() === 'today'" type="button" [attr.aria-pressed]="activeView() === 'today'" (click)="setView('today')">Today's Queue</button>
           <button class="link-button" [class.active-toggle]="activeView() === 'upcoming'" type="button" [attr.aria-pressed]="activeView() === 'upcoming'" (click)="setView('upcoming')">Upcoming</button>
-          <button class="link-button" [class.active-toggle]="activeView() === 'completed'" type="button" [attr.aria-pressed]="activeView() === 'completed'" (click)="setView('completed')">Completed</button>
+           <button class="link-button" [class.active-toggle]="activeView() === 'completed'" type="button" [attr.aria-pressed]="activeView() === 'completed'" (click)="setView('completed')">Completed</button>
+          <button class="link-button" [class.active-toggle]="activeView() === 'unresolved'" type="button" [attr.aria-pressed]="activeView() === 'unresolved'" (click)="setView('unresolved')">Past unresolved</button>
         </nav>
 
         <section class="panel" aria-live="polite">
@@ -121,7 +122,7 @@ export class StaffAppointmentsPage implements OnInit {
     return {
       today: rows.filter((item) => istDateKey(item.startAt) === today).length,
       live: rows.filter((item) => istDateKey(item.startAt) === today && LIVE_STATUSES.has(this.statusOf(item))).length,
-      completed: rows.filter((item) => this.isCompleted(item, today)).length,
+      completed: rows.filter((item) => this.isCompleted(item)).length,
       cancelled: rows.filter((item) => CANCELLED_STATUSES.has(this.statusOf(item))).length
     };
   });
@@ -135,8 +136,9 @@ export class StaffAppointmentsPage implements OnInit {
         case "today": return date === today;
         case "upcoming": return date > today && !TERMINAL_STATUSES.has(status);
         case "live": return date === today && LIVE_STATUSES.has(status);
-        case "completed": return this.isCompleted(item, today);
+        case "completed": return this.isCompleted(item);
         case "cancelled": return CANCELLED_STATUSES.has(status);
+        case "unresolved": return Boolean(date) && date < today && !TERMINAL_STATUSES.has(status);
       }
     });
     const ascending = view === "today" || view === "live" || view === "upcoming";
@@ -153,11 +155,11 @@ export class StaffAppointmentsPage implements OnInit {
   setView(view: AppointmentView) { this.activeView.set(view); }
 
   viewTitle(): string {
-    return ({ today: "Today's Queue", upcoming: "Upcoming appointments", live: "Live appointments", completed: "Completed appointments", cancelled: "Cancelled appointments" } as const)[this.activeView()];
+    return ({ today: "Today's Queue", upcoming: "Upcoming appointments", live: "Live appointments", completed: "Completed appointments", cancelled: "Cancelled appointments", unresolved: "Past unresolved appointments" } as const)[this.activeView()];
   }
 
   emptyMessage(): string {
-    return ({ today: "No appointments in today's queue.", upcoming: "No upcoming appointments assigned to you.", live: "No live appointments right now.", completed: "No completed appointments in the loaded range.", cancelled: "No cancelled appointments in the loaded range." } as const)[this.activeView()];
+    return ({ today: "No appointments in today's queue.", upcoming: "No upcoming appointments assigned to you.", live: "No live appointments right now.", completed: "No completed appointments in the loaded range.", cancelled: "No cancelled appointments in the loaded range.", unresolved: "No past appointments are awaiting a terminal status." } as const)[this.activeView()];
   }
 
   isValidDate(value: string): boolean { return !Number.isNaN(new Date(value).getTime()); }
@@ -173,10 +175,9 @@ export class StaffAppointmentsPage implements OnInit {
   closeDrawers() { this.selectedAppointment.set(null); }
 
   private statusOf(item: StaffAppointment): string { return String(item.status || "").toLowerCase(); }
-  private isCompleted(item: StaffAppointment, today: string): boolean {
+  private isCompleted(item: StaffAppointment): boolean {
     const status = this.statusOf(item);
-    const date = istDateKey(item.startAt);
-    return !CANCELLED_STATUSES.has(status) && (COMPLETED_STATUSES.has(status) || !date || date < today);
+    return COMPLETED_STATUSES.has(status);
   }
   private compareStartTimes(left: StaffAppointment, right: StaffAppointment, ascending: boolean): number {
     const leftTime = new Date(left.startAt).getTime();

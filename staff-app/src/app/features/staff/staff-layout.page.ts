@@ -56,7 +56,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
           <div class="topbar-actions">
              @if (visibleNav().length) { <button type="button" class="search-button" (click)="openCommand()" aria-label="Search permitted staff tools" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button> }
              @if (staff.hasPermission('read:staff')) { <a class="chat-button" routerLink="/staff/chat" routerLinkActive="active" aria-label="Open chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v10h2v1.8L8.3 16H20V6H4zm3 3h10v2H7V9zm0 4h7v2H7v-2z"></path></svg></a> }
-             @if (staff.hasPermission('read:staff')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
+             @if (staff.hasPermission('read:appointments')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
               <svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 10.8c0-3.5-2.1-6.1-5-6.7V3a1 1 0 0 0-2 0v1.1c-2.9.6-5 3.2-5 6.7V15l-1.6 2.4A1 1 0 0 0 5.2 19h13.6a1 1 0 0 0 .8-1.6L18 15v-4.2zM9.7 20a2.4 2.4 0 0 0 4.6 0H9.7z"></path>
               </svg>
@@ -99,7 +99,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
         </section>
       }
 
-      @if (notificationsOpen() && staff.hasPermission('read:staff')) {
+      @if (notificationsOpen() && staff.hasPermission('read:appointments')) {
         <button type="button" class="drawer-backdrop open" (click)="closeNotifications()" aria-label="Close notifications"></button>
         <aside class="notification-drawer open" role="dialog" aria-modal="true" aria-labelledby="staff-notifications-title" tabindex="-1" #notificationDialog (keydown)="trapFocus($event, notificationDialog)">
           <div class="drawer-title"><strong id="staff-notifications-title">Notifications</strong><button type="button" (click)="closeNotifications()">Close</button></div>
@@ -113,7 +113,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
           @if (push.message()) { <p class="push-message" role="status">{{ push.message() }}</p> }
           <div class="notice-list">
             @for (note of os()?.notifications || []; track note.id) {
-              <article><strong>{{ note.title }}</strong><small>{{ note.body || note.status }}</small><span>{{ note.status }}</span><button type="button" (click)="markNotification(note.id, note.status === 'read' ? 'unread' : 'read')">{{ note.status === 'read' ? 'Mark unread' : 'Mark read' }}</button></article>
+              <article><strong>{{ note.title }}</strong><small>{{ note.body || note.status }}</small><span>{{ note.status }}</span><button type="button" [disabled]="!canUpdateOwnNotifications()" (click)="markNotification(note.id, note.status === 'read' ? 'unread' : 'read')">{{ note.status === 'read' ? 'Mark unread' : 'Mark read' }}</button></article>
             } @empty {
               <p>No notifications yet.</p>
             }
@@ -321,16 +321,17 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   private staffHintTimer = 0;
   private routerSubscription?: Subscription;
   private socket: WebSocket | null = null;
+  private destroyed = false;
 
   private readonly nav: StaffNavItem[] = [
     { label: "Dashboard", path: "/staff/dashboard", iconPath: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z", group: "Home", permission: "read:appointments" },
-    { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "read:staff" },
-    { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "read:staff" },
+    { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work" },
+    { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "read:appointments" },
     { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "read:staff" },
     { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "read:staff" },
     { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "read:staff" },
     { label: "Payroll", path: "/staff/payroll", iconPath: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", group: "Account", anyPermissions: ["read:payroll", "read:finance"] },
-    { label: "Leaves", path: "/staff/leaves", iconPath: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z", group: "Account", permission: "read:staff" },
+    { label: "Leaves", path: "/staff/leaves", iconPath: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z", group: "Account" },
     { label: "Profile", path: "/staff/profile", iconPath: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-6 1.7-6 3.8V20h12v-2.2c0-2.1-2.7-3.8-6-3.8z", group: "Account" },
     { label: "Settings", path: "/staff/settings", iconPath: "M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7 7 0 0 0 7 6L4.6 5l-2 3.5 2 1.5A8 8 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.6 1.5L10 21h4l.4-2.5A7 7 0 0 0 17 17l2.4 1 2-3.5-2-1.5zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z", group: "Account" }
   ];
@@ -344,7 +345,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   readonly commandResults = computed(() => {
     const text = this.query().trim().toLowerCase();
     const navItems = this.visibleNav().map((item) => ({ ...item }));
-    const notices = this.staff.hasPermission("read:staff") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
+    const notices = this.staff.hasPermission("read:appointments") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
     const business = this.staff.hasPermission("read:appointments") ? (this.os()?.timeline || []).map((item) => ({ label: item.serviceNames?.join(", ") || "Appointment", path: "/staff/business", iconPath: this.iconFor("Business"), group: "Scheduled work" })) : [];
     const all = [...navItems, ...notices, ...business];
     if (!text) return all.slice(0, 12);
@@ -359,6 +360,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   constructor(readonly staff: StaffAppService, readonly push: StaffPushService, private readonly router: Router) {}
 
   ngOnInit() {
+    this.destroyed = false;
     void this.loadShellData();
     void this.flushOfflineQueue();
     void this.connectRealtime();
@@ -373,6 +375,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     window.clearInterval(this.pollTimer);
     window.clearTimeout(this.reconnectTimer);
     window.clearTimeout(this.toastTimer);
@@ -495,8 +498,13 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   async markNotification(id: string, status: "read" | "unread" | "archived") {
-    await this.staff.updateNotification(id, status);
-    await this.loadShellData();
+    if (!this.canUpdateOwnNotifications()) { this.showToast("You do not have permission to update notifications."); return; }
+    try {
+      await this.staff.updateNotification(id, status);
+      await this.loadShellData();
+    } catch {
+      this.showToast(this.staff.error() || "Notification could not be updated.");
+    }
   }
 
   async enableMobileNotifications() {
@@ -623,11 +631,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   private async connectRealtime() {
-    if (!this.online() || !this.staff.isAuthenticated()) return;
+    if (this.destroyed || !this.online() || !this.staff.isAuthenticated()) return;
     if (this.socket && ([WebSocket.CONNECTING, WebSocket.OPEN] as number[]).includes(this.socket.readyState)) return;
     let url = "";
     try { url = await this.staff.realtimeSocketTicketUrl(); } catch { this.scheduleRealtimeReconnect(); return; }
-    if (!this.online() || !this.staff.isAuthenticated()) return;
+    if (this.destroyed || !this.online() || !this.staff.isAuthenticated()) return;
     if (!url) return;
     try {
       const socket = new WebSocket(url);
@@ -640,7 +648,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       socket.onerror = () => socket.close();
       socket.onclose = () => {
         this.realtimeConnected.set(false);
-        if (this.online() && this.staff.isAuthenticated()) this.scheduleRealtimeReconnect();
+        if (!this.destroyed && this.online() && this.staff.isAuthenticated()) this.scheduleRealtimeReconnect();
       };
     } catch {
       this.scheduleRealtimeReconnect();
@@ -648,6 +656,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   private scheduleRealtimeReconnect() {
+    if (this.destroyed) return;
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = window.setTimeout(() => void this.connectRealtime(), 5000);
   }
@@ -667,6 +676,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       window.dispatchEvent(new CustomEvent("aura:refresh-child"));
     }
   }
+
+  canUpdateOwnNotifications(): boolean { return Boolean(this.staff.user()?.staffId) || this.staff.hasPermission("update:notifications"); }
 
   private async flushOfflineQueue() {
     this.offlinePending.set(this.staff.offlineQueueSize());

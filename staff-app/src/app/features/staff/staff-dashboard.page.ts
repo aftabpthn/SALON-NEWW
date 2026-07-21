@@ -1,6 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { isQueuedMutation, MutationResult, StaffAppService, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -186,8 +186,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
 
   private async clockAction() {
     if (!this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"])) return;
-    const open = this.openAttendance();
-    await this.runMutation("attendance", () => open ? this.staff.clockOut(open.id) : this.staff.clockIn(), open ? "Clocked out." : "Clocked in.");
+    await this.router.navigateByUrl("/staff/attendance");
   }
 
   private async runMutation(id: string, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
@@ -202,10 +201,6 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     } catch {
       this.actionFailed.set(true); this.actionMessage.set(this.staff.error() || "Unable to save this change. Please try again.");
     } finally { this.pendingMutation.set(""); }
-  }
-
-  private openAttendance(): StaffAttendance | null {
-    return this.today()?.attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || ""))) || null;
   }
 
   private isStaffRecordError(message: string): boolean { return /staff (record|profile)|not linked/i.test(message); }

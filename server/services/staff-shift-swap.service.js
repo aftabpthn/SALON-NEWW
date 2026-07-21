@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { repositories } from "../repositories/repository-registry.js";
 import { badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
+import { isOwnerControlRole } from "./access-control.service.js";
 import { realtimeService } from "./realtime.service.js";
 import { staffWebPushService } from "./staff-web-push.service.js";
 import { tenantService } from "./tenant.service.js";
@@ -20,6 +22,10 @@ function selfStaffId(access = {}) {
 
 function requireManager(access = {}) {
   if (!managerRoles.has(String(access.role || "").toLowerCase())) throw forbidden("Manager access is required");
+}
+
+function requireOwnerControl(access = {}) {
+  if (!isOwnerControlRole(access.role)) throw forbidden("Owner, admin or super admin approval is required");
 }
 
 function businessDate() {
@@ -95,6 +101,63 @@ function broadcast(type, swap) {
     });
   } catch {
     // Realtime publication is best-effort after the durable transition commits.
+  }
+}
+
+function notifyOwnersForApproval(swap, message = "A coworker accepted a shift swap. Review and approve or reject it.") {
+  const title = "Shift swap needs approval";
+  const payload = { type: "shift_swap_pending_approval", shiftSwapId: swap.id, scheduleId: swap.schedule_id, url: "/staff/roster" };
+  let ownerUserIds = [];
+  try {
+    repositories.notifications.create({
+      id: `owner_shift_swap_${swap.id}`,
+      clientId: "",
+      type: "shift_swap_pending_approval",
+      channel: "app",
+      message: `${title}: ${message}`,
+      status: "pending-action"
+    }, { tenantId: swap.tenant_id, branchId: swap.branch_id });
+  } catch {
+    // The owner feed notification is best-effort and idempotent by its deterministic id.
+  }
+  try {
+    ownerUserIds = repositories.tenantUsers.list({ limit: 1000 }, { tenantId: swap.tenant_id })
+      .filter((user) => isOwnerControlRole(user.role) && user.status !== "inactive")
+      .map((user) => user.id);
+  } catch {
+    // Recipient discovery must not affect the saved swap transition.
+  }
+  for (const userId of ownerUserIds) {
+    try {
+      repositories.pushNotifications.create({
+        id: `push_shift_swap_${swap.id}_${userId}`,
+        userId,
+        branchId: swap.branch_id,
+        deviceId: "",
+        title,
+        message,
+        payload,
+        status: "queued",
+        providerMessageId: "",
+        sentAt: ""
+      }, { tenantId: swap.tenant_id, branchId: swap.branch_id });
+    } catch {
+      // A retry may find an already-enqueued per-user notification.
+    }
+  }
+  try {
+    realtimeService.sendToUsers("owner:shift_swap_pending_approval", payload, {
+      tenantId: swap.tenant_id,
+      branchId: swap.branch_id,
+      userIds: ownerUserIds
+    });
+    realtimeService.broadcast("owner:shift_swap_pending_approval", payload, {
+      tenantId: swap.tenant_id,
+      branchId: swap.branch_id,
+      channel: `branch:${swap.branch_id}`
+    });
+  } catch {
+    // Realtime publication is best-effort after notification enqueue.
   }
 }
 
@@ -191,7 +254,8 @@ export const staffShiftSwapService = {
     const updated = loadSwap(id, access.tenantId);
     notification({ tenantId: updated.tenant_id, branchId: updated.branch_id, staffId: updated.from_staff_id,
       type: `shift_swap_${status}`, title: decision === "accept" ? "Swap accepted by coworker" : "Swap declined",
-      body: decision === "accept" ? "Your request is waiting for owner approval." : "Your coworker declined the shift swap.", swapId: id });
+      body: decision === "accept" ? "The accepted shift swap is waiting for owner approval." : "The coworker declined the shift swap.", swapId: id });
+    if (status === "pending_manager") notifyOwnersForApproval(updated);
     broadcast(`staff:shift_swap_${status}`, updated);
     return enrichedRows("sw.tenant_id = @tenantId AND sw.id = @id", { tenantId: access.tenantId, id }, 1)[0];
   },
@@ -244,7 +308,7 @@ export const staffShiftSwapService = {
     if (targetConflict(schedule, toStaffId, access.tenantId)) throw conflict("Selected staff member already has an overlapping shift");
     const row = {
       id: makeId("swap"), tenant_id: access.tenantId, branch_id: schedule.branch_id, schedule_id: schedule.id,
-      from_staff_id: schedule.staff_id, to_staff_id: toStaffId, reason: String(payload.reason || "").trim(), status: "pending_manager",
+      from_staff_id: schedule.staff_id, to_staff_id: toStaffId, reason: String(payload.reason || "").trim(), status: "pending_staff",
       requested_schedule_date: schedule.schedule_date, requested_start_time: schedule.start_time,
       requested_end_time: schedule.end_time, requested_shift_type: schedule.shift_type || ""
     };
@@ -257,13 +321,13 @@ export const staffShiftSwapService = {
         WHERE tenant_id = @tenant_id AND schedule_id = @schedule_id AND status IN ('pending', 'pending_staff', 'pending_manager'))`).run(row);
     if (inserted.changes !== 1) throw conflict("A swap request is already active for this shift");
     notification({ tenantId: row.tenant_id, branchId: row.branch_id, staffId: row.to_staff_id, type: "shift_reassignment_proposed",
-      title: "Shift reassignment proposed", body: `The owner proposed your ${schedule.schedule_date} shift assignment.`, swapId: row.id });
-    broadcast("staff:shift_swap_pending_manager", row);
+      title: "Shift reassignment proposed", body: `A manager proposed your ${schedule.schedule_date} shift assignment. Accept or decline the request.`, swapId: row.id });
+    broadcast("staff:shift_swap_requested", row);
     return enrichedRows("sw.tenant_id = @tenantId AND sw.id = @id", { tenantId: access.tenantId, id: row.id }, 1)[0];
   },
 
   approve(id, payload = {}, access) {
-    requireManager(access);
+    requireOwnerControl(access);
     const swap = loadSwap(id, access.tenantId);
     tenantService.assertBranchAccess(access, swap.branch_id);
     if (swap.status !== "pending_manager") throw badRequest("Coworker acceptance is required before approval");
@@ -305,7 +369,9 @@ export const staffShiftSwapService = {
   },
 
   reject(id, payload = {}, access) {
-    requireManager(access);
+    requireOwnerControl(access);
+    const reason = String(payload.reason || "").trim();
+    if (!reason) throw badRequest("Rejection reason is required");
     const swap = loadSwap(id, access.tenantId);
     tenantService.assertBranchAccess(access, swap.branch_id);
     if (swap.status !== "pending_manager") throw badRequest("Only owner-pending swaps can be rejected");
@@ -314,7 +380,7 @@ export const staffShiftSwapService = {
     const changed = db.prepare(`UPDATE staff_shift_swaps SET status = 'rejected', rejected_by = @rejectedBy,
       rejected_at = @stamp, rejection_reason = @reason, version = version + 1, updated_at = @stamp
       WHERE id = @id AND tenant_id = @tenantId AND status = 'pending_manager' AND version = @version`)
-      .run({ rejectedBy: access.userId || "", stamp, reason: String(payload.reason || "").trim(), id, tenantId: access.tenantId, version: swap.version });
+      .run({ rejectedBy: access.userId || "", stamp, reason, id, tenantId: access.tenantId, version: swap.version });
     if (changed.changes !== 1) throw conflict("Shift swap was updated by another request");
     const updated = loadSwap(id, access.tenantId);
     for (const staffId of [updated.from_staff_id, updated.to_staff_id]) notification({ tenantId: updated.tenant_id,

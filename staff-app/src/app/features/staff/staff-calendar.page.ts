@@ -57,7 +57,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         } @else {
           <section class="calendar-week">
             @for (item of weekSchedules(); track item.id) {
-              <article class="panel" draggable="true" (dragstart)="dragSchedule(item)" (dragover)="$event.preventDefault()" (drop)="dropSchedule(item.date)">
+              <article class="panel" [draggable]="canUpdateCalendar()" (dragstart)="dragSchedule(item)" (dragover)="$event.preventDefault()" (drop)="dropSchedule(item.date)">
                 <div class="panel-title"><h2>{{ item.date || 'Scheduled' }}</h2><span>{{ item.status }}</span></div>
                 <strong>{{ item.startTime || '-' }} - {{ item.endTime || '-' }}</strong>
                 <p class="muted">{{ item.type || 'roster' }}</p>
@@ -119,6 +119,7 @@ export class StaffCalendarPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.loadGeneration++;
     window.removeEventListener("aura:refresh-child", this.onRefresh);
   }
 
@@ -141,11 +142,11 @@ export class StaffCalendarPage implements OnInit, OnDestroy {
   }
 
   canReadCalendar(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("read:appointments");
   }
 
   canUpdateCalendar(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("update:appointments");
   }
 
   setView(value: "day" | "week") {

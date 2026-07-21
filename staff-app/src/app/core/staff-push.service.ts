@@ -124,24 +124,33 @@ export class StaffPushService {
   }
 
   private async registerNativeDevice(): Promise<void> {
-    const token = await new Promise<string>(async (resolve, reject) => {
+    const token = await new Promise<string>((resolve, reject) => {
       let settled = false;
+      let registration: { remove: () => Promise<void> } | null = null;
+      let registrationError: { remove: () => Promise<void> } | null = null;
+      const cleanup = async () => {
+        clearTimeout(timeout);
+        await Promise.all([registration?.remove().catch(() => {}), registrationError?.remove().catch(() => {})]);
+      };
+      const finish = (error?: Error, value?: string) => {
+        if (settled) return;
+        settled = true;
+        void cleanup().then(() => error ? reject(error) : resolve(value || ""));
+      };
       const timeout = window.setTimeout(() => {
-        if (!settled) { settled = true; reject(new Error("FCM registration timed out. Please try again.")); }
+        finish(new Error("FCM registration timed out. Please try again."));
       }, 15_000);
-      const registration = await PushNotifications.addListener("registration", async (result) => {
-        if (settled) return;
-        settled = true; clearTimeout(timeout);
-        await registration.remove(); await registrationError.remove();
-        resolve(result.value);
-      });
-      const registrationError = await PushNotifications.addListener("registrationError", async (error) => {
-        if (settled) return;
-        settled = true; clearTimeout(timeout);
-        await registration.remove(); await registrationError.remove();
-        reject(new Error(error.error || "FCM registration failed."));
-      });
-      await PushNotifications.register();
+      void (async () => {
+        try {
+          registration = await PushNotifications.addListener("registration", (result) => finish(undefined, result.value));
+          if (settled) { await registration.remove().catch(() => {}); return; }
+          registrationError = await PushNotifications.addListener("registrationError", (error) => finish(new Error(error.error || "FCM registration failed.")));
+          if (settled) { await cleanup(); return; }
+          await PushNotifications.register();
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error("FCM registration failed."));
+        }
+      })();
     });
     await this.staff.registerPushDevice(this.deviceId(), { platform: "android", pushProvider: "fcm", deviceToken: token });
   }
@@ -149,7 +158,6 @@ export class StaffPushService {
   private async setupNativeActionListener(): Promise<void> {
     if (this.nativeActionListenerReady) return;
     if (this.nativeActionHandle) { await this.nativeActionHandle.remove().catch(() => {}); this.nativeActionHandle = null; }
-    this.nativeActionListenerReady = true;
     await PushNotifications.createChannel({
       id: "staff_notifications",
       name: "Staff notifications",
@@ -162,7 +170,7 @@ export class StaffPushService {
       const url = String(action.notification.data?.["url"] || "/staff/notifications");
       const safe = url.startsWith("/staff/") && !url.includes("..") ? url : "/staff/notifications";
       void this.router.navigateByUrl(safe);
-    }).then((handle) => { this.nativeActionHandle = handle; });
+    }).then((handle) => { this.nativeActionHandle = handle; this.nativeActionListenerReady = true; });
   }
 
   private base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {

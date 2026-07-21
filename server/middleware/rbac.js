@@ -214,6 +214,28 @@ function explicitDecision(rows, action) {
   return false;
 }
 
+function explicitlyDenied(role, action, resources, access = {}) {
+  try {
+    const rows = db.prepare(`SELECT resource, actions
+      FROM security_permissions
+      WHERE tenantId = @tenantId
+        AND role = @role
+        AND effect = 'deny'
+        AND (resource IN (${resources.map((_, index) => `@resource${index}`).join(", ")}) OR resource = '*')
+        AND status = 'active'`).all({
+      tenantId: access.tenantId || "",
+      role: normalizeRole(role),
+      ...Object.fromEntries(resources.map((resource, index) => [`resource${index}`, resource]))
+    });
+    return rows.some((row) => {
+      const actions = safeActions(row.actions);
+      return !actions.length || actionMatches(actions, action);
+    });
+  } catch {
+    return false;
+  }
+}
+
 function staticGrantAllows(grants, action, resource) {
   return grants.includes("*") ||
     grants.includes(`${action}:*`) ||
@@ -300,10 +322,6 @@ export function requirePermission(action, resourceResolver = (req) => req.params
     const resource = resourceResolver(req);
     const role = req.access?.role || req.user?.role || "staff";
     const checkedAction = requestAction(action, req);
-    if (checkedAction === "read" && req.access?.staffId && /^\/staff-self\//.test(req.path || "")) {
-      next();
-      return;
-    }
     if (!can(role, checkedAction, resource, req.access || {})) {
       auditDenied(req, { action: checkedAction, resource, reason: "forbidden" });
       next(forbidden());
@@ -333,6 +351,25 @@ export function requireAnyPermission(checks = []) {
       return;
     }
     next();
+  };
+}
+
+export function requireSelfServiceOrAnyPermission(action, resources, checks = []) {
+  resources = Array.isArray(resources) ? resources : [resources];
+  const fallback = requireAnyPermission(checks);
+  return (req, res, next) => {
+    if (req.access?.staffId) {
+      const role = req.access.role || req.user?.role || "staff";
+      const checkedAction = requestAction(action, req);
+      if (explicitlyDenied(role, checkedAction, resources, req.access)) {
+        auditDenied(req, { action: checkedAction, resource: resources.join(","), reason: "forbidden" });
+        next(forbidden());
+        return;
+      }
+      next();
+      return;
+    }
+    fallback(req, res, next);
   };
 }
 

@@ -2,8 +2,11 @@ import { Router } from "express";
 import { staffMasterService } from "../services/staff-master.service.js";
 import { staffLoginService } from "../services/staff-login.service.js";
 import { route } from "./staff-os-route-utils.js";
+import { requirePermission } from "../middleware/rbac.js";
 
 export const staffMasterRouter = Router();
+
+staffMasterRouter.use((req, res, next) => requirePermission(req.method === "GET" ? "read" : "write", () => "staff")(req, res, next));
 
 staffMasterRouter.get("/staff-os/staff-categories", route((req, res) => res.json(staffMasterService.listStaffCategories(req.query, req.access))));
 staffMasterRouter.post("/staff-os/staff-categories", route((req, res) => res.status(201).json(staffMasterService.createStaffCategory(req.body, req.access))));

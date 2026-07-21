@@ -1,6 +1,8 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "../db.js";
-import { badRequest, conflict, notFound } from "../utils/app-error.js";
+import { badRequest, conflict, notFound, unauthorized } from "../utils/app-error.js";
 import { staffOsService } from "./staff-os.service.js";
+import { staffAttendanceService } from "./staff-attendance.service.js";
 import { staffOvertimeService } from "./staff-overtime.service.js";
 import { generalSettingsService } from "./general-settings.service.js";
 import {
@@ -41,6 +43,20 @@ const supportedProviders = new Set([
   "manual"
 ]);
 const punchTypes = new Set(["clock_in", "clock_out"]);
+
+function istBusinessDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(value);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left || ""));
+  const b = Buffer.from(String(right || ""));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 function businessDaysBetween(startDate, endDate) {
   const start = new Date(`${startDate}T00:00:00.000Z`);
@@ -167,7 +183,7 @@ export class StaffBiometricService {
 
   syncDevice(id, payload = {}, access) {
     access = requireTenant(access);
-    requireRole(access, managerRoles, "Only manager/admin/owner can sync biometric devices");
+    if (access.role !== "biometricGateway") requireRole(access, managerRoles, "Only manager/admin/owner can sync biometric devices");
     const device = db.prepare("SELECT * FROM biometric_devices WHERE id = ? AND tenant_id = ?").get(id, access.tenantId);
     if (!device) throw notFound("Biometric device not found");
     assertBranch(access, device.branch_id);
@@ -361,7 +377,9 @@ export class StaffBiometricService {
   gatewayHeartbeat(id, payload = {}, access) {
     access = requireTenant(access);
     const gateway = this.getGateway(id, access);
+    this.authenticateGateway(gateway, payload, access);
     const branchId = branchIdFrom(payload, access) || gateway.branch_id;
+    if (branchId !== gateway.branch_id) throw badRequest("Gateway heartbeat branch does not match registered branch");
     assertBranch(access, branchId);
     const stamp = now();
     db.prepare(`UPDATE biometric_gateway_agents SET health_status = ?, last_seen_at = ?, last_ip = ?, version_label = COALESCE(NULLIF(?, ''), version_label),
@@ -375,12 +393,17 @@ export class StaffBiometricService {
   gatewayEvents(id, payload = {}, access) {
     access = requireTenant(access);
     const gateway = this.getGateway(id, access);
+    this.authenticateGateway(gateway, payload, access);
     assertBranch(access, gateway.branch_id);
     const events = Array.isArray(payload.events) ? payload.events : Array.isArray(payload.punches) ? payload.punches : [];
     if (!events.length) throw badRequest("events are required");
+    if (events.length > 500) throw badRequest("A gateway batch cannot exceed 500 events");
+    const configuredScopes = this.parsePayload(gateway.provider_scope_json);
+    const providerScopes = new Set(Array.isArray(configuredScopes) ? configuredScopes : []);
     const grouped = new Map();
     for (const event of events) {
       const device = this.resolveGatewayDevice(event, gateway, access);
+      if (providerScopes.size && !providerScopes.has(device.provider)) throw badRequest(`Gateway is not allowed to ingest ${device.provider} events`);
       const list = grouped.get(device.id) || [];
       list.push({
         externalUserId: event.externalUserId || event.external_user_id,
@@ -399,7 +422,11 @@ export class StaffBiometricService {
     if (payload.processNow || payload.process_now) {
       processed = this.processQueue({ branchId: gateway.branch_id, limit: Math.max(events.length, 100) }, access);
     }
-    this.gatewayHeartbeat(gateway.id, { healthStatus: "online", config: { lastBatchSize: events.length } }, access);
+    this.gatewayHeartbeat(gateway.id, {
+      healthStatus: "online",
+      config: { lastBatchSize: events.length },
+      apiKey: payload.apiKey || payload.api_key || access.gatewayApiKey || ""
+    }, access);
     return {
       gateway: camel({ ...gateway, api_key_hash: "[stored]" }),
       acceptedEvents: syncResults.reduce((sum, result) => sum + Number(result.run?.acceptedEvents || 0), 0),
@@ -496,7 +523,7 @@ export class StaffBiometricService {
     access = requireTenant(access);
     const branchId = query.branchId || query.branch_id || access.requestedBranchId || access.branchId || "";
     assertBranch(access, branchId);
-    const date = query.date || now().slice(0, 10);
+    const date = query.date || istBusinessDate();
     const from = query.from || date;
     const to = query.to || date;
     const limit = Math.min(Number(query.limit || 80), 250);
@@ -711,7 +738,7 @@ export class StaffBiometricService {
     requireManager(access);
     const branchId = branchIdFrom(payload, access);
     assertBranch(access, branchId);
-    const date = payload.date || now().slice(0, 10);
+    const date = payload.date || istBusinessDate();
     const from = payload.from || payload.periodStart || date;
     const to = payload.to || payload.periodEnd || date;
     const created = [];
@@ -805,7 +832,7 @@ export class StaffBiometricService {
 
   processQueue(payload = {}, access) {
     access = requireTenant(access);
-    requireRole(access, managerRoles, "Only manager/admin/owner can process biometric attendance");
+    if (access.role !== "biometricGateway") requireRole(access, managerRoles, "Only manager/admin/owner can process biometric attendance");
     const branchId = branchIdFrom(payload, access);
     assertBranch(access, branchId);
     const limit = Math.min(Number(payload.limit || 100), 300);
@@ -819,30 +846,44 @@ export class StaffBiometricService {
       const punchAt = event.punch_at || event.punchAt || now();
       const staffId = row.staff_id || event.staff_id || event.staffId || "";
       try {
-        if (!staffId) throw badRequest("Biometric event is not mapped to a staff profile");
-        const attendancePayload = {
-          staffId,
-          branchId: row.branch_id,
-          businessDate: String(punchAt).slice(0, 10),
-          source: "biometric",
-          deviceId: event.device_id || event.deviceId || "",
-          ...(punchType === "clock_out" ? { clockOutAt: punchAt } : { clockInAt: punchAt })
-        };
-        const attendance = punchType === "clock_out"
-          ? staffOsService.clockOut(attendancePayload, access)
-          : staffOsService.clockIn(attendancePayload, access);
-        db.prepare(`UPDATE biometric_event_queue SET status = 'processed', processed_at = ? WHERE id = ? AND tenant_id = ?`)
-          .run(now(), row.id, access.tenantId);
-        if (row.biometric_log_id) {
-          db.prepare("UPDATE biometric_device_logs SET status = 'processed' WHERE id = ? AND tenant_id = ?").run(row.biometric_log_id, access.tenantId);
-        }
+        const attendance = db.transaction(() => {
+          const claimed = db.prepare(`UPDATE biometric_event_queue SET status = 'processing'
+            WHERE id = @id AND tenant_id = @tenant_id AND status = 'queued'`)
+            .run({ id: row.id, tenant_id: access.tenantId });
+          if (claimed.changes !== 1) throw conflict("Biometric event was already claimed");
+          if (!staffId) throw badRequest("Biometric event is not mapped to a staff profile");
+          const attendancePayload = {
+            staffId,
+            branchId: row.branch_id,
+            source: "biometric",
+            deviceId: event.device_id || event.deviceId || "",
+            ...(punchType === "clock_out"
+              ? { clockOutAt: punchAt }
+              : { businessDate: istBusinessDate(new Date(punchAt)), clockInAt: punchAt })
+          };
+          const saved = punchType === "clock_out"
+            ? staffAttendanceService.clockOut(attendancePayload, access)
+            : staffAttendanceService.clockIn(attendancePayload, access);
+          db.prepare(`UPDATE biometric_event_queue SET status = 'processed', processed_at = @processed_at
+            WHERE id = @id AND tenant_id = @tenant_id AND status = 'processing'`)
+            .run({ processed_at: now(), id: row.id, tenant_id: access.tenantId });
+          if (row.biometric_log_id) {
+            db.prepare("UPDATE biometric_device_logs SET status = 'processed' WHERE id = @id AND tenant_id = @tenant_id")
+              .run({ id: row.biometric_log_id, tenant_id: access.tenantId });
+          }
+          return saved;
+        })();
         results.push({ id: row.id, status: "processed", attendanceId: attendance.id, punchType, staffId });
       } catch (error) {
-        db.prepare(`UPDATE biometric_event_queue SET status = 'failed', processed_at = ? WHERE id = ? AND tenant_id = ?`)
-          .run(now(), row.id, access.tenantId);
+        const failed = db.prepare(`UPDATE biometric_event_queue SET status = 'failed', processed_at = @processed_at
+          WHERE id = @id AND tenant_id = @tenant_id AND status IN ('queued', 'processing')`)
+          .run({ processed_at: now(), id: row.id, tenant_id: access.tenantId });
+        if (failed.changes !== 1) continue;
         if (row.biometric_log_id) {
-          db.prepare("UPDATE biometric_device_logs SET status = 'failed', suspicious = 1, suspicious_reason = ? WHERE id = ? AND tenant_id = ?")
-            .run(error.message || "Unable to process biometric event", row.biometric_log_id, access.tenantId);
+          db.prepare(`UPDATE biometric_device_logs SET status = 'failed', suspicious = 1, suspicious_reason = @reason
+            WHERE id = @id AND tenant_id = @tenant_id`).run({
+            reason: error.message || "Unable to process biometric event", id: row.biometric_log_id, tenant_id: access.tenantId
+          });
         }
         this.recordRiskEvent({
           branchId: row.branch_id,
@@ -882,33 +923,48 @@ export class StaffBiometricService {
     const imageDataUrl = String(payload.imageDataUrl || payload.image_data_url || "");
     if (!edgeVerified && !imageDataUrl.startsWith("data:image/")) throw badRequest("Camera imageDataUrl is required unless edgeVerified is true");
     if (edgeVerified && !(payload.imageHash || payload.image_hash) && !signedEvent) throw badRequest("imageHash or signedEvent is required for edge verified camera punch");
+    if (edgeVerified) {
+      const gateway = this.getGateway(payload.gatewayId || payload.gateway_id || "", access);
+      const apiKey = this.authenticateGateway(gateway, payload, access, true);
+      if (!signedEvent || !edgeSignature) throw badRequest("signedEvent and edgeSignature are required for edge verified camera punch");
+      const expected = createHmac("sha256", apiKey).update(signedEvent).digest("hex");
+      if (!safeEqual(expected, edgeSignature)) throw badRequest("Invalid edge camera signature");
+      if (gateway.branch_id !== branchId) throw badRequest("Camera gateway does not belong to selected branch");
+    }
     if (imageDataUrl.length > 2_000_000) throw badRequest("Camera image is too large");
     const capturedAt = payload.capturedAt || payload.captured_at || now();
-    const businessDate = payload.businessDate || payload.business_date || String(capturedAt).slice(0, 10);
+    const capturedDate = new Date(capturedAt);
+    if (Number.isNaN(capturedDate.getTime())) throw badRequest("capturedAt is invalid");
+    const businessDate = payload.businessDate || payload.business_date || istBusinessDate(capturedDate);
     const device = payload.deviceId || payload.device_id
       ? this.getDevice(payload.deviceId || payload.device_id, access)
       : this.ensureCameraDevice(branchId, access);
     const imageHash = String(payload.imageHash || payload.image_hash || (imageDataUrl ? hashPayload({ imageDataUrl }) : hashPayload({ signedEvent, edgeSignature })));
     const externalEventId = payload.externalEventId || payload.external_event_id || hashPayload({ staffId: staff.id, punchType, capturedAt, imageHash });
-    const duplicateLog = db.prepare("SELECT id FROM biometric_device_logs WHERE tenant_id = ? AND device_id = ? AND external_event_id = ?")
-      .get(access.tenantId, device.id, externalEventId);
+    const duplicateLog = db.prepare(`SELECT id FROM biometric_device_logs
+      WHERE tenant_id = @tenant_id AND device_id = @device_id AND external_event_id = @external_event_id`)
+      .get({ tenant_id: access.tenantId, device_id: device.id, external_event_id: externalEventId });
     if (duplicateLog) throw conflict("Camera attendance event already exists");
     const evidenceId = makeId("cam_att");
     const selfieUrl = `camera-evidence:${evidenceId}`;
     const attendancePayload = {
       branchId,
       staffId: staff.id,
-      businessDate,
       source: "camera",
       deviceId: device.id,
       selfieUrl,
       gpsLat: payload.gpsLat ?? payload.gps_lat ?? null,
       gpsLng: payload.gpsLng ?? payload.gps_lng ?? null,
-      ...(punchType === "clock_out" ? { clockOutAt: capturedAt } : { clockInAt: capturedAt })
+      ...(punchType === "clock_out" ? { clockOutAt: capturedAt } : { businessDate, clockInAt: capturedAt })
     };
+    const stored = db.transaction(() => {
+    const concurrentDuplicate = db.prepare(`SELECT id FROM biometric_device_logs
+      WHERE tenant_id = @tenant_id AND device_id = @device_id AND external_event_id = @external_event_id`)
+      .get({ tenant_id: access.tenantId, device_id: device.id, external_event_id: externalEventId });
+    if (concurrentDuplicate) throw conflict("Camera attendance event already exists");
     const attendance = punchType === "clock_out"
-      ? staffOsService.clockOut(attendancePayload, access)
-      : staffOsService.clockIn(attendancePayload, access);
+      ? staffAttendanceService.clockOut(attendancePayload, access)
+      : staffAttendanceService.clockIn(attendancePayload, access);
     const livenessChecks = payload.livenessChecks || payload.liveness_checks || {};
     const derivedLivenessScore = this.deriveLivenessScore(livenessChecks);
     const livenessScore = Number(payload.livenessScore ?? payload.liveness_score ?? derivedLivenessScore ?? 0);
@@ -956,7 +1012,6 @@ export class StaffBiometricService {
       suspicious_reason: evidence.suspicious_reason,
       status: "processed"
     };
-    db.transaction(() => {
       db.prepare(`INSERT INTO staff_attendance_camera_evidence
         (id, tenant_id, branch_id, staff_id, attendance_id, device_id, capture_type, captured_at, business_date, image_data_url, image_hash,
          liveness_score, match_score, gps_lat, gps_lng, source, review_status, suspicious, suspicious_reason, notes, created_by)
@@ -965,10 +1020,15 @@ export class StaffBiometricService {
       db.prepare(`INSERT INTO biometric_device_logs
         (id, tenant_id, branch_id, device_id, staff_id, external_user_id, external_event_id, punch_type, punch_at, raw_event_json, suspicious, suspicious_reason, status)
         VALUES (@id, @tenant_id, @branch_id, @device_id, @staff_id, @external_user_id, @external_event_id, @punch_type, @punch_at, @raw_event_json, @suspicious, @suspicious_reason, @status)`).run(log);
-      db.prepare("UPDATE staff_attendance_logs SET selfie_url = ?, device_id = ?, source = ?, updated_at = ? WHERE id = ? AND tenant_id = ?")
-        .run(selfieUrl, device.id, evidence.source, now(), attendance.id, access.tenantId);
+      db.prepare(`UPDATE staff_attendance_logs SET selfie_url = @selfie_url, device_id = @device_id, source = @source, updated_at = @updated_at
+        WHERE id = @id AND tenant_id = @tenant_id`).run({
+        selfie_url: selfieUrl, device_id: device.id, source: evidence.source, updated_at: now(),
+        id: attendance.id, tenant_id: access.tenantId
+      });
       staffAudit("staff.camera_attendance_captured", "staff_attendance_camera_evidence", evidence.id, access, { after: { ...evidence, image_data_url: "[stored]" }, branchId });
+      return { attendance, evidence, log };
     })();
+    const { attendance, evidence, log } = stored;
     if (suspiciousReasons.length) {
       this.recordRiskEvent({
         branchId,
@@ -1047,9 +1107,48 @@ export class StaffBiometricService {
     return row;
   }
 
+  gatewayRequestAccess(id, credentials = {}) {
+    const tenantId = String(credentials.tenantId || "").trim();
+    const apiKey = String(credentials.apiKey || "");
+    if (!tenantId || !id || !apiKey) throw unauthorized("Gateway tenant, id and apiKey are required");
+    const gateway = db.prepare(`SELECT * FROM biometric_gateway_agents
+      WHERE tenant_id = @tenant_id AND (id = @id OR gateway_code = @id) LIMIT 1`)
+      .get({ tenant_id: tenantId, id });
+    if (!gateway || !safeEqual(hashPayload({ gatewayApiKey: apiKey }), gateway.api_key_hash)) {
+      throw unauthorized("Invalid biometric gateway credentials");
+    }
+    if (gateway.status !== "active") throw unauthorized("Biometric gateway is not active");
+    return {
+      tenantId: gateway.tenant_id,
+      branchId: gateway.branch_id,
+      requestedBranchId: gateway.branch_id,
+      branchIds: [gateway.branch_id],
+      role: "biometricGateway",
+      userId: `gateway:${gateway.id}`,
+      gatewayId: gateway.id,
+      gatewayApiKey: apiKey,
+      permissions: []
+    };
+  }
+
+  authenticateGateway(gateway, payload = {}, access = {}, required = false) {
+    const apiKey = String(payload.apiKey || payload.api_key || access.gatewayApiKey || "");
+    const managerRequest = managerRoles.has(access.role);
+    if (!apiKey && managerRequest && !required) return "";
+    if (!apiKey || !safeEqual(hashPayload({ gatewayApiKey: apiKey }), gateway.api_key_hash)) {
+      throw badRequest("Valid gateway apiKey is required");
+    }
+    if (gateway.status !== "active") throw badRequest("Biometric gateway is not active");
+    return apiKey;
+  }
+
   resolveGatewayDevice(event = {}, gateway, access) {
     const deviceId = event.deviceId || event.device_id || "";
-    if (deviceId) return this.getDevice(deviceId, access);
+    if (deviceId) {
+      const device = this.getDevice(deviceId, access);
+      if (device.branchId !== gateway.branch_id) throw badRequest("Biometric device does not belong to gateway branch");
+      return device;
+    }
     const deviceCode = event.deviceCode || event.device_code || "";
     if (!deviceCode) throw badRequest("deviceId or deviceCode is required for gateway events");
     const row = db.prepare(`SELECT * FROM biometric_devices

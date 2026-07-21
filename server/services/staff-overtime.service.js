@@ -40,12 +40,17 @@ export function minutesBetween(start, end) {
   return Math.floor((endAt - startAt) / 60000);
 }
 
-export function calculateOvertime({ grossMinutes = 0, completedBreakMinutes = 0, scheduledShiftMinutes = 0, hasSchedule = true, minimumOtDurationMinutes = 0 } = {}) {
+export function calculateOvertime({ grossMinutes = 0, completedBreakMinutes = 0, scheduledShiftMinutes = 0, hasSchedule = true, minimumOtDurationMinutes = 0, expectedEndAt = "", clockOutAt = "" } = {}) {
   const gross = wholeMinutes(grossMinutes);
   const breaks = wholeMinutes(completedBreakMinutes);
   const scheduled = wholeMinutes(scheduledShiftMinutes);
   const worked = Math.max(0, gross - breaks);
-  const rawOvertime = hasSchedule ? Math.max(0, worked - scheduled) : 0;
+  const expectedEnd = timestamp(expectedEndAt);
+  const clockOut = timestamp(clockOutAt);
+  const hasAuthoritativeEnd = Number.isFinite(expectedEnd) && Number.isFinite(clockOut);
+  const rawOvertime = hasSchedule
+    ? (hasAuthoritativeEnd ? Math.max(0, Math.floor((clockOut - expectedEnd) / 60000)) : Math.max(0, worked - scheduled))
+    : 0;
   const minOt = wholeMinutes(minimumOtDurationMinutes);
   return {
     grossMinutes: gross,
@@ -64,6 +69,31 @@ function scheduleInterval(schedule, businessDate) {
   if (!Number.isFinite(startAt) || !Number.isFinite(endAt)) return null;
   if (endAt <= startAt) endAt += 24 * 60 * 60000;
   return { schedule, startAt, endAt, scheduledMinutes: Math.floor((endAt - startAt) / 60000) };
+}
+
+function parseIds(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function categoryBaseline(category, businessDate, clockInAt) {
+  if (!category) return null;
+  const duration = wholeMinutes(category.working_duration_minutes);
+  let startAt = timestamp(category.in_time, businessDate);
+  let endAt = timestamp(category.out_time, businessDate);
+  if (Number.isFinite(startAt) && Number.isFinite(endAt) && endAt <= startAt) endAt += 24 * 60 * 60000;
+  if (Number.isFinite(startAt) && !Number.isFinite(endAt) && duration) endAt = startAt + duration * 60000;
+  if (!Number.isFinite(startAt) && Number.isFinite(endAt) && duration) startAt = endAt - duration * 60000;
+  if (!Number.isFinite(startAt) && !Number.isFinite(endAt) && duration) {
+    startAt = timestamp(clockInAt, businessDate);
+    endAt = startAt + duration * 60000;
+  }
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt) return null;
+  return { startAt, endAt, scheduledMinutes: Math.floor((endAt - startAt) / 60000), source: "attendance_category" };
 }
 
 export function matchSchedule(schedules = [], { businessDate = "", clockInAt = "" } = {}) {
@@ -117,11 +147,101 @@ class StaffOvertimeService {
       ORDER BY start_time, id`).all({ tenantId, branchId, staffId, businessDate });
   }
 
+  attendanceCategoryFor({ tenantId, branchId, schedule }) {
+    const rows = db.prepare(`SELECT * FROM staff_attendance_category_master
+      WHERE tenant_id = @tenantId AND status = 'active' AND COALESCE(hide, 0) = 0
+        AND (branch_id = @branchId OR branch_id = '')
+      ORDER BY CASE WHEN branch_id = @branchId THEN 0 ELSE 1 END,
+        updated_at DESC, created_at DESC, id ASC`).all({ tenantId, branchId });
+    const shiftKeys = new Set([schedule?.id, schedule?.shift_type, schedule?.shiftType].filter(Boolean).map(String));
+    return rows.find((category) => {
+      const allowable = parseIds(category.allowable_shift_ids_json);
+      return allowable.length === 0 || allowable.some((id) => shiftKeys.has(id));
+    }) || null;
+  }
+
+  freezeSnapshotPolicy(snapshot, { clockInAt = "", schedules, businessDate = snapshot?.businessDate, branchId = snapshot?.branchId, staffId = snapshot?.staffId, force = false } = {}) {
+    if (!snapshot || (snapshot.policyFrozenAt && !force)) return snapshot;
+    const alreadyFrozen = Boolean(snapshot.categoryId || snapshot.baselineStartAt || snapshot.expectedEndAt || snapshot.baselineSource);
+    const policyFrozenAt = new Date().toISOString();
+    if (alreadyFrozen && !force) {
+      db.prepare(`UPDATE staffAttendanceOvertimeSnapshots SET policyFrozenAt = @policyFrozenAt, updatedAt = CURRENT_TIMESTAMP
+        WHERE tenantId = @tenantId AND attendanceSource = @attendanceSource AND attendanceId = @attendanceId`).run({
+        policyFrozenAt,
+        tenantId: snapshot.tenantId,
+        attendanceSource: snapshot.attendanceSource,
+        attendanceId: snapshot.attendanceId
+      });
+      return this.snapshot(snapshot.tenantId, snapshot.attendanceSource, snapshot.attendanceId);
+    }
+    const availableSchedules = schedules || this.schedulesFor({
+      tenantId: snapshot.tenantId,
+      branchId,
+      staffId,
+      businessDate
+    });
+    const preferredSchedule = availableSchedules.find((schedule) => String(schedule.id || "") === String(snapshot.scheduleId || ""));
+    const matched = preferredSchedule && !force
+      ? scheduleInterval(preferredSchedule, businessDate)
+      : matchSchedule(availableSchedules, { businessDate, clockInAt });
+    const category = this.attendanceCategoryFor({ tenantId: snapshot.tenantId, branchId, schedule: matched?.schedule });
+    const baseline = matched ? { ...matched, source: "staff_schedule" } : categoryBaseline(category, businessDate, clockInAt);
+    const clockAt = timestamp(clockInAt, businessDate);
+    const delayMs = baseline && Number.isFinite(clockAt) ? Math.max(0, clockAt - baseline.startAt) : 0;
+    const explicitlyDisabled = force && alreadyFrozen && Number(snapshot.overtimeEnabled || 0) === 0 && snapshot.calculationStatus === "disabled";
+    const overtimeEnabled = !explicitlyDisabled && Boolean(category && Number(category.overtime_applicable || 0) === 1);
+    const calculationStatus = explicitlyDisabled ? "disabled" : (!category ? "review_required" : (!overtimeEnabled ? "disabled" : (baseline ? "eligible" : "review_required")));
+    const reviewReason = explicitlyDisabled ? (snapshot.reviewReason || "not_applicable") : (!category ? "missing_attendance_category" : (!overtimeEnabled ? "not_applicable" : (baseline ? "" : "missing_baseline")));
+    db.prepare(`UPDATE staffAttendanceOvertimeSnapshots SET
+      branchId = @branchId, staffId = @staffId, businessDate = @businessDate,
+      policyVersion = @policyVersion, scheduleId = @scheduleId, categoryId = @categoryId,
+      overtimeEnabled = @overtimeEnabled, minimumOtDurationMinutes = @minimumOtDurationMinutes,
+      baselineStartAt = @baselineStartAt, expectedEndAt = @expectedEndAt, baselineSource = @baselineSource,
+      scheduledMinutes = @scheduledMinutes, calculationStatus = @calculationStatus, reviewReason = @reviewReason,
+      policyFrozenAt = @policyFrozenAt, updatedAt = CURRENT_TIMESTAMP
+      WHERE tenantId = @tenantId AND attendanceSource = @attendanceSource AND attendanceId = @attendanceId`).run({
+        policyVersion: snapshot.policyVersion || STANDARD_OVERTIME_POLICY,
+        branchId,
+        staffId,
+        businessDate,
+        scheduleId: matched?.schedule?.id || "",
+        categoryId: explicitlyDisabled ? snapshot.categoryId : (category?.id || ""),
+        overtimeEnabled: overtimeEnabled ? 1 : 0,
+        minimumOtDurationMinutes: explicitlyDisabled ? wholeMinutes(snapshot.minimumOtDurationMinutes) : wholeMinutes(category?.minimum_ot_duration_minutes),
+        baselineStartAt: baseline ? new Date(baseline.startAt).toISOString() : "",
+        expectedEndAt: baseline ? new Date(baseline.endAt + delayMs).toISOString() : "",
+        baselineSource: baseline?.source || "",
+        scheduledMinutes: baseline?.scheduledMinutes || 0,
+        calculationStatus,
+        reviewReason,
+        policyFrozenAt,
+        tenantId: snapshot.tenantId,
+        attendanceSource: snapshot.attendanceSource,
+        attendanceId: snapshot.attendanceId
+      });
+    return this.snapshot(snapshot.tenantId, snapshot.attendanceSource, snapshot.attendanceId);
+  }
+
+  refreshSnapshotForCorrection({ tenantId, attendanceSource = "staff_attendance_logs", attendanceId, branchId, staffId, businessDate, clockInAt = "", schedules } = {}) {
+    const snapshot = this.snapshot(tenantId, attendanceSource, attendanceId);
+    if (!snapshot) return null;
+    return this.freezeSnapshotPolicy(snapshot, { clockInAt, schedules, branchId, staffId, businessDate, force: true });
+  }
+
   registerAttendance({ tenantId, branchId, staffId, attendanceId, businessDate, clockInAt = "", attendanceSource = "staff_attendance_logs", schedules } = {}) {
     const source = sourceKey(attendanceSource);
     const existing = this.snapshot(tenantId, source, attendanceId);
     if (existing) return existing;
     const matched = matchSchedule(schedules || this.schedulesFor({ tenantId, branchId, staffId, businessDate }), { businessDate, clockInAt });
+    const category = this.attendanceCategoryFor({ tenantId, branchId, schedule: matched?.schedule });
+    const categoryFallback = categoryBaseline(category, businessDate, clockInAt);
+    const baseline = matched ? { ...matched, source: "staff_schedule" } : categoryFallback;
+    const clockAt = timestamp(clockInAt, businessDate);
+    const delayMs = baseline && Number.isFinite(clockAt) ? Math.max(0, clockAt - baseline.startAt) : 0;
+    const expectedEndAt = baseline ? new Date(baseline.endAt + delayMs).toISOString() : "";
+    const overtimeEnabled = Boolean(category && Number(category.overtime_applicable || 0) === 1);
+    const calculationStatus = !category ? "review_required" : (!overtimeEnabled ? "disabled" : (baseline ? "eligible" : "review_required"));
+    const reviewReason = !category ? "missing_attendance_category" : (!overtimeEnabled ? "not_applicable" : (baseline ? "" : "missing_baseline"));
     const row = {
       id: `ot_${randomUUID().slice(0, 12)}`,
       tenantId,
@@ -132,13 +252,22 @@ class StaffOvertimeService {
       businessDate,
       policyVersion: STANDARD_OVERTIME_POLICY,
       scheduleId: matched?.schedule?.id || "",
-      scheduledMinutes: matched?.scheduledMinutes || 0,
-      calculationStatus: matched ? "eligible" : "review_required",
-      reviewReason: matched ? "" : "missing_schedule"
+      categoryId: category?.id || "",
+      overtimeEnabled: overtimeEnabled ? 1 : 0,
+      minimumOtDurationMinutes: wholeMinutes(category?.minimum_ot_duration_minutes),
+      baselineStartAt: baseline ? new Date(baseline.startAt).toISOString() : "",
+      expectedEndAt,
+      baselineSource: baseline?.source || "",
+      policyFrozenAt: new Date().toISOString(),
+      scheduledMinutes: baseline?.scheduledMinutes || 0,
+      calculationStatus,
+      reviewReason
     };
     db.prepare(`INSERT OR IGNORE INTO staffAttendanceOvertimeSnapshots
-      (id, tenantId, branchId, attendanceSource, attendanceId, staffId, businessDate, policyVersion, scheduleId, scheduledMinutes, calculationStatus, reviewReason)
-      VALUES (@id, @tenantId, @branchId, @attendanceSource, @attendanceId, @staffId, @businessDate, @policyVersion, @scheduleId, @scheduledMinutes, @calculationStatus, @reviewReason)`).run(row);
+      (id, tenantId, branchId, attendanceSource, attendanceId, staffId, businessDate, policyVersion, scheduleId, categoryId,
+       overtimeEnabled, minimumOtDurationMinutes, baselineStartAt, expectedEndAt, baselineSource, policyFrozenAt, scheduledMinutes, calculationStatus, reviewReason)
+      VALUES (@id, @tenantId, @branchId, @attendanceSource, @attendanceId, @staffId, @businessDate, @policyVersion, @scheduleId, @categoryId,
+       @overtimeEnabled, @minimumOtDurationMinutes, @baselineStartAt, @expectedEndAt, @baselineSource, @policyFrozenAt, @scheduledMinutes, @calculationStatus, @reviewReason)`).run(row);
     return this.snapshot(tenantId, source, attendanceId);
   }
 
@@ -150,25 +279,25 @@ class StaffOvertimeService {
   }
 
   completeSnapshot({ tenantId, attendanceSource, attendanceId, clockInAt, clockOutAt, completedBreakMinutes = 0 } = {}) {
-    const snapshot = this.snapshot(tenantId, attendanceSource, attendanceId);
+    let snapshot = this.snapshot(tenantId, attendanceSource, attendanceId);
     if (!snapshot) return null;
-    const category = db.prepare(`SELECT * FROM staff_attendance_category_master
-      WHERE tenant_id = ? AND branch_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1`)
-      .get(tenantId, snapshot.branchId || "");
-    const overtimeApplicable = category ? Number(category.overtime_applicable || 0) === 1 : true;
-    const minimumOtDurationMinutes = category ? Number(category.minimum_ot_duration_minutes || 0) : 0;
+    snapshot = this.freezeSnapshotPolicy(snapshot, { clockInAt });
+    const overtimeApplicable = Number(snapshot.overtimeEnabled || 0) === 1;
+    const minimumOtDurationMinutes = Number(snapshot.minimumOtDurationMinutes || 0);
     const grossMinutes = minutesBetween(clockInAt, clockOutAt);
     const validWindow = Boolean(clockInAt && clockOutAt && (grossMinutes > 0 || String(clockInAt) === String(clockOutAt)));
-    const hasSchedule = Boolean(snapshot.scheduleId) && validWindow && overtimeApplicable;
+    const hasSchedule = Boolean(snapshot.expectedEndAt) && validWindow && overtimeApplicable;
     const result = calculateOvertime({
       grossMinutes,
       completedBreakMinutes,
       scheduledShiftMinutes: snapshot.scheduledMinutes,
       hasSchedule,
-      minimumOtDurationMinutes
+      minimumOtDurationMinutes,
+      expectedEndAt: snapshot.expectedEndAt,
+      clockOutAt
     });
     const calculationStatus = !overtimeApplicable ? "disabled" : (hasSchedule ? "completed" : "review_required");
-    const reviewReason = !overtimeApplicable ? "not_applicable" : (!validWindow ? "invalid_time_window" : (snapshot.scheduleId ? "" : "missing_schedule"));
+    const reviewReason = !overtimeApplicable ? (snapshot.reviewReason || "not_applicable") : (!validWindow ? "invalid_time_window" : (snapshot.expectedEndAt ? "" : "missing_frozen_baseline"));
     db.prepare(`UPDATE staffAttendanceOvertimeSnapshots SET
       grossMinutes = @grossMinutes,
       completedBreakMinutes = @completedBreakMinutes,
@@ -187,7 +316,7 @@ class StaffOvertimeService {
         attendanceSource: sourceKey(attendanceSource),
         attendanceId
       });
-    return { ...result, calculationStatus, reviewReason, policyVersion: snapshot.policyVersion, scheduleId: snapshot.scheduleId };
+    return { ...result, calculationStatus, reviewReason, policyVersion: snapshot.policyVersion, scheduleId: snapshot.scheduleId, expectedEndAt: snapshot.expectedEndAt };
   }
 
   completeStaffOsAttendance(attendance, clockOutAt) {
@@ -230,7 +359,7 @@ class StaffOvertimeService {
     }
     return rows.map((row) => {
       const snapshot = snapshotByAttendance.get(String(row.id));
-      const completed = snapshot?.calculationStatus === "completed";
+      const completed = snapshot?.calculationStatus === "completed" || snapshot?.calculationStatus === "disabled";
       const grossMinutes = completed ? Number(snapshot.grossMinutes || 0) : minutesBetween(row.clockInAt, row.clockOutAt || new Date().toISOString());
       const totalBreakMinutes = completed ? Number(snapshot.completedBreakMinutes || 0) : Number(breakByAttendance.get(String(row.id)) || 0);
       return {
@@ -239,6 +368,8 @@ class StaffOvertimeService {
         totalBreakMinutes,
         totalWorkedMinutes: completed ? Number(snapshot.workedMinutes || 0) : Math.max(0, grossMinutes - totalBreakMinutes),
         scheduledShiftMinutes: snapshot ? Number(snapshot.scheduledMinutes || 0) : null,
+        expectedEndAt: snapshot?.expectedEndAt || "",
+        overtimeEnabled: snapshot ? Number(snapshot.overtimeEnabled || 0) === 1 : false,
         overtimeCalculationStatus: snapshot?.calculationStatus || "legacy",
         overtimeReviewReason: snapshot?.reviewReason || "",
         overtimePolicyVersion: snapshot?.policyVersion || ""

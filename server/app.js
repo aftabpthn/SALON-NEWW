@@ -21,6 +21,7 @@ import { ensureAppointmentActivitySchema } from "./services/appointment-activity
 import { ensureEnterpriseSchedulerSchema } from "./services/enterprise-scheduler-schema.service.js";
 import { ensureClientMasterSchema } from "./services/client-master-schema.service.js";
 import { ensureStaffOsSchema } from "./services/staff-os-schema.service.js";
+import { ensureAttendanceVerificationSchema } from "./services/attendance-verification-schema.service.js";
 import { ensureStatutoryComplianceSchema } from "./services/compliance/compliance-schema.service.js";
 import { ensureInvoiceNotificationSchema } from "./services/invoice-notification-schema.service.js";
 import { ensureReputationSchema } from "./services/reputation/reputation-schema.service.js";
@@ -206,6 +207,7 @@ import { staffOsRouter } from "./routes/staff-os.routes.js";
 import { staffEnterpriseRouter } from "./routes/staff-enterprise.routes.js";
 import { staffBusinessRouter } from "./routes/staff-business.routes.js";
 import { staffSelfRouter } from "./routes/staff-self.routes.js";
+import { mobileAttendanceVerificationRouter } from "./routes/mobile-attendance-verification.routes.js";
 import { teamChatRouter } from "./routes/team-chat.routes.js";
 import { superAdminRouter } from "./routes/super-admin.routes.js";
 import { terminalRouter } from "./routes/terminal.routes.js";
@@ -274,6 +276,7 @@ export function createApp() {
   ensureEnterpriseSchedulerSchema();
   ensureClientMasterSchema();
   ensureStaffOsSchema();
+  ensureAttendanceVerificationSchema();
   ensureStatutoryComplianceSchema();
   ensureInvoiceNotificationSchema();
   ensureReputationSchema();
@@ -445,6 +448,7 @@ export function createApp() {
   app.use("/api/v1", subscriptionGuardMiddleware);
   app.use("/api/v1", idempotencyMiddleware);
   app.use("/api/v1", exportProtectionMiddleware);
+  app.use("/api/v1", mobileAttendanceVerificationRouter);
   app.get("/api/v1/admin/schema-health", (req, res) => {
     const role = String(req.access?.role || req.headers["x-user-role"] || "").toLowerCase();
     if (!["owner", "admin", "superadmin"].includes(role)) {
@@ -657,6 +661,7 @@ export function createApp() {
   app.use("/api", subscriptionGuardMiddleware);
   app.use("/api", idempotencyMiddleware);
   app.use("/api", exportProtectionMiddleware);
+  app.use("/api", mobileAttendanceVerificationRouter);
   app.use("/api/discount-audit", discountAuditRouter);
   app.use("/api/discount-budget", discountBudgetRouter);
   app.use("/api/coupon-engine", couponEngineRouter);

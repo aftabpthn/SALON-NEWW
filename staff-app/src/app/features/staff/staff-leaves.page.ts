@@ -95,10 +95,10 @@ export class StaffLeavesPage implements OnInit {
   }
 
   canReadLeaves(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return Boolean(this.staff.user()?.staffId) || this.staff.hasPermission("read:staff");
   }
 
   canRequestLeave(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return Boolean(this.staff.user()?.staffId) || this.staff.hasAnyPermission(["write:staff", "update:staff"]);
   }
 }

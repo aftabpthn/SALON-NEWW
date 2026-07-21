@@ -7,6 +7,22 @@ import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./acce
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
 const privilegedRoles = new Set(["superAdmin", "owner", "admin"]);
+const istDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+});
+
+function istBusinessDate(value = new Date()) {
+  return istDateFormatter.format(value);
+}
+
+function istDayBoundary(dateText, endOfDay = false) {
+  const [year, month, day] = dateText.split("-").map(Number);
+  const start = Date.UTC(year, month - 1, day, -5, -30);
+  return new Date(start + (endOfDay ? 86400000 - 1 : 0)).toISOString();
+}
 
 function normalizeRole(role = "") {
   const value = String(role || "").trim();
@@ -40,9 +56,8 @@ function defaultLoginIdForStaff(staff = {}) {
   return normalizeLoginId(staff.employeeCode || staff.employee_code || emailPrefix || staff.mobile || staff.id);
 }
 
-function defaultPasswordForLogin(loginId, staff = {}) {
-  const seed = String(loginId || staff.id || "staff").replace(/[^a-z0-9]/gi, "").slice(-6).padStart(6, "0");
-  return `Aura@${seed}`;
+function temporaryPassword() {
+  return `Aura@${randomBytes(18).toString("base64url")}`;
 }
 
 function hashPassword(password) {
@@ -130,7 +145,7 @@ function toIsoBoundary(value, fallbackDate, endOfDay = false) {
   const text = String(value || "").trim();
   const raw = text || fallbackDate;
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return `${raw}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}Z`;
+    return istDayBoundary(raw, endOfDay);
   }
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? fallbackDate : date.toISOString();
@@ -331,23 +346,27 @@ export class StaffLoginService {
     ensureTenantUserAccessColumns();
     const staff = typeof staffOrId === "string" ? this.getStaff(staffOrId, access) : staffOrId;
     if (!staff?.id) throw notFound("Staff record not found");
-    if (!payload.autoProvision && !privilegedRoles.has(normalizeRole(access.role))) throw forbidden("Only owner, admin or super admin can provision staff login");
+    if (!privilegedRoles.has(normalizeRole(access.role))) throw forbidden("Only owner, admin or super admin can provision staff login");
     const loginId = normalizeLoginId(payload.loginId || payload.login_id || payload.email || defaultLoginIdForStaff(staff));
     if (!loginId) throw badRequest("Staff login ID is required");
     const email = safeEmail(loginId, payload.email || staff.email);
     const requestedRole = String(payload.role || payload.roleId || staff.roleId || "staff").trim();
     const authRole = ["manager", "frontDesk", "cashier", "staff", "marketingLead", "customMarketingLead", "inventoryManager", "accountant"].includes(normalizeRole(requestedRole)) ? normalizeRole(requestedRole) : "staff";
     const branchIds = normalizeBranchIdsForRole(payload.branchIds || [staff.branchId].filter(Boolean), authRole);
-    const existingByStaff = db.prepare("SELECT * FROM tenant_users WHERE tenantId = ? AND staffId = ?").get(access.tenantId, staff.id);
+    const existingByStaff = db.prepare("SELECT * FROM tenant_users WHERE tenantId = @tenantId AND staffId = @staffId")
+      .get({ tenantId: access.tenantId, staffId: staff.id });
     const existingByLogin = db.prepare(`SELECT * FROM tenant_users
-      WHERE tenantId = ? AND (lower(loginId) = lower(?) OR lower(email) = lower(?))`)
-      .get(access.tenantId, loginId, email);
-    const existing = existingByStaff || existingByLogin;
-    if (existingByLogin && existingByLogin.staffId && existingByLogin.staffId !== staff.id) {
-      throw badRequest("This login ID is already linked to another staff member");
+      WHERE tenantId = @tenantId
+        AND id != @existingId
+        AND (lower(loginId) IN (lower(@loginId), lower(@email)) OR lower(email) IN (lower(@loginId), lower(@email)))
+      LIMIT 1`).get({ tenantId: access.tenantId, existingId: existingByStaff?.id || "", loginId, email });
+    if (existingByLogin) {
+      throw badRequest("This login ID or email is already used by another account");
     }
-    if (!existing && !payload.password) throw badRequest("Password is required when creating staff login");
-    const passwordPatch = payload.password ? hashPassword(payload.password) : {
+    const existing = existingByStaff;
+    const generatedPassword = payload.autoProvision && !payload.password ? temporaryPassword() : "";
+    if (!existing && !payload.password && !generatedPassword) throw badRequest("Password is required when creating staff login");
+    const passwordPatch = payload.password || generatedPassword ? hashPassword(payload.password || generatedPassword) : {
       passwordSalt: existing?.passwordSalt || "",
       passwordHash: existing?.passwordHash || ""
     };
@@ -365,7 +384,7 @@ export class StaffLoginService {
       failedLoginCount: 0,
       lockedUntil: "",
       lastLoginAt: existing?.lastLoginAt || "",
-      status: payload.status || existing?.status || "active",
+      status: payload.autoProvision ? "pending_activation" : payload.status || existing?.status || "active",
       accessApprovedBy: access.userId || existing?.accessApprovedBy || "",
       accessApprovedAt: existing?.accessApprovedAt || now(),
       permissionVersion: Number(existing?.permissionVersion || 1) + (existing ? 1 : 0),
@@ -396,17 +415,10 @@ export class StaffLoginService {
     ensureTenantUserAccessColumns();
     const staff = typeof staffOrId === "string" ? this.getStaff(staffOrId, access) : staffOrId;
     if (!staff?.id) throw notFound("Staff record not found");
-    const existing = db.prepare("SELECT * FROM tenant_users WHERE tenantId = ? AND staffId = ?").get(access.tenantId, staff.id);
+    const existing = db.prepare("SELECT * FROM tenant_users WHERE tenantId = @tenantId AND staffId = @staffId")
+      .get({ tenantId: access.tenantId, staffId: staff.id });
     if (existing) return rowToAuthUser(existing);
-    const loginId = defaultLoginIdForStaff(staff);
-    return this.upsertStaffLogin(staff, {
-      autoProvision: true,
-      loginId,
-      email: staff.email || "",
-      password: defaultPasswordForLogin(loginId, staff),
-      role: "staff",
-      status: "active"
-    }, access);
+    return null;
   }
 
   getStaffLogin(staffId, access) {
@@ -419,13 +431,12 @@ export class StaffLoginService {
     const staffId = this.resolveStaffId(query, access);
     const staff = this.getStaff(staffId, access);
     const identityIds = this.staffIdentityIds(staff, access.tenantId);
-    const todayText = new Date().toISOString().slice(0, 10);
+    const todayText = istBusinessDate();
     const from = toIsoBoundary(query.from, new Date(Date.now() - 30 * 86400000).toISOString());
     const to = toIsoBoundary(query.to, new Date(Date.now() + 30 * 86400000).toISOString(), true);
-    const todayStart = `${String(query.date || todayText).slice(0, 10)}T00:00:00.000Z`;
-    const todayEndDate = new Date(todayStart);
-    todayEndDate.setUTCDate(todayEndDate.getUTCDate() + 1);
-    const todayEnd = todayEndDate.toISOString();
+    const businessDate = String(query.date || todayText).slice(0, 10);
+    const todayStart = istDayBoundary(businessDate);
+    const todayEnd = new Date(new Date(todayStart).getTime() + 86400000).toISOString();
     const idsSql = placeholders(identityIds);
     const appointmentScope = scopedFilters("appointments", access, staff.branchId);
     const appointmentRows = db.prepare(`SELECT * FROM appointments
@@ -446,7 +457,7 @@ export class StaffLoginService {
     return {
       staff,
       identityIds,
-      range: { from, to, date: String(query.date || todayText).slice(0, 10) },
+      range: { from, to, date: businessDate },
       summary: {
         appointments: enriched.length,
         todayAppointments: today.length,
@@ -477,7 +488,7 @@ export class StaffLoginService {
     const dashboard = this.staffDashboard(query, access);
     const staffId = dashboard.staff.id;
     const branchId = dashboard.staff.branchId || access.branchId || "";
-    const date = String(query.date || dashboard.range.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const date = String(query.date || dashboard.range.date || istBusinessDate()).slice(0, 10);
     const nowDate = new Date();
     const todayAppointments = dashboard.todayAppointments || [];
     const completed = dashboard.workReport || [];

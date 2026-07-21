@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { authenticateJwt } from "../middleware/auth.js";
-import { requirePermission } from "../middleware/rbac.js";
+import { requirePermission, requireSelfServiceOrAnyPermission } from "../middleware/rbac.js";
 import { staffLoginService } from "../services/staff-login.service.js";
 import { generalSettingsService } from "../services/general-settings.service.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.middleware.js";
@@ -47,7 +47,7 @@ staffSelfRouter.patch(
   "/staff-self/notifications/:id",
   authenticateJwt(),
   staffSelfContext(["status"]),
-  requirePermission("update", () => "notifications"),
+  requireSelfServiceOrAnyPermission("update", "notifications", [{ action: "update", resource: "notifications" }]),
   asyncHandler((req, res) => {
     res.json(staffLoginService.updateStaffNotification(req.params.id, req.body, req.access));
   })
@@ -57,7 +57,7 @@ staffSelfRouter.get(
   "/staff-self/shift-swap-coworkers",
   authenticateJwt(),
   staffSelfContext(),
-  requirePermission("read", () => "staff"),
+  requireSelfServiceOrAnyPermission("read", "staff", [{ action: "read", resource: "staff" }]),
   asyncHandler((req, res) => res.json(staffShiftSwapService.coworkers(req.access)))
 );
 
@@ -65,7 +65,7 @@ staffSelfRouter.get(
   "/staff-self/shift-swaps",
   authenticateJwt(),
   staffSelfContext(),
-  requirePermission("read", () => "staff"),
+  requireSelfServiceOrAnyPermission("read", "staff", [{ action: "read", resource: "staff" }]),
   asyncHandler((req, res) => res.json(staffShiftSwapService.listForSelf(req.query, req.access)))
 );
 
@@ -73,7 +73,7 @@ staffSelfRouter.post(
   "/staff-self/shift-swaps",
   authenticateJwt(),
   staffSelfContext(["scheduleId", "toStaffId", "reason"]),
-  requirePermission("read", () => "staff"),
+  requireSelfServiceOrAnyPermission("write", "staff", [{ action: "write", resource: "staff" }]),
   asyncHandler((req, res) => res.status(201).json(staffShiftSwapService.request(req.body, req.access)))
 );
 
@@ -81,7 +81,7 @@ staffSelfRouter.post(
   "/staff-self/shift-swaps/:id/respond",
   authenticateJwt(),
   staffSelfContext(["decision", "note", "version"]),
-  requirePermission("read", () => "staff"),
+  requireSelfServiceOrAnyPermission("write", "staff", [{ action: "write", resource: "staff" }]),
   asyncHandler((req, res) => res.json(staffShiftSwapService.respond(req.params.id, req.body, req.access)))
 );
 
@@ -89,7 +89,7 @@ staffSelfRouter.post(
   "/staff-self/shift-swaps/:id/cancel",
   authenticateJwt(),
   staffSelfContext(["version"]),
-  requirePermission("read", () => "staff"),
+  requireSelfServiceOrAnyPermission("write", "staff", [{ action: "write", resource: "staff" }]),
   asyncHandler((req, res) => res.json(staffShiftSwapService.cancel(req.params.id, req.body, req.access)))
 );
 

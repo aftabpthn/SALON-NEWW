@@ -5,6 +5,7 @@ import { environment } from "../../environments/environment";
 import { resetCsrfState } from "./csrf.interceptor";
 import { addBusinessDays, businessDate } from "./business-date";
 import { CapacitorHttp } from "@capacitor/core";
+import { AttendanceBiometricService, AttendanceInstallationIdentity, NativeAttendanceLocation } from "./attendance-biometric.service";
 
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
 const STAFF_OFFLINE_LEASE_KEY = "auraStaffOfflineQueueLease";
@@ -310,7 +311,43 @@ export type StaffAttendance = {
   overtimeCalculationStatus: string;
   overtimeReviewReason: string;
   overtimePolicyVersion: string;
+  expectedEndAt: string;
+  overtimeEnabled: boolean;
+  verificationEvidence?: AttendanceVerificationEvidence | null;
 };
+
+export type AttendanceVerificationPolicy = {
+  branchId: string;
+  status: "active" | "disabled";
+  radiusMeters: number;
+  maxAccuracyMeters: number;
+  enforceClockIn: boolean;
+  enforceClockOut: boolean;
+  requireVerifiedAttestation: boolean;
+  version: number;
+};
+
+export type AttendanceDevice = {
+  id: string;
+  deviceId: string;
+  status: "pending" | "approved" | "revoked";
+  publicKeyAlgorithm: "ECDSA_P256_SHA256";
+  hardwareBackedClaim: number;
+  verificationCapability: "biometric_or_device_credential";
+  attestationStatus: "unverified" | "verified";
+};
+
+export type AttendanceChallenge = { enforcementRequired: true; challengeId: string; signingPayloadBase64: string; algorithm: "ECDSA_P256_SHA256"; expiresAt: string };
+export type AttendanceEvidenceSubmission = { challengeId: string; deviceId: string; signatureBase64: string; idempotencyKey: string };
+export type AttendanceVerificationEvidence = {
+  id?: string;
+  decision?: "accepted" | "rejected";
+  serverDistanceMeters?: number;
+  accuracyMeters?: number;
+  reason?: string;
+  signatureValid?: number;
+};
+export type AttendanceVerificationProgress = "" | "checking-policy" | "checking-device" | "getting-location" | "verify-biometric" | "submitting";
 
 export type StaffOvertimeSummary = {
   asOf: string;
@@ -356,10 +393,22 @@ export type StaffShiftSwap = {
 
 export type StaffPayrollItem = {
   id: string;
-  periodStart: string;
-  periodEnd: string;
-  grossPay: number;
-  netPay: number;
+  payrollRunId: string;
+  periodStart?: string;
+  periodEnd?: string;
+  moneyStorageUnit: "paise";
+  sourceMoneyStorageUnit: "paise" | "legacy_rupees";
+  payrollContractVersion: 2;
+  grossAmountPaise: number;
+  overtimeAmountPaise: number;
+  bonusAmountPaise: number;
+  deductionAmountPaise: number;
+  netAmountPaise: number;
+  overtimeMinutes: number;
+  grossPay?: number;
+  netPay?: number;
+  grossAmount?: number;
+  netAmount?: number;
   status: string;
   createdAt: string;
 };
@@ -456,8 +505,11 @@ export class StaffAppService {
   readonly profile = signal<StaffDashboard["staff"] | null>(null);
   readonly biometricEnabled = signal(!!this.readBiometricHint());
   readonly biometricLocked = signal(false);
+  readonly attendanceVerificationProgress = signal<AttendanceVerificationProgress>("");
+  readonly attendanceVerificationEvidence = signal<AttendanceVerificationEvidence | null>(null);
+  readonly attendanceDeviceStatus = signal("");
 
-  constructor(private readonly http: HttpClient) {
+  constructor(private readonly http: HttpClient, private readonly attendanceBiometric: AttendanceBiometricService) {
     this.purgeLegacyAuthStorage();
   }
 
@@ -679,6 +731,10 @@ export class StaffAppService {
     });
   }
 
+  async attendanceHistoryRange(from: string, to = staffBusinessDate()): Promise<StaffAttendance[]> {
+    return this.get<StaffAttendance[]>("/staff-os/attendance", { from, to, limit: "500" });
+  }
+
   async overtimeSummary(): Promise<StaffOvertimeSummary> {
     return this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { asOf: staffBusinessDate() });
   }
@@ -700,11 +756,127 @@ export class StaffAppService {
   }
 
   async clockIn(): Promise<MutationResult<StaffAttendance>> {
-    return this.queueableMutation<StaffAttendance>("POST", "/staff-os/attendance/clock-in", { source: "staff-app" });
+    return this.attendancePunch("clock_in");
   }
 
   async clockOut(attendanceId?: string): Promise<MutationResult<StaffAttendance>> {
-    return this.queueableMutation<StaffAttendance>("POST", "/staff-os/attendance/clock-out", { attendanceId });
+    return this.attendancePunch("clock_out", attendanceId);
+  }
+
+  attendanceVerificationPolicy(): Promise<AttendanceVerificationPolicy> {
+    return this.get<AttendanceVerificationPolicy>("/staff-self/attendance-verification-policy");
+  }
+
+  attendanceDevice(deviceId: string): Promise<AttendanceDevice | null> {
+    return this.get<AttendanceDevice>("/staff-self/attendance-device", { deviceId }).catch((error) => {
+      if (error instanceof HttpErrorResponse && error.status === 404) return null;
+      throw error;
+    });
+  }
+
+  registerAttendanceDevice(identity: AttendanceInstallationIdentity): Promise<AttendanceDevice> {
+    return this.post<AttendanceDevice>("/staff-self/attendance-device/register", {
+      deviceId: identity.installationId,
+      deviceLabel: identity.biometricLabel || "Android staff app",
+      platform: "android",
+      publicKeySpkiBase64: identity.publicKeySpkiBase64,
+      publicKeyAlgorithm: identity.algorithm,
+      hardwareBacked: identity.hardwareBacked,
+      verificationCapability: identity.verificationCapability
+    });
+  }
+
+  attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string): Promise<AttendanceChallenge> {
+    const { locationReceipt: _locationReceipt, ...serverLocation } = location;
+    const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation };
+    return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload).catch((error) => {
+      if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload);
+      throw error;
+    });
+  }
+
+  submitAttendanceEvidence(payload: AttendanceEvidenceSubmission): Promise<StaffAttendance | { attendance: StaffAttendance; evidence?: AttendanceVerificationEvidence }> {
+    return this.post<StaffAttendance | { attendance: StaffAttendance; evidence?: AttendanceVerificationEvidence }>("/staff-self/attendance-verified-punch", payload).catch((error) => {
+      if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<StaffAttendance | { attendance: StaffAttendance; evidence?: AttendanceVerificationEvidence }>("/staff-self/attendance-verified-punch", payload);
+      throw error;
+    });
+  }
+
+  private async attendancePunch(action: "clock_in" | "clock_out", attendanceId?: string): Promise<MutationResult<StaffAttendance>> {
+    this.attendanceVerificationProgress.set("checking-policy");
+    this.attendanceVerificationEvidence.set(null);
+    this.attendanceDeviceStatus.set("");
+    try {
+      if (!this.isOnline()) throw new Error("Attendance requires an internet connection so the verification policy can be checked. This punch was not queued.");
+      const policy = await this.attendanceVerificationPolicy();
+       const enforced = policy.status === "active" && (action === "clock_in" ? policy.enforceClockIn === true : policy.enforceClockOut === true);
+      if (!enforced) {
+        const path = action === "clock_in" ? "/staff-os/attendance/clock-in" : "/staff-os/attendance/clock-out";
+        const body = action === "clock_in" ? { source: "staff-app" } : { attendanceId };
+        return this.queueableMutation<StaffAttendance>("POST", path, body);
+      }
+      if (!this.attendanceBiometric.isSupportedPlatform()) throw new Error(this.attendanceBiometric.unsupportedMessage());
+
+      this.attendanceVerificationProgress.set("checking-device");
+      const identity = await this.attendanceBiometric.installationIdentity();
+       if (!identity.installationId || !identity.publicKeySpkiBase64 || identity.algorithm !== "ECDSA_P256_SHA256" || identity.verificationCapability !== "biometric_or_device_credential") throw new Error("This device cannot provide the required secure attendance identity. The punch was not recorded.");
+      let device = await this.attendanceDevice(identity.installationId);
+      if (!device) device = await this.registerAttendanceDevice(identity);
+      this.attendanceDeviceStatus.set(device.status || "pending");
+      this.assertTrustedAttendanceDevice(device);
+
+      this.attendanceVerificationProgress.set("getting-location");
+      const location = await this.attendanceBiometric.preciseLocation(policy.maxAccuracyMeters || 25);
+      if (location.mockLocation) throw new Error("Mock location was detected. Use the device's real precise location and try again.");
+       this.attendanceVerificationEvidence.set({ accuracyMeters: location.accuracyMeters });
+       const clientPunchId = crypto.randomUUID();
+       const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId);
+
+      this.attendanceVerificationProgress.set("verify-biometric");
+       const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, location.locationReceipt, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
+      if (verification.userVerified !== true) throw new Error("User verification did not complete. The punch was not recorded.");
+      this.attendanceVerificationProgress.set("submitting");
+      const response = await this.submitAttendanceEvidence({
+        challengeId: challenge.challengeId,
+         deviceId: identity.installationId,
+         signatureBase64: verification.signatureBase64,
+         idempotencyKey: challenge.challengeId
+      });
+      const attendance = "attendance" in response ? response.attendance : response;
+      const evidence = "attendance" in response ? response.evidence : attendance.verificationEvidence;
+      if (evidence) this.attendanceVerificationEvidence.set(evidence);
+      return { state: "completed", data: attendance };
+    } catch (error) {
+      const message = this.attendanceReasonMessage(error);
+      this.error.set(message);
+      throw new Error(message);
+    } finally {
+      this.attendanceVerificationProgress.set("");
+    }
+  }
+
+  private assertTrustedAttendanceDevice(device: AttendanceDevice): void {
+    const status = String(device.status || "").toLowerCase();
+    if (status === "revoked") throw new Error("This device has been revoked. Ask the owner to approve a trusted device.");
+    if (status !== "approved") throw new Error("This device is awaiting owner approval. The punch was not recorded.");
+  }
+
+  private attendanceReasonMessage(error: unknown): string {
+    const details = error instanceof HttpErrorResponse && error.error && typeof error.error === "object"
+      ? ((error.error as { error?: { details?: Record<string, unknown> }; details?: Record<string, unknown> }).error?.details || (error.error as { details?: Record<string, unknown> }).details)
+      : undefined;
+    const reason = String(details?.["reason"] || details?.["code"] || "").toUpperCase();
+    const messages: Record<string, string> = {
+      OUTSIDE_ATTENDANCE_RADIUS: "You are outside the salon attendance area. Move within the allowed radius and try again.",
+      LOCATION_ACCURACY_EXCEEDED: "Location accuracy is too low. Enable precise location, move to an open area and try again.",
+      MOCK_LOCATION_DETECTED: "Mock location was detected. Disable mock-location apps and try again.",
+      DEVICE_NOT_APPROVED: "This device is awaiting owner approval. The punch was not recorded.",
+      DEVICE_REVOKED: "This device has been revoked. Ask the owner to approve a trusted device.",
+      CHALLENGE_EXPIRED: "Verification expired before submission. Start the clock action again.",
+      INTEGRITY_VERDICT_FAILED: "Device integrity verification failed. Use an approved, unmodified device.",
+      VERIFIED_ATTESTATION_REQUIRED: "This branch requires verified key attestation, which is not available for this registration."
+    };
+    return messages[reason] || this.errorMessage(error, "Unable to verify attendance.");
   }
 
   async startBreak(): Promise<MutationResult<unknown>> {
@@ -716,7 +888,7 @@ export class StaffAppService {
   }
 
   async requestLeave(payload: { leaveType: string; startDate: string; endDate: string; reason: string }): Promise<unknown> {
-    return this.post("/staff-os/mobile/request-leave", payload);
+    return this.post("/staff-os/leaves", payload);
   }
 
   async completeTask(taskId: string, version: number): Promise<MutationResult<unknown>> {

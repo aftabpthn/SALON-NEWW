@@ -33,11 +33,24 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               @if (overtimeEnabled()) { <div class="overtime-metric"><span>Overtime</span><strong>{{ overtimeWorkedLabel() }}</strong></div> }
             </div>
           </section>
+          @if (canUseAttendance()) {
+            <div class="attendance-actions" aria-label="Attendance actions">
+              @if (!activeAttendance()) { <button type="button" [disabled]="!!pendingAction()" (click)="clockIn()">{{ pendingAction() === 'clock-in' ? 'Clocking in…' : 'Clock in' }}</button> }
+              @if (activeAttendance()) {
+                <button type="button" [disabled]="!!pendingAction()" (click)="clockOut()">{{ pendingAction() === 'clock-out' ? 'Clocking out…' : 'Clock out' }}</button>
+                @if (!isOnBreak()) { <button type="button" [disabled]="!!pendingAction()" (click)="startBreak()">{{ pendingAction() === 'start-break' ? 'Starting break…' : 'Start break' }}</button> }
+                @if (isOnBreak()) { <button type="button" [disabled]="!!pendingAction()" (click)="endBreak()">{{ pendingAction() === 'end-break' ? 'Ending break…' : 'End break' }}</button> }
+              }
+            </div>
+          }
+          @if (verificationStatus()) { <section staffPageState class="notice verification-status" role="status" aria-live="polite">{{ verificationStatus() }}</section> }
+          @if (verificationEvidence()) { <section staffPageState class="notice success verification-result" role="status">{{ verificationEvidence() }}</section> }
+          @if (verificationPolicy()) { <section class="privacy-disclosure"><strong>Secure attendance privacy</strong><p>Clock actions capture your precise location, accuracy, device trust, biometric verification result, mock-location signal and optional device integrity verdict. Evidence is retained under your salon's attendance policy. Break actions do not run this secure flow.</p></section> }
           @if (overtimeEnabled()) {
             <section class="overtime-panel" aria-labelledby="overtime-title">
               <div class="overtime-heading"><div><p class="eyebrow">Owner enabled</p><h2 id="overtime-title">Adjusted Shift Overtime</h2></div><span>Policy active</span></div>
               <div class="overtime-rule"><span aria-hidden="true">i</span><p><strong>Overtime begins after the adjusted expected shift end.</strong> A delayed clock-in moves the expected shift end by the same policy-controlled duration.</p></div>
-              <div class="overtime-grid"><article><span>Expected shift end</span><strong>—</strong><small>Available after shift timing is confirmed</small></article><article><span>Actual clock out</span><strong>{{ activeOrLatestAttendance()?.clockOutAt ? (activeOrLatestAttendance()?.clockOutAt | date:'shortTime') : '—' }}</strong><small>Recorded attendance time</small></article><article><span>Overtime started</span><strong>—</strong><small>After adjusted shift end</small></article><article><span>Overtime worked</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Recorded by the attendance policy</small></article><article><span>Overtime overview</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Current recorded value</small></article></div>
+               <div class="overtime-grid"><article><span>Expected shift end</span><strong>{{ scheduledEndLabel() }}</strong><small>Frozen when you clocked in</small></article><article><span>Actual clock out</span><strong>{{ activeOrLatestAttendance()?.clockOutAt ? (activeOrLatestAttendance()?.clockOutAt | date:'shortTime') : '—' }}</strong><small>Recorded attendance time</small></article><article><span>Overtime started</span><strong>{{ overtimeStartLabel() }}</strong><small>After adjusted shift end</small></article><article><span>Overtime worked</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Recorded by the attendance policy</small></article><article><span>Overtime overview</span><strong>{{ overtimeWorkedLabel() }}</strong><small>Current recorded value</small></article></div>
             </section>
           }
           <button class="monthly-glance" type="button" (click)="view.set('monthly')" aria-label="Open this month summary"><span class="glance-title"><small>Monthly overview</small><b>{{ currentMonthLabel() }}</b></span><span><strong>{{ monthlyStats().presentDays }}</strong><small>Present</small></span><span><strong>{{ formatMinutes(monthlyStats().workedMinutes) }}</strong><small>Worked</small></span>@if (overtimeEnabled()) { <span><strong>{{ monthlyOvertimeLabel() }}</strong><small>Overtime</small></span> }<i aria-hidden="true">›</i></button>
@@ -63,6 +76,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   styles: [`
     :host{display:block}.attendance-page{max-width:1180px;gap:14px}.attendance-head{display:flex;align-items:end;justify-content:space-between}.date-chip{padding:7px 11px;border:1px solid var(--staff-border);border-radius:999px;color:var(--staff-text-secondary);background:var(--staff-surface-secondary);font-size:.72rem;font-weight:750;white-space:nowrap}.attendance-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:5px;border:1px solid var(--staff-border);border-radius:18px;background:var(--staff-surface)}.attendance-tabs button{display:flex;min-width:0;min-height:46px;align-items:center;justify-content:center;gap:7px;border:0;border-radius:13px;padding:7px 10px;color:var(--staff-text-secondary);background:transparent;font-size:.76rem;font-weight:750;cursor:pointer}.attendance-tabs button>span{display:grid;width:24px;height:24px;place-items:center;border-radius:8px;background:var(--staff-surface-secondary);font-size:.58rem}.attendance-tabs button.active{color:var(--staff-primary-hover);background:var(--staff-primary-light)}.today-card,.history-panel,.analytics-panel,.monthly-panel{overflow:hidden;border:1px solid var(--staff-border);border-radius:24px;background:var(--staff-surface);box-shadow:var(--staff-shadow)}.today-card{display:grid;grid-template-columns:minmax(210px,.8fr) minmax(360px,1.35fr) auto;align-items:center;gap:22px;padding:22px}.today-status{display:flex;align-items:center;gap:13px}.status-dot{width:12px;height:12px;flex:0 0 12px;border-radius:50%;background:var(--staff-text-tertiary);box-shadow:0 0 0 6px color-mix(in srgb,var(--staff-text-tertiary) 12%,transparent)}.status-dot.active{background:var(--staff-success);box-shadow:0 0 0 6px color-mix(in srgb,var(--staff-success) 13%,transparent)}.today-status p,.today-status h2,.today-status small{margin:0}.today-status p{color:var(--staff-text-secondary);font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}.today-status h2{margin-top:4px;color:var(--staff-text);font-size:1.35rem;text-transform:capitalize}.today-status small{display:block;margin-top:3px;color:var(--staff-text-secondary);font-size:.68rem}.today-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:hidden;border:1px solid var(--staff-border);border-radius:16px}.today-metrics>div{min-width:0;padding:12px;border-right:1px solid var(--staff-border)}.today-metrics>div:last-child{border-right:0}.today-metrics span,.analytics-grid span{display:block;color:var(--staff-text-secondary);font-size:.62rem;font-weight:750;text-transform:uppercase}.today-metrics strong{display:block;overflow:hidden;margin-top:5px;color:var(--staff-text);font-size:.94rem;text-overflow:ellipsis;white-space:nowrap}.attendance-actions{display:flex;gap:7px}.attendance-actions button{min-height:44px;border-radius:999px;padding:9px 16px;font:inherit;font-size:.76rem;font-weight:800;cursor:pointer}.attendance-actions button:disabled{cursor:wait;opacity:.55}.primary-action{border:0;color:var(--staff-primary-contrast);background:var(--staff-primary)}.primary-action.danger{color:var(--staff-danger);background:var(--staff-danger-light)}.secondary-action{border:1px solid var(--staff-border);color:var(--staff-text);background:var(--staff-surface-secondary)}.section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--staff-border)}.section-heading .eyebrow{margin-bottom:3px}.section-heading h2{margin:0;color:var(--staff-text);font-size:1.05rem}.section-heading>span{color:var(--staff-text-secondary);font-size:.7rem;font-weight:700}.history-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:12px 16px;padding:4px;border:1px solid var(--staff-border);border-radius:14px;background:var(--staff-surface-secondary)}.history-presets button{min-height:38px;border:0;border-radius:10px;color:var(--staff-text-secondary);background:transparent;font-size:.7rem;font-weight:750}.history-presets button.active{color:var(--staff-primary-hover);background:var(--staff-primary-light)}.attendance-list{padding:0 18px 8px}.attendance-list article{display:grid;grid-template-columns:46px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--staff-border)}.history-date{display:grid;align-content:center;justify-items:center;border-radius:12px;background:var(--staff-surface-secondary)}.history-date strong{color:var(--staff-text);font-size:1rem}.history-date span{color:var(--staff-text-secondary);font-size:.58rem;font-weight:750;text-transform:uppercase}.history-main{min-width:0}.history-main>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.history-main strong{color:var(--staff-text);font-size:.78rem}.history-main small{display:block;margin-top:3px;color:var(--staff-text-secondary);font-size:.64rem;line-height:1.25}.history-main .badge{flex:0 0 auto;padding:4px 7px;font-size:.56rem}.analytics-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--staff-border)}.analytics-grid article{padding:20px;background:var(--staff-surface)}.analytics-grid strong{display:block;margin-top:8px;color:var(--staff-text);font-size:1.4rem}.analytics-grid small{display:block;margin-top:4px;color:var(--staff-text-secondary);font-size:.65rem}.monthly-list{padding:4px 20px 10px}.monthly-list article{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--staff-border)}.monthly-list article:last-child{border-bottom:0}.monthly-list strong,.monthly-list span{display:block;color:var(--staff-text);font-size:.78rem}.monthly-list small{display:block;margin-top:3px;color:var(--staff-text-secondary);font-size:.64rem}.monthly-list article>div:last-child{text-align:right}.empty{padding:24px;color:var(--staff-text-secondary);text-align:center}
     .today-card{grid-template-columns:minmax(230px,.9fr) minmax(0,1.5fr)}.status-dot{align-self:flex-start;margin-top:5px;background:var(--staff-text-secondary);box-shadow:0 0 0 6px color-mix(in srgb,var(--staff-text-secondary) 12%,transparent)}.today-status .field-label{display:block;margin-top:9px;color:var(--staff-text-secondary);font-size:.58rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}.today-status small{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.today-status small b{color:var(--staff-text-secondary);font-size:.58rem;letter-spacing:.04em;text-transform:uppercase}.current-status{display:inline-flex;align-items:center;gap:6px;margin-top:10px;border-radius:999px;padding:5px 8px;color:var(--staff-primary-hover);background:var(--staff-primary-light);font-size:.6rem;font-weight:800;text-transform:capitalize}.current-status i{width:6px;height:6px;border-radius:50%;background:var(--staff-text-secondary)}.current-status.active i{background:var(--staff-success)}
+    .verification-status{font-weight:750}.privacy-disclosure{border:1px solid var(--staff-border);border-radius:16px;padding:12px 14px;background:var(--staff-surface-secondary)}.privacy-disclosure strong{color:var(--staff-text);font-size:.72rem}.privacy-disclosure p{margin:4px 0 0;color:var(--staff-text-secondary);font-size:.64rem;line-height:1.5}
     .overtime-panel{overflow:hidden;border:1px solid var(--staff-border);border-radius:20px;background:var(--staff-surface);box-shadow:var(--staff-shadow)}.overtime-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;border-bottom:1px solid var(--staff-border)}.overtime-heading .eyebrow{margin-bottom:2px;font-size:.55rem}.overtime-heading h2{margin:0;color:var(--staff-text);font-size:.92rem}.overtime-heading>span{border-radius:999px;padding:5px 8px;color:var(--staff-primary-hover);background:var(--staff-primary-light);font-size:.58rem;font-weight:800}.overtime-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--staff-border)}.overtime-grid article{padding:14px 16px;background:var(--staff-surface)}.overtime-grid span{display:block;color:var(--staff-text-secondary);font-size:.58rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase}.overtime-grid strong{display:block;margin-top:6px;color:var(--staff-text);font-size:1.12rem}.overtime-grid small{display:block;margin-top:3px;color:var(--staff-text-secondary);font-size:.58rem}.shared-range{margin:0}
     .overtime-rule{display:flex;align-items:flex-start;gap:9px;padding:10px 16px;border-bottom:1px solid var(--staff-border);background:var(--staff-primary-light)}.overtime-rule>span{display:grid;width:20px;height:20px;flex:0 0 20px;place-items:center;border-radius:50%;color:var(--staff-on-primary);background:var(--staff-primary);font-size:.62rem;font-weight:900}.overtime-rule p{margin:0;color:var(--staff-text-secondary);font-size:.65rem;line-height:1.4}.overtime-rule strong{color:var(--staff-text)}.overtime-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
     .attendance-timeline{display:grid;gap:8px;padding:10px}.timeline-record{overflow:hidden;border:1px solid var(--staff-border);border-radius:16px;background:var(--staff-surface-secondary)}.timeline-record>header{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--staff-border)}.timeline-record>header>div:nth-child(2)>strong{display:block;color:var(--staff-text);font-size:.72rem}.timeline-record>header>div:nth-child(2)>small{display:block;margin-top:2px;color:var(--staff-text-secondary);font-size:.56rem}.event-timeline{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;padding:13px 12px 10px}.event-timeline::before{position:absolute;top:20px;right:12%;left:12%;height:1px;background:var(--staff-border);content:""}.timeline-event{position:relative;z-index:1;display:grid;justify-items:center;min-width:0;text-align:center}.timeline-event i{width:14px;height:14px;border:3px solid var(--staff-surface-secondary);border-radius:50%;background:var(--staff-text-secondary);box-shadow:0 0 0 1px var(--staff-border)}.timeline-event.complete i{background:var(--staff-success)}.timeline-event.muted i{background:var(--staff-border-accent)}.timeline-event span{margin-top:7px;color:var(--staff-text-secondary);font-size:.56rem;font-weight:750}.timeline-event strong{margin-top:2px;color:var(--staff-text);font-size:.68rem}.timeline-event small{margin-top:2px;color:var(--staff-text-secondary);font-size:.52rem}.timeline-record>footer{display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px;border-top:1px solid var(--staff-border)}.timeline-record>footer span{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 7px;color:var(--staff-text);background:var(--staff-surface);font-size:.58rem}.timeline-record>footer b{color:var(--staff-text-secondary);font-size:.53rem;text-transform:uppercase}.timeline-record>footer .overtime{color:var(--staff-primary-hover);background:var(--staff-primary-light)}
@@ -84,6 +98,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly today = signal<StaffToday | null>(null);
   readonly attendance = signal<StaffAttendance[]>([]);
+  readonly monthlyAttendance = signal<StaffAttendance[]>([]);
+  readonly currentTime = signal(Date.now());
   readonly view = signal<"today" | "history" | "monthly">("today");
   readonly views = [{ id: "today", label: "Today", icon: "TD" }, { id: "history", label: "Timeline", icon: "TL" }, { id: "monthly", label: "Month", icon: "MO" }] as const;
   readonly loading = signal(false);
@@ -91,13 +107,10 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly selectedDays = signal<30 | 90 | 180 | 365>(30);
   readonly historyRanges = [{ days: 30, label: "30 days", rangeLabel: "Last 30 days" }, { days: 90, label: "3 months", rangeLabel: "Last 3 months" }, { days: 180, label: "6 months", rangeLabel: "Last 6 months" }, { days: 365, label: "12 months", rangeLabel: "Last 12 months" }] as const;
   readonly activeRangeLabel = computed(() => this.historyRanges.find((option) => option.days === this.selectedDays())?.rangeLabel || "Last 30 days");
-  readonly overtimeEnabled = computed(() => this.attendance().some((row) => {
-    const status = String(row.overtimeCalculationStatus || "").toLowerCase();
-    return !!row.overtimePolicyVersion && !["disabled", "not_enabled", "not_applicable"].includes(status);
-  }));
+  readonly overtimeEnabled = computed(() => this.activeOrLatestAttendance()?.overtimeEnabled === true || [...this.attendance(), ...this.monthlyAttendance()].some((row) => row.overtimeEnabled === true));
   readonly monthlyStats = computed(() => {
     const monthKey = String(this.today()?.date || "").slice(0, 7);
-    const rows = this.attendance().filter((row) => row.businessDate.startsWith(monthKey));
+    const rows = this.monthlyAttendance().filter((row) => row.businessDate.startsWith(monthKey));
     const hasStatus = (row: StaffAttendance, value: string) => String(row.status || "").toLowerCase().includes(value);
     const presentDays = rows.filter((row) => !!row.clockInAt).length;
     const workedMinutes = rows.reduce((total, row) => total + Number(row.totalWorkedMinutes || 0), 0);
@@ -107,40 +120,60 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly message = signal("");
   readonly localError = signal("");
   readonly pendingAction = signal<"clock-in" | "clock-out" | "start-break" | "end-break" | null>(null);
+  readonly verificationPolicy = signal(false);
+  readonly verificationStatus = computed(() => ({ "checking-policy": "Checking branch attendance policy...", "checking-device": "Checking trusted device...", "getting-location": "Capturing precise native location...", "verify-biometric": "Verify with your device biometric...", submitting: "Submitting verified attendance...", "": "" } as const)[this.staff.attendanceVerificationProgress()]);
+  readonly verificationEvidence = computed(() => {
+    const evidence = this.staff.attendanceVerificationEvidence();
+    if (!evidence) return "";
+    const values: string[] = [];
+    if (typeof evidence.serverDistanceMeters === "number") values.push(`Distance ${Math.round(evidence.serverDistanceMeters)} m`);
+    if (typeof evidence.accuracyMeters === "number") values.push(`Accuracy ${Math.round(evidence.accuracyMeters)} m`);
+    if (this.staff.attendanceDeviceStatus()) values.push(`Device ${this.staff.attendanceDeviceStatus()}`);
+    return values.join(" · ");
+  });
   readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   readonly todayShift = computed(() => this.today()?.schedules[0] || null);
   private readonly attendanceUpdated = () => void this.load();
+  private loadGeneration = 0;
+  private historyGeneration = 0;
+  private minuteTimer: ReturnType<typeof setInterval> | null = null;
   constructor(readonly staff: StaffAppService) {}
-  ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); void this.load(); }
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
+  ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); this.minuteTimer = setInterval(() => this.currentTime.set(Date.now()), 60_000); void this.load(); }
+  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); if (this.minuteTimer) clearInterval(this.minuteTimer); this.loadGeneration += 1; this.historyGeneration += 1; }
   async load() {
+    const generation = ++this.loadGeneration;
+    const historyGeneration = ++this.historyGeneration;
     this.loading.set(true);
     try {
-      const [today, attendance] = await Promise.all([this.staff.today(), this.staff.attendanceHistory(this.selectedDays())]);
+      const date = businessDate();
+      const monthStart = `${date.slice(0, 7)}-01`;
+      const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
+      if (generation !== this.loadGeneration) return;
       this.today.set(today);
-      this.attendance.set(attendance);
-    } finally { this.loading.set(false); }
+      if (historyGeneration === this.historyGeneration) this.attendance.set(attendance);
+      this.monthlyAttendance.set(monthlyAttendance);
+      this.verificationPolicy.set(!!policy && policy.status === "active" && (policy.enforceClockIn || policy.enforceClockOut));
+    } finally { if (generation === this.loadGeneration) this.loading.set(false); }
   }
   canUseAttendance(): boolean { return this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"]); }
   attendanceStatus(): string { return this.activeOrLatestAttendance()?.status?.replace(/_/g, " ") || "not clocked in"; }
   shiftName(): string { return this.todayShift()?.shiftType?.replace(/_/g, " ") || "No shift assigned"; }
   scheduledShiftLabel(): string { const shift = this.todayShift(); return shift?.startTime && shift?.endTime ? `${shift.startTime} – ${shift.endTime}` : "Not scheduled"; }
-  scheduledEndLabel(): string { return this.todayShift()?.endTime || "not set"; }
+  scheduledEndLabel(): string { const expected = this.expectedEndMs(); return expected === null ? "not set" : new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(expected)); }
   isOnBreak(): boolean { return !!this.today()?.activeBreak || ["on_break", "break"].includes(String(this.activeAttendance()?.status || "").toLowerCase()); }
-  workedLabel(): string { const row = this.activeOrLatestAttendance(); if (!row?.clockInAt) return "-"; if (row.clockOutAt) return this.formatMinutes(row.totalWorkedMinutes); const minutes = Math.max(0, Math.floor((Date.now() - new Date(row.clockInAt).getTime()) / 60000) - Number(row.totalBreakMinutes || 0)); return this.formatMinutes(minutes); }
+  workedLabel(): string { const row = this.activeOrLatestAttendance(); if (!row?.clockInAt) return "-"; if (row.clockOutAt) return this.formatMinutes(row.totalWorkedMinutes); const minutes = Math.max(0, Math.floor((this.currentTime() - new Date(row.clockInAt).getTime()) / 60000) - Number(row.totalBreakMinutes || 0)); return this.formatMinutes(minutes); }
   remainingShiftLabel(): string {
-    const shift = this.todayShift();
     const attendance = this.activeOrLatestAttendance();
-    if (!shift?.endTime) return "No shift end set";
+    const endMs = this.expectedEndMs();
+    if (endMs === null) return "No shift end set";
     if (!attendance?.clockInAt) return "Not clocked in";
     if (attendance.clockOutAt) return "Shift ended";
-    const todayDate = String(this.today()?.date || businessDate());
-    const endMs = new Date(`${todayDate}T${shift.endTime}:00`).getTime();
-    const diff = endMs - Date.now();
+    const diff = endMs - this.currentTime();
     if (diff <= 0) return "Overtime";
     return this.formatMinutes(Math.floor(diff / 60000));
   }
+  overtimeStartLabel(): string { const expected = this.expectedEndMs(); return expected !== null && this.currentTime() >= expected ? this.scheduledEndLabel() : "—"; }
   overtimeWorkedLabel(): string { const minutes = this.activeOrLatestAttendance()?.overtimeMinutes; return minutes === null || minutes === undefined ? "—" : this.formatMinutes(minutes); }
   monthlyOvertimeLabel(): string { return this.formatMinutes(this.monthlyStats().overtimeMinutes); }
   formatMinutes(value: number | null | undefined): string { const minutes = Math.max(0, Number(value || 0)); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
@@ -177,12 +210,27 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
     this.attendance.set([]);
     this.localError.set("");
     this.historyLoading.set(true);
-    try { this.attendance.set(await this.staff.attendanceHistory(days)); }
+    const generation = ++this.historyGeneration;
+    try { const rows = await this.staff.attendanceHistory(days); if (generation === this.historyGeneration) this.attendance.set(rows); }
     catch {
+      if (generation !== this.historyGeneration) return;
       this.selectedDays.set(previousDays);
       this.attendance.set(previousAttendance);
       this.localError.set(this.staff.error() || "Unable to load attendance history.");
     }
-    finally { this.historyLoading.set(false); }
+    finally { if (generation === this.historyGeneration) this.historyLoading.set(false); }
+  }
+  private expectedEndMs(): number | null {
+    const attendance = this.activeOrLatestAttendance();
+    if (attendance?.expectedEndAt) { const parsed = Date.parse(attendance.expectedEndAt); if (Number.isFinite(parsed)) return parsed; }
+    const shift = this.todayShift();
+    const date = String(this.today()?.date || businessDate());
+    if (!shift?.startTime || !shift.endTime) return null;
+    const start = Date.parse(`${date}T${shift.startTime}:00+05:30`);
+    let end = Date.parse(`${date}T${shift.endTime}:00+05:30`);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+    if (end <= start) end += 86_400_000;
+    const clockIn = attendance?.clockInAt ? Date.parse(attendance.clockInAt) : Number.NaN;
+    return end + (Number.isFinite(clockIn) ? Math.max(0, clockIn - start) : 0);
   }
 }

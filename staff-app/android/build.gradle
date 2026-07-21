@@ -18,6 +18,8 @@ buildscript {
 apply from: "variables.gradle"
 
 allprojects {
+    def isolatedBuildRoot = System.getenv('AURA_ANDROID_BUILD_ROOT')
+    if (isolatedBuildRoot) layout.buildDirectory.set(file("${isolatedBuildRoot}/${project.name}"))
     repositories {
         google()
         mavenCentral()

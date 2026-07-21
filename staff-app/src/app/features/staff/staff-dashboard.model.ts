@@ -84,11 +84,11 @@ const QUICK_ACTIONS: readonly RegistryItem<DashboardAction>[] = [
   { item: { id: "appointments", label: "Appointments", route: "/staff/appointments" }, permissions: ["read:appointments"] },
   { item: { id: "queue", label: "Today’s Queue", route: "/staff/queue" }, permissions: ["read:appointments"] },
   { item: { id: "tasks", label: "Tasks", route: "/staff/tasks" }, permissions: ["read:staff"] },
-  { item: { id: "calendar", label: "Calendar", route: "/staff/calendar" }, permissions: ["read:staff"] }
+  { item: { id: "calendar", label: "Calendar", route: "/staff/calendar" }, permissions: ["read:appointments"] }
 ];
 
 const TOOLS: readonly RegistryItem<DashboardTool>[] = [
-  { item: { id: "calendar", label: "My Shifts", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:staff"] },
+  { item: { id: "calendar", label: "My Shifts", hint: "Roster and schedule", route: "/staff/calendar" }, permissions: ["read:appointments"] },
   { item: { id: "leave", label: "Leave", hint: "Requests and balances", route: "/staff/leaves" }, permissions: ["read:staff"] },
   { item: { id: "chat", label: "Chat", hint: "Team and private owner chat", route: "/staff/chat" }, permissions: ["read:staff"] },
   { item: { id: "reports", label: "Reports", hint: "Work summaries", route: "/staff/reports" }, permissions: ["read:staff"] },
@@ -207,7 +207,7 @@ function alerts(input: ActionContext): DashboardAlert[] {
   const result: DashboardAlert[] = [];
   if (home.pendingPayments > 0 && FINANCIAL_PERMISSIONS.some(input.hasPermission)) result.push({ id: "payments", title: `${home.pendingPayments} pending payment${home.pendingPayments === 1 ? "" : "s"}`, detail: "Checkout needs attention.", route: "/staff/business", tone: "critical" });
   const unread = (input.enterprise?.notifications || []).filter((note) => String(note.status || "unread") !== "read").length;
-  if (unread > 0 && input.hasPermission("read:staff")) result.push({ id: "unread", title: `${unread} unread notification${unread === 1 ? "" : "s"}`, detail: "Review the latest operational updates.", route: "/staff/notifications", tone: "attention" });
+  if (unread > 0 && input.hasPermission("read:appointments")) result.push({ id: "unread", title: `${unread} unread notification${unread === 1 ? "" : "s"}`, detail: "Review the latest operational updates.", route: "/staff/notifications", tone: "attention" });
   return result.slice(0, 4);
 }
 
@@ -377,7 +377,7 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     { label: "Completed", value: String(input.dashboard.summary.completedAppointments), hint: input.dashboard.summary.completedAppointments ? "Services finished" : "No services finished", route: "/staff/reports" },
     { label: "Open tasks", value: String(ctx.openTaskCount), hint: ctx.openTaskCount ? "Needs follow-up" : "All clear", route: "/staff/tasks" }
   );
-  if (input.enterprise && input.hasPermission("read:staff")) {
+  if (input.enterprise && input.hasPermission("read:appointments")) {
     const unread = input.enterprise.notifications.filter((note) => String(note.status || "unread") !== "read").length;
     overview.push({ label: "Alerts", value: String(activeAlerts.length), hint: activeAlerts.length ? `${unread || activeAlerts.length} to review` : "No alerts", route: "/staff/notifications" });
   }

@@ -78,13 +78,28 @@ function uniqueRows(rows) {
 function moneyPayroll(row) {
   const result = { ...row };
   for (const key of ["grossAmount", "deductionsAmount", "netAmount", "basicAmount", "overtimeAmount", "commissionAmount", "incentiveAmount", "allowanceAmount", "pfAmount", "esicAmount", "tdsAmount", "ptAmount"]) {
-    if (result[key] !== undefined) { result[`${key}Paise`] = paise(result[key]); delete result[key]; }
+    if (result[key] === undefined && result[`${key}Paise`] === undefined) continue;
+    const amountPaise = result[`${key}Paise`] !== undefined
+      ? Math.round(Number(result[`${key}Paise`]) || 0)
+      : result.sourceMoneyStorageUnit === "paise" || (!result.sourceMoneyStorageUnit && result.payrollContractVersion >= 2)
+        ? Math.round(Number(result[key]) || 0)
+        : paise(result[key]);
+    result[`${key}Paise`] = amountPaise;
+    delete result[key];
   }
+  result.moneyStorageUnit = "paise";
+  result.payrollContractVersion = 2;
   return result;
 }
 
 function ownerPayrollItem(row) {
   const statutory = jsonObject(row.statutoryJson);
+  const storedAsPaise = row.sourceMoneyStorageUnit
+    ? row.sourceMoneyStorageUnit === "paise"
+    : statutory.storageUnit === "paise";
+  const columnPaise = (explicitKey, rawValue) => row[explicitKey] !== undefined
+    ? Math.round(Number(row[explicitKey]) || 0)
+    : storedAsPaise ? Math.round(Number(rawValue) || 0) : paise(rawValue);
   return {
     id: row.id,
     branchId: row.branchId,
@@ -92,13 +107,18 @@ function ownerPayrollItem(row) {
     salaryType: row.salaryType || "fixed",
     status: row.status || "draft",
     version: Number(row.version || 1),
-    grossAmountPaise: paise(row.grossAmount),
-    overtimeAmountPaise: paise(statutory.overtimeAmount ?? row.overtimeAmount),
+    moneyStorageUnit: "paise",
+    sourceMoneyStorageUnit: storedAsPaise ? "paise" : "legacy_rupees",
+    payrollContractVersion: 2,
+    grossAmountPaise: columnPaise("grossAmountPaise", row.grossAmount),
+    overtimeAmountPaise: row.overtimeAmountPaise !== undefined
+      ? Math.round(Number(row.overtimeAmountPaise) || 0)
+      : row.overtimeAmount !== undefined ? columnPaise("overtimeAmountPaise", row.overtimeAmount) : paise(statutory.overtimeAmount),
     overtimeMinutes: Number(statutory.overtimeMinutes || 0),
-    bonusAmountPaise: paise(statutory.bonusAmount ?? row.bonusAmount),
+    bonusAmountPaise: statutory.bonusAmount !== undefined ? paise(statutory.bonusAmount) : columnPaise("bonusAmountPaise", row.bonusAmount),
     bonusAccrualPaise: paise(statutory.bonusAccrual),
-    deductionsAmountPaise: paise(row.deductionAmount),
-    netAmountPaise: paise(row.netAmount),
+    deductionsAmountPaise: columnPaise("deductionAmountPaise", row.deductionAmount),
+    netAmountPaise: columnPaise("netAmountPaise", row.netAmount),
     pfAmountPaise: paise(statutory.pf),
     esicAmountPaise: paise(statutory.esicEmployee ?? statutory.esic),
     esicEmployerAmountPaise: paise(statutory.esicEmployer),
@@ -233,7 +253,7 @@ export class OwnerPeopleService {
     return this.leaveDetail(id, access).leave;
   }
 
-  payroll(access, query = {}) { const branches = ownerScope(access, query.branchId); const { limit, offset } = pageParams(query); const params = { tenantId: access.tenantId, status: text(query.status), from: text(query.from), to: text(query.to), q: `%${text(query.search || query.q).toLowerCase()}%`, limit, offset }; const scope = branchFilter(branches, params, "branch_id"); const where = `tenant_id=@tenantId AND ${scope} AND (@status='' OR status=@status) AND (@from='' OR period_end>=@from) AND (@to='' OR period_start<=@to) AND (@q='%%' OR lower(id || ' ' || period_start || ' ' || period_end) LIKE @q)`; const total = Number(db.prepare(`SELECT COUNT(*) AS total FROM staff_payroll_runs WHERE ${where}`).get(params).total); const rows = db.prepare(`SELECT id,branch_id AS branchId,period_start AS periodStart,period_end AS periodEnd,status,gross_amount AS grossAmount,deductions_amount AS deductionsAmount,net_amount AS netAmount,version,created_at AS createdAt FROM staff_payroll_runs WHERE ${where} ORDER BY created_at DESC,id LIMIT @limit OFFSET @offset`).all(params).map(moneyPayroll); return { ...page(rows, total, limit, offset), availability: { compliance: availability(true), incentives: availability(false, "Only persisted payroll item fields are returned") }, capabilities: capabilities(["generate", "approve", "markPaid"]) }; }
+  payroll(access, query = {}) { const branches = ownerScope(access, query.branchId); const { limit, offset } = pageParams(query); const params = { tenantId: access.tenantId, status: text(query.status), from: text(query.from), to: text(query.to), q: `%${text(query.search || query.q).toLowerCase()}%`, limit, offset }; const scope = branchFilter(branches, params, "pr.branch_id"); const where = `pr.tenant_id=@tenantId AND ${scope} AND (@status='' OR pr.status=@status) AND (@from='' OR pr.period_end>=@from) AND (@to='' OR pr.period_start<=@to) AND (@q='%%' OR lower(pr.id || ' ' || pr.period_start || ' ' || pr.period_end) LIKE @q)`; const total = Number(db.prepare(`SELECT COUNT(*) AS total FROM staff_payroll_runs pr WHERE ${where}`).get(params).total); const rows = db.prepare(`SELECT pr.id,pr.branch_id AS branchId,pr.period_start AS periodStart,pr.period_end AS periodEnd,pr.status,pr.gross_amount AS grossAmount,pr.deductions_amount AS deductionsAmount,pr.net_amount AS netAmount,pr.version,pr.created_at AS createdAt,CASE WHEN EXISTS (SELECT 1 FROM staff_payroll_items pi WHERE pi.tenant_id=pr.tenant_id AND pi.payroll_run_id=pr.id AND pi.statutory_json LIKE '%\"storageUnit\":\"paise\"%') THEN 'paise' ELSE 'legacy_rupees' END AS sourceMoneyStorageUnit FROM staff_payroll_runs pr WHERE ${where} ORDER BY pr.created_at DESC,pr.id LIMIT @limit OFFSET @offset`).all(params).map(moneyPayroll); return { ...page(rows, total, limit, offset), availability: { compliance: availability(true), incentives: availability(false, "Only persisted payroll item fields are returned") }, capabilities: capabilities(["generate", "approve", "markPaid"]) }; }
   payrollDetail(id, access) { const branchId = entityBranch("staff_payroll_runs", id, access); const scoped = { ...scopedAccess(access, branchId), role: "accountant" }; const run = staffOsService.listPayroll({ branchId, limit: 200 }, scoped).find((row) => row.id === id); if (!run) throw notFound("Payroll run not found"); const items = staffOsService.payrollItems(id, scoped).map(ownerPayrollItem); const hasCompliance = items.some((item) => item.hasStatutoryData); const actions = run.status === "draft" ? ["approve"] : run.status === "approved" ? ["markPaid"] : []; return { run: moneyPayroll(run), items, capabilities: capabilities(actions), availability: { calculation: availability(true), compliance: availability(hasCompliance, hasCompliance ? null : "Compliance fields are returned only when persisted") } }; }
   generatePayroll(body, access) { const branch = ownerScope(access, body.branchId)[0]; if (!body.branchId || text(body.branchId).toLowerCase() === "all") throw badRequest("A single branch is required to generate payroll"); const generated = staffOsService.generatePayroll(body, { ...scopedAccess(access, branch.id), role: "owner" }); const { items = [], ...run } = generated; return { ...moneyPayroll(run), items: items.map(ownerPayrollItem) }; }
   approvePayroll(id, access) { const branchId = entityBranch("staff_payroll_runs", id, access); const detail = this.payrollDetail(id, access); if (detail.run.status !== "draft") throw conflict("Only draft payroll can be approved"); return moneyPayroll(staffOsService.approvePayroll(id, { ...scopedAccess(access, branchId), role: "owner" })); }

@@ -22,7 +22,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         </div>
       </header>
 
-      @if (!canReadRoster()) { <section staffPageState class="notice">You do not have permission to read roster data.</section> }
+      @if (!canReadRoster() && !canUseShiftSwaps()) { <section staffPageState class="notice">You do not have permission to read roster or shift swap data.</section> }
       @if (loading()) { <section staffPageState class="state" [loading]="true">Loading roster...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (errorMessage()) { <section staffPageState class="notice">{{ errorMessage() }}</section> }
@@ -63,7 +63,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                         <button class="link-button" type="button" (click)="changeStatus(item, item.status === 'cancelled' ? 'scheduled' : 'cancelled')">{{ item.status === 'cancelled' ? 'Reinstate' : 'Cancel' }}</button>
                       }
                     }
-                    @if (item.status !== 'cancelled' && !activeSwapFor(item.id)) { <button class="link-button" type="button" (click)="openSwap(item.id)">Request swap</button> }
+                    @if (canUseShiftSwaps() && item.status !== 'cancelled' && !activeSwapFor(item.id)) { <button class="link-button" type="button" (click)="openSwap(item.id)">Request swap</button> }
                   </div>
                 </div>
                 @if (editingId() === item.id) {
@@ -88,6 +88,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             </div>
           </article>
         </section>
+      }
+      @if (canUseShiftSwaps()) {
         <section class="grid two">
           <article class="panel"><div class="panel-title"><h2>Needs your response</h2><span>{{ incomingSwaps().length }}</span></div><div class="list">@for (swap of incomingSwaps(); track swap.id) { <div class="row"><div class="row-main"><strong>{{ swap.scheduleDate }} · {{ swap.startTime }} - {{ swap.endTime }}</strong><small>{{ swap.fromStaffName || 'Coworker' }}: {{ swap.reason || 'No reason added' }}</small></div><div class="row-actions"><button class="button" type="button" [disabled]="swapBusy()" (click)="respondSwap(swap, 'accept')">Accept</button><button class="button" type="button" [disabled]="swapBusy()" (click)="respondSwap(swap, 'decline')">Decline</button></div></div> } @empty { <p class="empty">No swap request needs your response.</p> }</div></article>
           <article class="panel"><div class="panel-title"><h2>Swap requests</h2><span>{{ swaps().length }}</span></div><div class="list">@for (swap of swaps(); track swap.id) { <div class="row"><div class="row-main"><strong>{{ swap.scheduleDate }} · {{ swap.startTime }} - {{ swap.endTime }}</strong><small>{{ swap.fromStaffName }} → {{ swap.toStaffName }}</small><small>{{ swapStatusLabel(swap.status) }}</small></div><div class="row-actions"><span class="badge">{{ swapStatusLabel(swap.status) }}</span>@if (swap.fromStaffId === staff.user()?.staffId && (swap.status === 'pending_staff' || swap.status === 'pending_manager')) { <button class="link-button" type="button" [disabled]="swapBusy()" (click)="cancelSwap(swap)">Cancel</button> }</div></div> } @empty { <p class="empty">No shift swap requests yet.</p> }</div></article>
@@ -131,10 +133,11 @@ export class StaffRosterPage implements OnInit, OnDestroy {
 
   ngOnInit() {
     window.addEventListener("aura:refresh-child", this.onRefresh);
-    if (this.canReadRoster()) void this.load();
+    if (this.canReadRoster() || this.canUseShiftSwaps()) void this.load();
   }
 
   ngOnDestroy() {
+    this.loadGeneration++;
     window.removeEventListener("aura:refresh-child", this.onRefresh);
   }
 
@@ -143,35 +146,33 @@ export class StaffRosterPage implements OnInit, OnDestroy {
     this.loading.set(true);
     this.message.set("");
     this.errorMessage.set("");
-    try {
-      const from = this.windowStart();
-      const to = this.windowEnd();
-      const [today, os] = await Promise.all([
-        this.staff.today(this.windowStart()),
-        this.staff.enterpriseOs({ from, to })
-      ]);
-      if (generation !== this.loadGeneration) return;
-      this.today.set(today);
-      this.os.set(os);
-      const [coworkers, swaps] = await Promise.allSettled([this.staff.shiftSwapCoworkers(), this.staff.shiftSwaps()]);
-      if (generation !== this.loadGeneration) return;
-      if (coworkers.status === "fulfilled") this.coworkers.set(coworkers.value);
-      if (swaps.status === "fulfilled") this.swaps.set(swaps.value);
-      if (coworkers.status === "rejected" || swaps.status === "rejected") this.errorMessage.set("Roster loaded, but shift swap data is temporarily unavailable.");
-    } catch {
-      if (generation === this.loadGeneration) this.errorMessage.set(this.staff.error() || "Unable to load roster and swap requests.");
-    } finally {
-      if (generation === this.loadGeneration) this.loading.set(false);
-    }
+    const from = this.windowStart();
+    const to = this.windowEnd();
+    const base = this.canReadRoster() ? await Promise.allSettled([this.staff.today(this.windowStart()), this.staff.enterpriseOs({ from, to })]) : [];
+    if (generation !== this.loadGeneration) return;
+    if (base[0]?.status === "fulfilled") this.today.set(base[0].value);
+    if (base[1]?.status === "fulfilled") this.os.set(base[1].value);
+    const baseFailed = base.some((result) => result.status === "rejected");
+    const swapData = this.canUseShiftSwaps() ? await Promise.allSettled([this.staff.shiftSwapCoworkers(), this.staff.shiftSwaps()]) : [];
+    if (generation !== this.loadGeneration) return;
+    if (swapData[0]?.status === "fulfilled") this.coworkers.set(swapData[0].value);
+    if (swapData[1]?.status === "fulfilled") this.swaps.set(swapData[1].value);
+    const swapsFailed = swapData.some((result) => result.status === "rejected");
+    if (baseFailed && swapsFailed) this.errorMessage.set("Roster and shift swap data are temporarily unavailable.");
+    else if (baseFailed) this.errorMessage.set("Roster data is temporarily unavailable. Shift swap requests remain available.");
+    else if (swapsFailed) this.errorMessage.set("Roster loaded, but shift swap data is temporarily unavailable.");
+    this.loading.set(false);
   }
 
   canReadRoster(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("read:appointments");
   }
 
   canUpdateRoster(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("update:appointments");
   }
+
+  canUseShiftSwaps(): boolean { return Boolean(this.staff.user()?.staffId) || this.staff.hasPermission("read:staff"); }
 
   upcomingSchedules() {
     const from = this.windowStart();

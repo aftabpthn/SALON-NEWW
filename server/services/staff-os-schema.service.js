@@ -140,6 +140,13 @@ export function ensureStaffOsSchema() {
   ensureColumn("staff_fine_penalty_master", "trigger_count", "REAL DEFAULT 1");
   ensureColumn("staff_fine_penalty_master", "apply_mode", "TEXT DEFAULT 'per_occurrence'");
   ensureColumn("staff_fine_penalty_master", "auto_deduct", "INTEGER DEFAULT 1");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "categoryId", "TEXT DEFAULT ''");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "overtimeEnabled", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "minimumOtDurationMinutes", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "baselineStartAt", "TEXT DEFAULT ''");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "expectedEndAt", "TEXT DEFAULT ''");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "baselineSource", "TEXT DEFAULT ''");
+  ensureColumn("staffAttendanceOvertimeSnapshots", "policyFrozenAt", "TEXT");
   ensured = true;
   logger.info("staff_os_schema_ensured", {
     migrations: migrationPaths.map((migrationPath) => migrationPath.split(/[\\/]/).pop())

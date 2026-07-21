@@ -112,6 +112,18 @@ function rupeesToPaise(value) {
   return Math.round((Number(value) || 0) * 100);
 }
 
+function payrollColumnPaise(row, column) {
+  let storageUnit = "legacy_rupees";
+  try {
+    storageUnit = JSON.parse(row.statutory_json || "{}").storageUnit === "paise" ? "paise" : "legacy_rupees";
+  } catch {
+    storageUnit = "legacy_rupees";
+  }
+  return storageUnit === "paise"
+    ? Math.round(Number(row[column]) || 0)
+    : rupeesToPaise(row[column]);
+}
+
 function rowsByIds(table, column, ids, access, branchId) {
   if (!tableExists(table)) return [];
   const unique = [...new Set(ids.filter(Boolean).map(String))];
@@ -621,8 +633,8 @@ function earningsFor(context) {
   const tipsPaidPaise = tipPayouts
     .filter((row) => ["paid", "processed", "completed"].includes(String(row.status || "").toLowerCase()))
     .reduce((sum, row) => sum + rupeesToPaise(row.amount), 0);
-  const payrollGrossPaise = payrollItems.reduce((sum, row) => sum + rupeesToPaise(row.gross_amount), 0);
-  const payrollNetPaise = payrollItems.reduce((sum, row) => sum + rupeesToPaise(row.net_amount), 0);
+  const payrollGrossPaise = payrollItems.reduce((sum, row) => sum + payrollColumnPaise(row, "gross_amount"), 0);
+  const payrollNetPaise = payrollItems.reduce((sum, row) => sum + payrollColumnPaise(row, "net_amount"), 0);
   const payrollPaidPaise = payrollPayouts
     .filter((row) => ["paid", "processed", "completed"].includes(String(row.status || "").toLowerCase()))
     .reduce((sum, row) => sum + rupeesToPaise(row.amount), 0);
@@ -641,8 +653,8 @@ function earningsFor(context) {
       periodStart: row.period_start,
       periodEnd: row.period_end,
       status: row.run_status || row.status,
-      grossPaise: rupeesToPaise(row.gross_amount),
-      netPaise: rupeesToPaise(row.net_amount)
+      grossPaise: payrollColumnPaise(row, "gross_amount"),
+      netPaise: payrollColumnPaise(row, "net_amount")
     }))
   };
 }

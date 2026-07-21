@@ -82,6 +82,62 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function requireBusinessDate(value, field = "businessDate") {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw badRequest(`${field} must be an ISO date (YYYY-MM-DD)`);
+  const date = new Date(`${text}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) throw badRequest(`${field} is invalid`);
+  return text;
+}
+
+function requireTime(value, field) {
+  const text = String(value || "");
+  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(text)) throw badRequest(`${field} must use HH:mm`);
+  return text;
+}
+
+function requireTimestamp(value, field) {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(text)) throw badRequest(`${field} must be an ISO timestamp with timezone`);
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) throw badRequest(`${field} is invalid`);
+  return date;
+}
+
+function istDateForTimestamp(value) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(value);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function validateScheduleWindow(scheduleDate, startTime, endTime, allowOvernight = false) {
+  const date = requireBusinessDate(scheduleDate, "scheduleDate");
+  const start = requireTime(startTime, "startTime");
+  const end = requireTime(endTime, "endTime");
+  if (end <= start && !allowOvernight) throw badRequest("endTime must be after startTime; set allowOvernight for an overnight shift");
+  const startAt = new Date(`${date}T${start}:00.000Z`);
+  const endAt = new Date(`${date}T${end}:00.000Z`);
+  if (end <= start) endAt.setUTCDate(endAt.getUTCDate() + 1);
+  return { date, start, end, startAt, endAt };
+}
+
+function assertNoScheduleOverlap({ tenantId, branchId, staffId, window, excludeId = "" }) {
+  const from = new Date(window.startAt); from.setUTCDate(from.getUTCDate() - 1);
+  const to = new Date(window.endAt); to.setUTCDate(to.getUTCDate() + 1);
+  const rows = db.prepare(`SELECT id, schedule_date, start_time, end_time FROM staff_schedules
+    WHERE tenant_id = @tenant_id AND branch_id = @branch_id AND staff_id = @staff_id AND status != 'cancelled'
+      AND schedule_date BETWEEN @from_date AND @to_date AND id != @exclude_id`).all({
+    tenant_id: tenantId, branch_id: branchId, staff_id: staffId,
+    from_date: from.toISOString().slice(0, 10), to_date: to.toISOString().slice(0, 10), exclude_id: excludeId
+  });
+  if (rows.some((row) => {
+    const existing = validateScheduleWindow(row.schedule_date, row.start_time, row.end_time, row.end_time <= row.start_time);
+    return window.startAt < existing.endAt && window.endAt > existing.startAt;
+  })) throw conflict("Schedule overlaps an existing shift for this staff member");
+}
+
 function json(value) {
   return JSON.stringify(value ?? {});
 }
@@ -592,6 +648,29 @@ function rowToCamel(row = {}) {
     key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()),
     value
   ]));
+}
+
+function payrollRowToCamel(row = {}) {
+  const result = rowToCamel(row);
+  let itemUnit = "";
+  try {
+    itemUnit = JSON.parse(row.statutory_json || "{}").storageUnit || "";
+  } catch {
+    itemUnit = "";
+  }
+  const sourceStorageUnit = row.money_storage_unit === "paise" || itemUnit === "paise" ? "paise" : "legacy_rupees";
+  for (const key of ["grossAmount", "deductionsAmount", "netAmount", "overtimeAmount", "bonusAmount", "deductionAmount"]) {
+    if (result[key] === undefined || result[key] === null) continue;
+    const amountPaise = sourceStorageUnit === "paise"
+      ? Math.round(Number(result[key]) || 0)
+      : Math.round((Number(result[key]) || 0) * 100);
+    result[`${key}Paise`] = amountPaise;
+    result[key] = amountPaise / 100;
+  }
+  result.moneyStorageUnit = "paise";
+  result.sourceMoneyStorageUnit = sourceStorageUnit;
+  result.payrollContractVersion = 2;
+  return result;
 }
 
 function firstStaffEmail(staff = {}) {
@@ -2565,22 +2644,31 @@ export class StaffOsService {
     assertBranch(access, branchId);
     if (!payload.staffId && !payload.staff_id) throw badRequest("staffId is required");
     const staff = this.getStaff(payload.staffId || payload.staff_id, access);
+    if (staff.branchId !== branchId) throw badRequest("Staff must belong to the selected branch");
+    if (staff.status !== "active") throw badRequest("Schedule can be assigned only to active staff");
+    const window = validateScheduleWindow(
+      payload.scheduleDate || payload.schedule_date || payload.date || businessDate(),
+      payload.startTime || payload.start_time,
+      payload.endTime || payload.end_time,
+      boolInt(payload.allowOvernight ?? payload.allow_overnight) === 1
+    );
+    assertNoScheduleOverlap({ tenantId: access.tenantId, branchId, staffId: staff.id, window });
     const row = {
       id: makeId("sched"),
       tenant_id: access.tenantId,
       branch_id: branchId,
       staff_id: staff.id,
-      schedule_date: payload.scheduleDate || payload.schedule_date || payload.date || businessDate(),
-      start_time: payload.startTime || payload.start_time || "",
-      end_time: payload.endTime || payload.end_time || "",
+      schedule_date: window.date,
+      start_time: window.start,
+      end_time: window.end,
       shift_type: payload.shiftType || payload.shift_type || "regular",
       recurrence_rule: payload.recurrenceRule || payload.recurrence_rule || "",
       status: payload.status || "scheduled",
       notes: payload.notes || "",
       created_by: access.userId || ""
     };
-    if (!row.start_time || !row.end_time) throw badRequest("startTime and endTime are required");
     const trx = db.transaction(() => {
+      assertNoScheduleOverlap({ tenantId: access.tenantId, branchId, staffId: staff.id, window });
       db.prepare(`INSERT INTO staff_schedules (id, tenant_id, branch_id, staff_id, schedule_date, start_time, end_time, shift_type, recurrence_rule, status, notes, created_by)
         VALUES (@id, @tenant_id, @branch_id, @staff_id, @schedule_date, @start_time, @end_time, @shift_type, @recurrence_rule, @status, @notes, @created_by)`).run(row);
       this.writeAudit("staff.schedule_created", "staff_schedules", row.id, access, { after: row, branchId });
@@ -2710,11 +2798,21 @@ export class StaffOsService {
       version: Number(existing.version || 1) + 1,
       updated_at: now()
     };
+    const staff = this.getStaff(next.staff_id, access);
+    if (staff.branchId !== branchId) throw badRequest("Staff must belong to the selected branch");
+    if (staff.status !== "active") throw badRequest("Schedule can be assigned only to active staff");
+    const existingOvernight = existing.end_time <= existing.start_time;
+    const window = validateScheduleWindow(next.schedule_date, next.start_time, next.end_time,
+      payload.allowOvernight === true || payload.allow_overnight === true || (existingOvernight && payload.allowOvernight === undefined && payload.allow_overnight === undefined));
+    Object.assign(next, { schedule_date: window.date, start_time: window.start, end_time: window.end });
+    assertNoScheduleOverlap({ tenantId: access.tenantId, branchId, staffId: next.staff_id, window, excludeId: id });
     const trx = db.transaction(() => {
-      db.prepare(`UPDATE staff_schedules SET branch_id = @branch_id, staff_id = @staff_id, schedule_date = @schedule_date,
+      assertNoScheduleOverlap({ tenantId: access.tenantId, branchId, staffId: next.staff_id, window, excludeId: id });
+      const result = db.prepare(`UPDATE staff_schedules SET branch_id = @branch_id, staff_id = @staff_id, schedule_date = @schedule_date,
         start_time = @start_time, end_time = @end_time, shift_type = @shift_type, recurrence_rule = @recurrence_rule,
         status = @status, notes = @notes, version = @version, updated_at = @updated_at
-        WHERE id = @id AND tenant_id = @tenant_id`).run(next);
+        WHERE id = @id AND tenant_id = @tenant_id AND version = @expected_version`).run({ ...next, expected_version: Number(existing.version) });
+      if (result.changes !== 1) throw conflict("Schedule was updated by another request");
       this.writeAudit("staff.schedule_updated", "staff_schedules", id, access, { before: existing, after: next, branchId });
       return rowToCamel(db.prepare("SELECT * FROM staff_schedules WHERE id = ? AND tenant_id = ?").get(id, access.tenantId));
     });
@@ -2802,25 +2900,34 @@ export class StaffOsService {
     const staff = this.resolveMobileStaff(payload, access);
     const branchId = pickBranch(payload, access) || staff.branchId;
     assertBranch(access, branchId);
-    const date = payload.businessDate || payload.business_date || businessDate();
-    const existing = db.prepare(`SELECT * FROM staff_attendance_logs
-      WHERE tenant_id = ? AND staff_id = ? AND business_date = ? AND status = 'clocked_in'
-      ORDER BY created_at DESC LIMIT 1`).get(access.tenantId, staff.id, date);
-    if (existing) throw conflict("Staff is already clocked in for this date");
+    if (staff.branchId !== branchId) throw badRequest("Staff must belong to the selected branch");
+    if (staff.status !== "active") throw badRequest("Only active staff can clock in");
+    const date = requireBusinessDate(payload.businessDate || payload.business_date || businessDate());
+    const clockInAt = payload.clockInAt || payload.clock_in_at || now();
+    const clockInDate = requireTimestamp(clockInAt, "clockInAt");
+    if (istDateForTimestamp(clockInDate) !== date) throw badRequest("clockInAt must fall on businessDate in IST");
+    const activeAttendance = db.prepare(`SELECT id, business_date FROM staff_attendance_logs
+      WHERE tenant_id = @tenant_id AND staff_id = @staff_id AND status = 'clocked_in'
+      ORDER BY created_at DESC LIMIT 1`);
+    const attendanceScope = { tenant_id: access.tenantId, staff_id: staff.id };
+    const existing = activeAttendance.get(attendanceScope);
+    if (existing) throw conflict(`Staff is already clocked in with an open attendance record for ${existing.business_date}`);
     const row = {
       id: makeId("att"),
       tenant_id: access.tenantId,
       branch_id: branchId,
       staff_id: staff.id,
       business_date: date,
-      clock_in_at: payload.clockInAt || payload.clock_in_at || now(),
+      clock_in_at: clockInAt,
       source: payload.source || "manual",
       gps_lat: payload.gpsLat ?? payload.gps_lat ?? null,
       gps_lng: payload.gpsLng ?? payload.gps_lng ?? null,
       device_id: payload.deviceId || payload.device_id || "",
       selfie_url: payload.selfieUrl || payload.selfie_url || ""
     };
-    db.transaction(() => {
+    const createAttendance = db.transaction(() => {
+      const concurrentExisting = activeAttendance.get(attendanceScope);
+      if (concurrentExisting) throw conflict(`Staff is already clocked in with an open attendance record for ${concurrentExisting.business_date}`);
       db.prepare(`INSERT INTO staff_attendance_logs (id, tenant_id, branch_id, staff_id, business_date, clock_in_at, source, gps_lat, gps_lng, device_id, selfie_url)
         VALUES (@id, @tenant_id, @branch_id, @staff_id, @business_date, @clock_in_at, @source, @gps_lat, @gps_lng, @device_id, @selfie_url)`).run(row);
       staffOvertimeService.registerAttendance({
@@ -2832,9 +2939,11 @@ export class StaffOsService {
         clockInAt: row.clock_in_at
       });
       this.writeAudit("staff.clocked_in", "staff_attendance_logs", row.id, access, { after: row, branchId });
-    })();
+    });
+    createAttendance.immediate();
     this.emit("staff:clocked_in", access, branchId, row.id);
-    return rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(row.id, access.tenantId));
+    return rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = @id AND tenant_id = @tenant_id")
+      .get({ id: row.id, tenant_id: access.tenantId }));
   }
 
   closeAttendance(payload = {}, access) {
@@ -2844,21 +2953,30 @@ export class StaffOsService {
       ? db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(payload.attendanceId || payload.attendance_id, access.tenantId)
       : db.prepare(`SELECT * FROM staff_attendance_logs WHERE tenant_id = ? AND staff_id = ? AND status = 'clocked_in'
           ORDER BY created_at DESC LIMIT 1`).get(access.tenantId, staff.id);
-    if (!attendance) throw notFound("Active attendance record not found");
-    if (access.staffId && attendance.staff_id !== access.staffId) throw forbidden("Attendance record does not belong to the logged-in staff member");
+    if (!attendance || attendance.status !== "clocked_in") throw notFound("Active attendance record not found");
+    if (attendance.staff_id !== staff.id) throw forbidden("Attendance record does not belong to the resolved staff member");
     assertBranch(access, attendance.branch_id);
     const stamp = payload.clockOutAt || payload.clock_out_at || now();
+    const clockInDate = requireTimestamp(attendance.clock_in_at, "clockInAt");
+    const clockOutDate = requireTimestamp(stamp, "clockOutAt");
+    const elapsed = clockOutDate.getTime() - clockInDate.getTime();
+    if (elapsed < 0 || elapsed > 36 * 60 * 60 * 1000) throw badRequest("clockOutAt must be after clockInAt and within 36 hours");
+    const claimedDate = payload.businessDate || payload.business_date;
+    if (claimedDate && requireBusinessDate(claimedDate) !== attendance.business_date) throw badRequest("businessDate does not match the active attendance record");
     db.transaction(() => {
       const calculation = staffOvertimeService.completeStaffOsAttendance(attendance, stamp);
       const overtimeMinutes = calculation?.overtimeMinutes ?? Number(attendance.overtime_minutes || 0);
-      db.prepare(`UPDATE staff_attendance_logs SET clock_out_at = @clockOutAt, status = 'clocked_out', overtime_minutes = @overtimeMinutes, version = version + 1, updated_at = @updatedAt
-        WHERE id = @id AND tenant_id = @tenantId`).run({
+      const result = db.prepare(`UPDATE staff_attendance_logs SET clock_out_at = @clockOutAt, status = 'clocked_out', overtime_minutes = @overtimeMinutes, version = version + 1, updated_at = @updatedAt
+        WHERE id = @id AND tenant_id = @tenantId AND staff_id = @staffId AND status = 'clocked_in' AND version = @version`).run({
           clockOutAt: stamp,
           overtimeMinutes,
           updatedAt: stamp,
           id: attendance.id,
-          tenantId: access.tenantId
+          tenantId: access.tenantId,
+          staffId: staff.id,
+          version: Number(attendance.version)
         });
+      if (result.changes !== 1) throw conflict("Attendance was already clocked out or updated by another request");
       this.writeAudit("staff.clocked_out", "staff_attendance_logs", attendance.id, access, {
         before: attendance,
         after: { clock_out_at: stamp, overtime_minutes: overtimeMinutes, calculation },
@@ -2950,6 +3068,29 @@ export class StaffOsService {
     const attendance = db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(payload.attendanceId || payload.attendance_id, access.tenantId);
     if (!attendance) throw notFound("Attendance record not found");
     assertBranch(access, attendance.branch_id);
+    const requestedPatch = payload.patch || payload.newValue || {};
+    const aliases = {
+      clockInAt: "clock_in_at", clock_in_at: "clock_in_at", clockOutAt: "clock_out_at", clock_out_at: "clock_out_at",
+      businessDate: "business_date", business_date: "business_date",
+      gpsLat: "gps_lat", gps_lat: "gps_lat", gpsLng: "gps_lng", gps_lng: "gps_lng", source: "source",
+      deviceId: "device_id", device_id: "device_id", selfieUrl: "selfie_url", selfie_url: "selfie_url"
+    };
+    const patch = {};
+    for (const [key, value] of Object.entries(requestedPatch)) {
+      if (!aliases[key]) throw badRequest(`Attendance correction field is not allowed: ${key}`);
+      patch[aliases[key]] = value;
+    }
+    if (!Object.keys(patch).length) throw badRequest("Attendance correction patch is required");
+    const next = { ...attendance, ...patch };
+    const clockInDate = requireTimestamp(next.clock_in_at, "clockInAt");
+    if (next.clock_out_at) {
+      const clockOutDate = requireTimestamp(next.clock_out_at, "clockOutAt");
+      const elapsed = clockOutDate.getTime() - clockInDate.getTime();
+      if (elapsed < 0 || elapsed > 36 * 60 * 60 * 1000) throw badRequest("Corrected attendance window must be between 0 and 36 hours");
+    }
+    if (istDateForTimestamp(clockInDate) !== next.business_date) throw badRequest("Corrected clockInAt must fall on businessDate in IST");
+    const status = payload.status || "approved";
+    if (!new Set(["pending", "approved"]).has(status)) throw badRequest("Correction status must be pending or approved");
     const row = {
       id: makeId("corr"),
       tenant_id: access.tenantId,
@@ -2957,16 +3098,47 @@ export class StaffOsService {
       staff_id: attendance.staff_id,
       branch_id: attendance.branch_id,
       requested_by: access.userId || "",
-      approved_by: access.userId || "",
+      approved_by: status === "approved" ? access.userId || "" : "",
       reason: payload.reason || "",
       old_value: json(attendance),
-      new_value: json(payload.patch || payload.newValue || {}),
-      status: payload.status || "approved"
+      new_value: json(patch),
+      status
     };
     db.transaction(() => {
+      if (status === "approved") {
+        let overtimeMinutes = 0;
+        staffOvertimeService.registerAttendance({
+          tenantId: next.tenant_id, branchId: next.branch_id, staffId: next.staff_id,
+          attendanceId: next.id, businessDate: next.business_date, clockInAt: next.clock_in_at
+        });
+        staffOvertimeService.refreshSnapshotForCorrection({
+          tenantId: next.tenant_id, branchId: next.branch_id, staffId: next.staff_id,
+          attendanceId: next.id, businessDate: next.business_date, clockInAt: next.clock_in_at
+        });
+        if (next.clock_out_at) {
+          const calculation = staffOvertimeService.completeStaffOsAttendance(next, next.clock_out_at);
+          overtimeMinutes = calculation?.overtimeMinutes ?? 0;
+        } else {
+          db.prepare(`UPDATE staffAttendanceOvertimeSnapshots SET grossMinutes = 0, completedBreakMinutes = 0, workedMinutes = 0,
+            overtimeMinutes = 0,
+            calculationStatus = CASE WHEN overtimeEnabled = 0 THEN 'disabled' WHEN expectedEndAt != '' THEN 'eligible' ELSE 'review_required' END,
+            reviewReason = CASE WHEN overtimeEnabled = 0 THEN COALESCE(NULLIF(reviewReason, ''), 'not_applicable') WHEN expectedEndAt != '' THEN '' ELSE 'missing_frozen_baseline' END,
+            completedAt = NULL, updatedAt = CURRENT_TIMESTAMP
+            WHERE tenantId = @tenant_id AND attendanceSource = 'staff_attendance_logs' AND attendanceId = @attendance_id`)
+            .run({ tenant_id: next.tenant_id, attendance_id: next.id });
+        }
+        const result = db.prepare(`UPDATE staff_attendance_logs SET business_date = @business_date, clock_in_at = @clock_in_at, clock_out_at = @clock_out_at,
+          gps_lat = @gps_lat, gps_lng = @gps_lng, source = @source, device_id = @device_id, selfie_url = @selfie_url,
+          status = @status, overtime_minutes = @overtime_minutes, version = version + 1, updated_at = @updated_at
+          WHERE id = @id AND tenant_id = @tenant_id AND version = @version`).run({
+          ...next, status: next.clock_out_at ? "clocked_out" : "clocked_in", overtime_minutes: overtimeMinutes,
+          updated_at: now(), version: Number(attendance.version)
+        });
+        if (result.changes !== 1) throw conflict("Attendance was updated by another request");
+      }
       db.prepare(`INSERT INTO attendance_corrections (id, tenant_id, attendance_id, staff_id, branch_id, requested_by, approved_by, reason, old_value, new_value, status)
         VALUES (@id, @tenant_id, @attendance_id, @staff_id, @branch_id, @requested_by, @approved_by, @reason, @old_value, @new_value, @status)`).run(row);
-      this.writeAudit("staff.attendance_corrected", "attendance_corrections", row.id, access, { before: attendance, after: payload.patch || {}, branchId: attendance.branch_id });
+      this.writeAudit(status === "approved" ? "staff.attendance_corrected" : "staff.attendance_correction_requested", "attendance_corrections", row.id, access, { before: attendance, after: patch, branchId: attendance.branch_id });
     })();
     return rowToCamel(db.prepare("SELECT * FROM attendance_corrections WHERE id = ? AND tenant_id = ?").get(row.id, access.tenantId));
   }
@@ -3007,30 +3179,46 @@ export class StaffOsService {
     if (leave.status === status) return rowToCamel(leave);
     const stamp = now();
     db.transaction(() => {
-      db.prepare(`UPDATE staff_leaves SET status = ?, approved_by = ?, approved_at = ?, rejection_reason = ?, version = version + 1, updated_at = ?
-        WHERE id = ? AND tenant_id = ?`).run(status, access.userId || "", stamp, status === "rejected" ? payload.reason || "" : "", stamp, id, access.tenantId);
-      db.prepare("DELETE FROM leave_calendar_events WHERE tenant_id = ? AND leave_id = ?").run(access.tenantId, leave.id);
-      if (status === "approved") {
-        const days = daysBetweenInclusive(leave.start_date, leave.end_date);
-        const master = db.prepare(`SELECT leave_quota, quota_period FROM staff_leave_type_master
-          WHERE tenant_id = ? AND code = ? AND (branch_id = ? OR branch_id = '')
-          ORDER BY CASE WHEN branch_id = ? THEN 0 ELSE 1 END LIMIT 1`)
-          .get(access.tenantId, leave.leave_type, leave.branch_id, leave.branch_id);
-        const period = leaveBalancePeriod(leave.start_date, master?.quota_period || "yearly");
-        const balance = db.prepare(`SELECT * FROM leave_balances
-          WHERE tenant_id = ? AND staff_id = ? AND leave_type = ? AND period_start = ?`)
-          .get(access.tenantId, leave.staff_id, leave.leave_type, period.start);
+      const changed = db.prepare(`UPDATE staff_leaves SET status = @status, approved_by = @approved_by, approved_at = @approved_at,
+        rejection_reason = @rejection_reason, version = version + 1, updated_at = @updated_at
+        WHERE id = @id AND tenant_id = @tenant_id AND status = @previous_status AND version = @version`).run({
+        status, approved_by: access.userId || "", approved_at: stamp,
+        rejection_reason: status === "rejected" ? payload.reason || "" : "", updated_at: stamp,
+        id, tenant_id: access.tenantId, previous_status: leave.status, version: Number(leave.version)
+      });
+      if (changed.changes !== 1) throw conflict("Leave request was updated by another request");
+      db.prepare("DELETE FROM leave_calendar_events WHERE tenant_id = @tenant_id AND leave_id = @leave_id")
+        .run({ tenant_id: access.tenantId, leave_id: leave.id });
+      const days = daysBetweenInclusive(leave.start_date, leave.end_date);
+      const master = db.prepare(`SELECT leave_quota, quota_period FROM staff_leave_type_master
+        WHERE tenant_id = @tenant_id AND code = @code AND (branch_id = @branch_id OR branch_id = '')
+        ORDER BY CASE WHEN branch_id = @branch_id THEN 0 ELSE 1 END LIMIT 1`)
+        .get({ tenant_id: access.tenantId, code: leave.leave_type, branch_id: leave.branch_id });
+      const period = leaveBalancePeriod(leave.start_date, master?.quota_period || "yearly");
+      const balance = db.prepare(`SELECT * FROM leave_balances
+        WHERE tenant_id = @tenant_id AND staff_id = @staff_id AND leave_type = @leave_type AND period_start = @period_start`)
+        .get({ tenant_id: access.tenantId, staff_id: leave.staff_id, leave_type: leave.leave_type, period_start: period.start });
+      if (leave.status === "approved" && status === "rejected" && balance) {
+        db.prepare(`UPDATE leave_balances SET used = MAX(0, used - @days), balance = balance + @days, version = version + 1, updated_at = @stamp
+          WHERE id = @id AND tenant_id = @tenant_id`).run({ days, stamp, id: balance.id, tenant_id: access.tenantId });
+      } else if (leave.status !== "approved" && status === "approved") {
         if (balance) {
-          db.prepare(`UPDATE leave_balances SET used = used + ?, balance = balance - ?, version = version + 1, updated_at = ?
-            WHERE id = ? AND tenant_id = ?`).run(days, days, stamp, balance.id, access.tenantId);
+          db.prepare(`UPDATE leave_balances SET used = used + @days, balance = balance - @days, version = version + 1, updated_at = @stamp
+            WHERE id = @id AND tenant_id = @tenant_id`).run({ days, stamp, id: balance.id, tenant_id: access.tenantId });
         } else {
           const quota = parseNumber(master?.leave_quota, 0);
           db.prepare(`INSERT INTO leave_balances (id, tenant_id, staff_id, leave_type, balance, used, period_start, period_end)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(makeId("lvbal"), access.tenantId, leave.staff_id, leave.leave_type, quota - days, days, period.start, period.end);
+            VALUES (@id, @tenant_id, @staff_id, @leave_type, @balance, @used, @period_start, @period_end)`).run({
+            id: makeId("lvbal"), tenant_id: access.tenantId, staff_id: leave.staff_id, leave_type: leave.leave_type,
+            balance: quota - days, used: days, period_start: period.start, period_end: period.end
+          });
         }
         for (const eventDate of dateRangeInclusive(leave.start_date, leave.end_date)) {
           db.prepare(`INSERT INTO leave_calendar_events (id, tenant_id, branch_id, leave_id, staff_id, event_date, status)
-            VALUES (?, ?, ?, ?, ?, ?, 'approved')`).run(makeId("lcal"), access.tenantId, leave.branch_id, leave.id, leave.staff_id, eventDate);
+            VALUES (@id, @tenant_id, @branch_id, @leave_id, @staff_id, @event_date, 'approved')`).run({
+            id: makeId("lcal"), tenant_id: access.tenantId, branch_id: leave.branch_id,
+            leave_id: leave.id, staff_id: leave.staff_id, event_date: eventDate
+          });
         }
       }
       this.writeAudit(`staff.leave_${status}`, "staff_leaves", id, access, { before: leave, after: { status }, branchId: leave.branch_id });
@@ -3063,8 +3251,16 @@ export class StaffOsService {
 
   leaveBalances(query = {}, access) {
     access = normalizeAccess(access);
-    const rows = db.prepare(`SELECT * FROM leave_balances WHERE tenant_id = ? AND (? = '' OR staff_id = ?) ORDER BY leave_type`)
-      .all(access.tenantId, query.staffId || "", query.staffId || "");
+    const params = {
+      tenant_id: access.tenantId,
+      branch_id: query.branchId || query.branch_id || access.requestedBranchId || access.branchId || "",
+      staff_id: resolveSelfStaffId(query, access)
+    };
+    assertBranch(access, params.branch_id);
+    const rows = db.prepare(`SELECT lb.* FROM leave_balances lb
+      INNER JOIN staff_master sm ON sm.id = lb.staff_id AND sm.tenant_id = lb.tenant_id
+      WHERE lb.tenant_id = @tenant_id AND (@branch_id = '' OR sm.branch_id = @branch_id)
+        AND (@staff_id = '' OR lb.staff_id = @staff_id) ORDER BY lb.leave_type`).all(params);
     return rows.map(rowToCamel);
   }
 
@@ -3156,14 +3352,16 @@ export class StaffOsService {
           ? parseNumber(generatedRow.totalCommission, 0) + parseNumber(generatedRow.weekOffPayout, 0) + parseNumber(generatedRow.tips, 0) + parseNumber(generatedRow.allowances, 0)
           : 0;
         const bonusAccrual = salaryProfile.bonusApplicable === false ? 0 : Math.round(itemGross * 0.0833 * 100) / 100;
-        gross += Math.round(itemGross * 100) / 100;
-        deductions += Math.round(deduction * 100) / 100;
-        net += Math.round(netAmount * 100) / 100;
-        db.prepare(`INSERT INTO staff_payroll_items (id, tenant_id, payroll_run_id, branch_id, staff_id, gross_amount, bonus_amount, deduction_amount, net_amount, statutory_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-          makeId("payitem"), access.tenantId, run.id, staff.branchId, staff.id,
-          Math.round(itemGross * 100) / 100, Math.round(bonusAccrual * 100) / 100, Math.round(deduction * 100) / 100, Math.round(netAmount * 100) / 100,
-          json({
+        gross += itemGross;
+        deductions += deduction;
+        net += netAmount;
+        db.prepare(`INSERT INTO staff_payroll_items (id, tenant_id, payroll_run_id, branch_id, staff_id, gross_amount, overtime_amount, bonus_amount, deduction_amount, net_amount, statutory_json)
+          VALUES (@id, @tenant_id, @payroll_run_id, @branch_id, @staff_id, @gross_amount, @overtime_amount, @bonus_amount, @deduction_amount, @net_amount, @statutory_json)`).run({
+          id: makeId("payitem"), tenant_id: access.tenantId, payroll_run_id: run.id, branch_id: staff.branchId, staff_id: staff.id,
+          gross_amount: Math.round(itemGross * 100), overtime_amount: Math.round(overtimeAmount * 100), bonus_amount: Math.round(bonusAccrual * 100),
+          deduction_amount: Math.round(deduction * 100), net_amount: Math.round(netAmount * 100),
+          statutory_json: json({
+            storageUnit: "paise",
             pf,
             esicEmployee,
             esicEmployer,
@@ -3187,12 +3385,19 @@ export class StaffOsService {
               aadhaarNo: salaryProfile.aadhaarNo || ""
             }
           })
-        );
+        });
       }
-      db.prepare(`UPDATE staff_payroll_runs SET gross_amount = ?, deductions_amount = ?, net_amount = ?, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-        .run(Math.round(gross * 100) / 100, Math.round(deductions * 100) / 100, Math.round(net * 100) / 100, now(), run.id, access.tenantId);
+      db.prepare(`UPDATE staff_payroll_runs SET gross_amount = @gross_amount, deductions_amount = @deductions_amount, net_amount = @net_amount, updated_at = @updated_at
+        WHERE id = @id AND tenant_id = @tenant_id`).run({
+        gross_amount: Math.round(gross * 100), deductions_amount: Math.round(deductions * 100), net_amount: Math.round(net * 100),
+        updated_at: now(), id: run.id, tenant_id: access.tenantId
+      });
       this.writeAudit("staff.payroll_generated", "staff_payroll_runs", run.id, access, { after: { ...run, gross, deductions, net }, branchId });
-      return rowToCamel(db.prepare("SELECT * FROM staff_payroll_runs WHERE id = ? AND tenant_id = ?").get(run.id, access.tenantId));
+      return payrollRowToCamel(db.prepare(`SELECT pr.*,
+        CASE WHEN EXISTS (SELECT 1 FROM staff_payroll_items pi WHERE pi.tenant_id = pr.tenant_id AND pi.payroll_run_id = pr.id
+          AND pi.statutory_json LIKE '%\"storageUnit\":\"paise\"%') THEN 'paise' ELSE '' END AS money_storage_unit
+        FROM staff_payroll_runs pr WHERE pr.id = @id AND pr.tenant_id = @tenant_id`)
+        .get({ id: run.id, tenant_id: access.tenantId }));
     });
     const run = trx();
     this.emit("staff:payroll_generated", access, branchId, run.id);
@@ -3297,12 +3502,16 @@ export class StaffOsService {
     };
     const filters = [branchScopedWhere(access, params)];
     if (params.status) filters.push("status = @status");
-    return db.prepare(`SELECT * FROM staff_payroll_runs WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT @limit`).all(params).map(rowToCamel);
+    return db.prepare(`SELECT staff_payroll_runs.*,
+      CASE WHEN EXISTS (SELECT 1 FROM staff_payroll_items pi WHERE pi.tenant_id = staff_payroll_runs.tenant_id
+        AND pi.payroll_run_id = staff_payroll_runs.id AND pi.statutory_json LIKE '%\"storageUnit\":\"paise\"%') THEN 'paise' ELSE '' END AS money_storage_unit
+      FROM staff_payroll_runs WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT @limit`).all(params).map(payrollRowToCamel);
   }
 
   payrollItems(runId, access) {
-    return db.prepare("SELECT * FROM staff_payroll_items WHERE tenant_id = ? AND payroll_run_id = ? ORDER BY staff_id")
-      .all(access.tenantId, runId).map(rowToCamel);
+    return db.prepare(`SELECT * FROM staff_payroll_items
+      WHERE tenant_id = @tenant_id AND payroll_run_id = @payroll_run_id ORDER BY staff_id`)
+      .all({ tenant_id: access.tenantId, payroll_run_id: runId }).map(payrollRowToCamel);
   }
 
   approvePayroll(id, access) {
@@ -3329,7 +3538,11 @@ export class StaffOsService {
       this.writeAudit(`staff.payroll_${status}`, "staff_payroll_runs", id, access, { before: run, after: { status }, branchId: run.branch_id });
     })();
     this.emit(eventType, access, run.branch_id, id);
-    return rowToCamel(db.prepare("SELECT * FROM staff_payroll_runs WHERE id = ? AND tenant_id = ?").get(id, access.tenantId));
+    return payrollRowToCamel(db.prepare(`SELECT pr.*,
+      CASE WHEN EXISTS (SELECT 1 FROM staff_payroll_items pi WHERE pi.tenant_id = pr.tenant_id AND pi.payroll_run_id = pr.id
+        AND pi.statutory_json LIKE '%\"storageUnit\":\"paise\"%') THEN 'paise' ELSE '' END AS money_storage_unit
+      FROM staff_payroll_runs pr WHERE pr.id = @id AND pr.tenant_id = @tenant_id`)
+      .get({ id, tenant_id: access.tenantId }));
   }
 
   calculateCommission(payload = {}, access) {
@@ -3594,8 +3807,47 @@ export class StaffOsService {
   mobilePayroll(query = {}, access) {
     access = normalizeAccess(access);
     const staffId = resolveSelfStaffId(query, access);
-    return db.prepare("SELECT * FROM staff_payroll_items WHERE tenant_id = ? AND staff_id = ? ORDER BY created_at DESC LIMIT 12")
-      .all(access.tenantId, staffId).map(rowToCamel);
+    if (!staffId) throw badRequest("staffId is required");
+    return db.prepare(`SELECT pi.*, pr.period_start, pr.period_end
+      FROM staff_payroll_items pi
+      INNER JOIN staff_payroll_runs pr ON pr.id = pi.payroll_run_id AND pr.tenant_id = pi.tenant_id
+      WHERE pi.tenant_id = @tenant_id AND pi.staff_id = @staff_id
+      ORDER BY pi.created_at DESC LIMIT 12`).all({ tenant_id: access.tenantId, staff_id: staffId }).map((row) => {
+      const statutory = parseJsonObject(row.statutory_json);
+      const storedAsPaise = statutory.storageUnit === "paise";
+      const paise = (value) => storedAsPaise ? Math.round(parseNumber(value, 0)) : Math.round(parseNumber(value, 0) * 100);
+      const grossAmountPaise = paise(row.gross_amount);
+      const storedOvertime = parseNumber(row.overtime_amount, 0);
+      const overtimeAmountPaise = storedOvertime
+        ? paise(storedOvertime)
+        : Math.round(parseNumber(statutory.overtimeAmount, 0) * 100);
+      const bonusAmountPaise = paise(row.bonus_amount);
+      const deductionAmountPaise = paise(row.deduction_amount);
+      const netAmountPaise = paise(row.net_amount);
+      const overtimeMinutes = Math.max(0, Math.round(parseNumber(statutory.overtimeMinutes, 0)));
+      return {
+        ...rowToCamel(row),
+        moneyStorageUnit: "paise",
+        sourceMoneyStorageUnit: storedAsPaise ? "paise" : "legacy_rupees",
+        payrollContractVersion: 2,
+        grossAmountPaise,
+        overtimeAmountPaise,
+        bonusAmountPaise,
+        deductionAmountPaise,
+        netAmountPaise,
+        grossAmount: grossAmountPaise / 100,
+        overtimeAmount: overtimeAmountPaise / 100,
+        bonusAmount: bonusAmountPaise / 100,
+        deductionAmount: deductionAmountPaise / 100,
+        netAmount: netAmountPaise / 100,
+        grossEarning: grossAmountPaise / 100,
+        deductions: deductionAmountPaise / 100,
+        netSalary: netAmountPaise / 100,
+        overtimeMinutes,
+        otHours: overtimeMinutes / 60,
+        otAmount: overtimeAmountPaise / 100
+      };
+    });
   }
 
   mobileTargets(query = {}, access) {

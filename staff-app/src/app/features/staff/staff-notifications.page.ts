@@ -12,7 +12,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (!canReadNotifications()) { <section staffPageState class="notice">You do not have permission to view notifications.</section> }
       @if (loading()) { <section staffPageState class="state" [loading]="true">Loading notifications...</section> }
       @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
-      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (message()) { <section staffPageState class="notice" [class.success]="!messageError()">{{ message() }}</section> }
       @if (canReadNotifications() && os(); as data) {
         <section class="panel">
           <div class="panel-title"><h2>Inbox</h2><span>{{ data.notifications.length }}</span></div>
@@ -31,6 +31,7 @@ export class StaffNotificationsPage implements OnInit {
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly loading = signal(false);
   readonly message = signal("");
+  readonly messageError = signal(false);
 
   constructor(readonly staff: StaffAppService) {}
 
@@ -51,20 +52,27 @@ export class StaffNotificationsPage implements OnInit {
 
   async mark(id: string, status: "read" | "unread" | "archived") {
     this.message.set("");
+    this.messageError.set(false);
     if (!this.canUpdateNotifications()) {
       this.message.set("You do not have permission to update notifications.");
+      this.messageError.set(true);
       return;
     }
-    await this.staff.updateNotification(id, status);
-    this.message.set(`Notification marked ${status}.`);
-    await this.load();
+    try {
+      await this.staff.updateNotification(id, status);
+      this.message.set(`Notification marked ${status}.`);
+      await this.load();
+    } catch {
+      this.message.set(this.staff.error() || "Notification could not be updated.");
+      this.messageError.set(true);
+    }
   }
 
   canReadNotifications(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return Boolean(this.staff.user()?.staffId) || this.staff.hasPermission("read:appointments");
   }
 
   canUpdateNotifications(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return Boolean(this.staff.user()?.staffId) || this.staff.hasPermission("update:notifications");
   }
 }

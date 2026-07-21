@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,7 +8,9 @@ const dbPath = join(testDataDir, "salon-crm.sqlite");
 const forwardedArgs = process.argv.slice(2);
 const testTargets = forwardedArgs.length ? forwardedArgs : ["tests/*.test.js"];
 
-const child = spawn(process.execPath, ["--import", "./tests/helpers/authenticated-fetch-preload.mjs", "--test", "--test-concurrency=1", ...testTargets], {
+const preload = "./tests/helpers/authenticated-fetch-preload.mjs";
+const nodeArgs = [...(existsSync(preload) ? ["--import", preload] : []), "--test", "--test-concurrency=1", ...testTargets];
+const child = spawn(process.execPath, nodeArgs, {
   stdio: "inherit",
   shell: false,
   env: {

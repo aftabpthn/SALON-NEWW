@@ -3,9 +3,11 @@ import { badRequest, notFound } from "../utils/app-error.js";
 import { authService } from "./auth.service.js";
 import { realtimeService } from "./realtime.service.js";
 import { tenantService } from "./tenant.service.js";
+import { can, normalizeRole } from "../middleware/rbac.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${crypto.randomUUID().slice(0, 10)}`;
+const ownerControlRoles = new Set(["owner", "admin", "superAdmin"]);
 
 function scope(access, branchId = "") {
   const scoped = tenantService.accessScope(access || {}, "");
@@ -46,7 +48,14 @@ export class PushNotificationService {
   }
 
   listNotifications(query = {}, access) {
-    return repositories.pushNotifications.list(query, scope(access));
+    const role = normalizeRole(access.role);
+    const canViewBranch = ownerControlRoles.has(role) && can(role, "read", "notifications", access);
+    if (canViewBranch) return repositories.pushNotifications.list(query, scope(access));
+    const limit = Math.min(Math.max(Number(query.limit || 250), 1), 1000);
+    return repositories.pushNotifications
+      .list({ ...query, limit: 10000 }, scope(access))
+      .filter((notification) => notification.userId === access.userId)
+      .slice(0, limit);
   }
 
   send(payload = {}, access) {

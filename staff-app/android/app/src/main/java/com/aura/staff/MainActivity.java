@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     @SuppressLint("NewApi")
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(AttendanceBiometricPlugin.class);
         super.onCreate(savedInstanceState);
         WebView webView = getBridge().getWebView();
         if (webView == null) return;

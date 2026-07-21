@@ -9,11 +9,12 @@ import {
   now,
   requireManager,
   requireTenant,
-  scopedBranchWhere,
   staffAudit,
   staffById,
   toJson
 } from "./staff-os-advanced-utils.js";
+import { isOwnerControlRole } from "./access-control.service.js";
+import { can } from "../middleware/rbac.js";
 
 const sensitiveTypes = new Set(["payroll_generated", "payroll_paid", "burnout_alert"]);
 
@@ -31,19 +32,42 @@ function quietHourDeferred(preference = {}, scheduledAt = now()) {
   return start > end ? minutes >= start || minutes < end : minutes >= start && minutes < end;
 }
 
+function readBranchFilter(query, access, params, alias, includeGlobal = false) {
+  const requestedBranchId = query.branchId || query.branch_id || access.requestedBranchId || access.branchId || "";
+  if (requestedBranchId) {
+    assertBranch(access, requestedBranchId);
+    params.branch0 = requestedBranchId;
+    return includeGlobal
+      ? `(${alias}.branch_id = @branch0 OR ${alias}.branch_id IS NULL OR ${alias}.branch_id = '')`
+      : `${alias}.branch_id = @branch0`;
+  }
+  if (isOwnerControlRole(access.role)) return "";
+  const branchIds = [...new Set((access.branchIds || []).map(String).filter(Boolean))];
+  if (!branchIds.length) throw forbidden("A permitted branch is required to read staff notifications");
+  branchIds.forEach((branchId, index) => {
+    assertBranch(access, branchId);
+    params[`branch${index}`] = branchId;
+  });
+  const allowed = branchIds.map((_, index) => `@branch${index}`).join(", ");
+  return includeGlobal
+    ? `(${alias}.branch_id IN (${allowed}) OR ${alias}.branch_id IS NULL OR ${alias}.branch_id = '')`
+    : `${alias}.branch_id IN (${allowed})`;
+}
+
 export class StaffWhatsappNotificationService {
   listTemplates(query = {}, access) {
     access = requireTenant(access);
     const params = {
       tenant_id: access.tenantId,
-      branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
       notification_type: query.type || query.notificationType || "",
       limit: Math.min(Number(query.limit || 100), 500)
     };
-    const filters = ["tenant_id = @tenant_id"];
-    if (params.branch_id) filters.push("(branch_id = @branch_id OR branch_id IS NULL OR branch_id = '')");
-    if (params.notification_type) filters.push("notification_type = @notification_type");
-    return db.prepare(`SELECT * FROM staff_notification_templates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT @limit`).all(params).map(camel);
+    const filters = ["t.tenant_id = @tenant_id"];
+    const branchFilter = readBranchFilter(query, access, params, "t", true);
+    if (branchFilter) filters.push(branchFilter);
+    if (params.notification_type) filters.push("t.notification_type = @notification_type");
+    if (!can(access.role, "read", "staff", access)) filters.push("t.sensitive = 0 AND t.notification_type NOT LIKE 'payroll_%'");
+    return db.prepare(`SELECT t.* FROM staff_notification_templates t WHERE ${filters.join(" AND ")} ORDER BY t.created_at DESC LIMIT @limit`).all(params).map(camel);
   }
 
   createTemplate(payload = {}, access) {
@@ -71,6 +95,7 @@ export class StaffWhatsappNotificationService {
 
   queue(payload = {}, access) {
     access = requireTenant(access);
+    requireManager(access);
     const staff = staffById(payload.staffId || payload.staff_id, access);
     const branchId = branchIdFrom(payload, access) || staff.branch_id;
     assertBranch(access, branchId);
@@ -154,11 +179,17 @@ export class StaffWhatsappNotificationService {
     access = requireTenant(access);
     const params = {
       tenant_id: access.tenantId,
-      branch_id: query.branchId || query.branch_id || access.requestedBranchId || "",
       limit: Math.min(Number(query.limit || 100), 500)
     };
-    const filters = [scopedBranchWhere(access, params)];
-    return db.prepare(`SELECT * FROM staff_notification_delivery_logs WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT @limit`).all(params).map(camel);
+    const filters = ["l.tenant_id = @tenant_id"];
+    const branchFilter = readBranchFilter(query, access, params, "l");
+    if (branchFilter) filters.push(branchFilter);
+    if (!can(access.role, "read", "staff", access)) {
+      filters.push("q.id IS NOT NULL AND COALESCE(q.sensitive, 0) = 0 AND COALESCE(q.notification_type, '') NOT LIKE 'payroll_%'");
+    }
+    return db.prepare(`SELECT l.* FROM staff_notification_delivery_logs l
+      LEFT JOIN staff_notification_queue q ON q.id = l.queue_id AND q.tenant_id = l.tenant_id
+      WHERE ${filters.join(" AND ")} ORDER BY l.created_at DESC LIMIT @limit`).all(params).map(camel);
   }
 
   preference(staffId, access) {

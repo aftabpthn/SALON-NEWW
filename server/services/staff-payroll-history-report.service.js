@@ -51,6 +51,20 @@ function rowToHistory(row = {}) {
   const statutory = parseJson(row.statutory_json, {});
   const preview = statutory.preview || {};
   const staffName = row.staff_name || row.legacy_staff_name || row.staff_id || "Unassigned";
+  const storedAsPaise = statutory.storageUnit === "paise" || Number(statutory.payrollContractVersion || 0) >= 2;
+  const columnPaise = (value) => storedAsPaise
+    ? Math.round(Number(value) || 0)
+    : Math.round((Number(value) || 0) * 100);
+  const statutoryPaise = (value) => Math.round((Number(value) || 0) * 100);
+  const grossAmountPaise = columnPaise(row.item_gross_amount);
+  const deductionAmountPaise = columnPaise(row.item_deduction_amount);
+  const netAmountPaise = columnPaise(row.item_net_amount);
+  const overtimeAmountPaise = Number(row.overtime_amount || 0)
+    ? columnPaise(row.overtime_amount)
+    : statutoryPaise(statutory.overtimeAmount || preview.otAmount);
+  const bonusAmountPaise = Number(row.bonus_amount || 0)
+    ? columnPaise(row.bonus_amount)
+    : statutoryPaise(statutory.bonusAmount || preview.totalCommission);
   return {
     payrollRunId: row.payroll_run_id || "",
     payrollItemId: row.payroll_item_id || "",
@@ -68,11 +82,19 @@ function rowToHistory(row = {}) {
     staffName,
     staffCode: row.employee_code || row.staff_id || "",
     staffContact: row.mobile || "",
-    grossAmount: money(row.item_gross_amount),
-    deductionAmount: money(row.item_deduction_amount),
-    netAmount: money(row.item_net_amount),
-    overtimeAmount: money(row.overtime_amount || statutory.overtimeAmount || preview.otAmount),
-    bonusAmount: money(row.bonus_amount || statutory.bonusAmount || preview.totalCommission),
+    moneyStorageUnit: "paise",
+    sourceMoneyStorageUnit: storedAsPaise ? "paise" : "legacy_rupees",
+    payrollContractVersion: 2,
+    grossAmountPaise,
+    deductionAmountPaise,
+    netAmountPaise,
+    overtimeAmountPaise,
+    bonusAmountPaise,
+    grossAmount: money(grossAmountPaise / 100),
+    deductionAmount: money(deductionAmountPaise / 100),
+    netAmount: money(netAmountPaise / 100),
+    overtimeAmount: money(overtimeAmountPaise / 100),
+    bonusAmount: money(bonusAmountPaise / 100),
     pf: money(statutory.pf),
     esic: money(statutory.esicEmployee ?? statutory.esic),
     esicEmployer: money(statutory.esicEmployer),
