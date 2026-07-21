@@ -24,7 +24,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         <section class="panel">
           <div class="panel-title"><h2>Request leave</h2><span>{{ canRequestLeave() ? 'enabled' : 'view only' }}</span></div>
           @if (!canRequestLeave()) { <p class="muted">You can view leave data, but your role cannot submit leave requests.</p> }
-          <div class="form-grid"><label>Type<input [(ngModel)]="leaveType" placeholder="casual" /></label><label>From<input [(ngModel)]="leaveStart" type="date" /></label><label>To<input [(ngModel)]="leaveEnd" type="date" /></label><label>Reason<input [(ngModel)]="leaveReason" placeholder="Reason" /></label></div>
+          <div class="form-grid"><label>Type<input [(ngModel)]="leaveType" name="leaveType" placeholder="casual" required maxlength="50" /></label><label>From<input [(ngModel)]="leaveStart" name="leaveStart" type="date" required /></label><label>To<input [(ngModel)]="leaveEnd" name="leaveEnd" type="date" required /></label><label>Reason<textarea [(ngModel)]="leaveReason" name="leaveReason" placeholder="Reason" maxlength="500" rows="3"></textarea></label></div>
           <button class="link-button" type="button" [disabled]="!canRequestLeave() || submitting()" (click)="requestLeave()">{{ submitting() ? 'Sending...' : 'Send request' }}</button>
         </section>
       }

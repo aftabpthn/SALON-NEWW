@@ -249,7 +249,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
       .bell-icon { width: 19px; height: 19px; }
        .staff-content { overflow: visible; padding: 10px 0 var(--staff-bottom-clearance); }
        .staff-policy-hint { margin: 0 10px 8px; padding: 7px 10px; font-size: .72rem; line-height: 1.3; }
-      .notification-drawer { top: 0; right: 0; bottom: 0; left: auto; width: 72vw; min-width: 0; max-width: 360px; height: 100dvh; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-left: 1px solid var(--staff-border); border-radius: 22px 0 0 22px; box-shadow: -18px 0 40px rgba(31, 41, 55, .14); }
+      .notification-drawer { top: 0; right: 0; bottom: 0; left: auto; width: 72vw; min-width: 280px; max-width: 360px; height: 100dvh; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-left: 1px solid var(--staff-border); border-radius: 22px 0 0 22px; box-shadow: -18px 0 40px rgba(31, 41, 55, .14); }
       .notification-drawer .drawer-title { position: sticky; top: 0; z-index: 2; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); box-shadow: 0 6px 16px rgba(31, 41, 55, .08); }
        .mobile-bottom-nav { position: fixed; left: 50%; bottom: calc(var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom)); z-index: 27; display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); width: min(calc(100vw - 20px), 430px); min-height: var(--staff-mobile-nav-height); padding: 6px; gap: 3px; transform: translateX(-50%); border: 1px solid var(--staff-border); border-radius: 22px; background: var(--staff-surface-glass); box-shadow: var(--staff-shadow-elevated); backdrop-filter: blur(18px); }
        .mobile-bottom-nav:has(> a:nth-child(5)) { grid-template-columns: .85fr 1.2fr 1fr 1.15fr .8fr; gap: 1px; }
@@ -257,8 +257,9 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
        .mobile-bottom-nav:has(> a:nth-child(5)) a:nth-child(2) span { font-size: .57rem; letter-spacing: -.015em; }
        .mobile-bottom-nav a.active::after { position:absolute;top:2px;width:16px;height:2px;border-radius:999px;background:var(--staff-primary);content:""; }
       .mobile-bottom-nav a svg { display: block; width: 20px; height: 20px; margin: 0; fill: currentColor; }
-       .mobile-bottom-nav a.active { color: var(--staff-primary-hover); background: transparent; }
+        .mobile-bottom-nav a.active { color: var(--staff-primary-hover); background: transparent; }
         .mobile-bottom-nav a.active svg { box-sizing:content-box;padding:2px;border-radius:7px;background:var(--staff-primary-light); }
+        .mobile-bottom-nav a:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 2px; border-radius: 14px; }
       .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: rgba(31,41,55,.28); backdrop-filter: blur(2px); transition: opacity .18s ease; }
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
       .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 72vw; min-width: 0; max-width: 360px; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0 22px 22px 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 40px rgba(31, 41, 55, .14); }
@@ -286,7 +287,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
           .staff-app-shell:has(input:focus,textarea:focus,select:focus) .mobile-bottom-nav { opacity:0;pointer-events:none;transform:translate(-50%,calc(100% + var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom))); }
         }
       }
-     @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
+     @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } .command-palette input:active { transform: none; } }
   `]
 })
 export class StaffLayoutPage implements OnInit, OnDestroy {
@@ -599,15 +600,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   async refreshChildPage(): Promise<void> {
-    try {
-      let route = this.router.routerState.snapshot.root;
-      while (route.firstChild) route = route.firstChild;
-      const componentType = route.component;
-      if (componentType && (this.router as any).injector) {
-        const instance = (this.router as any).injector.get(componentType, null);
-        if (instance && typeof instance.load === "function") await instance.load();
-      }
-    } catch { /* component not injectable */ }
+    window.dispatchEvent(new CustomEvent("aura:refresh-child"));
     window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     await this.loadShellData();
   }

@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, signal } from "@angular/core";
 import { StaffAppService, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
 import { addBusinessDays, businessDate } from "../../core/business-date";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -25,7 +25,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 
       @if (loading()) { <section staffPageState class="state" [loading]="true">Loading calendar...</section> }
       @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
-      @if (message()) { <section staffPageState class="notice" [class.success]="message().startsWith('Shift') || message().startsWith('Calendar')">{{ message() }}</section> }
+      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (errorMessage()) { <section staffPageState class="notice">{{ errorMessage() }}</section> }
 
       @if (canReadCalendar()) {
         @if (view() === 'day') {
@@ -94,12 +95,13 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   styleUrls: ["./staff-app.styles.css"],
   styles: [`.icon-button{width:48px;padding:0}.icon-button svg{width:18px;height:18px;fill:currentColor}`]
 })
-export class StaffCalendarPage implements OnInit {
+export class StaffCalendarPage implements OnInit, OnDestroy {
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly today = signal<StaffToday | null>(null);
   readonly loading = signal(false);
   readonly view = signal<"day" | "week">("day");
   readonly message = signal("");
+  readonly errorMessage = signal("");
   readonly selectedDate = signal(businessDate());
   readonly dragged = signal<{ id: string; version: number; startTime: string; endTime: string } | null>(null);
   readonly editingId = signal<string | null>(null);
@@ -107,10 +109,18 @@ export class StaffCalendarPage implements OnInit {
   readonly moveStart = signal("09:00");
   readonly moveEnd = signal("18:00");
   private loadGeneration = 0;
+  private readonly onRefresh = () => void this.load();
 
   constructor(readonly staff: StaffAppService) {}
 
-  ngOnInit() { if (this.canReadCalendar()) void this.load(); }
+  ngOnInit() {
+    window.addEventListener("aura:refresh-child", this.onRefresh);
+    if (this.canReadCalendar()) void this.load();
+  }
+
+  ngOnDestroy() {
+    window.removeEventListener("aura:refresh-child", this.onRefresh);
+  }
 
   async load() {
     const generation = ++this.loadGeneration;
@@ -186,12 +196,13 @@ export class StaffCalendarPage implements OnInit {
     const item = this.dragged();
     if (!item || !date) return;
     this.message.set("");
+    this.errorMessage.set("");
     try {
       await this.staff.updateSchedule(item.id, { version: item.version, scheduleDate: date, startTime: item.startTime, endTime: item.endTime });
       this.message.set("Shift moved.");
       await this.load();
     } catch {
-      this.message.set(this.staff.error() || "Schedule could not be moved because of a conflict.");
+      this.errorMessage.set(this.staff.error() || "Schedule could not be moved because of a conflict.");
     } finally {
       this.dragged.set(null);
     }
@@ -214,28 +225,31 @@ export class StaffCalendarPage implements OnInit {
     const startTime = this.moveStart() || "09:00";
     const endTime = this.moveEnd() || "18:00";
     if (endTime <= startTime) {
-      this.message.set("End time must be after start time.");
+      this.errorMessage.set("End time must be after start time.");
       return;
     }
     this.message.set("");
+    this.errorMessage.set("");
     try {
       await this.staff.updateSchedule(item.id, { version: Number(item.version || 1), scheduleDate: date, startTime, endTime });
       this.message.set("Shift rescheduled.");
       this.editingId.set(null);
       await this.load();
     } catch {
-      this.message.set(this.staff.error() || "Unable to update shift due to overlap or conflict.");
+      this.errorMessage.set(this.staff.error() || "Unable to update shift due to overlap or conflict.");
     }
   }
 
   async changeStatus(item: { id: string; version?: number; status: string }, status: string) {
     if (!this.canUpdateCalendar()) return;
+    this.message.set("");
+    this.errorMessage.set("");
     try {
       await this.staff.updateSchedule(item.id, { version: Number(item.version || 1), status });
       this.message.set(`Shift ${status}`);
       await this.load();
     } catch {
-      this.message.set(this.staff.error() || "Unable to update shift status.");
+      this.errorMessage.set(this.staff.error() || "Unable to update shift status.");
     }
   }
 

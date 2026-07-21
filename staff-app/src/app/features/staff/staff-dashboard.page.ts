@@ -11,7 +11,7 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
   standalone: true,
   imports: [StaffDashboardSectionsComponent, StaffPageStateComponent],
   template: `
-    <section class="page dashboard-page" aria-busy="{{ initialLoading() }}">
+    <section class="page dashboard-page" [attr.aria-busy]="initialLoading()">
       @if (blockingError()) {
         <section class="dashboard-blocking-state" role="alert">
           <span class="state-mark" aria-hidden="true">!</span>

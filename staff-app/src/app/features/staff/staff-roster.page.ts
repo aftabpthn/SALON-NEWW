@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, signal } from "@angular/core";
 import { StaffAppService, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
 import { addBusinessDays, businessDate } from "../../core/business-date";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -25,6 +25,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (!canReadRoster()) { <section staffPageState class="notice">You do not have permission to read roster data.</section> }
       @if (loading()) { <section staffPageState class="state" [loading]="true">Loading roster...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (errorMessage()) { <section staffPageState class="notice">{{ errorMessage() }}</section> }
       @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadRoster() && today(); as data) {
@@ -84,17 +85,20 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   `,
   styleUrls: ["./staff-app.styles.css"]
 })
-export class StaffRosterPage implements OnInit {
+export class StaffRosterPage implements OnInit, OnDestroy {
   readonly today = signal<StaffToday | null>(null);
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly loading = signal(false);
   readonly message = signal("");
+  readonly errorMessage = signal("");
   readonly windowStart = signal(businessDate());
   readonly windowDays = signal(14);
   readonly editingId = signal<string | null>(null);
   readonly moveDate = signal(this.windowStart());
   readonly moveStart = signal("09:00");
   readonly moveEnd = signal("18:00");
+  private loadGeneration = 0;
+  private readonly onRefresh = () => void this.load();
 
   constructor(readonly staff: StaffAppService) {}
 
@@ -107,11 +111,20 @@ export class StaffRosterPage implements OnInit {
     }
   }
 
-  ngOnInit() { if (this.canReadRoster()) void this.load(); }
+  ngOnInit() {
+    window.addEventListener("aura:refresh-child", this.onRefresh);
+    if (this.canReadRoster()) void this.load();
+  }
+
+  ngOnDestroy() {
+    window.removeEventListener("aura:refresh-child", this.onRefresh);
+  }
 
   async load() {
+    const generation = ++this.loadGeneration;
     this.loading.set(true);
     this.message.set("");
+    this.errorMessage.set("");
     try {
       const from = this.windowStart();
       const to = this.windowEnd();
@@ -119,10 +132,11 @@ export class StaffRosterPage implements OnInit {
         this.staff.today(this.windowStart()),
         this.staff.enterpriseOs({ from, to })
       ]);
+      if (generation !== this.loadGeneration) return;
       this.today.set(today);
       this.os.set(os);
     } finally {
-      this.loading.set(false);
+      if (generation === this.loadGeneration) this.loading.set(false);
     }
   }
 
@@ -171,11 +185,12 @@ export class StaffRosterPage implements OnInit {
   async saveMove(item: { id: string; version?: number }) {
     if (!this.canUpdateRoster()) return;
     this.message.set("");
+    this.errorMessage.set("");
     const date = this.moveDate() || this.windowStart();
     const startTime = this.moveStart() || "09:00";
     const endTime = this.moveEnd() || "18:00";
     if (endTime <= startTime) {
-      this.message.set("End time must be after start time.");
+      this.errorMessage.set("End time must be after start time.");
       return;
     }
     try {
@@ -189,18 +204,20 @@ export class StaffRosterPage implements OnInit {
       this.editingId.set(null);
       await this.load();
     } catch {
-      this.message.set(this.staff.error() || "Unable to update shift due to overlap or conflict.");
+      this.errorMessage.set(this.staff.error() || "Unable to update shift due to overlap or conflict.");
     }
   }
 
   async changeStatus(item: { id: string; version?: number; status: string }, status: string) {
     if (!this.canUpdateRoster()) return;
+    this.message.set("");
+    this.errorMessage.set("");
     try {
       await this.staff.updateSchedule(item.id, { version: Number(item.version || 1), status });
       this.message.set(`Shift ${status}`);
       await this.load();
     } catch {
-      this.message.set(this.staff.error() || "Unable to update shift status.");
+      this.errorMessage.set(this.staff.error() || "Unable to update shift status.");
     }
   }
 

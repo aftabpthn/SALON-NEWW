@@ -1,6 +1,7 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffToday } from "../../core/staff-app.service";
+import { businessDate } from "../../core/business-date";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
@@ -128,7 +129,20 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   scheduledEndLabel(): string { return this.todayShift()?.endTime || "not set"; }
   isOnBreak(): boolean { return !!this.today()?.activeBreak || ["on_break", "break"].includes(String(this.activeAttendance()?.status || "").toLowerCase()); }
   workedLabel(): string { const row = this.activeOrLatestAttendance(); if (!row?.clockInAt) return "-"; if (row.clockOutAt) return this.formatMinutes(row.totalWorkedMinutes); const minutes = Math.max(0, Math.floor((Date.now() - new Date(row.clockInAt).getTime()) / 60000) - Number(row.totalBreakMinutes || 0)); return this.formatMinutes(minutes); }
-  remainingShiftLabel(): string { return "Awaiting data"; }
+  remainingShiftLabel(): string {
+    const shift = this.todayShift();
+    const attendance = this.activeOrLatestAttendance();
+    if (!shift?.endTime) return "No shift end set";
+    if (!attendance?.clockInAt) return "Not clocked in";
+    if (attendance.clockOutAt) return "Shift ended";
+    const now = Date.now();
+    const endMinutes = Number(shift.endTime.split(":")[0]) * 60 + Number(shift.endTime.split(":")[1]);
+    const todayDate = String(this.today()?.date || businessDate());
+    const endMs = new Date(`${todayDate}T${shift.endTime}:00`).getTime();
+    const diff = endMs - now;
+    if (diff <= 0) return "Overtime";
+    return this.formatMinutes(Math.floor(diff / 60000));
+  }
   overtimeWorkedLabel(): string { const minutes = this.activeOrLatestAttendance()?.overtimeMinutes; return minutes === null || minutes === undefined ? "—" : this.formatMinutes(minutes); }
   formatMinutes(value: number | null | undefined): string { const minutes = Math.max(0, Number(value || 0)); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
   currentMonthLabel(): string { const key = String(this.today()?.date || "").slice(0, 7); return /^\d{4}-\d{2}$/.test(key) ? this.monthLabel(key) : "Current month"; }
