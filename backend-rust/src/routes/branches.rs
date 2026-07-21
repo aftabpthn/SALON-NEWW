@@ -1,11 +1,14 @@
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, HeaderValue},
+    response::{IntoResponse, Response},
     Extension, Json, Router,
 };
 use chrono::NaiveDate;
 use serde::Deserialize;
 use serde_json::json;
+use std::io::{Cursor, Write};
+use zip::{write::SimpleFileOptions, ZipWriter};
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -13,7 +16,7 @@ use crate::{
         auth_repository, auth_repository::AuthAuditInput, branch_repository::BranchRecord,
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, branch_service},
+    services::{auth_service::AuthClaims, branch_service, invoice_pdf},
     state::AppState,
 };
 
@@ -102,6 +105,37 @@ pub struct MultiBranchDecisionRequest {
     pub note: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterBranchSettlementRequest {
+    pub version: i32,
+    pub payment_method: String,
+    pub settlement_reference: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiBranchCommandCenterQuery {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub region: Option<String>,
+    pub zone: Option<String>,
+    pub cluster: Option<String>,
+    pub branch_id: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiBranchDrilldownQuery {
+    pub kind: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub region: Option<String>,
+    pub zone: Option<String>,
+    pub cluster: Option<String>,
+    pub branch_id: Option<String>,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/settings/branches", axum::routing::get(list).post(create))
@@ -127,6 +161,26 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(multi_branch_command_center),
         )
         .route(
+            "/settings/multi-branch/drilldown",
+            axum::routing::get(multi_branch_drilldown),
+        )
+        .route(
+            "/settings/multi-branch/export.csv",
+            axum::routing::get(export_multi_branch_csv),
+        )
+        .route(
+            "/settings/multi-branch/export.xlsx",
+            axum::routing::get(export_multi_branch_xlsx),
+        )
+        .route(
+            "/settings/multi-branch/export.pdf",
+            axum::routing::get(export_multi_branch_pdf),
+        )
+        .route(
+            "/settings/multi-branch/settlements/:id/settle",
+            axum::routing::post(settle_inter_branch_redemption),
+        )
+        .route(
             "/settings/multi-branch/approvals",
             axum::routing::post(request_multi_branch_approval),
         )
@@ -136,15 +190,395 @@ pub fn router() -> Router<AppState> {
         )
 }
 
+async fn settle_inter_branch_redemption(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<InterBranchSettlementRequest>,
+) -> ApiResult<crate::repositories::branch_repository::InterBranchSettlementRecord> {
+    require_branch_access(&claims, true)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        branch_service::settle_inter_branch_redemption(
+            &state.db,
+            &tenant_id,
+            &claims.sub,
+            (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            has_unrestricted_org_scope(&claims),
+            &id,
+            payload.version,
+            &payload.payment_method,
+            &payload.settlement_reference,
+        )
+        .await?,
+    )))
+}
+
+async fn multi_branch_drilldown(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<MultiBranchDrilldownQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    require_org_report_access(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        branch_service::multi_branch_drilldown(
+            &state.db,
+            &tenant_id,
+            &claims.sub,
+            has_unrestricted_org_scope(&claims),
+            &query.kind,
+            branch_service::MultiBranchFilterInput {
+                start_date: query.start_date,
+                end_date: query.end_date,
+                region: query.region,
+                zone: query.zone,
+                cluster: query.cluster,
+                branch_id: query.branch_id,
+            },
+        )
+        .await?,
+    )))
+}
+
+async fn export_multi_branch_csv(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<MultiBranchCommandCenterQuery>,
+) -> Result<Response, AppError> {
+    export_multi_branch(state, claims, headers, query, "csv").await
+}
+
+async fn export_multi_branch_xlsx(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<MultiBranchCommandCenterQuery>,
+) -> Result<Response, AppError> {
+    export_multi_branch(state, claims, headers, query, "xlsx").await
+}
+
+async fn export_multi_branch_pdf(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<MultiBranchCommandCenterQuery>,
+) -> Result<Response, AppError> {
+    export_multi_branch(state, claims, headers, query, "pdf").await
+}
+
+async fn export_multi_branch(
+    state: AppState,
+    claims: AuthClaims,
+    headers: HeaderMap,
+    query: MultiBranchCommandCenterQuery,
+    format: &'static str,
+) -> Result<Response, AppError> {
+    require_org_report_access(&claims)?;
+    let (tenant_id, current_branch_id) = tenant_branch(&headers)?;
+    let report = branch_service::multi_branch_command_center(
+        &state.db,
+        &tenant_id,
+        &claims.sub,
+        has_unrestricted_org_scope(&claims),
+        branch_service::MultiBranchFilterInput {
+            start_date: query.start_date,
+            end_date: query.end_date,
+            region: query.region,
+            zone: query.zone,
+            cluster: query.cluster,
+            branch_id: query.branch_id,
+        },
+    )
+    .await?;
+    let (body, content_type) = match format {
+        "xlsx" => (
+            multi_branch_xlsx(&report)?,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        "pdf" => {
+            let mut lines = vec![
+                format!("Date range: {} to {}", report.range_start, report.range_end),
+                format!("Branches: {}", report.summary.branch_count),
+                format!(
+                    "Revenue: INR {:.2}",
+                    report.summary.revenue_paise as f64 / 100.0
+                ),
+            ];
+            lines.extend(report.comparisons.iter().map(|row| {
+                format!(
+                    "{} | {} / {} / {} | revenue {:.2} | refunds {:.2} | sales {} | appointments {} | utilization {:.2}% | variance {:.2}",
+                    row.branch_name,
+                    row.region_name,
+                    row.zone_name,
+                    row.cluster_name,
+                    row.revenue_paise as f64 / 100.0,
+                    row.refund_paise as f64 / 100.0,
+                    row.sale_count,
+                    row.appointment_count,
+                    row.utilization_bps as f64 / 100.0,
+                    row.cash_variance_paise as f64 / 100.0
+                )
+            }));
+            (
+                invoice_pdf::render_text_report("Multi-Branch Command Center", &lines),
+                "application/pdf",
+            )
+        }
+        _ => (
+            multi_branch_csv(&report).into_bytes(),
+            "text/csv; charset=utf-8",
+        ),
+    };
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&current_branch_id),
+            identity: None,
+            event_type: "multi_branch.report.exported",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"format":format,"rangeStart":report.range_start,"rangeEnd":report.range_end}),
+        },
+    )
+    .await;
+    let mut response = body.into_response();
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!(
+            "attachment; filename=multi-branch-report.{format}"
+        ))
+        .map_err(|_| AppError::internal("failed to set branch export filename"))?,
+    );
+    Ok(response)
+}
+
+fn multi_branch_csv(report: &branch_service::MultiBranchCommandCenter) -> String {
+    let mut csv = String::from("branch_id,branch_name,region,zone,cluster,revenue_paise,refund_paise,tip_paise,sales,voids,appointments,lost_appointments,utilization_bps,cash_variance_paise,open_tills,transfers,shortages,inventory_value_paise,membership_liability_paise,membership_redeemed_paise,cross_location_redeemed_paise,gift_card_liability_paise,loyalty_points_balance,shared_customers,service_sync_gap,product_sync_gap\n");
+    for row in &report.comparisons {
+        let text = |value: &str| format!("\"{}\"", value.replace('"', "\"\""));
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            text(&row.branch_id),
+            text(&row.branch_name),
+            text(&row.region_name),
+            text(&row.zone_name),
+            text(&row.cluster_name),
+            row.revenue_paise,
+            row.refund_paise,
+            row.tip_paise,
+            row.sale_count,
+            row.void_count,
+            row.appointment_count,
+            row.lost_appointment_count,
+            row.utilization_bps,
+            row.cash_variance_paise,
+            row.open_till_count,
+            row.transfer_count,
+            row.shortage_count,
+            row.inventory_value_paise,
+            row.membership_liability_paise,
+            row.membership_redeemed_paise,
+            row.cross_location_redeemed_paise,
+            row.gift_card_liability_paise,
+            row.loyalty_points_balance,
+            row.shared_customer_count,
+            row.service_sync_gap,
+            row.product_sync_gap
+        ));
+    }
+    csv
+}
+
+fn multi_branch_xlsx(
+    report: &branch_service::MultiBranchCommandCenter,
+) -> Result<Vec<u8>, AppError> {
+    const HEADERS: [&str; 26] = [
+        "Branch ID",
+        "Branch",
+        "Region",
+        "Zone",
+        "Cluster",
+        "Revenue Paise",
+        "Refund Paise",
+        "Tip Paise",
+        "Sales",
+        "Voids",
+        "Appointments",
+        "Lost Appointments",
+        "Utilization BPS",
+        "Cash Variance Paise",
+        "Open Tills",
+        "Transfers",
+        "Shortages",
+        "Inventory Value Paise",
+        "Membership Liability Paise",
+        "Membership Redeemed Paise",
+        "Cross Location Redeemed Paise",
+        "Gift Card Liability Paise",
+        "Loyalty Points",
+        "Shared Customers",
+        "Service Sync Gap",
+        "Product Sync Gap",
+    ];
+    let mut sheet = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>"#,
+    );
+    sheet.push_str("<row r=\"1\">");
+    for (column, value) in HEADERS.iter().enumerate() {
+        sheet.push_str(&xlsx_string_cell(column, 1, value));
+    }
+    sheet.push_str("</row>");
+    for (offset, row) in report.comparisons.iter().enumerate() {
+        let row_number = offset + 2;
+        sheet.push_str(&format!("<row r=\"{row_number}\">"));
+        for (column, value) in [
+            row.branch_id.as_str(),
+            row.branch_name.as_str(),
+            row.region_name.as_str(),
+            row.zone_name.as_str(),
+            row.cluster_name.as_str(),
+        ]
+        .iter()
+        .enumerate()
+        {
+            sheet.push_str(&xlsx_string_cell(column, row_number, value));
+        }
+        for (offset, value) in [
+            row.revenue_paise,
+            row.refund_paise,
+            row.tip_paise,
+            row.sale_count,
+            row.void_count,
+            row.appointment_count,
+            row.lost_appointment_count,
+            row.utilization_bps,
+            row.cash_variance_paise,
+            row.open_till_count,
+            row.transfer_count,
+            row.shortage_count,
+            row.inventory_value_paise,
+            row.membership_liability_paise,
+            row.membership_redeemed_paise,
+            row.cross_location_redeemed_paise,
+            row.gift_card_liability_paise,
+            row.loyalty_points_balance,
+            row.shared_customer_count,
+            row.service_sync_gap,
+            row.product_sync_gap,
+        ]
+        .iter()
+        .enumerate()
+        {
+            sheet.push_str(&format!(
+                "<c r=\"{}{}\"><v>{}</v></c>",
+                xlsx_column(offset + 5),
+                row_number,
+                value
+            ));
+        }
+        sheet.push_str("</row>");
+    }
+    sheet.push_str("</sheetData></worksheet>");
+
+    let cursor = Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(cursor);
+    let files = [
+        (
+            "[Content_Types].xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#,
+        ),
+        (
+            "_rels/.rels",
+            r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Branches" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+    ];
+    for (name, content) in files {
+        zip.start_file(name, SimpleFileOptions::default())
+            .map_err(|_| AppError::internal("failed to create XLSX export"))?;
+        zip.write_all(content.as_bytes())
+            .map_err(|_| AppError::internal("failed to write XLSX export"))?;
+    }
+    zip.start_file("xl/worksheets/sheet1.xml", SimpleFileOptions::default())
+        .map_err(|_| AppError::internal("failed to create XLSX worksheet"))?;
+    zip.write_all(sheet.as_bytes())
+        .map_err(|_| AppError::internal("failed to write XLSX worksheet"))?;
+    Ok(zip
+        .finish()
+        .map_err(|_| AppError::internal("failed to finish XLSX export"))?
+        .into_inner())
+}
+
+fn xlsx_string_cell(column: usize, row: usize, value: &str) -> String {
+    format!(
+        "<c r=\"{}{row}\" t=\"inlineStr\"><is><t>{}</t></is></c>",
+        xlsx_column(column),
+        xml_escape(value)
+    )
+}
+
+fn xlsx_column(mut column: usize) -> String {
+    let mut value = String::new();
+    loop {
+        value.insert(0, (b'A' + (column % 26) as u8) as char);
+        if column < 26 {
+            return value;
+        }
+        column = column / 26 - 1;
+    }
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 async fn multi_branch_command_center(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
+    Query(query): Query<MultiBranchCommandCenterQuery>,
 ) -> ApiResult<branch_service::MultiBranchCommandCenter> {
-    require_branch_access(&claims, false)?;
+    require_org_report_access(&claims)?;
     let (tenant_id, _) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        branch_service::multi_branch_command_center(&state.db, &tenant_id).await?,
+        branch_service::multi_branch_command_center(
+            &state.db,
+            &tenant_id,
+            &claims.sub,
+            has_unrestricted_org_scope(&claims),
+            branch_service::MultiBranchFilterInput {
+                start_date: query.start_date,
+                end_date: query.end_date,
+                region: query.region,
+                zone: query.zone,
+                cluster: query.cluster,
+                branch_id: query.branch_id,
+            },
+        )
+        .await?,
     )))
 }
 
@@ -202,7 +636,13 @@ async fn franchise_controls(
     require_branch_access(&claims, false)?;
     let (tenant_id, _) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        branch_service::franchise_controls(&state.db, &tenant_id).await?,
+        branch_service::franchise_controls_scoped(
+            &state.db,
+            &tenant_id,
+            &claims.sub,
+            has_unrestricted_org_scope(&claims),
+        )
+        .await?,
     )))
 }
 
@@ -248,19 +688,22 @@ async fn publish_central_masters(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
+    Json(payload): Json<MultiBranchApprovalRequest>,
 ) -> ApiResult<serde_json::Value> {
     require_branch_access(&claims, true)?;
     let (tenant_id, current_branch_id) = tenant_branch(&headers)?;
-    let published = branch_service::publish_central_masters(&state.db, &tenant_id).await?;
-    audit_franchise(
-        &state,
-        &claims,
+    let approval = branch_service::request_multi_branch_approval(
+        &state.db,
+        &tenant_id,
         &current_branch_id,
-        "franchise.masters.published",
-        json!({"published": published}),
+        &claims.sub,
+        (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+        &payload.note,
     )
-    .await;
-    Ok(Json(ApiResponse::ok(json!({"published": published}))))
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        json!({"status":"pending_approval","published":0,"approval":approval}),
+    )))
 }
 
 async fn generate_royalties(
@@ -409,6 +852,31 @@ fn require_branch_access(claims: &AuthClaims, write: bool) -> Result<(), AppErro
     }
 }
 
+fn require_org_report_access(claims: &AuthClaims) -> Result<(), AppError> {
+    if claims.role.eq_ignore_ascii_case("owner")
+        || claims.role.eq_ignore_ascii_case("admin")
+        || claims.role.eq_ignore_ascii_case("super-admin")
+        || claims.role.eq_ignore_ascii_case("superadmin")
+        || claims
+            .permissions
+            .iter()
+            .any(|permission| matches!(permission.as_str(), "tenant.read" | "settings.manage"))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "organization reporting permission is required",
+        ))
+    }
+}
+
+fn has_unrestricted_org_scope(claims: &AuthClaims) -> bool {
+    matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "super-admin" | "superadmin"
+    )
+}
+
 fn branch_access_allowed(role: &str, permissions: &[String], write: bool) -> bool {
     role.eq_ignore_ascii_case("owner")
         || permissions.iter().any(|permission| {
@@ -483,7 +951,8 @@ async fn audit_franchise(
 
 #[cfg(test)]
 mod tests {
-    use super::branch_access_allowed;
+    use super::{branch_access_allowed, require_org_report_access};
+    use crate::services::auth_service::AuthClaims;
 
     #[test]
     fn branch_access_matches_route_permission_mapping() {
@@ -503,5 +972,34 @@ mod tests {
             &["settings.manage".into()],
             true
         ));
+    }
+
+    #[test]
+    fn command_center_requires_organization_scope() {
+        let claims = |role: &str, permissions: Vec<String>| AuthClaims {
+            sub: "user-1".into(),
+            tenant_id: "tenant-1".into(),
+            branch_id: Some("branch-1".into()),
+            role: role.into(),
+            role_id: None,
+            permissions,
+            denied_permissions: vec![],
+            masked_fields: vec![],
+            max_discount_paise: None,
+            max_refund_paise: None,
+            max_cash_movement_paise: None,
+            permission_version: 1,
+            session_id: String::new(),
+            mfa_enrollment_required: false,
+            token_type: "access".into(),
+            jti: "jti-1".into(),
+            iat: 0,
+            exp: usize::MAX,
+        };
+        assert!(require_org_report_access(&claims("Owner", vec![])).is_ok());
+        assert!(require_org_report_access(&claims("Analyst", vec!["tenant.read".into()])).is_ok());
+        assert!(
+            require_org_report_access(&claims("Manager", vec!["settings.read".into()])).is_err()
+        );
     }
 }

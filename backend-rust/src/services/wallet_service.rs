@@ -352,6 +352,7 @@ pub async fn settle_pos_internal_payment(
                 tx,
                 tenant_id,
                 branch_id,
+                client_id,
                 sale_id,
                 method_reference,
                 amount_paise,
@@ -404,6 +405,7 @@ async fn settle_gift_card_payment(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
+    client_id: &str,
     sale_id: &str,
     code: &str,
     amount_paise: i64,
@@ -414,46 +416,65 @@ async fn settle_gift_card_payment(
             "gift card amount must be greater than zero",
         ));
     }
-    let existing = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM gift_card_transactions WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3",
+    let cards = sqlx::query_as::<_, (String, String, i64, String, Option<NaiveDate>)>(
+        r#"SELECT id,branch_id,balance_paise,status,expires_at
+             FROM gift_cards
+            WHERE tenant_id=$1 AND code=$3
+              AND (branch_id=$2 OR membership_cross_location_allowed(
+                    $1,branch_id,$2,client_id,$4,'gift_card'))
+            ORDER BY (branch_id=$2) DESC,created_at,id
+            LIMIT 2 FOR UPDATE"#,
     )
-    .bind(tenant_id).bind(branch_id).bind(idempotency_key)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(code.trim())
+    .bind(client_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load gift card"))?;
+    if cards.is_empty() {
+        return Err(AppError::not_found(
+            "gift card was not found or is not shared with this branch",
+        ));
+    }
+    if cards.len() > 1 && cards[0].1 != branch_id {
+        return Err(AppError::conflict(
+            "gift card code is ambiguous across shared branches",
+        ));
+    }
+    let card = &cards[0];
+    let existing = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM gift_card_transactions WHERE tenant_id=$1 AND gift_card_id=$2 AND idempotency_key=$3",
+    )
+    .bind(tenant_id).bind(&card.0).bind(idempotency_key)
     .fetch_optional(&mut **tx).await
     .map_err(|_| AppError::internal("failed to read gift card idempotency key"))?;
     if existing.is_some() {
         return Ok(());
     }
-
-    let card = sqlx::query_as::<_, (String, i64, String, Option<NaiveDate>)>(
-        "SELECT id, balance_paise, status, expires_at FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND code=$3 FOR UPDATE",
-    )
-    .bind(tenant_id).bind(branch_id).bind(code.trim())
-    .fetch_optional(&mut **tx).await
-    .map_err(|_| AppError::internal("failed to load gift card"))?
-    .ok_or_else(|| AppError::not_found("gift card was not found"))?;
-    if card.2 != "active" {
+    if card.3 != "active" {
         return Err(AppError::conflict("gift card is not active"));
     }
     if card
-        .3
+        .4
         .is_some_and(|date| date < chrono::Utc::now().date_naive())
     {
         return Err(AppError::conflict("gift card is expired"));
     }
-    if card.1 < amount_paise {
+    if card.2 < amount_paise {
         return Err(AppError::conflict(
             "gift card balance cannot cover this payment",
         ));
     }
 
-    let balance = card.1 - amount_paise;
+    let balance = card.2 - amount_paise;
     let status = if balance == 0 { "redeemed" } else { "active" };
     sqlx::query("UPDATE gift_cards SET balance_paise=$4, status=$5, updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-        .bind(tenant_id).bind(branch_id).bind(&card.0).bind(balance).bind(status)
+        .bind(tenant_id).bind(&card.1).bind(&card.0).bind(balance).bind(status)
         .execute(&mut **tx).await
         .map_err(|_| AppError::internal("failed to update gift card balance"))?;
     sqlx::query("INSERT INTO gift_card_transactions (tenant_id, branch_id, gift_card_id, sale_id, transaction_type, delta_paise, balance_after_paise, idempotency_key, notes) VALUES ($1,$2,$3,$4,'redeem',$5,$6,$7,'POS gift card payment')")
-        .bind(tenant_id).bind(branch_id).bind(&card.0).bind(sale_id).bind(-amount_paise).bind(balance).bind(idempotency_key)
+        .bind(tenant_id).bind(&card.1).bind(&card.0).bind(sale_id).bind(-amount_paise).bind(balance).bind(idempotency_key)
         .execute(&mut **tx).await
         .map_err(|_| AppError::internal("failed to save gift card redemption"))?;
     Ok(())

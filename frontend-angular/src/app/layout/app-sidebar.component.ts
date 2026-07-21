@@ -119,7 +119,8 @@ export class AppSidebarComponent {
   get visibleGroups() {
     const isPlatformAdmin = this.auth.hasRole('superadmin', 'super-admin');
     if (isPlatformAdmin) return this.groups.filter((group) => group.label === 'SaaS Admin');
-    const canOpenCommandCenter = this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin');
+    const canOpenCommandCenter = this.auth.hasRole('owner', 'admin', 'super-admin', 'manager', 'analyst')
+      || this.auth.hasPermission('reports.read');
     const tenantGroups = this.groups.filter((group) => group.label !== 'SaaS Admin');
     return canOpenCommandCenter ? tenantGroups : tenantGroups.filter((group) => group.label !== 'Command Center');
   }

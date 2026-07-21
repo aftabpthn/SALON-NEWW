@@ -622,6 +622,53 @@ pub async fn lock_for_adjustment(
     .await
 }
 
+pub async fn franchise_override_context(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<(Option<String>, Vec<String>, Vec<String>)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT item.central_master_item_id,item.franchise_override_fields,
+                  COALESCE(policy.allowed_override_fields,'{}'::TEXT[])
+             FROM inventory_items item
+             LEFT JOIN franchise_policies policy ON policy.tenant_id=item.tenant_id
+            WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$3"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn record_franchise_overrides(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    fields: &[String],
+) -> Result<(), sqlx::Error> {
+    if fields.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        r#"UPDATE inventory_items
+              SET franchise_override_fields=ARRAY(
+                    SELECT DISTINCT UNNEST(franchise_override_fields || $4::TEXT[])),
+                  updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+              AND central_master_item_id IS NOT NULL"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(fields)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub async fn adjustment_replay(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,

@@ -1,9 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, forkJoin, of } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
 type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'actions' | 'inventory' | 'inventory-controls' | 'security' | 'staff' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
 
@@ -206,8 +208,30 @@ type BranchComparison = {
   clusterName: string;
   active: boolean;
   revenuePaise: number;
+  discountPaise: number;
+  taxPaise: number;
+  refundPaise: number;
+  tipPaise: number;
+  averageTicketPaise: number;
   saleCount: number;
   appointmentCount: number;
+  lostAppointmentCount: number;
+  bookedMinutes: number;
+  scheduledMinutes: number;
+  utilizationBps: number;
+  voidCount: number;
+  cashVariancePaise: number;
+  openTillCount: number;
+  transferCount: number;
+  shortageCount: number;
+  inventoryValuePaise: number;
+  membershipLiabilityPaise: number;
+  membershipRedeemedPaise: number;
+  crossLocationRedeemedPaise: number;
+  giftCardLiabilityPaise: number;
+  loyaltyPointsBalance: number;
+  sharedCustomerCount: number;
+  royaltyOutstandingPaise: number;
   sharingEnabled: boolean;
   acceptInbound: boolean;
   serviceSyncGap: number;
@@ -240,9 +264,48 @@ type BranchAudit = {
   outcome: string;
   actorUserId?: string;
   createdAt: string;
+  details?: {
+    published?: number;
+    before?: { serviceSyncGap?: number; productSyncGap?: number };
+    after?: { serviceSyncGap?: number; productSyncGap?: number };
+  };
 };
 
 type MultiBranchCommandCenter = {
+  rangeStart: string;
+  rangeEnd: string;
+  summary: {
+    branchCount: number;
+    activeBranchCount: number;
+    revenuePaise: number;
+    discountPaise: number;
+    taxPaise: number;
+    refundPaise: number;
+    tipPaise: number;
+    averageTicketPaise: number;
+    saleCount: number;
+    appointmentCount: number;
+    lostAppointmentCount: number;
+    bookedMinutes: number;
+    scheduledMinutes: number;
+    utilizationBps: number;
+    voidCount: number;
+    cashVariancePaise: number;
+    openTillCount: number;
+    transferCount: number;
+    shortageCount: number;
+    inventoryValuePaise: number;
+    membershipLiabilityPaise: number;
+    membershipRedeemedPaise: number;
+    crossLocationRedeemedPaise: number;
+    giftCardLiabilityPaise: number;
+    loyaltyPointsBalance: number;
+    sharedCustomerCount: number;
+    royaltyOutstandingPaise: number;
+    syncGapCount: number;
+    pendingApprovalCount: number;
+    conflictCount: number;
+  };
   comparisons: BranchComparison[];
   conflicts: BranchConflict[];
   approvals: BranchApproval[];
@@ -263,7 +326,7 @@ const EMPTY_SNAPSHOT: DashboardSnapshot = {
 @Component({
   selector: 'page-command-center',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
   templateUrl: './command-center-page.component.html',
   styleUrls: ['./command-center-page.component.css'],
 })
@@ -286,9 +349,18 @@ export class CommandCenterPageComponent implements OnInit {
   franchise: FranchiseControls | null = null;
   membershipSettings: MembershipSettings | null = null;
   multiBranch: MultiBranchCommandCenter | null = null;
+  locationStartDate = this.dateOffset(-29);
+  locationEndDate = this.dateOffset(0);
+  locationRegion = '';
+  locationZone = '';
+  locationCluster = '';
+  locationBranchId = '';
   locationActionBusy = false;
   locationActionStatus = '';
   locationActionError = '';
+  locationDrilldownKind = '';
+  locationDrilldownRows: Array<Record<string, any>> = [];
+  locationDrilldownLoading = false;
   staffError = '';
   healthStatus = 'checking';
   snapshotLoading = true;
@@ -316,6 +388,39 @@ export class CommandCenterPageComponent implements OnInit {
 
   get branchLabel(): string {
     return this.auth.branchName || this.auth.branchId || 'Branch scope';
+  }
+
+  get workspaceLabel(): string {
+    return this.auth.hasRole('owner') ? 'Owner workspace' : 'Management workspace';
+  }
+
+  get canReadStaff(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager', 'accountant');
+  }
+
+  get canReadInventory(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager', 'analyst')
+      || this.auth.hasPermission('inventory.read', 'inventory.manage', 'tenant.read');
+  }
+
+  get canReadPaymentControls(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager', 'analyst')
+      || this.auth.hasPermission('pos.read', 'pos.manage', 'tenant.read');
+  }
+
+  get canReadSecurity(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
+      || this.auth.hasPermission('security.read', 'security.manage');
+  }
+
+  get canReadLocations(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
+      || this.auth.hasPermission('settings.manage', 'tenant.read');
+  }
+
+  get canManageLocations(): boolean {
+    return this.auth.hasRole('owner')
+      || this.auth.hasPermission('settings.manage', 'management.write');
   }
 
   get loading(): boolean {
@@ -395,7 +500,12 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get activeLocationCount(): number {
-    return this.locationBranches.filter((branch) => branch.active).length;
+    return this.multiBranch?.summary.activeBranchCount
+      ?? this.locationBranches.filter((branch) => branch.active).length;
+  }
+
+  get locationBranchCount(): number {
+    return this.multiBranch?.summary.branchCount ?? this.locationBranches.length;
   }
 
   get centralLocation(): Branch | undefined {
@@ -415,7 +525,8 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get outstandingRoyaltyPaise(): number {
-    return this.openRoyaltyStatements.reduce((total, statement) => total + Number(statement.royaltyPaise || 0), 0);
+    return this.multiBranch?.summary.royaltyOutstandingPaise
+      ?? this.openRoyaltyStatements.reduce((total, statement) => total + Number(statement.royaltyPaise || 0), 0);
   }
 
   get locationAttentionCount(): number {
@@ -439,7 +550,61 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get syncGapCount(): number {
-    return this.branchComparisons.reduce((total, branch) => total + branch.serviceSyncGap + branch.productSyncGap, 0);
+    return this.multiBranch?.summary.syncGapCount
+      ?? this.branchComparisons.reduce((total, branch) => total + branch.serviceSyncGap + branch.productSyncGap, 0);
+  }
+
+  get locationRegions(): string[] {
+    return this.uniqueLocationValues('regionName');
+  }
+
+  get locationZones(): string[] {
+    return this.uniqueLocationValues('zoneName', (branch) => !this.locationRegion || branch.regionName === this.locationRegion);
+  }
+
+  get locationClusters(): string[] {
+    return this.uniqueLocationValues('clusterName', (branch) => (!this.locationRegion || branch.regionName === this.locationRegion)
+      && (!this.locationZone || branch.zoneName === this.locationZone));
+  }
+
+  get filteredLocationBranches(): Branch[] {
+    return this.locationBranches.filter((branch) => (!this.locationRegion || branch.regionName === this.locationRegion)
+      && (!this.locationZone || branch.zoneName === this.locationZone)
+      && (!this.locationCluster || branch.clusterName === this.locationCluster));
+  }
+
+  applyLocationFilters(): void {
+    if (!this.locationStartDate || !this.locationEndDate || this.locationStartDate > this.locationEndDate) {
+      this.locationActionError = 'Select a valid report date range';
+      return;
+    }
+    this.locationActionError = '';
+    this.loadLocations();
+  }
+
+  resetLocationFilters(): void {
+    this.locationStartDate = this.dateOffset(-29);
+    this.locationEndDate = this.dateOffset(0);
+    this.locationRegion = '';
+    this.locationZone = '';
+    this.locationCluster = '';
+    this.locationBranchId = '';
+    this.loadLocations();
+  }
+
+  locationRegionChanged(): void {
+    this.locationZone = '';
+    this.locationCluster = '';
+    this.locationBranchId = '';
+  }
+
+  locationZoneChanged(): void {
+    this.locationCluster = '';
+    this.locationBranchId = '';
+  }
+
+  locationClusterChanged(): void {
+    this.locationBranchId = '';
   }
 
   get membershipSharingLabel(): string {
@@ -474,7 +639,7 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   requestMasterSync(): void {
-    if (this.locationActionBusy || this.pendingLocationApprovals.length || !this.franchise?.centralBranchId) return;
+    if (!this.canManageLocations || this.locationActionBusy || this.pendingLocationApprovals.length || !this.franchise?.centralBranchId) return;
     if (!window.confirm('Request approval to publish central masters to active branches?')) return;
     this.locationActionBusy = true;
     this.locationActionStatus = '';
@@ -488,7 +653,7 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   decideLocationApproval(approval: BranchApproval, decision: 'approved' | 'rejected'): void {
-    if (this.locationActionBusy || approval.status !== 'pending') return;
+    if (!this.canManageLocations || this.locationActionBusy || approval.status !== 'pending') return;
     const note = decision === 'rejected' ? window.prompt('Rejection note (optional)', '') : '';
     if (note === null || !window.confirm(`${this.label(decision)} this central master publish request?`)) return;
     this.locationActionBusy = true;
@@ -502,6 +667,68 @@ export class CommandCenterPageComponent implements OnInit {
       next: () => { this.locationActionStatus = `Approval ${decision}`; this.loadLocations(); },
       error: (error) => { this.locationActionError = this.apiError(error, 'Unable to decide approval'); },
     });
+  }
+
+  exportLocation(format: 'csv' | 'xlsx' | 'pdf'): void {
+    if (this.locationActionBusy) return;
+    this.locationActionBusy = true;
+    this.locationActionError = '';
+    this.api.getBlob(`/api/v1/settings/multi-branch/export.${format}?${this.locationReportQuery()}`)
+      .pipe(finalize(() => (this.locationActionBusy = false)))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `multi-branch-${this.locationStartDate}-${this.locationEndDate}.${format}`;
+          link.click();
+          URL.revokeObjectURL(url);
+        },
+        error: (error) => { this.locationActionError = this.apiError(error, 'Unable to export branch report'); },
+      });
+  }
+
+  loadLocationDrilldown(kind: 'sales' | 'appointments' | 'refunds' | 'transfers' | 'membershipRedemptions' | 'registerClosings' | 'conflicts' | 'interBranchSettlements', branchId = ''): void {
+    if (this.locationDrilldownLoading) return;
+    const query = this.locationReportQuery();
+    query.set('kind', kind);
+    if (branchId) query.set('branchId', branchId);
+    this.locationDrilldownKind = kind;
+    this.locationDrilldownRows = [];
+    this.locationDrilldownLoading = true;
+    this.locationActionError = '';
+    this.api.get<ApiEnvelope<Array<Record<string, any>>> | Array<Record<string, any>>>(`/api/v1/settings/multi-branch/drilldown?${query}`)
+      .pipe(finalize(() => (this.locationDrilldownLoading = false)))
+      .subscribe({
+        next: (response) => { this.locationDrilldownRows = this.unwrap(response) ?? []; },
+        error: (error) => { this.locationActionError = this.apiError(error, 'Unable to load drilldown'); },
+      });
+  }
+
+  settleInterBranchRedemption(row: Record<string, any>): void {
+    if (!this.canManageLocations || this.locationActionBusy || row['status'] !== 'open') return;
+    const paymentMethod = window.prompt('Payment method: bank_transfer or cash', 'bank_transfer')?.trim().toLowerCase();
+    if (!paymentMethod || !['bank_transfer', 'cash'].includes(paymentMethod)) return;
+    const reference = window.prompt('Settlement reference', '')?.trim();
+    if (!reference || !window.confirm(`Settle ${this.money(row['valuePaise'])} between these branches?`)) return;
+    this.locationActionBusy = true;
+    this.locationActionStatus = '';
+    this.locationActionError = '';
+    this.api.post(`/api/v1/settings/multi-branch/settlements/${encodeURIComponent(row['redemptionId'])}/settle`, {
+      version: Number(row['version'] || 0), paymentMethod, settlementReference: reference,
+    }).pipe(finalize(() => (this.locationActionBusy = false))).subscribe({
+      next: () => {
+        this.locationActionStatus = 'Inter-branch settlement completed';
+        this.loadLocationDrilldown('interBranchSettlements', this.locationBranchId);
+        this.loadLocations();
+      },
+      error: (error) => { this.locationActionError = this.apiError(error, 'Unable to settle inter-branch redemption'); },
+    });
+  }
+
+  closeLocationDrilldown(): void {
+    this.locationDrilldownKind = '';
+    this.locationDrilldownRows = [];
   }
 
   money(paise: number): string {
@@ -557,9 +784,15 @@ export class CommandCenterPageComponent implements OnInit {
     this.controlsLoading = true;
     forkJoin({
       actions: this.optional('actions', this.api.get<ApiEnvelope<ProfitAction[]> | ProfitAction[]>('/api/v1/profit-intelligence/actions?status=active&priority=high&limit=200')),
-      inventory: this.optional('inventory', this.api.get<ApiEnvelope<ReorderSuggestion[]> | ReorderSuggestion[]>('/api/v1/inventory/reorder-suggestions')),
-      inventoryControls: this.optional('inventory-controls', this.api.get<ApiEnvelope<InventoryAdvancedControls> | InventoryAdvancedControls>('/api/v1/inventory/advanced-controls')),
-      security: this.optional('security', this.api.get<ApiEnvelope<SecuritySummary> | SecuritySummary>('/api/v1/security/summary')),
+      inventory: this.canReadInventory
+        ? this.optional('inventory', this.api.get<ApiEnvelope<ReorderSuggestion[]> | ReorderSuggestion[]>('/api/v1/inventory/reorder-suggestions'))
+        : of(null),
+      inventoryControls: this.canReadInventory
+        ? this.optional('inventory-controls', this.api.get<ApiEnvelope<InventoryAdvancedControls> | InventoryAdvancedControls>('/api/v1/inventory/advanced-controls'))
+        : of(null),
+      security: this.canReadSecurity
+        ? this.optional('security', this.api.get<ApiEnvelope<SecuritySummary> | SecuritySummary>('/api/v1/security/summary'))
+        : of(null),
     }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventory, inventoryControls, security }) => {
       this.actions = this.unwrap(actions) ?? [];
       this.reorderSuggestions = this.unwrap(inventory) ?? [];
@@ -570,6 +803,11 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   private loadStaff(): void {
+    if (!this.canReadStaff) {
+      this.staffLoading = false;
+      this.staff = null;
+      return;
+    }
     this.staffLoading = true;
     this.staffError = '';
     const query = new URLSearchParams({ periodStart: this.dateOffset(-29), periodEnd: this.dateOffset(0) });
@@ -594,8 +832,12 @@ export class CommandCenterPageComponent implements OnInit {
     const riskRange = new URLSearchParams({ from: this.dateOffset(-29), to: this.dateOffset(0) });
     forkJoin({
       payments: this.optional('payments', this.api.get<ApiEnvelope<PaymentMode[]> | PaymentMode[]>(`/api/v1/reports/payment-modes?${range}`)),
-      risk: this.optional('payment-risk', this.api.get<ApiEnvelope<PaymentRiskSummary> | PaymentRiskSummary>(`/api/v1/pos/fraud-summary?${riskRange}`)),
-      providers: this.optional('payment-providers', this.api.get<ApiEnvelope<PaymentProvider[]> | PaymentProvider[]>('/api/v1/pos/payment-providers')),
+      risk: this.canReadPaymentControls
+        ? this.optional('payment-risk', this.api.get<ApiEnvelope<PaymentRiskSummary> | PaymentRiskSummary>(`/api/v1/pos/fraud-summary?${riskRange}`))
+        : of(null),
+      providers: this.canReadPaymentControls
+        ? this.optional('payment-providers', this.api.get<ApiEnvelope<PaymentProvider[]> | PaymentProvider[]>('/api/v1/pos/payment-providers'))
+        : of(null),
     }).pipe(finalize(() => (this.paymentLoading = false))).subscribe(({ payments, risk, providers }) => {
       this.paymentModes = this.unwrap(payments) ?? [];
       this.paymentRisk = this.unwrap(risk) ?? null;
@@ -605,14 +847,22 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   private loadLocations(): void {
+    if (!this.canReadLocations) {
+      this.locationLoading = false;
+      this.franchise = null;
+      this.membershipSettings = null;
+      this.multiBranch = null;
+      return;
+    }
     this.locationLoading = true;
     this.errors.delete('franchise');
     this.errors.delete('membership-settings');
     this.errors.delete('multi-branch');
+    const reportQuery = this.locationReportQuery();
     forkJoin({
       franchise: this.optional('franchise', this.api.get<ApiEnvelope<FranchiseControls> | FranchiseControls>('/api/v1/settings/franchise-controls')),
       membership: this.optional('membership-settings', this.api.get<ApiEnvelope<MembershipSettings> | MembershipSettings>('/api/v1/membership-enterprise/settings')),
-      commandCenter: this.optional('multi-branch', this.api.get<ApiEnvelope<MultiBranchCommandCenter> | MultiBranchCommandCenter>('/api/v1/settings/multi-branch/command-center')),
+      commandCenter: this.optional('multi-branch', this.api.get<ApiEnvelope<MultiBranchCommandCenter> | MultiBranchCommandCenter>(`/api/v1/settings/multi-branch/command-center?${reportQuery}`)),
     }).pipe(finalize(() => (this.locationLoading = false))).subscribe(({ franchise, membership, commandCenter }) => {
       this.franchise = this.unwrap(franchise) ?? null;
       this.membershipSettings = this.unwrap(membership) ?? null;
@@ -623,6 +873,15 @@ export class CommandCenterPageComponent implements OnInit {
 
   private apiError(error: any, fallback: string): string {
     return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback;
+  }
+
+  private locationReportQuery(): URLSearchParams {
+    const query = new URLSearchParams({ startDate: this.locationStartDate, endDate: this.locationEndDate });
+    if (this.locationRegion) query.set('region', this.locationRegion);
+    if (this.locationZone) query.set('zone', this.locationZone);
+    if (this.locationCluster) query.set('cluster', this.locationCluster);
+    if (this.locationBranchId) query.set('branchId', this.locationBranchId);
+    return query;
   }
 
   private optional<T>(source: Source, request: Observable<T>): Observable<T | null> {
@@ -640,6 +899,14 @@ export class CommandCenterPageComponent implements OnInit {
 
   private touch(): void {
     this.updatedAt = new Date();
+  }
+
+  private uniqueLocationValues(
+    field: 'regionName' | 'zoneName' | 'clusterName',
+    predicate: (branch: Branch) => boolean = () => true,
+  ): string[] {
+    return [...new Set(this.locationBranches.filter(predicate).map((branch) => branch[field]).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
   }
 
   private dateOffset(offset: number): string {

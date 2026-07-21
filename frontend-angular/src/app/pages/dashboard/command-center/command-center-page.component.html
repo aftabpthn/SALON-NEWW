@@ -1,7 +1,7 @@
 <main class="command-center">
   <header class="command-header">
     <div>
-      <span class="eyebrow">Owner workspace</span>
+      <span class="eyebrow">{{ workspaceLabel }}</span>
       <div class="title-row">
         <h1>Command Center</h1>
         <span class="live-pill" [ngClass]="liveState">
@@ -38,11 +38,11 @@
     </article>
     <article class="kpi-card">
       <span class="icon-badge amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
-      <div><span>Low stock</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ reorderSuggestions.length }}</strong> }</div>
+      <div><span>Low stock</span>@if (!canReadInventory) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ reorderSuggestions.length }}</strong> }</div>
     </article>
     <article class="kpi-card">
       <span class="icon-badge red"><i class="bi bi-shield-exclamation" aria-hidden="true"></i></span>
-      <div><span>Security alerts</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ openAlerts }}</strong> }</div>
+      <div><span>Security alerts</span>@if (!canReadSecurity) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ openAlerts }}</strong> }</div>
     </article>
   </section>
 
@@ -151,9 +151,11 @@
   <section class="panel staff-panel">
     <header class="panel-header">
       <div><span class="eyebrow">Team</span><h2>Staff Control</h2></div>
-      <a routerLink="/staff/control-center">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      @if (canReadStaff) { <a routerLink="/staff/control-center">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
     </header>
-    @if (staffLoading) {
+    @if (!canReadStaff) {
+      <div class="compact-state">Access restricted</div>
+    } @else if (staffLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading staff data</div>
     } @else if (errors.has('staff')) {
       <div class="compact-state">{{ staffError }}</div>
@@ -196,9 +198,11 @@
   <section class="panel inventory-panel">
     <header class="panel-header">
       <div><span class="eyebrow">Stock</span><h2>Inventory Autopilot</h2></div>
-      <a routerLink="/inventory/advanced-controls">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      @if (canReadInventory) { <a routerLink="/inventory/advanced-controls">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
     </header>
-    @if (controlsLoading) {
+    @if (!canReadInventory) {
+      <div class="compact-state">Access restricted</div>
+    } @else if (controlsLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading inventory controls</div>
     } @else if (errors.has('inventory') && errors.has('inventory-controls')) {
       <div class="compact-state">Inventory controls unavailable</div>
@@ -259,7 +263,7 @@
             <div><dt>Collected</dt><dd>{{ money(collectedPaise) }}</dd></div>
             <div><dt>Payments</dt><dd>{{ paymentCount }}</dd></div>
             <div><dt>Invoice dues</dt><dd>{{ money(outstandingPaise) }}</dd></div>
-            <div><dt>Amount at risk</dt><dd>{{ money(paymentRisk?.amountAtRiskPaise || 0) }}</dd></div>
+            <div><dt>Amount at risk</dt><dd>{{ canReadPaymentControls ? money(paymentRisk?.amountAtRiskPaise || 0) : '—' }}</dd></div>
           </dl>
         </section>
         <section aria-label="Payment mix">
@@ -277,10 +281,10 @@
         <section aria-label="Payment controls">
           <h3>Controls</h3>
           <dl class="metric-list">
-            <div><dt>Open risk cases</dt><dd>{{ paymentRisk?.openCount || 0 }}</dd></div>
-            <div><dt>High-risk cases</dt><dd>{{ paymentRisk?.highRiskCount || 0 }}</dd></div>
-            <div><dt>Cases reviewed</dt><dd>{{ paymentRisk?.caseCount || 0 }}</dd></div>
-            <div><dt>Providers ready</dt><dd>{{ readyProviderCount }}/{{ paymentProviders.length }}</dd></div>
+            <div><dt>Open risk cases</dt><dd>{{ canReadPaymentControls ? (paymentRisk?.openCount || 0) : '—' }}</dd></div>
+            <div><dt>High-risk cases</dt><dd>{{ canReadPaymentControls ? (paymentRisk?.highRiskCount || 0) : '—' }}</dd></div>
+            <div><dt>Cases reviewed</dt><dd>{{ canReadPaymentControls ? (paymentRisk?.caseCount || 0) : '—' }}</dd></div>
+            <div><dt>Providers ready</dt><dd>{{ canReadPaymentControls ? readyProviderCount + '/' + paymentProviders.length : '—' }}</dd></div>
           </dl>
         </section>
       </div>
@@ -290,9 +294,11 @@
   <section class="panel security-panel">
     <header class="panel-header">
       <div><span class="eyebrow">Protection</span><h2>Security Center</h2></div>
-      <a routerLink="/security">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      @if (canReadSecurity) { <a routerLink="/security">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
     </header>
-    @if (controlsLoading) {
+    @if (!canReadSecurity) {
+      <div class="compact-state">Access restricted</div>
+    } @else if (controlsLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading security controls</div>
     } @else if (errors.has('security')) {
       <div class="compact-state">Security summary unavailable</div>
@@ -328,25 +334,41 @@
     <header class="panel-header">
       <div><span class="eyebrow">Locations</span><h2>Multi-Branch Command Center</h2></div>
       <div class="location-actions">
-        <button type="button" [disabled]="locationActionBusy || pendingLocationApprovals.length > 0 || !franchise?.centralBranchId" (click)="requestMasterSync()">Request master sync</button>
-        <a routerLink="/settings">Manage controls <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        <button type="button" [disabled]="locationActionBusy || locationLoading" (click)="exportLocation('csv')">CSV</button>
+        <button type="button" [disabled]="locationActionBusy || locationLoading" (click)="exportLocation('xlsx')">XLSX</button>
+        <button type="button" [disabled]="locationActionBusy || locationLoading" (click)="exportLocation('pdf')">PDF</button>
+        @if (canManageLocations) { <button type="button" [disabled]="locationActionBusy || pendingLocationApprovals.length > 0 || !franchise?.centralBranchId" (click)="requestMasterSync()">Request master sync</button> }
+        @if (canReadLocations) { <a routerLink="/settings">Manage controls <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
       </div>
     </header>
     @if (locationActionStatus) { <div class="inline-status">{{ locationActionStatus }}</div> }
     @if (locationActionError) { <div class="inline-status error">{{ locationActionError }}</div> }
-    @if (locationLoading) {
+    @if (!canReadLocations) {
+      <div class="compact-state">Access restricted</div>
+    } @else if (locationLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading location controls</div>
     } @else if (errors.has('franchise')) {
       <div class="compact-state">Location controls unavailable</div>
     } @else {
+      <div class="location-report-filters" aria-label="Branch comparison filters">
+        <label>Date range<as-date-picker ariaLabel="Branch report date range" [rangeMode]="true" [(value)]="locationStartDate" [(rangeEnd)]="locationEndDate"></as-date-picker></label>
+        <label>Region<select [(ngModel)]="locationRegion" (ngModelChange)="locationRegionChanged()"><option value="">All regions</option>@for (region of locationRegions; track region) { <option [value]="region">{{ region }}</option> }</select></label>
+        <label>Zone<select [(ngModel)]="locationZone" (ngModelChange)="locationZoneChanged()"><option value="">All zones</option>@for (zone of locationZones; track zone) { <option [value]="zone">{{ zone }}</option> }</select></label>
+        <label>Cluster<select [(ngModel)]="locationCluster" (ngModelChange)="locationClusterChanged()"><option value="">All clusters</option>@for (cluster of locationClusters; track cluster) { <option [value]="cluster">{{ cluster }}</option> }</select></label>
+        <label>Branch<select [(ngModel)]="locationBranchId"><option value="">All branches</option>@for (branch of filteredLocationBranches; track branch.id) { <option [value]="branch.id">{{ branch.name }}</option> }</select></label>
+        <div class="location-filter-actions"><button type="button" [disabled]="locationLoading" (click)="resetLocationFilters()">Reset</button><button type="button" [disabled]="locationLoading" (click)="applyLocationFilters()">Apply</button></div>
+      </div>
       <div class="location-grid">
         <section aria-label="Location network">
           <h3>Network</h3>
           <dl class="metric-list">
-            <div><dt>Active branches</dt><dd>{{ activeLocationCount }}/{{ locationBranches.length }}</dd></div>
+            <div><dt>Active branches</dt><dd>{{ activeLocationCount }}/{{ locationBranchCount }}</dd></div>
             <div><dt>Central branch</dt><dd>{{ centralLocation?.name || 'Not configured' }}</dd></div>
             <div><dt>Hierarchy pending</dt><dd>{{ missingHierarchyCount }}</dd></div>
             <div><dt>Attention items</dt><dd>{{ locationAttentionCount }}</dd></div>
+            <div><dt>Revenue</dt><dd>{{ money(multiBranch?.summary?.revenuePaise || 0) }}</dd></div>
+            <div><dt>Average ticket</dt><dd>{{ money(multiBranch?.summary?.averageTicketPaise || 0) }}</dd></div>
+            <div><dt>Utilization</dt><dd>{{ margin(multiBranch?.summary?.utilizationBps || 0) }}</dd></div>
           </dl>
         </section>
         <section aria-label="Sharing governance">
@@ -366,13 +388,18 @@
             <div><dt>Royalty configured</dt><dd>{{ configuredRoyaltyCount }}</dd></div>
             <div><dt>Royalty outstanding</dt><dd>{{ money(outstandingRoyaltyPaise) }}</dd></div>
             <div><dt>Master sync gaps</dt><dd>{{ syncGapCount }}</dd></div>
+            <div><dt>Inventory value</dt><dd>{{ money(multiBranch?.summary?.inventoryValuePaise || 0) }}</dd></div>
+            <div><dt>Member liability</dt><dd>{{ money(multiBranch?.summary?.membershipLiabilityPaise || 0) }}</dd></div>
+            <div><dt>Cross-location redemption</dt><dd>{{ money(multiBranch?.summary?.crossLocationRedeemedPaise || 0) }}</dd></div>
+            <div><dt>Gift card liability</dt><dd>{{ money(multiBranch?.summary?.giftCardLiabilityPaise || 0) }}</dd></div>
+            <div><dt>Refunds</dt><dd>{{ money(multiBranch?.summary?.refundPaise || 0) }}</dd></div>
           </dl>
         </section>
       </div>
 
       <div class="location-operations-grid">
         <section aria-label="Location conflicts">
-          <h3>Conflicts</h3>
+          <h3>Conflicts <button type="button" class="data-link" (click)="loadLocationDrilldown('conflicts')">Field details</button></h3>
           <div class="action-list">
             @for (conflict of locationConflicts.slice(0, 6); track conflict.kind + conflict.branchId) {
               <article><span class="priority-dot" [ngClass]="conflict.severity" aria-hidden="true"></span><div><strong>{{ conflict.branchName }}</strong><span>{{ conflict.message }}</span></div><b>{{ label(conflict.severity) }}</b></article>
@@ -383,7 +410,7 @@
           <h3>Approval queue</h3>
           <div class="approval-list">
             @for (approval of pendingLocationApprovals; track approval.id) {
-              <article><div><strong>{{ label(approval.action) }}</strong><span>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="row-actions"><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'rejected')">Reject</button><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'approved')">Approve</button></div></article>
+              <article><div><strong>{{ label(approval.action) }}</strong><span>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</span></div>@if (canManageLocations) { <div class="row-actions"><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'rejected')">Reject</button><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'approved')">Approve</button></div> }</article>
             } @empty { <div class="mini-empty">No records yet</div> }
           </div>
         </section>
@@ -391,7 +418,7 @@
           <h3>Audit</h3>
           <div class="audit-list">
             @for (event of locationAudit; track event.id) {
-              <article><strong>{{ label(event.eventType.replace('multi_branch.', '')) }}</strong><span>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId || 'System' }}</span></article>
+              <article><strong>{{ label(event.eventType.replace('multi_branch.', '')) }}</strong><span>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId || 'System' }}<ng-container *ngIf="event.details?.published !== undefined"> · {{ event.details?.published }} records · gaps {{ (event.details?.before?.serviceSyncGap || 0) + (event.details?.before?.productSyncGap || 0) }} → {{ (event.details?.after?.serviceSyncGap || 0) + (event.details?.after?.productSyncGap || 0) }}</ng-container></span></article>
             } @empty { <div class="mini-empty">No records yet</div> }
           </div>
         </section>
@@ -404,23 +431,61 @@
       } @else {
         <div class="location-table-wrap">
           <table>
-            <thead><tr><th>Branch</th><th>Hierarchy</th><th>Revenue (30d)</th><th>Sales</th><th>Appointments</th><th>Sharing</th><th>Sync gaps</th><th>Conflicts</th></tr></thead>
+            <thead><tr><th scope="col">Branch</th><th scope="col">Hierarchy</th><th scope="col">Revenue</th><th scope="col">Average ticket</th><th scope="col">Refunds</th><th scope="col">Tips</th><th scope="col">Sales</th><th scope="col">Voids</th><th scope="col">Appointments</th><th scope="col">Lost</th><th scope="col">Utilization</th><th scope="col">Cash variance</th><th scope="col">Open tills</th><th scope="col">Transfers</th><th scope="col">Shortages</th><th scope="col">Inventory</th><th scope="col">Member liability</th><th scope="col">Redeemed</th><th scope="col">Cross redeemed</th><th scope="col">Gift liability</th><th scope="col">Loyalty points</th><th scope="col">Shared clients</th><th scope="col">Sharing</th><th scope="col">Sync gaps</th><th scope="col">Conflicts</th></tr></thead>
             <tbody>
               @for (branch of branchComparisons; track branch.branchId) {
                 <tr>
                   <td><strong>{{ branch.branchName }}</strong><small>{{ branch.branchCode }} · {{ branch.active ? 'Active' : 'Inactive' }}</small></td>
                   <td>{{ comparisonHierarchy(branch) }}</td>
                   <td>{{ money(branch.revenuePaise) }}</td>
-                  <td>{{ branch.saleCount }}</td>
-                  <td>{{ branch.appointmentCount }}</td>
+                  <td>{{ money(branch.averageTicketPaise) }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('refunds', branch.branchId)">{{ money(branch.refundPaise) }}</button></td>
+                  <td>{{ money(branch.tipPaise) }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('sales', branch.branchId)">{{ branch.saleCount }}</button></td>
+                  <td>{{ branch.voidCount }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('appointments', branch.branchId)">{{ branch.appointmentCount }}</button></td>
+                  <td>{{ branch.lostAppointmentCount }}</td>
+                  <td>{{ margin(branch.utilizationBps) }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ money(branch.cashVariancePaise) }}</button></td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ branch.openTillCount }}</button></td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('transfers', branch.branchId)">{{ branch.transferCount }}</button></td>
+                  <td>{{ branch.shortageCount }}</td>
+                  <td>{{ money(branch.inventoryValuePaise) }}</td>
+                  <td>{{ money(branch.membershipLiabilityPaise) }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('membershipRedemptions', branch.branchId)">{{ money(branch.membershipRedeemedPaise) }}</button></td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('interBranchSettlements', branch.branchId)">{{ money(branch.crossLocationRedeemedPaise) }}</button></td>
+                  <td>{{ money(branch.giftCardLiabilityPaise) }}</td>
+                  <td>{{ branch.loyaltyPointsBalance }}</td>
+                  <td>{{ branch.sharedCustomerCount }}</td>
                   <td>{{ branch.sharingEnabled ? (branch.acceptInbound ? 'Two-way' : 'Outbound') : (branch.acceptInbound ? 'Inbound' : 'Disabled') }}</td>
-                  <td>{{ branch.serviceSyncGap + branch.productSyncGap }}</td>
+                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('conflicts', branch.branchId)">{{ branch.serviceSyncGap + branch.productSyncGap }}</button></td>
                   <td><span class="state-badge" [class.inactive]="conflictCount(branch.branchId) > 0">{{ conflictCount(branch.branchId) }}</span></td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
+      }
+      @if (locationDrilldownKind) {
+        <section class="location-drilldown" aria-label="Branch drilldown">
+          <header><h3>{{ label(locationDrilldownKind) }}</h3><button type="button" (click)="closeLocationDrilldown()">Close</button></header>
+          @if (locationDrilldownLoading) { <div class="mini-empty">Loading…</div> }
+          @else {
+            <div class="drilldown-list">
+              @for (row of locationDrilldownRows; track row['id']) {
+                @if (locationDrilldownKind === 'conflicts') {
+                  <article><strong>{{ row['branchName'] }} · {{ label(row['entityType']) }} · {{ row['entityName'] }}</strong><span>{{ label(row['fieldName']) }}: {{ row['branchValue'] ?? 'Missing' }} → {{ row['centralValue'] ?? 'Missing' }}</span><b>{{ row['overridden'] ? 'Controlled override' : 'Mismatch' }}</b></article>
+                } @else if (locationDrilldownKind === 'registerClosings') {
+                  <article><strong>{{ row['branchName'] }} · {{ row['tillName'] }} · {{ row['businessDate'] | date:'dd/MM/yyyy' }}</strong><span>Expected {{ money(row['expectedCashPaise']) }} · Counted {{ row['countedCashPaise'] === null ? 'Pending' : money(row['countedCashPaise']) }} · {{ label(row['status']) }}</span><b>{{ money(row['variancePaise'] || 0) }}</b></article>
+                } @else if (locationDrilldownKind === 'interBranchSettlements') {
+                  <article><strong>{{ row['sourceBranchName'] }} → {{ row['redemptionBranchName'] }}</strong><span>{{ row['membershipName'] }} · {{ row['serviceName'] }} · {{ label(row['status']) }}<ng-container *ngIf="row['settlementReference']"> · {{ row['settlementReference'] }}</ng-container></span><b>@if (row['status'] === 'open' && canManageLocations) { <button type="button" [disabled]="locationActionBusy" (click)="settleInterBranchRedemption(row)">Settle {{ money(row['valuePaise']) }}</button> } @else { {{ money(row['valuePaise']) }} }</b></article>
+                } @else {
+                  <article><strong>{{ row['branchName'] }} · {{ row['invoiceNumber'] || row['invoiceId'] || row['id'] }}</strong><span>{{ row['staffName'] || row['serviceName'] || row['membershipName'] || label(row['status'] || row['kind']) }} · {{ row['occurredAt'] | date:'dd/MM/yyyy HH:mm' }}</span><b>{{ money(row['totalPaise'] || row['amountPaise'] || row['valuePaise'] || 0) }}</b></article>
+                }
+              } @empty { <div class="mini-empty">No records yet</div> }
+            </div>
+          }
+        </section>
       }
     }
   </section>
@@ -429,10 +494,10 @@
     <header class="panel-header"><div><span class="eyebrow">Operations</span><h2>Workspaces</h2></div></header>
     <div class="workspace-grid">
       <a routerLink="/reports"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-      <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-      <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-      <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-      <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+      @if (canReadStaff) { <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+      @if (canReadInventory) { <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+      @if (canReadPaymentControls) { <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+      @if (canReadSecurity) { <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
       <a routerLink="/dashboard"><span class="icon-badge blue"><i class="bi bi-grid-1x2" aria-hidden="true"></i></span><strong>Operational Dashboard</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
     </div>
   </section>

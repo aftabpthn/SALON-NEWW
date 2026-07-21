@@ -174,25 +174,32 @@ pub fn router() -> Router<AppState> {
 
 async fn list_custom_reports(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let reports = analytics_service::list_custom_reports(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "reports": reports,
-        "options": analytics_service::custom_report_options()
+        "options": analytics_service::custom_report_options(can_run_organization_report(&claims))
     }))))
 }
 
 async fn preview_custom_report(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(definition): Json<analytics_service::CustomReportDefinition>,
 ) -> ApiResult<analytics_service::PivotReport> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let report =
-        analytics_service::preview_custom_report(&state.db, &tenant_id, &branch_id, &definition)
-            .await?;
+    let report = analytics_service::preview_custom_report(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &definition,
+        can_run_organization_report(&claims),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(report)))
 }
 
@@ -208,6 +215,7 @@ async fn save_custom_report(
         &tenant_id,
         &branch_id,
         &claims.sub,
+        can_run_organization_report(&claims),
         request,
     )
     .await?;
@@ -216,13 +224,27 @@ async fn save_custom_report(
 
 async fn run_custom_report(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<analytics_service::PivotReport> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let report =
-        analytics_service::run_saved_custom_report(&state.db, &tenant_id, &branch_id, &id).await?;
+    let report = analytics_service::run_saved_custom_report(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        can_run_organization_report(&claims),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(report)))
+}
+
+fn can_run_organization_report(claims: &AuthClaims) -> bool {
+    matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "super-admin" | "superadmin"
+    )
 }
 
 #[derive(Debug, Deserialize)]

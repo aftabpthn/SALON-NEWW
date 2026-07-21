@@ -328,12 +328,16 @@ pub struct CustomReportView {
     pub updated_at: DateTime<Utc>,
 }
 
-pub fn custom_report_options() -> Value {
+pub fn custom_report_options(include_organization: bool) -> Value {
+    let mut datasets = vec![
+        json!({"id":"sales","label":"Sales","dimensions":["date","service","staff","lineType","status"],"metrics":["revenuePaise","quantity","discountPaise","invoiceCount"]}),
+        json!({"id":"appointments","label":"Appointments","dimensions":["date","status","staff","source"],"metrics":["appointmentCount","durationMinutes"]}),
+    ];
+    if include_organization {
+        datasets.push(json!({"id":"multiBranch","label":"Multi-Branch","dimensions":["date","region","zone","cluster","branch","status"],"metrics":["revenuePaise","discountPaise","taxPaise","tipPaise","refundPaise","invoiceCount"]}));
+    }
     json!({
-        "datasets": [
-            {"id":"sales","label":"Sales","dimensions":["date","service","staff","lineType","status"],"metrics":["revenuePaise","quantity","discountPaise","invoiceCount"]},
-            {"id":"appointments","label":"Appointments","dimensions":["date","status","staff","source"],"metrics":["appointmentCount","durationMinutes"]}
-        ],
+        "datasets": datasets,
         "dateRanges": ["last7Days","last30Days","monthToDate","custom"],
         "schedules": ["none","daily","weekly","monthly"]
     })
@@ -344,8 +348,9 @@ pub async fn preview_custom_report(
     tenant_id: &str,
     branch_id: &str,
     definition: &CustomReportDefinition,
+    allow_organization: bool,
 ) -> Result<PivotReport, AppError> {
-    validate_custom_definition(definition)?;
+    validate_custom_definition(definition, allow_organization)?;
     let (from_date, to_date) = custom_report_dates(definition, Utc::now())?;
     let records = analytics_repository::custom_pivot(
         db,
@@ -382,9 +387,10 @@ pub async fn save_custom_report(
     tenant_id: &str,
     branch_id: &str,
     actor: &str,
+    allow_organization: bool,
     request: CustomReportSaveRequest,
 ) -> Result<CustomReportView, AppError> {
-    validate_custom_definition(&request.definition)?;
+    validate_custom_definition(&request.definition, allow_organization)?;
     let name = request.name.trim();
     if name.is_empty() || name.chars().count() > 120 {
         return Err(AppError::validation("report name is invalid"));
@@ -445,6 +451,7 @@ pub async fn run_saved_custom_report(
     tenant_id: &str,
     branch_id: &str,
     id: &str,
+    allow_organization: bool,
 ) -> Result<PivotReport, AppError> {
     let row = analytics_repository::get_custom_report(db, tenant_id, branch_id, id)
         .await
@@ -452,7 +459,8 @@ pub async fn run_saved_custom_report(
         .ok_or_else(|| AppError::not_found("saved report was not found"))?;
     let definition: CustomReportDefinition = serde_json::from_value(row.definition_json)
         .map_err(|_| AppError::internal("saved report definition is invalid"))?;
-    let report = preview_custom_report(db, tenant_id, branch_id, &definition).await?;
+    let report =
+        preview_custom_report(db, tenant_id, branch_id, &definition, allow_organization).await?;
     let result = serde_json::to_value(&report)
         .map_err(|_| AppError::internal("failed to record report result"))?;
     analytics_repository::record_custom_report_result(db, tenant_id, branch_id, id, &result)
@@ -491,7 +499,8 @@ pub async fn process_due_custom_reports(state: &AppState) -> Result<usize, AppEr
                 }
             };
         let result =
-            preview_custom_report(&state.db, &row.tenant_id, &row.branch_id, &definition).await;
+            preview_custom_report(&state.db, &row.tenant_id, &row.branch_id, &definition, true)
+                .await;
         let outcome = match result {
             Ok(report) => {
                 let value = serde_json::to_value(&report)
@@ -551,7 +560,10 @@ pub async fn process_due_custom_reports(state: &AppState) -> Result<usize, AppEr
     Ok(sent)
 }
 
-fn validate_custom_definition(definition: &CustomReportDefinition) -> Result<(), AppError> {
+fn validate_custom_definition(
+    definition: &CustomReportDefinition,
+    allow_organization: bool,
+) -> Result<(), AppError> {
     let (dimensions, metrics): (&[&str], &[&str]) = match definition.dataset.as_str() {
         "sales" => (
             &["date", "service", "staff", "lineType", "status"],
@@ -560,6 +572,17 @@ fn validate_custom_definition(definition: &CustomReportDefinition) -> Result<(),
         "appointments" => (
             &["date", "status", "staff", "source"],
             &["appointmentCount", "durationMinutes"],
+        ),
+        "multiBranch" if allow_organization => (
+            &["date", "region", "zone", "cluster", "branch", "status"],
+            &[
+                "revenuePaise",
+                "discountPaise",
+                "taxPaise",
+                "tipPaise",
+                "refundPaise",
+                "invoiceCount",
+            ],
         ),
         _ => return Err(AppError::validation("custom report dataset is invalid")),
     };

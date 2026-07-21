@@ -887,6 +887,53 @@ pub async fn custom_pivot(
                           WHEN 'invoiceCount' THEN COUNT(DISTINCT sale_id)::BIGINT END AS value
              FROM base WHERE row_key IS NOT NULL AND column_key IS NOT NULL
             GROUP BY row_key,column_key ORDER BY row_key,column_key LIMIT 1000"#
+    } else if dataset == "multiBranch" {
+        r#"WITH scoped_branches AS (
+             SELECT COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT) AS branch_id,
+                    branch.name AS branch_name,branch.region_name,branch.zone_name,branch.cluster_name
+               FROM branches branch JOIN tenants tenant ON tenant.id=branch.tenant_id
+              WHERE COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=$1
+           ), events AS (
+             SELECT (COALESCE(sale.finalized_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE AS event_date,
+                    branch.branch_name,branch.region_name,branch.zone_name,branch.cluster_name,sale.status,
+                    sale.total_paise AS revenue_paise,sale.discount_paise,sale.tax_paise,sale.tip_paise,
+                    0::BIGINT AS refund_paise,sale.id AS invoice_id
+               FROM pos_sales sale JOIN scoped_branches branch ON branch.branch_id=sale.branch_id
+              WHERE sale.tenant_id=$1 AND sale.status NOT IN ('draft','open','voided','cancelled')
+                AND (COALESCE(sale.finalized_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+                AND ($8='' OR sale.status=$8)
+             UNION ALL
+             SELECT (refund.created_at AT TIME ZONE 'Asia/Kolkata')::DATE,
+                    branch.branch_name,branch.region_name,branch.zone_name,branch.cluster_name,sale.status,
+                    0,0,0,0,refund.amount_paise,NULL
+               FROM pos_invoice_refunds refund
+               JOIN pos_sales sale ON sale.tenant_id=refund.tenant_id AND sale.branch_id=refund.branch_id AND sale.id=refund.sale_id
+               JOIN scoped_branches branch ON branch.branch_id=refund.branch_id
+              WHERE refund.tenant_id=$1 AND (refund.created_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+                AND ($8='' OR sale.status=$8)
+           ), base AS (
+             SELECT CASE $5 WHEN 'date' THEN TO_CHAR(event_date,'YYYY-MM-DD')
+                       WHEN 'region' THEN COALESCE(NULLIF(region_name,''),'Unassigned')
+                       WHEN 'zone' THEN COALESCE(NULLIF(zone_name,''),'Unassigned')
+                       WHEN 'cluster' THEN COALESCE(NULLIF(cluster_name,''),'Unassigned')
+                       WHEN 'branch' THEN branch_name WHEN 'status' THEN INITCAP(status) END AS row_key,
+                    CASE $6 WHEN 'none' THEN 'Total' WHEN 'date' THEN TO_CHAR(event_date,'YYYY-MM-DD')
+                       WHEN 'region' THEN COALESCE(NULLIF(region_name,''),'Unassigned')
+                       WHEN 'zone' THEN COALESCE(NULLIF(zone_name,''),'Unassigned')
+                       WHEN 'cluster' THEN COALESCE(NULLIF(cluster_name,''),'Unassigned')
+                       WHEN 'branch' THEN branch_name WHEN 'status' THEN INITCAP(status) END AS column_key,
+                    revenue_paise,discount_paise,tax_paise,tip_paise,refund_paise,invoice_id
+               FROM events
+           )
+           SELECT row_key,column_key,
+                  CASE $7 WHEN 'revenuePaise' THEN COALESCE(SUM(revenue_paise),0)::BIGINT
+                          WHEN 'discountPaise' THEN COALESCE(SUM(discount_paise),0)::BIGINT
+                          WHEN 'taxPaise' THEN COALESCE(SUM(tax_paise),0)::BIGINT
+                          WHEN 'tipPaise' THEN COALESCE(SUM(tip_paise),0)::BIGINT
+                          WHEN 'refundPaise' THEN COALESCE(SUM(refund_paise),0)::BIGINT
+                          WHEN 'invoiceCount' THEN COUNT(DISTINCT invoice_id)::BIGINT END AS value
+             FROM base WHERE row_key IS NOT NULL AND column_key IS NOT NULL
+            GROUP BY row_key,column_key ORDER BY row_key,column_key LIMIT 1000"#
     } else {
         r#"WITH base AS (
              SELECT CASE $5

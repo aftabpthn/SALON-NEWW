@@ -100,8 +100,11 @@ pub async fn list_gift_cards(
         FROM gift_cards g
         LEFT JOIN clients c
           ON c.tenant_id=g.tenant_id AND c.branch_id=g.branch_id AND c.id=g.client_id
-        WHERE g.tenant_id=$1 AND g.branch_id=$2
-          AND ($3='' OR g.client_id=$3)
+        WHERE g.tenant_id=$1
+          AND (g.branch_id=$2 OR ($5<>'' AND $3<>'' AND membership_cross_location_allowed(
+                $1,g.branch_id,$2,g.client_id,$3,'gift_card')))
+          AND ($3='' OR (g.branch_id=$2 AND g.client_id=$3) OR membership_cross_location_allowed(
+                $1,g.branch_id,$2,g.client_id,$3,'gift_card'))
           AND ($4='' OR g.status=$4)
           AND ($5='' OR UPPER(g.code)=UPPER($5))
         ORDER BY g.created_at DESC

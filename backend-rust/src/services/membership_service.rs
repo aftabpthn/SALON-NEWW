@@ -1356,7 +1356,7 @@ fn default_membership_settings() -> Value {
         "renewalExpiry":{"autoRenewEnabled":false,"expiryDaysEnabled":true,"defaultValidityDays":365,"renewalReminderDays":30,"expiredBenefitAction":"block"},
         "paymentBilling":{"allowDueOnMembershipSale":true,"membershipTaxApplicable":true,"taxInclusiveMembershipPrice":false,"invoiceMembershipSnapshot":true},
         "redemptionRules":{"blockRedemptionWhenExpired":true,"requireStaffConfirmation":true,"allowPartialCredits":true,"allowFamilySharing":true},
-        "crossLocation":{"enabled":false,"acceptInbound":false,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true},
+        "crossLocation":{"enabled":false,"acceptInbound":false,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true,"allowGiftCards":false,"allowLoyaltyPoints":false},
         "notificationsRisk":{"renewalReminder":true,"lowCreditReminder":true,"ownerAlertForHighBalance":true,"highBalanceThreshold":1000000},
         "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
@@ -1495,8 +1495,9 @@ fn price_paise(price: Option<i64>, price_paise: Option<i64>) -> Result<i64, AppE
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_reward_balance, default_membership_settings, merge_known_settings, prorated_amounts,
-        reverse_rewards_for_refund, validate_retention_settings,
+        adjust_reward_balance, default_membership_settings, membership_settings,
+        merge_known_settings, prorated_amounts, reverse_rewards_for_refund,
+        save_membership_settings, validate_retention_settings,
     };
     use chrono::{Duration, Utc};
     use serde_json::json;
@@ -1537,6 +1538,42 @@ mod tests {
         assert_eq!(merged["crossLocation"]["enabled"], true);
         assert_eq!(merged["crossLocation"]["scope"], "zone");
         assert!(validate_retention_settings(&merged).is_ok());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn membership_settings_save_reload_is_complete_and_tenant_scoped(pool: PgPool) {
+        sqlx::query(
+            "CREATE TABLE membership_settings(tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,settings_json JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ,PRIMARY KEY(tenant_id,branch_id))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let payload = json!({
+            "membershipCatalog":{"membershipSalesEnabled":false},
+            "crossLocation":{"enabled":true,"acceptInbound":true,"scope":"zone","allowDiscounts":false,"allowServiceCredits":true,"allowGiftCards":true,"allowLoyaltyPoints":true},
+            "renewalExpiry":{"defaultValidityDays":180}
+        });
+        let saved = save_membership_settings(&pool, "tenant-1", "branch-1", &payload)
+            .await
+            .unwrap();
+        let reloaded = membership_settings(&pool, "tenant-1", "branch-1")
+            .await
+            .unwrap();
+        assert_eq!(reloaded, saved);
+        assert_eq!(reloaded["crossLocation"]["scope"], "zone");
+        assert_eq!(reloaded["crossLocation"]["allowGiftCards"], true);
+        assert_eq!(reloaded["crossLocation"]["allowLoyaltyPoints"], true);
+        assert_eq!(
+            reloaded["membershipCatalog"]["membershipSalesEnabled"],
+            false
+        );
+        assert_eq!(reloaded["renewalExpiry"]["defaultValidityDays"], 180);
+        assert_eq!(
+            membership_settings(&pool, "tenant-2", "branch-1")
+                .await
+                .unwrap()["crossLocation"]["enabled"],
+            false
+        );
     }
 
     #[sqlx::test(migrations = false)]

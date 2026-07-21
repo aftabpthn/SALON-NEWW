@@ -582,6 +582,81 @@ async fn update_in_tx(
         return Ok(None);
     };
 
+    let override_context = inventory_repository::franchise_override_context(
+        tx,
+        input.tenant_id,
+        input.branch_id,
+        input.id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load product override policy"))?;
+    let mut changed_master_fields = Vec::new();
+    if let Some((Some(_), _, allowed_fields)) = &override_context {
+        let candidates = [
+            (
+                "sku",
+                input.sku.is_some_and(|value| value != current.sku.as_str()),
+            ),
+            (
+                "name",
+                input
+                    .name
+                    .is_some_and(|value| value != current.name.as_str()),
+            ),
+            (
+                "category",
+                input
+                    .category
+                    .is_some_and(|value| value != current.category.as_str()),
+            ),
+            (
+                "unit",
+                input
+                    .unit
+                    .is_some_and(|value| value != current.unit.as_str()),
+            ),
+            (
+                "hsnCode",
+                input
+                    .hsn_code
+                    .is_some_and(|value| value != current.hsn_code.as_str()),
+            ),
+            (
+                "gstPercent",
+                input
+                    .gst_percent
+                    .is_some_and(|value| value != current.gst_percent),
+            ),
+            (
+                "barcode",
+                input
+                    .barcode
+                    .is_some_and(|value| value != current.barcode.as_str()),
+            ),
+            (
+                "batchTracked",
+                input
+                    .batch_tracked
+                    .is_some_and(|value| value != current.batch_tracked),
+            ),
+            (
+                "active",
+                input.active.is_some_and(|value| value != current.active),
+            ),
+        ];
+        for (field, changed) in candidates {
+            if !changed {
+                continue;
+            }
+            if !allowed_fields.iter().any(|allowed| allowed == field) {
+                return Err(AppError::forbidden(format!(
+                    "{field} is controlled by the central product master"
+                )));
+            }
+            changed_master_fields.push(field.to_string());
+        }
+    }
+
     if input.batch_tracked != Some(current.batch_tracked) {
         if current.stock_quantity != 0 {
             return Err(AppError::conflict(
@@ -674,7 +749,7 @@ async fn update_in_tx(
         }
     }
 
-    inventory_repository::update(
+    let updated = inventory_repository::update(
         tx,
         UpdateInventory {
             tenant_id: input.tenant_id,
@@ -694,7 +769,17 @@ async fn update_in_tx(
         },
     )
     .await
-    .map_err(|_| AppError::internal("failed to update inventory item"))
+    .map_err(|_| AppError::internal("failed to update inventory item"))?;
+    inventory_repository::record_franchise_overrides(
+        tx,
+        input.tenant_id,
+        input.branch_id,
+        input.id,
+        &changed_master_fields,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record product override"))?;
+    Ok(updated)
 }
 
 pub async fn record_batch_receipt(
@@ -1359,10 +1444,15 @@ mod tests {
               reorder_point INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
               hsn_code TEXT NOT NULL DEFAULT '', gst_percent INTEGER NOT NULL DEFAULT 0,
               barcode TEXT NOT NULL DEFAULT '', batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,
-              active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
+              franchise_override_fields TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ
             )
             "#,
+            r#"CREATE TABLE franchise_policies (
+              tenant_id TEXT PRIMARY KEY, central_branch_id TEXT NOT NULL,
+              allowed_override_fields TEXT[] NOT NULL DEFAULT '{}'
+            )"#,
             r#"
             CREATE TABLE inventory_stock_ledger (
               id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
@@ -1457,6 +1547,48 @@ mod tests {
                 .expect("ledger count should load");
         assert_eq!(persisted_stock, 7);
         assert_eq!(persisted_ledger, 1);
+
+        sqlx::query(
+            "UPDATE inventory_items SET central_master_item_id='central-item' WHERE id='item-1'",
+        )
+        .execute(&pool)
+        .await
+        .expect("linked product should be configured");
+        sqlx::query("INSERT INTO franchise_policies(tenant_id,central_branch_id,allowed_override_fields) VALUES('tenant-1','central',ARRAY['active'])")
+            .execute(&pool).await.expect("override policy should be configured");
+        let mut blocked_input = input("tenant-1", "branch-1", 7, "");
+        blocked_input.stock_quantity = None;
+        blocked_input.name = Some("Local Shampoo");
+        let mut blocked = pool
+            .begin()
+            .await
+            .expect("blocked transaction should start");
+        assert!(update_in_tx(&mut blocked, &blocked_input).await.is_err());
+        blocked
+            .rollback()
+            .await
+            .expect("blocked transaction should roll back");
+
+        sqlx::query("UPDATE franchise_policies SET allowed_override_fields=ARRAY['name'] WHERE tenant_id='tenant-1'")
+            .execute(&pool).await.expect("override policy should update");
+        let mut allowed = pool
+            .begin()
+            .await
+            .expect("allowed transaction should start");
+        update_in_tx(&mut allowed, &blocked_input)
+            .await
+            .expect("allowed override should save");
+        allowed
+            .commit()
+            .await
+            .expect("allowed override should commit");
+        let overrides: Vec<String> = sqlx::query_scalar(
+            "SELECT franchise_override_fields FROM inventory_items WHERE id='item-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("override fields should load");
+        assert_eq!(overrides, vec!["name"]);
 
         assert!(validate(&input("tenant-1", "branch-1", -1, "negative-1")).is_err());
     }

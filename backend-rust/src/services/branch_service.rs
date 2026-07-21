@@ -22,6 +22,11 @@ const FRANCHISE_OVERRIDE_FIELDS: &[&str] = &[
     "cleanupTimeMinutes",
     "bufferTimeMinutes",
     "active",
+    "sku",
+    "unit",
+    "hsnCode",
+    "barcode",
+    "batchTracked",
 ];
 
 #[derive(Debug, Serialize)]
@@ -49,10 +54,58 @@ pub struct MultiBranchConflict {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiBranchCommandCenter {
+    pub range_start: NaiveDate,
+    pub range_end: NaiveDate,
+    pub summary: MultiBranchSummary,
     pub comparisons: Vec<branch_repository::BranchComparisonRecord>,
     pub conflicts: Vec<MultiBranchConflict>,
     pub approvals: Vec<branch_repository::MultiBranchApprovalRecord>,
     pub audit: Vec<branch_repository::MultiBranchAuditRecord>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiBranchSummary {
+    pub branch_count: usize,
+    pub active_branch_count: usize,
+    pub revenue_paise: i64,
+    pub discount_paise: i64,
+    pub tax_paise: i64,
+    pub refund_paise: i64,
+    pub tip_paise: i64,
+    pub average_ticket_paise: i64,
+    pub sale_count: i64,
+    pub appointment_count: i64,
+    pub lost_appointment_count: i64,
+    pub booked_minutes: i64,
+    pub scheduled_minutes: i64,
+    pub utilization_bps: i64,
+    pub void_count: i64,
+    pub cash_variance_paise: i64,
+    pub open_till_count: i64,
+    pub transfer_count: i64,
+    pub shortage_count: i64,
+    pub inventory_value_paise: i64,
+    pub membership_liability_paise: i64,
+    pub membership_redeemed_paise: i64,
+    pub cross_location_redeemed_paise: i64,
+    pub gift_card_liability_paise: i64,
+    pub loyalty_points_balance: i64,
+    pub shared_customer_count: i64,
+    pub royalty_outstanding_paise: i64,
+    pub sync_gap_count: i64,
+    pub pending_approval_count: usize,
+    pub conflict_count: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct MultiBranchFilterInput {
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub region: Option<String>,
+    pub zone: Option<String>,
+    pub cluster: Option<String>,
+    pub branch_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -317,6 +370,30 @@ pub async fn franchise_controls(
     })
 }
 
+pub async fn franchise_controls_scoped(
+    db: &PgPool,
+    tenant_id: &str,
+    actor_user_id: &str,
+    unrestricted: bool,
+) -> Result<FranchiseControls, AppError> {
+    let mut controls = franchise_controls(db, tenant_id).await?;
+    if unrestricted {
+        return Ok(controls);
+    }
+    let visible = branch_repository::accessible_branch_ids(db, tenant_id, actor_user_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load assigned branches"))?
+        .into_iter()
+        .collect::<HashSet<_>>();
+    controls
+        .branches
+        .retain(|branch| visible.contains(&branch.id));
+    controls
+        .royalty_statements
+        .retain(|statement| visible.contains(&statement.branch_id));
+    Ok(controls)
+}
+
 pub async fn save_franchise_controls(
     db: &PgPool,
     tenant_id: &str,
@@ -379,26 +456,422 @@ pub async fn save_franchise_controls(
 pub async fn multi_branch_command_center(
     db: &PgPool,
     tenant_id: &str,
+    actor_user_id: &str,
+    unrestricted: bool,
+    input: MultiBranchFilterInput,
 ) -> Result<MultiBranchCommandCenter, AppError> {
-    let comparisons = branch_repository::branch_comparison(db, tenant_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load branch comparison"))?;
+    let (range_start, range_end, region, zone, cluster, branch_id) =
+        normalize_multi_branch_filters(input)?;
+    let comparisons = branch_repository::branch_comparison(
+        db,
+        tenant_id,
+        range_start,
+        range_end,
+        &region,
+        &zone,
+        &cluster,
+        &branch_id,
+        actor_user_id,
+        unrestricted,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load branch comparison"))?;
     let policy = branch_repository::franchise_policy(db, tenant_id)
         .await
         .map_err(|_| AppError::internal("failed to load franchise policy"))?;
-    let approvals = branch_repository::multi_branch_approvals(db, tenant_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load branch approvals"))?;
-    let audit = branch_repository::multi_branch_audit(db, tenant_id)
+    let approvals =
+        branch_repository::multi_branch_approvals(db, tenant_id, actor_user_id, unrestricted)
+            .await
+            .map_err(|_| AppError::internal("failed to load branch approvals"))?;
+    let audit = branch_repository::multi_branch_audit(db, tenant_id, actor_user_id, unrestricted)
         .await
         .map_err(|_| AppError::internal("failed to load branch audit"))?;
     let conflicts = multi_branch_conflicts(&comparisons, policy.is_some());
+    let sale_count = comparisons.iter().fold(0_i64, |total, branch| {
+        total.saturating_add(branch.sale_count)
+    });
+    let revenue_paise = comparisons.iter().fold(0_i64, |total, branch| {
+        total.saturating_add(branch.revenue_paise)
+    });
+    let booked_minutes = comparisons.iter().fold(0_i64, |total, branch| {
+        total.saturating_add(branch.booked_minutes)
+    });
+    let scheduled_minutes = comparisons.iter().fold(0_i64, |total, branch| {
+        total.saturating_add(branch.scheduled_minutes)
+    });
+    let summary = MultiBranchSummary {
+        branch_count: comparisons.len(),
+        active_branch_count: comparisons.iter().filter(|branch| branch.active).count(),
+        revenue_paise,
+        discount_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.discount_paise)
+        }),
+        tax_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.tax_paise)
+        }),
+        refund_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.refund_paise)
+        }),
+        tip_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.tip_paise)
+        }),
+        average_ticket_paise: if sale_count == 0 {
+            0
+        } else {
+            revenue_paise / sale_count
+        },
+        sale_count,
+        appointment_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.appointment_count)
+        }),
+        lost_appointment_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.lost_appointment_count)
+        }),
+        booked_minutes,
+        scheduled_minutes,
+        utilization_bps: if scheduled_minutes == 0 {
+            0
+        } else {
+            booked_minutes
+                .saturating_mul(10_000)
+                .saturating_div(scheduled_minutes)
+                .min(10_000)
+        },
+        void_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.void_count)
+        }),
+        cash_variance_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.cash_variance_paise)
+        }),
+        open_till_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.open_till_count)
+        }),
+        transfer_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.transfer_count)
+        }),
+        shortage_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.shortage_count)
+        }),
+        inventory_value_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.inventory_value_paise)
+        }),
+        membership_liability_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.membership_liability_paise)
+        }),
+        membership_redeemed_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.membership_redeemed_paise)
+        }),
+        cross_location_redeemed_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.cross_location_redeemed_paise)
+        }),
+        gift_card_liability_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.gift_card_liability_paise)
+        }),
+        loyalty_points_balance: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.loyalty_points_balance)
+        }),
+        shared_customer_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.shared_customer_count)
+        }),
+        royalty_outstanding_paise: comparisons.iter().fold(0_i64, |total, branch| {
+            total.saturating_add(branch.royalty_outstanding_paise)
+        }),
+        sync_gap_count: comparisons.iter().fold(0_i64, |total, branch| {
+            total
+                .saturating_add(branch.service_sync_gap)
+                .saturating_add(branch.product_sync_gap)
+        }),
+        pending_approval_count: approvals
+            .iter()
+            .filter(|approval| approval.status == "pending")
+            .count(),
+        conflict_count: conflicts.len(),
+    };
     Ok(MultiBranchCommandCenter {
+        range_start,
+        range_end,
+        summary,
         comparisons,
         conflicts,
         approvals,
         audit,
     })
+}
+
+pub async fn multi_branch_drilldown(
+    db: &PgPool,
+    tenant_id: &str,
+    actor_user_id: &str,
+    unrestricted: bool,
+    kind: &str,
+    input: MultiBranchFilterInput,
+) -> Result<Vec<serde_json::Value>, AppError> {
+    let kind = kind.trim();
+    if !matches!(
+        kind,
+        "sales"
+            | "appointments"
+            | "refunds"
+            | "transfers"
+            | "membershipRedemptions"
+            | "registerClosings"
+            | "conflicts"
+            | "interBranchSettlements"
+    ) {
+        return Err(AppError::validation(
+            "multi-branch drilldown kind is invalid",
+        ));
+    }
+    let (range_start, range_end, region, zone, cluster, branch_id) =
+        normalize_multi_branch_filters(input)?;
+    branch_repository::multi_branch_drilldown(
+        db,
+        tenant_id,
+        range_start,
+        range_end,
+        &region,
+        &zone,
+        &cluster,
+        &branch_id,
+        actor_user_id,
+        unrestricted,
+        kind,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load branch drilldown"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn settle_inter_branch_redemption(
+    db: &PgPool,
+    tenant_id: &str,
+    actor: &str,
+    session_id: Option<&str>,
+    unrestricted: bool,
+    redemption_id: &str,
+    version: i32,
+    payment_method: &str,
+    settlement_reference: &str,
+) -> Result<branch_repository::InterBranchSettlementRecord, AppError> {
+    if version != 0 {
+        return Err(AppError::conflict(
+            "inter-branch settlement changed before save",
+        ));
+    }
+    let payment_method = match payment_method.trim().to_ascii_lowercase().as_str() {
+        "cash" => "cash",
+        "bank" | "bank_transfer" => "bank_transfer",
+        _ => return Err(AppError::validation("settlement payment method is invalid")),
+    };
+    let settlement_reference = settlement_reference.trim();
+    if settlement_reference.is_empty() || settlement_reference.chars().count() > 120 {
+        return Err(AppError::validation(
+            "settlement reference must be between 1 and 120 characters",
+        ));
+    }
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start inter-branch settlement"))?;
+    let redemption =
+        branch_repository::inter_branch_redemption_for_update(&mut tx, tenant_id, redemption_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load inter-branch redemption"))?
+            .ok_or_else(|| AppError::not_found("inter-branch redemption was not found"))?;
+    if redemption.amount_paise <= 0 {
+        return Err(AppError::conflict(
+            "inter-branch redemption has no settlement value",
+        ));
+    }
+    if !unrestricted {
+        let source_visible = branch_repository::has_assigned_branch_access(
+            &mut tx,
+            tenant_id,
+            actor,
+            &redemption.source_branch_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate branch scope"))?;
+        let target_visible = branch_repository::has_assigned_branch_access(
+            &mut tx,
+            tenant_id,
+            actor,
+            &redemption.redemption_branch_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate branch scope"))?;
+        if !source_visible || !target_visible {
+            return Err(AppError::forbidden(
+                "both settlement branches must be assigned to the current user",
+            ));
+        }
+    }
+    if let Some(existing) =
+        branch_repository::inter_branch_settlement_for_update(&mut tx, tenant_id, redemption_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load inter-branch settlement"))?
+    {
+        if existing.payment_method == payment_method
+            && existing.settlement_reference == settlement_reference
+        {
+            tx.commit()
+                .await
+                .map_err(|_| AppError::internal("failed to finish inter-branch settlement"))?;
+            return Ok(existing);
+        }
+        return Err(AppError::conflict(
+            "inter-branch redemption is already settled",
+        ));
+    }
+
+    let settlement_id = uuid::Uuid::new_v4().to_string();
+    let payment_account = if payment_method == "cash" {
+        "CASH_ON_HAND"
+    } else {
+        "BANK_CLEARING"
+    };
+    let source_accrual = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        &redemption.source_branch_id,
+        "inter_branch_accrual",
+        &settlement_id,
+        redemption.business_date,
+        "Cross-location membership redemption payable",
+        actor,
+        &[
+            accounting_service::ManualJournalLine {
+                account_code: "DEFERRED_REVENUE".into(),
+                debit_paise: redemption.amount_paise,
+                credit_paise: 0,
+            },
+            accounting_service::ManualJournalLine {
+                account_code: "ACCOUNTS_PAYABLE".into(),
+                debit_paise: 0,
+                credit_paise: redemption.amount_paise,
+            },
+        ],
+    )
+    .await?
+    .ok_or_else(|| AppError::conflict("source settlement accrual was already posted"))?;
+    let target_accrual = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        &redemption.redemption_branch_id,
+        "inter_branch_accrual",
+        &settlement_id,
+        redemption.business_date,
+        "Cross-location membership redemption receivable",
+        actor,
+        &[
+            accounting_service::ManualJournalLine {
+                account_code: "ACCOUNTS_RECEIVABLE".into(),
+                debit_paise: redemption.amount_paise,
+                credit_paise: 0,
+            },
+            accounting_service::ManualJournalLine {
+                account_code: "SALES_REVENUE".into(),
+                debit_paise: 0,
+                credit_paise: redemption.amount_paise,
+            },
+        ],
+    )
+    .await?
+    .ok_or_else(|| AppError::conflict("target settlement accrual was already posted"))?;
+    let source_payment = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        &redemption.source_branch_id,
+        "inter_branch_payment",
+        &settlement_id,
+        Utc::now().date_naive(),
+        "Cross-location membership settlement paid",
+        actor,
+        &[
+            accounting_service::ManualJournalLine {
+                account_code: "ACCOUNTS_PAYABLE".into(),
+                debit_paise: redemption.amount_paise,
+                credit_paise: 0,
+            },
+            accounting_service::ManualJournalLine {
+                account_code: payment_account.into(),
+                debit_paise: 0,
+                credit_paise: redemption.amount_paise,
+            },
+        ],
+    )
+    .await?
+    .ok_or_else(|| AppError::conflict("source settlement payment was already posted"))?;
+    let target_payment = accounting_service::post_control_journal(
+        &mut tx,
+        tenant_id,
+        &redemption.redemption_branch_id,
+        "inter_branch_payment",
+        &settlement_id,
+        Utc::now().date_naive(),
+        "Cross-location membership settlement received",
+        actor,
+        &[
+            accounting_service::ManualJournalLine {
+                account_code: payment_account.into(),
+                debit_paise: redemption.amount_paise,
+                credit_paise: 0,
+            },
+            accounting_service::ManualJournalLine {
+                account_code: "ACCOUNTS_RECEIVABLE".into(),
+                debit_paise: 0,
+                credit_paise: redemption.amount_paise,
+            },
+        ],
+    )
+    .await?
+    .ok_or_else(|| AppError::conflict("target settlement payment was already posted"))?;
+    let settlement = branch_repository::insert_inter_branch_settlement(
+        &mut tx,
+        &settlement_id,
+        tenant_id,
+        &redemption,
+        payment_method,
+        settlement_reference,
+        &source_accrual,
+        &target_accrual,
+        &source_payment,
+        &target_payment,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save inter-branch settlement"))?;
+    branch_repository::audit_multi_branch(
+        &mut tx,
+        tenant_id,
+        &redemption.source_branch_id,
+        actor,
+        session_id,
+        "multi_branch.settlement.settled",
+        json!({
+            "settlementId": settlement.id,
+            "redemptionId": redemption.id,
+            "sourceBranchId": redemption.source_branch_id,
+            "redemptionBranchId": redemption.redemption_branch_id,
+            "amountPaise": redemption.amount_paise,
+            "paymentMethod": payment_method,
+            "reference": settlement_reference,
+            "before": {"status":"open","version":0},
+            "after": {"status":"settled","version":settlement.version},
+            "journals": {
+                "sourceAccrual": source_accrual,
+                "targetAccrual": target_accrual,
+                "sourcePayment": source_payment,
+                "targetPayment": target_payment
+            }
+        }),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit inter-branch settlement"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit inter-branch settlement"))?;
+    Ok(settlement)
 }
 
 pub async fn request_multi_branch_approval(
@@ -489,14 +962,40 @@ pub async fn decide_multi_branch_approval(
             "branch approval changed before decision",
         ));
     }
+    if current.requested_by == actor {
+        return Err(AppError::forbidden(
+            "approval must be decided by a different manager",
+        ));
+    }
+    let mut before_sync_gap = (0_i64, 0_i64);
+    let mut after_sync_gap = (0_i64, 0_i64);
     let published = if decision == "approved" {
         let policy = branch_repository::franchise_policy_for_update(&mut tx, tenant_id)
             .await
             .map_err(|_| AppError::internal("failed to load franchise policy"))?
             .ok_or_else(|| AppError::conflict("configure a central branch first"))?;
-        branch_repository::publish_central_services(&mut tx, tenant_id, &policy.central_branch_id)
-            .await
-            .map_err(|_| AppError::internal("failed to publish central masters"))?
+        before_sync_gap = branch_repository::central_sync_gap_snapshot(
+            &mut tx,
+            tenant_id,
+            &policy.central_branch_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to capture pre-publish state"))?;
+        let published = branch_repository::publish_central_services(
+            &mut tx,
+            tenant_id,
+            &policy.central_branch_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to publish central masters"))?;
+        after_sync_gap = branch_repository::central_sync_gap_snapshot(
+            &mut tx,
+            tenant_id,
+            &policy.central_branch_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to capture post-publish state"))?;
+        published
     } else {
         0
     };
@@ -517,7 +1016,13 @@ pub async fn decide_multi_branch_approval(
         } else {
             "multi_branch.approval.rejected"
         },
-        json!({"approvalId": approval.id, "action": approval.action, "published": published}),
+        json!({
+            "approvalId": approval.id,
+            "action": approval.action,
+            "published": published,
+            "before": {"serviceSyncGap": before_sync_gap.0, "productSyncGap": before_sync_gap.1},
+            "after": {"serviceSyncGap": after_sync_gap.0, "productSyncGap": after_sync_gap.1}
+        }),
     )
     .await
     .map_err(|_| AppError::internal("failed to audit approval decision"))?;
@@ -580,31 +1085,6 @@ fn multi_branch_conflicts(
         }
     }
     conflicts
-}
-
-pub async fn publish_central_masters(db: &PgPool, tenant_id: &str) -> Result<u64, AppError> {
-    let policy = branch_repository::franchise_policy(db, tenant_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load franchise policy"))?
-        .ok_or_else(|| AppError::conflict("configure a central branch first"))?;
-    let mut tx = db
-        .begin()
-        .await
-        .map_err(|_| AppError::internal("failed to start central publish"))?;
-    if !branch_repository::branch_in_tenant(&mut tx, tenant_id, &policy.central_branch_id)
-        .await
-        .map_err(|_| AppError::internal("failed to validate central branch"))?
-    {
-        return Err(AppError::conflict("central branch is inactive or missing"));
-    }
-    let published =
-        branch_repository::publish_central_services(&mut tx, tenant_id, &policy.central_branch_id)
-            .await
-            .map_err(|_| AppError::internal("failed to publish central masters"))?;
-    tx.commit()
-        .await
-        .map_err(|_| AppError::internal("failed to commit central publish"))?;
-    Ok(published)
 }
 
 pub async fn generate_royalties(
@@ -714,6 +1194,49 @@ fn normalize_override_fields(fields: Vec<String>) -> Result<Vec<String>, AppErro
         return Err(AppError::validation("franchise override field is invalid"));
     }
     Ok(normalized)
+}
+
+fn normalize_multi_branch_filters(
+    input: MultiBranchFilterInput,
+) -> Result<(NaiveDate, NaiveDate, String, String, String, String), AppError> {
+    let india = FixedOffset::east_opt(19_800)
+        .ok_or_else(|| AppError::internal("failed to calculate report range"))?;
+    let today = Utc::now().with_timezone(&india).date_naive();
+    let end = input
+        .end_date
+        .as_deref()
+        .map(|value| NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d"))
+        .transpose()
+        .map_err(|_| AppError::validation("endDate must use YYYY-MM-DD"))?
+        .unwrap_or(today);
+    let start = input
+        .start_date
+        .as_deref()
+        .map(|value| NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d"))
+        .transpose()
+        .map_err(|_| AppError::validation("startDate must use YYYY-MM-DD"))?
+        .unwrap_or(end - chrono::Duration::days(29));
+    if start > end || end.signed_duration_since(start).num_days() > 366 {
+        return Err(AppError::validation(
+            "report range must be between 1 and 367 days",
+        ));
+    }
+    let normalize = |value: Option<String>, name: &str, max: usize| {
+        let value = value.unwrap_or_default().trim().to_string();
+        if value.chars().count() > max || value.chars().any(char::is_control) {
+            Err(AppError::validation(format!("{name} filter is invalid")))
+        } else {
+            Ok(value)
+        }
+    };
+    Ok((
+        start,
+        end,
+        normalize(input.region, "region", 120)?,
+        normalize(input.zone, "zone", 120)?,
+        normalize(input.cluster, "cluster", 120)?,
+        normalize(input.branch_id, "branchId", 128)?,
+    ))
 }
 
 fn validate_royalty_period(period_start: NaiveDate) -> Result<(), AppError> {
@@ -829,8 +1352,9 @@ fn map_write_error(error: sqlx::Error) -> AppError {
 mod tests {
     use super::{
         decide_multi_branch_approval, normalize_code, normalize_deposit_percent,
-        normalize_hierarchy, normalize_name, normalize_override_fields,
-        request_multi_branch_approval, validate_coordinates,
+        normalize_hierarchy, normalize_multi_branch_filters, normalize_name,
+        normalize_override_fields, request_multi_branch_approval, settle_inter_branch_redemption,
+        validate_coordinates, MultiBranchFilterInput,
     };
     use crate::repositories::branch_repository;
     use sqlx::PgPool;
@@ -851,6 +1375,62 @@ mod tests {
             vec!["pricePaise"]
         );
         assert!(normalize_override_fields(vec!["unknown".into()]).is_err());
+        let (start, end, region, zone, cluster, branch_id) =
+            normalize_multi_branch_filters(MultiBranchFilterInput {
+                start_date: Some("2026-07-01".into()),
+                end_date: Some("2026-07-21".into()),
+                region: Some(" West ".into()),
+                zone: Some("Mumbai".into()),
+                cluster: None,
+                branch_id: Some("BR-01".into()),
+            })
+            .unwrap();
+        assert_eq!(start.to_string(), "2026-07-01");
+        assert_eq!(end.to_string(), "2026-07-21");
+        assert_eq!(
+            (
+                region.as_str(),
+                zone.as_str(),
+                cluster.as_str(),
+                branch_id.as_str()
+            ),
+            ("West", "Mumbai", "", "BR-01")
+        );
+        assert!(normalize_multi_branch_filters(MultiBranchFilterInput {
+            start_date: Some("2025-01-01".into()),
+            end_date: Some("2026-07-21".into()),
+            ..Default::default()
+        })
+        .is_err());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn assigned_branch_scope_is_tenant_and_validity_isolated(pool: PgPool) {
+        sqlx::query(
+            r#"CREATE TABLE user_branch_roles(
+              tenant_id TEXT NOT NULL,user_id TEXT NOT NULL,branch_id TEXT NOT NULL,
+              active BOOLEAN NOT NULL DEFAULT TRUE,access_type TEXT NOT NULL DEFAULT 'permanent',
+              valid_from DATE,valid_until DATE)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO user_branch_roles VALUES
+              ('tenant-1','regional-1','branch-a',TRUE,'permanent',NULL,NULL),
+              ('tenant-1','regional-1','branch-b',TRUE,'deputation',CURRENT_DATE-1,CURRENT_DATE+1),
+              ('tenant-1','regional-1','expired',TRUE,'deputation',CURRENT_DATE-3,CURRENT_DATE-2),
+              ('tenant-2','regional-1','other-tenant',TRUE,'permanent',NULL,NULL),
+              ('tenant-1','other-user','other-user-branch',TRUE,'permanent',NULL,NULL)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut visible = branch_repository::accessible_branch_ids(&pool, "tenant-1", "regional-1")
+            .await
+            .unwrap();
+        visible.sort();
+        assert_eq!(visible, vec!["branch-a", "branch-b"]);
     }
 
     #[sqlx::test(migrations = false)]
@@ -863,7 +1443,7 @@ mod tests {
             CREATE TABLE franchise_policies(tenant_id TEXT PRIMARY KEY,central_branch_id TEXT NOT NULL,allowed_override_fields TEXT[] NOT NULL DEFAULT '{}',created_by TEXT NOT NULL,updated_by TEXT NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
             CREATE TABLE services(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,name TEXT NOT NULL,category TEXT NOT NULL DEFAULT '',duration_minutes INTEGER NOT NULL DEFAULT 0,price_paise INTEGER NOT NULL DEFAULT 0,gst_percent INTEGER NOT NULL DEFAULT 0,sac_code TEXT NOT NULL DEFAULT '',wait_time_minutes INTEGER NOT NULL DEFAULT 0,cleanup_time_minutes INTEGER NOT NULL DEFAULT 0,buffer_time_minutes INTEGER NOT NULL DEFAULT 0,product_consumption_json JSONB NOT NULL DEFAULT '[]',active BOOLEAN NOT NULL DEFAULT TRUE,central_master_service_id TEXT,franchise_override_fields TEXT[] NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ);
             CREATE UNIQUE INDEX uq_test_service_master ON services(tenant_id,branch_id,central_master_service_id) WHERE central_master_service_id IS NOT NULL;
-            CREATE TABLE inventory_items(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,sku TEXT NOT NULL DEFAULT '',name TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',unit TEXT NOT NULL DEFAULT 'pcs',stock_quantity INTEGER NOT NULL DEFAULT 0,reorder_point INTEGER NOT NULL DEFAULT 0,unit_cost_paise BIGINT NOT NULL DEFAULT 0,hsn_code TEXT NOT NULL DEFAULT '',gst_percent INTEGER NOT NULL DEFAULT 0,barcode TEXT NOT NULL DEFAULT '',batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,active BOOLEAN NOT NULL DEFAULT TRUE,central_master_item_id TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ);
+            CREATE TABLE inventory_items(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,sku TEXT NOT NULL DEFAULT '',name TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',unit TEXT NOT NULL DEFAULT 'pcs',stock_quantity INTEGER NOT NULL DEFAULT 0,reorder_point INTEGER NOT NULL DEFAULT 0,unit_cost_paise BIGINT NOT NULL DEFAULT 0,hsn_code TEXT NOT NULL DEFAULT '',gst_percent INTEGER NOT NULL DEFAULT 0,barcode TEXT NOT NULL DEFAULT '',batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,active BOOLEAN NOT NULL DEFAULT TRUE,central_master_item_id TEXT,franchise_override_fields TEXT[] NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ);
             CREATE UNIQUE INDEX uq_test_item_master ON inventory_items(tenant_id,branch_id,central_master_item_id) WHERE central_master_item_id IS NOT NULL;
             CREATE TABLE auth_audit_logs(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,user_id TEXT,session_id TEXT,branch_id TEXT,event_type TEXT NOT NULL,outcome TEXT NOT NULL,details_json JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
             "#,
@@ -873,6 +1453,12 @@ mod tests {
         .unwrap();
         sqlx::raw_sql(include_str!(
             "../../migrations/0172_multi_branch_command_center.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0215_multi_branch_approval_separation.sql"
         ))
         .execute(&pool)
         .await
@@ -897,11 +1483,26 @@ mod tests {
         request_multi_branch_approval(&pool, "tenant-2", "central-2", "owner-2", None, "")
             .await
             .unwrap();
-        let tenant_one_rows = branch_repository::multi_branch_approvals(&pool, "tenant-1")
-            .await
-            .unwrap();
+        let tenant_one_rows =
+            branch_repository::multi_branch_approvals(&pool, "tenant-1", "owner-1", true)
+                .await
+                .unwrap();
         assert_eq!(tenant_one_rows.len(), 1);
         assert_eq!(tenant_one_rows[0].id, tenant_one.id);
+
+        assert!(decide_multi_branch_approval(
+            &pool,
+            "tenant-1",
+            "central-1",
+            "owner-1",
+            None,
+            &tenant_one.id,
+            tenant_one.version,
+            "approved",
+            "",
+        )
+        .await
+        .is_err());
 
         sqlx::query("DROP TABLE auth_audit_logs")
             .execute(&pool)
@@ -911,7 +1512,7 @@ mod tests {
             &pool,
             "tenant-1",
             "central-1",
-            "owner-1",
+            "approver-1",
             None,
             &tenant_one.id,
             tenant_one.version,
@@ -942,7 +1543,7 @@ mod tests {
             &pool,
             "tenant-1",
             "central-1",
-            "owner-1",
+            "approver-1",
             None,
             &tenant_one.id,
             tenant_one.version,
@@ -962,6 +1563,115 @@ mod tests {
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM auth_audit_logs WHERE tenant_id='tenant-1' AND event_type='multi_branch.approval.approved'")
                 .fetch_one(&pool).await.unwrap(),
             1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn inter_branch_settlement_is_atomic_idempotent_and_tenant_scoped(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            CREATE TABLE pos_sales(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,status TEXT NOT NULL,business_date DATE NOT NULL);
+            CREATE TABLE client_membership_credits(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,unit_value_paise BIGINT NOT NULL);
+            CREATE TABLE pos_membership_redemptions(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,sale_id TEXT NOT NULL,client_membership_credit_id TEXT NOT NULL,quantity INTEGER NOT NULL,redeemed_value_paise BIGINT NOT NULL);
+            CREATE TABLE accounting_journal_entries(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,source_type TEXT NOT NULL,source_id TEXT NOT NULL,memo TEXT NOT NULL DEFAULT '',entry_date DATE,created_by_user_id TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(tenant_id,branch_id,source_type,source_id));
+            CREATE TABLE accounting_journal_lines(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,journal_entry_id TEXT NOT NULL REFERENCES accounting_journal_entries(id) ON DELETE CASCADE,account_code TEXT NOT NULL,debit_paise BIGINT NOT NULL DEFAULT 0,credit_paise BIGINT NOT NULL DEFAULT 0,CHECK ((debit_paise=0)<>(credit_paise=0)));
+            CREATE TABLE auth_audit_logs(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,user_id TEXT,session_id TEXT,branch_id TEXT,event_type TEXT NOT NULL,outcome TEXT NOT NULL,details_json JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+            INSERT INTO pos_sales VALUES('sale-1','tenant-1','redeem-1','completed','2026-07-21'),('sale-2','tenant-1','redeem-1','completed','2026-07-21');
+            INSERT INTO client_membership_credits VALUES('credit-1','tenant-1','source-1',5000),('credit-2','tenant-1','source-1',5000);
+            INSERT INTO pos_membership_redemptions VALUES('redemption-1','tenant-1','redeem-1','sale-1','credit-1',1,5000),('redemption-2','tenant-1','redeem-1','sale-2','credit-2',1,5000);
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0222_multi_branch_settlement_ledger.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(settle_inter_branch_redemption(
+            &pool,
+            "tenant-2",
+            "owner-1",
+            None,
+            true,
+            "redemption-1",
+            0,
+            "bank_transfer",
+            "UTR-1",
+        )
+        .await
+        .is_err());
+        let settled = settle_inter_branch_redemption(
+            &pool,
+            "tenant-1",
+            "owner-1",
+            None,
+            true,
+            "redemption-1",
+            0,
+            "bank_transfer",
+            "UTR-1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(settled.amount_paise, 5000);
+        assert_eq!(settled.status, "settled");
+        let retry = settle_inter_branch_redemption(
+            &pool,
+            "tenant-1",
+            "owner-1",
+            None,
+            true,
+            "redemption-1",
+            0,
+            "bank_transfer",
+            "UTR-1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(retry.id, settled.id);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM accounting_journal_entries")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            4
+        );
+
+        sqlx::query("DROP TABLE auth_audit_logs")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(settle_inter_branch_redemption(
+            &pool,
+            "tenant-1",
+            "owner-1",
+            None,
+            true,
+            "redemption-2",
+            0,
+            "cash",
+            "CASH-1",
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM multi_branch_settlements")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM accounting_journal_entries")
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+            4
         );
     }
 }

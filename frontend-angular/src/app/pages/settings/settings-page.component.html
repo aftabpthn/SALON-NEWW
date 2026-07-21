@@ -18,6 +18,53 @@
     </article>
   </section>
 
+  <section class="settings-panel language-settings-panel" *ngIf="activePanel === 'language'" aria-label="Language and region settings">
+    <header>
+      <h2>Language &amp; Region</h2>
+      <div class="panel-actions">
+        <button type="button" [disabled]="languageLoading || languageSaving" (click)="loadLanguageSettings(true)">Reload</button>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+
+    <span class="status" *ngIf="languageLoading">Loading…</span>
+    <span class="status error" role="alert" *ngIf="languageError">{{ languageError }}</span>
+
+    <ng-container *ngIf="!languageLoading">
+      <section class="setting-block">
+        <h3>Tenant default</h3>
+        <div class="form-grid">
+          <label>Primary language<select [(ngModel)]="languageSettings.primaryLanguage" [disabled]="!canManageLanguageTenant"><option *ngFor="let option of languageOptions" [value]="option.code">{{ option.label }}</option></select></label>
+          <label>Display mode<select [(ngModel)]="languageSettings.displayMode" [disabled]="!canManageLanguageTenant"><option value="single">Single language</option><option value="bilingual">Bilingual</option></select></label>
+          <label *ngIf="languageSettings.displayMode === 'bilingual'">Secondary language<select [(ngModel)]="languageSettings.secondaryLanguage" [disabled]="!canManageLanguageTenant"><option [ngValue]="undefined">Select language</option><option *ngFor="let option of languageOptions" [value]="option.code" [disabled]="option.code === languageSettings.primaryLanguage">{{ option.label }}</option></select></label>
+          <label>Country / region<input [(ngModel)]="languageSettings.region" maxlength="2" list="region-codes" [disabled]="!canManageLanguageTenant" /></label>
+          <label>Currency<input [(ngModel)]="languageSettings.currency" maxlength="3" list="currency-codes" [disabled]="!canManageLanguageTenant" /></label>
+          <label>Timezone<input [(ngModel)]="languageSettings.timeZone" maxlength="64" list="timezone-codes" [disabled]="!canManageLanguageTenant" /></label>
+          <label>Date format<select [(ngModel)]="languageSettings.dateFormat" [disabled]="!canManageLanguageTenant"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></label>
+          <label>Number format<select [(ngModel)]="languageSettings.numberLocale" [disabled]="!canManageLanguageTenant"><option value="en-IN">1,23,456.78</option><option value="hi-IN">१,२३,४५६.७८</option></select></label>
+        </div>
+        <datalist id="region-codes"><option *ngFor="let option of regionOptions" [value]="option.code">{{ option.label }}</option></datalist>
+        <datalist id="currency-codes"><option *ngFor="let option of currencyOptions" [value]="option"></option></datalist>
+        <datalist id="timezone-codes"><option *ngFor="let option of timezoneOptions" [value]="option"></option></datalist>
+      </section>
+
+      <label class="toggle-card language-override-card">
+        <span><b>Allow users to override</b><small>Header selection is stored for each user inside this tenant.</small></span>
+        <input type="checkbox" [(ngModel)]="languageSettings.allowUserOverride" [disabled]="!canManageLanguageTenant" />
+      </label>
+
+      <section class="language-preview" [attr.dir]="languagePreviewDirection">
+        <span>Direction preview · {{ languagePreviewDirection | uppercase }}</span>
+        <strong>{{ languageSettings.displayMode === 'bilingual' ? 'Save / सहेजें' : (languageSettings.primaryLanguage === 'hi-IN' ? 'सहेजें' : 'Save') }}</strong>
+      </section>
+
+      <footer>
+        <button class="primary" type="button" [disabled]="!canManageLanguageTenant || languageSaving" (click)="saveLanguageSettings()">{{ languageSaving ? 'Saving…' : 'Save tenant default' }}</button>
+        <span class="status">{{ canManageLanguageTenant ? languageStatus : 'Read only' }}</span>
+      </footer>
+    </ng-container>
+  </section>
+
   <section class="settings-panel" *ngIf="activePanel === 'branches'" aria-label="Branch management">
     <header>
       <h2>Branches</h2>
@@ -186,7 +233,7 @@
         </div>
         <footer>
           <button class="primary" type="button" [disabled]="franchiseSaving || !franchiseCentralBranchId" (click)="saveFranchiseControls()">{{ franchiseSaving ? 'Saving…' : 'Save controls' }}</button>
-          <button type="button" [disabled]="franchiseSaving || !franchiseCentralBranchId || franchiseCentralBranchId !== franchisePersistedCentralBranchId" (click)="publishCentralMasters()">Publish masters</button>
+          <button type="button" [disabled]="franchiseSaving || !franchiseCentralBranchId || franchiseCentralBranchId !== franchisePersistedCentralBranchId" (click)="publishCentralMasters()">Request publish approval</button>
           <span class="status">{{ franchiseStatus }}</span>
         </footer>
       </section>
@@ -201,6 +248,8 @@
             <label><input type="checkbox" [(ngModel)]="sharingPolicy.acceptInbound" /><span>Accept inbound</span></label>
             <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowDiscounts" /><span>Discounts</span></label>
             <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowServiceCredits" /><span>Service credits</span></label>
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowGiftCards" /><span>Gift cards</span></label>
+            <label><input type="checkbox" [(ngModel)]="sharingPolicy.allowLoyaltyPoints" /><span>Loyalty points</span></label>
           </div>
           <div class="form-grid">
             <label>Sharing scope<select [(ngModel)]="sharingPolicy.scope"><option value="tenant">All locations</option><option value="region">Region</option><option value="zone">Zone</option><option value="cluster">Cluster</option></select></label>
@@ -570,6 +619,20 @@
             <option *ngFor="let option of appointmentStatusOptions" [ngValue]="option">{{ option }}</option>
           </select>
         </label>
+      </div>
+    </section>
+
+    <section class="setting-block">
+      <h3>Reschedule rules</h3>
+      <div class="toggle-grid">
+        <label class="toggle-card"><span><b>Client self-reschedule</b><small>Allow the client app to request a new slot</small></span><button type="button" class="status-toggle" [class.is-on]="appointmentSettings.clientSelfReschedule" (click)="appointmentSettings.clientSelfReschedule = !appointmentSettings.clientSelfReschedule"><span></span></button></label>
+        <label class="toggle-card"><span><b>Approval required</b><small>Manager must approve client requests</small></span><button type="button" class="status-toggle" [class.is-on]="appointmentSettings.rescheduleApprovalRequired" (click)="appointmentSettings.rescheduleApprovalRequired = !appointmentSettings.rescheduleApprovalRequired"><span></span></button></label>
+        <label class="toggle-card"><span><b>SMS / app notification</b><small>Send confirmation for official reschedules</small></span><button type="button" class="status-toggle" [class.is-on]="appointmentSettings.rescheduleSmsAppNotification" (click)="appointmentSettings.rescheduleSmsAppNotification = !appointmentSettings.rescheduleSmsAppNotification"><span></span></button></label>
+        <label class="toggle-card"><span><b>Per-service message</b><small>Send each staff and service time separately</small></span><button type="button" class="status-toggle" [class.is-on]="appointmentSettings.perServiceRescheduleSms" (click)="appointmentSettings.perServiceRescheduleSms = !appointmentSettings.perServiceRescheduleSms"><span></span></button></label>
+      </div>
+      <div class="form-grid">
+        <label>Cutoff before appointment (hours)<input type="number" min="0" max="168" [(ngModel)]="appointmentSettings.rescheduleCutoffHours" /></label>
+        <label>Maximum reschedule count<input type="number" min="1" max="20" [(ngModel)]="appointmentSettings.maxRescheduleCount" /></label>
       </div>
     </section>
 

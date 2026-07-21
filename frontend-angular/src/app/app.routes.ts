@@ -14,7 +14,7 @@ export const routes: Routes = [
     path: 'command-center',
     loadComponent: () => import('./pages/dashboard/command-center/command-center-page.component').then((m) => m.CommandCenterPageComponent),
     canActivate: [authGuard],
-    data: { roles: ['owner', 'admin', 'superadmin', 'super-admin'], deniedRedirect: '/dashboard' },
+    data: { roles: ['owner', 'admin', 'super-admin', 'manager', 'analyst'], permissions: ['reports.read'], deniedRedirect: '/dashboard' },
   },
   { path: 'clients', loadComponent: () => import('./pages/clients/clients-page.component').then((m) => m.ClientsPageComponent), canActivate: [authGuard] },
   { path: 'clients/:clientId', loadComponent: () => import('./pages/clients/clients-page.component').then((m) => m.ClientsPageComponent), canActivate: [authGuard] },

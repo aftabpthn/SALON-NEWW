@@ -5,8 +5,9 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../shared/services/api.service';
+import { LanguageService, TenantLanguageSettings } from '../../core/i18n/language.service';
 
-type SettingsPanel = 'appointments' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms';
+type SettingsPanel = 'appointments' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language';
 
 type SettingsSection = {
   code: string;
@@ -33,6 +34,12 @@ type AppointmentSettings = {
   roomNumberOption: boolean;
   staffCalendar: boolean;
   defaultStatus: string;
+  clientSelfReschedule: boolean;
+  rescheduleApprovalRequired: boolean;
+  rescheduleCutoffHours: number;
+  maxRescheduleCount: number;
+  rescheduleSmsAppNotification: boolean;
+  perServiceRescheduleSms: boolean;
   colors: AppointmentColorSetting[];
 };
 
@@ -122,6 +129,8 @@ type CrossLocationSettings = {
   scope: 'tenant' | 'region' | 'zone' | 'cluster';
   allowDiscounts: boolean;
   allowServiceCredits: boolean;
+  allowGiftCards: boolean;
+  allowLoyaltyPoints: boolean;
 };
 
 type MembershipSettingsPayload = Record<string, unknown> & {
@@ -178,6 +187,7 @@ type ClientFormSettings = {
 export class SettingsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  readonly language = inject(LanguageService);
   private readonly appointmentSettingsKey = 'aurashine.appointment.settings';
   search = '';
   activePanel: SettingsPanel | '' = '';
@@ -235,7 +245,7 @@ export class SettingsPageComponent implements OnInit {
   franchiseError = '';
   franchiseStatus = '';
   membershipSettings: MembershipSettingsPayload = {};
-  sharingPolicy: CrossLocationSettings = { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: false, allowServiceCredits: false };
+  sharingPolicy: CrossLocationSettings = { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: false, allowServiceCredits: false, allowGiftCards: false, allowLoyaltyPoints: false };
   sharingLoading = false;
   sharingSaving = false;
   sharingLoaded = false;
@@ -257,10 +267,23 @@ export class SettingsPageComponent implements OnInit {
   clientFormSettingsSaving = false;
   clientFormSettingsError = '';
   clientFormSettingsStatus = '';
+  languageSettings: TenantLanguageSettings = {
+    primaryLanguage: 'en-IN', secondaryLanguage: undefined, displayMode: 'single', region: 'IN', currency: 'INR',
+    timeZone: 'Asia/Kolkata', dateFormat: 'DD/MM/YYYY', numberLocale: 'en-IN', allowUserOverride: true,
+  };
+  languageLoading = false;
+  languageSaving = false;
+  languageError = '';
+  languageStatus = '';
+  canManageLanguageTenant = false;
 
   readonly weekStartOptions = ['Sunday', 'Monday'];
   readonly slotOptions = [10, 15, 30, 60];
   readonly timeFormatOptions = ['12 Hours', '24 Hours'];
+  readonly languageOptions = [{ code: 'en-IN', label: 'English' }, { code: 'hi-IN', label: 'हिन्दी' }] as const;
+  readonly regionOptions = [{ code: 'IN', label: 'India' }, { code: 'US', label: 'United States' }, { code: 'GB', label: 'United Kingdom' }, { code: 'AE', label: 'United Arab Emirates' }, { code: 'CA', label: 'Canada' }, { code: 'AU', label: 'Australia' }, { code: 'SG', label: 'Singapore' }];
+  readonly currencyOptions = ['INR', 'USD', 'GBP', 'AED', 'CAD', 'AUD', 'SGD', 'EUR'];
+  readonly timezoneOptions = ['Asia/Kolkata', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney'];
   readonly clientFormSettingGroups = [
     { key: 'clientFormMasterRules', label: 'Client master rules' },
     { key: 'personalDetailRules', label: 'Personal details' },
@@ -271,6 +294,7 @@ export class SettingsPageComponent implements OnInit {
   ];
 
   readonly sections: SettingsSection[] = [
+    { code: 'LANG', title: 'Language & Region', panel: 'language' },
     { code: 'BR', title: 'Branches', panel: 'branches' },
     { code: 'FR', title: 'Franchise controls', panel: 'franchise' },
     { code: 'ST', title: 'Staff', route: '/staff' },
@@ -379,12 +403,48 @@ export class SettingsPageComponent implements OnInit {
     if (panel === 'services') await this.loadServiceSettings();
     if (panel === 'ai') await this.loadAiGovernance();
     if (panel === 'clientForms') await this.loadClientFormSettings();
+    if (panel === 'language') await this.loadLanguageSettings();
   }
 
   closePanel() {
     this.activePanel = '';
     this.saveStatus = '';
     this.saveError = '';
+  }
+
+  get languagePreviewDirection() { return this.language.directionFor(this.languageSettings.primaryLanguage); }
+
+  async loadLanguageSettings(force = false) {
+    this.languageLoading = true;
+    this.languageError = '';
+    this.languageStatus = '';
+    try {
+      const view = await this.language.loadSettings(force);
+      this.languageSettings = { ...view.tenantDefault };
+      this.canManageLanguageTenant = view.canManageTenant;
+    } catch (error) { this.languageError = this.apiError(error, 'Unable to load language settings'); }
+    finally { this.languageLoading = false; }
+  }
+
+  async saveLanguageSettings() {
+    if (this.languageSaving || !this.canManageLanguageTenant) return;
+    if (this.languageSettings.displayMode === 'bilingual'
+      && (!this.languageSettings.secondaryLanguage || this.languageSettings.secondaryLanguage === this.languageSettings.primaryLanguage)) {
+      this.languageError = 'Select a different secondary language';
+      return;
+    }
+    this.languageSaving = true;
+    this.languageError = '';
+    this.languageStatus = '';
+    try {
+      const payload = { ...this.languageSettings };
+      if (payload.displayMode === 'single') payload.secondaryLanguage = undefined;
+      const view = await this.language.saveTenantSettings(payload);
+      this.languageSettings = { ...view.tenantDefault };
+      this.canManageLanguageTenant = view.canManageTenant;
+      this.languageStatus = 'Language settings saved';
+    } catch (error) { this.languageError = this.apiError(error, 'Unable to save language settings'); }
+    finally { this.languageSaving = false; }
   }
 
   hasAiChannel(channel: string) { return this.aiGovernance.allowedChannels.includes(channel); }
@@ -630,17 +690,15 @@ export class SettingsPageComponent implements OnInit {
   }
 
   async publishCentralMasters() {
-    if (this.franchiseSaving || !this.franchiseCentralBranchId || !window.confirm('Publish central service masters to active branches?')) return;
+    if (this.franchiseSaving || !this.franchiseCentralBranchId || !window.confirm('Request approval to publish central masters to active branches?')) return;
     this.franchiseSaving = true;
     this.franchiseError = '';
     this.franchiseStatus = '';
     try {
-      const result = await firstValueFrom(this.api.post<any>('/api/v1/settings/franchise-controls/publish', {}));
-      const published = Number((result?.data ?? result)?.published ?? 0);
-      await this.loadFranchiseControls();
-      this.franchiseStatus = `${published} branch service records synchronized`;
+      await firstValueFrom(this.api.post('/api/v1/settings/multi-branch/approvals', { note: '' }));
+      this.franchiseStatus = 'Publish approval requested';
     } catch (error: any) {
-      this.franchiseError = this.apiError(error, 'Unable to publish central masters');
+      this.franchiseError = this.apiError(error, 'Unable to request publish approval');
     } finally {
       this.franchiseSaving = false;
     }
@@ -1077,6 +1135,12 @@ export class SettingsPageComponent implements OnInit {
     merged.roomNumberOption = Boolean(source?.roomNumberOption ?? defaults.roomNumberOption);
     merged.staffCalendar = Boolean(source?.staffCalendar ?? defaults.staffCalendar);
     merged.defaultStatus = String(source?.defaultStatus || defaults.defaultStatus);
+    merged.clientSelfReschedule = Boolean(source?.clientSelfReschedule ?? defaults.clientSelfReschedule);
+    merged.rescheduleApprovalRequired = Boolean(source?.rescheduleApprovalRequired ?? defaults.rescheduleApprovalRequired);
+    merged.rescheduleCutoffHours = Math.max(0, Math.min(168, Number(source?.rescheduleCutoffHours ?? defaults.rescheduleCutoffHours) || 0));
+    merged.maxRescheduleCount = Math.max(1, Math.min(20, Number(source?.maxRescheduleCount ?? defaults.maxRescheduleCount) || defaults.maxRescheduleCount));
+    merged.rescheduleSmsAppNotification = Boolean(source?.rescheduleSmsAppNotification ?? defaults.rescheduleSmsAppNotification);
+    merged.perServiceRescheduleSms = Boolean(source?.perServiceRescheduleSms ?? defaults.perServiceRescheduleSms);
     merged.colors = defaults.colors.map((item) => {
       const found = source?.colors?.find((entry) => entry?.status === item.status);
       return found
@@ -1182,6 +1246,12 @@ export class SettingsPageComponent implements OnInit {
       roomNumberOption: false,
       staffCalendar: true,
       defaultStatus: 'Confirmed',
+      clientSelfReschedule: true,
+      rescheduleApprovalRequired: false,
+      rescheduleCutoffHours: 2,
+      maxRescheduleCount: 2,
+      rescheduleSmsAppNotification: true,
+      perServiceRescheduleSms: true,
       colors: this.defaultColorSettings(),
     };
   }
@@ -1209,6 +1279,8 @@ export class SettingsPageComponent implements OnInit {
       slotMinutes: this.slotOptions.includes(value.slotMinutes) ? value.slotMinutes : 15,
       timeFormat: this.timeFormatOptions.includes(value.timeFormat) ? value.timeFormat : '12 Hours',
       weekStartFrom: this.weekStartOptions.includes(value.weekStartFrom) ? value.weekStartFrom : 'Sunday',
+      rescheduleCutoffHours: Math.max(0, Math.min(168, Number(value.rescheduleCutoffHours) || 0)),
+      maxRescheduleCount: Math.max(1, Math.min(20, Number(value.maxRescheduleCount) || 2)),
       colors: value.colors.map((entry) => ({
         ...entry,
         status: String(entry.status || ''),

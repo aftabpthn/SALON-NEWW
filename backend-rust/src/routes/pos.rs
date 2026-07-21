@@ -11261,12 +11261,31 @@ async fn apply_membership_benefits(
     let settings = membership_service::membership_settings(&state.db, tenant_id, branch_id).await?;
     let eligibility =
         membership_service::client_eligibility(&state.db, tenant_id, branch_id, client_id).await?;
-    let Some(eligibility) = eligibility else {
-        if points > 0 || has_marked_discount {
-            return Err(AppError::validation(
-                "active membership is required for benefits",
-            ));
-        }
+    let reward_membership_eligible = if points > 0 {
+        sqlx::query_scalar::<_, bool>(r#"SELECT EXISTS(
+          SELECT 1 FROM client_memberships cm
+          JOIN memberships membership ON membership.id=cm.membership_id
+            AND membership.tenant_id=cm.tenant_id AND membership.branch_id=cm.branch_id AND membership.active=TRUE
+          WHERE cm.tenant_id=$1 AND cm.active=TRUE
+            AND cm.assigned_at<=NOW() AND (cm.expires_at IS NULL OR cm.expires_at>=NOW())
+            AND ((cm.branch_id=$2 AND cm.client_id=$3)
+              OR membership_cross_location_allowed($1,cm.branch_id,$2,cm.client_id,$3,'loyalty')))"#)
+            .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(&state.db).await
+            .map_err(|_| AppError::internal("failed to validate loyalty sharing"))?
+    } else {
+        false
+    };
+    if has_marked_discount && eligibility.is_none() {
+        return Err(AppError::validation(
+            "active membership is required for benefits",
+        ));
+    }
+    if points > 0 && !reward_membership_eligible {
+        return Err(AppError::validation(
+            "active membership with shared loyalty is required for reward redemption",
+        ));
+    }
+    if eligibility.is_none() && points == 0 {
         return Ok(false);
     };
     let rewards_enabled =
@@ -11294,8 +11313,8 @@ async fn apply_membership_benefits(
     }
 
     let service_ids = eligibility
-        .service_ids
-        .as_array()
+        .as_ref()
+        .and_then(|value| value.service_ids.as_array())
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
@@ -11303,7 +11322,9 @@ async fn apply_membership_benefits(
         .collect::<HashSet<_>>();
     let fallback_staff_id = payload.staff_id.clone().unwrap_or_default();
     let apply_discount = discounts_enabled
-        && eligibility.discount_percent > 0
+        && eligibility
+            .as_ref()
+            .is_some_and(|value| value.discount_percent > 0)
         && (allow_stacking || (points == 0 && current.discount_paise == 0));
     let mut changed = false;
     if let Some(lines) = payload.lines.as_mut().or(payload.items.as_mut()) {
@@ -11326,7 +11347,10 @@ async fn apply_membership_benefits(
                     normalized
                         .quantity
                         .saturating_mul(normalized.unit_price_paise),
-                    eligibility.discount_percent,
+                    eligibility
+                        .as_ref()
+                        .map(|value| value.discount_percent)
+                        .unwrap_or(0),
                 );
                 if (source == "membership" && normalized.item_discount_paise != expected)
                     || (source == "membership_stacked" && normalized.item_discount_paise < expected)
@@ -11343,7 +11367,13 @@ async fn apply_membership_benefits(
             let gross = normalized
                 .quantity
                 .saturating_mul(normalized.unit_price_paise);
-            let benefit = membership_discount_paise(gross, eligibility.discount_percent);
+            let benefit = membership_discount_paise(
+                gross,
+                eligibility
+                    .as_ref()
+                    .map(|value| value.discount_percent)
+                    .unwrap_or(0),
+            );
             let combined = if allow_stacking {
                 normalized.item_discount_paise.saturating_add(benefit)
             } else {
@@ -11459,43 +11489,89 @@ async fn post_membership_rewards(
         package_setting_bool(&settings, &["redemptionRules", "allowFamilySharing"], true),
     )
     .await?;
-    if (redeemed > 0 || has_membership_discount) && !eligible {
+    let loyalty_eligible = eligible || sqlx::query_scalar::<_, bool>(r#"SELECT EXISTS(
+      SELECT 1 FROM client_memberships cm
+      JOIN memberships membership ON membership.id=cm.membership_id
+        AND membership.tenant_id=cm.tenant_id AND membership.branch_id=cm.branch_id AND membership.active=TRUE
+      WHERE cm.tenant_id=$1 AND cm.active=TRUE AND cm.frozen_at IS NULL
+        AND cm.assigned_at<=NOW() AND (cm.expires_at IS NULL OR cm.expires_at>=NOW())
+        AND membership_cross_location_allowed($1,cm.branch_id,$2,cm.client_id,$3,'loyalty'))"#)
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to validate loyalty sharing"))?;
+    if has_membership_discount && !eligible {
         return Err(AppError::validation(
             "active membership is required for benefits",
         ));
     }
-    if !eligible {
+    if redeemed > 0 && !loyalty_eligible {
+        return Err(AppError::validation(
+            "active membership with shared loyalty is required for reward redemption",
+        ));
+    }
+    if !eligible && !loyalty_eligible {
         return Ok(());
     }
     if !enabled && redeemed > 0 {
         return Err(AppError::validation("reward redemption is disabled"));
     }
-    sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+    if redeemed > i64::from(i32::MAX) {
+        return Err(AppError::validation(
+            "reward redemption exceeds supported range",
+        ));
+    }
+    let mut reward_source = (branch_id.to_string(), client_id.to_string(), 0_i32);
+    if redeemed > 0 {
+        reward_source = sqlx::query_as::<_, (String, String, i32)>(
+            r#"WITH latest AS (
+                 SELECT DISTINCT ON (ledger.branch_id,ledger.client_id)
+                        ledger.branch_id,ledger.client_id,ledger.balance_after
+                   FROM membership_reward_ledger ledger
+                  WHERE ledger.tenant_id=$1
+                  ORDER BY ledger.branch_id,ledger.client_id,ledger.created_at DESC,ledger.id DESC
+               )
+               SELECT latest.branch_id,latest.client_id,latest.balance_after
+                 FROM latest
+                WHERE latest.balance_after >= $4
+                  AND ((latest.branch_id=$2 AND latest.client_id=$3)
+                    OR membership_cross_location_allowed($1,latest.branch_id,$2,latest.client_id,$3,'loyalty'))
+                ORDER BY (latest.branch_id=$2 AND latest.client_id=$3) DESC,latest.balance_after DESC
+                LIMIT 1"#,
+        )
         .bind(tenant_id)
         .bind(branch_id)
         .bind(client_id)
+        .bind(redeemed as i32)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to load shared reward balance"))?
+        .ok_or_else(|| AppError::validation("reward points balance is insufficient or not shared with this branch"))?;
+    }
+    sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id)
+        .bind(&reward_source.0)
+        .bind(&reward_source.1)
         .execute(&mut **tx)
         .await
         .map_err(|_| AppError::internal("failed to lock reward balance"))?;
-    let mut balance = sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
-        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(&mut **tx).await
-        .map_err(|_| AppError::internal("failed to load reward balance"))?.unwrap_or(0);
-    if redeemed > i64::from(balance) {
-        return Err(AppError::validation(
-            "reward points balance is insufficient",
-        ));
-    }
+    let mut source_balance = reward_source.2;
     if redeemed > 0 {
-        balance -= redeemed as i32;
+        source_balance -= redeemed as i32;
         sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'redeemed',$5,$6,$7,'POS reward redemption') ON CONFLICT DO NOTHING")
-            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(redeemed as i32).bind(balance).bind(staff_id).execute(&mut **tx).await
+            .bind(tenant_id).bind(&reward_source.0).bind(&reward_source.1).bind(sale_id).bind(redeemed as i32).bind(source_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post reward redemption"))?;
     }
     let earned = reward_points_for_sale(total_paise, rate);
     if enabled && earned > 0 {
-        balance = balance.saturating_add(earned.min(i64::from(i32::MAX)) as i32);
+        let mut target_balance = if reward_source.0 == branch_id && reward_source.1 == client_id {
+            source_balance
+        } else {
+            sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
+                .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to load reward balance"))?.unwrap_or(0)
+        };
+        target_balance = target_balance.saturating_add(earned.min(i64::from(i32::MAX)) as i32);
         sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'earned',$5,$6,$7,'POS sale reward') ON CONFLICT DO NOTHING")
-            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned.min(i64::from(i32::MAX)) as i32).bind(balance).bind(staff_id).execute(&mut **tx).await
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned.min(i64::from(i32::MAX)) as i32).bind(target_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post earned rewards"))?;
     }
     Ok(())
@@ -11672,13 +11748,17 @@ mod package_credit_value_tests {
     async fn pos_cross_location_policy_enforces_saved_tenant_branch_settings(pool: PgPool) {
         sqlx::raw_sql(
             r#"
-            CREATE TABLE branches(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,region_name TEXT NOT NULL DEFAULT '',zone_name TEXT NOT NULL DEFAULT '',cluster_name TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE);
+            CREATE TABLE tenants(id TEXT PRIMARY KEY,scope_id TEXT NOT NULL DEFAULT '');
+            CREATE TABLE branches(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,scope_id TEXT NOT NULL DEFAULT '',region_name TEXT NOT NULL DEFAULT '',zone_name TEXT NOT NULL DEFAULT '',cluster_name TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE);
             CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,normalized_phone TEXT NOT NULL DEFAULT '',phone_verified_at TIMESTAMPTZ,active BOOLEAN NOT NULL DEFAULT TRUE,merged_into_client_id TEXT);
             CREATE TABLE membership_settings(tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,settings_json JSONB NOT NULL DEFAULT '{}',PRIMARY KEY(tenant_id,branch_id));
-            INSERT INTO branches VALUES('source','tenant-1','West','Mumbai','Central',TRUE),('target','tenant-1','West','Mumbai','Central',TRUE),('other','tenant-2','West','Mumbai','Central',TRUE);
+            CREATE TABLE customer_account_clients(account_id TEXT NOT NULL,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL);
+            CREATE TABLE inventory_items(id TEXT PRIMARY KEY,franchise_override_fields TEXT[] NOT NULL DEFAULT '{}');
+            INSERT INTO tenants VALUES('tenant-1',''),('tenant-2','');
+            INSERT INTO branches VALUES('source','tenant-1','','West','Mumbai','Central',TRUE),('target','tenant-1','','West','Mumbai','Central',TRUE),('other','tenant-2','','West','Mumbai','Central',TRUE);
             INSERT INTO clients VALUES('source-client','tenant-1','source','919999999999',NOW(),TRUE,NULL),('target-client','tenant-1','target','919999999999',NOW(),TRUE,NULL),('other-client','tenant-2','other','919999999999',NOW(),TRUE,NULL);
             INSERT INTO membership_settings VALUES
-              ('tenant-1','source','{"crossLocation":{"enabled":true,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true}}'),
+              ('tenant-1','source','{"crossLocation":{"enabled":true,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true,"allowGiftCards":true,"allowLoyaltyPoints":true}}'),
               ('tenant-1','target','{"crossLocation":{"acceptInbound":true}}'),
               ('tenant-2','other','{"crossLocation":{"acceptInbound":true}}');
             "#,
@@ -11687,7 +11767,7 @@ mod package_credit_value_tests {
         .await
         .unwrap();
         sqlx::raw_sql(include_str!(
-            "../../migrations/0154_membership_cross_location_policy.sql"
+            "../../migrations/0216_multi_branch_enterprise_completion.sql"
         ))
         .execute(&pool)
         .await
@@ -11706,6 +11786,18 @@ mod package_credit_value_tests {
         .unwrap();
         assert!(allowed);
         assert!(!cross_tenant);
+        sqlx::query("UPDATE clients SET normalized_phone=id,phone_verified_at=NULL WHERE tenant_id='tenant-1'")
+            .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO customer_account_clients VALUES('account-1','tenant-1','source','source-client'),('account-1','tenant-1','target','target-client')")
+            .execute(&pool).await.unwrap();
+        assert!(sqlx::query_scalar::<_, bool>(
+            "SELECT membership_cross_location_allowed('tenant-1','source','target','source-client','target-client','gift_card')",
+        )
+        .fetch_one(&pool).await.unwrap());
+        assert!(sqlx::query_scalar::<_, bool>(
+            "SELECT membership_cross_location_allowed('tenant-1','source','target','source-client','target-client','loyalty')",
+        )
+        .fetch_one(&pool).await.unwrap());
         sqlx::query(r#"UPDATE membership_settings SET settings_json='{"crossLocation":{"acceptInbound":false}}' WHERE tenant_id='tenant-1' AND branch_id='target'"#)
             .execute(&pool).await.unwrap();
         assert!(!sqlx::query_scalar::<_, bool>(

@@ -813,7 +813,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.giftCardLookupError = '';
     if (!code) { this.giftCardLookupError = 'Enter gift card code'; return; }
     this.giftCardLookupLoading = true;
-    this.api.get<any>(`/retention/gift-cards?code=${encodeURIComponent(code)}`).subscribe({
+    this.api.get<any>(`/retention/gift-cards?code=${encodeURIComponent(code)}&clientId=${encodeURIComponent(this.selectedClientId || '')}`).subscribe({
       next: (response: any) => {
         const card = this.list(response).find((item) => String(item?.code ?? '').trim().toUpperCase() === code);
         if (!card) { this.giftCardLookupError = 'Gift card not found'; this.giftCardLookupLoading = false; return; }
