@@ -50,6 +50,17 @@ export interface OwnerAdministrationRole {
   status: string;
   permissionKeys: string[];
   editable: boolean;
+  configuredKeys: string[];
+  inheritedKeys: string[];
+  effectiveKeys: string[];
+  allowKeys: string[];
+  denyKeys: string[];
+  policyMode: "inherited" | "override";
+  policySource: "default" | "tenant-override" | "branch-override" | string;
+  editablePolicy: boolean;
+  kind: "system" | "custom";
+  assignedUserCount: number;
+  activeAssignedUserCount: number;
 }
 
 export interface OwnerAdministrationUser {
@@ -64,6 +75,7 @@ export interface OwnerAdministrationUser {
   permissionVersion: number;
   lastLoginAt: string;
   activeSessions: number;
+  staffId?: string;
 }
 
 export interface OwnerAccessAdministration {
@@ -71,12 +83,15 @@ export interface OwnerAccessAdministration {
   roles: OwnerAdministrationRole[];
   users: OwnerAdministrationUser[];
   permissionGroups: OwnerPermissionGroup[];
-  capabilities: { createRole: boolean; editCustomRole: boolean; duplicateRole: boolean; setCustomRoleStatus: boolean; createUser: boolean; updateUser: boolean; disableUser: boolean };
+  capabilities: { createRole: boolean; editCustomRole: boolean; editBuiltinStaffAppPolicy: boolean; restoreRoleDefaults: boolean; duplicateRole: boolean; setCustomRoleStatus: boolean; createUser: boolean; updateUser: boolean; disableUser: boolean };
   safeguards: { lastActiveOwner: boolean; ownerEssentialAccess: boolean; assignmentsLimitedToOwnerBranches: boolean; permissionVersionInvalidation: boolean };
 }
 
-export interface OwnerRoleWrite { role: string; name: string; description: string; status: string; permissionKeys: string[]; }
+export interface OwnerRoleWrite { role: string; name: string; description: string; status: string; permissionKeys: string[]; mode?: "inherited" | "override"; allowKeys?: string[]; denyKeys?: string[]; branchId?: string; intent?: "create" | "update"; }
 export interface OwnerUserWrite { name: string; loginId: string; email: string; role: string; branchIds: string[]; status: string; password?: string; }
+
+export interface OwnerRoleMutationImpact { affectedUsers: number; activeAffectedUsers: number; requiresReauthentication: boolean; permissionVersionIncremented: number; affectedActiveSessions: number; scope: "tenant" | "branch"; branchId: string; }
+export interface OwnerRoleMutation { role: OwnerAdministrationRole; access: OwnerAccessAdministration; invalidatedUsers: number; requiresReauthentication: boolean; impact: OwnerRoleMutationImpact; }
 
 export interface OwnerGeneralSettings {
   workspace: { workspaceName: string; defaultLandingPage: string; fastPosEnabled: boolean };

@@ -402,10 +402,10 @@ function hideSummaryMoney(summary, billingVisible) {
 function permissionsFor(access) {
   const readable = (resource) => can(access.role || "staff", "read", resource, access);
   return {
-    billing: ["finance", "sales", "payments", "invoices"].some(readable),
-    earnings: ["payroll", "finance"].some(readable),
-    targets: readable("staff"),
-    invoiceDetail: readable("invoices")
+    billing: ["staff-app-finance", "staff-app-sales", "staff-app-payments", "staff-app-invoices"].some(readable),
+    earnings: ["staff-app-payroll", "staff-app-finance"].some(readable),
+    targets: readable("staff-app-staff"),
+    invoiceDetail: readable("staff-app-invoices")
   };
 }
 
@@ -413,8 +413,8 @@ function appointmentContext(query, access) {
   const range = businessRange(query);
   const staffId = staffLoginService.resolveStaffId(query, access);
   const staff = staffLoginService.getStaff(staffId, access);
-  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId).map(String);
   const branchId = staff.branchId || access.branchId || "";
+  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId, branchId).map(String);
   return {
     query,
     access,
@@ -470,7 +470,7 @@ function appointmentBatch(context, cursor) {
 }
 
 function enrichBatch(rawRows, context) {
-  const appointments = staffLoginService.enrichAppointments(rawRows, context.access.tenantId);
+  const appointments = staffLoginService.enrichAppointments(rawRows, context.access.tenantId, context.branchId);
   const logs = rowsByIds("appointment_activity_log", "appointmentId", appointments.map((row) => row.id), context.access, context.branchId);
   const eventsByAppointment = new Map();
   for (const event of logs) {

@@ -3,6 +3,7 @@ import { tenantService } from "../services/tenant.service.js";
 import { db } from "../db.js";
 import { ensureTenantUserAccessColumns, normalizeRole } from "../services/access-control.service.js";
 import { unauthorized } from "../utils/app-error.js";
+import { assertActiveStaffAppRole } from "../services/staff-app-role-policy.service.js";
 
 function bearerToken(req) {
   const alt = req.get("x-auth-token") || "";
@@ -12,7 +13,7 @@ function bearerToken(req) {
   return scheme?.toLowerCase() === "bearer" ? token : "";
 }
 
-function isBiometricGatewayRequest(req) {
+export function isBiometricGatewayRequest(req) {
   const path = String(req.path || "").replace(/^\/api\/v1/, "");
   return req.method === "POST"
     && /^\/staff-os\/biometric\/gateway\/[^/]+\/(?:heartbeat|events)\/?$/.test(path)
@@ -30,11 +31,11 @@ function clientsWhereClause() {
 }
 
 const permissionsCache = new Map();
-function resolvePermissions(tenantId, userId, role, permissionVersion) {
-  const key = `${tenantId}:${userId}:${permissionVersion}`;
+function resolvePermissions(tenantId, userId, role, permissionVersion, branchId = "") {
+  const key = `${tenantId}:${branchId}:${userId}:${permissionVersion}`;
   const cached = permissionsCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
-  const perms = authService.permissionsForUser({ role, id: userId }, tenantId);
+  const perms = authService.permissionsForUser({ role, id: userId }, tenantId, branchId);
   if (permissionsCache.size > 2000) {
     const now = Date.now();
     for (const [k, v] of permissionsCache) { if (v.expiresAt <= now) permissionsCache.delete(k); }
@@ -105,12 +106,17 @@ export function authenticateJwt({ required = true } = {}) {
       ensureTenantUserAccessColumns();
       const userRow = db.prepare("SELECT status, permissionVersion, staffId FROM tenant_users WHERE tenantId = @tenantId AND id = @id").get({ tenantId: payload.tenantId, id: payload.sub });
       if (!userRow || userRow.status !== "active") throw unauthorized("User session is no longer active");
+      try {
+        assertActiveStaffAppRole(payload.tenantId, payload.role, req.get("x-branch-id") || payload.branchId || "");
+      } catch (error) {
+        throw unauthorized(error.message || "User role is no longer active");
+      }
       const tokenPermissionVersion = Number(payload.pv || payload.permissionVersion || 1);
       if (Number(userRow.permissionVersion || 1) !== tokenPermissionVersion) throw unauthorized("User permissions changed; please sign in again");
       const currentStaffId = String(userRow.staffId || payload.staffId || "").trim();
       const requestedBranchId = req.get("x-branch-id") || payload.branchId || "";
       if (requestedBranchId) tenantService.assertBranchAccess(payload, requestedBranchId);
-      const permissions = payload.permissions || resolvePermissions(payload.tenantId, payload.sub, payload.role, tokenPermissionVersion);
+      const permissions = payload.permissions || resolvePermissions(payload.tenantId, payload.sub, payload.role, tokenPermissionVersion, requestedBranchId || payload.branchId || "");
       req.auth = payload;
       req.tenant = tenant;
       req.user = {

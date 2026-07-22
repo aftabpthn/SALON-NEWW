@@ -5,9 +5,16 @@ import { route } from "./staff-os-route-utils.js";
 import { requirePermission } from "../middleware/rbac.js";
 
 export const staffMasterRouter = Router();
+const staffMasterPrefixes = [
+  "/staff-os/staff", "/staff-os/staff-categories", "/staff-os/attendance-masters",
+  "/staff-os/leave-masters", "/staff-os/shift-masters", "/staff-os/attendance-categories",
+  "/staff-os/target-incentives", "/staff-os/service-assignments", "/staff-os/fine-penalties",
+  "/staff-os/allowance-deductions", "/staff-os/payroll-structures", "/staff-os/bulk-employee-update"
+];
 
 staffMasterRouter.use((req, res, next) => {
-  if (!req.path.startsWith("/staff-os/")) return next();
+  if (/^\/staff-os\/staff\/[^/]+\/salary-(?:history|revision|revisions)(?:\/|$)/.test(req.path)) return next();
+  if (!staffMasterPrefixes.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))) return next();
   return requirePermission(req.method === "GET" ? "read" : "write", () => "staff")(req, res, next);
 });
 

@@ -3,6 +3,7 @@ import { columnsFor, db } from "../db.js";
 import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { realtimeService } from "./realtime.service.js";
 import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./access-control.service.js";
+import { assertActiveStaffAppRole } from "./staff-app-role-policy.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -351,7 +352,8 @@ export class StaffLoginService {
     if (!loginId) throw badRequest("Staff login ID is required");
     const email = safeEmail(loginId, payload.email || staff.email);
     const requestedRole = String(payload.role || payload.roleId || staff.roleId || "staff").trim();
-    const authRole = ["manager", "frontDesk", "cashier", "staff", "marketingLead", "customMarketingLead", "inventoryManager", "accountant"].includes(normalizeRole(requestedRole)) ? normalizeRole(requestedRole) : "staff";
+    const authRole = normalizeRole(requestedRole);
+    assertActiveStaffAppRole(access.tenantId, authRole, staff.branchId || "", { assignable: true });
     const branchIds = normalizeBranchIdsForRole(payload.branchIds || [staff.branchId].filter(Boolean), authRole);
     const existingByStaff = db.prepare("SELECT * FROM tenant_users WHERE tenantId = @tenantId AND staffId = @staffId")
       .get({ tenantId: access.tenantId, staffId: staff.id });
@@ -430,7 +432,7 @@ export class StaffLoginService {
   staffDashboard(query = {}, access) {
     const staffId = this.resolveStaffId(query, access);
     const staff = this.getStaff(staffId, access);
-    const identityIds = this.staffIdentityIds(staff, access.tenantId);
+    const identityIds = this.staffIdentityIds(staff, access.tenantId, staff.branchId || access.branchId || "");
     const todayText = istBusinessDate();
     const from = toIsoBoundary(query.from, new Date(Date.now() - 30 * 86400000).toISOString());
     const to = toIsoBoundary(query.to, new Date(Date.now() + 30 * 86400000).toISOString(), true);
@@ -450,9 +452,9 @@ export class StaffLoginService {
     const salesRows = db.prepare(`SELECT * FROM sales
       WHERE ${[...salesScope.filters, `staffId IN (${idsSql})`, "createdAt >= ?", "createdAt <= ?"].join(" AND ")}
       ORDER BY createdAt DESC LIMIT 500`).all(...salesScope.params, ...identityIds, from, to);
-    const enriched = this.enrichAppointments(appointmentRows, access.tenantId);
+    const enriched = this.enrichAppointments(appointmentRows, access.tenantId, staff.branchId || access.branchId || "");
     const liveStatuses = new Set(["booked", "confirmed", "checked-in", "arrived", "in-service", "started"]);
-    const today = this.enrichAppointments(todayRows, access.tenantId);
+    const today = this.enrichAppointments(todayRows, access.tenantId, staff.branchId || access.branchId || "");
     const completed = enriched.filter((row) => ["completed", "checked-out"].includes(String(row.status || "").toLowerCase()));
     return {
       staff,
@@ -1216,9 +1218,9 @@ export class StaffLoginService {
   }
 
   getStaff(staffId, access) {
-    const row = db.prepare("SELECT * FROM staff_master WHERE id = ? AND tenant_id = ?").get(staffId, access.tenantId);
+    const row = db.prepare("SELECT * FROM staff_master WHERE id = @staffId AND tenant_id = @tenantId").get({ staffId, tenantId: access.tenantId });
     if (!row) {
-      const legacy = db.prepare("SELECT * FROM staff WHERE id = ? AND tenantId = ?").get(staffId, access.tenantId);
+      const legacy = db.prepare("SELECT * FROM staff WHERE id = @staffId AND tenantId = @tenantId").get({ staffId, tenantId: access.tenantId });
       if (!legacy) throw notFound("Staff record not found");
       if (!privilegedRoles.has(normalizeRole(access.role)) && access.branchId && legacy.branchId !== access.branchId && access.staffId !== staffId) {
         throw forbidden("This staff record is outside your branch access");
@@ -1231,10 +1233,11 @@ export class StaffLoginService {
     return rowToStaff(row);
   }
 
-  staffIdentityIds(staff, tenantId) {
+  staffIdentityIds(staff, tenantId, branchId = "") {
+    if (!tenantId) throw badRequest("tenantId is required to resolve staff identities");
     const ids = new Set([staff.id].filter(Boolean));
     const clauses = ["id = @id"];
-    const params = { id: staff.id };
+    const params = { id: staff.id, tenantId, branchId };
     if (staff.email) {
       clauses.push("lower(email) = lower(@email)");
       params.email = staff.email;
@@ -1247,22 +1250,26 @@ export class StaffLoginService {
       clauses.push("lower(name) = lower(@name)");
       params.name = staff.fullName;
     }
-    const matches = db.prepare(`SELECT id FROM staff WHERE ${clauses.join(" OR ")}`).all(params);
+    const branchFilter = branchId ? " AND branchId = @branchId" : "";
+    const matches = db.prepare(`SELECT id FROM staff WHERE tenantId = @tenantId${branchFilter} AND (${clauses.join(" OR ")})`).all(params);
     matches.forEach((row) => ids.add(row.id));
-    const linkedUsers = db.prepare("SELECT staffId FROM tenant_users WHERE tenantId = ? AND staffId = ?").all(tenantId, staff.id);
+    const linkedUsers = db.prepare("SELECT staffId FROM tenant_users WHERE tenantId = @tenantId AND staffId = @staffId").all({ tenantId, staffId: staff.id });
     linkedUsers.forEach((row) => row.staffId && ids.add(row.staffId));
     return [...ids].filter(Boolean);
   }
 
-  enrichAppointments(rows, tenantId = "") {
+  enrichAppointments(rows, tenantId = "", branchId = "") {
+    if (!tenantId) throw badRequest("tenantId is required to enrich appointments");
     const clientColumns = columnsFor("clients");
     const clientSelect = ["id", "name", clientColumns.includes("phone") ? "phone" : "'' AS phone"];
     clientSelect.push(clientColumns.includes("mobile") ? "mobile" : "'' AS mobile");
-    const clientRows = clientColumns.includes("tenantId") && tenantId
-      ? db.prepare(`SELECT ${clientSelect.join(", ")} FROM clients WHERE tenantId = ?`).all(tenantId)
-      : db.prepare(`SELECT ${clientSelect.join(", ")} FROM clients`).all();
+    const clientBranchFilter = branchId && clientColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
+    const clientRows = db.prepare(`SELECT ${clientSelect.join(", ")} FROM clients WHERE tenantId = @tenantId${clientBranchFilter}`).all({ tenantId, branchId });
     const clients = new Map(clientRows.map((row) => [row.id, row]));
-    const services = new Map(db.prepare("SELECT id, name, durationMinutes, price FROM services").all().map((row) => [row.id, row]));
+    const serviceColumns = columnsFor("services");
+    const serviceBranchFilter = branchId && serviceColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
+    const serviceRows = db.prepare(`SELECT id, name, durationMinutes, price FROM services WHERE tenantId = @tenantId${serviceBranchFilter}`).all({ tenantId, branchId });
+    const services = new Map(serviceRows.map((row) => [row.id, row]));
     return rows.map((row) => {
       const serviceIds = parseServiceIds(row.serviceIds);
       const serviceRows = serviceIds.map((serviceId) => services.get(serviceId)).filter(Boolean);

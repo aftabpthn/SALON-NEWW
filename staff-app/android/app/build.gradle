@@ -40,6 +40,7 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation "androidx.biometric:biometric:$androidxBiometricVersion"
     implementation "com.google.android.gms:play-services-location:$playServicesLocationVersion"
+    implementation "com.google.android.play:integrity:$playServicesIntegrityVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

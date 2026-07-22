@@ -23,7 +23,7 @@ import {
 import { OwnerAttendance, OwnerAttendanceDevice, OwnerAttendanceEvidence, OwnerAttendancePolicy, OwnerLeave, OwnerLeaveDetail, OwnerListResponse, OwnerPayroll, OwnerPayrollDetail, OwnerShiftSwap, OwnerStaff, OwnerStaffDetail, OwnerStaffWrite } from "./owner-people.models";
 import { OwnerExportFile, OwnerFinanceDrilldown, OwnerFinanceOverview, OwnerFinanceQuery, OwnerReportCatalogue, OwnerReportData } from "./owner-finance-reports.models";
 import { OwnerCampaign, OwnerChatConversation, OwnerChatMessage, OwnerChatMessagesResponse, OwnerChatReceiptResponse, OwnerClient, OwnerClientDetail, OwnerInventoryDetail, OwnerInventoryResponse, OwnerNotification, OwnerNotificationReceipt, OwnerOperationsQuery, OwnerOperationsResponse } from "./owner-operations.models";
-import { OwnerAccessAdministration, OwnerAdministrationRole, OwnerAdministrationUser, OwnerBranchCatalogue, OwnerBranchMutation, OwnerBranchWrite, OwnerRoleWrite, OwnerSettingsResponse, OwnerUserWrite } from "./owner-administration.models";
+import { OwnerAccessAdministration, OwnerAdministrationUser, OwnerBranchCatalogue, OwnerBranchMutation, OwnerBranchWrite, OwnerRoleMutation, OwnerRoleWrite, OwnerSettingsResponse, OwnerUserWrite } from "./owner-administration.models";
 import { OwnerBillingDetail, OwnerBillingList } from "./owner-billing.models";
 
 export type OwnerUser = {
@@ -222,8 +222,9 @@ export class OwnerAppService {
   createAdministrationBranch(payload: OwnerBranchWrite): Promise<OwnerBranchMutation> { return this.post("/owner-console/administration/branches", payload); }
   updateAdministrationBranch(id: string, payload: OwnerBranchWrite): Promise<OwnerBranchMutation> { return this.patch(`/owner-console/administration/branches/${encodeURIComponent(id)}`, payload); }
   setAdministrationBranchStatus(id: string, status: "active" | "inactive"): Promise<OwnerBranchMutation> { return this.patch(`/owner-console/administration/branches/${encodeURIComponent(id)}/status`, { status }); }
-  administrationAccess(): Promise<OwnerAccessAdministration> { return this.get("/owner-console/administration/access"); }
-  saveAdministrationRole(payload: OwnerRoleWrite): Promise<{ role: OwnerAdministrationRole; access: OwnerAccessAdministration; invalidatedUsers: number }> { return this.post("/owner-console/administration/roles", payload); }
+  administrationAccess(branchId = ""): Promise<OwnerAccessAdministration> { return this.get("/owner-console/administration/access", branchId ? { branchId } : {}); }
+  saveAdministrationRole(payload: OwnerRoleWrite): Promise<OwnerRoleMutation> { return this.post("/owner-console/administration/roles", payload); }
+  restoreAdministrationRoleDefaults(role: string, branchId = ""): Promise<OwnerRoleMutation> { return this.post(`/owner-console/administration/roles/${encodeURIComponent(role)}/restore-defaults`, { branchId }); }
   createAdministrationUser(payload: OwnerUserWrite): Promise<{ user: OwnerAdministrationUser; access: OwnerAccessAdministration }> { return this.post("/owner-console/administration/users", payload); }
   updateAdministrationUser(id: string, payload: Partial<OwnerUserWrite>): Promise<{ user: OwnerAdministrationUser; access: OwnerAccessAdministration }> { return this.patch(`/owner-console/administration/users/${encodeURIComponent(id)}`, payload); }
   administrationSettings(branchId = ""): Promise<OwnerSettingsResponse> { return this.get("/owner-console/administration/settings", branchId ? { branchId } : {}); }

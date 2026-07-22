@@ -213,11 +213,50 @@ export const staffAppPermissionCatalog = [
 
   item("finance", "Finance & Revenue", "staff-app-finance", "read", "View finance data", "finance", ["/staff/payroll", "/staff/performance"], ["GET /finance"]),
   item("finance", "Finance & Revenue", "staff-app-payroll", "read", "View payroll", "finance", ["/staff/payroll"], ["GET /staff-payroll"]),
+  item("finance", "Finance & Revenue", "staff-app-payroll", "write", "Manage payroll", "finance", ["/staff/payroll"], ["POST /staff-payroll"]),
   item("finance", "Finance & Revenue", "staff-app-sales", "read", "View sales data", "finance", ["/staff/performance"], ["GET /sales"]),
   item("finance", "Finance & Revenue", "staff-app-payments", "read", "View payments data", "finance", ["/staff/performance"], ["GET /payments"]),
   item("finance", "Finance & Revenue", "staff-app-invoices", "read", "View invoices data", "finance", ["/staff/performance"], ["GET /invoices"]),
 
-  item("notifications", "Notifications", "staff-app-notifications", "update", "Mark notifications read", "notifications", ["/staff/notifications"], ["PATCH /notifications"])
+  item("notifications", "Notifications", "staff-app-notifications", "read", "View notifications", "notifications", ["/staff/notifications"], ["GET /notifications"]),
+  item("notifications", "Notifications", "staff-app-notifications", "update", "Mark notifications read", "notifications", ["/staff/notifications"], ["PATCH /notifications"]),
+  item("notifications", "Notifications", "staff-app-notifications", "write", "Manage staff notifications", "notifications", ["/staff/notifications"], ["POST /notifications"])
+  ,item("staff-os", "Staff OS", "staff-app-master", "read", "View Staff OS masters", "staffOs", ["/staff-os"], ["GET /staff-os/staff-categories", "GET /staff-os/*-masters"])
+  ,item("staff-os", "Staff OS", "staff-app-master", "write", "Manage Staff OS masters", "staffOs", ["/staff-os"], ["POST/PATCH /staff-os/*-masters"])
+  ,item("staff-os", "Staff OS", "staff-app-schedules", "read", "View staff schedules", "staffOs", ["/staff-os/roster"], ["GET /staff-os/schedules", "GET /staff-os/shift-swaps"])
+  ,item("staff-os", "Staff OS", "staff-app-schedules", "write", "Manage staff schedules", "staffOs", ["/staff-os/roster"], ["POST/PATCH/DELETE /staff-os/schedules", "POST /staff-os/shift-swaps"])
+  ,item("staff-os", "Staff OS", "staff-app-attendance", "read", "View attendance", "staffOs", ["/staff-os/attendance"], ["GET /staff-os/attendance"])
+  ,item("staff-os", "Staff OS", "staff-app-attendance", "write", "Record and correct attendance", "staffOs", ["/staff-os/attendance"], ["POST /staff-os/attendance"])
+  ,item("staff-os", "Staff OS", "staff-app-leave", "read", "View leave", "staffOs", ["/staff-os/leaves"], ["GET /staff-os/leaves", "GET /staff-os/leave-calendar"])
+  ,item("staff-os", "Staff OS", "staff-app-leave", "write", "Request and decide leave", "staffOs", ["/staff-os/leaves"], ["POST/PATCH /staff-os/leaves"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-commissions", "read", "View commissions", "staffOs", ["/staff-os/commissions"], ["GET /staff-os/commissions"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-commissions", "write", "Calculate and approve commissions", "staffOs", ["/staff-os/commissions"], ["POST /staff-os/commissions"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-tips", "read", "View tips", "staffOs", ["/staff-os/tips"], ["GET /staff-os/tips"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-tips", "write", "Manage tips", "staffOs", ["/staff-os/tips"], ["POST/PATCH /staff-os/tips"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-performance", "read", "View staff performance", "staffOs", ["/staff-os/performance"], ["GET /staff-os/performance"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-performance", "write", "Manage performance targets", "staffOs", ["/staff-os/performance"], ["POST/PATCH /staff-os/performance"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-intelligence", "read", "View workforce intelligence", "staffOs", ["/staff-os/intelligence"], ["GET /staff-os/intelligence"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-intelligence", "write", "Run workforce intelligence actions", "staffOs", ["/staff-os/intelligence"], ["POST /staff-os/intelligence"])
+  ,item("staff-os", "Staff OS", "staff-app-mobile", "read", "View Staff App mobile data", "staffOs", ["/staff"], ["GET /staff-os/mobile"])
+  ,item("staff-os", "Staff OS", "staff-app-mobile", "write", "Submit Staff App mobile requests", "staffOs", ["/staff"], ["POST /staff-os/mobile"])
+  ,item("staff-os", "Staff OS", "staff-app-tasks", "read", "View staff tasks", "staffOs", ["/staff/tasks"], ["GET /staff-os/tasks"])
+  ,item("staff-os", "Staff OS", "staff-app-tasks", "write", "Manage staff tasks", "staffOs", ["/staff/tasks"], ["POST/PATCH /staff-os/tasks"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-audit", "read", "View Staff OS audit trail", "staffOs", ["/staff-os/audit"], ["GET /staff-os/audit"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-reports", "read", "View Staff OS reports", "staffOs", ["/staff-os/reports"], ["GET /staff-os/reports"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-biometric", "read", "View biometric operations", "staffOs", ["/staff-os/biometric"], ["GET /staff-os/biometric", "GET /staff-os/attendance/biometric-center"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-biometric", "write", "Manage biometric operations", "staffOs", ["/staff-os/biometric"], ["POST/PATCH /staff-os/biometric", "POST /staff-os/attendance/fraud-scan"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-payroll-compliance", "read", "View payroll compliance", "staffOs", ["/staff-os/payroll"], ["GET /staff-os/payroll-compliance"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-payroll-compliance", "write", "Manage payroll compliance", "staffOs", ["/staff-os/payroll"], ["POST/PATCH /staff-os/payroll-compliance"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-replacement", "read", "View replacement recommendations", "staffOs", ["/staff-os/roster"], ["GET /staff-os/replacement"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-replacement", "write", "Run replacement actions", "staffOs", ["/staff-os/roster"], ["POST /staff-os/replacement"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-sync", "read", "View mobile sync state", "staffOs", ["/staff"], ["GET /staff-os/mobile/snapshot", "GET /staff-os/mobile/conflicts"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-sync", "write", "Manage mobile sync", "staffOs", ["/staff"], ["POST /staff-os/mobile/sync", "POST /staff-os/mobile/conflicts"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-approvals", "read", "View staff approvals", "staffOs", ["/staff-os/approvals"], ["GET /staff-os/approvals"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-approvals", "write", "Manage staff approvals", "staffOs", ["/staff-os/approvals"], ["POST /staff-os/approvals"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-roster", "read", "View roster optimization", "staffOs", ["/staff-os/roster"], ["GET /staff-os/roster-optimizer"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-roster", "write", "Run roster optimization", "staffOs", ["/staff-os/roster"], ["POST /staff-os/roster-optimizer"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-forecasting", "read", "View manpower forecasts", "staffOs", ["/staff-os/forecasting"], ["GET /staff-os/manpower-forecast"])
+  ,item("staff-os-sensitive", "Staff OS Sensitive", "staff-app-forecasting", "write", "Manage manpower forecasts", "staffOs", ["/staff-os/forecasting"], ["POST /staff-os/manpower-forecast"])
 ];
 
 export const permissionResources = [

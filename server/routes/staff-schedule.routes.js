@@ -2,13 +2,13 @@ import { Router } from "express";
 import { staffScheduleService } from "../services/staff-schedule.service.js";
 import { staffShiftSwapService } from "../services/staff-shift-swap.service.js";
 import { route } from "./staff-os-route-utils.js";
-import { requireAnyPermission, requireSelfServiceOrAnyPermission } from "../middleware/rbac.js";
+import { requireStaffAppPermission, requireStaffAppSelfOrPermission } from "../middleware/rbac.js";
 import { derivedStaffQuery, managedStaffAccess } from "../middleware/staff-self-context.middleware.js";
 
 export const staffScheduleRouter = Router();
 
-const canReadOwnSchedule = requireSelfServiceOrAnyPermission("read", "staff", [{ action: "read", resource: "staff" }]);
-const canManageSchedule = requireAnyPermission([{ action: "write", resource: "staff" }]);
+const canReadOwnSchedule = requireStaffAppSelfOrPermission("read", "staff-app-appointments");
+const canManageSchedule = requireStaffAppPermission("write", "staff-app-staff");
 
 staffScheduleRouter.get("/staff-os/schedules", canReadOwnSchedule, derivedStaffQuery(), route((req, res) => res.json(staffScheduleService.listSchedules(req.query, managedStaffAccess(req.access)))));
 staffScheduleRouter.post("/staff-os/schedules", canManageSchedule, route((req, res) => res.status(201).json(staffScheduleService.createSchedule(req.body, req.access))));

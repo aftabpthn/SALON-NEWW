@@ -4,6 +4,9 @@ import android.Manifest;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
@@ -35,6 +38,10 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
+import com.google.android.play.core.integrity.IntegrityManager;
+import com.google.android.play.core.integrity.IntegrityManagerFactory;
+import com.google.android.play.core.integrity.IntegrityTokenRequest;
+import com.google.android.play.core.integrity.IntegrityTokenResponse;
 
 import org.json.JSONObject;
 
@@ -47,8 +54,12 @@ import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Signature;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 import javax.crypto.Cipher;
@@ -85,16 +96,18 @@ public class AttendanceBiometricPlugin extends Plugin {
         final String capturedAt;
         final boolean mockLocation;
         final String integrityVerdict;
+        final String integrityToken;
         final long cachedAt;
 
-        CachedLocation(String receipt, Location location) {
+        CachedLocation(String receipt, Location location, String integrityToken) {
             this.receipt = receipt;
             latitude = location.getLatitude();
             longitude = location.getLongitude();
             accuracyMeters = location.getAccuracy();
             capturedAt = Instant.ofEpochMilli(location.getTime() > 0 ? location.getTime() : System.currentTimeMillis()).toString();
             mockLocation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? location.isMock() : LocationCompat.isMock(location);
-            integrityVerdict = "not_provided";
+            integrityVerdict = integrityToken != null ? "provided" : "not_provided";
+            this.integrityToken = integrityToken;
             cachedAt = System.currentTimeMillis();
         }
     }
@@ -103,18 +116,64 @@ public class AttendanceBiometricPlugin extends Plugin {
     public void getInstallationIdentity(PluginCall call) {
         try {
             if (!ensureSecureLock(call)) return;
+            String installationId = getOrCreateInstallationId();
             KeyPair keyPair = getOrCreateSigningKey();
             JSObject result = keyDetails(keyPair);
-            result.put("installationId", getOrCreateInstallationId());
+            result.put("installationId", installationId);
             result.put("algorithm", "ECDSA_P256_SHA256");
             result.put("biometricLabel", "Android biometric or device credential");
             result.put("verificationCapability", "biometric_or_device_credential");
-            result.put("attestationStatus", "unverified");
+            String[] attestationChain = getAttestationChain();
+            result.put("attestationStatus", attestationChain.length > 1 ? "attested" : "unverified");
+            result.put("attestationChain", String.join(",", attestationChain));
             call.resolve(result);
         } catch (KeyPermanentlyInvalidatedException error) {
             reject(call, "KEY_INVALIDATED", "The secure lock configuration changed. Re-register this installation.", error, null);
         } catch (Exception error) {
             reject(call, "KEYSTORE_ERROR", "Unable to access the secure attendance identity.", error, null);
+        }
+    }
+
+    @PluginMethod
+    public void requestIntegrityToken(PluginCall call) {
+        String nonce = call.getString("nonce");
+        if (nonce == null || nonce.isEmpty()) {
+            reject(call, "NONCE_REQUIRED", "A nonce is required for integrity verification.", null, null);
+            return;
+        }
+        try {
+            IntegrityManager integrityManager = IntegrityManagerFactory.create(getContext());
+            IntegrityTokenRequest request = IntegrityTokenRequest.builder()
+                .setNonce(nonce)
+                .setCloudProjectNumber(0)
+                .build();
+            integrityManager.requestIntegrityToken(request)
+                .addOnSuccessListener(response -> {
+                    try {
+                        String token = response.token();
+                        JSObject result = new JSObject();
+                        result.put("integrityToken", token);
+                        result.put("integrityVerdict", "provided");
+                        call.resolve(result);
+                    } catch (Exception error) {
+                        reject(call, "INTEGRITY_TOKEN_ERROR", "Failed to extract integrity token.", error, null);
+                    }
+                })
+                .addOnFailureListener(error -> {
+                    String message = error.getMessage();
+                    String verdict = "failed";
+                    if (message != null && message.contains("PLAY_STORE_NOT_FOUND")) {
+                        verdict = "play_store_not_found";
+                    } else if (message != null && message.contains("API_NOT_AVAILABLE")) {
+                        verdict = "api_not_available";
+                    }
+                    JSObject result = new JSObject();
+                    result.put("integrityToken", "");
+                    result.put("integrityVerdict", verdict);
+                    call.resolve(result);
+                });
+        } catch (Exception error) {
+            reject(call, "INTEGRITY_UNAVAILABLE", "Play Integrity API is unavailable on this device.", error, null);
         }
     }
 
@@ -189,7 +248,7 @@ public class AttendanceBiometricPlugin extends Plugin {
             reject(call, "LOCATION_ACCURACY_EXCEEDED", "Location accuracy exceeds the attendance policy.", null, data);
             return;
         }
-        CachedLocation receipt = new CachedLocation(UUID.randomUUID().toString(), location);
+        CachedLocation receipt = new CachedLocation(UUID.randomUUID().toString(), location, null);
         cachedLocation = receipt;
         JSObject result = new JSObject();
         result.put("locationReceipt", receipt.receipt);
@@ -290,6 +349,10 @@ public class AttendanceBiometricPlugin extends Plugin {
             .setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setUserAuthenticationRequired(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            byte[] attestationChallenge = MessageDigest.getInstance("SHA-256").digest(getOrCreateInstallationId().getBytes(StandardCharsets.UTF_8));
+            builder.setAttestationChallenge(attestationChallenge);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setUserAuthenticationParameters(30, KeyProperties.AUTH_BIOMETRIC_STRONG | KeyProperties.AUTH_DEVICE_CREDENTIAL);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -299,6 +362,23 @@ public class AttendanceBiometricPlugin extends Plugin {
         }
         generator.initialize(builder.build());
         return generator.generateKeyPair();
+    }
+
+    private String[] getAttestationChain() {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            if (!keyStore.containsAlias(SIGNING_KEY_ALIAS)) return new String[0];
+            Certificate[] chain = keyStore.getCertificateChain(SIGNING_KEY_ALIAS);
+            if (chain == null || chain.length == 0) return new String[0];
+            List<String> encoded = new ArrayList<>();
+            for (Certificate cert : chain) {
+                encoded.add(Base64.encodeToString(cert.getEncoded(), Base64.NO_WRAP));
+            }
+            return encoded.toArray(new String[0]);
+        } catch (Exception ignored) {
+            return new String[0];
+        }
     }
 
     private JSObject keyDetails(KeyPair keyPair) throws Exception {

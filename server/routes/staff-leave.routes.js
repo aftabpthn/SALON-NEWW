@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAnyPermission, requireSelfServiceOrAnyPermission } from "../middleware/rbac.js";
+import { requireStaffAppPermission, requireStaffAppSelfOrPermission } from "../middleware/rbac.js";
 import { derivedStaffMutation, derivedStaffQuery, managedStaffAccess } from "../middleware/staff-self-context.middleware.js";
 import { staffLeaveRequestService } from "../services/staff-leave-request.service.js";
 import { staffLeaveService } from "../services/staff-leave.service.js";
@@ -7,18 +7,9 @@ import { route } from "./staff-os-route-utils.js";
 
 export const staffLeaveRouter = Router();
 
-const canWriteStaffLeave = requireAnyPermission([
-  { action: "write", resource: "staff" },
-  { action: "update", resource: "staff" }
-]);
-const canUseOwnLeave = requireSelfServiceOrAnyPermission("write", "staff", [
-  { action: "write", resource: "staff" },
-  { action: "update", resource: "staff" }
-]);
-const canReadOwnLeave = requireSelfServiceOrAnyPermission("read", "staff", [
-  { action: "read", resource: "staff" },
-  { action: "write", resource: "staff" }
-]);
+const canWriteStaffLeave = requireStaffAppPermission("update", "staff-app-staff");
+const canUseOwnLeave = requireStaffAppSelfOrPermission("write", "staff-app-staff");
+const canReadOwnLeave = requireStaffAppSelfOrPermission("read", "staff-app-staff");
 
 staffLeaveRouter.post("/staff-os/leaves", canUseOwnLeave, derivedStaffMutation(), route((req, res) => res.status(201).json(staffLeaveRequestService.requestLeave(req.body, managedStaffAccess(req.access)))));
 staffLeaveRouter.patch("/staff-os/leaves/:id/approve", canWriteStaffLeave, route((req, res) => res.json(staffLeaveService.decideLeave(req.params.id, "approved", req.body, managedStaffAccess(req.access)))));

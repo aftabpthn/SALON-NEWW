@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { db, columnsFor } from "../db.js";
 import { staffAppPermissionCatalog } from "../config/staff-permission-catalog.js";
-import { can } from "../middleware/rbac.js";
+import { builtinRoles, can } from "../middleware/rbac.js";
 import { securityService } from "./security.service.js";
 import { generalSettingsService } from "./general-settings.service.js";
 import { tenantService } from "./tenant.service.js";
-import { badRequest, forbidden, notFound } from "../utils/app-error.js";
+import { badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
+import { assertActiveStaffAppRole, restoreStaffAppRoleDefaults, saveStaffAppRolePolicy, staffAppCatalogueKeys, staffAppRolePolicy } from "./staff-app-role-policy.service.js";
 
 const text = (value) => String(value ?? "").trim();
 const lower = (value) => text(value).toLowerCase();
@@ -76,18 +77,15 @@ function validateBranchAssignments(owner, branchIds, role) {
   return ids;
 }
 
-function assertAssignableRole(role, access) {
+function assertAssignableRole(role, access, branchIds = []) {
   const management = securityService.permissionMatrix(access);
   const found = management.roles.find((item) => item.role === role);
   if (!found) throw badRequest("Role does not exist");
-  const custom = management.customRoles.find((item) => item.role === role);
-  if (custom && lower(custom.status) !== "active") throw badRequest("Inactive roles cannot be assigned");
+  for (const branchId of branchIds.length ? branchIds : [""]) assertActiveStaffAppRole(access.tenantId, role, branchId, { assignable: true });
 }
 
 function catalogueKeys() {
-  const keys = new Set();
-  for (const item of staffAppPermissionCatalog) keys.add(`${item.action}:${item.resource}`);
-  return keys;
+  return new Set(staffAppCatalogueKeys());
 }
 
 function validatePermissionKeys(keys) {
@@ -127,19 +125,41 @@ function userInOwnerScope(user, owner) {
   return assigned.some((branchId) => owner.branchIds.includes(branchId));
 }
 
-function accessCatalogue(access, owner) {
+function accessCatalogue(access, owner, branchId = "") {
+  if (branchId) branchById(owner, branchId);
   const management = securityService.userManagement(access);
+  const visibleUsers = management.users.filter((user) => userInOwnerScope(user, owner));
   const staffAppKeys = catalogueKeys();
   const permissionGroups = [...new Map(staffAppPermissionCatalog.map((item) => [item.groupKey, { key: item.groupKey, label: item.groupLabel }])).values()].map((group) => {
-    const items = staffAppPermissionCatalog.filter((item) => item.groupKey === group.key).map((item) => ({ key: `${item.action}:${item.resource}`, label: item.label, resource: item.resource, action: item.action, sensitive: ["staff-app-finance", "staff-app-payroll"].includes(item.resource) }));
+    const items = staffAppPermissionCatalog.filter((item) => item.groupKey === group.key).map((item) => ({ key: `${item.action}:${item.resource}`, label: item.label, resource: item.resource, action: item.action, sensitive: item.groupKey === "staff-os-sensitive" || ["staff-app-finance", "staff-app-payroll"].includes(item.resource), apiTargets: item.apiTargets }));
     return { ...group, items: [...new Map(items.map((item) => [item.key, item])).values()] };
   });
   return {
     branches: assignedBranches(owner),
-    roles: management.roles.map((role) => ({ ...role, status: management.customRoles.find((item) => item.role === role.role)?.status || "active", permissionKeys: rolePermissionKeys(management, role.role).filter((key) => staffAppKeys.has(key)), editable: !Number(role.isSystem) })),
-    users: management.users.filter((user) => userInOwnerScope(user, owner)),
+    roles: management.roles.map((role) => {
+      const policy = staffAppRolePolicy(owner.tenantId, branchId, role.role);
+      const assigned = visibleUsers.filter((user) => user.role === role.role && (!branchId || jsonArray(user.branchIds).includes(branchId)));
+      return {
+        ...role,
+        status: policy.status,
+        permissionKeys: policy.effectiveKeys.filter((key) => staffAppKeys.has(key)),
+        configuredKeys: policy.configuredKeys,
+        inheritedKeys: policy.inheritedKeys,
+        effectiveKeys: policy.effectiveKeys,
+        allowKeys: policy.allowKeys,
+        denyKeys: policy.denyKeys,
+        policyMode: policy.mode,
+        policySource: policy.source,
+        editablePolicy: policy.editablePolicy,
+        kind: policy.kind,
+        editable: policy.kind === "custom",
+        assignedUserCount: assigned.length,
+        activeAssignedUserCount: assigned.filter((user) => user.status === "active").length
+      };
+    }),
+    users: visibleUsers,
     permissionGroups,
-    capabilities: { createRole: true, editCustomRole: true, duplicateRole: true, setCustomRoleStatus: true, createUser: true, updateUser: true, disableUser: true },
+    capabilities: { createRole: true, editCustomRole: true, editBuiltinStaffAppPolicy: true, restoreRoleDefaults: true, duplicateRole: true, setCustomRoleStatus: true, createUser: true, updateUser: true, disableUser: true },
     safeguards: { lastActiveOwner: true, ownerEssentialAccess: true, assignmentsLimitedToOwnerBranches: true, permissionVersionInvalidation: true }
   };
 }
@@ -217,9 +237,9 @@ export const ownerAdministrationService = {
     return { branch: branchView(branchById(owner, existing.id)) };
   },
 
-  access(access) {
+  access(access, query = {}) {
     requireGrant(access, "read", "security");
-    return accessCatalogue(access, activeOwner(access));
+    return accessCatalogue(access, activeOwner(access), text(query.branchId));
   },
 
   saveRole(payload, access, req) {
@@ -228,33 +248,49 @@ export const ownerAdministrationService = {
     const role = text(payload.role);
     const existing = db.prepare(`SELECT * FROM role_definitions WHERE tenantId = @tenantId AND role = @role`).get({ tenantId: owner.tenantId, role });
     const catalogueRole = securityService.permissionMatrix(access).roles.find((item) => item.role === role);
-    if ((existing && Number(existing.isSystem)) || Number(catalogueRole?.isSystem)) throw forbidden("System roles cannot be edited");
-    const status = lower(payload.status || existing?.status || "active");
+    if (!role) throw badRequest("Role is required");
+    const isBuiltin = builtinRoles().includes(role);
+    if ((existing || isBuiltin) && (payload.createOnly === true || payload.intent === "create")) throw conflict(`Role '${role}' already exists`);
+    if (["owner", "superAdmin"].includes(role)) throw forbidden("Owner and super admin access cannot be changed");
+    const branchId = text(payload.branchId);
+    if (branchId) branchById(owner, branchId);
+    const currentPolicy = staffAppRolePolicy(owner.tenantId, branchId, role);
+    const status = lower(payload.status || currentPolicy.status || existing?.status || "active");
     if (!roleStatuses.has(status)) throw badRequest("Role status must be active or inactive");
-    const keys = validatePermissionKeys(payload.permissionKeys);
-    if (!keys.length) throw badRequest("Choose at least one catalogue permission");
+    const hasConfiguredKeys = Object.prototype.hasOwnProperty.call(payload, "permissionKeys") || Object.prototype.hasOwnProperty.call(payload, "allowKeys");
+    const keys = hasConfiguredKeys ? validatePermissionKeys(payload.permissionKeys ?? payload.allowKeys ?? []) : currentPolicy.allowKeys;
+    const denyKeys = payload.denyKeys !== undefined
+      ? validatePermissionKeys(payload.denyKeys)
+      : hasConfiguredKeys ? staffAppCatalogueKeys().filter((key) => !keys.includes(key)) : currentPolicy.denyKeys;
+    const mode = payload.mode === "inherited" ? "inherited" : payload.mode === "override" || hasConfiguredKeys || payload.denyKeys !== undefined ? "override" : currentPolicy.mode;
     const appResources = [...new Set(staffAppPermissionCatalog.map((item) => item.resource))];
-    const save = db.transaction(() => {
+    let savedDefinition = null;
+    if (!isBuiltin) {
       const storedPermissions = db.prepare(`SELECT resource, actions, effect, conditions, status FROM security_permissions WHERE tenantId = @tenantId AND role = @role`).all({ tenantId: owner.tenantId, role });
       const preservedPermissions = storedPermissions.filter((item) => !appResources.includes(item.resource)).map((item) => ({ ...item, actions: jsonArray(item.actions), conditions: jsonObject(item.conditions) }));
-      const resourceParams = { updatedAt: now(), tenantId: owner.tenantId, role };
-      const resourceSlots = appResources.map((resource, index) => { resourceParams[`resource${index}`] = resource; return `@resource${index}`; });
-      db.prepare(`UPDATE security_permissions SET status = 'inactive', updatedAt = @updatedAt WHERE tenantId = @tenantId AND role = @role AND resource IN (${resourceSlots.join(",")})`).run(resourceParams);
-      const result = securityService.upsertRoleDefinition({ role, name: text(payload.name), description: text(payload.description), status, permissions: [...preservedPermissions, ...permissionRows(keys, status)], isSystem: false }, access, req);
-      const users = db.prepare(`SELECT id FROM tenant_users WHERE tenantId = @tenantId AND role = @role`).all({ tenantId: owner.tenantId, role });
-      if (users.length) db.prepare(`UPDATE tenant_users SET permissionVersion = permissionVersion + 1, updatedAt = @updatedAt WHERE tenantId = @tenantId AND role = @role`).run({ updatedAt: now(), tenantId: owner.tenantId, role });
-      return { result, users };
-    });
-    const { result, users } = save();
-    return { role: result.definition, access: accessCatalogue(access, activeOwner(access)), invalidatedUsers: users.length };
+      savedDefinition = securityService.upsertRoleDefinition({ role, name: text(payload.name || existing?.name || role), description: payload.description === undefined ? existing?.description || "" : text(payload.description), status, permissions: preservedPermissions, isSystem: false, skipPermissionVersionInvalidation: true }, access, req).definition;
+    }
+    const saved = saveStaffAppRolePolicy({ tenantId: owner.tenantId, branchId, role, mode, allowKeys: keys, denyKeys, status, updatedBy: owner.id, tenantWideStatusChange: !isBuiltin && Boolean(existing) && existing.status !== status });
+    securityService.audit({ action: "staff_app_role_policy.updated", targetType: "role_definition", targetId: role, details: { branchId, mode, status, effectiveKeys: saved.policy.effectiveKeys, impact: saved.impact } }, access, req);
+    return { role: { ...(savedDefinition || catalogueRole), ...saved.policy }, policy: saved.policy, impact: saved.impact, invalidatedUsers: saved.impact.affectedUsers, requiresReauthentication: saved.impact.requiresReauthentication, access: accessCatalogue(access, activeOwner(access), branchId) };
+  },
+
+  restoreRoleDefaults(role, payload, access, req) {
+    requireGrant(access, "write", "security");
+    const owner = activeOwner(access);
+    const branchId = text(payload?.branchId);
+    if (branchId) branchById(owner, branchId);
+    const restored = restoreStaffAppRoleDefaults({ tenantId: owner.tenantId, branchId, role: text(role), updatedBy: owner.id });
+    securityService.audit({ action: "staff_app_role_policy.restored", targetType: "role_definition", targetId: text(role), details: { branchId, impact: restored.impact } }, access, req);
+    return { role: restored.policy, policy: restored.policy, impact: restored.impact, invalidatedUsers: restored.impact.affectedUsers, requiresReauthentication: restored.impact.requiresReauthentication, access: accessCatalogue(access, activeOwner(access), branchId) };
   },
 
   createUser(payload, access, req) {
     requireGrant(access, "write", "security");
     const owner = activeOwner(access);
     const role = text(payload.role);
-    assertAssignableRole(role, access);
     const branchIds = validateBranchAssignments(owner, payload.branchIds, role);
+    assertAssignableRole(role, access, branchIds);
     const result = securityService.createTenantUser({ ...payload, role, branchIds, status: userStatuses.has(lower(payload.status)) ? lower(payload.status) : "active" }, access, req);
     return { user: result.user, access: accessCatalogue(access, activeOwner(access)) };
   },
@@ -265,9 +301,10 @@ export const ownerAdministrationService = {
     const existing = db.prepare(`SELECT * FROM tenant_users WHERE tenantId = @tenantId AND id = @id`).get({ tenantId: owner.tenantId, id: text(userId) });
     if (!existing) throw notFound("User not found");
     if (!userInOwnerScope(existing, owner)) throw forbidden("This user is outside the owner's assigned branches");
+    if (["owner", "superAdmin"].includes(existing.role) && existing.id !== owner.id) throw forbidden("Existing owner and super admin accounts cannot be changed here");
     const role = payload.role === undefined ? existing.role : text(payload.role);
-    assertAssignableRole(role, access);
     const branchIds = payload.branchIds === undefined ? jsonArray(existing.branchIds) : validateBranchAssignments(owner, payload.branchIds, role);
+    if (!["owner", "superAdmin"].includes(role) || role !== existing.role) assertAssignableRole(role, access, branchIds);
     if (existing.id === owner.id && (role !== "owner" || (payload.status !== undefined && lower(payload.status) !== "active"))) throw forbidden("Your active owner access cannot be removed from this session");
     const result = securityService.updateTenantUser(existing.id, { ...payload, role, branchIds }, access, req);
     return { user: result.user, access: accessCatalogue(access, activeOwner(access)) };

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { forbidden, unauthorized } from "../utils/app-error.js";
 import { db } from "../db.js";
+import { staffAppPermissionAllowed } from "../services/staff-app-role-policy.service.js";
 
 const permissions = {
   superAdmin: ["*"],
@@ -285,6 +286,7 @@ function auditDenied(req, { action = "", resource = "", reason = "forbidden" } =
 
 export function can(role, action, resource, access = {}) {
   role = normalizeRole(role);
+  if (resource.startsWith("staff-app-")) return staffAppPermissionAllowed(role, action, resource, access);
   if (cappedBuiltinRoles.has(role) && !resource.startsWith("staff-app-")) {
     return staticGrantAllows(permissions[role] || [], action, resource);
   }
@@ -313,10 +315,6 @@ export function can(role, action, resource, access = {}) {
     // Fall back to built-in grants when persisted role grants cannot be inspected.
   }
   if (staticGrantAllows(grants, action, resource)) return true;
-  if (!resource.startsWith("staff-app-")) {
-    const staffAppResource = `staff-app-${resource}`;
-    if (can(role, action, staffAppResource, access)) return true;
-  }
   return false;
 }
 export function requirePermission(action, resourceResolver = (req) => req.params.resource || "system") {
@@ -380,23 +378,6 @@ export function requireSelfServiceOrAnyPermission(action, resources, checks = []
   };
 }
 
-function hasStaffAppPolicy(role, access = {}) {
-  const sessionHasStaffAppPolicy = (access.permissions || []).some((grant) => String(grant || "").includes(":staff-app-"));
-  if (sessionHasStaffAppPolicy) return true;
-  if (cappedBuiltinRoles.has(normalizeRole(role))) return false;
-  try {
-    return Boolean(db.prepare(`SELECT 1
-      FROM security_permissions
-      WHERE tenantId = @tenantId
-        AND role = @role
-        AND resource LIKE 'staff-app-%'
-        AND status = 'active'
-      LIMIT 1`).get({ tenantId: access.tenantId || "", role: normalizeRole(role) }));
-  } catch {
-    return false;
-  }
-}
-
 export function requireStaffAppSelfPermission(action, resource) {
   return (req, _res, next) => {
     if (!req.access?.staffId) {
@@ -406,19 +387,22 @@ export function requireStaffAppSelfPermission(action, resource) {
     }
     const role = req.access.role || req.user?.role || "staff";
     const checkedAction = requestAction(action, req);
-    const legacyResource = String(resource || "").replace(/^staff-app-/, "");
-    const sessionHasStaffAppPolicy = (req.access.permissions || []).some((grant) => String(grant || "").includes(":staff-app-"));
-    if (!sessionHasStaffAppPolicy && staticGrantAllows(req.access.permissions || [], checkedAction, legacyResource)) {
-      next();
-      return;
-    }
-    const requiredResource = hasStaffAppPolicy(role, req.access) ? resource : legacyResource;
-    if (!can(role, checkedAction, requiredResource, req.access)) {
-      auditDenied(req, { action: checkedAction, resource: requiredResource, reason: "forbidden" });
+    if (!can(role, checkedAction, resource, req.access)) {
+      auditDenied(req, { action: checkedAction, resource, reason: "forbidden" });
       next(forbidden());
       return;
     }
     next();
   };
+}
+
+export function requireStaffAppPermission(action, resource) {
+  return requirePermission(action, () => resource);
+}
+
+export function requireStaffAppSelfOrPermission(action, resource) {
+  const self = requireStaffAppSelfPermission(action, resource);
+  const managed = requireStaffAppPermission(action, resource);
+  return (req, res, next) => req.access?.staffId ? self(req, res, next) : managed(req, res, next);
 }
 

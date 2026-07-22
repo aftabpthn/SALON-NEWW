@@ -1,16 +1,13 @@
 import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
-import { requirePermission, requireSelfServiceOrAnyPermission } from "../middleware/rbac.js";
+import { requirePermission, requireStaffAppSelfPermission } from "../middleware/rbac.js";
 import { staffSelfContext } from "../middleware/staff-self-context.middleware.js";
 import { forbidden } from "../utils/app-error.js";
 import { mobileAttendanceVerificationService as service } from "../services/mobile-attendance-verification.service.js";
 
 export const mobileAttendanceVerificationRouter = Router();
 
-const staffAttendanceAccess = requireSelfServiceOrAnyPermission("write", ["staff-checkin-checkout", "staff"], [
-  { action: "allow", resource: "staff-checkin-checkout" },
-  { action: "write", resource: "staff" }
-]);
+const staffAttendanceAccess = requireStaffAppSelfPermission("allow", "staff-app-checkin-checkout");
 const readStaff = requirePermission("read", () => "staff");
 const writeStaff = requirePermission("write", () => "staff");
 const ownerOrAdmin = (req, _res, next) => ["owner", "admin"].includes(req.access?.role)

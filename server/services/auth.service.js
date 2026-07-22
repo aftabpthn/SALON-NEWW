@@ -8,6 +8,7 @@ import { assertLoginBranchScope, ensureTenantUserAccessColumns, normalizeRole } 
 import { twoFactorService } from "./two-factor.service.js";
 import { intrusionDetectionService } from "./intrusion-detection.service.js";
 import { permissionResources } from "../config/staff-permission-catalog.js";
+import { assertActiveStaffAppRole, staffAppRolePolicy } from "./staff-app-role-policy.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -121,6 +122,7 @@ export class AuthService {
     this.verifyPassword(user, payload.password, { tenantId: tenant.id, ip: request.ip || "", userAgent: request.userAgent || "" });
     this.verifyTwoFactor(user, payload, tenant.id);
     const branchId = assertLoginBranchScope(user, payload.branchId || "");
+    assertActiveStaffAppRole(tenant.id, user.role, branchId);
     if (branchId) tenantService.assertBranchAccess({ tenantId: tenant.id, role: user.role, branchIds: user.branchIds || [], branchId }, branchId);
     const device = payload.device ? this.registerDevice({ ...payload.device, userId: user.id, branchId }, { tenantId: tenant.id, userId: user.id, role: user.role, branchId, branchIds: user.branchIds || [] }) : null;
     repositories.tenantUsers.update(user.id, { failedLoginCount: 0, lockedUntil: "", lastLoginAt: now() }, { tenantId: tenant.id });
@@ -167,6 +169,12 @@ export class AuthService {
     const tenant = repositories.tenants.getById(record.tenantId);
     const user = repositories.tenantUsers.getById(record.userId, { tenantId: record.tenantId });
     if (!tenant || !user) throw unauthorized("Refresh token account no longer exists");
+    if (user.status && user.status !== "active") throw unauthorized("User is not active");
+    try {
+      assertActiveStaffAppRole(record.tenantId, normalizeRole(user.role), record.branchId || "");
+    } catch (error) {
+      throw unauthorized(error.message || "User role is no longer active");
+    }
     if (user.staffId && !fromCookie) throw unauthorized("Staff refresh requires the secure session cookie");
     repositories.authRefreshTokens.update(record.id, { revokedAt: now() }, { tenantId: record.tenantId });
     const branchId = assertLoginBranchScope({ ...user, role: normalizeRole(user.role) }, record.branchId || "");
@@ -183,7 +191,7 @@ export class AuthService {
     return { revoked: true };
   }
 
-  permissionsForUser(user, tenantId) {
+  permissionsForUser(user, tenantId, branchId = "") {
     const role = normalizeRole(user.role || "");
     const staticGrants = staticGrantsForRole(role);
     if (staticGrants.includes("*")) return ["*"];
@@ -195,14 +203,15 @@ export class AuthService {
     const grants = new Set(staticGrants);
     permissionResources.forEach((resource) => {
       actions.forEach((action) => {
-        if (can(role || "staff", action, resource, { tenantId })) grants.add(`${action}:${resource}`);
+        if (can(role || "staff", action, resource, { tenantId, branchId })) grants.add(`${action}:${resource}`);
       });
     });
     return Array.from(grants).sort();
   }
   issueTokenPair({ tenant, user, branchId = "", deviceId = "" }) {
     ensureTenantUserAccessColumns();
-    const permissions = this.permissionsForUser(user, tenant.id);
+    const permissions = this.permissionsForUser(user, tenant.id, branchId);
+    const staffAppPolicy = staffAppRolePolicy(tenant.id, branchId, normalizeRole(user.role));
     const accessPayload = {
       iss: "aura-salon-api",
       aud: "aura-mobile",
@@ -246,6 +255,8 @@ export class AuthService {
         branchId,
         branchIds: user.branchIds || [],
         permissions,
+        staffAppPermissions: staffAppPolicy.effectiveKeys,
+        staffAppPolicy: { mode: staffAppPolicy.mode, source: staffAppPolicy.source, status: staffAppPolicy.status },
         permissionVersion: Number(user.permissionVersion || 1)
       },
       tenant: {

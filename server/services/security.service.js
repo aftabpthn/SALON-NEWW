@@ -5,10 +5,11 @@ import { db, dbPath } from "../db.js";
 import { env } from "../config/env.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { builtinRoles, can, staticGrantsForRole } from "../middleware/rbac.js";
-import { badRequest, notFound } from "../utils/app-error.js";
+import { badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
 import { tenantService } from "./tenant.service.js";
 import { permissionResources, staffPermissionCatalog } from "../config/staff-permission-catalog.js";
 import { assertOwnerControl, ensureTenantUserAccessColumns, normalizeBranchIdsForRole, normalizeRole, ownerControlRoles } from "./access-control.service.js";
+import { assertActiveStaffAppRole } from "./staff-app-role-policy.service.js";
 
 const backupDir = join(dirname(dbPath), "backups");
 const now = () => new Date().toISOString();
@@ -192,6 +193,8 @@ export class SecurityService {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest("Valid email is required");
     if (password.length < 10) throw badRequest("Temporary password must be at least 10 characters");
     this.assertRoleExists(role, access);
+    const normalizedBranchIds = normalizeBranchIdsForRole(payload.branchIds || payload.branchIdsText, role);
+    for (const branchId of normalizedBranchIds.length ? normalizedBranchIds : [""]) assertActiveStaffAppRole(access.tenantId, role, branchId, { assignable: true });
     const duplicate = db.prepare(
       `SELECT id FROM tenant_users
         WHERE tenantId = @tenantId
@@ -207,7 +210,7 @@ export class SecurityService {
       loginId: String(payload.loginId || "").trim(),
       email,
       role,
-      branchIds: JSON.stringify(normalizeBranchIdsForRole(payload.branchIds || payload.branchIdsText, role)),
+      branchIds: JSON.stringify(normalizedBranchIds),
       staffId: String(payload.staffId || "").trim(),
       passwordSalt: salt,
       passwordHash: passwordHashFor(password, salt),
@@ -245,6 +248,13 @@ export class SecurityService {
         WHERE tenantId = @tenantId AND id = @id`
     ).get({ tenantId: access.tenantId, id: userId });
     if (!existing) throw notFound("User not found");
+    const existingRole = normalizeRole(existing.role);
+    if (["owner", "superAdmin"].includes(existingRole) && existing.id !== access.userId) throw forbidden("Existing owner and super admin accounts cannot be changed by another user");
+    if (["owner", "superAdmin"].includes(existingRole) && (
+      (payload.role !== undefined && normalizeRole(payload.role) !== existingRole) ||
+      (payload.status !== undefined && payload.status !== existing.status) ||
+      payload.branchIds !== undefined || payload.branchIdsText !== undefined || payload.lockMinutes || payload.lockedUntil
+    )) throw forbidden("Owner and super admin access fields cannot be changed through user administration");
     const next = {
       id: existing.id,
       tenantId: existing.tenantId,
@@ -271,6 +281,9 @@ export class SecurityService {
     if (!tenantUserStatuses.has(next.status)) throw badRequest("Invalid user status");
     next.branchIds = JSON.stringify(normalizeBranchIdsForRole(safeJsonArray(next.branchIds), next.role));
     this.assertRoleExists(next.role, access);
+    if (!["owner", "superAdmin"].includes(next.role) || next.role !== normalizeRole(existing.role)) {
+      for (const branchId of safeJsonArray(next.branchIds)) assertActiveStaffAppRole(access.tenantId, next.role, branchId, { assignable: true });
+    }
     const duplicate = db.prepare(
       `SELECT id FROM tenant_users
         WHERE tenantId = @tenantId
@@ -290,7 +303,8 @@ export class SecurityService {
       next.failedLoginCount = 0;
       next.lockedUntil = "";
     }
-    if (next.role !== normalizeRole(existing.role) || next.branchIds !== existing.branchIds || next.status !== (existing.status || "active") || newPassword) {
+    const accessChanged = next.role !== normalizeRole(existing.role) || next.branchIds !== existing.branchIds || next.status !== (existing.status || "active") || Boolean(newPassword);
+    if (accessChanged) {
       next.permissionVersion += 1;
       next.accessApprovedBy = access.userId || next.accessApprovedBy;
       next.accessApprovedAt = now();
@@ -316,6 +330,10 @@ export class SecurityService {
               updatedAt = @updatedAt
         WHERE tenantId = @tenantId AND id = @id`
     ).run(next);
+    if (accessChanged) {
+      db.prepare(`UPDATE auth_refresh_tokens SET revokedAt = @revokedAt, updatedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND COALESCE(revokedAt, '') = ''`).run({ revokedAt: next.updatedAt, tenantId: access.tenantId, userId: existing.id });
+      db.prepare(`UPDATE security_sessions SET revokedAt = @revokedAt, status = 'revoked', updatedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND status = 'active' AND COALESCE(revokedAt, '') = ''`).run({ revokedAt: next.updatedAt, tenantId: access.tenantId, userId: existing.id });
+    }
     this.audit({
       action: "tenant_user.updated",
       targetType: "tenant_user",
@@ -335,30 +353,32 @@ export class SecurityService {
   }
 
   assertNotLastOwner(existing, next, access) {
-    const wasOwner = ownerControlRoles.has(existing.role);
-    const willRemainActiveOwner = ownerControlRoles.has(next.role) && next.status === "active" && !(next.lockedUntil && next.lockedUntil > now());
+    const wasOwner = normalizeRole(existing.role) === "owner";
+    const willRemainActiveOwner = normalizeRole(next.role) === "owner" && next.status === "active" && !(next.lockedUntil && next.lockedUntil > now());
     if (!wasOwner || willRemainActiveOwner) return;
     const activeOwners = db.prepare(
       `SELECT COUNT(*) AS total
          FROM tenant_users
         WHERE tenantId = @tenantId
           AND id <> @id
-          AND role IN ('owner', 'admin', 'superAdmin')
+           AND role = 'owner'
           AND status = 'active'
           AND (lockedUntil = '' OR lockedUntil <= @stamp)`
     ).get({ tenantId: access.tenantId, id: existing.id, stamp: now() });
-    if (Number(activeOwners?.total || 0) === 0) throw badRequest("At least one active owner/admin must remain");
+    if (Number(activeOwners?.total || 0) === 0) throw badRequest("At least one active owner must remain");
   }
 
   upsertRoleDefinition(payload = {}, access, req = null) {
     if (!payload.role || !payload.name) throw badRequest("role and name are required");
     const role = String(payload.role).trim();
+    const storedDefinition = db.prepare("SELECT id, isSystem FROM role_definitions WHERE tenantId = @tenantId AND role = @role").get({ tenantId: access.tenantId, role });
+    if ((payload.createOnly === true || payload.intent === "create") && (storedDefinition || builtinRoles().includes(role))) throw conflict(`Role '${role}' already exists`);
+    if (builtinRoles().includes(role) || Number(storedDefinition?.isSystem)) throw forbidden("System role metadata and keys cannot be edited");
     if (!/^[a-zA-Z][a-zA-Z0-9_-]{2,40}$/.test(role)) {
       throw badRequest("role must start with a letter and use letters, numbers, _ or -");
     }
     const permissions = Array.isArray(payload.permissions) ? payload.permissions : [];
-    if (!permissions.length) throw badRequest("permissions array is required");
-    const existing = db.prepare("SELECT id FROM role_definitions WHERE tenantId = @tenantId AND role = @role").get({ tenantId: access.tenantId, role });
+    const existing = storedDefinition;
     const data = {
       role,
       name: payload.name,
@@ -392,7 +412,24 @@ export class SecurityService {
     });
 
     this.audit({ action: "role.upserted", targetType: "role_definition", targetId: definition.id, details: data }, access, req);
-    return { definition, matrix: this.permissionMatrix(access) };
+    const users = db.prepare(`SELECT id, status FROM tenant_users WHERE tenantId = @tenantId AND role = @role`).all({ tenantId: access.tenantId, role });
+    const activeSessions = db.prepare(`SELECT COUNT(*) AS total FROM security_sessions WHERE tenantId = @tenantId AND role = @role AND status = 'active' AND COALESCE(revokedAt, '') = ''`).get({ tenantId: access.tenantId, role });
+    if (users.length && !payload.skipPermissionVersionInvalidation) {
+      const revokedAt = now();
+      db.prepare(`UPDATE tenant_users SET permissionVersion = COALESCE(permissionVersion, 1) + 1, updatedAt = @updatedAt WHERE tenantId = @tenantId AND role = @role`).run({ updatedAt: revokedAt, tenantId: access.tenantId, role });
+      db.prepare(`UPDATE auth_refresh_tokens SET revokedAt = @revokedAt, updatedAt = @revokedAt WHERE tenantId = @tenantId AND userId IN (SELECT id FROM tenant_users WHERE tenantId = @tenantId AND role = @role) AND COALESCE(revokedAt, '') = ''`).run({ revokedAt, tenantId: access.tenantId, role });
+      db.prepare(`UPDATE security_sessions SET revokedAt = @revokedAt, status = 'revoked', updatedAt = @revokedAt WHERE tenantId = @tenantId AND role = @role AND status = 'active' AND COALESCE(revokedAt, '') = ''`).run({ revokedAt, tenantId: access.tenantId, role });
+    }
+    return {
+      definition,
+      matrix: this.permissionMatrix(access),
+      impact: {
+        affectedUsers: payload.skipPermissionVersionInvalidation ? 0 : users.length,
+        activeAffectedUsers: payload.skipPermissionVersionInvalidation ? 0 : users.filter((user) => user.status === "active").length,
+        affectedActiveSessions: payload.skipPermissionVersionInvalidation ? 0 : Number(activeSessions?.total || 0),
+        requiresReauthentication: !payload.skipPermissionVersionInvalidation && users.length > 0
+      }
+    };
   }
 
   complianceSummary(query = {}, access) {

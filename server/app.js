@@ -21,6 +21,7 @@ import { ensureAppointmentActivitySchema } from "./services/appointment-activity
 import { ensureEnterpriseSchedulerSchema } from "./services/enterprise-scheduler-schema.service.js";
 import { ensureClientMasterSchema } from "./services/client-master-schema.service.js";
 import { ensureStaffOsSchema } from "./services/staff-os-schema.service.js";
+import { ensureStaffAppRolePolicySchema } from "./services/staff-app-role-policy.service.js";
 import { ensureAttendanceVerificationSchema } from "./services/attendance-verification-schema.service.js";
 import { ensureStatutoryComplianceSchema } from "./services/compliance/compliance-schema.service.js";
 import { ensureInvoiceNotificationSchema } from "./services/invoice-notification-schema.service.js";
@@ -276,6 +277,7 @@ export function createApp() {
   ensureEnterpriseSchedulerSchema();
   ensureClientMasterSchema();
   ensureStaffOsSchema();
+  ensureStaffAppRolePolicySchema();
   ensureAttendanceVerificationSchema();
   ensureStatutoryComplianceSchema();
   ensureInvoiceNotificationSchema();
@@ -570,7 +572,7 @@ export function createApp() {
   app.use("/api/v1", authenticateJwt(), staffEnterpriseRouter);
   app.use("/api/v1", authenticateJwt(), staffBusinessRouter);
   app.use("/api/v1", authenticateJwt(), staffSelfRouter);
-  app.use("/api/v1", teamChatRouter);
+  app.use("/api/v1", authenticateJwt(), teamChatRouter);
   app.use("/api/v1", authenticateJwt(), enterpriseCommandRouter);
   app.use("/api/v1", authenticateJwt(), engagementRouter);
   app.use("/api/v1", leadManagementRouter);
@@ -634,7 +636,7 @@ export function createApp() {
   });
 
 
-  const legacyApiAuth = env.nodeEnv === "production" ? authenticateJwt() : (_req, _res, next) => next();
+  const legacyApiAuth = authenticateJwt();
   app.use("/api", calendarPublicRouter);
   app.use("/api", bookingPaymentsPublicRouter);
   app.use("/api", paymentPublicRouter);

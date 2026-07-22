@@ -1,7 +1,7 @@
 import { can, normalizeRole } from "../middleware/rbac.js";
 
 const adminRoles = new Set(["owner", "admin", "superAdmin"]);
-const financialResources = ["finance", "sales", "payments", "invoices"];
+const financialResources = ["staff-app-finance", "staff-app-sales", "staff-app-payments", "staff-app-invoices"];
 const financialExactFields = new Set(["total", "paid", "sales", "salescount", "appointmentvalue", "aicoach"]);
 const privateClientFields = new Set(["notes", "allergies", "medicalnotes", "medicalhistory", "privatenotes", "healthnotes", "birthday", "dateofbirth", "clientprofile", "clientpreferences", "mediaportfolio"]);
 
@@ -9,23 +9,10 @@ function normalizedField(field) {
   return String(field || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
-function grants(access, action, resource) {
-  const permissions = access?.permissions || [];
-  return permissions.includes("*") ||
-    permissions.includes(`${action}:*`) ||
-    permissions.includes(`${action}:${resource}`) ||
-    permissions.includes(`write:${resource}`) ||
-    permissions.includes(`admin:${resource}`);
-}
-
 function hasFinancialAccess(access = {}) {
   const role = normalizeRole(access.role || "staff");
   if (adminRoles.has(role)) return true;
-  return financialResources.some((resource) =>
-    grants(access, "read", resource) ||
-    can(role, "read", resource, access) ||
-    can(role, "write", resource, access)
-  );
+  return financialResources.some((resource) => can(role, "read", resource, access));
 }
 
 function withoutFields(value, restricted) {

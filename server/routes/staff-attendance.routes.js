@@ -1,21 +1,14 @@
 import { Router } from "express";
-import { requireAnyPermission, requireSelfServiceOrAnyPermission } from "../middleware/rbac.js";
+import { requireStaffAppPermission, requireStaffAppSelfOrPermission } from "../middleware/rbac.js";
 import { staffAttendanceService } from "../services/staff-attendance.service.js";
 import { route } from "./staff-os-route-utils.js";
 import { derivedStaffMutation, derivedStaffQuery, managedStaffAccess } from "../middleware/staff-self-context.middleware.js";
 
 export const staffAttendanceRouter = Router();
 
-const canUseAttendance = requireSelfServiceOrAnyPermission("write", ["staff-checkin-checkout", "staff"], [
-  { action: "allow", resource: "staff-checkin-checkout" },
-  { action: "write", resource: "staff" }
-]);
-const canReadAttendance = requireSelfServiceOrAnyPermission("read", ["staff-checkin-checkout", "staff"], [
-  { action: "allow", resource: "staff-checkin-checkout" },
-  { action: "read", resource: "staff" },
-  { action: "write", resource: "staff" }
-]);
-const canCorrectAttendance = requireAnyPermission([{ action: "write", resource: "staff" }]);
+const canUseAttendance = requireStaffAppSelfOrPermission("allow", "staff-app-checkin-checkout");
+const canReadAttendance = requireStaffAppSelfOrPermission("read", "staff-app-staff");
+const canCorrectAttendance = requireStaffAppPermission("write", "staff-app-staff");
 
 staffAttendanceRouter.post("/staff-os/attendance/clock-in", canUseAttendance, derivedStaffMutation(["businessDate", "business_date", "clockInAt", "clock_in_at", "source", "gpsLat", "gps_lat", "gpsLng", "gps_lng", "deviceId", "device_id", "selfieUrl", "selfie_url"]), route((req, res) => res.status(201).json(staffAttendanceService.clockIn(req.body, managedStaffAccess(req.access)))));
 staffAttendanceRouter.post("/staff-os/attendance/clock-out", canUseAttendance, derivedStaffMutation(["attendanceId", "attendance_id", "clockOutAt", "clock_out_at"]), route((req, res) => res.json(staffAttendanceService.clockOut(req.body, managedStaffAccess(req.access)))));

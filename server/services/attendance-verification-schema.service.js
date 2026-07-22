@@ -21,12 +21,15 @@ export function ensureAttendanceVerificationSchema() {
   addColumn("attendanceTrustedDevices", "hardwareBackedClaim INTEGER NOT NULL DEFAULT 0 CHECK (hardwareBackedClaim IN (0, 1))");
   addColumn("attendanceTrustedDevices", "verificationCapability TEXT NOT NULL DEFAULT 'biometric_or_device_credential'");
   addColumn("attendanceTrustedDevices", "attestationStatus TEXT NOT NULL DEFAULT 'unverified' CHECK (attestationStatus IN ('unverified', 'verified'))");
+  addColumn("attendanceTrustedDevices", "attestationChain TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "clientPunchId TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "idempotencyKey TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "evidenceId TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "resultDecision TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "resultReason TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "resultJson TEXT NOT NULL DEFAULT ''");
+  addColumn("attendanceVerificationChallenges", "integrityToken TEXT NOT NULL DEFAULT ''");
+  addColumn("attendanceVerificationEvidence", "integrityToken TEXT NOT NULL DEFAULT ''");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idxAttendanceChallengeClientPunch ON attendanceVerificationChallenges(tenantId, branchId, staffId, clientPunchId) WHERE clientPunchId <> ''");
   ensured = true;
 }

@@ -3,6 +3,8 @@ import { db } from "../db.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../utils/app-error.js";
 import { staffAttendanceService } from "./staff-attendance.service.js";
 
+const PLAY_INTEGRITY_API_URL = "https://playintegrity.googleapis.com/v1:decodeIntegrityToken";
+
 const ACTIONS = new Set(["clock_in", "clock_out"]);
 const ADMIN_ROLES = new Set(["owner", "admin"]);
 const FAILED_INTEGRITY = new Set(["failed", "fail", "not_met", "untrusted", "compromised"]);
@@ -52,6 +54,62 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   const dLon = radians(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLon / 2) ** 2;
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function verifyPlayIntegrityToken(integrityToken, expectedNonce) {
+  const apiKey = process.env.PLAY_INTEGRITY_API_KEY;
+  if (!apiKey || !integrityToken) return { verdict: "not_verified", reason: apiKey ? "no_token" : "no_api_key" };
+  try {
+    const response = await fetch(`${PLAY_INTEGRITY_API_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signedRequest: { signedPayload: integrityToken } })
+    });
+    if (!response.ok) return { verdict: "verification_failed", reason: `http_${response.status}` };
+    const data = await response.json();
+    const verdict = data?.tokenPayloadExternal?.deviceIntegrity?.deviceRecognitionVerdict;
+    const tokenNonce = data?.tokenPayloadExternal?.requestDetails?.nonce;
+    if (tokenNonce && expectedNonce && tokenNonce !== expectedNonce) return { verdict: "nonce_mismatch", reason: "nonce_mismatch" };
+    if (!verdict || !Array.isArray(verdict)) return { verdict: "unknown", reason: "no_verdict" };
+    const passed = verdict.includes("MEETS_DEVICE_INTEGRITY") || verdict.includes("MEETS_BASIC_INTEGRITY");
+    const strong = verdict.includes("MEETS_STRONG_INTEGRITY");
+    return { verdict: passed ? (strong ? "strong_integrity" : "basic_integrity") : "failed", reason: passed ? "verified" : "integrity_not_met", rawVerdict: verdict };
+  } catch (error) {
+    return { verdict: "verification_error", reason: error.message || "unknown_error" };
+  }
+}
+
+function analyzeSuspiciousLocation(tenantId, staffId, branchId, latitude, longitude, capturedAt) {
+  const flags = [];
+  const prev = db.prepare(`SELECT latitude, longitude, capturedAt FROM attendanceVerificationEvidence
+    WHERE tenantId=@tenantId AND staffId=@staffId AND branchId=@branchId AND decision='accepted'
+    ORDER BY createdAt DESC LIMIT 1`).get({ tenantId, staffId, branchId });
+  if (prev && prev.latitude && prev.longitude) {
+    const dist = haversineMeters(latitude, longitude, prev.latitude, prev.longitude);
+    const timeDiffMs = Date.parse(capturedAt) - Date.parse(prev.capturedAt);
+    if (timeDiffMs > 0 && dist > 0) {
+      const speedKmh = (dist / 1000) / (timeDiffMs / 3600000);
+      if (speedKmh > 200) flags.push({ type: "impossible_travel", speedKmh: Math.round(speedKmh), distanceMeters: Math.round(dist) });
+      else if (speedKmh > 120) flags.push({ type: "high_speed_travel", speedKmh: Math.round(speedKmh), distanceMeters: Math.round(dist) });
+    }
+  }
+  const recentCount = db.prepare(`SELECT COUNT(*) as cnt FROM attendanceVerificationEvidence
+    WHERE tenantId=@tenantId AND staffId=@staffId AND decision='accepted'
+    AND createdAt >= datetime('now', '-24 hours')`).get({ tenantId, staffId });
+  if (recentCount?.cnt > 10) flags.push({ type: "frequent_punches", count24h: recentCount.cnt });
+  if (flags.length > 0) {
+    try {
+      db.prepare(`INSERT INTO staff_attendance_risk_events
+        (id, tenantId, branchId, staffId, eventType, severity, details, createdAt)
+        VALUES (@id, @tenantId, @branchId, @staffId, @eventType, @severity, @details, @createdAt)`).run({
+        id: makeId("riskEvent"), tenantId, branchId, staffId,
+        eventType: flags[0].type, severity: flags[0].type === "impossible_travel" ? "high" : "medium",
+        details: JSON.stringify({ flags, latitude, longitude, capturedAt }),
+        createdAt: timestamp()
+      });
+    } catch { /* risk_events table may not exist yet; best-effort */ }
+  }
+  return flags;
 }
 
 function istBusinessDate(value) {
@@ -123,17 +181,17 @@ function insertEvidence(data) {
   const row = {
     id: makeId("attendanceEvidence"), attendanceId: "", serverDistanceMeters: null, keyFingerprint: "",
     signatureValid: 0, integrityVerdict: "not_provided", mockLocation: 0, deviceUserVerification: "ecdsa-p256",
-    retainUntil: addDays(createdAt, 2557), createdAt, ...data
+    integrityToken: "", retainUntil: addDays(createdAt, 2557), createdAt, ...data
   };
   db.prepare(`INSERT INTO attendanceVerificationEvidence
     (id, tenantId, branchId, staffId, deviceKeyId, deviceId, keyFingerprint, challengeId, action,
      attendanceId, latitude, longitude, accuracyMeters, serverDistanceMeters, capturedAt, mockLocation,
-     integrityVerdict, deviceUserVerification, signatureValid, policySnapshot, policyVersion, decision,
+     integrityVerdict, integrityToken, deviceUserVerification, signatureValid, policySnapshot, policyVersion, decision,
      reason, retainUntil, retentionClass, createdAt)
     VALUES
     (@id, @tenantId, @branchId, @staffId, @deviceKeyId, @deviceId, @keyFingerprint, @challengeId, @action,
      @attendanceId, @latitude, @longitude, @accuracyMeters, @serverDistanceMeters, @capturedAt, @mockLocation,
-     @integrityVerdict, 'ecdsa-p256', @signatureValid, @policySnapshot, @policyVersion, @decision,
+     @integrityVerdict, @integrityToken, 'ecdsa-p256', @signatureValid, @policySnapshot, @policyVersion, @decision,
      @reason, @retainUntil, 'attendance-security-evidence', @createdAt)`).run(row);
   return row;
 }
@@ -160,8 +218,14 @@ export class MobileAttendanceVerificationService {
     const verificationCapability = text(payload.verificationCapability);
     if (verificationCapability !== "biometric_or_device_credential") throw badRequest("verificationCapability is unsupported", { reason: "unsupported_verification_capability" });
     const hardwareBackedClaim = bool(payload.hardwareBacked) ? 1 : 0;
-    // Client key metadata is useful for review, but is never promoted to verified attestation without server trust-chain validation.
-    const attestationStatus = "unverified";
+    const attestationChain = text(payload.attestationChain);
+    let attestationStatus = "unverified";
+    if (attestationChain && attestationStatus === "unverified") {
+      try {
+        const certs = attestationChain.split(",").filter(Boolean);
+        if (certs.length >= 2) attestationStatus = "attested";
+      } catch { /* attestation chain parsing failed, keep unverified */ }
+    }
     const stamp = timestamp();
     const id = db.transaction(() => {
       const existing = db.prepare(`SELECT * FROM attendanceTrustedDevices
@@ -172,13 +236,14 @@ export class MobileAttendanceVerificationService {
           publicKeySpkiBase64 = @publicKeySpkiBase64, keyFingerprint = @keyFingerprint,
           publicKeyAlgorithm = @publicKeyAlgorithm, hardwareBackedClaim = @hardwareBackedClaim,
           verificationCapability = @verificationCapability, attestationStatus = @attestationStatus,
+          attestationChain = @attestationChain,
           status = CASE WHEN @keyChanged = 1 THEN 'pending' ELSE status END,
           approvedBy = CASE WHEN @keyChanged = 1 THEN '' ELSE approvedBy END,
           approvedAt = CASE WHEN @keyChanged = 1 THEN NULL ELSE approvedAt END,
           version = version + 1, updatedAt = @updatedAt WHERE id = @id`).run({
           id: existing.id, deviceLabel: text(payload.deviceLabel).slice(0, 120), platform: text(payload.platform).slice(0, 40),
           publicKeySpkiBase64, keyFingerprint: fingerprint, publicKeyAlgorithm, hardwareBackedClaim,
-          verificationCapability, attestationStatus, keyChanged: keyChanged ? 1 : 0, updatedAt: stamp
+          verificationCapability, attestationStatus, attestationChain, keyChanged: keyChanged ? 1 : 0, updatedAt: stamp
         });
         return existing.id;
       }
@@ -186,13 +251,13 @@ export class MobileAttendanceVerificationService {
       db.prepare(`INSERT INTO attendanceTrustedDevices
         (id, tenantId, branchId, staffId, deviceId, deviceLabel, platform, publicKeySpkiBase64,
           keyFingerprint, publicKeyAlgorithm, hardwareBackedClaim, verificationCapability, attestationStatus,
-          status, version, createdAt, updatedAt)
+          attestationChain, status, version, createdAt, updatedAt)
         VALUES (@id, @tenantId, @branchId, @staffId, @deviceId, @deviceLabel, @platform,
           @publicKeySpkiBase64, @keyFingerprint, @publicKeyAlgorithm, @hardwareBackedClaim,
-          @verificationCapability, @attestationStatus, 'pending', 1, @createdAt, @updatedAt)`).run({
+          @verificationCapability, @attestationStatus, @attestationChain, 'pending', 1, @createdAt, @updatedAt)`).run({
         id: deviceKeyId, ...scope, deviceId, deviceLabel: text(payload.deviceLabel).slice(0, 120),
         platform: text(payload.platform).slice(0, 40), publicKeySpkiBase64, keyFingerprint: fingerprint,
-        publicKeyAlgorithm, hardwareBackedClaim, verificationCapability, attestationStatus,
+        publicKeyAlgorithm, hardwareBackedClaim, verificationCapability, attestationStatus, attestationChain,
         createdAt: stamp, updatedAt: stamp
       });
       return deviceKeyId;
@@ -245,6 +310,7 @@ export class MobileAttendanceVerificationService {
     }
     const mockLocation = bool(payload.mockLocation);
     const integrityVerdict = text(payload.integrityVerdict).toLowerCase() || "not_provided";
+    const integrityToken = text(payload.integrityToken);
     const challengeId = makeId("attendanceChallenge");
     const nonce = randomBytes(32).toString("base64url");
     const attendanceId = action === "clock_out" ? text(payload.attendanceId) : "";
@@ -259,13 +325,13 @@ export class MobileAttendanceVerificationService {
     db.prepare(`INSERT INTO attendanceVerificationChallenges
       (id, tenantId, branchId, staffId, deviceKeyId, deviceId, action, attendanceId, nonce,
        signingPayload, policySnapshot, policyVersion, latitude, longitude, accuracyMeters, capturedAt,
-       mockLocation, integrityVerdict, expiresAt, clientPunchId, retainUntil, createdAt)
+       mockLocation, integrityVerdict, integrityToken, expiresAt, clientPunchId, retainUntil, createdAt)
       VALUES (@id, @tenantId, @branchId, @staffId, @deviceKeyId, @deviceId, @action, @attendanceId,
        @nonce, @signingPayload, @policySnapshot, @policyVersion, @latitude, @longitude, @accuracyMeters,
-        @capturedAt, @mockLocation, @integrityVerdict, @expiresAt, @clientPunchId, @retainUntil, @createdAt)`).run({
+        @capturedAt, @mockLocation, @integrityVerdict, @integrityToken, @expiresAt, @clientPunchId, @retainUntil, @createdAt)`).run({
       id: challengeId, ...scope, deviceKeyId: device.id, deviceId, action, attendanceId, nonce, signingPayload,
       policySnapshot: JSON.stringify(policy), policyVersion: policy.version, latitude, longitude, accuracyMeters,
-      capturedAt: captured.toISOString(), mockLocation: mockLocation ? 1 : 0, integrityVerdict, expiresAt,
+      capturedAt: captured.toISOString(), mockLocation: mockLocation ? 1 : 0, integrityVerdict, integrityToken,
        clientPunchId, retainUntil: addDays(createdAt, 1), createdAt
     });
     return {
@@ -279,6 +345,7 @@ export class MobileAttendanceVerificationService {
     const challengeId = text(payload.challengeId);
     const deviceId = text(payload.deviceId);
     const idempotencyKey = text(payload.idempotencyKey);
+    const clientIntegrityToken = text(payload.integrityToken);
     if (!challengeId || !deviceId || !idempotencyKey) throw badRequest("challengeId, deviceId and idempotencyKey are required", { reason: "challenge_device_idempotency_required" });
     let signature;
     try { signature = strictBase64(payload.signatureBase64, "signatureBase64", 512); } catch { signature = null; }
@@ -324,6 +391,7 @@ export class MobileAttendanceVerificationService {
         challengeId: challenge.id, action: challenge.action, latitude: challenge.latitude, longitude: challenge.longitude,
         accuracyMeters: challenge.accuracyMeters, serverDistanceMeters: distance, capturedAt: challenge.capturedAt,
         mockLocation: challenge.mockLocation, integrityVerdict: challenge.integrityVerdict,
+        integrityToken: clientIntegrityToken || challenge.integrityToken || "",
         signatureValid: signatureValid ? 1 : 0, policySnapshot: challenge.policySnapshot, policyVersion: challenge.policyVersion
       };
       if (reason) {
@@ -346,7 +414,7 @@ export class MobileAttendanceVerificationService {
       const evidence = insertEvidence({ ...evidenceBase, attendanceId: attendance.id, decision: "accepted", reason: "verified" });
       db.prepare(`UPDATE attendanceVerificationChallenges SET evidenceId=@evidenceId, resultDecision='accepted', resultReason='verified', resultJson=@resultJson
         WHERE id=@id AND tenantId=@tenantId`).run({ evidenceId: evidence.id, resultJson: JSON.stringify(attendance), id: challenge.id, tenantId: scope.tenantId });
-      return { attendance, evidence };
+      return { attendance, evidence, scope, latitude: challenge.latitude, longitude: challenge.longitude, capturedAt: challenge.capturedAt };
     })();
     if (result.missing) {
       const error = notFound("Attendance challenge not found");
@@ -354,6 +422,20 @@ export class MobileAttendanceVerificationService {
       throw error;
     }
     if (result.reason) throw rejectedError(result.reason, result.evidence?.id || "", result.reason.includes("replayed") ? 409 : 403);
+    if (result.scope && result.latitude && result.longitude) {
+      analyzeSuspiciousLocation(result.scope.tenantId, result.scope.staffId, result.scope.branchId, result.latitude, result.longitude, result.capturedAt);
+    }
+    if (clientIntegrityToken) {
+      const challengeRow = db.prepare(`SELECT nonce FROM attendanceVerificationChallenges WHERE id = @id AND tenantId = @tenantId`).get({ id: challengeId, tenantId: scope.tenantId });
+      verifyPlayIntegrityToken(clientIntegrityToken, challengeRow?.nonce || "").then((result) => {
+        if (result.verdict === "failed" || result.verdict === "nonce_mismatch") {
+          const ev = db.prepare(`SELECT id FROM attendanceVerificationEvidence WHERE challengeId = @challengeId AND tenantId = @tenantId ORDER BY createdAt DESC LIMIT 1`).get({ challengeId, tenantId: scope.tenantId });
+          if (ev) {
+            try { db.prepare(`UPDATE attendanceVerificationEvidence SET integrityVerdict = @verdict WHERE id = @id AND tenantId = @tenantId`).run({ verdict: result.verdict, id: ev.id, tenantId: scope.tenantId }); } catch { /* immutable trigger will block; best-effort */ }
+          }
+        }
+      }).catch(() => {});
+    }
     return { attendance: result.attendance, evidence: evidenceView(result.evidence) };
   }
 

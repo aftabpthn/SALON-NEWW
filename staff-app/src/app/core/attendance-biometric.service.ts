@@ -8,7 +8,8 @@ export type AttendanceInstallationIdentity = {
   biometricLabel?: string;
   hardwareBacked: boolean;
   verificationCapability: "biometric_or_device_credential";
-  attestationStatus: "unverified" | "verified";
+  attestationStatus: "unverified" | "attested";
+  attestationChain?: string;
 };
 
 export type NativeAttendanceLocation = {
@@ -19,6 +20,7 @@ export type NativeAttendanceLocation = {
   capturedAt: string;
   mockLocation: boolean;
   integrityVerdict?: string;
+  integrityToken?: string;
 };
 
 export type AttendanceUserVerification = {
@@ -28,10 +30,16 @@ export type AttendanceUserVerification = {
   verifiedAt: string;
 };
 
+export type IntegrityTokenResult = {
+  integrityToken: string;
+  integrityVerdict: string;
+};
+
 type AttendanceBiometricPlugin = {
   getInstallationIdentity(): Promise<AttendanceInstallationIdentity>;
   capturePreciseLocation(options: { maxAccuracyMeters: number; timeoutMs: number }): Promise<NativeAttendanceLocation>;
   verifyUserAndSign(options: { signingPayloadBase64: string; locationReceipt: string; reason: string }): Promise<AttendanceUserVerification>;
+  requestIntegrityToken(options: { nonce: string }): Promise<IntegrityTokenResult>;
 };
 
 const AttendanceBiometric = registerPlugin<AttendanceBiometricPlugin>("AttendanceBiometric");
@@ -57,6 +65,11 @@ export class AttendanceBiometricService {
   verifyUserAndSign(signingPayloadBase64: string, locationReceipt: string, reason: string): Promise<AttendanceUserVerification> {
     this.assertSupported();
     return AttendanceBiometric.verifyUserAndSign({ signingPayloadBase64, locationReceipt, reason });
+  }
+
+  requestIntegrityToken(nonce: string): Promise<IntegrityTokenResult> {
+    this.assertSupported();
+    return AttendanceBiometric.requestIntegrityToken({ nonce });
   }
 
   private assertSupported(): void {

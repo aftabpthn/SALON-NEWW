@@ -199,8 +199,8 @@ function buildBusinessData(query, access) {
   const range = businessRange(query);
   const staffId = staffLoginService.resolveStaffId(query, access);
   const staff = staffLoginService.getStaff(staffId, access);
-  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId);
   const branchId = staff.branchId || access.branchId || "";
+  const identityIds = staffLoginService.staffIdentityIds(staff, access.tenantId, branchId);
   const params = {
     tenantId: access.tenantId,
     branchId,
@@ -218,8 +218,8 @@ function buildBusinessData(query, access) {
 
   // ponytail: aggregate the staff-scoped range in memory; move aggregation to SQL only if multi-year profiles become a measured bottleneck.
   const rawAppointments = db.prepare(`SELECT * FROM appointments WHERE ${filters.join(" AND ")} ORDER BY startAt ASC`).all(params);
-  const appointments = staffLoginService.enrichAppointments(rawAppointments, access.tenantId);
-  const billingVisible = ["finance", "sales", "payments", "invoices"].some((resource) =>
+  const appointments = staffLoginService.enrichAppointments(rawAppointments, access.tenantId, branchId);
+  const billingVisible = ["staff-app-finance", "staff-app-sales", "staff-app-payments", "staff-app-invoices"].some((resource) =>
     can(access.role || "staff", "read", resource, access)
   );
   const sales = billingVisible ? rowsByIds("sales", "appointmentId", appointments.map((row) => row.id), access, branchId) : [];

@@ -50,7 +50,11 @@ export type StaffUser = {
   branchId: string;
   branchName?: string;
   branchIds: string[];
+  /** Effective Staff App grants used by every Staff App authorization surface. */
   permissions?: string[];
+  staffAppPermissions?: string[];
+  /** Broader CRM grants are retained for diagnostics, never Staff App authorization. */
+  crmPermissions?: string[];
 };
 
 export type StaffAppointment = {
@@ -338,7 +342,7 @@ export type AttendanceDevice = {
 };
 
 export type AttendanceChallenge = { enforcementRequired: true; challengeId: string; signingPayloadBase64: string; algorithm: "ECDSA_P256_SHA256"; expiresAt: string };
-export type AttendanceEvidenceSubmission = { challengeId: string; deviceId: string; signatureBase64: string; idempotencyKey: string };
+export type AttendanceEvidenceSubmission = { challengeId: string; deviceId: string; signatureBase64: string; idempotencyKey: string; integrityToken?: string };
 export type AttendanceVerificationEvidence = {
   id?: string;
   decision?: "accepted" | "rejected";
@@ -596,7 +600,7 @@ export class StaffAppService {
       if (!session.user?.staffId) throw new Error("This login is not linked with a staff profile.");
       if (!this.isStaffRole(session.user.role)) throw new Error("Use a staff login, not an owner/admin login.");
       this.saveSession(session, tenantId);
-      return session.user;
+      return this.user()!;
     } catch (error: any) {
       const message = this.errorMessage(error, "Unable to login staff.");
       this.error.set(message);
@@ -789,13 +793,15 @@ export class StaffAppService {
       publicKeySpkiBase64: identity.publicKeySpkiBase64,
       publicKeyAlgorithm: identity.algorithm,
       hardwareBacked: identity.hardwareBacked,
-      verificationCapability: identity.verificationCapability
+      verificationCapability: identity.verificationCapability,
+      attestationStatus: identity.attestationStatus,
+      attestationChain: identity.attestationChain || ""
     });
   }
 
-  attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string): Promise<AttendanceChallenge> {
+  attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string, integrityToken?: string): Promise<AttendanceChallenge> {
     const { locationReceipt: _locationReceipt, ...serverLocation } = location;
-    const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation };
+    const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation, integrityToken: integrityToken || "" };
     return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload).catch((error) => {
       if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload);
       throw error;
@@ -814,9 +820,11 @@ export class StaffAppService {
     this.attendanceVerificationEvidence.set(null);
     this.attendanceDeviceStatus.set("");
     try {
-      if (!this.isOnline()) throw new Error("Attendance requires an internet connection so the verification policy can be checked. This punch was not queued.");
-      const policy = await this.attendanceVerificationPolicy();
-       const enforced = policy.status === "active" && (action === "clock_in" ? policy.enforceClockIn === true : policy.enforceClockOut === true);
+      let enforced = false;
+      if (this.isOnline()) {
+        const policy = await this.attendanceVerificationPolicy();
+        enforced = policy.status === "active" && (action === "clock_in" ? policy.enforceClockIn === true : policy.enforceClockOut === true);
+      }
       if (!enforced) {
         const path = action === "clock_in" ? "/staff-os/attendance/clock-in" : "/staff-os/attendance/clock-out";
         const body = action === "clock_in" ? { source: "staff-app" } : { attendanceId };
@@ -832,12 +840,24 @@ export class StaffAppService {
       this.attendanceDeviceStatus.set(device.status || "pending");
       this.assertTrustedAttendanceDevice(device);
 
+      const clientPunchId = crypto.randomUUID();
+
+      // P1: Request Play Integrity token bound to this punch (best-effort, non-fatal)
+      let integrityToken = "";
+      try {
+        const nonceBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(clientPunchId));
+        const nonceArray = new Uint8Array(nonceBuffer);
+        const nonce = btoa(String.fromCharCode(...nonceArray)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        const integrityResult = await this.attendanceBiometric.requestIntegrityToken(nonce);
+        if (integrityResult.integrityToken) integrityToken = integrityResult.integrityToken;
+      } catch { /* Integrity token is best-effort; attendance still works without it */ }
+
       this.attendanceVerificationProgress.set("getting-location");
+      const policy = await this.attendanceVerificationPolicy();
       const location = await this.attendanceBiometric.preciseLocation(policy.maxAccuracyMeters || 25);
       if (location.mockLocation) throw new Error("Mock location was detected. Use the device's real precise location and try again.");
        this.attendanceVerificationEvidence.set({ accuracyMeters: location.accuracyMeters });
-       const clientPunchId = crypto.randomUUID();
-       const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId);
+       const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId, integrityToken);
 
       this.attendanceVerificationProgress.set("verify-biometric");
        const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, location.locationReceipt, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
@@ -847,7 +867,8 @@ export class StaffAppService {
         challengeId: challenge.challengeId,
          deviceId: identity.installationId,
          signatureBase64: verification.signatureBase64,
-         idempotencyKey: challenge.challengeId
+         idempotencyKey: challenge.challengeId,
+         integrityToken
       });
       const attendance = "attendance" in response ? response.attendance : response;
       const evidence = "attendance" in response ? response.evidence : attendance.verificationEvidence;
@@ -1150,7 +1171,7 @@ export class StaffAppService {
     this.tenantIdValue = tenantId;
     this.sessionIdValue = crypto.randomUUID();
     this.profile.set(null);
-    this.user.set(session.user);
+    this.user.set(this.normalizeUser(session.user));
   }
 
   private async withRefreshRetry<T>(request: () => Promise<T>): Promise<T> {
@@ -1183,7 +1204,7 @@ export class StaffAppService {
         if (session.user?.staffId) {
           if (this.user()?.id && this.user()?.id !== session.user.id) this.clearOfflineState();
           this.profile.set(null);
-          this.user.set(session.user);
+          this.user.set(this.normalizeUser(session.user));
           this.tenantIdValue ||= this.readBiometricHint()?.tenantId || "";
           this.sessionIdValue ||= crypto.randomUUID();
         }
@@ -1207,6 +1228,12 @@ export class StaffAppService {
       return msg.includes("401") || msg.includes("unauthorized") || msg.includes("session") || msg.includes("expired");
     }
     return false;
+  }
+
+  private normalizeUser(user: StaffUser): StaffUser {
+    const crmPermissions = Array.isArray(user.crmPermissions) ? user.crmPermissions : Array.isArray(user.permissions) ? user.permissions : [];
+    const staffAppPermissions = Array.isArray(user.staffAppPermissions) ? user.staffAppPermissions : [];
+    return { ...user, crmPermissions: [...crmPermissions], staffAppPermissions: [...staffAppPermissions], permissions: [...staffAppPermissions] };
   }
 
   private isProxyBadRequest(body: unknown): boolean {

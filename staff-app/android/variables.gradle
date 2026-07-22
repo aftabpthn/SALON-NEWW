@@ -11,6 +11,7 @@ ext {
     androidxWebkitVersion = '1.12.1'
     androidxBiometricVersion = '1.1.0'
     playServicesLocationVersion = '21.3.0'
+    playServicesIntegrityVersion = '1.4.0'
     junitVersion = '4.13.2'
     androidxJunitVersion = '1.2.1'
     androidxEspressoCoreVersion = '3.6.1'
