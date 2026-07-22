@@ -381,6 +381,9 @@ export function requireSelfServiceOrAnyPermission(action, resources, checks = []
 }
 
 function hasStaffAppPolicy(role, access = {}) {
+  const sessionHasStaffAppPolicy = (access.permissions || []).some((grant) => String(grant || "").includes(":staff-app-"));
+  if (sessionHasStaffAppPolicy) return true;
+  if (cappedBuiltinRoles.has(normalizeRole(role))) return false;
   try {
     return Boolean(db.prepare(`SELECT 1
       FROM security_permissions
