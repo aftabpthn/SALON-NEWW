@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiBaseUrl: "https://aurashinesalonwellness.in/api/v1"
+  apiBaseUrl: "https://greenyellow-louse-758785.hostingersite.com/api/v1"
 };
