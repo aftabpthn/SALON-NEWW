@@ -407,6 +407,11 @@ export function requireStaffAppSelfPermission(action, resource) {
     const role = req.access.role || req.user?.role || "staff";
     const checkedAction = requestAction(action, req);
     const legacyResource = String(resource || "").replace(/^staff-app-/, "");
+    const sessionHasStaffAppPolicy = (req.access.permissions || []).some((grant) => String(grant || "").includes(":staff-app-"));
+    if (!sessionHasStaffAppPolicy && staticGrantAllows(req.access.permissions || [], checkedAction, legacyResource)) {
+      next();
+      return;
+    }
     const requiredResource = hasStaffAppPolicy(role, req.access) ? resource : legacyResource;
     if (!can(role, checkedAction, requiredResource, req.access)) {
       auditDenied(req, { action: checkedAction, resource: requiredResource, reason: "forbidden" });
