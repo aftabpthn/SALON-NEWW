@@ -4,7 +4,7 @@ import { firstValueFrom, Observable } from "rxjs";
 import { environment } from "../../environments/environment";
 import { resetCsrfState } from "./csrf.interceptor";
 import { addBusinessDays, businessDate } from "./business-date";
-import { CapacitorHttp } from "@capacitor/core";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { AttendanceBiometricService, AttendanceInstallationIdentity, NativeAttendanceLocation } from "./attendance-biometric.service";
 
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
@@ -581,7 +581,7 @@ export class StaffAppService {
           email: loginId.includes("@") ? loginId : undefined,
           password: payload.password,
           branchId: payload.branchId?.trim() || undefined,
-          device: { type: "staff-app", name: "Aura Staff App", platform: "web" }
+          device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() }
         }
       });
       const session = this.unwrap(loginResp.data);
@@ -902,7 +902,11 @@ export class StaffAppService {
   async logout(): Promise<void> {
     try {
       if (!this.accessTokenValue) await this.refreshSession();
-      await firstValueFrom(this.http.post(`${this.baseUrl}/auth/logout`, {}, { headers: this.authHeaders(), withCredentials: true }));
+      await CapacitorHttp.post({
+        url: `${this.baseUrl}/auth/logout`,
+        headers: this.accessTokenValue ? { Authorization: `Bearer ${this.accessTokenValue}` } : {},
+        data: {}
+      });
     } catch {
       // Local state must still be destroyed when the server session is already invalid.
     } finally {
@@ -1124,12 +1128,16 @@ export class StaffAppService {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = (async () => {
       try {
-        const response = await firstValueFrom(this.http.post<StaffRefreshResponse | ApiEnvelope<StaffRefreshResponse>>(
-          `${this.baseUrl}/auth/refresh`,
-          { device: { type: "staff-app", name: "Aura Staff App", platform: "web" } },
-          { withCredentials: true }
-        ));
-        const session = this.unwrap(response);
+        const response = await CapacitorHttp.post({
+          url: `${this.baseUrl}/auth/refresh`,
+          headers: { "Content-Type": "application/json" },
+          data: { device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() } }
+        });
+        if (response.status < 200 || response.status >= 300) {
+          const message = this.errorMessage({ error: response.data, message: `Session refresh failed (${response.status}).` }, "Staff session refresh failed.");
+          throw new Error(message);
+        }
+        const session = this.unwrap<StaffRefreshResponse>(response.data);
         if (!session.accessToken) throw new Error("Staff session refresh failed.");
         this.accessTokenValue = session.accessToken;
         if (session.user?.staffId) {
