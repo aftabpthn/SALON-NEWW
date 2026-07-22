@@ -534,6 +534,7 @@ type StaffListSortField = 'name' | 'contact' | 'employeeCode' | 'email' | 'salar
                             <a routerLink="/staff/my-work" [queryParams]="{ staffId: staff.id }">My Work</a>
                             <a routerLink="/staff-os/attendance-dashboard" [queryParams]="{ staffId: staff.id }">Attendance</a>
                             <a routerLink="/staff-os/payroll-dashboard" [queryParams]="{ staffId: staff.id }">Payroll</a>
+                            <a routerLink="/permissions" [queryParams]="{ userId: staff.loginUserId, staffId: staff.id, mode: 'rights' }">Permission</a>
                             <button *ngIf="canProvisionStaffLogin()" type="button" (click)="openStaffLoginEditor(staff)">{{ staff.loginUserId ? 'Edit/reset login' : 'Create login' }}</button>
                             <button type="button" (click)="openSalaryEditor(staff)">Salary</button>
                             <button type="button" (click)="prefillManualAttendance(staff)">Manual attendance</button>
