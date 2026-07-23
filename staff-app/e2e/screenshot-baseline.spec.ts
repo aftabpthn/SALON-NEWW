@@ -11,7 +11,13 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { hasCredentials, gotoProtected, loginStaff } from "./fixtures/auth.helper";
+import {
+  hasStaffCredentials,
+  hasOwnerCredentials,
+  gotoProtected,
+  gotoProtectedOwner,
+  loginOwner,
+} from "./fixtures/auth.helper";
 import {
   stabilizeForScreenshot,
   hasErrorOverlay,
@@ -48,7 +54,7 @@ test.describe("Screenshots — Staff Pages", () => {
     const screenshotName = route.path.replace(/\//g, "-").replace(/^-/, "");
 
     test(`staff ${route.label}`, async ({ page }) => {
-      if (!hasCredentials()) {
+      if (!hasStaffCredentials()) {
         test.skip(true, "STAFF_USER + STAFF_PASS required");
         return;
       }
@@ -88,15 +94,20 @@ test.describe("Screenshots — Owner Pages", () => {
     const screenshotName = "owner-" + route.path.replace(/\/owner\//, "").replace(/\//g, "-");
 
     test(`owner ${route.label}`, async ({ page }) => {
-      await page.goto(route.path, { waitUntil: "domcontentloaded" });
-      await waitForAngularSettle(page);
-
-      // If redirected to owner login, skip
-      if (page.url().includes("/owner/login")) {
-        test.skip(true, "Owner auth required");
+      if (!hasOwnerCredentials()) {
+        test.skip(true, "OWNER_USER + OWNER_PASS required");
         return;
       }
 
+      await gotoProtectedOwner(page, route.path);
+
+      // If redirected to owner login, skip
+      if (page.url().includes("/owner/login")) {
+        test.skip(true, "Owner auth failed");
+        return;
+      }
+
+      await waitForAngularSettle(page);
       await stabilizeForScreenshot(page);
       await expect(page).toHaveScreenshot(`${screenshotName}.png`, { fullPage: true });
     });

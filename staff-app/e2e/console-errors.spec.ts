@@ -6,7 +6,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
-import { hasCredentials, gotoProtected } from "./fixtures/auth.helper";
+import { hasStaffCredentials, gotoProtected, hasOwnerCredentials, gotoProtectedOwner } from "./fixtures/auth.helper";
 import {
   ConsoleError,
   collectConsoleErrors,
@@ -14,7 +14,7 @@ import {
   waitForAngularSettle,
   hasErrorOverlay,
 } from "./fixtures/helpers";
-import { STAFF_ROUTES } from "./fixtures/routes";
+import { STAFF_ROUTES, OWNER_ROUTES } from "./fixtures/routes";
 
 /* ──────────────────────────────────────────────────────── */
 /*  Helpers                                                */
@@ -66,7 +66,7 @@ test.describe("Console Errors — Protected Pages", () => {
 
   for (const route of protectedRoutes) {
     test(`${route.label} — no console errors`, async ({ page }) => {
-      if (!hasCredentials()) {
+      if (!hasStaffCredentials()) {
         test.skip(true, "STAFF_USER + STAFF_PASS required");
         return;
       }
@@ -98,23 +98,63 @@ test.describe("Console Errors — Protected Pages", () => {
 });
 
 /* ──────────────────────────────────────────────────────── */
+/*  PROTECTED OWNER PAGES — Console Errors                 */
+/* ──────────────────────────────────────────────────────── */
+
+test.describe("Console Errors — Owner Protected Pages", () => {
+  const protectedOwnerRoutes = OWNER_ROUTES.filter((r) => !r.public);
+
+  for (const route of protectedOwnerRoutes) {
+    test(`Owner ${route.label} — no console errors`, async ({ page }) => {
+      if (!hasOwnerCredentials()) {
+        test.skip(true, "OWNER_USER + OWNER_PASS required");
+        return;
+      }
+
+      await gotoProtectedOwner(page, route.path);
+
+      if (page.url().includes("/owner/login")) {
+        test.skip(true, "Owner not authenticated");
+        return;
+      }
+
+      const errors: ConsoleError[] = [];
+      const detach = collectConsoleErrors(page, errors);
+      await page.waitForTimeout(800);
+      await page.evaluate(() => window.scrollTo(0, 50));
+      await page.waitForTimeout(300);
+      detach();
+
+      const filtered = filterIgnorableErrors(errors);
+      expect(
+        filtered,
+        `Console errors on ${route.path}:\n${filtered.map((e) => `  [${e.type}] ${e.text}`).join("\n")}`
+      ).toHaveLength(0);
+    });
+  }
+});
+
+/* ──────────────────────────────────────────────────────── */
 /*  NO ERROR OVERLAY                                       */
 /* ──────────────────────────────────────────────────────── */
 
 test.describe("No Angular Error Overlay", () => {
   for (const route of STAFF_ROUTES) {
     test(`${route.label} — no error overlay`, async ({ page }) => {
-      if (!route.public && !hasCredentials()) {
+      if (!route.public && !hasStaffCredentials()) {
         test.skip(true, "STAFF_USER + STAFF_PASS required");
         return;
       }
 
-      await page.goto(route.path, { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(600);
-
-      if (page.url().includes("/staff/login") && !route.public) {
-        test.skip(true, "Not authenticated");
-        return;
+      if (!route.public) {
+        await gotoProtected(page, route.path);
+        if (page.url().includes("/staff/login")) {
+          test.skip(true, "Not authenticated");
+          return;
+        }
+      } else {
+        await page.goto(route.path, { waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(600);
       }
 
       expect(await hasErrorOverlay(page)).toBe(false);
