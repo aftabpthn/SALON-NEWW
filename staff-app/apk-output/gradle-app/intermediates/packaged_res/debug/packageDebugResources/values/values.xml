@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <string name="app_name">Aura Staff</string>
+    <string name="custom_url_scheme">com.aura.staff</string>
+    <string name="default_web_client_id" translatable="false">47194589898-fkdr3rkiqv0p4eop81bl001e2bm8jts8.apps.googleusercontent.com</string>
+    <string name="gcm_defaultSenderId" translatable="false">47194589898</string>
+    <string name="google_api_key" translatable="false">AIzaSyBDaBp-rsSOXnjo1OeKkQoUKbP9o1nn530</string>
+    <string name="google_app_id" translatable="false">1:47194589898:android:1a953778161f7d54790233</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBDaBp-rsSOXnjo1OeKkQoUKbP9o1nn530</string>
+    <string name="google_storage_bucket" translatable="false">aurashineclient.firebasestorage.app</string>
+    <string name="package_name">com.aura.staff</string>
+    <string name="project_id" translatable="false">aurashineclient</string>
+    <string name="title_activity_main">Aura Staff</string>
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+    </style>
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+    </style>
+</resources>

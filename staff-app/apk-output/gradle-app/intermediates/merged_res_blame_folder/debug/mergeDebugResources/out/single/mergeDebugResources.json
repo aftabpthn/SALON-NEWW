@@ -1,0 +1,142 @@
+[
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-anydpi-v24_ic_launcher_foreground.xml.flat",
+        "source": "com.aura.staff.app-pngs-34:/drawable-anydpi-v24/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-hdpi_ic_launcher_foreground.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-hdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/xml_network_security_config.xml.flat",
+        "source": "com.aura.staff.app-main-33:/xml/network_security_config.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-port-hdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-port-hdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-port-xxhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-port-xxhdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/layout_activity_main.xml.flat",
+        "source": "com.aura.staff.app-main-33:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-land-xhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-land-xhdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-mdpi_ic_launcher_foreground.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-mdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-port-xhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-port-xhdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-land-mdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-land-mdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-land-hdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-land-hdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/raw_isrg_root_x2.pem.flat",
+        "source": "com.aura.staff.app-main-33:/raw/isrg_root_x2.pem"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-land-xxxhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-land-xxxhdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-port-mdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-port-mdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/xml_file_paths.xml.flat",
+        "source": "com.aura.staff.app-main-33:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.aura.staff.app-main-33:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-land-xxhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-land-xxhdpi/splash.png"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/xml_config.xml.flat",
+        "source": "com.aura.staff.app-main-33:/xml/config.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.aura.staff.app-main-33:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.aura.staff.app-debug-39:/drawable-port-xxxhdpi_splash.png.flat",
+        "source": "com.aura.staff.app-main-33:/drawable-port-xxxhdpi/splash.png"
+    }
+]

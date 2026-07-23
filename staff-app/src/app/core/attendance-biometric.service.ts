@@ -35,11 +35,19 @@ export type IntegrityTokenResult = {
   integrityVerdict: string;
 };
 
+export type DeviceRiskSignals = {
+  rooted: boolean;
+  hookDetected: boolean;
+  tampered: boolean;
+  emulator: boolean;
+};
+
 type AttendanceBiometricPlugin = {
   getInstallationIdentity(): Promise<AttendanceInstallationIdentity>;
   capturePreciseLocation(options: { maxAccuracyMeters: number; timeoutMs: number }): Promise<NativeAttendanceLocation>;
   verifyUserAndSign(options: { signingPayloadBase64: string; locationReceipt: string; reason: string }): Promise<AttendanceUserVerification>;
   requestIntegrityToken(options: { nonce: string }): Promise<IntegrityTokenResult>;
+  getDeviceRiskSignals(): Promise<DeviceRiskSignals>;
 };
 
 const AttendanceBiometric = registerPlugin<AttendanceBiometricPlugin>("AttendanceBiometric");
@@ -70,6 +78,11 @@ export class AttendanceBiometricService {
   requestIntegrityToken(nonce: string): Promise<IntegrityTokenResult> {
     this.assertSupported();
     return AttendanceBiometric.requestIntegrityToken({ nonce });
+  }
+
+  getDeviceRiskSignals(): Promise<DeviceRiskSignals> {
+    this.assertSupported();
+    return AttendanceBiometric.getDeviceRiskSignals();
   }
 
   private assertSupported(): void {

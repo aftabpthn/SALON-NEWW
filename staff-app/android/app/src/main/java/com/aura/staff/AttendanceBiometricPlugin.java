@@ -178,6 +178,64 @@ public class AttendanceBiometricPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getDeviceRiskSignals(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("rooted", isDeviceRooted());
+        result.put("hookDetected", isHookFrameworkDetected());
+        result.put("tampered", isAppTampered());
+        result.put("emulator", isEmulator());
+        call.resolve(result);
+    }
+
+    private boolean isDeviceRooted() {
+        String[] paths = { "/system/app/Superuser.apk", "/system/xbin/su", "/system/bin/su", "/sbin/su", "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/su" };
+        for (String path : paths) { if (new java.io.File(path).exists()) return true; }
+        try { Runtime.getRuntime().exec("which su"); return true; } catch (Exception ignored) {}
+        try { String tags = Build.TAGS; if (tags != null && tags.contains("test-keys")) return true; } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean isHookFrameworkDetected() {
+        try {
+            String[] fridaPaths = { "/tmp/frida-server", "/data/local/tmp/frida-server", "/sdcard/frida-server" };
+            for (String path : fridaPaths) { if (new java.io.File(path).exists()) return true; }
+            String maps;
+            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader("/proc/self/maps"));
+            StringBuilder sb = new StringBuilder();
+            while ((maps = reader.readLine()) != null) sb.append(maps);
+            reader.close();
+            String mapsContent = sb.toString().toLowerCase();
+            if (mapsContent.contains("frida") || mapsContent.contains("xposed") || mapsContent.contains("substrate") || mapsContent.contains("gadget")) return true;
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean isAppTampered() {
+        try {
+            PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
+            Signature[] sigs = info.signingInfo != null ? info.signingInfo.getAp contentsSigners() : null;
+            if (sigs == null || sigs.length == 0) return true;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(sigs[0].toByteArray());
+            String signingHash = Base64.encodeToString(md.digest(), Base64.NO_WRAP);
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String stored = prefs.getString("app_signing_hash", null);
+            if (stored == null) {
+                prefs.edit().putString("app_signing_hash", signingHash).commit();
+                return false;
+            }
+            return !stored.equals(signingHash);
+        } catch (Exception ignored) { return false; }
+    }
+
+    private boolean isEmulator() {
+        return Build.FINGERPRINT.startsWith("generic") || Build.FINGERPRINT.startsWith("unknown")
+            || Build.MODEL.contains("google_sdk") || Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK built for x86")
+            || Build.MANUFACTURER.contains("Genymotion") || (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic"))
+            || "google_sdk".equals(Build.PRODUCT) || Build.HARDWARE.contains("goldfish") || Build.HARDWARE.contains("ranchu");
+    }
+
+    @PluginMethod
     public void capturePreciseLocation(PluginCall call) {
         if (pendingLocationCall != null) {
             reject(call, "OPERATION_IN_PROGRESS", "Another location capture is already active.", null, null);

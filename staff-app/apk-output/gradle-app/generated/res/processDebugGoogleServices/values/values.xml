@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="default_web_client_id" translatable="false">47194589898-fkdr3rkiqv0p4eop81bl001e2bm8jts8.apps.googleusercontent.com</string>
+    <string name="gcm_defaultSenderId" translatable="false">47194589898</string>
+    <string name="google_api_key" translatable="false">AIzaSyBDaBp-rsSOXnjo1OeKkQoUKbP9o1nn530</string>
+    <string name="google_app_id" translatable="false">1:47194589898:android:1a953778161f7d54790233</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyBDaBp-rsSOXnjo1OeKkQoUKbP9o1nn530</string>
+    <string name="google_storage_bucket" translatable="false">aurashineclient.firebasestorage.app</string>
+    <string name="project_id" translatable="false">aurashineclient</string>
+</resources>

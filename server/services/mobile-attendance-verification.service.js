@@ -79,8 +79,11 @@ async function verifyPlayIntegrityToken(integrityToken, expectedNonce) {
   }
 }
 
-function analyzeSuspiciousLocation(tenantId, staffId, branchId, latitude, longitude, capturedAt) {
+function analyzeSuspiciousLocation(tenantId, staffId, branchId, latitude, longitude, capturedAt, riskVerdict) {
   const flags = [];
+  if (riskVerdict && riskVerdict !== "clean" && riskVerdict !== "not_checked") {
+    flags.push({ type: "device_risk", riskVerdict });
+  }
   const prev = db.prepare(`SELECT latitude, longitude, capturedAt FROM attendanceVerificationEvidence
     WHERE tenantId=@tenantId AND staffId=@staffId AND branchId=@branchId AND decision='accepted'
     ORDER BY createdAt DESC LIMIT 1`).get({ tenantId, staffId, branchId });
@@ -311,13 +314,14 @@ export class MobileAttendanceVerificationService {
     const mockLocation = bool(payload.mockLocation);
     const integrityVerdict = text(payload.integrityVerdict).toLowerCase() || "not_provided";
     const integrityToken = text(payload.integrityToken);
+    const riskVerdict = text(payload.riskVerdict);
     const challengeId = makeId("attendanceChallenge");
     const nonce = randomBytes(32).toString("base64url");
     const attendanceId = action === "clock_out" ? text(payload.attendanceId) : "";
     const signingObject = {
       challengeId, nonce, tenantId: scope.tenantId, branchId: scope.branchId, staffId: scope.staffId,
       deviceKeyId: device.id, deviceId, action, attendanceId, latitude, longitude, accuracyMeters,
-      capturedAt: captured.toISOString(), mockLocation, integrityVerdict, policyVersion: policy.version
+      capturedAt: captured.toISOString(), mockLocation, integrityVerdict, riskVerdict, policyVersion: policy.version
     };
     const signingPayload = JSON.stringify(signingObject);
     const createdAt = timestamp();
@@ -325,13 +329,13 @@ export class MobileAttendanceVerificationService {
     db.prepare(`INSERT INTO attendanceVerificationChallenges
       (id, tenantId, branchId, staffId, deviceKeyId, deviceId, action, attendanceId, nonce,
        signingPayload, policySnapshot, policyVersion, latitude, longitude, accuracyMeters, capturedAt,
-       mockLocation, integrityVerdict, integrityToken, expiresAt, clientPunchId, retainUntil, createdAt)
+       mockLocation, integrityVerdict, integrityToken, riskVerdict, expiresAt, clientPunchId, retainUntil, createdAt)
       VALUES (@id, @tenantId, @branchId, @staffId, @deviceKeyId, @deviceId, @action, @attendanceId,
        @nonce, @signingPayload, @policySnapshot, @policyVersion, @latitude, @longitude, @accuracyMeters,
-        @capturedAt, @mockLocation, @integrityVerdict, @integrityToken, @expiresAt, @clientPunchId, @retainUntil, @createdAt)`).run({
+        @capturedAt, @mockLocation, @integrityVerdict, @integrityToken, @riskVerdict, @expiresAt, @clientPunchId, @retainUntil, @createdAt)`).run({
       id: challengeId, ...scope, deviceKeyId: device.id, deviceId, action, attendanceId, nonce, signingPayload,
       policySnapshot: JSON.stringify(policy), policyVersion: policy.version, latitude, longitude, accuracyMeters,
-      capturedAt: captured.toISOString(), mockLocation: mockLocation ? 1 : 0, integrityVerdict, integrityToken,
+      capturedAt: captured.toISOString(), mockLocation: mockLocation ? 1 : 0, integrityVerdict, integrityToken, riskVerdict,
        clientPunchId, retainUntil: addDays(createdAt, 1), createdAt
     });
     return {
@@ -414,7 +418,7 @@ export class MobileAttendanceVerificationService {
       const evidence = insertEvidence({ ...evidenceBase, attendanceId: attendance.id, decision: "accepted", reason: "verified" });
       db.prepare(`UPDATE attendanceVerificationChallenges SET evidenceId=@evidenceId, resultDecision='accepted', resultReason='verified', resultJson=@resultJson
         WHERE id=@id AND tenantId=@tenantId`).run({ evidenceId: evidence.id, resultJson: JSON.stringify(attendance), id: challenge.id, tenantId: scope.tenantId });
-      return { attendance, evidence, scope, latitude: challenge.latitude, longitude: challenge.longitude, capturedAt: challenge.capturedAt };
+      return { attendance, evidence, scope, latitude: challenge.latitude, longitude: challenge.longitude, capturedAt: challenge.capturedAt, riskVerdict: challenge.riskVerdict || "" };
     })();
     if (result.missing) {
       const error = notFound("Attendance challenge not found");
@@ -423,7 +427,7 @@ export class MobileAttendanceVerificationService {
     }
     if (result.reason) throw rejectedError(result.reason, result.evidence?.id || "", result.reason.includes("replayed") ? 409 : 403);
     if (result.scope && result.latitude && result.longitude) {
-      analyzeSuspiciousLocation(result.scope.tenantId, result.scope.staffId, result.scope.branchId, result.latitude, result.longitude, result.capturedAt);
+      analyzeSuspiciousLocation(result.scope.tenantId, result.scope.staffId, result.scope.branchId, result.latitude, result.longitude, result.capturedAt, result.riskVerdict || "");
     }
     if (clientIntegrityToken) {
       const challengeRow = db.prepare(`SELECT nonce FROM attendanceVerificationChallenges WHERE id = @id AND tenantId = @tenantId`).get({ id: challengeId, tenantId: scope.tenantId });

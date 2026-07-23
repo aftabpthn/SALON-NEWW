@@ -338,7 +338,7 @@ export type AttendanceDevice = {
   publicKeyAlgorithm: "ECDSA_P256_SHA256";
   hardwareBackedClaim: number;
   verificationCapability: "biometric_or_device_credential";
-  attestationStatus: "unverified" | "verified";
+  attestationStatus: "unverified" | "attested" | "verified";
 };
 
 export type AttendanceChallenge = { enforcementRequired: true; challengeId: string; signingPayloadBase64: string; algorithm: "ECDSA_P256_SHA256"; expiresAt: string };
@@ -799,9 +799,9 @@ export class StaffAppService {
     });
   }
 
-  attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string, integrityToken?: string): Promise<AttendanceChallenge> {
+  attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string, integrityToken?: string, riskVerdict?: string): Promise<AttendanceChallenge> {
     const { locationReceipt: _locationReceipt, ...serverLocation } = location;
-    const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation, integrityToken: integrityToken || "" };
+    const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation, integrityToken: integrityToken || "", riskVerdict: riskVerdict || "" };
     return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload).catch((error) => {
       if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload);
       throw error;
@@ -852,12 +852,25 @@ export class StaffAppService {
         if (integrityResult.integrityToken) integrityToken = integrityResult.integrityToken;
       } catch { /* Integrity token is best-effort; attendance still works without it */ }
 
+      // P3: Check device risk signals (best-effort, non-fatal)
+      let riskVerdict = "not_checked";
+      try {
+        const risks = await this.attendanceBiometric.getDeviceRiskSignals();
+        if (risks.rooted || risks.hookDetected || risks.tampered) {
+          riskVerdict = [risks.rooted ? "rooted" : "", risks.hookDetected ? "hooked" : "", risks.tampered ? "tampered" : ""].filter(Boolean).join("+");
+        } else if (risks.emulator) {
+          riskVerdict = "emulator";
+        } else {
+          riskVerdict = "clean";
+        }
+      } catch { /* Risk check is best-effort */ }
+
       this.attendanceVerificationProgress.set("getting-location");
       const policy = await this.attendanceVerificationPolicy();
       const location = await this.attendanceBiometric.preciseLocation(policy.maxAccuracyMeters || 25);
       if (location.mockLocation) throw new Error("Mock location was detected. Use the device's real precise location and try again.");
        this.attendanceVerificationEvidence.set({ accuracyMeters: location.accuracyMeters });
-       const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId, integrityToken);
+       const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId, integrityToken, riskVerdict);
 
       this.attendanceVerificationProgress.set("verify-biometric");
        const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, location.locationReceipt, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
