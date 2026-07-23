@@ -1,7 +1,10 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Check, ArrowRight } from "lucide-react";
+import {
+  Calendar, CreditCard, Users, Package, Megaphone,
+  TrendingUp, ShieldCheck, Palette, Check, ArrowRight,
+} from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +13,11 @@ import { CTA_LINKS } from "@/lib/constants";
 import { fadeInUp, staggerContainer, staggerChild } from "@/lib/animations";
 import type { FeaturePageData } from "@/lib/types";
 
+const CAPABILITY_ICONS = [
+  Calendar, CreditCard, Users, Package, Megaphone,
+  TrendingUp, ShieldCheck, Palette, Check,
+];
+
 interface FeaturePageTemplateProps {
   data: FeaturePageData;
 }
@@ -17,7 +25,6 @@ interface FeaturePageTemplateProps {
 export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
   return (
     <>
-      {/* Hero */}
       <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 bg-gradient-to-b from-aura-bg to-white overflow-hidden">
         <GridBackground className="opacity-30" />
         <div className="absolute top-20 left-1/4 w-72 h-72 rounded-full bg-neon-violet/8 blur-[100px]" />
@@ -43,7 +50,6 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
         </Container>
       </section>
 
-      {/* Stats */}
       {data.stats && (
         <section className="py-12 bg-white border-y border-aura-border">
           <Container>
@@ -65,7 +71,6 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
         </section>
       )}
 
-      {/* Capabilities */}
       <section className="py-20 md:py-28 bg-aura-bg">
         <Container>
           <SectionHeading
@@ -80,24 +85,26 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
             viewport={{ once: true, margin: "-80px" }}
             className="mt-16 grid md:grid-cols-2 gap-6 max-w-5xl mx-auto"
           >
-            {data.capabilities.map((cap) => (
-              <motion.div
-                key={cap.title}
-                variants={staggerChild}
-                className="glow-card rounded-2xl border border-aura-border bg-white p-8 transition-all duration-300 hover:shadow-lg hover:border-transparent"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/15 to-aura-rose/15 flex items-center justify-center mb-4">
-                  <Check className="w-5 h-5 text-neon-violet" />
-                </div>
-                <h3 className="text-lg font-bold text-aura-text mb-2">{cap.title}</h3>
-                <p className="text-sm text-aura-text-secondary leading-relaxed">{cap.description}</p>
-              </motion.div>
-            ))}
+            {data.capabilities.map((cap, i) => {
+              const Icon = CAPABILITY_ICONS[i % CAPABILITY_ICONS.length];
+              return (
+                <motion.div
+                  key={cap.title}
+                  variants={staggerChild}
+                  className="glow-card rounded-2xl border border-aura-border bg-white p-8 transition-all duration-300 hover:shadow-lg hover:border-transparent group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neon-violet/15 to-aura-rose/15 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                    <Icon className="w-5 h-5 text-neon-violet" />
+                  </div>
+                  <h3 className="text-lg font-bold text-aura-text mb-2">{cap.title}</h3>
+                  <p className="text-sm text-aura-text-secondary leading-relaxed">{cap.description}</p>
+                </motion.div>
+              );
+            })}
           </motion.div>
         </Container>
       </section>
 
-      {/* CTA */}
       <section className="py-20 bg-white">
         <Container>
           <motion.div

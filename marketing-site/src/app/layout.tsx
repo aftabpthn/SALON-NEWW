@@ -7,6 +7,7 @@ import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvide
 import { CustomCursor } from "@/components/ui/CustomCursor";
 import { ScrollProgress } from "@/components/ui/ScrollProgress";
 import { SocialProofToast } from "@/components/ui/SocialProofToast";
+import { BackToTop } from "@/components/ui/BackToTop";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -56,6 +57,7 @@ export default function RootLayout({
           <ScrollProgress />
           <CustomCursor />
           <SocialProofToast />
+          <BackToTop />
           <Navbar />
           <main id="main-content" className="flex-1">{children}</main>
           <Footer />

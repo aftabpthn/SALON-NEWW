@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { motion, useInView } from "motion/react";
 import { FOOTER_LINKS, CTA_LINKS } from "@/lib/constants";
 import { MagneticElement } from "@/components/ui/MagneticElement";
+import { Newsletter } from "./Newsletter";
 
 const footerSections = [
   { title: "Product", links: FOOTER_LINKS.product },
@@ -75,6 +76,9 @@ export function Footer() {
                   {icon}
                 </div>
               ))}
+            </div>
+            <div className="mt-6">
+              <Newsletter />
             </div>
           </motion.div>
 
