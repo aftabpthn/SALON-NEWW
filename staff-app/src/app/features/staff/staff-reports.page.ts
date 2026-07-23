@@ -126,18 +126,18 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (canReadReports() && dashboard(); as dash) {
         <section class="grid two">
           <article class="panel">
-            <div class="panel-title"><h2>Work report</h2><span>{{ dash.workReport?.length ?? 0 }}</span></div>
+            <div class="panel-title"><h2>Work report</h2><span>{{ dash.workReport.length }}</span></div>
             <div class="list">
-              @for (item of (dash.workReport ?? []).slice(0, 30); track item.id) {
-                <div class="row"><div class="row-main"><strong>Assigned appointment</strong><small>{{ item.startAt | date:'medium' }} · {{ item.serviceNames?.join(', ') || 'Service' }}</small></div><span class="badge">{{ item.status }}</span></div>
+              @for (item of dash.workReport.slice(0, 30); track item.id) {
+                <div class="row"><div class="row-main"><strong>Assigned appointment</strong><small>{{ item.startAt | date:'medium' }} · {{ item.serviceNames.join(', ') || 'Service' }}</small></div><span class="badge">{{ item.status }}</span></div>
               } @empty { <p class="empty">No completed work in this report window.</p> }
             </div>
           </article>
           @if (canSeeRevenue()) {
             <article class="panel">
-              <div class="panel-title"><h2>Sales</h2><span>{{ dash.sales?.length ?? 0 }}</span></div>
+              <div class="panel-title"><h2>Sales</h2><span>{{ dash.sales.length }}</span></div>
               <div class="list">
-                @for (sale of (dash.sales ?? []).slice(0, 30); track sale.id) {
+                @for (sale of dash.sales.slice(0, 30); track sale.id) {
                   <div class="row"><div class="row-main"><strong>{{ sale.total | paiseInr }}</strong><small>{{ sale.createdAt | date:'short' }} · commission {{ sale.commissionTotal | paiseInr }}</small></div><span class="badge">{{ sale.status }}</span></div>
                 } @empty { <p class="empty">No sales entries visible.</p> }
               </div>

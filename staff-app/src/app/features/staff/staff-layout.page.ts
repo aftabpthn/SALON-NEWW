@@ -369,7 +369,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.routerSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.showStaffHintOnce(event.urlAfterRedirects);
-        this.mainShell.nativeElement.scrollTop = 0;
+        if (this.mainShell) this.mainShell.nativeElement.scrollTop = 0;
       }
     });
     this.showStaffHintOnce(this.router.url);
