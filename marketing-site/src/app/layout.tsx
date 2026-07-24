@@ -9,6 +9,7 @@ import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import { CookieConsent } from "@/components/ui/CookieConsent";
 import { LanguageProvider } from "@/components/providers/LanguageProvider";
+import { softwareAppJsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -19,47 +20,68 @@ const inter = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL("https://aura.example.com"),
   title: {
-    default: "Aura — The Living Salon Operating System",
+    default: "Aura — Salon CRM, POS & Booking Software for India",
     template: "%s | Aura Salon CRM/POS",
   },
   description:
-    "Aura connects Owner CRM and POS, customer booking, staff work, inventory, finance and branch-aware operations for Indian salons.",
+    "Aura is a connected salon operating system. Run CRM, GST billing, online booking, staff payroll, inventory and finance from one platform — built for Indian salons.",
   keywords: [
-    "salon software", "salon CRM", "salon POS", "salon billing",
-    "salon management", "appointment booking", "staff management",
-    "salon inventory", "GST billing salon", "salon marketing",
-    "salon POS India", "salon software India", "salon app India",
+    "salon software India", "salon CRM", "salon POS", "salon billing software",
+    "salon management app", "salon booking software", "salon staff management",
+    "GST billing salon", "salon inventory", "salon marketing automation",
+    "best salon software India", "salon POS India", "salon app India",
+    "salon software free", "salon billing GST", "salon management software India",
   ],
+  authors: [{ name: "Aura" }],
+  creator: "Aura",
+  publisher: "Aura",
+  formatDetection: { telephone: false },
   openGraph: {
-    title: "Aura — The Living Salon Operating System",
-    description: "Owner CRM and POS, customer booking and staff operations connected around the same salon day.",
-    type: "website",
-    locale: "en_IN",
+    title: "Aura — Salon CRM, POS & Booking Software for India",
+    description:
+      "Connected CRM, POS, booking, staff and inventory for Indian salons. Start free.",
+    url: "https://aura.example.com",
     siteName: "Aura Salon CRM/POS",
+    locale: "en_IN",
+    type: "website",
+    images: [
+      {
+        url: "/og?path=/",
+        width: 1200,
+        height: 630,
+        alt: "Aura Salon CRM/POS — Connected salon operating system",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Aura — Salon CRM, POS & Booking Software for India",
+    description:
+      "Connected CRM, POS, booking, staff and inventory for Indian salons.",
+    images: ["/og?path=/"],
+    creator: "@aurasalon",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: "https://aura.example.com",
+    languages: {
+      "en-IN": "https://aura.example.com",
+      "hi-IN": "https://aura.example.com?lang=hi",
+    },
   },
 };
 
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "Aura Salon CRM/POS",
-  applicationCategory: "BusinessApplication",
-  operatingSystem: "Web",
-  description: "Connected CRM, POS, customer booking and staff operations platform for salons in India.",
-  offers: [
-    {
-      "@type": "Offer",
-      price: "999",
-      priceCurrency: "INR",
-      priceSpecification: {
-        "@type": "UnitPriceSpecification",
-        price: "999",
-        priceCurrency: "INR",
-        billingDuration: "P1M",
-      },
-    },
-  ],
-};
+const jsonLdScripts = [softwareAppJsonLd, organizationJsonLd, websiteJsonLd];
 
 export default function RootLayout({
   children,
@@ -69,10 +91,13 @@ export default function RootLayout({
   return (
     <html lang="en-IN" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        {jsonLdScripts.map((ld, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+          />
+        ))}
       </head>
       <body className="min-h-full flex flex-col font-sans antialiased grain-overlay">
         {/* Skip to content */}

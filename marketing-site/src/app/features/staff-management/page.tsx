@@ -1,8 +1,19 @@
-"use client";
+import type { Metadata } from "next";
+import { getFeaturePageSEO, breadcrumbJsonLd } from "@/lib/seo";
+import StaffManagementPageClient from "./StaffManagementPageClient";
 
-import { FEATURE_PAGES } from "@/lib/constants";
-import { FeaturePageTemplate } from "@/components/features/FeaturePageTemplate";
+export const metadata: Metadata = getFeaturePageSEO("staff-management");
 
 export default function StaffManagementPage() {
-  return <FeaturePageTemplate data={FEATURE_PAGES["staff-management"]} />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Features", url: "/features" },
+    { name: "Staff Management", url: "/features/staff-management" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <StaffManagementPageClient />
+    </>
+  );
 }

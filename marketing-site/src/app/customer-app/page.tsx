@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { PAGE_SEO, breadcrumbJsonLd } from "@/lib/seo";
 import { EcosystemRoutePage } from "@/components/ecosystem/EcosystemRoutePage";
 
-export const metadata: Metadata = {
-  title: "Customer App",
-  description: "Online booking, appointment history, loyalty wallet, referrals and WhatsApp notifications — your client's salon companion.",
-  openGraph: {
-    title: "Customer App — Aura Salon CRM/POS",
-    description: "Online booking, loyalty wallet, referrals and WhatsApp notifications for salon clients.",
-    images: [{ url: "/og?path=customer-app", width: 1200, height: 630 }],
-  },
-};
+export const metadata: Metadata = PAGE_SEO["/customer-app"];
 
 export default function CustomerAppPage() {
-  return <EcosystemRoutePage route="customer" />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Customer App", url: "/customer-app" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <EcosystemRoutePage route="customer" />
+    </>
+  );
 }

@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { PAGE_SEO, breadcrumbJsonLd } from "@/lib/seo";
 import { EcosystemRoutePage } from "@/components/ecosystem/EcosystemRoutePage";
 
-export const metadata: Metadata = {
-  title: "Platform Overview",
-  description: "Aura connects Owner CRM and POS, customer booking, staff work, inventory, finance and branch-aware operations for Indian salons.",
-  openGraph: {
-    title: "Platform Overview — Aura Salon CRM/POS",
-    description: "Owner CRM and POS, customer booking and staff operations connected around the same salon day.",
-    images: [{ url: "/og?path=platform", width: 1200, height: 630 }],
-  },
-};
+export const metadata: Metadata = PAGE_SEO["/platform"];
 
 export default function PlatformPage() {
-  return <EcosystemRoutePage route="platform" />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Platform", url: "/platform" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <EcosystemRoutePage route="platform" />
+    </>
+  );
 }
