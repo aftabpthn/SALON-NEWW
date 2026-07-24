@@ -19,6 +19,7 @@ import { CompetitorMatrix } from "@/components/landing/CompetitorMatrix";
 import { PersonalizedDemoModal } from "@/components/landing/PersonalizedDemoModal";
 import { InstantQuotationModal } from "@/components/landing/InstantQuotationModal";
 import { InteractiveFAQ } from "@/components/landing/InteractiveFAQ";
+import { HardwareShowcase } from "@/components/landing/HardwareShowcase";
 
 export default function HomePage() {
   return (
@@ -32,6 +33,7 @@ export default function HomePage() {
       <BeforeAfterSlider />
       <RoleChapters />
       <ProductTour />
+      <HardwareShowcase />
       <MultiBranchShowcase />
       <InstantQuotationModal />
       <ROICalculator />
