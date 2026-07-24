@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "20.3.32",
-    "@angular/cli": "20.3.30",
+    "@angular/cli": "21.0.4",
     "@angular/compiler-cli": "20.3.25",
     "@capacitor/cli": "^7.0.0",
     "typescript": "~5.8.0"
