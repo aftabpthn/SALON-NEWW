@@ -14,7 +14,7 @@ export function RoleChapters() {
   const copy = ECOSYSTEM_CONTENT[language];
   const chapters = (["owner", "customer", "staff"] as const).map((role) => ({ role, content: copy.chapters[role] }));
   return (
-    <section className="bg-[#fffdf9] py-20 md:py-28">
+    <section className="bg-aura-surface py-20 md:py-28">
       <Container>
         <SectionHeading badge={copy.chapters.eyebrow} title={copy.chapters.title} subtitle={copy.chapters.body} />
         <div className="mt-14 space-y-4">

@@ -87,7 +87,7 @@ export function MobileMenu({ open, onClose, links, ctaLinks, pathname }: MobileM
           aria-label={t("nav.primary")}
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-[#21191c]/45 backdrop-blur-[3px]" onClick={onClose} aria-hidden="true" />
+           <div className="absolute inset-0 bg-aura-dark/45 backdrop-blur-[3px]" onClick={onClose} aria-hidden="true" />
 
           {/* Menu Panel */}
           <motion.div
@@ -96,7 +96,7 @@ export function MobileMenu({ open, onClose, links, ctaLinks, pathname }: MobileM
             animate={{ x: 0 }}
             exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
             transition={{ duration: reducedMotion ? 0 : 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute bottom-0 right-0 top-0 w-full max-w-[30rem] border-l border-aura-border bg-[#fffdf9] shadow-2xl"
+            className="absolute bottom-0 right-0 top-0 w-full max-w-[30rem] border-l border-aura-border bg-aura-surface shadow-2xl"
           >
             <div className="flex h-full flex-col overflow-y-auto px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-7" style={{ paddingTop: "calc(5.25rem + env(safe-area-inset-top))" }}>
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-aura-border pb-5">

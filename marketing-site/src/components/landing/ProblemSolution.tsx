@@ -68,7 +68,7 @@ export function ProblemSolution() {
   const inView = useInView(ref, { once: true, margin: "-100px" });
 
   return (
-    <section ref={ref} className="py-20 md:py-32 bg-[#fffdf9]">
+    <section ref={ref} className="py-20 md:py-32 bg-aura-surface">
       <Container>
         <SectionHeading
           badge={t("problem.badge")}

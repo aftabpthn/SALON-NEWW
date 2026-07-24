@@ -42,6 +42,15 @@
   --aura-danger: #EF4444;
   --aura-info: #3B82F6;
 
+  /* Dark surfaces */
+  --aura-dark: #171415;
+  --aura-dark-elevated: #21191c;
+
+  /* Accent tones (copper / cream) */
+  --aura-copper: #e3b493;
+  --aura-cream: #e8c8af;
+  --aura-cta-cream: #f5e8dc;
+
   /* Shadows */
   --aura-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
   --aura-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
@@ -95,6 +104,11 @@
   --color-aura-warning: var(--aura-warning);
   --color-aura-danger: var(--aura-danger);
   --color-aura-info: var(--aura-info);
+  --color-aura-dark: var(--aura-dark);
+  --color-aura-dark-elevated: var(--aura-dark-elevated);
+  --color-aura-copper: var(--aura-copper);
+  --color-aura-cream: var(--aura-cream);
+  --color-aura-cta-cream: var(--aura-cta-cream);
   --color-neon-violet: #681f37;
   --color-electric-blue: #526d68;
   --color-deep-navy: #171415;
@@ -183,24 +197,10 @@ button, a { touch-action: manipulation; }
   background-clip: text;
 }
 
-.gradient-text-animated {
-  background: var(--gradient-hero);
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: none;
-}
-
 /* Retire the previous rainbow CTA treatment across legacy routes. */
 .from-neon-violet.via-aura-rose.to-aura-amber {
   background-image: none;
   background-color: var(--aura-burgundy);
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
 }
 
 /* ===== GLOW EFFECTS ===== */

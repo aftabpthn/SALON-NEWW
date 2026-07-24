@@ -19,7 +19,7 @@ function StaticScene({ selected }: { selected: EcosystemRole }) {
         {(["owner", "customer", "staff", "flow"] as EcosystemRole[]).map((role, index) => {
           const Icon = roleIcons[role];
           const position = ["left-[2%] top-[18%]", "right-[4%] top-[12%]", "right-[1%] bottom-[10%]", "left-[8%] bottom-[8%]"][index];
-          return <div key={role} className={cn("absolute grid h-14 w-14 place-items-center rounded-2xl border bg-[#fffaf2]/90 shadow-lg transition-transform sm:h-16 sm:w-16", position, selected === role ? "scale-110 border-aura-amber text-aura-burgundy" : "border-aura-border text-aura-text-muted")}><Icon className="h-5 w-5" /></div>;
+          return <div key={role} className={cn("absolute grid h-14 w-14 place-items-center rounded-2xl border bg-aura-surface/90 shadow-lg transition-transform sm:h-16 sm:w-16", position, selected === role ? "scale-110 border-aura-amber text-aura-burgundy" : "border-aura-border text-aura-text-muted")}><Icon className="h-5 w-5" /></div>;
         })}
       </div>
     </div>
@@ -46,7 +46,7 @@ export function EcosystemStage({ selected, onSelect }: { selected: EcosystemRole
     <div ref={ref} className="relative aspect-[4/4.35] min-h-[25rem] overflow-hidden rounded-[1.75rem] border border-white/60 bg-[radial-gradient(circle_at_50%_45%,#fffaf2_0%,#eadfd2_52%,#d7c5b4_100%)] shadow-[0_35px_100px_rgba(61,30,40,.2)] sm:aspect-[4/3.3] lg:aspect-[4/4.15]" aria-label={copy.hero.sceneLabel}>
       <StaticScene selected={selected} />
       {useWebGL && <div className="absolute inset-0"><DynamicScene selected={selected} reducedMotion={capabilities.reducedMotion} onSelect={onSelect} /></div>}
-      <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/60 bg-[#fffdf9]/92 p-2.5 shadow-lg backdrop-blur-md sm:inset-x-5 sm:bottom-5">
+      <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/60 bg-aura-surface/92 p-2.5 shadow-lg backdrop-blur-md sm:inset-x-5 sm:bottom-5">
         <div className="grid grid-cols-4 gap-1" role="group" aria-label={copy.ecosystem.title}>
           {(Object.keys(copy.ecosystem.roles) as EcosystemRole[]).map((role) => {
             const Icon = roleIcons[role];
@@ -54,7 +54,7 @@ export function EcosystemStage({ selected, onSelect }: { selected: EcosystemRole
           })}
         </div>
       </div>
-      <p className="absolute left-4 top-4 max-w-[15rem] rounded-full border border-white/60 bg-[#fffdf9]/85 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.1em] text-aura-text-muted backdrop-blur sm:left-5 sm:top-5 sm:text-[10px]">{copy.hero.disclosure}</p>
+      <p className="absolute left-4 top-4 max-w-[15rem] rounded-full border border-white/60 bg-aura-surface/85 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[.1em] text-aura-text-muted backdrop-blur sm:left-5 sm:top-5 sm:text-[10px]">{copy.hero.disclosure}</p>
     </div>
   );
 }

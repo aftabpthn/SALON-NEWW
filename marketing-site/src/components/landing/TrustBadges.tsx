@@ -18,7 +18,7 @@ export function TrustBadges() {
   const inView = useInView(ref, { once: true, margin: "-40px" });
 
   return (
-    <section ref={ref} className="bg-[#fffdf9] py-10 sm:py-12">
+    <section ref={ref} className="bg-aura-surface py-10 sm:py-12">
       <div className="mx-auto max-w-[82rem] px-4 sm:px-6 lg:px-10">
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-aura-border bg-aura-border sm:grid-cols-2 lg:grid-cols-4">
           {BADGES.map((badge, i) => (

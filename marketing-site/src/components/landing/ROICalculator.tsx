@@ -31,7 +31,7 @@ export function ROICalculator() {
   ];
 
   return (
-    <section className="bg-[#fffdf9] py-20 md:py-28">
+    <section className="bg-aura-surface py-20 md:py-28">
       <Container>
         <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:gap-16">
           <div><SectionHeading badge={t("roi.badge")} title={t("roi.title")} subtitle={t("roi.body")} align="left" /><div className="mt-8 rounded-2xl border border-aura-border bg-aura-bg p-5"><Calculator className="h-5 w-5 text-aura-burgundy" /><p className="mt-4 text-xs leading-5 text-aura-text-muted">{t("roi.disclaimer")}</p></div></div>
@@ -39,11 +39,11 @@ export function ROICalculator() {
             <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-7">
               {fields.map((field) => <label key={field.key} className="grid gap-2 text-xs font-semibold text-aura-text-secondary"><span>{field.label}</span><input type="number" min={limits[field.key][0]} max={limits[field.key][1]} step={field.step ?? 1} inputMode="decimal" value={values[field.key]} onChange={(event) => update(field.key, event.target.value)} onBlur={(event) => update(field.key, event.target.value)} className="w-full rounded-xl border border-aura-border bg-aura-surface-muted px-3 py-3 text-base font-semibold text-aura-text outline-none focus:border-aura-burgundy focus:ring-2 focus:ring-aura-rose-soft" /></label>)}
             </div>
-            <div className="bg-[#21191c] p-5 text-white sm:p-7" aria-live="polite" aria-atomic="true">
+            <div className="bg-aura-dark-elevated p-5 text-white sm:p-7" aria-live="polite" aria-atomic="true">
               <div className="grid gap-5 sm:grid-cols-2"><div><p className="text-xs text-white/45">{t("roi.monthly")}</p><strong className="mt-1 block font-display text-3xl font-normal sm:text-4xl">{currency.format(result.monthly)}</strong></div><div><p className="text-xs text-white/45">{t("roi.annual")}</p><strong className="mt-1 block text-xl">{currency.format(result.monthly * 12)}</strong></div></div>
               <dl className="mt-6 grid gap-2 border-t border-white/10 pt-5 text-xs sm:grid-cols-2"><div className="flex justify-between gap-3 sm:block"><dt className="text-white/45">{t("roi.revenue")}</dt><dd className="mt-1 font-semibold">{currency.format(result.recoveredRevenue)}</dd></div><div className="flex justify-between gap-3 sm:block"><dt className="text-white/45">{t("roi.time")}</dt><dd className="mt-1 font-semibold">{currency.format(result.timeValue)}</dd></div></dl>
               <details className="mt-5 border-t border-white/10 pt-4 text-xs text-white/55"><summary className="min-h-10 cursor-pointer py-2 font-semibold text-white/75">{t("roi.method")}</summary><div className="space-y-2 pb-2 leading-5"><p>{t("roi.formulaRevenue")}</p><p>{t("roi.formulaTime")}</p></div></details>
-              <a href={CTA_LINKS.demo} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-[#f4e8dc] px-5 text-sm font-semibold text-aura-burgundy">{t("roi.cta")}<ArrowRight className="h-4 w-4" /></a>
+              <a href={CTA_LINKS.demo} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full bg-aura-cta-cream px-5 text-sm font-semibold text-aura-burgundy">{t("roi.cta")}<ArrowRight className="h-4 w-4" /></a>
             </div>
           </div>
         </div>

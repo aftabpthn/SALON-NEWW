@@ -11,7 +11,7 @@ export function WorkflowNarrative({ compact = false }: { compact?: boolean }) {
   const { language } = useLanguage();
   const copy = ECOSYSTEM_CONTENT[language];
   return (
-    <section className="overflow-hidden bg-[#f3ece2] py-20 md:py-28">
+    <section className="overflow-hidden bg-aura-bg-warm py-20 md:py-28">
       <Container size="wide">
         <SectionHeading badge={copy.workflow.eyebrow} title={copy.workflow.title} subtitle={copy.workflow.body} align="left" />
         <ol className="relative mt-12 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

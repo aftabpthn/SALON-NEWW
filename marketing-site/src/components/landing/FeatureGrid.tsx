@@ -66,7 +66,7 @@ function TiltCard({ feature, index }: { feature: typeof FEATURES[number]; index:
         whileInView={{ opacity: 1, y: 0, scale: 1 }}
         viewport={{ once: true, margin: "-50px" }}
         transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        className="relative rounded-2xl border border-aura-border bg-[#fffdf9] p-6 sm:p-7 h-full min-h-64 transition-shadow duration-300 cursor-pointer"
+        className="relative rounded-2xl border border-aura-border bg-aura-surface p-6 sm:p-7 h-full min-h-64 transition-shadow duration-300 cursor-pointer"
         data-cursor-hover
       >
         {/* Glow overlay */}
@@ -118,7 +118,7 @@ export function FeatureGrid() {
   const inView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section ref={ref} className="py-24 md:py-32 bg-[#f5f0e8] section-divider">
+    <section ref={ref} className="py-24 md:py-32 bg-aura-bg section-divider">
       <Container>
         <SectionHeading
           badge={t("features.badge")}
@@ -141,7 +141,7 @@ export function FeatureGrid() {
         <div className="mt-12 text-center">
           <Link
             href="/features"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-neon-violet hover:text-neon-violet/80 transition-colors"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-aura-burgundy hover:text-aura-burgundy-strong transition-colors"
           >
             {t("features.all")} →
           </Link>

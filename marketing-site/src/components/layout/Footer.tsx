@@ -28,10 +28,10 @@ export function Footer() {
   const inView = useInView(ref, { once: true, margin: "-50px" });
 
   return (
-    <footer ref={ref} className="relative bg-[#171415] text-white/70 overflow-hidden">
+    <footer ref={ref} className="relative bg-aura-dark text-white/70 overflow-hidden">
       {/* Subtle mesh gradient background */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-neon-violet/5 blur-[150px]" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-aura-burgundy/5 blur-[150px]" />
         <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full bg-aura-rose/4 blur-[120px]" />
       </div>
 
@@ -43,13 +43,13 @@ export function Footer() {
             animate={inView ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
           >
-            <h2 className="max-w-4xl font-display text-[clamp(2.7rem,6vw,5.6rem)] font-normal tracking-[-.04em] text-white mb-5 leading-[.96]">
+            <h2 className="max-w-4xl font-display text-[clamp(2.7rem,6vw,5.6rem)] font-normal tracking-[-.035em] text-white mb-5 leading-[1.04]">
               {t("footer.title")}
             </h2>
             <p className="text-base md:text-lg text-white/50 mb-8 max-w-2xl">
               {t("footer.body")}
             </p>
-            <Link href={CTA_LINKS.trial} className="inline-flex min-h-12 items-center rounded-full bg-[#f5e8dc] px-7 text-sm font-semibold text-aura-burgundy shadow-lg transition-colors duration-300 hover:bg-white">{t("nav.trial")}</Link>
+            <Link href={CTA_LINKS.trial} className="inline-flex min-h-12 items-center rounded-full bg-aura-cta-cream px-7 text-sm font-semibold text-aura-burgundy shadow-lg transition-colors duration-300 hover:bg-white">{t("nav.trial")}</Link>
           </motion.div>
         </div>
       </div>

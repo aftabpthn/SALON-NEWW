@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef } from "react";
+import Link from "next/link";
 import { motion, useInView } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { CTA_LINKS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
+import { Button } from "@/components/ui/Button";
 import { useLanguage } from "@/components/providers/LanguageProvider";
 
 export function CTASection() {
@@ -13,13 +15,13 @@ export function CTASection() {
   const inView = useInView(ref, { once: true, margin: "-80px" });
 
   return (
-    <section ref={ref} className="relative py-20 md:py-28 bg-[#fffdf9] overflow-hidden">
+    <section ref={ref} className="relative py-20 md:py-28 bg-aura-surface overflow-hidden">
       <Container>
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-          className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#21191c]"
+          className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-aura-dark-elevated"
         >
           <div className="absolute inset-y-0 right-0 w-2/5 border-l border-white/10 opacity-50 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:48px_48px]" aria-hidden="true" />
 
@@ -30,7 +32,7 @@ export function CTASection() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.7, delay: 0.2 }}
             >
-              <h2 className="max-w-3xl font-display text-[clamp(2.6rem,6vw,5.5rem)] font-normal leading-[.96] tracking-[-.04em] text-white text-balance">
+              <h2 className="max-w-3xl font-display text-[clamp(2.6rem,6vw,5.5rem)] font-normal leading-[1.04] tracking-[-.035em] text-white text-balance">
                 {t("cta.title")}
               </h2>
               <p className="mt-6 text-base leading-7 text-white/55 max-w-2xl">
@@ -44,11 +46,25 @@ export function CTASection() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="flex flex-col items-stretch gap-3 sm:flex-row lg:flex-col"
             >
-              <a href={CTA_LINKS.trial} className="group inline-flex min-h-12 items-center justify-center gap-2.5 rounded-full bg-[#f5e8dc] px-7 text-sm font-bold text-aura-burgundy shadow-lg transition-colors hover:bg-white">
-                {t("cta.primary")}
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </a>
-              <a href="/features" className="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-full border border-white/20 px-7 text-sm font-semibold text-white transition-colors hover:bg-white/10">{t("cta.secondary")}</a>
+              <Button
+                asChild
+                variant="primary"
+                size="lg"
+                className="bg-aura-cta-cream text-aura-burgundy hover:bg-white shadow-lg sm:inline-flex"
+              >
+                <Link href={CTA_LINKS.trial} className="group">
+                  {t("cta.primary")}
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="border-white/20 text-white hover:bg-white/10 sm:inline-flex"
+              >
+                <Link href="/features">{t("cta.secondary")}</Link>
+              </Button>
             </motion.div>
 
             <motion.div

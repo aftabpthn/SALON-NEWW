@@ -56,15 +56,15 @@ export function Navbar() {
         className={cn(
           "fixed inset-x-0 top-0 z-[9997] border-b pt-[env(safe-area-inset-top)] transition-[background-color,border-color,box-shadow] duration-300",
           scrolled || mobileOpen
-            ? "border-aura-border/80 bg-[#fffdf9]/95 shadow-[0_10px_35px_rgba(49,28,33,0.07)] backdrop-blur-xl"
-            : "border-transparent bg-[#f5f0e8]/75 backdrop-blur-md"
+            ? "border-aura-border/80 bg-aura-surface/95 shadow-[0_10px_35px_rgba(49,28,33,0.07)] backdrop-blur-xl"
+            : "border-transparent bg-aura-bg/75 backdrop-blur-md"
         )}
       >
         <nav className="mx-auto max-w-[90rem] px-3 sm:px-6 xl:px-8 2xl:px-10" aria-label={t("nav.primary")}>
           <div className="flex h-16 items-center justify-between gap-3 sm:h-[4.5rem]">
             {/* Logo */}
             <Link href="/" className="group flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl" aria-label={t("nav.home")}>
-              <span className="grid h-10 w-10 place-items-center rounded-[.85rem] bg-aura-burgundy font-display text-xl italic text-[#fffaf2] shadow-[0_6px_18px_rgba(69,18,37,.2)] transition-transform duration-300 group-hover:scale-[1.03]" aria-hidden="true">A</span>
+              <span className="grid h-10 w-10 place-items-center rounded-[.85rem] bg-aura-burgundy font-display text-xl italic text-white shadow-[0_6px_18px_rgba(69,18,37,.2)] transition-transform duration-300 group-hover:scale-[1.03]" aria-hidden="true">A</span>
               <span className="leading-none">
                 <span className="block font-display text-[1.35rem] tracking-[-.035em] text-aura-text">Aura</span>
                 <span className="mt-1 hidden text-[8px] font-bold uppercase tracking-[.2em] text-aura-text-muted md:block">Salon OS</span>
@@ -88,7 +88,7 @@ export function Navbar() {
                     {active && (
                       <motion.span
                         layoutId="desktop-nav-active"
-                        className="absolute inset-0 rounded-full border border-aura-border bg-[#fffdf9] shadow-sm"
+                        className="absolute inset-0 rounded-full border border-aura-border bg-aura-surface shadow-sm"
                         transition={reducedMotion ? { duration: 0 } : { duration: 0.35, ease: "easeOut" }}
                         aria-hidden="true"
                       />

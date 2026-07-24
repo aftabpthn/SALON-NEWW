@@ -40,7 +40,7 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; inde
       } : undefined}
       className={`relative rounded-2xl border p-6 lg:p-8 transition-all duration-300 ${
         tier.highlighted
-          ? "border-neon-violet/30 bg-white shadow-xl md:scale-[1.04]"
+          ? "border-aura-burgundy/30 bg-white shadow-xl md:scale-[1.04]"
           : "border-aura-border bg-white hover:shadow-lg hover:border-aura-border-strong"
       }`}
     >
@@ -48,7 +48,7 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; inde
       {tier.highlighted && (
         <>
           <div className="absolute -inset-[1px] rounded-2xl animate-breathe pointer-events-none" />
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full bg-gradient-to-r from-neon-violet to-aura-rose text-white text-xs font-bold shadow-lg">
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full bg-gradient-to-r from-aura-burgundy to-aura-rose text-white text-xs font-bold shadow-lg">
             {t("pricing.popular")}
           </div>
         </>
@@ -78,11 +78,15 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; inde
         ))}
       </ul>
 
-      <a href={CTA_LINKS.trial} className="block">
-        <Button variant={tier.highlighted ? "primary" : "outline"} className="w-full">
+      <Button
+        asChild
+        variant={tier.highlighted ? "primary" : "outline"}
+        className="w-full"
+      >
+        <Link href={CTA_LINKS.trial}>
           {index === 2 ? t("pricing.sales") : t("pricing.start")}
-        </Button>
-      </a>
+        </Link>
+      </Button>
     </motion.div>
   );
 }
@@ -115,7 +119,7 @@ export function PricingPreview() {
         <div className="mt-12 text-center">
           <Link
             href="/pricing"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-neon-violet hover:text-neon-violet/80 transition-colors"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-aura-burgundy hover:text-aura-burgundy-strong transition-colors"
           >
             {t("pricing.all")} →
           </Link>
