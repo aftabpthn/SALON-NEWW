@@ -83,6 +83,7 @@ export const metadata: Metadata = {
 
 import { CustomCursor } from "@/components/ui/CustomCursor";
 import { SoundEffectsToggle } from "@/components/ui/SoundEffects";
+import { FloatingConversionDock } from "@/components/ui/FloatingConversionDock";
 
 const jsonLdScripts = [softwareAppJsonLd, organizationJsonLd, websiteJsonLd];
 
@@ -109,6 +110,7 @@ export default function RootLayout({
         <SmoothScrollProvider>
           <CustomCursor />
           <SoundEffectsToggle />
+          <FloatingConversionDock />
           <ScrollProgress />
           <WhatsAppButton />
           <CommandPalette />
