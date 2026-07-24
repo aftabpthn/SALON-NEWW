@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { motion, useInView } from "motion/react";
+import { motion, useInView, useReducedMotion } from "motion/react";
 import { Check } from "lucide-react";
 import { PRICING_TIERS, CTA_LINKS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
@@ -16,15 +16,16 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; inde
   const { language, t } = useLanguage();
   const features = language === "hi" ? PRICING_FEATURES_HI[index] : tier.features;
   const cardRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
   const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0 });
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!cardRef.current || !tier.highlighted) return;
+    if (!cardRef.current || !tier.highlighted || reducedMotion) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     setTilt({ rotateX: (0.5 - y) * 8, rotateY: (x - 0.5) * 8 });
-  }, [tier.highlighted]);
+  }, [tier.highlighted, reducedMotion]);
 
   const handleMouseLeave = useCallback(() => setTilt({ rotateX: 0, rotateY: 0 }), []);
 

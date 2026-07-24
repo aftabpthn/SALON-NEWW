@@ -416,7 +416,6 @@ export const organizationJsonLd = {
   url: SITE,
   logo: `${SITE}/logo.png`,
   description: "Connected salon operating system for Indian salons — CRM, POS, booking, staff, inventory and finance.",
-  sameAs: [],
   contactPoint: {
     "@type": "ContactPoint",
     contactType: "customer support",
@@ -428,17 +427,12 @@ export const organizationJsonLd = {
   },
 };
 
-/* ===== JSON-LD: WebSite with SearchAction ===== */
+/* ===== JSON-LD: WebSite ===== */
 export const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   name: "Aura Salon CRM/POS",
   url: SITE,
-  potentialAction: {
-    "@type": "SearchAction",
-    target: `${SITE}/blog?q={search_term_string}`,
-    "query-input": "required name=search_term_string",
-  },
 };
 
 /* ===== JSON-LD: SoftwareApplication (enhanced) ===== */
@@ -495,13 +489,6 @@ export const softwareAppJsonLd = {
       ],
     },
   ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    ratingCount: "150",
-    bestRating: "5",
-    worstRating: "1",
-  },
   screenshot: `${SITE}/screenshot.png`,
   featureList: [
     "Smart Booking & Appointments",

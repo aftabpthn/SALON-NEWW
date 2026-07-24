@@ -46,7 +46,7 @@ export function Footer() {
             <h2 className="max-w-4xl font-display text-[clamp(2.7rem,6vw,5.6rem)] font-normal tracking-[-.035em] text-white mb-5 leading-[1.04]">
               {t("footer.title")}
             </h2>
-            <p className="text-base md:text-lg text-white/50 mb-8 max-w-2xl">
+            <p className="text-base md:text-lg text-white/60 mb-8 max-w-2xl">
               {t("footer.body")}
             </p>
             <Link href={CTA_LINKS.trial} className="inline-flex min-h-12 items-center rounded-full bg-aura-cta-cream px-7 text-sm font-semibold text-aura-burgundy shadow-lg transition-colors duration-300 hover:bg-white">{t("nav.trial")}</Link>
@@ -70,10 +70,10 @@ export function Footer() {
               </div>
               <span className="text-lg font-bold text-white tracking-tight">Aura</span>
             </Link>
-            <p className="text-sm text-white/40 leading-relaxed mb-6">
+            <p className="text-sm text-white/50 leading-relaxed mb-6">
               {t("footer.about")}
             </p>
-            <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[.12em] text-white/35"><span>{t("nav.owner-crm")}</span><span>·</span><span>{t("nav.customer-app")}</span><span>·</span><span>{t("nav.staff-app")}</span></div>
+            <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[.12em] text-white/45"><span>{t("nav.owner-crm")}</span><span>·</span><span>{t("nav.customer-app")}</span><span>·</span><span>{t("nav.staff-app")}</span></div>
             <div className="mt-6">
               <Newsletter />
             </div>
@@ -95,7 +95,7 @@ export function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-white/40 hover:text-white transition-colors duration-200"
+                      className="text-sm text-white/50 hover:text-white transition-colors duration-200"
                     >
                       {t(footerLabelKeys[link.label] ?? link.label)}
                     </Link>
@@ -108,13 +108,13 @@ export function Footer() {
 
         {/* Bottom Bar */}
         <div className="mt-16 pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/30">
+          <p className="text-sm text-white/45">
             &copy; {new Date().getFullYear()} Aura Salon CRM/POS. {t("footer.rights")}
           </p>
           <div className="flex items-center gap-6">
-            <Link href="/privacy" className="text-sm text-white/30 hover:text-white/60 transition-colors">{t("footer.privacy")}</Link>
-            <Link href="/terms" className="text-sm text-white/30 hover:text-white/60 transition-colors">{t("footer.terms")}</Link>
-            <Link href="/cookies" className="text-sm text-white/30 hover:text-white/60 transition-colors">{t("footer.cookies")}</Link>
+            <Link href="/privacy" className="text-sm text-white/45 hover:text-white/70 transition-colors">{t("footer.privacy")}</Link>
+            <Link href="/terms" className="text-sm text-white/45 hover:text-white/70 transition-colors">{t("footer.terms")}</Link>
+            <Link href="/cookies" className="text-sm text-white/45 hover:text-white/70 transition-colors">{t("footer.cookies")}</Link>
           </div>
         </div>
       </div>

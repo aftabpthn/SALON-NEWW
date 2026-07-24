@@ -20,7 +20,7 @@ export function Newsletter() {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
       <h3 className="text-sm font-bold text-white mb-2">{t("newsletter.title")}</h3>
-      <p className="text-xs text-white/40 mb-4">
+      <p className="text-xs text-white/50 mb-4">
         {t("newsletter.body")}
       </p>
       {submitted ? (
@@ -41,11 +41,11 @@ export function Newsletter() {
             placeholder="you@salon.com"
             aria-label={t("newsletter.email")}
             required
-            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-neon-violet/50"
+            className="flex-1 px-3 py-2 rounded-lg bg-white/10 border border-white/10 text-sm text-white placeholder:text-white/45 focus:outline-none focus:ring-1 focus:ring-aura-burgundy/50"
           />
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg bg-neon-violet text-white text-xs font-semibold hover:bg-neon-violet/80 transition-colors"
+            className="px-4 py-2 rounded-lg bg-aura-burgundy text-white text-xs font-semibold hover:bg-aura-burgundy-strong transition-colors"
           >
             {t("newsletter.join")}
           </button>

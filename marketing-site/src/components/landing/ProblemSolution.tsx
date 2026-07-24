@@ -99,7 +99,7 @@ export function ProblemSolution() {
           </div>
 
           {/* Solution Side */}
-          <div className="bg-[#21191c] p-6 sm:p-8 lg:p-10">
+          <div className="bg-aura-dark-elevated p-6 sm:p-8 lg:p-10">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}

@@ -21,7 +21,7 @@ export function ProductShell({ role, label, eyebrow, title, body, points, note, 
   const copy = ECOSYSTEM_CONTENT[language];
   const phone = role === "customer" || role === "staff";
   return (
-    <div className="min-w-0" data-media-slot="Replace with approved Aura product media while retaining the accessible description">
+    <div className="min-w-0" data-media-slot="">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-[.12em] text-white/45"><span>{disclosure}</span><span>{label}</span></div>
       <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-aura-bg p-3 text-aura-text shadow-2xl sm:p-5">
         <div className="flex items-center justify-between border-b border-aura-border pb-3"><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-aura-burgundy" /><span className="text-xs font-semibold">Aura · {eyebrow}</span></div><MoreHorizontal className="h-4 w-4 text-aura-text-muted" aria-hidden="true" /></div>

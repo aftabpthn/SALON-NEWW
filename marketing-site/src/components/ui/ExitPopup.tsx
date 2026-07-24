@@ -92,7 +92,7 @@ export function ExitPopup() {
             <button
               ref={closeRef}
               onClick={dismiss}
-              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/80 flex items-center justify-center text-aura-text-muted hover:text-aura-text transition-colors"
+              className="absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/80 flex items-center justify-center text-aura-text-muted hover:text-aura-text transition-colors"
               aria-label={t("overlay.close")}
             >
               <X className="w-4 h-4" />
@@ -134,7 +134,7 @@ export function ExitPopup() {
                       onChange={(e) => setEmail(e.target.value)}
                        placeholder={t("overlay.email")}
                        aria-label={t("overlay.email")}
-                      className="w-full px-4 py-3 rounded-xl border border-aura-border bg-white text-sm text-aura-text placeholder:text-aura-text-muted focus:outline-none focus:ring-2 focus:ring-neon-violet/30 focus:border-neon-violet/50 transition-all"
+                      className="w-full px-4 py-3 rounded-xl border border-aura-border bg-white text-sm text-aura-text placeholder:text-aura-text-muted focus:outline-none focus:ring-2 focus:ring-aura-burgundy/30 focus:border-aura-burgundy/50 transition-all"
                     />
                     <button
                       type="submit"

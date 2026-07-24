@@ -34,7 +34,7 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
 
   return (
     <>
-      <section className="relative pt-28 pb-20 md:pt-40 md:pb-28 bg-[#f5f0e8] overflow-hidden">
+      <section className="relative pt-28 pb-20 md:pt-40 md:pb-28 bg-aura-bg overflow-hidden">
         <GridBackground className="opacity-30" />
 
         <Container className="relative z-10">
@@ -78,7 +78,7 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
         </section>
       )}
 
-      <section className="py-20 md:py-28 bg-[#fffdf9]">
+      <section className="py-20 md:py-28 bg-aura-cream">
         <Container>
           <SectionHeading
             badge={t("feature.capabilities")}
@@ -98,10 +98,10 @@ export function FeaturePageTemplate({ data }: FeaturePageTemplateProps) {
                 <motion.div
                   key={cap.title}
                   variants={staggerChild}
-                  className="group border-b border-r border-aura-border bg-[#fffdf9] p-6 sm:p-8 lg:p-10 transition-colors duration-300 hover:bg-aura-bg"
+                  className="group border-b border-r border-aura-border bg-aura-cream p-6 sm:p-8 lg:p-10 transition-colors duration-300 hover:bg-aura-bg"
                 >
                   <div className="w-10 h-10 rounded-full bg-aura-rose-soft flex items-center justify-center mb-8 group-hover:scale-105 transition-transform duration-300">
-                    <Icon className="w-5 h-5 text-neon-violet" />
+                    <Icon className="w-5 h-5 text-aura-burgundy" />
                   </div>
                   <h3 className="text-lg font-bold text-aura-text mb-2">{cap.title}</h3>
                   <p className="text-sm text-aura-text-secondary leading-relaxed">{cap.description}</p>

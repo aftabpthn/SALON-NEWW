@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import { motion, useInView } from "motion/react";
+import { motion, useInView, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import {
   Calendar, CreditCard, Users, UserCheck, Package, Megaphone, TrendingUp, ShieldCheck,
@@ -28,11 +28,12 @@ function TiltCard({ feature, index }: { feature: typeof FEATURES[number]; index:
   const { language } = useLanguage();
   const translated = language === "hi" ? FEATURE_OVERVIEW_HI[index] : undefined;
   const cardRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
   const [tilt, setTilt] = useState({ rotateX: 0, rotateY: 0, glowX: 50, glowY: 50 });
   const [isHovered, setIsHovered] = useState(false);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || reducedMotion) return;
     const rect = cardRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -42,7 +43,7 @@ function TiltCard({ feature, index }: { feature: typeof FEATURES[number]; index:
       glowX: x * 100,
       glowY: y * 100,
     });
-  }, []);
+  }, [reducedMotion]);
 
   const handleMouseLeave = useCallback(() => {
     setTilt({ rotateX: 0, rotateY: 0, glowX: 50, glowY: 50 });

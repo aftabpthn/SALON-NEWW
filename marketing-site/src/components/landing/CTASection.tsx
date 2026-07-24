@@ -54,7 +54,7 @@ export function CTASection() {
               >
                 <Link href={CTA_LINKS.trial} className="group">
                   {t("cta.primary")}
-                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
                 </Link>
               </Button>
               <Button

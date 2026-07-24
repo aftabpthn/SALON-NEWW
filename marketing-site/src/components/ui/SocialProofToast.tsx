@@ -28,7 +28,7 @@ export function SocialProofToast() {
             animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, x: -10, scale: 0.95 }}
             transition={{ duration: .45, ease: [0.22, 1, 0.36, 1] }}
-            className="flex max-w-xs items-center gap-3 rounded-full border border-aura-border bg-[#fffdf9]/95 px-4 py-3 shadow-xl backdrop-blur-xl"
+            className="flex max-w-xs items-center gap-3 rounded-full border border-aura-border bg-aura-surface/95 px-4 py-3 shadow-xl backdrop-blur-xl"
           >
             {/* Avatar */}
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-aura-rose-soft text-aura-burgundy">
