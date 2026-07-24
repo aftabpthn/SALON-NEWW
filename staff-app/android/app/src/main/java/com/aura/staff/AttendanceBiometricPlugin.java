@@ -336,24 +336,30 @@ public class AttendanceBiometricPlugin extends Plugin {
     @PluginMethod
     public void verifyUserAndSign(PluginCall call) {
         String payloadBase64 = call.getString("signingPayloadBase64");
+        byte[] payload;
         try {
             if (payloadBase64 == null || payloadBase64.isEmpty()) {
                 reject(call, "PAYLOAD_REQUIRED", "signingPayloadBase64 is required.", null, null);
                 return;
             }
-            // Validate and decode the signing payload
-            byte[] payload = Base64.decode(payloadBase64, Base64.DEFAULT);
-            if (payload.length == 0) throw new IllegalArgumentException("Empty signing payload after decode");
+            // Validate and decode the signing payload (supports standard + URL-safe Base64)
+            payload = Base64.decode(payloadBase64, Base64.DEFAULT | Base64.URL_SAFE);
+            if (payload == null || payload.length == 0) throw new IllegalArgumentException("Empty signing payload after decode");
 
             // Verify the decoded payload is valid JSON (catches corruption early)
             new JSONObject(new String(payload, StandardCharsets.UTF_8));
-
-            // Clear the cached location after successful use
-            cachedLocation = null;
-
-            authenticateAndSign(call, payload, call.getString("reason", "Verify attendance"));
         } catch (Exception error) {
             reject(call, "PAYLOAD_INVALID", "The signing payload is invalid or could not be processed.", error, null);
+            return;
+        }
+
+        // Clear the cached location after successful payload validation
+        cachedLocation = null;
+
+        try {
+            authenticateAndSign(call, payload, call.getString("reason", "Verify attendance"));
+        } catch (Exception error) {
+            reject(call, "VERIFICATION_ERROR", error.getMessage() != null ? error.getMessage() : "Biometric verification failed.", error, null);
         }
     }
 
@@ -420,10 +426,6 @@ public class AttendanceBiometricPlugin extends Plugin {
             .setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setUserAuthenticationRequired(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            byte[] attestationChallenge = MessageDigest.getInstance("SHA-256").digest(getOrCreateInstallationId().getBytes(StandardCharsets.UTF_8));
-            builder.setAttestationChallenge(attestationChallenge);
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setUserAuthenticationParameters(30, KeyProperties.AUTH_BIOMETRIC_STRONG | KeyProperties.AUTH_DEVICE_CREDENTIAL);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -432,6 +434,16 @@ public class AttendanceBiometricPlugin extends Plugin {
             builder.setUserAuthenticationValidityDurationSeconds(-1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 builder.setInvalidatedByBiometricEnrollment(true);
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                byte[] attestationChallenge = MessageDigest.getInstance("SHA-256").digest(getOrCreateInstallationId().getBytes(StandardCharsets.UTF_8));
+                builder.setAttestationChallenge(attestationChallenge);
+                generator.initialize(builder.build());
+                return generator.generateKeyPair();
+            } catch (Exception ignored) {
+                builder.setAttestationChallenge(null);
             }
         }
         generator.initialize(builder.build());

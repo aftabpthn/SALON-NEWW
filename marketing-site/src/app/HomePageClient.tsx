@@ -18,6 +18,7 @@ import { BeforeAfterSlider } from "@/components/landing/BeforeAfterSlider";
 import { CompetitorMatrix } from "@/components/landing/CompetitorMatrix";
 import { PersonalizedDemoModal } from "@/components/landing/PersonalizedDemoModal";
 import { InstantQuotationModal } from "@/components/landing/InstantQuotationModal";
+import { InteractiveFAQ } from "@/components/landing/InteractiveFAQ";
 
 export default function HomePage() {
   return (
@@ -36,6 +37,7 @@ export default function HomePage() {
       <ROICalculator />
       <CompetitorMatrix />
       <PersonalizedDemoModal />
+      <InteractiveFAQ />
       <Stats />
       <Testimonials />
       <PricingPreview />
