@@ -81,6 +81,8 @@ export const metadata: Metadata = {
   },
 };
 
+import { CustomCursor } from "@/components/ui/CustomCursor";
+
 const jsonLdScripts = [softwareAppJsonLd, organizationJsonLd, websiteJsonLd];
 
 export default function RootLayout({
@@ -104,6 +106,7 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">Skip to content / मुख्य सामग्री</a>
         <LanguageProvider>
         <SmoothScrollProvider>
+          <CustomCursor />
           <ScrollProgress />
           <WhatsAppButton />
           <CommandPalette />
