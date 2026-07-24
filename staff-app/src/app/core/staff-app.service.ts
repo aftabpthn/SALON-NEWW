@@ -873,9 +873,9 @@ export class StaffAppService {
        this.attendanceVerificationEvidence.set({ accuracyMeters: location.accuracyMeters });
        const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId, integrityToken, riskVerdict);
 
-      this.attendanceVerificationProgress.set("verify-biometric");
-       const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, location.locationReceipt, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
-      if (verification.userVerified !== true) throw new Error("User verification did not complete. The punch was not recorded.");
+       this.attendanceVerificationProgress.set("verify-biometric");
+        const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
+       if (verification.userVerified !== true) throw new Error("User verification did not complete. The punch was not recorded.");
       this.attendanceVerificationProgress.set("submitting");
       const response = await this.submitAttendanceEvidence({
         challengeId: challenge.challengeId,
