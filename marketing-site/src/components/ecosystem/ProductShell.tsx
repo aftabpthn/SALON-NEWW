@@ -227,7 +227,7 @@ export function ProductShell({ role, label, eyebrow, title, body, points, note, 
             </aside>
           </div>
         ) : (
-          <div className={`mt-4 grid gap-3 ${phone ? "md:grid-cols-[.72fr_1.28fr]" : "md:grid-cols-[1.25fr_.75fr]"}`}>
+          <div className={`mt-4 grid gap-3 ${role === "customer" || role === "staff" ? "md:grid-cols-[.72fr_1.28fr]" : "md:grid-cols-[1.25fr_.75fr]"}`}>
             <section className="rounded-2xl border border-aura-border bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-[.14em] text-aura-burgundy">{eyebrow}</p>
               <h3 className="mt-3 font-display text-3xl leading-tight text-aura-text">{title}</h3>
