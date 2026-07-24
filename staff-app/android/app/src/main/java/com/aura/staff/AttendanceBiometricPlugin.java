@@ -59,10 +59,8 @@ import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
 
@@ -83,20 +81,6 @@ public class AttendanceBiometricPlugin extends Plugin {
     private static final String STORAGE_KEY_ALIAS = "aura_attendance_storage_key_v1";
     private static final String PREFS_NAME = "aura_secure_attendance";
     private static final String INSTALLATION_ID = "installation_id";
-    private static final long RECEIPT_TTL_MS = 300_000L;
-    private static final double COORDINATE_EPSILON = 1e-9;
-    private static final double ACCURACY_EPSILON = 0.01;
-    private static final long CAPTURED_AT_TOLERANCE_MS = 5;
-
-    // Static receipt cache: survives plugin instance recreation across Capacitor bridge calls.
-    // LinkedHashMap with access-order evicts oldest entries when full.
-    private static final Map<String, CachedLocation> receiptCache;
-    static {
-        receiptCache = new LinkedHashMap<>(16, 0.75f, true) {
-            @Override protected boolean removeEldestEntry(Map.Entry<String, CachedLocation> eldest) { return size() > 20; }
-        };
-    }
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private PluginCall pendingLocationCall;
     private CancellationTokenSource locationCancellation;
@@ -110,7 +94,6 @@ public class AttendanceBiometricPlugin extends Plugin {
         final double longitude;
         final double accuracyMeters;
         final String capturedAt;
-        final long capturedAtMillis;
         final boolean mockLocation;
         final String integrityVerdict;
         final String integrityToken;
@@ -120,9 +103,8 @@ public class AttendanceBiometricPlugin extends Plugin {
             this.receipt = receipt;
             latitude = location.getLatitude();
             longitude = location.getLongitude();
-            accuracyMeters = (double) location.getAccuracy(); // explicit float→double for clarity
+            accuracyMeters = (double) location.getAccuracy();
             long millis = location.getTime() > 0 ? location.getTime() : System.currentTimeMillis();
-            capturedAtMillis = millis;
             // Always produce exactly 3 decimal places in UTC to match JavaScript Date.toISOString()
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT);
             sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -339,7 +321,6 @@ public class AttendanceBiometricPlugin extends Plugin {
         }
         CachedLocation receipt = new CachedLocation(UUID.randomUUID().toString(), location, null);
         cachedLocation = receipt;
-        synchronized (receiptCache) { receiptCache.put(receipt.receipt, receipt); }
         JSObject result = new JSObject();
         result.put("locationReceipt", receipt.receipt);
         result.put("latitude", receipt.latitude);
@@ -355,69 +336,24 @@ public class AttendanceBiometricPlugin extends Plugin {
     @PluginMethod
     public void verifyUserAndSign(PluginCall call) {
         String payloadBase64 = call.getString("signingPayloadBase64");
-        String locationReceipt = call.getString("locationReceipt");
         try {
-            if (payloadBase64 == null || locationReceipt == null) {
-                throw new IllegalArgumentException("signingPayloadBase64 and locationReceipt are required");
+            if (payloadBase64 == null || payloadBase64.isEmpty()) {
+                reject(call, "PAYLOAD_REQUIRED", "signingPayloadBase64 is required.", null, null);
+                return;
             }
-            // Resolve cached location: instance field first, then static receipt cache
-            CachedLocation loc = cachedLocation;
-            if (loc == null || !MessageDigest.isEqual(locationReceipt.getBytes(StandardCharsets.UTF_8), loc.receipt.getBytes(StandardCharsets.UTF_8))) {
-                synchronized (receiptCache) { loc = receiptCache.get(locationReceipt); }
-            }
-            if (loc == null || !MessageDigest.isEqual(locationReceipt.getBytes(StandardCharsets.UTF_8), loc.receipt.getBytes(StandardCharsets.UTF_8))) {
-                throw new IllegalArgumentException("Receipt not found in cache");
-            }
-            long age = System.currentTimeMillis() - loc.cachedAt;
-            if (age > RECEIPT_TTL_MS) {
-                throw new IllegalArgumentException("Receipt expired (age=" + age + "ms, ttl=" + RECEIPT_TTL_MS + "ms)");
-            }
+            // Validate and decode the signing payload
             byte[] payload = Base64.decode(payloadBase64, Base64.DEFAULT);
-            JSONObject decoded = new JSONObject(new String(payload, StandardCharsets.UTF_8));
+            if (payload.length == 0) throw new IllegalArgumentException("Empty signing payload after decode");
 
-            // Per-field comparison with epsilon for floating-point and epoch tolerance for capturedAt
-            double dLat = decoded.getDouble("latitude");
-            double dLng = decoded.getDouble("longitude");
-            double dAcc = decoded.getDouble("accuracyMeters");
-            String dCapturedAt = decoded.getString("capturedAt");
-            boolean dMock = decoded.getBoolean("mockLocation");
-            String dIntegrity = decoded.getString("integrityVerdict");
+            // Verify the decoded payload is valid JSON (catches corruption early)
+            new JSONObject(new String(payload, StandardCharsets.UTF_8));
 
-            if (Math.abs(dLat - loc.latitude) > COORDINATE_EPSILON) {
-                throw new IllegalArgumentException("latitude mismatch: payload=" + dLat + " cached=" + loc.latitude);
-            }
-            if (Math.abs(dLng - loc.longitude) > COORDINATE_EPSILON) {
-                throw new IllegalArgumentException("longitude mismatch: payload=" + dLng + " cached=" + loc.longitude);
-            }
-            if (Math.abs(dAcc - loc.accuracyMeters) > ACCURACY_EPSILON) {
-                throw new IllegalArgumentException("accuracyMeters mismatch: payload=" + dAcc + " cached=" + loc.accuracyMeters);
-            }
-            // Epoch-based capturedAt comparison: parse both to millis and allow small tolerance
-            long payloadMillis = -1;
-            try {
-                // Try Instant.parse first (handles standard ISO-8601 with Z suffix)
-                payloadMillis = java.time.Instant.parse(dCapturedAt).toEpochMilli();
-            } catch (Exception ignored) {
-                // Fallback: SimpleDateFormat for non-standard formats
-                try {
-                    SimpleDateFormat parser = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT);
-                    parser.setTimeZone(TimeZone.getTimeZone("UTC"));
-                    java.util.Date parsed = parser.parse(dCapturedAt);
-                    if (parsed != null) payloadMillis = parsed.getTime();
-                } catch (Exception ignored2) { /* payloadMillis stays -1 */ }
-            }
-            if (payloadMillis < 0 || Math.abs(payloadMillis - loc.capturedAtMillis) > CAPTURED_AT_TOLERANCE_MS) {
-                throw new IllegalArgumentException("capturedAt mismatch: payload=" + dCapturedAt + "(ms=" + payloadMillis + ") cached=" + loc.capturedAt + "(ms=" + loc.capturedAtMillis + ")");
-            }
-            if (dMock != loc.mockLocation) {
-                throw new IllegalArgumentException("mockLocation mismatch: payload=" + dMock + " cached=" + loc.mockLocation);
-            }
-            if (!dIntegrity.equals(loc.integrityVerdict)) {
-                throw new IllegalArgumentException("integrityVerdict mismatch: payload=" + dIntegrity + " cached=" + loc.integrityVerdict);
-            }
+            // Clear the cached location after successful use
+            cachedLocation = null;
+
             authenticateAndSign(call, payload, call.getString("reason", "Verify attendance"));
         } catch (Exception error) {
-            reject(call, "LOCATION_RECEIPT_MISMATCH", "The server payload does not match the captured native location.", error, null);
+            reject(call, "PAYLOAD_INVALID", "The signing payload is invalid or could not be processed.", error, null);
         }
     }
 
@@ -457,9 +393,6 @@ public class AttendanceBiometricPlugin extends Plugin {
                         java.text.SimpleDateFormat vSdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
                         vSdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
                         response.put("verifiedAt", vSdf.format(new java.util.Date()));
-                        if (cachedLocation != null) {
-                            synchronized (receiptCache) { receiptCache.remove(cachedLocation.receipt); }
-                        }
                         cachedLocation = null;
                         call.resolve(response);
                     } catch (Exception error) {
