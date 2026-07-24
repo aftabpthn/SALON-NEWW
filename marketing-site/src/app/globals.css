@@ -4,52 +4,52 @@
 :root {
   /* Core Palette */
   --aura-burgundy: #681f37;
-  --aura-burgundy-strong: #451225;
+  --aura-burgundy-strong: #3d0d1e;
   --aura-rose: #c58a99;
-  --aura-rose-soft: rgba(104, 31, 55, 0.09);
+  --aura-rose-soft: rgba(104, 31, 55, 0.12);
   --aura-amber: #b87343;
-  --aura-amber-soft: rgba(184, 115, 67, 0.12);
+  --aura-amber-soft: rgba(184, 115, 67, 0.15);
 
-  /* Bold Gradient Palette */
-  --gradient-primary: linear-gradient(110deg, #681f37, #a44d5e 55%, #b87343);
-  --gradient-hero: linear-gradient(110deg, #451225, #681f37 55%, #b87343);
-  --gradient-cta: linear-gradient(125deg, #28161c, #681f37);
-  --gradient-surface: linear-gradient(180deg, #f5f0e8 0%, #fffdf9 100%);
-  --gradient-dark: linear-gradient(145deg, #171415 0%, #2a181e 60%, #181617 100%);
-  --gradient-mesh: radial-gradient(at 80% 10%, rgba(184,115,67,.12), transparent 42%), radial-gradient(at 12% 70%, rgba(104,31,55,.1), transparent 40%);
+  /* Bold High-Contrast Gradient Palette */
+  --gradient-primary: linear-gradient(110deg, #681f37, #8e2b48 55%, #c87a46);
+  --gradient-hero: linear-gradient(110deg, #3d0d1e, #681f37 55%, #b87343);
+  --gradient-cta: linear-gradient(125deg, #1f0c13, #681f37);
+  --gradient-surface: linear-gradient(180deg, #f7f3eb 0%, #ffffff 100%);
+  --gradient-dark: linear-gradient(145deg, #120e10 0%, #241318 60%, #120e10 100%);
+  --gradient-mesh: radial-gradient(at 80% 10%, rgba(200,122,70,.18), transparent 45%), radial-gradient(at 12% 70%, rgba(104,31,55,.16), transparent 45%);
 
-  /* Surfaces */
-  --aura-bg: #f5f0e8;
-  --aura-bg-warm: #eee5d9;
-  --aura-surface: #fffdf9;
-  --aura-surface-elevated: #FFFFFF;
-  --aura-surface-muted: #f8f3ec;
+  /* High-Contrast Surfaces */
+  --aura-bg: #f6f1e9;
+  --aura-bg-warm: #ece2d4;
+  --aura-surface: #ffffff;
+  --aura-surface-elevated: #ffffff;
+  --aura-surface-muted: #f5efe7;
 
-  /* Text */
-  --aura-text: #211d1e;
-  --aura-text-secondary: #61595a;
-  --aura-text-muted: #8b8181;
-  --aura-text-inverse: #FFFFFF;
+  /* Sharper High-Contrast Text */
+  --aura-text: #181415;
+  --aura-text-secondary: #484042;
+  --aura-text-muted: #746c6d;
+  --aura-text-inverse: #ffffff;
 
-  /* Borders */
-  --aura-border: #ded4c8;
-  --aura-border-strong: #c7b8aa;
-  --aura-border-glow: rgba(104,31,55,.42);
+  /* Vibrant Borders */
+  --aura-border: #d9cdbe;
+  --aura-border-strong: #bfaea0;
+  --aura-border-glow: rgba(104,31,55,.55);
 
   /* Semantic Colors */
-  --aura-success: #567565;
-  --aura-warning: #b87343;
-  --aura-danger: #EF4444;
-  --aura-info: #3B82F6;
+  --aura-success: #2e7d5a;
+  --aura-warning: #d97706;
+  --aura-danger: #dc2626;
+  --aura-info: #2563eb;
 
-  /* Dark surfaces */
-  --aura-dark: #171415;
-  --aura-dark-elevated: #21191c;
+  /* Ultra-Dark surfaces */
+  --aura-dark: #120e10;
+  --aura-dark-elevated: #1e1317;
 
-  /* Accent tones (copper / cream) */
-  --aura-copper: #e3b493;
-  --aura-cream: #e8c8af;
-  --aura-cta-cream: #f5e8dc;
+  /* Accent tones (glowing copper / rose gold) */
+  --aura-copper: #eab490;
+  --aura-cream: #f3d4be;
+  --aura-cta-cream: #faebd9;
 
   /* Role accent backgrounds */
   --aura-role-owner: #28191e;
