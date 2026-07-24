@@ -105,12 +105,11 @@ public class AttendanceBiometricPlugin extends Plugin {
             longitude = location.getLongitude();
             accuracyMeters = location.getAccuracy();
             long millis = location.getTime() > 0 ? location.getTime() : System.currentTimeMillis();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                capturedAt = Instant.ofEpochMilli(millis).toString();
-            } else {
-                capturedAt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT)
-                    .format(new java.util.Date(millis));
-            }
+            // Always produce exactly 3 decimal places in UTC to match JavaScript Date.toISOString()
+            // Instant.toString() strips trailing zeros (.1Z vs .100Z) which causes payload mismatch
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
+            sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            capturedAt = sdf.format(new java.util.Date(millis));
             mockLocation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? location.isMock() : LocationCompat.isMock(location);
             integrityVerdict = integrityToken != null ? "provided" : "not_provided";
             this.integrityToken = integrityToken;
@@ -394,12 +393,9 @@ public class AttendanceBiometricPlugin extends Plugin {
                         response.put("signatureBase64", Base64.encodeToString(unlocked.sign(), Base64.NO_WRAP));
                         response.put("algorithm", "ECDSA_P256_SHA256");
                         response.put("userVerified", true);
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            response.put("verifiedAt", Instant.now().toString());
-                        } else {
-                            response.put("verifiedAt", new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT)
-                                .format(new java.util.Date()));
-                        }
+                        java.text.SimpleDateFormat vSdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
+                        vSdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                        response.put("verifiedAt", vSdf.format(new java.util.Date()));
                         cachedLocation = null;
                         call.resolve(response);
                     } catch (Exception error) {
