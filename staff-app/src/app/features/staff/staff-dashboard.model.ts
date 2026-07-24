@@ -132,13 +132,7 @@ function isOpenAttendance(item: StaffToday["attendance"][number]): boolean {
 
 function timeLabel(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value || "Time unavailable";
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Kolkata"
-  }).format(date);
+  return Number.isNaN(date.getTime()) ? value || "Time unavailable" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function durationLabel(minutes: number): string {

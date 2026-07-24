@@ -13,19 +13,27 @@ import { ProductTour } from "@/components/landing/ProductTour";
 import { WhatsAppSimulator } from "@/components/landing/WhatsAppSimulator";
 import { POSSandbox } from "@/components/landing/POSSandbox";
 import { MultiBranchShowcase } from "@/components/landing/MultiBranchShowcase";
+import { LiveActivityTicker } from "@/components/landing/LiveActivityTicker";
+import { BeforeAfterSlider } from "@/components/landing/BeforeAfterSlider";
+import { CompetitorMatrix } from "@/components/landing/CompetitorMatrix";
+import { PersonalizedDemoModal } from "@/components/landing/PersonalizedDemoModal";
 
 export default function HomePage() {
   return (
     <>
+      <LiveActivityTicker />
       <Hero />
       <EcosystemSelector />
       <WorkflowNarrative compact />
       <WhatsAppSimulator />
       <POSSandbox />
+      <BeforeAfterSlider />
       <RoleChapters />
       <ProductTour />
       <MultiBranchShowcase />
       <ROICalculator />
+      <CompetitorMatrix />
+      <PersonalizedDemoModal />
       <Stats />
       <Testimonials />
       <PricingPreview />

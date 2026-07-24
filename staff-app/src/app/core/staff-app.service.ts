@@ -801,7 +801,7 @@ export class StaffAppService {
   }
 
   attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string, integrityToken?: string, riskVerdict?: string): Promise<AttendanceChallenge> {
-    const { locationReceipt: _locationReceipt, ...serverLocation } = location;
+    const { ...serverLocation } = location;
     const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation, integrityToken: integrityToken || "", riskVerdict: riskVerdict || "" };
     return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload).catch((error) => {
       if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload);
