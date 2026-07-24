@@ -17,6 +17,7 @@ import { LiveActivityTicker } from "@/components/landing/LiveActivityTicker";
 import { BeforeAfterSlider } from "@/components/landing/BeforeAfterSlider";
 import { CompetitorMatrix } from "@/components/landing/CompetitorMatrix";
 import { PersonalizedDemoModal } from "@/components/landing/PersonalizedDemoModal";
+import { InstantQuotationModal } from "@/components/landing/InstantQuotationModal";
 
 export default function HomePage() {
   return (
@@ -31,6 +32,7 @@ export default function HomePage() {
       <RoleChapters />
       <ProductTour />
       <MultiBranchShowcase />
+      <InstantQuotationModal />
       <ROICalculator />
       <CompetitorMatrix />
       <PersonalizedDemoModal />

@@ -11,6 +11,7 @@ import { useLanguage } from "@/components/providers/LanguageProvider";
 import { BusinessTypeSelector } from "./BusinessTypeSelector";
 import { EcosystemStage } from "./EcosystemStage";
 import { ECOSYSTEM_CONTENT, type EcosystemRole } from "@/lib/ecosystem-content";
+import { Aura3dOrbit } from "@/components/three/Aura3dOrbit";
 
 export function Hero() {
   const { language } = useLanguage();
@@ -22,6 +23,7 @@ export function Hero() {
 
   return (
     <section className="relative overflow-hidden bg-aura-bg">
+      <Aura3dOrbit />
       <div className="absolute inset-0 opacity-55 [background-image:linear-gradient(rgba(104,31,55,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(104,31,55,.05)_1px,transparent_1px)] [background-size:72px_72px] [mask-image:linear-gradient(to_bottom,black,transparent_82%)]" aria-hidden="true" />
       <Container size="wide" className="relative z-10">
         <div className="grid items-center gap-10 pb-16 lg:grid-cols-[.86fr_1.14fr] lg:gap-12 lg:pb-24 xl:gap-16">
