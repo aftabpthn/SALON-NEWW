@@ -10,6 +10,9 @@ import { EcosystemSelector } from "@/components/landing/EcosystemSelector";
 import { WorkflowNarrative } from "@/components/landing/WorkflowNarrative";
 import { RoleChapters } from "@/components/landing/RoleChapters";
 import { ProductTour } from "@/components/landing/ProductTour";
+import { WhatsAppSimulator } from "@/components/landing/WhatsAppSimulator";
+import { POSSandbox } from "@/components/landing/POSSandbox";
+import { MultiBranchShowcase } from "@/components/landing/MultiBranchShowcase";
 
 export default function HomePage() {
   return (
@@ -17,8 +20,11 @@ export default function HomePage() {
       <Hero />
       <EcosystemSelector />
       <WorkflowNarrative compact />
+      <WhatsAppSimulator />
+      <POSSandbox />
       <RoleChapters />
       <ProductTour />
+      <MultiBranchShowcase />
       <ROICalculator />
       <Stats />
       <Testimonials />
