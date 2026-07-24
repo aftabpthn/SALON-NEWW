@@ -375,44 +375,51 @@ public class AttendanceBiometricPlugin extends Plugin {
         java.security.Signature signature = java.security.Signature.getInstance("SHA256withECDSA");
         boolean cryptoPrompt = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
         if (cryptoPrompt) signature.initSign(keyPair.getPrivate());
-        BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
-            new BiometricPrompt.AuthenticationCallback() {
-                @Override
-                public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
-                    String code = errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_CANCELED
-                        || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ? "VERIFICATION_CANCELLED" : "VERIFICATION_ERROR";
-                    reject(call, code, errString.toString(), null, null);
-                }
 
-                @Override
-                public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
-                    try {
-                        java.security.Signature unlocked = cryptoPrompt && result.getCryptoObject() != null
-                            ? result.getCryptoObject().getSignature() : signature;
-                        if (unlocked == null) throw new IllegalStateException("Attendance key was not unlocked");
-                        if (!cryptoPrompt) unlocked.initSign(keyPair.getPrivate());
-                        unlocked.update(payload);
-                        JSObject response = new JSObject();
-                        response.put("signatureBase64", Base64.encodeToString(unlocked.sign(), Base64.NO_WRAP));
-                        response.put("algorithm", "ECDSA_P256_SHA256");
-                        response.put("userVerified", true);
-                        java.text.SimpleDateFormat vSdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
-                        vSdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-                        response.put("verifiedAt", vSdf.format(new java.util.Date()));
-                        cachedLocation = null;
-                        call.resolve(response);
-                    } catch (Exception error) {
-                        reject(call, "SIGNING_ERROR", "Unable to sign the attendance payload.", error, null);
-                    }
-                }
-            });
-        BiometricPrompt.PromptInfo.Builder info = new BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Verify attendance")
-            .setSubtitle(reason)
-            .setAllowedAuthenticators(authenticators);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) info.setNegativeButtonText("Cancel");
-        if (cryptoPrompt) prompt.authenticate(info.build(), new BiometricPrompt.CryptoObject(signature));
-        else prompt.authenticate(info.build());
+        getActivity().runOnUiThread(() -> {
+            try {
+                BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
+                    new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                            String code = errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_CANCELED
+                                || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ? "VERIFICATION_CANCELLED" : "VERIFICATION_ERROR";
+                            reject(call, code, errString.toString(), null, null);
+                        }
+
+                        @Override
+                        public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                            try {
+                                java.security.Signature unlocked = cryptoPrompt && result.getCryptoObject() != null
+                                    ? result.getCryptoObject().getSignature() : signature;
+                                if (unlocked == null) throw new IllegalStateException("Attendance key was not unlocked");
+                                if (!cryptoPrompt) unlocked.initSign(keyPair.getPrivate());
+                                unlocked.update(payload);
+                                JSObject response = new JSObject();
+                                response.put("signatureBase64", Base64.encodeToString(unlocked.sign(), Base64.NO_WRAP));
+                                response.put("algorithm", "ECDSA_P256_SHA256");
+                                response.put("userVerified", true);
+                                java.text.SimpleDateFormat vSdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
+                                vSdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                response.put("verifiedAt", vSdf.format(new java.util.Date()));
+                                cachedLocation = null;
+                                call.resolve(response);
+                            } catch (Exception error) {
+                                reject(call, "SIGNING_ERROR", "Unable to sign the attendance payload.", error, null);
+                            }
+                        }
+                    });
+                BiometricPrompt.PromptInfo.Builder info = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Verify attendance")
+                    .setSubtitle(reason)
+                    .setAllowedAuthenticators(authenticators);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) info.setNegativeButtonText("Cancel");
+                if (cryptoPrompt) prompt.authenticate(info.build(), new BiometricPrompt.CryptoObject(signature));
+                else prompt.authenticate(info.build());
+            } catch (Exception error) {
+                reject(call, "BIOMETRIC_PROMPT_ERROR", "Failed to display biometric prompt.", error, null);
+            }
+        });
     }
 
     private KeyPair getOrCreateSigningKey() throws Exception {
