@@ -74,6 +74,30 @@ export class OwnerDashboardPage implements OnDestroy {
   readonly visibleStaff = computed(() => (this.data()?.staffOperations.staff || []).slice(0, 4));
   readonly unavailableActionCategories = computed(() => Object.entries(this.data()?.actionCentre.categories || {}).filter(([, category]) => !category.available));
   readonly showBranchComparison = computed(() => !this.context.selectedBranchId() && (this.data()?.branchComparison.branches.length || 0) > 1);
+  readonly dailyTargetPaise = 3500000;
+  readonly revenueTargetPercent = computed(() => {
+    const current = this.data()?.kpis?.netRevenuePaise?.current || 0;
+    if (!current) return 0;
+    return Math.min(100, Math.round((current / this.dailyTargetPaise) * 100));
+  });
+  readonly occupancyPercent = computed(() => {
+    const total = this.data()?.kpis?.appointments?.current || 0;
+    const completed = this.data()?.kpis?.completedAppointments?.current || 0;
+    if (!total) return 0;
+    return Math.min(100, Math.round((completed / total) * 100));
+  });
+  readonly serviceRevenuePercent = computed(() => {
+    const gross = this.data()?.revenue?.aggregates?.grossSalesPaise?.current || 1;
+    const service = this.data()?.revenue?.aggregates?.serviceRevenuePaise?.current || 0;
+    if (!gross) return 0;
+    return Math.min(100, Math.round((service / gross) * 100));
+  });
+  readonly productRevenuePercent = computed(() => {
+    const gross = this.data()?.revenue?.aggregates?.grossSalesPaise?.current || 1;
+    const product = this.data()?.revenue?.aggregates?.productRevenuePaise?.current || 0;
+    if (!gross) return 0;
+    return Math.min(100, Math.round((product / gross) * 100));
+  });
   private requestId = 0;
   private socket: WebSocket | null = null;
   private reconnectTimer = 0;
