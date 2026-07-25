@@ -131,7 +131,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
     if (this.staff.attendanceDeviceStatus()) values.push(`Device ${this.staff.attendanceDeviceStatus()}`);
     return values.join(" · ");
   });
-  readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
+  readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || this.attendance().find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   readonly todayShift = computed(() => this.today()?.schedules[0] || null);
   private readonly attendanceUpdated = () => void this.load();
