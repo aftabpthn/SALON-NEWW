@@ -340,3 +340,18 @@ input:not(:disabled):active,select:not(:disabled):active,textarea:not(:disabled)
 @media(max-width:380px){
   .tasks-page>.grid.four{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Universal Smart Suggestions UI */
+.search-control, .chat-local-search { position: relative; }
+.search-suggestions { position: absolute; z-index: 50; top: calc(100% + 6px); right: 0; left: 0; overflow: hidden; border: 1px solid var(--staff-border); border-radius: 14px; background: var(--staff-surface); box-shadow: 0 14px 36px rgba(0, 0, 0, .25); max-height: 240px; overflow-y: auto; }
+.search-suggestions button { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 10px; border: 0; border-bottom: 1px solid var(--staff-border); border-radius: 0; padding: 8px 12px; color: var(--staff-text); background: transparent; text-align: left; cursor: pointer; }
+.search-suggestions button:last-child { border-bottom: 0; }
+.search-suggestions button:hover, .search-suggestions button:focus-visible { background: var(--staff-primary-light); color: var(--staff-primary-hover); }
+.search-suggestions span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .84rem; font-weight: 600; }
+.search-suggestions small { flex: 0 0 auto; color: var(--staff-primary-hover); font-size: .62rem; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+
+.command-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 12px; padding: 0 2px; }
+.command-suggestions small { color: var(--staff-text-secondary); font-size: .72rem; font-weight: 700; margin-right: 4px; }
+.suggestion-chip { min-height: 28px; padding: 4px 10px; border: 1px solid var(--staff-border); border-radius: 999px; background: var(--staff-surface-secondary); color: var(--staff-text); font-size: .72rem; font-weight: 650; cursor: pointer; transition: all .15s ease; }
+.suggestion-chip:hover { border-color: var(--staff-border-accent); background: var(--staff-primary-light); color: var(--staff-primary-hover); }
+

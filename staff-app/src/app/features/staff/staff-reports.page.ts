@@ -57,7 +57,19 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             </button>
             <div id="report-advanced-filters" class="advanced-content" [attr.aria-hidden]="!advancedFiltersOpen" [attr.inert]="advancedFiltersOpen ? null : ''">
               <div class="advanced-grid">
-                <label>Search<input [(ngModel)]="reportSearch" type="search" placeholder="Search reports" /></label>
+                <label class="search-control">Search
+                  <input [(ngModel)]="reportSearch" type="search" placeholder="Search reports" (focus)="showReportSuggestions = true" (blur)="closeReportSuggestions()" />
+                  @if (showReportSuggestions && reportSuggestions.length) {
+                    <div class="search-suggestions" role="listbox">
+                      @for (suggestion of reportSuggestions; track suggestion) {
+                        <button type="button" (mousedown)="selectReportSuggestion(suggestion)">
+                          <span>{{ suggestion }}</span>
+                          <small>Report</small>
+                        </button>
+                      }
+                    </div>
+                  }
+                </label>
                 <label>Status<select [(ngModel)]="reportStatus"><option value="all">All statuses</option><option value="completed">Completed</option><option value="live">Live</option></select></label>
                 <label>Sort<select [(ngModel)]="reportSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
                 <button class="button primary advanced-apply" type="button" (click)="load()">Apply filters</button>
@@ -306,6 +318,23 @@ export class StaffReportsPage implements OnInit {
   reportSearch = "";
   reportStatus = "all";
   reportSort = "newest";
+  showReportSuggestions = false;
+
+  get reportSuggestions(): string[] {
+    const q = this.reportSearch.trim().toLowerCase();
+    const suggestions = ["Appointments", "Completed", "Live", "Revenue", "Services", "Staff Performance"];
+    return suggestions.filter((s) => !q || s.toLowerCase().includes(q));
+  }
+
+  selectReportSuggestion(val: string) {
+    this.reportSearch = val;
+    this.showReportSuggestions = false;
+    void this.load();
+  }
+
+  closeReportSuggestions() {
+    setTimeout(() => (this.showReportSuggestions = false), 150);
+  }
   private loadGeneration = 0;
 
   constructor(readonly staff: StaffAppService) {}

@@ -87,6 +87,12 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
           <div class="command-palette" role="dialog" aria-modal="true" aria-labelledby="staff-command-title" tabindex="-1" #commandDialog (keydown)="trapFocus($event, commandDialog)" (click)="$event.stopPropagation()">
             <div class="command-head"><strong id="staff-command-title">Command palette</strong><button type="button" (click)="closeCommand()">Close</button></div>
             <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" aria-label="Search staff pages and business" placeholder="Search staff pages and business..." #commandInput autofocus />
+            <div class="command-suggestions">
+              <small>Suggestions:</small>
+              @for (chip of quickSuggestions(); track chip) {
+                <button type="button" class="suggestion-chip" (click)="applyCommandSuggestion(chip)">{{ chip }}</button>
+              }
+            </div>
             @if (query().trim()) { <small class="search-hint">{{ commandResults().length }} matches · Press Enter to open the first result</small> }
             <div class="command-list">
               @for (item of commandResults(); track $index) {
@@ -359,6 +365,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   });
 
   readonly currentUrl = signal(this.router.url);
+  readonly quickSuggestions = signal(["Appointments", "Business", "Attendance", "Tasks", "Profile", "Chat"]);
+
+  applyCommandSuggestion(text: string) {
+    this.query.set(text);
+  }
 
   constructor(readonly staff: StaffAppService, readonly push: StaffPushService, private readonly router: Router) {}
 
