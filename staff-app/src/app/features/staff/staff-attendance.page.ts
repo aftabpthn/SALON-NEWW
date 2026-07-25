@@ -194,6 +194,14 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
         this.message.set(`Offline: ${action.replace(/-/g, " ")} queued for sync (${result.queueId}).`);
         return;
       }
+      const rec = (result && typeof result === "object" && "data" in result ? (result as { data: StaffAttendance }).data : result) as StaffAttendance;
+      if (rec && typeof rec === "object" && rec.id) {
+        const curToday = this.today();
+        if (curToday) {
+          const list = [rec, ...curToday.attendance.filter((a) => a.id !== rec.id)];
+          this.today.set({ ...curToday, attendance: list });
+        }
+      }
       this.message.set(completedMessage);
       await this.load();
       window.dispatchEvent(new CustomEvent("aura:attendance-updated"));

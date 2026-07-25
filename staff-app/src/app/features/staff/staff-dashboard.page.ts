@@ -1,6 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { isQueuedMutation, MutationResult, StaffAttendance, StaffAppService, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -201,6 +201,14 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       const result = await mutate();
       if (isQueuedMutation(result)) {
         this.actionMessage.set("Change saved offline and queued for sync."); this.queuedActions.set(this.staff.offlineQueueSize()); return;
+      }
+      const rec = (result && typeof result === "object" && "data" in result ? (result as { data: StaffAttendance }).data : result) as StaffAttendance;
+      if (rec && typeof rec === "object" && rec.id) {
+        const curToday = this.today();
+        if (curToday) {
+          const list = [rec, ...curToday.attendance.filter((a) => a.id !== rec.id)];
+          this.today.set({ ...curToday, attendance: list });
+        }
       }
       this.actionMessage.set(completedMessage); await this.load();
     } catch {
