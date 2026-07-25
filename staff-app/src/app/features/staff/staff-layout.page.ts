@@ -415,25 +415,15 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const touch = event.changedTouches[0];
     const endX = touch?.clientX || 0;
     const deltaX = endX - this.touchStartX;
-    const deltaY = Math.abs((touch?.clientY || 0) - this.touchStartY);
     const target = event.target as HTMLElement | null;
     if (target?.closest("input,textarea,button,a,[role=dialog]")) return;
     const wasMenuOpen = this.menuOpen();
     if (this.touchStartX < 24 && deltaX > 70) this.openMenu();
     if (wasMenuOpen && deltaX < -70) { this.closeMenu(); return; }
-    if (window.matchMedia("(max-width: 900px)").matches && !this.menuOpen() && !this.notificationsOpen() && Math.abs(deltaX) > 70 && Math.abs(deltaX) > deltaY) this.navigateMobileSwipe(deltaX < 0 ? 1 : -1);
   }
 
   private touchStartX = 0;
   private touchStartY = 0;
-  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/appointments", "/staff/business", "/staff/attendance", "/staff/tasks"];
-
-  private navigateMobileSwipe(direction: number) {
-    const current = this.router.url.split("?")[0];
-    const index = this.mobileSwipeRoutes.indexOf(current);
-    const next = this.mobileSwipeRoutes[index + direction];
-    if (index >= 0 && next) void this.router.navigateByUrl(next);
-  }
   visibleNav(): StaffNavItem[] {
     return this.nav.filter((item) => (!item.permission || this.staff.hasPermission(item.permission)) && (!item.anyPermissions?.length || this.staff.hasAnyPermission([...item.anyPermissions])));
   }
