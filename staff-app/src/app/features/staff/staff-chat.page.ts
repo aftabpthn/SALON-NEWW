@@ -36,13 +36,20 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
               @if (showConvSuggestions() && convSuggestions().length) {
                 <div class="search-suggestions" role="listbox">
                   @for (s of convSuggestions(); track s) {
-                    <button type="button" (mousedown)="selectConvSuggestion(s)">
-                      <span>{{ s }}</span>
+                    <button type="button" (mousedown)="$event.preventDefault(); selectConvSuggestion(s)" (click)="selectConvSuggestion(s)">
+                      <span>🔍 {{ s }}</span>
                       <small>Chat</small>
                     </button>
                   }
                 </div>
               }
+              <div class="search-chips-row">
+                @for (s of convSuggestions().slice(0, 3); track s) {
+                  <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectConvSuggestion(s)" (click)="selectConvSuggestion(s)">
+                    <span>🏷️ {{ s }}</span>
+                  </button>
+                }
+              </div>
             </div>
             <nav class="chat-conversation-list" aria-label="Choose a conversation">
               @for (conversation of filteredConversations(); track conversation.id) {
@@ -80,13 +87,20 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
                 @if (showMsgSuggestions() && messageSuggestions().length) {
                   <div class="search-suggestions" role="listbox">
                     @for (s of messageSuggestions(); track s) {
-                      <button type="button" (mousedown)="selectMsgSuggestion(s)">
-                        <span>{{ s }}</span>
+                      <button type="button" (mousedown)="$event.preventDefault(); selectMsgSuggestion(s)" (click)="selectMsgSuggestion(s)">
+                        <span>🔍 {{ s }}</span>
                         <small>Message</small>
                       </button>
                     }
                   </div>
                 }
+                <div class="search-chips-row">
+                  @for (s of messageSuggestions().slice(0, 3); track s) {
+                    <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectMsgSuggestion(s)" (click)="selectMsgSuggestion(s)">
+                      <span>🏷️ {{ s }}</span>
+                    </button>
+                  }
+                </div>
               </div>
 
               <div #messageViewport class="chat-message-viewport" (scroll)="onMessageScroll()" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">

@@ -58,17 +58,24 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             <div id="report-advanced-filters" class="advanced-content" [attr.aria-hidden]="!advancedFiltersOpen" [attr.inert]="advancedFiltersOpen ? null : ''">
               <div class="advanced-grid">
                 <label class="search-control">Search
-                  <input [(ngModel)]="reportSearch" type="search" placeholder="Search reports" (focus)="showReportSuggestions = true" (blur)="closeReportSuggestions()" />
+                  <input [(ngModel)]="reportSearch" type="search" placeholder="Search reports..." (focus)="showReportSuggestions = true" (blur)="closeReportSuggestions()" />
                   @if (showReportSuggestions && reportSuggestions.length) {
                     <div class="search-suggestions" role="listbox">
                       @for (suggestion of reportSuggestions; track suggestion) {
-                        <button type="button" (mousedown)="selectReportSuggestion(suggestion)">
-                          <span>{{ suggestion }}</span>
+                        <button type="button" (mousedown)="$event.preventDefault(); selectReportSuggestion(suggestion)" (click)="selectReportSuggestion(suggestion)">
+                          <span>🔍 {{ suggestion }}</span>
                           <small>Report</small>
                         </button>
                       }
                     </div>
                   }
+                  <div class="search-chips-row">
+                    @for (suggestion of reportSuggestions.slice(0, 4); track suggestion) {
+                      <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectReportSuggestion(suggestion)" (click)="selectReportSuggestion(suggestion)">
+                        <span>🏷️ {{ suggestion }}</span>
+                      </button>
+                    }
+                  </div>
                 </label>
                 <label>Status<select [(ngModel)]="reportStatus"><option value="all">All statuses</option><option value="completed">Completed</option><option value="live">Live</option></select></label>
                 <label>Sort<select [(ngModel)]="reportSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
