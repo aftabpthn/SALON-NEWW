@@ -343,7 +343,8 @@ public class AttendanceBiometricPlugin extends Plugin {
                 return;
             }
             // Validate and decode the signing payload (supports standard + URL-safe Base64)
-            payload = Base64.decode(payloadBase64, Base64.DEFAULT | Base64.URL_SAFE);
+            String normalizedBase64 = payloadBase64.trim().replace('-', '+').replace('_', '/');
+            payload = Base64.decode(normalizedBase64, Base64.DEFAULT);
             if (payload == null || payload.length == 0) throw new IllegalArgumentException("Empty signing payload after decode");
 
             // Verify the decoded payload is valid JSON (catches corruption early)
