@@ -18,3 +18,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .request-section label { display: grid; gap: 5px; color: #53647e; font-size: 13px; font-weight: 600; }
 .request-section input, .request-section select, .request-section textarea { width: 100%; min-height: 40px; box-sizing: border-box; border: 1px solid #c8d6e7; border-radius: 8px; padding: 8px 10px; background: #fff; color: #0d1f3c; font: inherit; font-weight: 400; }
 .request-section textarea { min-height: 64px; resize: vertical; }
+
+@media (max-width: 480px) {
+  .status-page { padding: 12px; }
+  header, .request-section { padding-inline: 14px; }
+  dl div { align-items: flex-start; flex-direction: column; padding: 12px 14px; }
+  dd { width: 100%; overflow-wrap: anywhere; text-align: left; }
+  button, .request-section input, .request-section select { min-height: 44px; }
+}

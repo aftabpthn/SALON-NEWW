@@ -213,11 +213,10 @@ type ContextOfferDraft = {
 };
 
 @Component({
-  selector: 'app-happy-hours-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
-  templateUrl: './happy-hours-page.component.html',
-  styleUrls: ['./happy-hours-page.component.css'],
+    selector: 'app-happy-hours-page',
+    imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
+    templateUrl: './happy-hours-page.component.html',
+    styleUrls: ['./happy-hours-page.component.css']
 })
 export class HappyHoursPageComponent implements OnInit {
   readonly weekDays = [

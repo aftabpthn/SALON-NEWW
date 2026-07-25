@@ -16,11 +16,12 @@
 - Fill required values (`DATABASE_URL`, `REDIS_URL`, JWT secrets)
 - `docker compose up -d` (from `backend-rust/`)
 - API:
-  - `GET http://localhost:8080/api/v1/health`
-  - `GET http://localhost:8080/api/health`
-  - `GET http://localhost:8080/health`
+  - `GET http://localhost:8082/api/v1/health`
+  - `GET http://localhost:8082/api/health`
+  - `GET http://localhost:8082/health`
 
 ## Next phase
 - Attach auth/tenant/role middleware to protected CRM module routes
 - Add OAuth provider callback routes
 - Add appointments, billing and inventory service/repository logic
+

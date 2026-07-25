@@ -937,19 +937,47 @@ async fn cash_approval_snapshot(
     if !requested_till_id.is_empty() && till_ids.is_empty() {
         return Err(AppError::conflict("selected cash drawer till is not open"));
     }
-    let (cash_sales, movement_delta) = cash_drawer_repository::totals(
-        tx,
-        tenant_id,
-        branch_id,
-        voucher.business_date,
-        &session.id,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to calculate cash drawer balance"))?;
-    let opening_balance = session
-        .opening_cash_paise
-        .saturating_add(cash_sales)
-        .saturating_add(movement_delta);
+    if requested_till_id.is_empty() && till_ids.len() > 1 {
+        return Err(AppError::validation(
+            "cashDrawerTillId is required when multiple tills are open",
+        ));
+    }
+    let resolved_till_id = till_ids.first().cloned();
+    let opening_balance = if let Some(till_id) = resolved_till_id.as_deref() {
+        let till = cash_drawer_repository::till_for_update(tx, tenant_id, branch_id, till_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock cash drawer till"))?
+            .ok_or_else(|| AppError::conflict("selected cash drawer till is not open"))?;
+        let cash_sales = cash_drawer_repository::till_cash_sales(tx, tenant_id, branch_id, till_id)
+            .await
+            .map_err(|_| AppError::internal("failed to calculate till cash sales"))?;
+        let movement_delta =
+            cash_drawer_repository::till_movement_delta(tx, tenant_id, branch_id, till_id)
+                .await
+                .map_err(|_| AppError::internal("failed to calculate till movements"))?;
+        let outgoing_cash =
+            cash_drawer_repository::till_outgoing_cash(tx, tenant_id, branch_id, till_id)
+                .await
+                .map_err(|_| AppError::internal("failed to calculate till outgoing cash"))?;
+        till.opening_cash_paise
+            .saturating_add(cash_sales)
+            .saturating_add(movement_delta)
+            .saturating_sub(outgoing_cash)
+    } else {
+        let (cash_sales, movement_delta) = cash_drawer_repository::totals(
+            tx,
+            tenant_id,
+            branch_id,
+            voucher.business_date,
+            &session.id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to calculate cash drawer balance"))?;
+        session
+            .opening_cash_paise
+            .saturating_add(cash_sales)
+            .saturating_add(movement_delta)
+    };
     let closing_balance = opening_balance.saturating_sub(voucher.total_paise);
     if closing_balance < 0 {
         return Err(AppError::conflict(
@@ -958,11 +986,7 @@ async fn cash_approval_snapshot(
     }
     Ok(CashApprovalSnapshot {
         session_id: Some(session.id),
-        till_id: if requested_till_id.is_empty() {
-            till_ids.into_iter().next()
-        } else {
-            Some(requested_till_id.to_string())
-        },
+        till_id: resolved_till_id,
         opening_balance_paise: Some(opening_balance),
         closing_balance_paise: Some(closing_balance),
     })

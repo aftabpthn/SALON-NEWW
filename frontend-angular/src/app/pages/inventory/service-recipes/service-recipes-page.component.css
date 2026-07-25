@@ -4,6 +4,7 @@
 .page-head,.tabs,.kpis article,.recipe-workspace,.review-card { border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:0 6px 18px rgba(15,35,65,.05); }
 .page-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
 h1,h2,p { margin:0; } h1 { font-size:20px; } h2 { font-size:14px; }
+.title-block { display:grid; gap:3px; }.title-block small { color:var(--blue); font-size:12px; font-weight:600; }
 .head-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
 button,input,select { min-height:36px; border:1px solid #c9d5e5; border-radius:8px; background:#fff; padding:7px 10px; color:var(--ink); font:inherit; }
 button { cursor:pointer; font-weight:600; } button:hover:not(:disabled),button:focus-visible,input:focus,select:focus { border-color:var(--blue); background:#eff6ff; outline:none; }

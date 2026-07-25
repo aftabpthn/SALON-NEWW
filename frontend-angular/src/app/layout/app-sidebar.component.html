@@ -1,58 +1,62 @@
-<aside class="sidebar">
+<aside class="sidebar" id="primary-navigation">
   <nav class="nav-groups" [attr.aria-label]="'shell.primaryNavigation' | translate">
-    <div
-      class="nav-group"
-      *ngFor="let group of visibleGroups"
-      routerLinkActive="is-active"
-      [routerLinkActiveOptions]="{ exact: group.exact }"
-      [class.menu-open]="openGroup === group.label"
-    >
-      @if (group.label === 'Dashboard') {
-        <a class="rail-link" [routerLink]="group.route" [attr.aria-label]="'nav.' + group.label | translate" (click)="closeMenu()">
-          <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
-        </a>
-      } @else {
-        <button
-          class="rail-link"
-          type="button"
-          [attr.aria-label]="'nav.' + group.label | translate"
-          aria-haspopup="true"
-          [attr.aria-expanded]="openGroup === group.label"
-          [attr.aria-controls]="'nav-menu-' + group.label.toLowerCase()"
-          (click)="toggleGroup(group.label)"
+    @for (group of visibleGroups; track group) {
+      <div
+        class="nav-group"
+        routerLinkActive="is-active"
+        [routerLinkActiveOptions]="{ exact: group.exact }"
+        [class.menu-open]="openGroup === group.label"
         >
-          <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
-        </button>
-      }
-      <span class="rail-tooltip" aria-hidden="true">{{ 'nav.' + group.label | translate }}</span>
-
-      @if (group.label !== 'Dashboard') {
-        <section
-          class="flyout"
-          [id]="'nav-menu-' + group.label.toLowerCase()"
-          [attr.aria-label]="'shell.sectionMenu' | translate: { section: ('nav.' + group.label | translate) }"
-          [attr.aria-hidden]="openGroup !== group.label"
-        >
-          <header><h2>{{ 'nav.' + group.label | translate }}</h2></header>
-          <a
-            class="flyout-link"
-            *ngFor="let link of group.links"
-            [routerLink]="link.route"
-            routerLinkActive="active-link"
-            [routerLinkActiveOptions]="{ exact: link.exact }"
-            ariaCurrentWhenActive="page"
-            (click)="closeMenu()"
-          >
-            <i class="bi" [class]="'bi ' + link.icon" aria-hidden="true"></i>
-            <span>{{ 'nav.' + link.label | translate }}</span>
+        @if (group.label === 'Dashboard') {
+          <a class="rail-link" [routerLink]="group.route" [attr.aria-label]="'nav.' + group.label | translate" (click)="closeMenu()">
+            <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
+            <span class="rail-label">{{ 'nav.' + group.label | translate }}</span>
           </a>
-        </section>
-      }
-    </div>
+        } @else {
+          <button
+            class="rail-link"
+            type="button"
+            [attr.aria-label]="'nav.' + group.label | translate"
+            aria-haspopup="true"
+            [attr.aria-expanded]="openGroup === group.label"
+            [attr.aria-controls]="'nav-menu-' + group.label.toLowerCase()"
+            (click)="toggleGroup(group.label)"
+            >
+            <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
+            <span class="rail-label">{{ 'nav.' + group.label | translate }}</span>
+          </button>
+        }
+        <span class="rail-tooltip" aria-hidden="true">{{ 'nav.' + group.label | translate }}</span>
+        @if (group.label !== 'Dashboard') {
+          <section
+            class="flyout"
+            [id]="'nav-menu-' + group.label.toLowerCase()"
+            [attr.aria-label]="'shell.sectionMenu' | translate: { section: ('nav.' + group.label | translate) }"
+            [attr.aria-hidden]="openGroup !== group.label"
+            >
+            <header><h2>{{ 'nav.' + group.label | translate }}</h2></header>
+            @for (link of group.links; track link) {
+              <a
+                class="flyout-link"
+                [routerLink]="link.route"
+                routerLinkActive="active-link"
+                [routerLinkActiveOptions]="{ exact: link.exact }"
+                ariaCurrentWhenActive="page"
+                (click)="closeMenu()"
+                >
+                <i class="bi" [class]="'bi ' + link.icon" aria-hidden="true"></i>
+                <span>{{ 'nav.' + link.label | translate }}</span>
+              </a>
+            }
+          </section>
+        }
+      </div>
+    }
 
     <div class="nav-group logout-group">
       <button class="rail-link" type="button" [attr.aria-label]="'shell.logout' | translate" (click)="logout()">
         <i class="bi bi-power" aria-hidden="true"></i>
+        <span class="rail-label">{{ 'shell.logout' | translate }}</span>
       </button>
       <span class="rail-tooltip" aria-hidden="true">{{ 'shell.logout' | translate }}</span>
     </div>

@@ -21,20 +21,30 @@ pub async fn run(
     branch: &str,
     actor: &str,
 ) -> Result<ForecastDetail, AppError> {
-    let inputs = repo::demand_inputs(&state.db, tenant, branch)
+    let config = repo::forecast_config(&state.db, tenant, branch)
+        .await
+        .map_err(|_| AppError::internal("failed to load reorder forecast configuration"))?;
+    let inputs = repo::demand_inputs(&state.db, tenant, branch, config.history_days)
         .await
         .map_err(|_| AppError::internal("failed to aggregate reorder demand"))?;
-    let evidence = json!({"itemsEvaluated":inputs.len(),"historyDays":30,"sources":["immutable stock ledger","service recipe sales consumption","backbar usage","open purchase orders","expiry batches"]});
+    let evidence = json!({"itemsEvaluated":inputs.len(),"historyDays":config.history_days,"coverageDays":config.coverage_days,"sources":["immutable stock ledger","service recipe sales consumption","backbar usage","open purchase orders","expiry batches","supplier delivery, fill, return and expiry evidence"]});
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start reorder forecast"))?;
-    let run = repo::create_run(&mut tx, tenant, branch, actor, &evidence)
-        .await
-        .map_err(|_| AppError::internal("failed to save reorder forecast"))?;
+    let run = repo::create_run(
+        &mut tx,
+        tenant,
+        branch,
+        actor,
+        config.history_days,
+        &evidence,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save reorder forecast"))?;
     for input in inputs {
-        if let Some(row) = recommend(&input) {
+        if let Some(row) = recommend(&input, config.history_days, config.coverage_days) {
             repo::insert_recommendation(&mut tx, tenant, branch, &run, &row)
                 .await
                 .map_err(|_| AppError::internal("failed to save reorder recommendation"))?;
@@ -163,16 +173,21 @@ pub async fn save_terms(
     .await
     .map_err(|_| AppError::not_found("active supplier or inventory item was not found"))
 }
-fn recommend(input: &repo::DemandInput) -> Option<repo::RecommendationDraft> {
-    if input.demand_30 <= 0 || input.expiring_quantity > 0 || input.inactive_days >= 90 {
+fn recommend(
+    input: &repo::DemandInput,
+    history_days: i32,
+    coverage_days: i32,
+) -> Option<repo::RecommendationDraft> {
+    if input.demand_history <= 0 || input.expiring_quantity > 0 || input.inactive_days >= 90 {
         return None;
     }
-    let daily = input.demand_30 as f64 / 30.0;
+    let daily = input.demand_history as f64 / f64::from(history_days);
     let recent = input.demand_7 as f64 / 7.0;
     let seasonality = (recent / daily).clamp(0.5, 2.0);
     let safety = (daily * input.safety_stock_days as f64 * 1.25).ceil() as i64;
-    let target =
-        ((daily * (input.lead_time_days + 14) as f64 * seasonality).ceil() as i64) + safety;
+    let target = ((daily * (input.lead_time_days + coverage_days) as f64 * seasonality).ceil()
+        as i64)
+        + safety;
     let gap = target - i64::from(input.stock_quantity) - input.pending_quantity;
     if gap <= 0 {
         return None;
@@ -181,8 +196,8 @@ fn recommend(input: &repo::DemandInput) -> Option<repo::RecommendationDraft> {
     let pack = i64::from(input.pack_size);
     let suggested = ((base + pack - 1) / pack * pack).min(i64::from(i32::MAX)) as i32;
     let confidence = (5000
-        + (input.demand_30.min(300) as i32 * 10)
-        + (input.consumption_30.min(100) as i32 * 5))
+        + (input.demand_history.min(i64::from(history_days) * 10) as i32 * 5)
+        + (input.consumption_history.min(200) as i32 * 5))
         .min(9000);
     Some(repo::RecommendationDraft {
         inventory_item_id: input.inventory_item_id.clone(),
@@ -190,7 +205,7 @@ fn recommend(input: &repo::DemandInput) -> Option<repo::RecommendationDraft> {
         suggested_quantity: suggested,
         unit_cost_paise: input.unit_cost_paise,
         confidence_bps: confidence,
-        explanation: json!({"modelVersion":"seasonal-demand-v1","currentStock":input.stock_quantity,"reorderLevel":input.reorder_point,"dailyDemand30":daily,"dailyDemand7":recent,"seasonalityFactor":seasonality,"safetyStock":safety,"leadTimeDays":input.lead_time_days,"minimumOrderQuantity":input.minimum_order_quantity,"packSize":input.pack_size,"pendingPoQuantity":input.pending_quantity,"serviceAndBackbarConsumption30":input.consumption_30,"gstPercent":input.gst_percent,"formula":"ceil(max(targetStock-currentStock-pendingPO, MOQ)/packSize)*packSize"}),
+        explanation: json!({"modelVersion":"seasonal-demand-v3","historyDays":history_days,"coverageDays":coverage_days,"currentStock":input.stock_quantity,"reorderLevel":input.reorder_point,"dailyDemandHistory":daily,"dailyDemand7":recent,"seasonalityFactor":seasonality,"safetyStock":safety,"leadTimeDays":input.lead_time_days,"minimumOrderQuantity":input.minimum_order_quantity,"packSize":input.pack_size,"pendingPoQuantity":input.pending_quantity,"serviceAndBackbarConsumption":input.consumption_history,"gstPercent":input.gst_percent,"supplierScoreBps":input.supplier_score_bps,"onTimeRateBps":input.on_time_rate_bps,"fillRateBps":input.fill_rate_bps,"returnRateBps":input.return_rate_bps,"expiryRiskBps":input.expiry_risk_bps,"supplierSelection":"highest evidence-backed delivery, fill, return and expiry score; then lowest effective price and shortest lead time","formula":"ceil(max((daily demand * (lead + coverage) * seasonality + safety)-current stock-pending PO, MOQ)/pack size)*pack size"}),
     })
 }
 #[cfg(test)]
@@ -208,19 +223,56 @@ mod tests {
             gst_percent: 0,
             supplier_id: "s".into(),
             lead_time_days: 2,
+            supplier_score_bps: None,
+            on_time_rate_bps: None,
+            fill_rate_bps: None,
+            return_rate_bps: None,
+            expiry_risk_bps: None,
             minimum_order_quantity: 1,
             pack_size: 1,
             safety_stock_days: 7,
-            demand_30: 0,
+            demand_history: 0,
             demand_7: 0,
-            consumption_30: 0,
+            consumption_history: 0,
             pending_quantity: 0,
             expiring_quantity: 0,
             inactive_days: 0,
         };
-        assert!(recommend(&row).is_none());
-        row.demand_30 = 30;
+        assert!(recommend(&row, 60, 30).is_none());
+        row.demand_history = 60;
         row.expiring_quantity = 1;
-        assert!(recommend(&row).is_none());
+        assert!(recommend(&row, 60, 30).is_none());
+    }
+
+    #[test]
+    fn configurable_coverage_changes_reorder_quantity() {
+        let row = repo::DemandInput {
+            inventory_item_id: "i".into(),
+            product_name: "i".into(),
+            sku: "".into(),
+            stock_quantity: 0,
+            reorder_point: 0,
+            unit_cost_paise: 100,
+            gst_percent: 18,
+            supplier_id: "s".into(),
+            lead_time_days: 5,
+            supplier_score_bps: Some(9000),
+            on_time_rate_bps: Some(9000),
+            fill_rate_bps: Some(9500),
+            return_rate_bps: Some(100),
+            expiry_risk_bps: Some(200),
+            minimum_order_quantity: 1,
+            pack_size: 1,
+            safety_stock_days: 0,
+            demand_history: 60,
+            demand_7: 7,
+            consumption_history: 60,
+            pending_quantity: 0,
+            expiring_quantity: 0,
+            inactive_days: 0,
+        };
+        let short = recommend(&row, 60, 7).expect("short coverage recommendation");
+        let long = recommend(&row, 60, 30).expect("long coverage recommendation");
+        assert!(long.suggested_quantity > short.suggested_quantity);
     }
 }

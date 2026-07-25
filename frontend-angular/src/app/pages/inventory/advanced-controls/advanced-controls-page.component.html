@@ -2,6 +2,7 @@
   <header class="command-bar">
     <div class="command-title"><h1>{{ 'inventory.ui.6dc3c7ac80' | translate }}</h1><span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
     <span></span>
+    <select aria-label="Inventory branch scope" [(ngModel)]="allBranches"><option [ngValue]="true">All accessible branches</option><option [ngValue]="false">Current branch</option></select>
     <select [attr.aria-label]="'inventory.ui.e66bd46a34' | translate" [(ngModel)]="severity">
       <option value="all">{{ 'inventory.ui.068616a640' | translate }}</option>
       <option value="critical">{{ 'inventory.ui.04b7b26c8c' | translate }}</option>
@@ -10,10 +11,16 @@
     <button class="primary-button" type="button" [disabled]="loading" (click)="reload()">{{ 'inventory.ui.aa5ced548b' | translate }}</button>
   </header>
 
-  <p class="message error" *ngIf="error">{{ error }}</p><p class="message success" *ngIf="notice">{{ notice }}</p>
+  @if (error) {
+    <p class="message error">{{ error }}</p>
+    }@if (notice) {
+    <p class="message success">{{ notice }}</p>
+  }
 
   <nav class="tabs" [attr.aria-label]="'inventory.ui.9a8e647829' | translate">
-    <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
+    @for (tab of tabs; track tab) {
+      <button type="button" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
+    }
   </nav>
 
   <section class="metrics" [attr.aria-label]="'inventory.ui.7088f8447e' | translate">
@@ -23,72 +30,164 @@
     <article class="dead"><i class="bi bi-box-seam" aria-hidden="true"></i><span>{{ 'inventory.ui.d83e70287e' | translate }}</span><strong>{{ controls.summary.deadStock }}</strong></article>
   </section>
 
-  <section class="panel" *ngIf="activeTab === 'exceptions'">
-    <header><h2>{{ 'inventory.ui.bec0df1287' | translate }}</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.43bba59126' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
-    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.56d2e1b1c1' | translate }}</div>
-    <div class="table-scroll" *ngIf="!loading && filteredExceptions.length">
-      <table>
-        <thead><tr><th>{{ 'inventory.ui.de314fa0c9' | translate }}</th><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.20049bc069' | translate }}</th><th>{{ 'inventory.ui.8dce170de2' | translate }}</th><th>{{ 'inventory.ui.7ea014de7b' | translate }}</th><th>{{ 'inventory.ui.89ff31225c' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let row of filteredExceptions">
-            <td><span class="status" [class.critical]="row.severity === 'critical'">{{ row.severity }}</span></td>
-            <td>{{ row.control }}</td><td><strong>{{ row.title }}</strong></td><td>{{ money(row.valuePaise) }}</td><td>{{ row.evidence || '—' }}</td><td>{{ row.owner }}</td><td>{{ row.status }}</td>
-            <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="empty-state" *ngIf="!loading && !filteredExceptions.length"><i class="bi bi-shield-check" aria-hidden="true"></i><strong>{{ 'inventory.ui.5ca2f7b527' | translate }}</strong></div>
-  </section>
+  @if (activeTab === 'exceptions') {
+    <section class="panel">
+      <header><h2>{{ 'inventory.ui.bec0df1287' | translate }}</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.43bba59126' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+      @if (loading) {
+        <div class="loading-state">{{ 'inventory.ui.56d2e1b1c1' | translate }}</div>
+      }
+      @if (!loading && filteredExceptions.length) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>{{ 'inventory.ui.de314fa0c9' | translate }}</th><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.20049bc069' | translate }}</th><th>{{ 'inventory.ui.8dce170de2' | translate }}</th><th>{{ 'inventory.ui.7ea014de7b' | translate }}</th><th>{{ 'inventory.ui.89ff31225c' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
+            <tbody>
+              @for (row of filteredExceptions; track row) {
+                <tr>
+                  <td><span class="status" [class.critical]="row.severity === 'critical'">{{ row.severity }}</span></td>
+                  <td>{{ row.control }}</td><td><strong>{{ row.title }}</strong><small>{{ row.branchName }}</small></td><td>{{ money(row.valuePaise) }}</td><td>{{ row.evidence || '—' }}</td><td>{{ row.owner }}</td><td>{{ row.status }}</td>
+                  <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (!loading && !filteredExceptions.length) {
+        <div class="empty-state"><i class="bi bi-shield-check" aria-hidden="true"></i><strong>{{ 'inventory.ui.5ca2f7b527' | translate }}</strong></div>
+      }
+    </section>
+  }
 
-  <section class="panel" *ngIf="activeTab === 'approvals'">
-    <header><h2>{{ 'inventory.ui.f2bb844c2c' | translate }}</h2></header>
-    <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.1d8dbcf82e' | translate }}</th><th>{{ 'inventory.ui.96f608c16c' | translate }}</th><th>{{ 'inventory.ui.5701b5f6fe' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.approvalMatrix"><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
-      <tr *ngIf="!controls.approvalMatrix.length"><td class="empty-state" colspan="5">{{ 'inventory.ui.235a2a357f' | translate }}</td></tr>
+  @if (activeTab === 'approvals') {
+    <section class="panel">
+      <header><h2>{{ 'inventory.ui.f2bb844c2c' | translate }}</h2></header>
+      <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.1d8dbcf82e' | translate }}</th><th>{{ 'inventory.ui.96f608c16c' | translate }}</th><th>{{ 'inventory.ui.5701b5f6fe' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
+      @for (row of controls.approvalMatrix; track row) {
+        <tr><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+      }
+      @if (!controls.approvalMatrix.length) {
+        <tr><td class="empty-state" colspan="5">{{ 'inventory.ui.235a2a357f' | translate }}</td></tr>
+      }
     </tbody></table></div>
   </section>
+}
 
-  <section class="panel" *ngIf="activeTab === 'locks'">
+@if (activeTab === 'locks') {
+  <section class="panel">
     <header><h2>{{ 'inventory.ui.8a053eb92a' | translate }}</h2></header>
     <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.891ebccd5b' | translate }}</th><th>{{ 'inventory.ui.160507bf60' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.auditLocks"><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
-      <tr *ngIf="!controls.auditLocks.length"><td class="empty-state" colspan="4">{{ 'inventory.ui.162fea976c' | translate }}</td></tr>
-    </tbody></table></div>
-  </section>
+    @for (row of controls.auditLocks; track row) {
+      <tr><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+    }
+    @if (!controls.auditLocks.length) {
+      <tr><td class="empty-state" colspan="4">{{ 'inventory.ui.162fea976c' | translate }}</td></tr>
+    }
+  </tbody></table></div>
+</section>
+}
 
-  <section class="panel" *ngIf="activeTab === 'expiry'">
+@if (activeTab === 'expiry') {
+  <section class="panel">
     <header><h2>{{ 'inventory.ui.ba8f571e0f' | translate }}</h2></header>
-    <div class="capability-state" *ngIf="!controls.capabilities.expiry">{{ 'inventory.ui.62d8a65dff' | translate }}</div>
-    <div class="table-scroll" *ngIf="controls.capabilities.expiry"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.8bf1ef5668' | translate }}</th><th>{{ 'inventory.ui.ba8f571e0f' | translate }}</th><th>{{ 'inventory.ui.f6bb0f468a' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.expiringRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ date(row.expiryDate) }}</td><td>{{ row.daysToExpiry }}</td></tr>
-      <tr *ngIf="!controls.expiringRows.length"><td class="empty-state" colspan="4">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+    @if (!controls.capabilities.expiry) {
+      <div class="capability-state">{{ 'inventory.ui.62d8a65dff' | translate }}</div>
+    }
+    @if (controls.capabilities.expiry) {
+      <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.8bf1ef5668' | translate }}</th><th>{{ 'inventory.ui.ba8f571e0f' | translate }}</th><th>{{ 'inventory.ui.f6bb0f468a' | translate }}</th></tr></thead><tbody>
+      @for (row of controls.expiringRows; track row) {
+        <tr><td><strong>{{ row.productName }}</strong><small>{{ row.branchName }}</small></td><td>{{ row.batchNumber }}</td><td>{{ date(row.expiryDate) }}</td><td>{{ row.daysToExpiry }}</td></tr>
+      }
+      @if (!controls.expiringRows.length) {
+        <tr><td class="empty-state" colspan="4">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+      }
     </tbody></table></div>
-  </section>
+  }
+</section>
+}
 
-  <section class="panel" *ngIf="activeTab === 'dead-stock'">
+@if (activeTab === 'dead-stock') {
+  <section class="panel">
     <header><h2>{{ 'inventory.ui.093fc9f435' | translate }}</h2></header>
     <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.d59192b9c8' | translate }}</th><th>{{ 'inventory.ui.bcecf4562f' | translate }}</th><th>{{ 'inventory.ui.d6975f0dc1' | translate }}</th><th>{{ 'inventory.ui.8dce170de2' | translate }}</th><th>{{ 'inventory.ui.b1c24a3970' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of controls.deadStockRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.sku || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ row.inactiveDays }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ date(row.lastOutboundAt) }}</td></tr>
-      <tr *ngIf="!controls.deadStockRows.length"><td class="empty-state" colspan="6">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
-    </tbody></table></div>
-  </section>
+    @for (row of controls.deadStockRows; track row) {
+      <tr><td><strong>{{ row.productName }}</strong><small>{{ row.branchName }}</small></td><td>{{ row.sku || '—' }}</td><td>{{ row.stockQuantity }}</td><td>{{ row.inactiveDays }}</td><td>{{ money(row.valuePaise) }}</td><td>{{ date(row.lastOutboundAt) }}</td></tr>
+    }
+    @if (!controls.deadStockRows.length) {
+      <tr><td class="empty-state" colspan="6">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+    }
+  </tbody></table></div>
+</section>
+}
 
-  <section class="panel" *ngIf="activeTab === 'policy'">
+@if (activeTab === 'policy') {
+  <section class="panel">
     <header><h2>{{ 'inventory.ui.3835314865' | translate }}</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">{{ savingPolicy ? 'Saving…' : 'Save policy' }}</button></header>
     <div class="policy-grid">
       <label>{{ 'inventory.ui.f1d1c11769' | translate }}<select [(ngModel)]="policy.negativeStockRule"><option value="block">{{ 'inventory.ui.82dd2cdf36' | translate }}</option><option value="approval_required">{{ 'inventory.ui.b8d012c200' | translate }}</option></select></label>
       <label>{{ 'inventory.ui.2dfbcefb7b' | translate }}<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">{{ 'inventory.ui.c74e4e7c5c' | translate }}</option><option value="fifo">{{ 'inventory.ui.07c257b166' | translate }}</option></select></label>
       <label>{{ 'inventory.ui.e3d400bee8' | translate }}<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
       <label>{{ 'inventory.ui.a692bbeff4' | translate }}<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
+      <label>Reorder history (days)<input type="number" min="14" max="365" [(ngModel)]="policy.reorderHistoryDays" /></label>
+      <label>Reorder coverage (days)<input type="number" min="7" max="180" [(ngModel)]="policy.reorderCoverageDays" /></label>
+      <label>Transfer base transport (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferBaseTransportRupees" /></label>
+      <label>Transfer transport per km (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferCostPerKmRupees" /></label>
+      <label>Transfer handling per unit (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferHandlingPerUnitRupees" /></label>
+      <label>Transfer delay per unit/day (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferDelayPerUnitDayRupees" /></label>
+      <label>Expected transfer days<input type="number" min="0" max="365" [(ngModel)]="policy.transferExpectedDays" /></label>
       <label>{{ 'inventory.ui.24e8505587' | translate }}<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
       <label>{{ 'inventory.ui.eb2cf73d0b' | translate }}<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
       <label>{{ 'inventory.ui.f5595ea0c0' | translate }}<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
     </div>
-    <div class="table-scroll" *ngIf="negativeStockRequests.length"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.2f0039e913' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.bcdf8d373d' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody><tr *ngFor="let row of negativeStockRequests"><td><strong>{{ row.productName }}</strong></td><td>{{ row.requestedStockQuantity }}</td><td>{{ row.reason }}</td><td>{{ row.requestedBy }}</td><td><span class="status">{{ row.status }}</span></td><td><div class="panel-actions" *ngIf="row.status === 'pending'"><button type="button" (click)="reviewNegativeStock(row,'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button type="button" (click)="reviewNegativeStock(row,'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div></td></tr></tbody></table></div>  </section>
+    @if (negativeStockRequests.length) {
+      <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.2f0039e913' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.bcdf8d373d' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>@for (row of negativeStockRequests; track row) {
+      <tr><td><strong>{{ row.productName }}</strong></td><td>{{ row.requestedStockQuantity }}</td><td>{{ row.reason }}</td><td>{{ row.requestedBy }}</td><td><span class="status">{{ row.status }}</span></td><td>@if (row.status === 'pending') {
+      <div class="panel-actions"><button type="button" (click)="reviewNegativeStock(row,'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button type="button" (click)="reviewNegativeStock(row,'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div>
+    }</td></tr>
+  }</tbody></table></div>
+}  </section>
+}
 
-  <section class="panel" *ngIf="activeTab === 'operations'">
-    <header><h2>{{ 'inventory.ui.72580d4cef' | translate }}</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.a58cdd4aac' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+@if (activeTab === 'operations') {
+  <section class="panel">
+    <header><h2>Autonomous Inventory Operations</h2><div class="panel-actions">@if (canManageAutomationPolicy) { <button type="button" [disabled]="automationBusy" (click)="saveAutomationPolicy()">{{ automationBusy ? 'Working…' : 'Save controls' }}</button> } @if (canRunAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.policy.enabled" (click)="runAutomation()">Run now</button> }<button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.a58cdd4aac' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <div class="automation-policy">
+      <label class="toggle"><input type="checkbox" [(ngModel)]="autonomous.policy.enabled" [disabled]="!canManageAutomationPolicy" />Enabled</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="autonomous.policy.autoTransferDrafts" [disabled]="!canManageAutomationPolicy" />Auto transfer drafts</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="autonomous.policy.autoPoDrafts" [disabled]="!canManageAutomationPolicy" />Auto PO drafts</label>
+      <label>Monthly budget (₹)<input type="number" min="0" [(ngModel)]="automationBudgetRupees" [disabled]="!canManageAutomationPolicy" /></label>
+      <label>Expiry rescue (days)<input type="number" min="1" max="365" [(ngModel)]="autonomous.policy.expiryRescueDays" [disabled]="!canManageAutomationPolicy" /></label>
+      <label>Run interval (minutes)<input type="number" min="60" max="10080" [(ngModel)]="autonomous.policy.runIntervalMinutes" [disabled]="!canManageAutomationPolicy" /></label>
+      <label>Escalation (minutes)<input type="number" min="30" max="10080" [(ngModel)]="autonomous.policy.escalationMinutes" [disabled]="!canManageAutomationPolicy" /></label>
+      <label>Minimum confidence (bps)<input type="number" min="0" max="10000" [(ngModel)]="autonomous.policy.minConfidenceBps" [disabled]="!canManageAutomationPolicy" /></label>
+      <div class="category-budgets">
+        <div class="category-budget-heading"><strong>Category budgets</strong>@if (canManageAutomationPolicy) { <button type="button" (click)="addCategoryBudget()">Add category</button> }</div>
+        @for (row of categoryBudgets; track $index) {
+          <div class="category-budget-row">
+            <label>Category<input maxlength="120" [ngModel]="row.category" (ngModelChange)="row.category = titleCase($event)" [disabled]="!canManageAutomationPolicy" /></label>
+            <label>Monthly cap (₹)<input type="number" min="0" [(ngModel)]="row.amountRupees" [disabled]="!canManageAutomationPolicy" /></label>
+            @if (canManageAutomationPolicy) { <button type="button" aria-label="Remove category budget" (click)="removeCategoryBudget($index)">Remove</button> }
+          </div>
+        } @empty { <span class="empty-inline">No category caps</span> }
+      </div>
+    </div>
+    <dl class="automation-summary">
+      <div><dt>Pending approval</dt><dd>{{ autonomous.summary.pendingApproval }}</dd></div>
+      <div><dt>Failed</dt><dd>{{ autonomous.summary.failed }}</dd></div>
+      <div><dt>Budget committed</dt><dd>{{ money(autonomous.summary.budgetCommittedPaise) }}</dd></div>
+      <div><dt>Pending expenses</dt><dd>{{ money(autonomous.summary.pendingExpensePaise) }}</dd></div>
+      <div><dt>Available cash</dt><dd>{{ money(autonomous.summary.availableCashPaise) }}</dd></div>
+      <div><dt>Spendable budget</dt><dd>{{ money(autonomous.summary.budgetRemainingPaise) }}</dd></div>
+      <div><dt>Last run</dt><dd>{{ date(autonomous.policy.lastRunAt) }}</dd></div>
+      <div><dt>Next run</dt><dd>{{ autonomous.policy.enabled ? date(autonomous.policy.nextRunAt) : 'Disabled' }}</dd></div>
+    </dl>
+    <div class="table-scroll"><table><thead><tr><th>Action</th><th>Reason</th><th>Confidence</th><th>Cost</th><th>Status</th><th>Created</th><th>Control</th></tr></thead><tbody>
+      @for (row of autonomous.actions; track row.id) {
+        <tr><td><strong>{{ row.title }}</strong><small>{{ row.actionType }}</small></td><td>{{ row.lastError || row.rationale }}</td><td>{{ row.confidenceBps / 100 }}%</td><td>{{ money(row.estimatedCostPaise) }}</td><td><span class="status" [class.critical]="row.status === 'failed'">{{ row.status }}</span></td><td>{{ date(row.createdAt) }}</td><td><div class="panel-actions">@if (canApproveAutomation && (row.status === 'pending_approval' || row.status === 'failed')) { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'approve')">{{ row.status === 'failed' ? 'Retry' : 'Approve' }}</button> } @if (canApproveAutomation && row.status === 'pending_approval') { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'reject')">Reject</button> }<a [routerLink]="automationRoute(row)">Open</a></div></td></tr>
+      } @empty { <tr><td class="empty-state" colspan="7">No records yet</td></tr> }
+    </tbody></table></div>
+  </section>
+  <section class="panel">
+    <header><h2>{{ 'inventory.ui.72580d4cef' | translate }}</h2></header>
     <div class="operations-grid">
       <article><span>{{ 'inventory.ui.6a599877d7' | translate }}</span><strong>{{ operations.queue.queued }}</strong></article>
       <article><span>{{ 'inventory.ui.e63451d3cf' | translate }}</span><strong>{{ operations.queue.processing }}</strong></article>
@@ -96,39 +195,21 @@
       <article><span>{{ 'inventory.ui.3db9beef5f' | translate }}</span><strong>{{ operations.queue.terminalFailed }}</strong></article>
       <article><span>{{ 'inventory.ui.0210e85f19' | translate }}</span><strong>{{ operations.invariants.ledgerStockMismatch }}</strong></article>
       <article><span>{{ 'inventory.ui.f1d1c11769' | translate }}</span><strong>{{ operations.invariants.negativeStock }}</strong></article>
+      <article><span>Trusted ledger rows</span><strong>{{ operations.invariants.trustedLedgerRows }}</strong></article>
+      <article><span>Reconstructed legacy rows</span><strong>{{ operations.invariants.reconstructedLedgerRows }}</strong></article>
+      <article><span>Snapshot missing</span><strong>{{ operations.invariants.ledgerSnapshotMissing }}</strong></article>
+      <article><span>Snapshot mismatch</span><strong>{{ operations.invariants.ledgerSnapshotMismatch }}</strong></article>
+      <article><span>Missing provenance</span><strong>{{ operations.invariants.provenanceIncomplete }}</strong></article>
+      <article><span>Missing batch evidence</span><strong>{{ operations.invariants.batchEvidenceMissing }}</strong></article>
     </div>
     <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.879f0b1bef' | translate }}</th><th>{{ 'inventory.ui.d42713493c' | translate }}</th><th>{{ 'inventory.ui.5a29585e3f' | translate }}</th><th>{{ 'inventory.ui.5e4df866b2' | translate }}</th><th>{{ 'inventory.ui.f2f8570ddd' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of operations.failedJobs"><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
-      <tr *ngIf="!operations.failedJobs.length"><td class="empty-state" colspan="6">{{ 'inventory.ui.8633a2b8bc' | translate }}</td></tr>
-    </tbody></table></div>
-  </section>
-
-  <section class="panel" *ngIf="activeTab === 'policy'">
-    <header><h2>Inventory Policy</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">{{ savingPolicy ? 'Saving…' : 'Save policy' }}</button></header>
-    <div class="policy-grid">
-      <label>Negative stock<select [(ngModel)]="policy.negativeStockRule"><option value="block">Block</option><option value="approval_required">Approval required</option></select></label>
-      <label>Valuation method<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">Weighted average</option><option value="fifo">FIFO</option></select></label>
-      <label>Expiry window (days)<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
-      <label>Count variance threshold (bps)<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
-      <label>Negative stock approver<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
-      <label>Stock count approver<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
-      <label>Backbar override approver<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
-    </div>
-    <div class="table-scroll" *ngIf="negativeStockRequests.length"><table><thead><tr><th>Product</th><th>Requested stock</th><th>Reason</th><th>Requester</th><th>Status</th><th>Action</th></tr></thead><tbody><tr *ngFor="let row of negativeStockRequests"><td><strong>{{ row.productName }}</strong></td><td>{{ row.requestedStockQuantity }}</td><td>{{ row.reason }}</td><td>{{ row.requestedBy }}</td><td><span class="status">{{ row.status }}</span></td><td><div class="panel-actions" *ngIf="row.status === 'pending'"><button type="button" (click)="reviewNegativeStock(row,'approve')">Approve</button><button type="button" (click)="reviewNegativeStock(row,'reject')">Reject</button></div></td></tr></tbody></table></div>  </section>
-
-  <section class="panel" *ngIf="activeTab === 'operations'">
-    <header><h2>Production Operations</h2><button class="icon-button" type="button" aria-label="Refresh operations" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
-    <div class="operations-grid">
-      <article><span>Queued</span><strong>{{ operations.queue.queued }}</strong></article>
-      <article><span>Processing</span><strong>{{ operations.queue.processing }}</strong></article>
-      <article><span>Retry scheduled</span><strong>{{ operations.queue.retryScheduled }}</strong></article>
-      <article><span>Terminal failed</span><strong>{{ operations.queue.terminalFailed }}</strong></article>
-      <article><span>Ledger mismatch</span><strong>{{ operations.invariants.ledgerStockMismatch }}</strong></article>
-      <article><span>Negative stock</span><strong>{{ operations.invariants.negativeStock }}</strong></article>
-    </div>
-    <div class="table-scroll"><table><thead><tr><th>Channel</th><th>Destination</th><th>Attempts</th><th>Last error</th><th>Updated</th><th>Action</th></tr></thead><tbody>
-      <tr *ngFor="let row of operations.failedJobs"><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
-      <tr *ngIf="!operations.failedJobs.length"><td class="empty-state" colspan="6">No failed jobs</td></tr>
-    </tbody></table></div>
-  </section>
+    @for (row of operations.failedJobs; track row) {
+      <tr><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
+    }
+    @if (!operations.failedJobs.length) {
+      <tr><td class="empty-state" colspan="6">{{ 'inventory.ui.8633a2b8bc' | translate }}</td></tr>
+    }
+  </tbody></table></div>
+</section>
+}
 </section>

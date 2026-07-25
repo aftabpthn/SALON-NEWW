@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -9,11 +9,10 @@ type PublicCredit = { serviceId: string; serviceName: string; remainingQty: numb
 type PublicStatus = { clientName: string; membershipName: string; status: string; expiresAt?: string; tokenExpiresAt: string; credits: PublicCredit[] };
 
 @Component({
-  selector: 'page-membership-status',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './membership-status-page.component.html',
-  styleUrls: ['./membership-status-page.component.css'],
+    selector: 'page-membership-status',
+    imports: [FormsModule],
+    templateUrl: './membership-status-page.component.html',
+    styleUrls: ['./membership-status-page.component.css']
 })
 export class MembershipStatusPageComponent implements OnInit {
   private readonly api = inject(ApiService);

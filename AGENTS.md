@@ -1,5 +1,11 @@
 ﻿# AGENTS.md - AuraShine CRM Rust
 
+## Canonical Workspace Rule
+
+- The only writable AuraShine CRM Rust workspace is `C:\Users\Aftab Ahamad\AuraShine CRM Rust`.
+- Every new task and every resumed older task must make all reads, edits, builds, tests, and Git operations in that canonical workspace.
+
+
 ## Core Rules
 
 - Prefer clean, scalable, production-ready architecture.
@@ -17,6 +23,13 @@
 - Avoid rabbit holes: do not over-explore unrelated files, features, or speculative future work.
 - Use a tight loop: inspect, fix, run the smallest useful verification, then report.
 - If the same issue repeats after two failed attempts, stop and report the root cause, blocker, and next concrete action.
+
+## Windows Rust Build And Runtime Rule
+
+- Reuse `backend-rust/target` for normal checks and builds. Do not create a new per-task `CARGO_TARGET_DIR`; use one stable fallback only after a confirmed target-artifact lock.
+- Use `cargo check --bin aura-shine-backend` for normal backend verification. Run `cargo build --bin aura-shine-backend` only when a refreshed executable is required for live verification.
+- Never run the live backend directly from `backend-rust/target/debug/aura-shine-backend.exe`. Use `backend-rust/scripts/restart-backend-dev.ps1`, which runs a copied executable so Cargo can replace its build output without Windows `Access is denied` errors.
+- Never start a second Cargo command because the first command timed out. Check the existing `cargo`/`rustc` process and captured log, then wait for that same process or report the blocker.
 
 ## Token Efficiency Rules
 
@@ -298,4 +311,5 @@ Rules:
 - Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- Do not run a repo-wide Graphify refresh as a blocking step after routine edits. Run `graphify update . --no-cluster` only for explicit `/graphify` requests or broad architecture changes, and never launch a duplicate refresh while one is active.
+- If a refresh exceeds 60 seconds, stop that refresh process and report the graph as pending; normal task verification must continue without waiting for it.

@@ -30,6 +30,12 @@ pub struct ApiMeta {
     pub request_id: String,
     pub version: &'static str,
     pub timestamp: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<i64>,
+    #[serde(rename = "pageSize", skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -47,6 +53,15 @@ impl<T> ApiResponse<T> {
             data: Some(data),
             error: None,
             meta: ApiMeta::new(),
+        }
+    }
+
+    pub fn paged(data: T, page: i64, page_size: i64, total: i64) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+            meta: ApiMeta::paged(page, page_size, total),
         }
     }
 }
@@ -68,6 +83,18 @@ impl ApiMeta {
             request_id: Uuid::new_v4().to_string(),
             version: "v1",
             timestamp: Utc::now().to_rfc3339(),
+            page: None,
+            page_size: None,
+            total: None,
+        }
+    }
+
+    fn paged(page: i64, page_size: i64, total: i64) -> Self {
+        Self {
+            page: Some(page),
+            page_size: Some(page_size),
+            total: Some(total),
+            ..Self::new()
         }
     }
 }
@@ -121,6 +148,14 @@ impl AppError {
     pub fn with_details(mut self, details: Value) -> Self {
         self.details = Some(details);
         self
+    }
+
+    pub fn status_code(&self) -> StatusCode {
+        self.status
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
     }
 
     fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {

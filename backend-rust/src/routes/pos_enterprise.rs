@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
-    repositories::pos_enterprise_repository,
+    repositories::{cash_drawer_repository, pos_enterprise_repository},
     routes::context::tenant_branch,
     services::{auth_service::AuthClaims, invoice_delivery, pos_enterprise_service},
     state::AppState,
@@ -508,14 +508,22 @@ async fn lock_day(
     }
     let date = parse_date(&date)?;
     let (t, b) = tenant_branch(&headers)?;
-    let pending:i64=sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status IN ('open','pending_approval')").bind(&t).bind(&b).bind(date).fetch_one(&state.db).await.map_err(|_|AppError::internal("failed to validate business day"))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start business day lock"))?;
+    cash_drawer_repository::lock_business_date(&mut tx, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to lock business date"))?;
+    let pending:i64=sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status IN ('open','pending_approval')").bind(&t).bind(&b).bind(date).fetch_one(&mut *tx).await.map_err(|_|AppError::internal("failed to validate business day"))?;
     if pending > 0 {
         return Err(AppError::conflict(
             "cash drawers must be closed before locking the day",
         ));
     }
     let row = pos_enterprise_repository::day_lock(
-        &state.db,
+        &mut tx,
         &t,
         &b,
         &claims.sub,
@@ -525,6 +533,9 @@ async fn lock_day(
     )
     .await
     .map_err(|_| AppError::internal("failed to lock business day"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit business day lock"))?;
     Ok(Json(ApiResponse::ok(row)))
 }
 async fn reopen_day(
@@ -540,8 +551,16 @@ async fn reopen_day(
     }
     let date = parse_date(&date)?;
     let (t, b) = tenant_branch(&headers)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start business day reopen"))?;
+    cash_drawer_repository::lock_business_date(&mut tx, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to lock business date"))?;
     let row = pos_enterprise_repository::day_lock(
-        &state.db,
+        &mut tx,
         &t,
         &b,
         &claims.sub,
@@ -551,6 +570,9 @@ async fn reopen_day(
     )
     .await
     .map_err(|_| AppError::internal("failed to reopen business day"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit business day reopen"))?;
     Ok(Json(ApiResponse::ok(row)))
 }
 async fn get_z_report(
@@ -721,8 +743,9 @@ async fn float_suggestion(State(state): State<AppState>, headers: HeaderMap) -> 
 }
 
 async fn payment_providers(State(state): State<AppState>) -> ApiResult<Value> {
-    let rows = ["razorpay", "cashfree", "phonepe"]
-        .into_iter()
+    let rows = crate::config::PAYMENT_PROVIDERS
+        .iter()
+        .copied()
         .map(|provider| {
             json!({
                 "provider": provider,

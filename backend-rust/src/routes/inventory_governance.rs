@@ -46,6 +46,10 @@ pub fn router() -> Router<AppState> {
             get(containers).post(create_container),
         )
         .route(
+            "/inventory/backbar-containers/:id/label",
+            get(container_label),
+        )
+        .route(
             "/inventory/backbar-containers/:id/open",
             post(open_container),
         )
@@ -155,6 +159,16 @@ async fn retry_communication(
 async fn containers(State(s): State<AppState>, h: HeaderMap) -> ApiResult<Vec<Value>> {
     let (t, b) = tenant_branch(&h)?;
     Ok(Json(ApiResponse::ok(svc::containers(&s.db, &t, &b).await?)))
+}
+async fn container_label(
+    State(s): State<AppState>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::container_label(&s.db, &t, &b, &id).await?,
+    )))
 }
 async fn create_container(
     State(s): State<AppState>,

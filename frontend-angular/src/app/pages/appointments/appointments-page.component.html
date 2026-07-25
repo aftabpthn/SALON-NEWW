@@ -11,14 +11,15 @@
       <as-date-picker ariaLabel="Appointment date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
 
       <div class="view-switch" aria-label="Calendar view">
-        <button
-          *ngFor="let mode of viewModes; trackBy: trackByIndex"
-          type="button"
-          [class.active]="activeView === mode"
-          (click)="setView(mode)"
-        >
-          {{ mode }}
-        </button>
+        @for (mode of viewModes; track trackByIndex($index, mode)) {
+          <button
+            type="button"
+            [class.active]="activeView === mode"
+            (click)="setView(mode)"
+            >
+            {{ mode }}
+          </button>
+        }
       </div>
 
       <select
@@ -27,8 +28,10 @@
         [ngModel]="activeStaffGridMode"
         name="staffGridMode"
         (ngModelChange)="setStaffGridMode($event)"
-      >
-        <option *ngFor="let mode of staffGridModes; trackBy: trackByIndex" [ngValue]="mode">{{ mode }}</option>
+        >
+        @for (mode of staffGridModes; track trackByIndex($index, mode)) {
+          <option [ngValue]="mode">{{ mode }}</option>
+        }
       </select>
 
       <button class="scheduled-staff-trigger" type="button" aria-label="Scheduled staff" (click)="openScheduledStaff()">
@@ -46,893 +49,1182 @@
     </div>
   </section>
 
-  <p class="status-action-message" *ngIf="appointmentActionMessage">{{ appointmentActionMessage }}</p>
-  <p class="status-action-error board-action-error" *ngIf="appointmentActionError && !selectedAppointment">{{ appointmentActionError }}</p>
+  @if (appointmentActionMessage) {
+    <p class="status-action-message">{{ appointmentActionMessage }}</p>
+  }
+  @if (appointmentActionError && !selectedAppointment) {
+    <p class="status-action-error board-action-error">{{ appointmentActionError }}</p>
+  }
 
   <section class="metrics" aria-label="Appointment summary">
-    <button
-      *ngFor="let item of summary; trackBy: trackByIndex"
-      type="button"
-      class="metric-card"
-      [ngClass]="item.tone"
-      [class.active-filter]="isSummaryFilterActive(item.statuses)"
-      [attr.aria-pressed]="isSummaryFilterActive(item.statuses)"
-      [disabled]="!item.statuses.length && !item.command"
-      (click)="openSummaryMetric(item.statuses, item.command)"
-    >
-      <span class="metric-icon" aria-hidden="true" [ngSwitch]="item.icon">
-        <svg *ngSwitchCase="'booked'" viewBox="0 0 24 24">
-          <rect x="4" y="5" width="16" height="15" rx="3"></rect>
-          <path d="M8 3v4M16 3v4M4 10h16"></path>
-        </svg>
-        <svg *ngSwitchCase="'pending'" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="8"></circle>
-          <path d="M12 7v6l4 2"></path>
-        </svg>
-        <svg *ngSwitchCase="'arrived'" viewBox="0 0 24 24">
-          <path d="M4 12h11"></path>
-          <path d="M11 8l4 4-4 4"></path>
-          <path d="M18 5h2v14h-2"></path>
-        </svg>
-        <svg *ngSwitchCase="'service'" viewBox="0 0 24 24">
-          <rect x="6" y="10" width="12" height="10" rx="3"></rect>
-          <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
-        </svg>
-        <svg *ngSwitchCase="'completed'" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="8"></circle>
-          <path d="M8.5 12.5l2.2 2.2 4.8-5"></path>
-        </svg>
-        <svg *ngSwitchCase="'waitlist'" viewBox="0 0 24 24">
-          <circle cx="9" cy="9" r="3"></circle>
-          <circle cx="16" cy="10" r="2.5"></circle>
-          <path d="M4 19c.8-3 2.6-5 5-5s4.2 2 5 5"></path>
-          <path d="M13.5 15.5c1.8.2 3.2 1.5 3.9 3.5"></path>
-        </svg>
-        <svg *ngSwitchCase="'revenue'" viewBox="0 0 24 24">
-          <rect x="4" y="6" width="16" height="13" rx="3"></rect>
-          <path d="M16 10h4v5h-4a2.5 2.5 0 0 1 0-5Z"></path>
-          <text x="10" y="15" text-anchor="middle">₹</text>
-        </svg>
-      </span>
-      <span class="metric-copy">
-        <span class="metric-label">{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-      </span>
-    </button>
+    @for (item of summary; track trackByIndex($index, item)) {
+      <button
+        type="button"
+        class="metric-card"
+        [ngClass]="item.tone"
+        [class.active-filter]="isKpiHistoryActive(item.label)"
+        [attr.aria-pressed]="isKpiHistoryActive(item.label)"
+        [disabled]="!item.statuses.length && !item.command"
+        (click)="openSummaryMetric(item.label, item.statuses, item.command)"
+        >
+        <span class="metric-icon" aria-hidden="true">
+          @switch (item.icon) {
+            @case ('booked') {
+              <svg viewBox="0 0 24 24">
+                <rect x="4" y="5" width="16" height="15" rx="3"></rect>
+                <path d="M8 3v4M16 3v4M4 10h16"></path>
+              </svg>
+            }
+            @case ('pending') {
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="M12 7v6l4 2"></path>
+              </svg>
+            }
+            @case ('arrived') {
+              <svg viewBox="0 0 24 24">
+                <path d="M4 12h11"></path>
+                <path d="M11 8l4 4-4 4"></path>
+                <path d="M18 5h2v14h-2"></path>
+              </svg>
+            }
+            @case ('service') {
+              <svg viewBox="0 0 24 24">
+                <rect x="6" y="10" width="12" height="10" rx="3"></rect>
+                <path d="M8 10V8a4 4 0 0 1 8 0v2"></path>
+              </svg>
+            }
+            @case ('completed') {
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="M8.5 12.5l2.2 2.2 4.8-5"></path>
+              </svg>
+            }
+            @case ('waitlist') {
+              <svg viewBox="0 0 24 24">
+                <circle cx="9" cy="9" r="3"></circle>
+                <circle cx="16" cy="10" r="2.5"></circle>
+                <path d="M4 19c.8-3 2.6-5 5-5s4.2 2 5 5"></path>
+                <path d="M13.5 15.5c1.8.2 3.2 1.5 3.9 3.5"></path>
+              </svg>
+            }
+            @case ('revenue') {
+              <svg viewBox="0 0 24 24">
+                <rect x="4" y="6" width="16" height="13" rx="3"></rect>
+                <path d="M16 10h4v5h-4a2.5 2.5 0 0 1 0-5Z"></path>
+                <text x="10" y="15" text-anchor="middle">₹</text>
+              </svg>
+            }
+          }
+        </span>
+        <span class="metric-copy">
+          <span class="metric-label">{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </span>
+      </button>
+    }
   </section>
 
   <section class="work-area">
     <section class="calendar-panel" aria-label="Staff appointment calendar">
-      <section class="appointment-list-mode" *ngIf="activeStaffGridMode === 'List'; else operationalModes">
-        <article
-          class="list-appointment"
-          *ngFor="let item of todaysAppointments; trackBy: trackByIndex"
-          (click)="openAppointment(item)"
-          (mouseenter)="showAppointmentDetails(item, $event)"
-          (mousemove)="moveAppointmentDetails($event)"
-          (mouseleave)="hideAppointmentDetails()"
-        >
-          <span>
-            <b>{{ item.client }}</b>
-            <small>{{ item.service }}</small>
-          </span>
-          <strong>{{ item.time }}</strong>
-          <em>{{ item.status }}</em>
-        </article>
-
-        <div class="empty-state list-empty" *ngIf="todaysAppointments.length === 0">
-          <strong>No records yet</strong>
-        </div>
-      </section>
-
-      <ng-template #operationalModes>
-        <section class="operational-view resource-grid-mode" *ngIf="activeStaffGridMode === 'Chair / Room Grid'; else statusBoardMode">
-          <article class="resource-grid-card" *ngFor="let resource of chairRoomGridRows; trackBy: trackByIndex">
-            <header><span>{{ resource.kind }}</span><b>{{ resource.name }}</b></header>
-            <div class="resource-grid-booking" *ngFor="let appointment of resource.appointments; trackBy: trackByIndex">
-              <strong>{{ appointment.time }}</strong>
-              <b>{{ appointment.client }}</b>
-              <span>{{ appointment.service }}</span>
-              <small>{{ appointment.status }}</small>
-            </div>
-            <p class="view-empty" *ngIf="!resource.appointments.length">Free</p>
-          </article>
-          <p class="view-empty" *ngIf="!chairRoomGridRows.length">No chair or room configured</p>
-        </section>
-      </ng-template>
-
-      <ng-template #statusBoardMode>
-        <section class="operational-view status-board-mode" *ngIf="activeStaffGridMode === 'Status Board'; else capacityMode">
-          <article class="status-column" *ngFor="let column of statusBoardColumns; trackBy: trackByIndex">
-            <header><b>{{ column.label }}</b><span>{{ column.appointments.length }}</span></header>
-            <button type="button" class="status-card" *ngFor="let appointment of column.appointments; trackBy: trackByIndex" (click)="openAppointment(appointment)">
-              <strong>{{ appointment.time }}</strong>
-              <b>{{ appointment.client }}</b>
-              <span>{{ appointment.service }}</span>
-            </button>
-            <p class="view-empty" *ngIf="!column.appointments.length">No bookings</p>
-          </article>
-        </section>
-      </ng-template>
-
-      <ng-template #capacityMode>
-        <section class="operational-view capacity-view-mode" *ngIf="activeStaffGridMode === 'Capacity View'; else conflictMode">
-          <article class="capacity-card" *ngFor="let staff of capacityRows; trackBy: trackByIndex">
-            <header><span class="avatar">{{ staff.initials }}</span><b>{{ staff.name }}</b></header>
-            <div><strong>{{ staff.utilization }}%</strong><span>{{ staff.occupiedMinutes }} min occupied</span></div>
-            <progress [value]="staff.utilization" max="100"></progress>
-            <small>{{ staff.openSlots }} free slots</small>
-          </article>
-          <p class="view-empty" *ngIf="!capacityRows.length">No staff scheduled</p>
-        </section>
-      </ng-template>
-
-      <ng-template #conflictMode>
-        <section class="operational-view conflict-view-mode" *ngIf="activeStaffGridMode === 'Conflict View'; else calendarModes">
-          <table *ngIf="conflictRows.length; else noConflicts">
-            <thead><tr><th scope="col">Type</th><th scope="col">Resource</th><th scope="col">Booking one</th><th scope="col">Booking two</th></tr></thead>
-            <tbody><tr *ngFor="let conflict of conflictRows; trackBy: trackByIndex"><td>{{ conflict.type }}</td><td>{{ conflict.target }}</td><td>{{ conflict.first }}</td><td>{{ conflict.second }}</td></tr></tbody>
-          </table>
-          <ng-template #noConflicts><p class="view-empty">No schedule conflicts</p></ng-template>
-        </section>
-      </ng-template>
-
-      <ng-template #calendarModes>
-      <div
-        class="calendar-grid"
-        [ngClass]="calendarModeClass"
-        [style.grid-template-columns]="calendarColumns"
-        *ngIf="calendarColumnsData.length > 0; else emptyCalendar"
-      >
-        <div class="time-head">Time</div>
-        <div class="staff-head" *ngFor="let column of calendarColumnsData; trackBy: trackByIndex">
-          <span class="avatar">{{ column.initials }}</span>
-          <span>
-            <b>{{ column.title }}</b>
-            <small>{{ column.subtitle }}</small>
-          </span>
-        </div>
-
-        <div class="time-col">
-          <div class="time-row" *ngFor="let time of times; trackBy: trackByIndex">{{ time }}</div>
-          <div
-            class="current-time-label"
-            *ngIf="currentTimeTop !== null && activeView === 'Day'"
-            [style.top.px]="currentTimeTop"
-            aria-hidden="true"
-          >{{ currentTimeLabel }}</div>
-        </div>
-
-        <div class="lane" *ngFor="let column of calendarColumnsData; let columnIndex = index; trackBy: trackByIndex">
-          <button
-            class="slot"
-            *ngFor="let time of times; trackBy: trackByIndex"
-            type="button"
-            [attr.aria-label]="'Open slot ' + time + ' for ' + column.title"
-            (click)="openColumnSlot(columnIndex, time, $event)"
-            (mouseenter)="showSlotTime(column, time, $event)"
-            (mousemove)="moveSlotTime($event)"
-            (mouseleave)="hideSlotTime()"
-            (focus)="showSlotTime(column, time, $event)"
-            (blur)="hideSlotTime()"
-            (dragover)="$event.preventDefault()"
-            (drop)="dropAppointment(column, time, $event)"
-          ></button>
-
-          <div
-            class="current-time-line"
-            *ngIf="currentTimeTop !== null && activeView === 'Day'"
-            [style.top.px]="currentTimeTop"
-            aria-hidden="true"
-          ></div>
-
-          <ng-container *ngFor="let entry of blackouts; trackBy: trackByIndex">
-            <div
-              class="blocked-time-card"
-              *ngIf="isBlackoutForColumn(entry, column)"
-              [style.top.px]="blackoutTop(entry)"
-              [style.height.px]="blackoutHeight(entry)"
-            >
-              <strong>Blocked</strong>
-              <span>{{ blackoutLabel(entry) }}</span>
-              <small>{{ entry.reason || 'Unavailable' }}</small>
-            </div>
-          </ng-container>
-
-          <ng-container *ngFor="let item of appointments; trackBy: trackByIndex">
-            <button
-              *ngIf="item.staff === columnIndex"
-              class="booking"
-              [class.pending]="item.status === 'pending' || item.status === 'waiting'"
-              [class.arrived]="item.status === 'arrived'"
-              [class.service]="item.status === 'in-service'"
-              [class.completed]="item.status === 'completed' || item.status === 'paid'"
-              [class.cancelled]="item.status === 'cancelled'"
-              [class.no-show]="item.status === 'no-show'"
-              [class.not-confirmed]="item.status === 'not-confirmed'"
-              [style.border-left-color]="statusColor(item.status)"
-              [style.background-color]="statusColor(item.status) ? statusColor(item.status) + '22' : ''"
-              [style.top.px]="item.top"
-              [style.height.px]="item.height"
-              [style.--lane-left]="(item.lane * 100 / item.laneCount) + '%'"
-              [style.--lane-width]="(100 / item.laneCount) + '%'"
-              draggable="true"
-              (dragstart)="startDrag(item)"
-              type="button"
-              (click)="openAppointment(item); $event.stopPropagation()"
+      @if (activeStaffGridMode === 'List') {
+        <section class="appointment-list-mode">
+          @for (item of todaysAppointments; track trackByIndex($index, item)) {
+            <article
+              class="list-appointment"
+              (click)="openAppointment(item)"
               (mouseenter)="showAppointmentDetails(item, $event)"
               (mousemove)="moveAppointmentDetails($event)"
               (mouseleave)="hideAppointmentDetails()"
-              (focus)="showAppointmentDetails(item, $event)"
-              (blur)="hideAppointmentDetails()"
-            >
+              >
+              <span>
+                <b>{{ item.client }}</b>
+                <small>{{ item.service }}</small>
+              </span>
               <strong>{{ item.time }}</strong>
-              <b>{{ item.client }}</b>
-              <span>{{ item.service }}</span>
-              <em class="staff-request-badge" *ngIf="item.staffPreference !== 'any' && item.requestedStaffId">♥ {{ requestedStaffLabel(item) }} requested</em>
-              <small>{{ statusLabel(item.status) }}</small>
-            </button>
-          </ng-container>
-        </div>
-      </div>
-      </ng-template>
-
-      <ng-template #emptyCalendar>
-        <div class="calendar-grid empty-calendar">
-          <div class="time-head">Time</div>
-          <div class="staff-head muted-head">Staff lanes</div>
-
-          <div class="time-col">
-            <div class="time-row" *ngFor="let time of times; trackBy: trackByIndex">{{ time }}</div>
-          </div>
-
-          <div class="empty-lane">
-            <div class="slot" *ngFor="let time of times; trackBy: trackByIndex"></div>
-            <div class="empty-state">
+              <em>{{ item.status }}</em>
+            </article>
+          }
+          @if (todaysAppointments.length === 0) {
+            <div class="empty-state list-empty">
               <strong>No records yet</strong>
             </div>
-          </div>
-        </div>
-      </ng-template>
+          }
+        </section>
+      } @else {
+        @if (activeStaffGridMode === 'Chair / Room Grid') {
+          <section class="operational-view resource-grid-mode">
+            @for (resource of chairRoomGridRows; track trackByIndex($index, resource)) {
+              <article class="resource-grid-card">
+                <header><span>{{ resource.kind }}</span><b>{{ resource.name }}</b></header>
+                @for (appointment of resource.appointments; track trackByIndex($index, appointment)) {
+                  <div class="resource-grid-booking">
+                    <strong>{{ appointment.time }}</strong>
+                    <b>{{ appointment.client }}</b>
+                    <span>{{ appointment.service }}</span>
+                    <small>{{ appointment.status }}</small>
+                  </div>
+                }
+                @if (!resource.appointments.length) {
+                  <p class="view-empty">Free</p>
+                }
+              </article>
+            }
+            @if (!chairRoomGridRows.length) {
+              <p class="view-empty">No chair or room configured</p>
+            }
+          </section>
+        } @else {
+          @if (activeStaffGridMode === 'Status Board') {
+            <section class="operational-view status-board-mode">
+              @for (column of statusBoardColumns; track trackByIndex($index, column)) {
+                <article class="status-column">
+                  <header><b>{{ column.label }}</b><span>{{ column.appointments.length }}</span></header>
+                  @for (appointment of column.appointments; track trackByIndex($index, appointment)) {
+                    <button type="button" class="status-card" (click)="openAppointment(appointment)">
+                      <strong>{{ appointment.time }}</strong>
+                      <b>{{ appointment.client }}</b>
+                      <span>{{ appointment.service }}</span>
+                    </button>
+                  }
+                  @if (!column.appointments.length) {
+                    <p class="view-empty">No bookings</p>
+                  }
+                </article>
+              }
+            </section>
+          } @else {
+            @if (activeStaffGridMode === 'Capacity View') {
+              <section class="operational-view capacity-view-mode">
+                @for (staff of capacityRows; track trackByIndex($index, staff)) {
+                  <article class="capacity-card">
+                    <header>
+                      <span class="avatar">
+                        @if (staff.photoUrl) {
+                          <img [src]="staff.photoUrl" [alt]="staff.name" referrerpolicy="no-referrer" (error)="hideStaffPhoto(staff.id)" />
+                        } @else {
+                          {{ staff.initials }}
+                        }
+                      </span>
+                      <b>{{ staff.name }}</b>
+                    </header>
+                    <div><strong>{{ staff.utilization }}%</strong><span>{{ staff.occupiedMinutes }} min occupied</span></div>
+                    <progress [value]="staff.utilization" max="100"></progress>
+                    <small>{{ staff.openSlots }} free slots</small>
+                  </article>
+                }
+                @if (!capacityRows.length) {
+                  <p class="view-empty">No staff scheduled</p>
+                }
+              </section>
+            } @else {
+              @if (activeStaffGridMode === 'Conflict View') {
+                <section class="operational-view conflict-view-mode">
+                  @if (conflictRows.length) {
+                    <table>
+                      <thead><tr><th scope="col">Type</th><th scope="col">Resource</th><th scope="col">Booking one</th><th scope="col">Booking two</th></tr></thead>
+                      <tbody>@for (conflict of conflictRows; track trackByIndex($index, conflict)) {
+                        <tr><td>{{ conflict.type }}</td><td>{{ conflict.target }}</td><td>{{ conflict.first }}</td><td>{{ conflict.second }}</td></tr>
+                      }</tbody>
+                    </table>
+                  } @else {
+                    <p class="view-empty">No schedule conflicts</p>
+                  }
+                </section>
+              } @else {
+                @if (calendarColumnsData.length > 0) {
+                  <div
+                    class="calendar-grid"
+                    [ngClass]="calendarModeClass"
+                    [style.grid-template-columns]="calendarColumns"
+                    >
+                    <div class="time-head">Time</div>
+                    @for (column of calendarColumnsData; track trackByIndex($index, column)) {
+                      <div class="staff-head">
+                        <span class="avatar">
+                          @if (column.photoUrl) {
+                            <img [src]="column.photoUrl" [alt]="column.title" referrerpolicy="no-referrer" (error)="hideStaffPhoto(column.staffId)" />
+                          } @else {
+                            {{ column.initials }}
+                          }
+                        </span>
+                        <span>
+                          <b>{{ column.title }}</b>
+                          <small>{{ column.subtitle }}</small>
+                        </span>
+                      </div>
+                    }
+                    <div class="time-col">
+                      @for (time of times; track trackByIndex($index, time)) {
+                        <div class="time-row">{{ time }}</div>
+                      }
+                      @if (currentTimeTop !== null && activeView === 'Day') {
+                        <div
+                          class="current-time-label"
+                          [style.top.px]="currentTimeTop"
+                          aria-hidden="true"
+                        >{{ currentTimeLabel }}</div>
+                      }
+                    </div>
+                    @for (column of calendarColumnsData; track trackByIndex(columnIndex, column); let columnIndex = $index) {
+                      <div class="lane">
+                        @for (time of times; track trackByIndex($index, time)) {
+                          <button
+                            class="slot"
+                            type="button"
+                            [attr.aria-label]="'Open slot ' + time + ' for ' + column.title"
+                            (click)="openColumnSlot(columnIndex, time, $event)"
+                            (mouseenter)="showSlotTime(column, time, $event)"
+                            (mousemove)="moveSlotTime($event)"
+                            (mouseleave)="hideSlotTime()"
+                            (focus)="showSlotTime(column, time, $event)"
+                            (blur)="hideSlotTime()"
+                            (dragover)="$event.preventDefault()"
+                            (drop)="dropAppointment(column, time, $event)"
+                          ></button>
+                        }
+                        @if (currentTimeTop !== null && activeView === 'Day') {
+                          <div
+                            class="current-time-line"
+                            [style.top.px]="currentTimeTop"
+                            aria-hidden="true"
+                          ></div>
+                        }
+                        @for (entry of blackouts; track trackByIndex($index, entry)) {
+                          @if (isBlackoutForColumn(entry, column)) {
+                            <div
+                              class="blocked-time-card"
+                              [style.top.px]="blackoutTop(entry)"
+                              [style.height.px]="blackoutHeight(entry)"
+                              >
+                              <strong>Blocked</strong>
+                              <span>{{ blackoutLabel(entry) }}</span>
+                              <small>{{ entry.reason || 'Unavailable' }}</small>
+                            </div>
+                          }
+                        }
+                        @for (item of appointments; track trackByIndex($index, item)) {
+                          @if (item.staff === columnIndex) {
+                            <button
+                              class="booking"
+                              [class.pending]="item.status === 'pending' || item.status === 'waiting'"
+                              [class.arrived]="item.status === 'arrived'"
+                              [class.service]="item.status === 'in-service'"
+                              [class.completed]="item.status === 'completed' || item.status === 'paid'"
+                              [class.cancelled]="item.status === 'cancelled'"
+                              [class.no-show]="item.status === 'no-show'"
+                              [class.not-confirmed]="item.status === 'not-confirmed'"
+                              [style.border-left-color]="statusColor(item.status)"
+                              [style.background-color]="statusColor(item.status) ? statusColor(item.status) + '22' : ''"
+                              [style.top.px]="item.top"
+                              [style.height.px]="item.height"
+                              [style.--lane-left]="(item.lane * 100 / item.laneCount) + '%'"
+                              [style.--lane-width]="(100 / item.laneCount) + '%'"
+                              draggable="true"
+                              (dragstart)="startDrag(item)"
+                              type="button"
+                              (click)="openAppointment(item); $event.stopPropagation()"
+                              (mouseenter)="showAppointmentDetails(item, $event)"
+                              (mousemove)="moveAppointmentDetails($event)"
+                              (mouseleave)="hideAppointmentDetails()"
+                              (focus)="showAppointmentDetails(item, $event)"
+                              (blur)="hideAppointmentDetails()"
+                              >
+                              <strong>{{ item.time }}</strong>
+                              <b>{{ item.client }}</b>
+                              <span>{{ item.service }}</span>
+                              @if (item.staffPreference !== 'any' && item.requestedStaffId) {
+                                <em class="staff-request-badge">♥ {{ requestedStaffLabel(item) }} requested</em>
+                              }
+                              <small>{{ statusLabel(item.status) }}</small>
+                            </button>
+                          }
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="calendar-grid empty-calendar">
+                    <div class="time-head">Time</div>
+                    <div class="staff-head muted-head">Staff lanes</div>
+                    <div class="time-col">
+                      @for (time of times; track trackByIndex($index, time)) {
+                        <div class="time-row">{{ time }}</div>
+                      }
+                    </div>
+                    <div class="empty-lane">
+                      @for (time of times; track trackByIndex($index, time)) {
+                        <div class="slot"></div>
+                      }
+                      <div class="empty-state">
+                        <strong>No records yet</strong>
+                      </div>
+                    </div>
+                  </div>
+                }
+              }
+            }
+          }
+        }
+      }
+
+
+
+
+
+
     </section>
   </section>
 
-  <div
-    class="slot-action-popover"
-    *ngIf="slotAction"
-    [style.left.px]="slotAction.left"
-  [style.top.px]="slotAction.top"
-  role="dialog"
-  aria-label="Slot actions"
-  >
-    <div class="slot-action-title">
-      <strong>{{ slotAction.time }}</strong>
-      <button class="slot-action-close" type="button" aria-label="Close slot actions" (click)="slotAction = null">&times;</button>
+  @if (slotAction) {
+    <div
+      class="slot-action-popover"
+      [style.left.px]="slotAction.left"
+      [style.top.px]="slotAction.top"
+      role="dialog"
+      aria-label="Slot actions"
+      >
+      <div class="slot-action-title">
+        <strong>{{ slotAction.time }}</strong>
+        <button class="slot-action-close" type="button" aria-label="Close slot actions" (click)="slotAction = null">&times;</button>
+      </div>
+      <button type="button" (click)="openSlotAction('booking')">New booking</button>
+      <button type="button" (click)="openSlotAction('block')">Block time</button>
+      <button type="button" (click)="openSlotAction('waitlist')">Add to waitlist</button>
     </div>
-    <button type="button" (click)="openSlotAction('booking')">New booking</button>
-    <button type="button" (click)="openSlotAction('block')">Block time</button>
-    <button type="button" (click)="openSlotAction('waitlist')">Add to waitlist</button>
-  </div>
+  }
 
-  <section class="scheduled-staff-popover" *ngIf="scheduledStaffOpen" aria-label="Scheduled staff">
-    <header>
-      <div>
-        <h2>Scheduled Staff</h2>
-        <span>{{ visibleStaffLabel }}</span>
-      </div>
-      <button class="icon-button" type="button" aria-label="Close scheduled staff" (click)="closeScheduledStaff()">×</button>
-    </header>
-
-    <div class="scheduled-staff-list">
-      <article *ngFor="let person of staff; trackBy: trackByIndex">
-        <span class="drag-dot">::</span>
-        <label
-          class="staff-toggle"
-          [class.is-on]="scheduledStaffSelection[person.id] !== false"
-          [attr.aria-label]="'Toggle ' + person.name + ' visibility'"
-        >
-          <input
-            type="checkbox"
-            [checked]="scheduledStaffSelection[person.id] !== false"
-            (change)="toggleScheduledStaff(person.id, $any($event.target).checked)"
-            aria-hidden="true"
-          />
-          <span aria-hidden="true" class="check-mark"></span>
-        </label>
-
-        <span class="initials">{{ person.initials }}</span>
-        <span class="staff-copy">
-          <b>{{ person.name }}</b>
-          <small>{{ person.role }}</small>
-        </span>
-        <button class="mini round" type="button" aria-label="Move staff up" (click)="moveScheduledStaff(person.id, -1)">↑</button>
-        <button class="mini round" type="button" aria-label="Move staff down" (click)="moveScheduledStaff(person.id, 1)">↓</button>
-      </article>
-    </div>
-
-    <footer>
-      <button type="button" (click)="resetScheduledStaff()">Reset</button>
-      <button type="button" (click)="closeScheduledStaff()">Cancel</button>
-      <button class="primary accent" type="button" (click)="saveScheduledStaff()">Save</button>
-    </footer>
-  </section>
-
-  <aside class="appointment-detail-drawer" *ngIf="selectedAppointment as appointment" aria-label="Appointment details">
-    <header>
-      <div>
-        <span class="section-label">Appointment</span>
-        <h2>{{ appointment.client }}</h2>
-        <small>{{ appointment.time }}</small>
-      </div>
-      <div class="status-actions" aria-label="Appointment status actions">
-        <button
-          *ngFor="let action of statusActions; trackBy: trackByIndex"
-          type="button"
-          [class.active]="appointment.status === action.status"
-          [style.border-color]="appointment.status === action.status ? action.color : ''"
-          [style.color]="appointment.status === action.status ? action.color : ''"
-          [disabled]="!!statusSaving"
-          (click)="setAppointmentStatus(action.status)"
-        >
-          <span *ngIf="statusSaving === action.status">Saving...</span>
-          <span *ngIf="statusSaving !== action.status">{{ action.label }}</span>
-        </button>
-        <small *ngIf="appointmentActionError" class="status-action-error">
-          {{ appointmentActionError }}
-        </small>
-      </div>
-      <button class="icon-button" type="button" aria-label="Close appointment" (click)="closeAppointmentDetail()">×</button>
-    </header>
-
-    <nav class="detail-tabs" aria-label="Appointment detail tabs">
-      <button type="button" [class.active]="appointmentDetailTab === 'booking'" (click)="setAppointmentDetailTab('booking')">Booking</button>
-      <button type="button" [class.active]="appointmentDetailTab === 'activity'" (click)="setAppointmentDetailTab('activity')">Activities</button>
-    </nav>
-
-    <section class="detail-body" *ngIf="appointmentDetailTab === 'booking'">
-      <div class="detail-grid">
-        <article *ngFor="let row of appointment.detailRows; trackBy: trackByIndex">
-          <span>{{ row.label }}</span>
-          <b>{{ row.value }}</b>
-        </article>
-      </div>
-
-      <label class="notes-box">
-        Notes
-        <textarea rows="3" [(ngModel)]="appointmentNoteDraft" name="appointmentNoteDraft"></textarea>
-      </label>
-      <button type="button" [disabled]="notesSaving" (click)="saveAppointmentNotes()">
-        {{ notesSaving ? 'Saving...' : 'Save notes' }}
-      </button>
-
-      <section class="bill-lines">
-        <h3>Service bill lines</h3>
-        <div class="bill-table">
-          <div class="bill-head">
-            <span>Service</span>
-            <span>Start time</span>
-            <span>Staff</span>
-            <span>Qty</span>
-            <span>Price</span>
-            <span>Discount</span>
-            <span>Total</span>
-          </div>
-          <div class="bill-row" *ngFor="let line of selectedAppointmentRows; trackBy: trackByIndex">
-            <span>{{ line.serviceName }}</span>
-            <span>{{ line.startTime }}</span>
-            <span>{{ line.staffName }}</span>
-            <span>{{ line.quantity }}</span>
-            <span>{{ line.price }}</span>
-            <span>{{ line.discount }}</span>
-            <span>{{ line.total }}</span>
-          </div>
+  @if (scheduledStaffOpen) {
+    <section class="scheduled-staff-popover" aria-label="Scheduled staff">
+      <header>
+        <div>
+          <h2>Scheduled Staff</h2>
+          <span>{{ visibleStaffLabel }}</span>
         </div>
+        <div class="scheduled-staff-header-actions">
+          <button class="sort-staff-button" type="button" aria-label="Sort staff names A to Z" title="Sort A to Z" (click)="sortScheduledStaffAlphabetically()">A–Z</button>
+          <button class="icon-button" type="button" aria-label="Close scheduled staff" (click)="closeScheduledStaff()">×</button>
+        </div>
+      </header>
+      <div class="scheduled-staff-list">
+        @for (person of staff; track trackByIndex($index, person)) {
+          <article
+            [class.is-dragging]="draggedScheduledStaffId === person.id"
+            [class.drop-before]="scheduledStaffDropId === person.id && !scheduledStaffDropAfter"
+            [class.drop-after]="scheduledStaffDropId === person.id && scheduledStaffDropAfter"
+            (dragover)="overScheduledStaff(person.id, $event)"
+            (drop)="dropScheduledStaff(person.id, $event)"
+            >
+            <span class="drag-dot" draggable="true" title="Drag to move staff" (dragstart)="startScheduledStaffDrag(person.id, $event)" (dragend)="endScheduledStaffDrag()">::</span>
+            <label
+              class="staff-toggle"
+              [class.is-on]="scheduledStaffSelection[person.id] !== false"
+              [attr.aria-label]="'Toggle ' + person.name + ' visibility'"
+              >
+              <input
+                type="checkbox"
+                [checked]="scheduledStaffSelection[person.id] !== false"
+                (change)="toggleScheduledStaff(person.id, $any($event.target).checked)"
+                aria-hidden="true"
+                />
+                <span aria-hidden="true" class="check-mark"></span>
+              </label>
+              <span class="initials">{{ person.initials }}</span>
+              <span class="staff-copy">
+                <b>{{ person.name }}</b>
+                <small>{{ person.role }}</small>
+              </span>
+              <button class="mini round" type="button" aria-label="Move staff up" (click)="moveScheduledStaff(person.id, -1)">↑</button>
+              <button class="mini round" type="button" aria-label="Move staff down" (click)="moveScheduledStaff(person.id, 1)">↓</button>
+            </article>
+          }
+        </div>
+        <footer>
+          <button type="button" (click)="resetScheduledStaff()">Reset</button>
+          <button type="button" (click)="closeScheduledStaff()">Cancel</button>
+          <button class="primary accent" type="button" (click)="saveScheduledStaff()">Save</button>
+        </footer>
       </section>
+    }
 
-      <section class="pending-reschedule-requests" *ngIf="selectedRescheduleRequests.length">
-        <strong>Client reschedule request</strong>
-        <article *ngFor="let request of selectedRescheduleRequests; trackBy: trackByIndex">
-          <span>{{ formatActivityTime(request.requestedStartAt) }}{{ request.reason ? ' · ' + request.reason : '' }}</span>
-          <button type="button" (click)="decideRescheduleRequest(request.id, true)">Approve</button><button type="button" (click)="decideRescheduleRequest(request.id, false)">Reject</button>
-        </article>
-      </section>
-
-      <div class="drawer-actions">
-        <button type="button" (click)="openEditAppointment(appointment)">Edit Booking</button>
-        <button type="button" (click)="openRescheduleAppointment(appointment)">Reschedule</button>
-        <button type="button" [disabled]="!clientPhone(appointment.clientId) || clientSmsSending" (click)="sendClientSms(appointment)">{{ clientSmsSending ? 'Queuing...' : 'SMS client' }}</button>
-      </div>
-    </section>
-
-    <section class="detail-body" *ngIf="appointmentDetailTab === 'activity'">
-      <small *ngIf="activityRefreshError" class="status-action-error">{{ activityRefreshError }}</small>
-      <div class="activity-log" *ngIf="appointment.activityLines.length > 0; else noActivity">
-        <article *ngFor="let event of appointment.activityLines; trackBy: trackByIndex">
-          <strong>{{ event.title }}</strong>
-          <span>{{ formatActivityTime(event.time) }}</span>
-          <p>{{ event.body }}</p>
-        </article>
-      </div>
-      <ng-template #noActivity>
-        <div class="compact-empty">No activity</div>
-      </ng-template>
-    </section>
-  </aside>
-
-  <div
-    class="appointment-detail-popover"
-    *ngIf="hoveredAppointment as hover"
-    role="tooltip"
-    [style.left.px]="hover.x"
-    [style.top.px]="hover.y"
-  >
-    <div class="hover-title">
-      <strong>{{ hover.card.client }}</strong>
-      <small>{{ hover.card.time }}</small>
-    </div>
-    <div class="hover-row" *ngFor="let row of hover.card.detailRows; trackBy: trackByIndex">
-      <em>{{ row.label }}</em>
-      <b>{{ row.value }}</b>
-    </div>
-  </div>
-
-  <div
-    class="slot-time-popover"
-    *ngIf="hoveredSlot as slot"
-    role="tooltip"
-    [style.left.px]="slot.x"
-    [style.top.px]="slot.y"
-  >
-    <strong>{{ slot.time }}</strong>
-    <span>{{ slot.staff }}</span>
-  </div>
-
-  <aside class="command-flyout" *ngIf="noShowDrawerOpen && selectedAppointment as appointment" aria-label="No-show action">
-    <header>
-      <div><span class="section-label">No-show</span><h2>{{ appointment.client }}</h2></div>
-      <button class="icon-button" type="button" aria-label="Close no-show action" (click)="closeNoShowDrawer()">×</button>
-    </header>
-    <div class="command-form">
-      <label>
-        Fee amount
-        <input [(ngModel)]="noShowAmount" name="noShowAmount" type="number" min="0.01" step="0.01" placeholder="Amount" />
-      </label>
-      <label>
-        Payment provider
-        <select [(ngModel)]="noShowProvider" name="noShowProvider">
-          <option value="razorpay">Razorpay</option>
-          <option value="cashfree">Cashfree</option>
-          <option value="phonepe">PhonePe</option>
-        </select>
-      </label>
-      <p class="status-action-error" *ngIf="appointmentActionError">{{ appointmentActionError }}</p>
-    </div>
-    <footer>
-      <button type="button" [disabled]="noShowSaving" (click)="submitNoShow(false)">Mark only</button>
-      <button class="primary" type="button" [disabled]="noShowSaving" (click)="submitNoShow(true)">{{ noShowSaving ? 'Saving...' : 'Create fee link' }}</button>
-    </footer>
-  </aside>
-
-  <aside class="command-flyout" *ngIf="activeCommand" aria-label="Appointment action">
-    <header>
-      <h2 *ngIf="activeCommand === 'block'">Block time</h2>
-      <h2 *ngIf="activeCommand === 'waitlist'">Waitlist</h2>
-      <h2 *ngIf="activeCommand === 'move'">Move appointment</h2>
-      <button class="icon-button" type="button" aria-label="Close action" (click)="closeCommand()">×</button>
-    </header>
-
-    <form class="command-form" (ngSubmit)="saveCommand()">
-      <label *ngIf="activeCommand === 'move'">
-        Appointment
-        <select [(ngModel)]="commandAppointmentId" name="commandAppointmentId">
-          <option value="">Select appointment</option>
-          <option *ngFor="let appointment of appointmentRows; trackBy: trackByIndex" [value]="appointment.id">
-            {{ timeText(appointment.startAt) }} · {{ clientName(appointment.clientId) }}
-          </option>
-        </select>
-      </label>
-
-      <label *ngIf="activeCommand === 'waitlist'">
-        Client
-        <select [(ngModel)]="commandClientId" name="commandClientId">
-          <option value="">Select client</option>
-          <option *ngFor="let client of clients; trackBy: trackByIndex" [value]="client.id">{{ client.name || client.phone }}</option>
-        </select>
-      </label>
-
-      <label *ngIf="activeCommand === 'waitlist'">
-        Service
-        <select [(ngModel)]="commandServiceId" name="commandServiceId">
-          <option value="">Select service</option>
-          <option *ngFor="let service of services; trackBy: trackByIndex" [value]="service.id">{{ service.name }}</option>
-        </select>
-      </label>
-
-      <fieldset class="block-staff-picker" *ngIf="activeCommand === 'block'">
-        <legend>Staff</legend>
-        <div class="block-staff-actions">
-          <button type="button" (click)="selectAllBlockStaff()">Select all</button>
-          <button type="button" (click)="setBlockStaffIds([])">Clear</button>
-        </div>
-        <div class="block-staff-options">
-          <label *ngFor="let person of scheduledStaff; trackBy: trackByIndex">
-            <input type="checkbox" [checked]="commandStaffIds.includes(person.id)" (change)="toggleBlockStaff(person.id, $any($event.target).checked)" />
-            <span>{{ person.name }}</span>
-          </label>
-        </div>
-      </fieldset>
-
-      <label *ngIf="activeCommand === 'move'">
-        Staff
-        <select [(ngModel)]="commandStaffId" name="commandStaffId">
-          <option value="">Select staff</option>
-          <option *ngFor="let person of staff; trackBy: trackByIndex" [value]="person.id">{{ person.name }}</option>
-        </select>
-      </label>
-
-      <div class="field-row">
-        <label>
-        Date
-          <as-date-picker ariaLabel="Action date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
-        </label>
-        <div class="command-time-picker">
-          <span>Start</span>
-          <div class="time-slot-grid command-time-slots" role="listbox" aria-label="Choose command start time">
-            <button
-              *ngFor="let slot of commandSlots(); trackBy: trackByIndex"
-              type="button"
-              class="time-slot"
-              [class.is-selected]="commandStartTime === slot.value"
-              [class.is-blocked]="slot.blocked"
-              [disabled]="slot.blocked"
-              [attr.aria-pressed]="commandStartTime === slot.value"
-              [title]="slot.blocked ? 'Unavailable for this staff and duration' : slot.label"
-              (click)="selectCommandSlot(slot)"
-            >{{ slot.label }}</button>
-          </div>
-        </div>
-      </div>
-
-      <label *ngIf="activeCommand === 'block'">
-        Duration
-        <input type="number" min="15" step="15" [(ngModel)]="commandDurationMinutes" name="commandDurationMinutes" />
-      </label>
-
-      <label>
-        Reason
-        <textarea rows="3" [(ngModel)]="commandReason" name="commandReason"></textarea>
-      </label>
-
-      <p class="inline-error" *ngIf="commandError">{{ commandError }}</p>
-
-      <section class="command-records" *ngIf="activeCommand === 'waitlist' || activeCommand === 'block'">
-        <h3>{{ activeCommand === 'waitlist' ? 'Pending waitlist' : 'Blocked times' }}</h3>
-        <article *ngFor="let entry of commandRecords; trackBy: trackByIndex">
+    @if (kpiHistory; as history) {
+      <aside class="appointment-detail-drawer kpi-history-drawer" aria-label="Appointment KPI history">
+        <header>
           <div>
-            <strong>{{ activeCommand === 'waitlist' ? waitlistLabel($any(entry)) : blackoutLabel($any(entry)) }}</strong>
-            <small>{{ $any(entry).reason || $any(entry).notes || 'No reason' }}</small>
+            <span class="section-label">Appointment history</span>
+            <h2>{{ history.label }}</h2>
+            <small>{{ history.waitlist ? kpiHistoryWaitlistRows.length : kpiHistoryAppointmentRows.length }} records</small>
           </div>
-          <button type="button" (click)="activeCommand === 'waitlist' ? removeWaitlist(entry.id) : removeBlackout(entry.id)">Remove</button>
-        </article>
-        <p *ngIf="activeCommand === 'waitlist' && waitlistEntries.length === 0">No records yet</p>
-        <p *ngIf="activeCommand === 'block' && blackouts.length === 0">No records yet</p>
-      </section>
-    </form>
+          <button class="icon-button" type="button" aria-label="Close appointment history" (click)="closeKpiHistory()">×</button>
+        </header>
+        <section class="detail-body kpi-history-list">
+          @for (row of (history.waitlist ? kpiHistoryWaitlistRows : kpiHistoryAppointmentRows); track row.id) {
+            <article>
+              <div class="kpi-history-title">
+                <strong>{{ row.client }}</strong>
+                <span>{{ row.status }}</span>
+              </div>
+              <b>{{ row.service }}</b>
+              <small>{{ row.time }} · {{ row.staff }}</small>
+              @if (row.bookingNumber) {
+                <small>Booking {{ row.bookingNumber }}</small>
+              }
+            </article>
+          } @empty {
+            <div class="compact-empty">No records yet</div>
+          }
+        </section>
+      </aside>
+    }
 
-    <footer>
-      <button type="button" (click)="closeCommand()">Cancel</button>
-      <button class="primary" type="button" [disabled]="commandSaving" (click)="saveCommand()">
-        {{ commandSaving ? 'Saving...' : 'Save' }}
-      </button>
-    </footer>
-  </aside>
-
-  <aside class="booking-flyout" *ngIf="newBookingOpen" aria-label="New booking flyout">
-    <header>
-      <div>
-        <span class="section-label">Booking</span>
-        <h2>{{ rescheduleMode ? 'Reschedule booking' : (editingAppointmentId ? 'Edit booking' : 'New booking') }}</h2>
-      </div>
-      <button class="icon-button" type="button" aria-label="Close new booking" (click)="closeNewBooking()">×</button>
-    </header>
-
-    <form class="booking-form" (ngSubmit)="createBooking()">
-      <div class="linked-field">
-        <label class="smart-picker">
-          Client
-          <input
-            type="search"
-            placeholder="Search client"
-            [ngModel]="bookingClientSearch"
-            name="bookingClientSearch"
-            (ngModelChange)="setClientSearch($event)"
-          />
-          <div class="picker-results" *ngIf="bookingClientSearch && !selectedClientId">
-            <button
-              *ngFor="let client of filteredClients(); trackBy: trackByIndex"
-              type="button"
-              (mousedown)="$event.preventDefault(); selectClient(client)"
-            >
-              <b>{{ client.name || client.phone || client.email }}</b>
-              <span>{{ client.phone || client.email }}</span>
-            </button>
-            <small *ngIf="filteredClients().length === 0">No clients</small>
+    @if (selectedAppointment; as appointment) {
+      <aside class="appointment-detail-drawer" aria-label="Appointment details">
+        <header>
+          <div>
+            <span class="section-label">Appointment</span>
+            <h2>{{ appointment.client }}</h2>
+            <small>{{ appointment.time }}</small>
           </div>
-        </label>
-        <a routerLink="/clients">Clients</a>
-      </div>
-
-      <section class="booking-client-kpis" *ngIf="selectedClientId">
-        <p class="compact-empty" *ngIf="bookingClientKpiLoading">Loading client details...</p>
-        <ng-container *ngIf="bookingClientKpi as kpi">
-          <article><span>Wallet</span><strong>{{ kpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
-          <article><span>Unpaid</span><strong>{{ kpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
-          <article><span>Membership assigned</span><strong>{{ kpi.hasActiveMembership ? shortDate(kpi.membershipAssignDate || '') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
-          <article><span>Membership expires</span><strong>{{ kpi.hasActiveMembership ? shortDate(kpi.membershipExpireDate || '') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
-        </ng-container>
-      </section>
-
-      <section class="booking-intelligence-panel" *ngIf="bookingLines.length > 0">
-        <div class="service-line-head">
-          <strong>Booking intelligence</strong>
-          <button class="mini" type="button" [disabled]="bookingIntelligenceLoading" (click)="refreshBookingIntelligence()">
-            {{ bookingIntelligenceLoading ? 'Checking...' : 'Refresh plan' }}
-          </button>
-        </div>
-        <p class="inline-error" *ngIf="bookingIntelligenceError">{{ bookingIntelligenceError }}</p>
-        <ng-container *ngIf="bookingIntelligence as intelligence">
-          <div class="booking-intelligence-summary" *ngIf="intelligence.client as client">
-            <span>Risk <b>{{ client.riskLevel }} · {{ client.riskScore }}</b></span>
-            <span>Package credits <b>{{ client.packageCredits }}</b></span>
-            <span>Memberships <b>{{ client.activeMemberships }}</b></span>
+          <div class="status-actions" aria-label="Appointment status actions">
+            @for (action of statusActions; track trackByIndex($index, action)) {
+              <button
+                type="button"
+                [class.active]="appointment.status === action.status"
+                [style.border-color]="appointment.status === action.status ? action.color : ''"
+                [style.color]="appointment.status === action.status ? action.color : ''"
+                [disabled]="!!statusSaving"
+                (click)="setAppointmentStatus(action.status)"
+                >
+                @if (statusSaving === action.status) {
+                  <span>Saving...</span>
+                }
+                @if (statusSaving !== action.status) {
+                  <span>{{ action.label }}</span>
+                }
+              </button>
+            }
+            @if (appointmentActionError) {
+              <small class="status-action-error">
+                {{ appointmentActionError }}
+              </small>
+            }
           </div>
-          <div class="booking-intelligence-summary" *ngIf="intelligence.deposit.required">
-            <span>Deposit required <b>{{ intelligence.deposit.depositPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</b></span>
-          </div>
-          <button class="mini" type="button" *ngIf="intelligence.plan.length > 1" (click)="applySequencePlan()">Apply sequence</button>
-          <article class="booking-plan-line" *ngFor="let plan of intelligence.plan; trackBy: trackByIndex">
-            <div>
-              <b>{{ plan.serviceName }}</b>
-              <small>{{ timeText(plan.startAt) }} · Active until {{ timeText(plan.activeEndsAt) }} · Buffer until {{ timeText(plan.busyUntil) }}</small>
-              <small *ngIf="plan.processingMinutes || plan.cleanupMinutes || plan.bufferMinutes">Processing {{ plan.processingMinutes }}m · Cleanup {{ plan.cleanupMinutes }}m · Buffer {{ plan.bufferMinutes }}m</small>
+          <button class="icon-button" type="button" aria-label="Close appointment" (click)="closeAppointmentDetail()">×</button>
+        </header>
+        <nav class="detail-tabs" aria-label="Appointment detail tabs">
+          <button type="button" [class.active]="appointmentDetailTab === 'booking'" (click)="setAppointmentDetailTab('booking')">Booking</button>
+          <button type="button" [class.active]="appointmentDetailTab === 'activity'" (click)="setAppointmentDetailTab('activity')">Activities</button>
+        </nav>
+        @if (appointmentDetailTab === 'booking') {
+          <section class="detail-body">
+            <div class="detail-grid">
+              @for (row of appointment.detailRows; track trackByIndex($index, row)) {
+                <article>
+                  <span>{{ row.label }}</span>
+                  <b>{{ row.value }}</b>
+                  @if (row.label === 'Client') {
+                    <a class="client-history-link" [routerLink]="['/clients', appointment.clientId]">View history</a>
+                  }
+                </article>
+              }
             </div>
-            <small *ngIf="plan.staff.length">Eligible: {{ plan.staff[0].name }} · {{ plan.staff[0].verifiedSkills }} verified skills · {{ plan.staff[0].bookedMinutes }}m booked</small>
-            <small class="inline-error" *ngIf="(plan.consultation.required || plan.consultation.patchTestRequired) && !plan.consultation.current">Consultation{{ plan.consultation.patchTestRequired ? ' / patch test' : '' }} required before this service can be booked.</small>
-            <small *ngIf="(plan.consultation.required || plan.consultation.patchTestRequired) && plan.consultation.current">Consultation clearance is current.</small>
-            <div class="booking-alternatives" *ngFor="let alternative of intelligence.alternatives; trackBy: trackByIndex">
-              <ng-container *ngIf="alternative.lineId === plan.lineId">
-                <button class="mini" type="button" *ngFor="let slot of alternative.slots; trackBy: trackByIndex" (click)="applyAlternative(plan.lineId, slot)">
-                  {{ staffName(slot.staffId) }} · {{ timeText(slot.startAt) }}
-                </button>
-              </ng-container>
+            <label class="notes-box">
+              Notes
+              <textarea rows="3" [(ngModel)]="appointmentNoteDraft" name="appointmentNoteDraft"></textarea>
+            </label>
+            <button type="button" [disabled]="notesSaving" (click)="saveAppointmentNotes()">
+              {{ notesSaving ? 'Saving...' : 'Save notes' }}
+            </button>
+            <section class="bill-lines">
+              <h3>Service bill lines</h3>
+              <div class="bill-table">
+                <div class="bill-head">
+                  <span>Service</span>
+                  <span>Start time</span>
+                  <span>Staff</span>
+                  <span>Qty</span>
+                  <span>Price</span>
+                  <span>Discount</span>
+                  <span>Total</span>
+                </div>
+                @for (line of selectedAppointmentRows; track trackByIndex($index, line)) {
+                  <div class="bill-row">
+                    <span>{{ line.serviceName }}</span>
+                    <span>{{ line.startTime }}</span>
+                    <span>{{ line.staffName }}</span>
+                    <span>{{ line.quantity }}</span>
+                    <span>{{ line.price }}</span>
+                    <span>{{ line.discount }}</span>
+                    <span>{{ line.total }}</span>
+                  </div>
+                }
+              </div>
+            </section>
+            @if (selectedRescheduleRequests.length) {
+              <section class="pending-reschedule-requests">
+                <strong>Client reschedule request</strong>
+                @for (request of selectedRescheduleRequests; track trackByIndex($index, request)) {
+                  <article>
+                    <span>{{ formatActivityTime(request.requestedStartAt) }}{{ request.reason ? ' · ' + request.reason : '' }}</span>
+                    <button type="button" (click)="decideRescheduleRequest(request.id, true)">Approve</button><button type="button" (click)="decideRescheduleRequest(request.id, false)">Reject</button>
+                  </article>
+                }
+              </section>
+            }
+            <div class="drawer-actions">
+              <button type="button" (click)="openEditAppointment(appointment)">Edit Booking</button>
+              <button type="button" (click)="openRescheduleAppointment(appointment)">Reschedule</button>
+              <button type="button" [disabled]="!clientPhone(appointment.clientId) || clientSmsSending" (click)="sendClientSms(appointment)">{{ clientSmsSending ? 'Queuing...' : 'SMS client' }}</button>
             </div>
-          </article>
-        </ng-container>
-      </section>
+          </section>
+        }
+        @if (appointmentDetailTab === 'activity') {
+          <section class="detail-body">
+            @if (activityRefreshError) {
+              <small class="status-action-error">{{ activityRefreshError }}</small>
+            }
+            @if (appointment.activityLines.length > 0) {
+              <div class="activity-log">
+                @for (event of appointment.activityLines; track trackByIndex($index, event)) {
+                  <article>
+                    <strong>{{ event.title }}</strong>
+                    <span>{{ formatActivityTime(event.time) }}</span>
+                    <p>{{ event.body }}</p>
+                  </article>
+                }
+              </div>
+            } @else {
+              <div class="compact-empty">No activity</div>
+            }
+          </section>
+        }
+      </aside>
+    }
 
-      <label>
-        Notes
-        <textarea rows="3" [(ngModel)]="bookingNotes" name="bookingNotes"></textarea>
-      </label>
-
-      <section class="previous-service-panel" *ngIf="selectedClientId">
-        <div class="service-line-head">
-          <strong>Previous services</strong>
-          <button class="mini" type="button" (click)="refreshPreviousServices()">Refresh</button>
+    @if (hoveredAppointment; as hover) {
+      <div
+        class="appointment-detail-popover"
+        role="tooltip"
+        [style.left.px]="hover.x"
+        [style.top.px]="hover.y"
+        >
+        <div class="hover-title">
+          <strong>{{ hover.card.client }}</strong>
+          <small>{{ hover.card.time }}</small>
         </div>
-        <div class="previous-service-list" *ngIf="previousServices().length > 0; else noPreviousServices">
-          <article *ngFor="let item of previousServices(); trackBy: trackByIndex">
-            <span>
-              <b>{{ item.serviceName }}</b>
-              <small>{{ item.date }} · {{ item.staffName }} · {{ item.durationMinutes }}m</small>
-            </span>
-            <button class="mini" type="button" (click)="addSelectedPreviousService(item)">Add service</button>
-          </article>
-        </div>
-        <ng-template #noPreviousServices>
-          <div class="compact-empty">No previous services</div>
-        </ng-template>
-      </section>
-
-      <div class="service-line-head">
-        <strong>Services</strong>
-        <span>
-          <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
-          <button class="mini" type="button" (click)="addParallelServiceLine()">Add parallel</button>
-        </span>
+        @for (row of hover.card.detailRows; track trackByIndex($index, row)) {
+          <div class="hover-row">
+            <em>{{ row.label }}</em>
+            <b>{{ row.value }}</b>
+          </div>
+        }
       </div>
+    }
 
-      <section class="service-card" *ngFor="let line of bookingLines; let lineIndex = index; trackBy: trackLine" aria-label="Service line">
-        <label class="toggle-line" *ngIf="rescheduleMode">
-          <input type="checkbox" [checked]="isRescheduleLineSelected(line)" (change)="toggleRescheduleLine(line, $any($event.target).checked)" />
-          Reschedule this service
-        </label>
-        <label class="smart-picker service-field-wide">
-          Guest
-          <input
-            type="search"
-            placeholder="Search guest"
-            [ngModel]="line.clientSearch"
-            [name]="'clientSearch' + line.id"
-            (focus)="line.clientOpen = true"
-            (ngModelChange)="setLineClientSearch(line, $event)"
-          />
-          <div class="picker-results" *ngIf="line.clientOpen">
-            <button
-              *ngFor="let client of filteredLineClients(line); trackBy: trackByIndex"
-              type="button"
-              (mousedown)="$event.preventDefault(); selectLineClient(line, client)"
-            >
-              <b>{{ client.name || client.phone || client.email }}</b>
-              <span>{{ client.phone || client.email }}</span>
-            </button>
-            <small *ngIf="filteredLineClients(line).length === 0">No clients</small>
-          </div>
-        </label>
-        <label class="smart-picker service-field-wide">
-          Service
-          <input
-            type="search"
-            placeholder="Search service"
-            [ngModel]="line.serviceSearch"
-            [name]="'serviceSearch' + line.id"
-            (focus)="line.serviceOpen = true"
-            (ngModelChange)="setServiceSearch(line, $event)"
-          />
-          <div class="picker-results" *ngIf="line.serviceOpen">
-            <button
-              *ngFor="let service of filteredServices(line); trackBy: trackByIndex"
-              type="button"
-              (mousedown)="$event.preventDefault(); selectService(line, service)"
-            >
-              <b>{{ service.name }}</b>
-              <span>{{ service.category }} · {{ service.durationMinutes }}m</span>
-            </button>
-            <small *ngIf="filteredServices(line).length === 0">No services</small>
-          </div>
-        </label>
+    @if (hoveredSlot; as slot) {
+      <div
+        class="slot-time-popover"
+        role="tooltip"
+        [style.left.px]="slot.x"
+        [style.top.px]="slot.y"
+        >
+        <strong>{{ slot.time }}</strong>
+        <span>{{ slot.staff }}</span>
+      </div>
+    }
 
-        <label *ngIf="serviceVariants(line).length">
-          Variant
-          <select [ngModel]="line.variantId" [name]="'variant' + line.id" (ngModelChange)="selectVariant(line, $event)">
-            <option value="">Standard</option>
-            <option *ngFor="let variant of serviceVariants(line); trackBy: trackByIndex" [value]="variant.id">{{ variant.name }}</option>
-          </select>
-        </label>
-
-        <div class="service-addons" *ngIf="serviceAddons(line).length">
-          <span>Add-ons</span>
-          <label *ngFor="let addon of serviceAddons(line); trackBy: trackByIndex">
-            <input type="checkbox" [checked]="line.addonIds.includes(addon.id)" (change)="toggleAddon(line, addon.id)" />
-            {{ addon.name }}
+    @if (noShowDrawerOpen && selectedAppointment; as appointment) {
+      <aside class="command-flyout" aria-label="No-show action">
+        <header>
+          <div><span class="section-label">No-show</span><h2>{{ appointment.client }}</h2></div>
+          <button class="icon-button" type="button" aria-label="Close no-show action" (click)="closeNoShowDrawer()">×</button>
+        </header>
+        <div class="command-form">
+          <label>
+            Fee amount
+            <input [(ngModel)]="noShowAmount" name="noShowAmount" type="number" min="0.01" step="0.01" placeholder="Amount" />
           </label>
+          <label>
+            Payment provider
+            <select [(ngModel)]="noShowProvider" name="noShowProvider">
+              <option value="razorpay">Razorpay</option>
+              <option value="cashfree">Cashfree</option>
+              <option value="phonepe">PhonePe</option>
+            </select>
+          </label>
+          @if (appointmentActionError) {
+            <p class="status-action-error">{{ appointmentActionError }}</p>
+          }
         </div>
+        <footer>
+          <button type="button" [disabled]="noShowSaving" (click)="submitNoShow(false)">Mark only</button>
+          <button class="primary" type="button" [disabled]="noShowSaving" (click)="submitNoShow(true)">{{ noShowSaving ? 'Saving...' : 'Create fee link' }}</button>
+        </footer>
+      </aside>
+    }
 
-        <label class="smart-picker staff-field-wide">
-          Staff
-          <div class="staff-picker-input">
-            <input
-              type="search"
-              placeholder="Search staff"
-              [ngModel]="line.staffSearch"
-              [name]="'staffSearch' + line.id"
-              (focus)="line.staffOpen = true"
-              (ngModelChange)="setStaffSearch(line, $event)"
-            />
-            <button
-              class="requested-staff-heart"
-              type="button"
-              [class.active]="line.staffPreference !== 'any'"
-              [disabled]="!line.staffId"
-              [attr.aria-pressed]="line.staffPreference !== 'any'"
-              [attr.aria-label]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
-              [title]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
-              (click)="toggleStaffRequest(line)"
-            >♥</button>
+    @if (activeCommand) {
+      <aside class="command-flyout" aria-label="Appointment action">
+        <header>
+          @if (activeCommand === 'block') {
+            <h2>Block time</h2>
+          }
+          @if (activeCommand === 'waitlist') {
+            <h2>Waitlist</h2>
+          }
+          @if (activeCommand === 'move') {
+            <h2>Move appointment</h2>
+          }
+          <button class="icon-button" type="button" aria-label="Close action" (click)="closeCommand()">×</button>
+        </header>
+        <form class="command-form" (ngSubmit)="saveCommand()">
+          @if (activeCommand === 'move') {
+            <label>
+              Appointment
+              <select [(ngModel)]="commandAppointmentId" name="commandAppointmentId">
+                <option value="">Select appointment</option>
+                @for (appointment of appointmentRows; track trackByIndex($index, appointment)) {
+                  <option [value]="appointment.id">
+                    {{ timeText(appointment.startAt) }} · {{ clientName(appointment.clientId) }}
+                  </option>
+                }
+              </select>
+            </label>
+          }
+          @if (activeCommand === 'waitlist') {
+            <label>
+              Client
+              <select [(ngModel)]="commandClientId" name="commandClientId">
+                <option value="">Select client</option>
+                @for (client of clients; track trackByIndex($index, client)) {
+                  <option [value]="client.id">{{ client.name || client.phone }}</option>
+                }
+              </select>
+            </label>
+          }
+          @if (activeCommand === 'waitlist') {
+            <label>
+              Service
+              <select [(ngModel)]="commandServiceId" name="commandServiceId">
+                <option value="">Select service</option>
+                @for (service of services; track trackByIndex($index, service)) {
+                  <option [value]="service.id">{{ service.name }}</option>
+                }
+              </select>
+            </label>
+          }
+          @if (activeCommand === 'block') {
+            <fieldset class="block-staff-picker">
+              <legend>Staff</legend>
+              <div class="block-staff-actions">
+                <button type="button" (click)="selectAllBlockStaff()">Select all</button>
+                <button type="button" (click)="setBlockStaffIds([])">Clear</button>
+              </div>
+              <div class="block-staff-options">
+                @for (person of scheduledStaff; track trackByIndex($index, person)) {
+                  <label>
+                    <input type="checkbox" [checked]="commandStaffIds.includes(person.id)" (change)="toggleBlockStaff(person.id, $any($event.target).checked)" />
+                    <span>{{ person.name }}</span>
+                  </label>
+                }
+              </div>
+            </fieldset>
+          }
+          @if (activeCommand === 'move') {
+            <label>
+              Staff
+              <select [(ngModel)]="commandStaffId" name="commandStaffId">
+                <option value="">Select staff</option>
+                @for (person of staff; track trackByIndex($index, person)) {
+                  <option [value]="person.id">{{ person.name }}</option>
+                }
+              </select>
+            </label>
+          }
+          <div class="field-row">
+            <label>
+              Date
+              <as-date-picker ariaLabel="Action date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
+            </label>
+            <div class="command-time-picker">
+              <span>Start</span>
+              <div class="time-slot-grid command-time-slots" role="listbox" aria-label="Choose command start time">
+                @for (slot of commandSlots(); track trackByIndex($index, slot)) {
+                  <button
+                    type="button"
+                    class="time-slot"
+                    [class.is-selected]="commandStartTime === slot.value"
+                    [class.is-blocked]="slot.blocked"
+                    [disabled]="slot.blocked"
+                    [attr.aria-pressed]="commandStartTime === slot.value"
+                    [title]="slot.blocked ? 'Unavailable for this staff and duration' : slot.label"
+                    (click)="selectCommandSlot(slot)"
+                  >{{ slot.label }}</button>
+                }
+              </div>
+            </div>
           </div>
-          <div class="picker-results" *ngIf="line.staffOpen">
-            <button
-              *ngFor="let person of filteredStaff(line); trackBy: trackByIndex"
-              type="button"
-              (mousedown)="$event.preventDefault(); selectStaff(line, person)"
-            >
-              <b>{{ person.name }}</b>
-              <span>{{ person.role }}</span>
-            </button>
-            <small *ngIf="filteredStaff(line).length === 0">No staff</small>
+          @if (activeCommand === 'block') {
+            <label>
+              Duration
+              <input type="number" min="15" step="15" [(ngModel)]="commandDurationMinutes" name="commandDurationMinutes" />
+            </label>
+          }
+          <label>
+            Reason
+            <textarea rows="3" [(ngModel)]="commandReason" name="commandReason"></textarea>
+          </label>
+          @if (commandError) {
+            <p class="inline-error">{{ commandError }}</p>
+          }
+          @if (activeCommand === 'waitlist' || activeCommand === 'block') {
+            <section class="command-records">
+              <h3>{{ activeCommand === 'waitlist' ? 'Pending waitlist' : 'Blocked times' }}</h3>
+              @for (entry of commandRecords; track trackByIndex($index, entry)) {
+                <article>
+                  <div>
+                    <strong>{{ activeCommand === 'waitlist' ? waitlistLabel($any(entry)) : blackoutLabel($any(entry)) }}</strong>
+                    <small>{{ $any(entry).reason || $any(entry).notes || 'No reason' }}</small>
+                  </div>
+                  <button type="button" (click)="activeCommand === 'waitlist' ? removeWaitlist(entry.id) : removeBlackout(entry.id)">Remove</button>
+                </article>
+              }
+              @if (activeCommand === 'waitlist' && waitlistEntries.length === 0) {
+                <p>No records yet</p>
+              }
+              @if (activeCommand === 'block' && blackouts.length === 0) {
+                <p>No records yet</p>
+              }
+            </section>
+          }
+        </form>
+        <footer>
+          <button type="button" (click)="closeCommand()">Cancel</button>
+          <button class="primary" type="button" [disabled]="commandSaving" (click)="saveCommand()">
+            {{ commandSaving ? 'Saving...' : 'Save' }}
+          </button>
+        </footer>
+      </aside>
+    }
+
+    @if (newBookingOpen) {
+      <aside class="booking-flyout" aria-label="New booking flyout">
+        <header>
+          <div>
+            <span class="section-label">Booking</span>
+            <h2>{{ rescheduleMode ? 'Reschedule booking' : (editingAppointmentId ? 'Edit booking' : 'New booking') }}</h2>
           </div>
-        </label>
-
-        <label class="staff-preference-field">
-          Staff preference
-          <select [ngModel]="line.staffPreference" [name]="'staffPreference' + line.id" (ngModelChange)="setStaffPreference(line, $any($event))">
-            <option value="any">Any available staff</option>
-            <option value="preferred">♥ Preferred staff</option>
-            <option value="required">♥ Required staff</option>
-          </select>
-        </label>
-
-        <label>
-        Date
-          <as-date-picker ariaLabel="Booking date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
-        </label>
-
-        <div class="booking-time-picker">
-          <span>Start</span>
-          <select [(ngModel)]="line.startTime" [name]="'startTime' + line.id" aria-label="Choose start time">
-            <option
-              *ngFor="let slot of bookingSlots(line); trackBy: trackByIndex"
-              [value]="slot.value"
-              [disabled]="slot.blocked && line.startTime !== slot.value"
-            >{{ slot.label }}{{ slot.blocked ? ' · Unavailable' : '' }}</option>
-          </select>
-        </div>
-
-        <label>
-          Duration
-          <input type="number" min="15" step="15" [(ngModel)]="line.durationMinutes" [name]="'duration' + line.id" />
-        </label>
-
-        <label>
-          Chair / room
-          <select [(ngModel)]="line.chairRoomId" [name]="'chairRoom' + line.id">
-            <option value="">No chair / room</option>
-            <option
-              *ngFor="let resource of chairRooms; trackBy: trackByIndex"
-              [value]="resource.id"
-              [disabled]="isChairRoomUnavailable(line, resource.id)"
-            >{{ resource.name }} · {{ resource.kind }}</option>
-          </select>
-        </label>
-        <small class="inline-error" *ngIf="isChairRoomUnavailable(line)">Chair / room unavailable for this time</small>
-
-        <button class="mini danger" type="button" [disabled]="bookingLines.length === 1" (click)="removeServiceLine(line.id)">Remove</button>
-      </section>
-
-      <div class="recurrence-fields" *ngIf="!editingAppointmentId">
-        <label>
-          Repeat
-          <select [(ngModel)]="recurrenceFrequency" name="recurrenceFrequency">
-            <option value="none">Does not repeat</option>
-            <option value="weekly">Weekly</option>
-            <option value="fortnightly">Every 2 weeks</option>
-            <option value="monthly">Every 4 weeks</option>
-          </select>
-        </label>
-        <label *ngIf="recurrenceFrequency !== 'none'">
-          Occurrences
-          <input type="number" min="2" max="52" step="1" [(ngModel)]="recurrenceCount" name="recurrenceCount" placeholder="Occurrences" />
-        </label>
-      </div>
-
-      <label class="toggle-line">
-        <input type="checkbox" [(ngModel)]="notifyStaff" name="notifyStaff" />
-        Staff
-      </label>
-
-      <p class="inline-error" *ngIf="bookingError">{{ bookingError }}</p>
-    </form>
-
-    <section class="staff-change-review" *ngIf="staffChangeReviewOpen">
-      <header><strong>Staff preference review</strong><button type="button" (click)="staffChangeReviewOpen = false">×</button></header>
-      <article *ngFor="let line of pendingStaffChanges(); trackBy: trackLine">
-        <b>{{ staffName(line.requestedStaffId) }} requested → {{ staffName(line.staffId) }}</b>
-        <small>{{ line.staffPreference === 'required' ? 'Required staff: client approval is mandatory.' : 'Preferred staff: client approval or manager override is required.' }}</small>
-        <select [(ngModel)]="line.staffChangeApproval" [name]="'staffChangeApproval' + line.id">
-          <option value="">Choose approval</option>
-          <option value="client-approved">Client approved</option>
-          <option *ngIf="line.staffPreference === 'preferred'" value="manager-override">Manager override</option>
-        </select>
-        <input *ngIf="line.staffChangeApproval === 'manager-override'" [(ngModel)]="line.staffChangeReason" [name]="'staffChangeReason' + line.id" placeholder="Manager override reason" />
-      </article>
-      <footer><button type="button" (click)="staffChangeReviewOpen = false">Back</button><button class="primary" type="button" (click)="confirmStaffChanges()">Continue saving</button></footer>
-    </section>
-
-    <footer>
-      <button type="button" (click)="closeNewBooking()">Cancel</button>
-      <button class="primary" type="button" [disabled]="savingBooking" (click)="createBooking()">
-        {{ savingBooking ? 'Saving...' : rescheduleMode ? 'Reschedule selected' : editingAppointmentId ? 'Save booking' : 'Create booking' }}
-      </button>
-    </footer>
-  </aside>
-</section>
+          <button class="icon-button" type="button" aria-label="Close new booking" (click)="closeNewBooking()">×</button>
+        </header>
+        <form class="booking-form" (ngSubmit)="createBooking()">
+          <div class="linked-field">
+            <label class="smart-picker">
+              Client
+              <input
+                type="search"
+                placeholder="Search client"
+                [ngModel]="bookingClientSearch"
+                name="bookingClientSearch"
+                (ngModelChange)="setClientSearch($event)"
+                />
+                @if (bookingClientSearch && !selectedClientId) {
+                  <div class="picker-results">
+                    @for (client of filteredClients(); track trackByIndex($index, client)) {
+                      <button
+                        type="button"
+                        (mousedown)="$event.preventDefault(); selectClient(client)"
+                        >
+                        <b>{{ client.name || client.phone || client.email }}</b>
+                        <span>{{ client.phone || client.email }}</span>
+                      </button>
+                    }
+                    @if (filteredClients().length === 0) {
+                      <small>No clients</small>
+                    }
+                  </div>
+                }
+              </label>
+              <div class="linked-actions">
+                <a routerLink="/clients">Clients</a>
+                @if (selectedClientId) {
+                  <a [routerLink]="['/clients', selectedClientId]">View history</a>
+                }
+              </div>
+            </div>
+            @if (selectedClientId) {
+              <section class="booking-client-kpis">
+                @if (bookingClientKpiLoading) {
+                  <p class="compact-empty">Loading client details...</p>
+                }
+                @if (bookingClientKpi; as kpi) {
+                  <article><span>Wallet</span><strong>{{ kpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
+                  <article><span>Unpaid</span><strong>{{ kpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</strong><small>Live</small></article>
+                  <article><span>Membership assigned</span><strong>{{ kpi.membershipAssignDate ? (kpi.membershipAssignDate | date:'dd/MM/yyyy') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
+                  <article><span>Membership expires</span><strong>{{ kpi.membershipExpireDate ? (kpi.membershipExpireDate | date:'dd/MM/yyyy') : '—' }}</strong><small>{{ kpi.hasActiveMembership ? 'Active membership' : 'No active membership' }}</small></article>
+                }
+              </section>
+            }
+            @if (bookingLines.length > 0) {
+              <section class="booking-intelligence-panel">
+                <div class="service-line-head">
+                  <strong>Booking intelligence</strong>
+                  <button class="mini" type="button" [disabled]="bookingIntelligenceLoading" (click)="refreshBookingIntelligence()">
+                    {{ bookingIntelligenceLoading ? 'Checking...' : 'Refresh plan' }}
+                  </button>
+                </div>
+                @if (bookingIntelligenceError) {
+                  <p class="inline-error">{{ bookingIntelligenceError }}</p>
+                }
+                @if (bookingIntelligence; as intelligence) {
+                  @if (intelligence.client; as client) {
+                    <div class="booking-intelligence-summary">
+                      <span>Risk <b>{{ client.riskLevel }} · {{ client.riskScore }}</b></span>
+                      <span>Package credits <b>{{ client.packageCredits }}</b></span>
+                      <span>Memberships <b>{{ client.activeMemberships }}</b></span>
+                    </div>
+                  }
+                  @if (intelligence.deposit.required) {
+                    <div class="booking-intelligence-summary">
+                      <span>Deposit required <b>{{ intelligence.deposit.depositPaise / 100 | currency:'INR':'symbol':'1.0-0' }}</b></span>
+                    </div>
+                  }
+                  @if (intelligence.plan.length > 1) {
+                    <button class="mini" type="button" (click)="applySequencePlan()">Apply sequence</button>
+                  }
+                  @for (plan of intelligence.plan; track trackByIndex($index, plan)) {
+                    <article class="booking-plan-line">
+                      <div>
+                        <b>{{ plan.serviceName }}</b>
+                        <small>{{ timeText(plan.startAt) }} · Active until {{ timeText(plan.activeEndsAt) }} · Buffer until {{ timeText(plan.busyUntil) }}</small>
+                        @if (plan.processingMinutes || plan.cleanupMinutes || plan.bufferMinutes) {
+                          <small>Processing {{ plan.processingMinutes }}m · Cleanup {{ plan.cleanupMinutes }}m · Buffer {{ plan.bufferMinutes }}m</small>
+                        }
+                      </div>
+                      @if (plan.staff.length) {
+                        <small>Eligible: {{ plan.staff[0].name }} · {{ plan.staff[0].verifiedSkills }} verified skills · {{ plan.staff[0].bookedMinutes }}m booked</small>
+                      }
+                      @if ((plan.consultation.required || plan.consultation.patchTestRequired) && !plan.consultation.current) {
+                        <small class="inline-error">Consultation{{ plan.consultation.patchTestRequired ? ' / patch test' : '' }} required before this service can be booked.</small>
+                      }
+                      @if ((plan.consultation.required || plan.consultation.patchTestRequired) && plan.consultation.current) {
+                        <small>Consultation clearance is current.</small>
+                      }
+                      @for (alternative of intelligence.alternatives; track trackByIndex($index, alternative)) {
+                        <div class="booking-alternatives">
+                          @if (alternative.lineId === plan.lineId) {
+                            @for (slot of alternative.slots; track trackByIndex($index, slot)) {
+                              <button class="mini" type="button" (click)="applyAlternative(plan.lineId, slot)">
+                                {{ staffName(slot.staffId) }} · {{ timeText(slot.startAt) }}
+                              </button>
+                            }
+                          }
+                        </div>
+                      }
+                    </article>
+                  }
+                }
+              </section>
+            }
+            <label>
+              Notes
+              <textarea rows="3" [(ngModel)]="bookingNotes" name="bookingNotes"></textarea>
+            </label>
+            @if (selectedClientId) {
+              <section class="previous-service-panel">
+                <div class="service-line-head">
+                  <strong>Previous services</strong>
+                  <button class="mini" type="button" (click)="refreshPreviousServices()">Refresh</button>
+                </div>
+                @if (previousServices().length > 0) {
+                  <div class="previous-service-list">
+                    @for (item of previousServices(); track trackByIndex($index, item)) {
+                      <article>
+                        <span>
+                          <b>{{ item.serviceName }}</b>
+                          <small>{{ item.date }} · {{ item.staffName }} · {{ item.durationMinutes }}m</small>
+                        </span>
+                        <button class="mini" type="button" (click)="addSelectedPreviousService(item)">Add service</button>
+                      </article>
+                    }
+                  </div>
+                } @else {
+                  <div class="compact-empty">No previous services</div>
+                }
+              </section>
+            }
+            <div class="service-line-head">
+              <strong>Services</strong>
+              <span>
+                <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
+                <button class="mini" type="button" (click)="addParallelServiceLine()">Add parallel</button>
+              </span>
+            </div>
+            @for (line of bookingLines; track trackLine(lineIndex, line); let lineIndex = $index) {
+              <section class="service-card" aria-label="Service line">
+                @if (rescheduleMode) {
+                  <label class="toggle-line">
+                    <input type="checkbox" [checked]="isRescheduleLineSelected(line)" (change)="toggleRescheduleLine(line, $any($event.target).checked)" />
+                    Reschedule this service
+                  </label>
+                }
+                <label class="smart-picker service-field-wide">
+                  Guest
+                  <input
+                    type="search"
+                    placeholder="Search guest"
+                    [ngModel]="line.clientSearch"
+                    [name]="'clientSearch' + line.id"
+                    (focus)="line.clientOpen = true"
+                    (ngModelChange)="setLineClientSearch(line, $event)"
+                    />
+                    @if (line.clientOpen) {
+                      <div class="picker-results">
+                        @for (client of filteredLineClients(line); track trackByIndex($index, client)) {
+                          <button
+                            type="button"
+                            (mousedown)="$event.preventDefault(); selectLineClient(line, client)"
+                            >
+                            <b>{{ client.name || client.phone || client.email }}</b>
+                            <span>{{ client.phone || client.email }}</span>
+                          </button>
+                        }
+                        @if (filteredLineClients(line).length === 0) {
+                          <small>No clients</small>
+                        }
+                      </div>
+                    }
+                  </label>
+                  <label class="smart-picker service-field-wide">
+                    Service
+                    <input
+                      type="search"
+                      placeholder="Search service"
+                      [ngModel]="line.serviceSearch"
+                      [name]="'serviceSearch' + line.id"
+                      (focus)="line.serviceOpen = true"
+                      (ngModelChange)="setServiceSearch(line, $event)"
+                      />
+                      @if (line.serviceOpen) {
+                        <div class="picker-results">
+                          @for (service of filteredServices(line); track trackByIndex($index, service)) {
+                            <button
+                              type="button"
+                              (mousedown)="$event.preventDefault(); selectService(line, service)"
+                              >
+                              <b>{{ service.name }}</b>
+                              <span>{{ service.category }} · {{ service.durationMinutes }}m</span>
+                            </button>
+                          }
+                          @if (filteredServices(line).length === 0) {
+                            <small>No services</small>
+                          }
+                        </div>
+                      }
+                    </label>
+                    @if (serviceVariants(line).length) {
+                      <label>
+                        Variant
+                        <select [ngModel]="line.variantId" [name]="'variant' + line.id" (ngModelChange)="selectVariant(line, $event)">
+                          <option value="">Standard</option>
+                          @for (variant of serviceVariants(line); track trackByIndex($index, variant)) {
+                            <option [value]="variant.id">{{ variant.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
+                    @if (serviceAddons(line).length) {
+                      <div class="service-addons">
+                        <span>Add-ons</span>
+                        @for (addon of serviceAddons(line); track trackByIndex($index, addon)) {
+                          <label>
+                            <input type="checkbox" [checked]="line.addonIds.includes(addon.id)" (change)="toggleAddon(line, addon.id)" />
+                            {{ addon.name }}
+                          </label>
+                        }
+                      </div>
+                    }
+                    <label class="smart-picker staff-field-wide">
+                      Staff
+                      <div class="staff-picker-input">
+                        <input
+                          type="search"
+                          placeholder="Search staff"
+                          [ngModel]="line.staffSearch"
+                          [name]="'staffSearch' + line.id"
+                          (focus)="line.staffOpen = true"
+                          (ngModelChange)="setStaffSearch(line, $event)"
+                          />
+                          <button
+                            class="requested-staff-heart"
+                            type="button"
+                            [class.active]="line.staffPreference !== 'any'"
+                            [disabled]="!line.staffId"
+                            [attr.aria-pressed]="line.staffPreference !== 'any'"
+                            [attr.aria-label]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
+                            [title]="line.staffPreference === 'any' ? 'Mark selected staff as preferred' : 'Remove staff preference'"
+                            (click)="toggleStaffRequest(line)"
+                          >♥</button>
+                        </div>
+                        @if (line.staffOpen) {
+                          <div class="picker-results">
+                            @for (person of filteredStaff(line); track trackByIndex($index, person)) {
+                              <button
+                                type="button"
+                                (mousedown)="$event.preventDefault(); selectStaff(line, person)"
+                                >
+                                <b>{{ person.name }}</b>
+                                <span>{{ person.role }}</span>
+                              </button>
+                            }
+                            @if (filteredStaff(line).length === 0) {
+                              <small>No staff</small>
+                            }
+                          </div>
+                        }
+                      </label>
+                      <label class="staff-preference-field">
+                        Staff preference
+                        <select [ngModel]="line.staffPreference" [name]="'staffPreference' + line.id" (ngModelChange)="setStaffPreference(line, $any($event))">
+                          <option value="any">Any available staff</option>
+                          <option value="preferred">♥ Preferred staff</option>
+                        </select>
+                      </label>
+                      <label>
+                        Date
+                        <as-date-picker ariaLabel="Booking date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
+                      </label>
+                      <div class="booking-time-picker">
+                        <span>Start</span>
+                        <select [(ngModel)]="line.startTime" [name]="'startTime' + line.id" aria-label="Choose start time">
+                          @for (slot of bookingSlots(line); track trackByIndex($index, slot)) {
+                            <option
+                              [value]="slot.value"
+                              [disabled]="slot.blocked && line.startTime !== slot.value"
+                            >{{ slot.label }}{{ slot.blocked ? ' · Unavailable' : '' }}</option>
+                          }
+                        </select>
+                      </div>
+                      <label>
+                        Duration
+                        <input type="number" min="15" step="15" [(ngModel)]="line.durationMinutes" [name]="'duration' + line.id" />
+                      </label>
+                      <label>
+                        Chair / room
+                        <select [(ngModel)]="line.chairRoomId" [name]="'chairRoom' + line.id">
+                          <option value="">No chair / room</option>
+                          @for (resource of chairRooms; track trackByIndex($index, resource)) {
+                            <option
+                              [value]="resource.id"
+                              [disabled]="isChairRoomUnavailable(line, resource.id)"
+                            >{{ resource.name }} · {{ resource.kind }}</option>
+                          }
+                        </select>
+                      </label>
+                      @if (isChairRoomUnavailable(line)) {
+                        <small class="inline-error">Chair / room unavailable for this time</small>
+                      }
+                      <button class="mini danger" type="button" [disabled]="bookingLines.length === 1" (click)="removeServiceLine(line.id)">Remove</button>
+                    </section>
+                  }
+                  @if (!editingAppointmentId) {
+                    <div class="recurrence-fields">
+                      <label>
+                        Repeat
+                        <select [ngModel]="recurrenceFrequency" (ngModelChange)="setRecurrenceFrequency($event)" name="recurrenceFrequency">
+                          <option value="none">Does not repeat</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="fortnightly">Every 2 weeks</option>
+                          <option value="monthly">Every 4 weeks</option>
+                        </select>
+                      </label>
+                      @if (recurrenceFrequency !== 'none') {
+                        <label>
+                          Occurrences
+                          <input type="number" min="2" max="52" step="1" [(ngModel)]="recurrenceCount" name="recurrenceCount" placeholder="Occurrences" />
+                        </label>
+                      }
+                    </div>
+                  }
+                  @if (!editingAppointmentId && recurrenceFrequency === 'none') {
+                    <section class="advance-payment-card">
+                      <label class="toggle-line">
+                        <input type="checkbox" [ngModel]="collectAdvance" (ngModelChange)="toggleAdvancePayment($event)" name="collectAdvance" />
+                        Add advance payment
+                      </label>
+                      @if (collectAdvance) {
+                        <div class="advance-payment-fields">
+                          <label>
+                            Amount
+                            <input type="number" min="0.01" step="0.01" [(ngModel)]="advanceAmount" name="advanceAmount" placeholder="Enter amount" />
+                          </label>
+                          <label>
+                            Payment method
+                            <select [(ngModel)]="advancePaymentMethod" name="advancePaymentMethod">
+                              @for (mode of advancePaymentMethods; track mode.code) {
+                                <option [value]="mode.code">{{ mode.name }}</option>
+                              }
+                            </select>
+                          </label>
+                          @if (advanceReferenceRequired) {
+                            <label>
+                              {{ selectedAdvancePaymentMode?.settlementType === 'gift_card' ? 'Gift card code' : selectedAdvancePaymentMode?.settlementType === 'store_credit' ? 'Store credit ID' : 'Reference' }}
+                              <input [(ngModel)]="advancePaymentReference" name="advancePaymentReference" [placeholder]="selectedAdvancePaymentMode?.settlementType === 'gift_card' ? 'Enter gift card code' : selectedAdvancePaymentMode?.settlementType === 'store_credit' ? 'Enter store credit ID' : 'Transaction reference'" />
+                            </label>
+                          }
+                          @if (selectedAdvancePaymentMode?.settlementType === 'cash' && cashTills.length > 1) {
+                            <label>
+                              Cash till
+                              <select [(ngModel)]="advanceCashTillId" name="advanceCashTillId">
+                                <option value="">Select till</option>
+                                @for (till of cashTills; track till.id) {
+                                  <option [value]="till.id">{{ till.name }}</option>
+                                }
+                              </select>
+                            </label>
+                          }
+                        </div>
+                        @if (bookingTotalPaise > 0) {
+                          <small>Booking total {{ moneyFromPaise(bookingTotalPaise) }}</small>
+                        }
+                      }
+                    </section>
+                  }
+                  <label class="toggle-line">
+                    <input type="checkbox" [(ngModel)]="notifyStaff" name="notifyStaff" />
+                    Staff
+                  </label>
+                  @if (bookingError) {
+                    <p class="inline-error">{{ bookingError }}</p>
+                  }
+                </form>
+                @if (staffChangeReviewOpen) {
+                  <section class="staff-change-review">
+                    <header><strong>Staff preference review</strong><button type="button" (click)="staffChangeReviewOpen = false">×</button></header>
+                    @for (line of pendingStaffChanges(); track trackLine($index, line)) {
+                      <article>
+                        <b>{{ staffName(line.requestedStaffId) }} requested → {{ staffName(line.staffId) }}</b>
+                        <small>{{ line.staffPreference === 'required' ? 'Required staff: client approval is mandatory.' : 'Preferred staff: client approval or manager override is required.' }}</small>
+                        <select [(ngModel)]="line.staffChangeApproval" [name]="'staffChangeApproval' + line.id">
+                          <option value="">Choose approval</option>
+                          <option value="client-approved">Client approved</option>
+                          @if (line.staffPreference === 'preferred') {
+                            <option value="manager-override">Manager override</option>
+                          }
+                        </select>
+                        @if (line.staffChangeApproval === 'manager-override') {
+                          <input [(ngModel)]="line.staffChangeReason" [name]="'staffChangeReason' + line.id" placeholder="Manager override reason" />
+                        }
+                      </article>
+                    }
+                    <footer><button type="button" (click)="staffChangeReviewOpen = false">Back</button><button class="primary" type="button" (click)="confirmStaffChanges()">Continue saving</button></footer>
+                  </section>
+                }
+                <footer>
+                  <button type="button" (click)="closeNewBooking()">Cancel</button>
+                  <button class="primary" type="button" [disabled]="savingBooking" (click)="createBooking()">
+                    {{ savingBooking ? 'Saving...' : rescheduleMode ? 'Reschedule selected' : editingAppointmentId ? 'Save booking' : 'Create booking' }}
+                  </button>
+                </footer>
+              </aside>
+            }
+          </section>

@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 import { AuthService } from './auth.service';
+import { environment } from '../../../environments/environment';
 
 export interface PosRealtimeEvent {
   type: 'pos.updated';
-  entityType: 'invoice' | 'terminal' | 'print_job';
+  entityType: 'invoice' | 'terminal' | 'print_job' | 'cash_drawer';
   entityId: string;
   action: string;
 }
@@ -23,6 +24,16 @@ export class PosRealtimeService {
     return this.updates.asObservable();
   }
 
+  private realtimeUrl(): string {
+    const configuredBase = environment.realtimeWsBaseUrl.trim() || environment.apiBaseUrl;
+    const base = configuredBase.replace(/\/+$/, '');
+    if (/^wss?:\/\//i.test(base)) return `${base}/realtime/pos`;
+
+    const httpBase = base.match(/^https?:\/\/[^/]+/i)?.[0] ?? location.origin;
+    const path = base.replace(/^https?:\/\/[^/]+/i, '');
+    const wsOrigin = httpBase.replace(/^http/i, location.protocol === 'https:' ? 'wss' : 'ws');
+    return `${wsOrigin}${path}/realtime/pos`;
+  }
   private connect(): void {
     const token = this.auth.accessToken ?? '';
     if (!token) return;
@@ -33,9 +44,8 @@ export class PosRealtimeService {
       this.socket.onclose = null;
       this.socket.close();
     }
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     this.socketToken = token;
-    this.socket = new WebSocket(`${scheme}://${location.host}/api/v1/realtime/pos`, ['aurashine-v1', token]);
+    this.socket = new WebSocket(this.realtimeUrl(), ['aurashine-v1', token]);
     this.socket.onmessage = ({ data }) => {
       try {
         const event = JSON.parse(String(data)) as PosRealtimeEvent;

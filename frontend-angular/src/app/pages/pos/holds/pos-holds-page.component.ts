@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -19,17 +19,16 @@ interface HeldInvoice {
 }
 
 @Component({
-  selector: 'app-pos-holds-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './pos-holds-page.component.html',
-  styleUrls: ['./pos-holds-page.component.css'],
+    selector: 'app-pos-holds-page',
+    imports: [FormsModule, RouterLink],
+    templateUrl: './pos-holds-page.component.html',
+    styleUrls: ['./pos-holds-page.component.css']
 })
 export class PosHoldsPageComponent implements OnInit, OnDestroy {
   holds: HeldInvoice[] = [];
-  selected: HeldInvoice | null = null;
   search = '';
   error = '';
+  cancellingId = '';
   private liveUpdates?: Subscription;
 
   constructor(private readonly api: ApiService, private readonly router: Router, private readonly realtime: PosRealtimeService) {}
@@ -54,13 +53,10 @@ export class PosHoldsPageComponent implements OnInit, OnDestroy {
     this.api.get<any>('/api/v1/pos/sales-register?page=1&pageSize=100&status=draft').subscribe({
       next: (response) => {
         this.holds = this.rows(response).filter((row) => String(row.status ?? '').toLowerCase() === 'draft').map((row) => this.mapHold(row));
-        this.selected = this.holds.find((hold) => hold.id === this.selected?.id) ?? this.holds[0] ?? null;
       },
       error: (error: any) => this.error = error?.error?.message ?? 'Unable to load held invoices',
     });
   }
-
-  select(hold: HeldInvoice): void { this.selected = hold; }
 
   resume(hold: HeldInvoice, event?: Event): void {
     event?.stopPropagation();
@@ -68,6 +64,27 @@ export class PosHoldsPageComponent implements OnInit, OnDestroy {
     this.api.post(`/api/v1/pos/invoices/${hold.id}/resume`, {}).subscribe({
       next: () => this.router.navigate(['/pos'], { queryParams: { draft: hold.id } }),
       error: (error: any) => this.error = error?.error?.message ?? 'Unable to resume held invoice',
+    });
+  }
+
+  cancel(hold: HeldInvoice, event?: Event): void {
+    event?.stopPropagation();
+    if (this.cancellingId || !window.confirm(`Cancel held invoice ${hold.holdId}?`)) return;
+    this.error = '';
+    this.cancellingId = hold.id;
+    this.api.post(`/api/v1/pos/invoices/${hold.id}/void`, {
+      reason: 'Held invoice discarded',
+      notes: `Cancelled from held invoice register (${hold.holdId})`,
+      idempotencyKey: `held-invoice-discard:${hold.id}`,
+    }).subscribe({
+      next: () => {
+        this.cancellingId = '';
+        this.load();
+      },
+      error: (error: any) => {
+        this.cancellingId = '';
+        this.error = error?.error?.message ?? 'Unable to cancel held invoice';
+      },
     });
   }
 

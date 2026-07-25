@@ -1,5 +1,5 @@
 import { LanguageService } from '../../../core/i18n/language.service';
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -19,8 +19,8 @@ type GlBranchRow = {
   missingCostProducts: number;
   status: string;
 };
-type GlException = { severity: string; title: string; detail: string; amountPaise: number; route: string };
-type GlAuditRow = { id: string; sourceType: string; sourceId: string; memo: string; amountPaise: number; createdAt: string };
+type GlException = { branchId:string; branchName:string; severity: string; title: string; detail: string; amountPaise: number; route: string };
+type GlAuditRow = { branchId:string; branchName:string; id: string; sourceType: string; sourceId: string; memo: string; amountPaise: number; createdAt: string };
 type GlReconciliation = {
   asOfDate: string;
   accountCode: string;
@@ -32,11 +32,10 @@ type GlReconciliation = {
 };
 
 @Component({
-  selector: 'page-inventory-gl-reconciliation',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent, TranslatePipe],
-  templateUrl: './gl-reconciliation-page.component.html',
-  styleUrls: ['./gl-reconciliation-page.component.css'],
+    selector: 'page-inventory-gl-reconciliation',
+    imports: [FormsModule, RouterLink, DatePickerComponent, TranslatePipe],
+    templateUrl: './gl-reconciliation-page.component.html',
+    styleUrls: ['./gl-reconciliation-page.component.css']
 })
 export class GlReconciliationPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -49,6 +48,7 @@ export class GlReconciliationPageComponent implements OnInit {
   ];
   activeTab: Tab = 'summary';
   asOf = this.today();
+  allBranches = true;
   loading = true;
   error = '';
   result: GlReconciliation | null = null;
@@ -66,7 +66,7 @@ export class GlReconciliationPageComponent implements OnInit {
     this.error = '';
     try {
       const response = await firstValueFrom(
-        this.api.get<ApiEnvelope<GlReconciliation>>(`/inventory/gl-reconciliation?asOf=${encodeURIComponent(this.asOf)}`),
+        this.api.get<ApiEnvelope<GlReconciliation>>(`/inventory/gl-reconciliation?asOf=${encodeURIComponent(this.asOf)}&allBranches=${this.allBranches}`),
       );
       if (!response.success || !response.data) throw new Error(response.error?.message || 'Reconciliation could not be loaded');
       this.result = response.data;

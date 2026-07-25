@@ -1,0 +1,148 @@
+name: Performance capacity gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Load profile to run against protected staging
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - baseline
+          - pool
+      vus:
+        description: Total concurrent VUs for baseline
+        required: true
+        default: '30'
+        type: string
+      duration:
+        description: k6 duration such as 5m or 10m
+        required: true
+        default: 5m
+        type: string
+      pool_rps:
+        description: Requests per second for the pool profile
+        required: true
+        default: '100'
+        type: string
+  workflow_call:
+    inputs:
+      profile:
+        description: Load profile to run against protected staging
+        required: false
+        default: smoke
+        type: string
+      vus:
+        description: Total concurrent VUs for baseline
+        required: false
+        default: '30'
+        type: string
+      duration:
+        description: k6 duration such as 5m or 10m
+        required: false
+        default: 5m
+        type: string
+      pool_rps:
+        description: Requests per second for the pool profile
+        required: false
+        default: '100'
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: performance-capacity-staging
+  cancel-in-progress: false
+
+jobs:
+  capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: staging
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      K6_BASE_URL: ${{ vars.PERF_BASE_URL }}
+      K6_USERS_JSON: ${{ secrets.PERF_USERS_JSON }}
+      K6_EXPECTED_BRANCHES: ${{ vars.PERF_EXPECTED_BRANCHES || '100' }}
+      K6_BRANCH_SWITCH_VUS: ${{ vars.PERF_BRANCH_SWITCH_VUS || '3' }}
+      K6_PROFILE: ${{ inputs.profile }}
+      K6_VUS: ${{ inputs.vus }}
+      K6_DURATION: ${{ inputs.duration }}
+      K6_POOL_RPS: ${{ inputs.pool_rps }}
+      K6_SUMMARY_PATH: backend-rust/load-tests/artifacts/k6-summary.json
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate protected staging configuration
+        shell: bash
+        run: |
+          test -n "$K6_BASE_URL" || { echo "PERF_BASE_URL is required"; exit 1; }
+          test -n "$K6_USERS_JSON" || { echo "PERF_USERS_JSON is required"; exit 1; }
+          test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN is required"; exit 1; }
+          [[ "$K6_BASE_URL" == https://* ]] || { echo "PERF_BASE_URL must use HTTPS"; exit 1; }
+          [[ "$K6_DURATION" =~ ^[1-9][0-9]*(s|m|h)$ ]] || { echo "duration must use k6 s, m, or h syntax"; exit 1; }
+          [[ "$K6_VUS" =~ ^[1-9][0-9]*$ ]] || { echo "vus must be a positive integer"; exit 1; }
+          [[ "$K6_POOL_RPS" =~ ^[1-9][0-9]*$ ]] || { echo "pool_rps must be a positive integer"; exit 1; }
+          mkdir -p backend-rust/load-tests/artifacts/aws
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: aurashine-capacity-${{ github.run_id }}
+
+      - name: Record evidence window start
+        shell: bash
+        run: echo "K6_EVIDENCE_START_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Run k6 capacity thresholds
+        id: load
+        continue-on-error: true
+        shell: bash
+        run: |
+          docker run --rm \
+            -e K6_BASE_URL \
+            -e K6_USERS_JSON \
+            -e K6_EXPECTED_BRANCHES \
+            -e K6_BRANCH_SWITCH_VUS \
+            -e K6_PROFILE \
+            -e K6_VUS \
+            -e K6_DURATION \
+            -e K6_POOL_RPS \
+            -e K6_SUMMARY_PATH \
+            -v "$PWD:/work" \
+            -w /work \
+            grafana/k6:2.1.0 run backend-rust/load-tests/k6/capacity.js
+
+      - name: Collect correlated AWS evidence
+        if: always()
+        shell: bash
+        env:
+          K6_EVIDENCE_ENVIRONMENT: staging
+          K6_EVIDENCE_OUTPUT_DIR: backend-rust/load-tests/artifacts/aws
+        run: |
+          export K6_EVIDENCE_END_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          bash backend-rust/load-tests/aws/collect-cloudwatch-evidence.sh
+
+      - name: Upload capacity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-capacity-${{ inputs.profile }}-${{ github.run_attempt }}
+          path: backend-rust/load-tests/artifacts
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce k6 result
+        if: always() && steps.load.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "k6 thresholds failed; inspect the uploaded evidence artifact."
+          exit 1

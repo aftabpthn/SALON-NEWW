@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -50,11 +50,10 @@ type ServiceRow = {
 };
 
 @Component({
-  selector: 'page-services',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './services-page.component.html',
-  styleUrls: ['./services-page.component.css'],
+    selector: 'page-services',
+    imports: [FormsModule],
+    templateUrl: './services-page.component.html',
+    styleUrls: ['./services-page.component.css']
 })
 export class ServicesPageComponent implements OnInit {
   private readonly api = inject(ApiService);

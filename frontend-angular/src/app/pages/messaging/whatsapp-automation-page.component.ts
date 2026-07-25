@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -8,11 +8,10 @@ type Summary = { totalMessages: number; inboundMessages: number; outboundMessage
 type Row = Record<string, any>;
 
 @Component({
-  selector: 'page-whatsapp-automation',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './whatsapp-automation-page.component.html',
-  styleUrls: ['./whatsapp-automation-page.component.css'],
+    selector: 'page-whatsapp-automation',
+    imports: [FormsModule],
+    templateUrl: './whatsapp-automation-page.component.html',
+    styleUrls: ['./whatsapp-automation-page.component.css']
 })
 export class WhatsAppAutomationPageComponent implements OnInit {
   private readonly api = inject(ApiService);

@@ -5,46 +5,64 @@
       <h1><i class="bi" [ngClass]="view.icon"></i>{{ view.title }}</h1>
     </div>
     <div class="header-actions">
-      <button type="button" *ngFor="let action of view.actions || []" (click)="run(action)">
-        <i class="bi" [ngClass]="action.icon"></i>{{ action.label }}
-      </button>
+      @for (action of view.actions || []; track action) {
+        <button type="button" (click)="run(action)">
+          <i class="bi" [ngClass]="action.icon"></i>{{ action.label }}
+        </button>
+      }
       <button type="button" (click)="refresh()" [disabled]="loading"><i class="bi bi-arrow-repeat"></i>{{ loading ? 'Loading…' : 'Refresh' }}</button>
       <button type="button" (click)="back()"><i class="bi bi-arrow-left"></i>{{ 'staff.ui.a4730a22cf' | translate }}</button>
     </div>
   </header>
 
-  <p class="error" *ngIf="error">{{ error }}</p>
+  @if (error) {
+    <p class="error">{{ error }}</p>
+  }
 
-  <section class="data-card" *ngFor="let section of sections; trackBy: trackSection">
-    <header>
-      <div>
-        <h2>{{ section.title }}</h2>
-        <span>{{ section.rows.length }} records</span>
-      </div>
-    </header>
-
-    <p class="error" *ngIf="section.error">{{ section.error }}</p>
-
-    <div class="summary-grid" *ngIf="section.summary.length">
-      <div *ngFor="let item of section.summary">
-        <span>{{ label(item.key) }}</span>
-        <strong>{{ display(item.value) }}</strong>
-      </div>
-    </div>
-
-    <div class="table-wrap" *ngIf="section.rows.length">
-      <table>
-        <thead>
-          <tr><th scope="col" *ngFor="let column of section.columns; trackBy: trackColumn" [attr.data-column]="column">{{ label(column) }}</th></tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let row of section.rows; trackBy: trackRow">
-            <td *ngFor="let column of section.columns; trackBy: trackColumn" [attr.data-column]="column">{{ display(row[column]) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="empty-state" *ngIf="!section.rows.length && !section.summary.length && !section.error">{{ 'staff.ui.e619c5b961' | translate }}</div>
-  </section>
+  @for (section of sections; track trackSection($index, section)) {
+    <section class="data-card">
+      <header>
+        <div>
+          <h2>{{ section.title }}</h2>
+          <span>{{ section.rows.length }} records</span>
+        </div>
+      </header>
+      @if (section.error) {
+        <p class="error">{{ section.error }}</p>
+      }
+      @if (section.summary.length) {
+        <div class="summary-grid">
+          @for (item of section.summary; track item) {
+            <div>
+              <span>{{ label(item.key) }}</span>
+              <strong>{{ display(item.value) }}</strong>
+            </div>
+          }
+        </div>
+      }
+      @if (section.rows.length) {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>@for (column of section.columns; track trackColumn($index, column)) {
+                <th scope="col" [attr.data-column]="column">{{ label(column) }}</th>
+              }</tr>
+            </thead>
+            <tbody>
+              @for (row of section.rows; track trackRow($index, row)) {
+                <tr>
+                  @for (column of section.columns; track trackColumn($index, column)) {
+                    <td [attr.data-column]="column">{{ display(row[column]) }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (!section.rows.length && !section.summary.length && !section.error) {
+        <div class="empty-state">{{ 'staff.ui.e619c5b961' | translate }}</div>
+      }
+    </section>
+  }
 </section>

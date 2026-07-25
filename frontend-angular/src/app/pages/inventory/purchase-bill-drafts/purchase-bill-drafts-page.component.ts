@@ -1,5 +1,5 @@
 import { LanguageService } from '../../../core/i18n/language.service';
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -31,11 +31,10 @@ type Item = { id: string; name: string; sku: string; unit: string; active: boole
 type Order = { id: string; orderNumber: string; supplierId: string; supplierName: string; status: string };
 
 @Component({
-  selector: 'page-purchase-bill-drafts',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './purchase-bill-drafts-page.component.html',
-  styleUrls: ['./purchase-bill-drafts-page.component.css'],
+    selector: 'page-purchase-bill-drafts',
+    imports: [FormsModule, DatePickerComponent, TranslatePipe],
+    templateUrl: './purchase-bill-drafts-page.component.html',
+    styleUrls: ['./purchase-bill-drafts-page.component.css']
 })
 export class PurchaseBillDraftsPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -59,15 +58,17 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
     this.loading = true;
     this.error = '';
     try {
-      [this.drafts, this.suppliers, this.items, this.orders] = await Promise.all([
-        this.get<Draft[]>(`/purchases/bill-drafts${this.status ? `?status=${encodeURIComponent(this.status)}` : ''}`),
-        this.get<Supplier[]>('/purchases/suppliers'),
-        this.get<Item[]>('/inventory'),
-        this.get<Order[]>('/purchases/orders'),
-      ]);
+      this.drafts = await this.get<Draft[]>(`/purchases/bill-drafts${this.status ? `?status=${encodeURIComponent(this.status)}` : ''}`);
+      void this.loadReferences();
       if (selectedId) await this.open(selectedId);
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.a8495bad85')); }
     finally { this.loading = false; }
+  }
+
+  private async loadReferences() {
+    try {
+      [this.suppliers, this.items, this.orders] = await Promise.all([this.get<Supplier[]>('/purchases/suppliers'), this.get<Item[]>('/inventory?page=1&pageSize=50&withCount=false'), this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')]);
+    } catch (error) { this.error ||= this.message(error, this.language.text('inventory.message.a8495bad85')); }
   }
 
   async upload(event: Event) {
@@ -221,3 +222,4 @@ export class PurchaseBillDraftsPageComponent implements OnInit {
     return value?.error?.error?.message || value?.error?.message || value?.message || fallback;
   }
 }
+

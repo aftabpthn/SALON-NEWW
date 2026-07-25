@@ -34,11 +34,10 @@ type BookingPayment = {
 };
 
 @Component({
-  selector: 'page-public-booking',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './public-booking-page.component.html',
-  styleUrls: ['./public-booking-page.component.css'],
+    selector: 'page-public-booking',
+    imports: [CommonModule, FormsModule, DatePickerComponent],
+    templateUrl: './public-booking-page.component.html',
+    styleUrls: ['./public-booking-page.component.css']
 })
 export class PublicBookingPageComponent implements OnInit {
   private readonly http = inject(HttpClient);
@@ -604,7 +603,7 @@ export class PublicBookingPageComponent implements OnInit {
     const names = booking.service_ids.map((id) => this.services.find((service) => service.id === id)?.name).filter(Boolean);
     return names.length ? names.join(', ') : `${booking.service_ids.length} service(s)`;
   }
-  branchName(branchId: string) { return this.branches.find((branch) => branch.id === branchId)?.name || branchId; }
+  branchName(branchId: string) { return this.branches.find((branch) => branch.id === branchId)?.name || 'Branch'; }
   canChangeBooking(booking: MyBooking) { return !['cancelled', 'completed', 'billed', 'paid'].includes(booking.status); }
   async useMyLocation() {
     if (!navigator.geolocation) return;

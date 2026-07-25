@@ -5,3 +5,13 @@ header { padding: 20px; border-bottom: 1px solid var(--line); } header span { co
 dl { margin: 0; } dl div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid var(--line); } dt { color: var(--muted); font-size: 12px; font-weight: 600; } dd { margin: 0; font-weight: 700; }
 form { display: grid; gap: 12px; padding: 20px; } label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 700; } input,textarea,button { border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-weight: 600; } input { min-height: 40px; padding: 0 11px; } textarea { padding: 10px 11px; resize: vertical; } button { min-height: 40px; padding: 0 14px; cursor: pointer; } .actions { display: flex; justify-content: flex-end; gap: 8px; } .primary { border-color: var(--brand); background: var(--brand); color: var(--panel); }
 .state,.error,.complete { padding: 20px; } .error { color: #b42318; } .complete { display: grid; gap: 6px; text-align: center; }
+
+@media (max-width: 480px) {
+  .approval-shell { padding: 12px; }
+  header, form, .state, .error, .complete { padding: 16px; }
+  dl div { align-items: flex-start; flex-direction: column; padding-inline: 16px; }
+  dd { overflow-wrap: anywhere; text-align: left; }
+  .actions { flex-direction: column; }
+  .actions button { width: 100%; }
+  input, button { min-height: 44px; }
+}

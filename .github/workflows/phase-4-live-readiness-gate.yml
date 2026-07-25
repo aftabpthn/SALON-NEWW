@@ -1,0 +1,54 @@
+name: Phase 4 live-readiness gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_state_changing:
+        description: Run write-path readiness flows (appointments, POS invoice, staff branch access)
+        required: true
+        default: false
+        type: boolean
+      profile:
+        description: Performance profile to run
+        required: false
+        default: baseline
+        type: string
+      vus:
+        description: Total concurrent VUs for baseline profile
+        required: false
+        default: '30'
+        type: string
+      duration:
+        description: k6 duration such as 5m or 10m
+        required: false
+        default: 5m
+        type: string
+      pool_rps:
+        description: Requests per second for pool profile
+        required: false
+        default: '100'
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: phase-4-live-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  browser-readiness:
+    uses: ./.github/workflows/device-browser-readiness.yml
+    with:
+      run_state_changing: ${{ inputs.run_state_changing }}
+    secrets: inherit
+
+  performance-capacity:
+    uses: ./.github/workflows/performance-capacity.yml
+    with:
+      profile: ${{ inputs.profile }}
+      vus: ${{ inputs.vus }}
+      duration: ${{ inputs.duration }}
+      pool_rps: ${{ inputs.pool_rps }}
+    secrets: inherit

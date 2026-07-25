@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { StockWorkflow, adjustedStock } from './scanner-stock';
+import { AuthBranchAccess, AuthService } from '../../../core/services/auth.service';
 
 type Workflow = 'lookup' | StockWorkflow | 'transfer';
 type InventoryItem = { id: string; sku: string; name: string; category: string; unit: string; stockQuantity: number; reorderPoint: number; unitCostPaise: number; barcode: string; active: boolean };
@@ -17,20 +18,23 @@ type ScanResolution = { event: { inventoryItemId: string | null }; aliasType: st
 const OFFLINE_QUEUE_KEY = 'aurashine.inventory.scanner.queue.v1';
 const DEVICE_KEY = 'aurashine.inventory.scanner.device.v1';
 
-@Component({ selector: 'page-inventory-scanner', standalone: true, imports: [CommonModule, FormsModule, TranslatePipe], templateUrl: './inventory-scanner-page.component.html', styleUrls: ['./inventory-scanner-page.component.css'] })
+@Component({
+    selector: 'page-inventory-scanner', imports: [CommonModule, FormsModule, TranslatePipe], templateUrl: './inventory-scanner-page.component.html', styleUrls: ['./inventory-scanner-page.component.css']
+})
 export class InventoryScannerPageComponent implements OnInit, OnDestroy {
   private readonly language = inject(LanguageService);
   @ViewChild('camera') camera?: ElementRef<HTMLVideoElement>;
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private stream?: MediaStream;
   private detector?: { detect(source: HTMLVideoElement): Promise<Array<{ rawValue?: string }>> };
   private detectionFrame = 0;
   private readonly onlineHandler = () => { void this.replayOfflineQueue(); };
   readonly workflows: Array<{ id: Workflow; label: string }> = [{ id: 'lookup', label: 'Lookup' }, { id: 'receive', label: 'Receive' }, { id: 'count', label: 'Count' }, { id: 'waste', label: 'Waste' }, { id: 'transfer', label: 'Transfer' }];
-  workflow: Workflow = 'lookup'; code = ''; matched: InventoryItem | null = null; history: ScanEvent[] = []; audits: AuditSession[] = [];
+  workflow: Workflow = 'lookup'; code = ''; matched: InventoryItem | null = null; history: ScanEvent[] = []; audits: AuditSession[] = []; branches: AuthBranchAccess[] = [];
   historyOpen = false; loading = false; saving = false; cameraActive = false; error = ''; notice = ''; quantity: number | null = null; notes = ''; destinationBranchId = ''; destinationInventoryItemId = ''; auditSessionId = '';
 
-  ngOnInit() { window.addEventListener('online', this.onlineHandler); void this.loadScannerState(); }
+  ngOnInit() { window.addEventListener('online', this.onlineHandler); void this.loadScannerState(); void firstValueFrom(this.auth.loadProfile()).then((profile) => { this.branches = profile.branches; }).catch(() => undefined); }
   ngOnDestroy() { window.removeEventListener('online', this.onlineHandler); this.stopCamera(); }
 
   async loadScannerState() {
@@ -50,7 +54,7 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
     this.loading = true; this.clearFeedback();
     try {
       const persisted = record ? await this.persistScan(code) : null;
-      const rows = await this.get<InventoryItem[]>(`/inventory?q=${encodeURIComponent(code)}&pageSize=200`);
+      const rows = await this.get<InventoryItem[]>(`/inventory?page=1&pageSize=200&withCount=false&q=${encodeURIComponent(code)}`);
       const normalized = code.toLowerCase();
       const localMatch = rows.find((item) => item.sku.trim().toLowerCase() === normalized || item.barcode.trim().toLowerCase() === normalized || item.id.toLowerCase() === normalized) ?? null;
       this.matched = persisted?.event.inventoryItemId
@@ -121,3 +125,4 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
   private clearFeedback() { this.error = ''; this.notice = ''; }
   private message(error: any, fallback: string) { return error?.error?.error?.message || error?.error?.error || error?.error?.message || error?.message || fallback; }
 }
+

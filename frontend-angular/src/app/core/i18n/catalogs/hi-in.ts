@@ -68,6 +68,7 @@ export default {
   'nav.Daily Closing & Enterprise': 'दैनिक समापन और एंटरप्राइज़',
   'nav.Dashboard': 'डैशबोर्ड',
   'nav.Executive Overview': 'कार्यकारी अवलोकन',
+  'nav.Enterprise POS Controls': 'एंटरप्राइज़ POS नियंत्रण',
   'nav.Face Punch': 'फेस पंच',
   'nav.Finance': 'वित्त',
   'nav.Fines & Deductions': 'जुर्माना और कटौती',

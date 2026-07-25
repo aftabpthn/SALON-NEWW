@@ -1,0 +1,14 @@
+environment              = "dev"
+vpc_cidr                 = "10.40.0.0/16"
+nat_gateway_count        = 1
+desired_count            = 1
+autoscaling_min_capacity = 1
+autoscaling_max_capacity = 2
+db_instance_class        = "db.t4g.micro"
+db_multi_az              = false
+db_deletion_protection   = false
+db_backup_retention_days = 7
+redis_node_type          = "cache.t4g.micro"
+redis_node_count         = 1
+log_retention_days       = 14
+waf_rate_limit           = 3000

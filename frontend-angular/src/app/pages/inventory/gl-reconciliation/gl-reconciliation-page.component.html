@@ -6,8 +6,9 @@
     </div>
     <span></span>
     <as-date-picker [(value)]="asOf" ariaLabel="Reconciliation date"></as-date-picker>
-    <select [attr.aria-label]="'inventory.ui.1627510b24' | translate" disabled>
-      <option>{{ result?.rows?.[0]?.branchName || 'Current branch' }}</option>
+    <select [attr.aria-label]="'inventory.ui.1627510b24' | translate" [(ngModel)]="allBranches">
+      <option [ngValue]="true">All accessible branches</option>
+      <option [ngValue]="false">Current branch</option>
     </select>
     <button class="primary-button" type="button" [disabled]="loading" (click)="runReconciliation()">
       {{ loading ? 'Running…' : 'Run reconciliation' }}
@@ -15,103 +16,144 @@
   </header>
 
   <nav class="tabs" [attr.aria-label]="'inventory.ui.5e980b2c19' | translate">
-    <button
-      type="button"
-      *ngFor="let tab of tabs"
-      [class.active]="activeTab === tab.id"
-      (click)="activeTab = tab.id"
-    >{{ tab.label }}</button>
+    @for (tab of tabs; track tab) {
+      <button
+        type="button"
+        [class.active]="activeTab === tab.id"
+        (click)="activeTab = tab.id"
+      >{{ tab.label }}</button>
+    }
   </nav>
 
-  <div class="message error" *ngIf="error">{{ error }}</div>
+  @if (error) {
+    <div class="message error">{{ error }}</div>
+  }
 
-  <section class="metrics" *ngIf="result">
-    <article>
-      <i class="bi bi-currency-rupee metric-icon blue" aria-hidden="true"></i>
-      <div><span>{{ 'inventory.ui.5503aa229d' | translate }}</span><strong>{{ money(result.summary.inventoryValuePaise) }}</strong></div>
-    </article>
-    <article class="gl-card">
-      <i class="bi bi-journal-check metric-icon amber" aria-hidden="true"></i>
-      <div><span>{{ 'inventory.ui.77ced7f19b' | translate }}</span><strong>{{ money(result.summary.glValuePaise) }}</strong></div>
-    </article>
-    <article class="difference-card">
-      <i class="bi bi-arrows-expand-vertical metric-icon teal" aria-hidden="true"></i>
-      <div><span>{{ 'inventory.ui.b16f1f6654' | translate }}</span><strong>{{ money(result.summary.differencePaise) }}</strong></div>
-    </article>
-    <article class="status-card">
-      <i class="bi bi-exclamation-lg metric-icon green" aria-hidden="true"></i>
-      <div><span>{{ 'inventory.ui.0dc6aba610' | translate }}</span><strong>{{ result.summary.unreconciled }}</strong></div>
-    </article>
-  </section>
+  @if (result) {
+    <section class="metrics">
+      <article>
+        <i class="bi bi-currency-rupee metric-icon blue" aria-hidden="true"></i>
+        <div><span>{{ 'inventory.ui.5503aa229d' | translate }}</span><strong>{{ money(result.summary.inventoryValuePaise) }}</strong></div>
+      </article>
+      <article class="gl-card">
+        <i class="bi bi-journal-check metric-icon amber" aria-hidden="true"></i>
+        <div><span>{{ 'inventory.ui.77ced7f19b' | translate }}</span><strong>{{ money(result.summary.glValuePaise) }}</strong></div>
+      </article>
+      <article class="difference-card">
+        <i class="bi bi-arrows-expand-vertical metric-icon teal" aria-hidden="true"></i>
+        <div><span>{{ 'inventory.ui.b16f1f6654' | translate }}</span><strong>{{ money(result.summary.differencePaise) }}</strong></div>
+      </article>
+      <article class="status-card">
+        <i class="bi bi-exclamation-lg metric-icon green" aria-hidden="true"></i>
+        <div><span>{{ 'inventory.ui.0dc6aba610' | translate }}</span><strong>{{ result.summary.unreconciled }}</strong></div>
+      </article>
+    </section>
+  }
 
-  <section class="panel" *ngIf="activeTab === 'summary'">
-    <header>
-      <h2>{{ 'inventory.ui.30bd7af0c2' | translate }}</h2>
-      <div class="panel-actions">
-        <button type="button" [disabled]="!result" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button>
-        <button type="button" [disabled]="!result" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button>
-      </div>
-    </header>
-    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
-    <div class="table-scroll" *ngIf="!loading && result">
-      <table>
-        <thead><tr><th>{{ 'inventory.ui.1627510b24' | translate }}</th><th>{{ 'inventory.ui.fe0a091fdb' | translate }}</th><th>{{ 'inventory.ui.5503aa229d' | translate }}</th><th>{{ 'inventory.ui.9e79d192e7' | translate }}</th><th>{{ 'inventory.ui.b16f1f6654' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.cd3dfbe79f' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let row of result.rows">
-            <td><strong>{{ row.branchName }}</strong></td>
-            <td>{{ row.productCount }}</td>
-            <td>{{ money(row.inventoryValuePaise) }}</td>
-            <td>{{ money(row.glValuePaise) }}</td>
-            <td [class.negative]="row.differencePaise !== 0">{{ money(row.differencePaise) }}</td>
-            <td><span class="status" [class.matched]="row.status === 'matched'">{{ row.status }}</span></td>
-            <td>{{ row.missingCostProducts + (row.differencePaise === 0 ? 0 : 1) }}</td>
-            <td><button type="button" (click)="reviewExceptions()">{{ 'inventory.ui.e29a79fe0c' | translate }}</button></td>
-          </tr>
-          <tr *ngIf="!result.rows.length"><td class="empty-state" colspan="8">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="empty-panel" *ngIf="!loading && !result && !error"><i class="bi bi-journal-check" aria-hidden="true"></i><strong>{{ 'inventory.ui.9ce39ac308' | translate }}</strong></div>
-    <footer *ngIf="result"><span>{{ result.accountCode }}</span><span>{{ result.valuationMethod }}</span></footer>
-  </section>
+  @if (activeTab === 'summary') {
+    <section class="panel">
+      <header>
+        <h2>{{ 'inventory.ui.30bd7af0c2' | translate }}</h2>
+        <div class="panel-actions">
+          <button type="button" [disabled]="!result" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button>
+          <button type="button" [disabled]="!result" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button>
+        </div>
+      </header>
+      @if (loading) {
+        <div class="loading-state">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
+      }
+      @if (!loading && result) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>{{ 'inventory.ui.1627510b24' | translate }}</th><th>{{ 'inventory.ui.fe0a091fdb' | translate }}</th><th>{{ 'inventory.ui.5503aa229d' | translate }}</th><th>{{ 'inventory.ui.9e79d192e7' | translate }}</th><th>{{ 'inventory.ui.b16f1f6654' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.cd3dfbe79f' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
+            <tbody>
+              @for (row of result.rows; track row) {
+                <tr>
+                  <td><strong>{{ row.branchName }}</strong></td>
+                  <td>{{ row.productCount }}</td>
+                  <td>{{ money(row.inventoryValuePaise) }}</td>
+                  <td>{{ money(row.glValuePaise) }}</td>
+                  <td [class.negative]="row.differencePaise !== 0">{{ money(row.differencePaise) }}</td>
+                  <td><span class="status" [class.matched]="row.status === 'matched'">{{ row.status }}</span></td>
+                  <td>{{ row.missingCostProducts + (row.differencePaise === 0 ? 0 : 1) }}</td>
+                  <td><button type="button" (click)="reviewExceptions()">{{ 'inventory.ui.e29a79fe0c' | translate }}</button></td>
+                </tr>
+              }
+              @if (!result.rows.length) {
+                <tr><td class="empty-state" colspan="8">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (!loading && !result && !error) {
+        <div class="empty-panel"><i class="bi bi-journal-check" aria-hidden="true"></i><strong>{{ 'inventory.ui.9ce39ac308' | translate }}</strong></div>
+      }
+      @if (result) {
+        <footer><span>{{ result.accountCode }}</span><span>{{ result.valuationMethod }}</span></footer>
+      }
+    </section>
+  }
 
-  <section class="panel" *ngIf="activeTab === 'exceptions'">
-    <header><h2>{{ 'inventory.ui.cd3dfbe79f' | translate }}</h2></header>
-    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
-    <div class="table-scroll" *ngIf="!loading && result">
-      <table>
-        <thead><tr><th>{{ 'inventory.ui.de314fa0c9' | translate }}</th><th>{{ 'inventory.ui.20049bc069' | translate }}</th><th>{{ 'inventory.ui.7ea014de7b' | translate }}</th><th>{{ 'inventory.ui.b16f1f6654' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let row of result.exceptionRows">
-            <td><span class="status severity" [class.warning]="row.severity === 'warning'">{{ row.severity }}</span></td>
-            <td><strong>{{ row.title }}</strong></td>
-            <td>{{ row.detail }}</td>
-            <td>{{ money(row.amountPaise) }}</td>
-            <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
-          </tr>
-          <tr *ngIf="!result.exceptionRows.length"><td class="empty-state" colspan="5">{{ 'inventory.ui.837b2df885' | translate }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+  @if (activeTab === 'exceptions') {
+    <section class="panel">
+      <header><h2>{{ 'inventory.ui.cd3dfbe79f' | translate }}</h2></header>
+      @if (loading) {
+        <div class="loading-state">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
+      }
+      @if (!loading && result) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Branch</th><th>{{ 'inventory.ui.de314fa0c9' | translate }}</th><th>{{ 'inventory.ui.20049bc069' | translate }}</th><th>{{ 'inventory.ui.7ea014de7b' | translate }}</th><th>{{ 'inventory.ui.b16f1f6654' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
+            <tbody>
+              @for (row of result.exceptionRows; track row) {
+                <tr>
+                  <td><strong>{{ row.branchName }}</strong></td>
+                  <td><span class="status severity" [class.warning]="row.severity === 'warning'">{{ row.severity }}</span></td>
+                  <td><strong>{{ row.title }}</strong></td>
+                  <td>{{ row.detail }}</td>
+                  <td>{{ money(row.amountPaise) }}</td>
+                  <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
+                </tr>
+              }
+              @if (!result.exceptionRows.length) {
+                <tr><td class="empty-state" colspan="6">{{ 'inventory.ui.837b2df885' | translate }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
 
-  <section class="panel" *ngIf="activeTab === 'audit'">
-    <header><h2>{{ 'inventory.ui.020517df78' | translate }}</h2></header>
-    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
-    <div class="table-scroll" *ngIf="!loading && result">
-      <table>
-        <thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.6da13addb0' | translate }}</th><th>{{ 'inventory.ui.db1c784524' | translate }}</th><th>{{ 'inventory.ui.1fd79b9555' | translate }}</th><th>{{ 'inventory.ui.ee1ec81dbe' | translate }}</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let row of result.auditRows">
-            <td>{{ dateTime(row.createdAt) }}</td>
-            <td>{{ row.sourceType }}</td>
-            <td>{{ row.sourceId }}</td>
-            <td>{{ row.memo || '—' }}</td>
-            <td>{{ money(row.amountPaise) }}</td>
-          </tr>
-          <tr *ngIf="!result.auditRows.length"><td class="empty-state" colspan="5">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+  @if (activeTab === 'audit') {
+    <section class="panel">
+      <header><h2>{{ 'inventory.ui.020517df78' | translate }}</h2></header>
+      @if (loading) {
+        <div class="loading-state">{{ 'inventory.ui.4719ccf20b' | translate }}</div>
+      }
+      @if (!loading && result) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Branch</th><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.6da13addb0' | translate }}</th><th>{{ 'inventory.ui.db1c784524' | translate }}</th><th>{{ 'inventory.ui.1fd79b9555' | translate }}</th><th>{{ 'inventory.ui.ee1ec81dbe' | translate }}</th></tr></thead>
+            <tbody>
+              @for (row of result.auditRows; track row) {
+                <tr>
+                  <td><strong>{{ row.branchName }}</strong></td>
+                  <td>{{ dateTime(row.createdAt) }}</td>
+                  <td>{{ row.sourceType }}</td>
+                  <td>{{ row.sourceId }}</td>
+                  <td>{{ row.memo || '—' }}</td>
+                  <td>{{ money(row.amountPaise) }}</td>
+                </tr>
+              }
+              @if (!result.auditRows.length) {
+                <tr><td class="empty-state" colspan="6">{{ 'inventory.ui.e619c5b961' | translate }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
 </section>

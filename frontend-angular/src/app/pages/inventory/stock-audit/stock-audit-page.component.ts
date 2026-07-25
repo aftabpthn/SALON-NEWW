@@ -10,20 +10,17 @@ type AuditStatus = 'counting' | 'recount_required' | 'review' | 'pending_approva
 type Session = { id: string; name: string; status: AuditStatus; blindCounting: boolean; requiredCounters: number; recountThreshold: number; cutoffAt: string; createdAt: string };
 type AuditItem = { id: string; inventoryItemId: string; itemName: string; sku: string; unit: string; expectedQuantity: number | null; approvedQuantity: number | null; varianceQuantity: number | null; varianceReason: string; postedAt: string | null };
 type Detail = { session: Session; items: AuditItem[]; counts: Array<{ sessionItemId: string; counterUserId: string; roundNumber: number; countedQuantity: number; createdAt: string }>; findings: Array<{ sessionItemId: string; findingType: string; notes: string; evidence: unknown[]; createdAt: string }> };
-type InventoryItem = { id: string; name: string; sku: string; unit: string };
 
 @Component({
-  selector: 'page-stock-audit',
-  standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
-  templateUrl: './stock-audit-page.component.html',
-  styleUrls: ['./stock-audit-page.component.css'],
+    selector: 'page-stock-audit',
+    imports: [CommonModule, FormsModule, TranslatePipe],
+    templateUrl: './stock-audit-page.component.html',
+    styleUrls: ['./stock-audit-page.component.css']
 })
 export class StockAuditPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   sessions: Session[] = [];
-  inventory: InventoryItem[] = [];
   selected: Detail | null = null;
   loading = false;
   saving = false;
@@ -40,12 +37,7 @@ export class StockAuditPageComponent implements OnInit {
     this.loading = true;
     this.clearFeedback();
     try {
-      const [sessions, inventory] = await Promise.all([
-        this.get<Session[]>('/inventory/stock-audits'),
-        this.get<InventoryItem[]>('/inventory?pageSize=200'),
-      ]);
-      this.sessions = sessions;
-      this.inventory = inventory;
+      this.sessions = await this.get<Session[]>('/inventory/stock-audits');
       const target = selectId ?? this.selected?.session.id;
       if (target) this.selected = await this.get<Detail>(`/inventory/stock-audits/${target}`);
       else this.selected = null;

@@ -3,43 +3,79 @@
 
   <section class="filters" aria-label="Schedule filters">
     <label>Center<input [value]="centerLabel" readonly /></label>
-    <label>Role<select [(ngModel)]="roleId" (ngModelChange)="reloadFilters()"><option value="">All roles</option><option *ngFor="let role of roles" [value]="role.id">{{ role.name }}</option></select></label>
-    <label>Job<select [(ngModel)]="job" (ngModelChange)="reloadFilters()"><option value="">All jobs</option><option *ngFor="let item of jobs" [value]="item">{{ item }}</option></select></label>
-    <label>Employee<select [(ngModel)]="staffId" (ngModelChange)="reloadFilters()"><option value="">All employees</option><option *ngFor="let person of employeeOptions" [value]="person.id">{{ person.name }}</option></select></label>
-  </section>
+    <label>Role<select [(ngModel)]="roleId" (ngModelChange)="reloadFilters()"><option value="">All roles</option>@for (role of roles; track role) {
+    <option [value]="role.id">{{ role.name }}</option>
+  }</select></label>
+  <label>Job<select [(ngModel)]="job" (ngModelChange)="reloadFilters()"><option value="">All jobs</option>@for (item of jobs; track item) {
+  <option [value]="item">{{ item }}</option>
+}</select></label>
+<label>Employee<select [(ngModel)]="staffId" (ngModelChange)="reloadFilters()"><option value="">All employees</option>@for (person of employeeOptions; track person) {
+<option [value]="person.id">{{ person.name }}</option>
+}</select></label>
+</section>
 
-  <nav class="view-tabs" aria-label="Schedule view"><button *ngFor="let mode of modes" type="button" [class.active]="viewMode === mode" (click)="setView(mode)">{{ mode }}</button></nav>
+<nav class="view-tabs" aria-label="Schedule view">@for (mode of modes; track mode) {
+  <button type="button" [class.active]="viewMode === mode" (click)="setView(mode)">{{ mode }}</button>
+}</nav>
 
-  <section class="schedule-toolbar">
-    <div class="toolbar-actions"><button type="button" [disabled]="viewMode !== 'week' || staff.length === 0" (click)="prepareCopy()">Copy schedule</button><label class="bulk-control">Bulk status<select [(ngModel)]="bulkStatus"><option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option></select></label><button type="button" [disabled]="staff.length === 0" (click)="applyBulkStatus()">Update bulk status</button></div>
-    <div class="date-navigation"><button type="button" (click)="navigate(-1)">Previous</button><as-date-picker [value]="anchorDate" ariaLabel="Schedule date" (valueChange)="goToDate($event)"></as-date-picker><strong>{{ rangeLabel }}</strong><button type="button" (click)="navigate(1)">Next</button></div>
-  </section>
+<section class="schedule-toolbar">
+  <div class="toolbar-actions"><button type="button" [disabled]="viewMode !== 'week' || staff.length === 0" (click)="prepareCopy()">Copy schedule</button><label class="bulk-control">Bulk status<select [(ngModel)]="bulkStatus">@for (option of statusOptions; track option) {
+  <option [value]="option.value">{{ option.label }}</option>
+  }</select></label><button type="button" [disabled]="staff.length === 0" (click)="applyBulkStatus()">Update bulk status</button></div>
+  <div class="date-navigation"><button type="button" (click)="navigate(-1)">Previous</button><as-date-picker [value]="anchorDate" ariaLabel="Schedule date" (valueChange)="goToDate($event)"></as-date-picker><strong>{{ rangeLabel }}</strong><button type="button" (click)="navigate(1)">Next</button></div>
+</section>
 
-  <section class="copy-panel" *ngIf="copyTargetDate"><label>Target week<as-date-picker [(value)]="copyTargetDate" ariaLabel="Copy target week"></as-date-picker></label><button type="button" (click)="copyTargetDate = ''">Cancel</button><button class="primary" type="button" [disabled]="copying" (click)="copySchedule()">{{ copying ? 'Copying…' : 'Copy' }}</button></section>
-  <p class="error" *ngIf="error">{{ error }}</p>
+@if (copyTargetDate) {
+  <section class="copy-panel"><label>Target week<as-date-picker [(value)]="copyTargetDate" ariaLabel="Copy target week"></as-date-picker></label><button type="button" (click)="copyTargetDate = ''">Cancel</button><button class="primary" type="button" [disabled]="copying" (click)="copySchedule()">{{ copying ? 'Copying…' : 'Copy' }}</button></section>
+}
+@if (error) {
+  <p class="error">{{ error }}</p>
+}
 
-  <section class="schedule-grid-card" [class.month-view]="viewMode === 'month'" aria-label="Employee schedule grid">
-    <div class="loading" *ngIf="loading">Loading…</div>
-    <div class="schedule-grid" *ngIf="!loading && staff.length" [style.--day-count]="days.length">
+<section class="schedule-grid-card" [class.month-view]="viewMode === 'month'" aria-label="Employee schedule grid">
+  @if (loading) {
+    <div class="loading">Loading…</div>
+  }
+  @if (!loading && staff.length) {
+    <div class="schedule-grid" [style.--day-count]="days.length">
       <div class="grid-head employee-head"><input type="checkbox" [checked]="allSelected" (change)="toggleAll($any($event.target).checked)" aria-label="Select all employees" />Employees</div>
-      <div class="grid-head" *ngFor="let date of days">{{ dayLabel(date) }}</div>
-      <ng-container *ngFor="let person of staff">
+      @for (date of days; track date) {
+        <div class="grid-head">{{ dayLabel(date) }}</div>
+      }
+      @for (person of staff; track person) {
         <div class="employee-cell"><input type="checkbox" [checked]="selectedStaff.has(person.id)" (change)="toggleStaff(person.id, $any($event.target).checked)" [attr.aria-label]="'Select ' + person.name" /><span><strong>{{ person.name }}</strong><small>{{ totalHours(person) | number:'1.0-2' }} Hrs</small></span></div>
-        <button class="schedule-cell" *ngFor="let date of days" type="button" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" [class.has-operation]="operationsFor(person.id,date).length > 0" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span><small *ngIf="cell(person.id,date)?.notes">Note added</small><small class="operation-chip" *ngFor="let block of operationsFor(person.id,date)">{{ operationLabel(block) }}<ng-container *ngIf="block.scheduledTime"> · {{ block.scheduledTime.slice(0,5) }}</ng-container></small></button>
-      </ng-container>
-    </div>
-    <div class="empty" *ngIf="!loading && staff.length === 0">No records yet</div>
-  </section>
+        @for (date of days; track date) {
+          <button class="schedule-cell" type="button" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" [class.has-operation]="operationsFor(person.id,date).length > 0" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span>@if (cell(person.id,date)?.notes) {
+          <small>Note added</small>
+          }@for (block of operationsFor(person.id,date); track block) {
+          <small class="operation-chip">{{ operationLabel(block) }}@if (block.scheduledTime) {
+            · {{ block.scheduledTime.slice(0,5) }}
+          }</small>
+        }</button>
+      }
+    }
+  </div>
+}
+@if (!loading && staff.length === 0) {
+  <div class="empty">No records yet</div>
+}
+</section>
 
-  <div class="drawer-backdrop" *ngIf="editorOpen" (click)="closeEditor()"></div>
-  <aside class="shift-drawer" *ngIf="editorOpen && editorDraft" aria-label="Edit employee schedule">
+@if (editorOpen) {
+  <div class="drawer-backdrop" (click)="closeEditor()"></div>
+}
+@if (editorOpen && editorDraft) {
+  <aside class="shift-drawer" aria-label="Edit employee schedule">
     <header><div><span class="section-label">{{ dayLabel(editorDate) }}</span><h2>{{ editorStaff?.name }}</h2></div><button type="button" aria-label="Close" (click)="closeEditor()">Close</button></header>
     <div class="drawer-body">
       <section class="shift-card"><h3>Shift 1</h3><div class="time-grid"><label>Start<input type="time" [(ngModel)]="editorDraft.shift1Start" /></label><label>End<input type="time" [(ngModel)]="editorDraft.shift1End" /></label></div></section>
       <section class="shift-card"><h3>Shift 2</h3><div class="time-grid"><label>Start<input type="time" [(ngModel)]="editorDraft.shift2Start" /></label><label>End<input type="time" [(ngModel)]="editorDraft.shift2End" /></label></div></section>
-      <label>Status<select [(ngModel)]="editorDraft.status"><option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option></select></label>
+      <label>Status<select [(ngModel)]="editorDraft.status">@for (option of statusOptions; track option) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }</select></label>
       <label>Notes<textarea rows="4" maxlength="1000" [(ngModel)]="editorDraft.notes"></textarea></label>
     </div>
     <footer><button type="button" (click)="closeEditor()">Cancel</button><button class="primary" type="button" (click)="applyEditor()">Apply</button></footer>
   </aside>
+}
 </section>

@@ -1,11 +1,13 @@
 <section class="page-shell">
   <header class="page-head">
-    <h1>{{ 'inventory.ui.2dd9dc160d' | translate }}</h1>
+    <div class="title-block"><small>Inventory / Backbar / Consume</small><h1>Live Product Consume</h1></div>
     <div class="head-actions">
       <as-date-picker ariaLabel="Backbar usage date" [(value)]="filterDate"></as-date-picker>
       <select [attr.aria-label]="'inventory.ui.d05e4f1255' | translate" [(ngModel)]="filterStaff"><option value="">{{ 'inventory.ui.94c955663c' | translate }}</option><option *ngFor="let row of staff" [value]="row.id">{{ staffName(row) }}</option></select>
       <button type="button" (click)="load()">{{ 'inventory.ui.56e3badc4e' | translate }}</button>
-      <button class="primary" type="button" (click)="openRecord()">{{ 'inventory.ui.3f6d3a323e' | translate }}</button>
+      <button type="button" (click)="openScanner()"><i class="bi bi-upc-scan" aria-hidden="true"></i> Scan</button>
+      <button type="button" (click)="openContainers()"><i class="bi bi-box-seam" aria-hidden="true"></i> Containers</button>
+      <button class="primary" type="button" (click)="openRecord()">Record Usage</button>
     </div>
   </header>
 
@@ -13,12 +15,11 @@
   <div class="loading" *ngIf="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
 
   <nav class="tabs" *ngIf="!loading" [attr.aria-label]="'inventory.ui.35195a733f' | translate">
-    <button type="button" [class.active]="activeTab === 'usage'" (click)="activeTab = 'usage'">{{ 'inventory.ui.0bb18642b7' | translate }}</button>
+    <button type="button" [class.active]="activeTab === 'usage'" (click)="activeTab = 'usage'">Live Consume</button>
     <button type="button" [class.active]="activeTab === 'daily'" (click)="activeTab = 'daily'">{{ 'inventory.ui.398069e1ea' | translate }}</button>
     <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">{{ 'inventory.ui.eb39bbf6cc' | translate }}</button>
     <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">{{ 'inventory.ui.deb9d03cf0' | translate }}</button>
     <button type="button" [class.active]="activeTab === 'audit'" (click)="activeTab = 'audit'">{{ 'inventory.ui.fa1703dd78' | translate }}</button>
-    <button type="button" [class.active]="activeTab === 'containers'" (click)="activeTab = 'containers'">{{ 'inventory.ui.e040a458f4' | translate }}</button>
   </nav>
 
   <section class="kpis" *ngIf="!loading">
@@ -27,42 +28,28 @@
     <article class="teal"><i class="bi bi-plus-minus" aria-hidden="true"></i><span>{{ 'inventory.ui.eb39bbf6cc' | translate }}</span><strong>{{ quantity(varianceTotal) }}</strong></article>
     <article class="green"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ pendingApprovals }}</strong></article>
   </section>
-
-
-  <section class="table-card container-card" *ngIf="!loading && activeTab === 'containers'">
-    <header><h2>{{ 'inventory.ui.6e1e724242' | translate }}</h2></header>
-    <div class="container-form">
-      <select [(ngModel)]="containerDraft.inventoryItemId" [attr.aria-label]="'inventory.ui.0ffda2290d' | translate"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let row of items" [value]="row.id">{{ row.name }}</option></select>
-      <input [(ngModel)]="containerDraft.barcode" [attr.placeholder]="'inventory.ui.c45ac15dc0' | translate" [attr.aria-label]="'inventory.ui.c45ac15dc0' | translate" />
-      <input type="number" min="1" [(ngModel)]="containerDraft.capacityQuantity" [attr.placeholder]="'inventory.ui.45bd908df4' | translate" [attr.aria-label]="'inventory.ui.2c83cdfa6e' | translate" />
-      <input [(ngModel)]="containerDraft.unit" [attr.placeholder]="'inventory.ui.f6b935ab33' | translate" [attr.aria-label]="'inventory.ui.14f3e77b71' | translate" />
-      <button type="button" [disabled]="saving" (click)="createContainer()">{{ 'inventory.ui.569b246651' | translate }}</button>
-    </div>
-    <div class="table-scroll" *ngIf="containers.length; else noContainers"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.8e54dc5331' | translate }}</th><th>{{ 'inventory.ui.a725020675' | translate }}</th><th>{{ 'inventory.ui.cc632b5e2f' | translate }}</th><th>{{ 'inventory.ui.c4f1f5b1d4' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
-      <tr *ngFor="let row of containers"><td><strong>{{ row.productName }}</strong></td><td>{{ row.barcode }}</td><td><span class="status">{{ row.status }}</span></td><td>{{ quantity(row.remainingQuantity, row.unit) }} / {{ quantity(row.capacityQuantity, row.unit) }}</td><td>{{ row.openedAt ? date(row.openedAt) : '—' }}</td><td><div class="row-actions"><button *ngIf="row.status === 'sealed'" type="button" (click)="openContainer(row)">{{ 'inventory.ui.cf9b77061f' | translate }}</button><ng-container *ngIf="row.status === 'open'"><input class="consume-input" type="number" min="1" [max]="row.remainingQuantity" [(ngModel)]="containerQuantity[row.id]" [attr.aria-label]="'inventory.ui.3c99669985' | translate" /><button type="button" (click)="consumeContainer(row)">{{ 'inventory.ui.1d4d43cc6f' | translate }}</button><button type="button" (click)="requestOverride(row)">{{ 'inventory.ui.48e09e45c5' | translate }}</button></ng-container><ng-container *ngIf="row.pendingOverrideId && canReview"><button type="button" (click)="reviewOverride(row,'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button class="danger" type="button" (click)="reviewOverride(row,'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></ng-container></div></td></tr>
-    </tbody></table></div>
-    <ng-template #noContainers><div class="empty-state">{{ 'inventory.ui.0f3b4652d0' | translate }}</div></ng-template>
-  </section>
-  <section class="table-card" *ngIf="!loading && activeTab !== 'containers'">
+  <section class="table-card" *ngIf="!loading">
     <header><h2>{{ tableTitle }}</h2><div><select [attr.aria-label]="'inventory.ui.640aa76d00' | translate" [(ngModel)]="workflow"><option value="">{{ 'inventory.ui.203295911c' | translate }}</option><option value="recorded">{{ 'inventory.ui.4e836fdc25' | translate }}</option><option value="pending_approval">{{ 'inventory.ui.25d1b4bbf1' | translate }}</option><option value="rejected">{{ 'inventory.ui.27eeb7a291' | translate }}</option><option value="auto_consumed">{{ 'inventory.ui.ac9041e768' | translate }}</option></select><button type="button" [disabled]="!visibleUsage.length" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button></div></header>
-    <div class="table-scroll" *ngIf="visibleUsage.length; else empty"><table><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.7aad070f69' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th *ngIf="activeTab === 'audit'">{{ 'inventory.ui.70440046a3' | translate }}</th><th *ngIf="activeTab === 'approvals' && canReview">{{ 'inventory.ui.c3cd636a58' | translate }}</th></tr></thead>
-      <tbody><tr *ngFor="let row of visibleUsage"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.source }}</td><td>{{ row.serviceName || '—' }}</td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td><td *ngIf="activeTab === 'audit'">{{ row.reviewNote || row.notes || '—' }}</td><td *ngIf="activeTab === 'approvals' && canReview"><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div></td></tr></tbody>
+    <div class="table-scroll" *ngIf="visibleUsage.length; else empty"><table><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.7aad070f69' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>Client</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th *ngIf="activeTab === 'audit'">{{ 'inventory.ui.70440046a3' | translate }}</th><th *ngIf="activeTab === 'approvals' && canReview">{{ 'inventory.ui.c3cd636a58' | translate }}</th></tr></thead>
+      <tbody><tr *ngFor="let row of visibleUsage"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.source }}</td><td>{{ row.serviceName || '—' }}</td><td>{{ row.staffName || '—' }}</td><td>{{ row.clientName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td><td *ngIf="activeTab === 'audit'">{{ row.reviewNote || row.notes || '—' }}</td><td *ngIf="activeTab === 'approvals' && canReview"><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div></td></tr></tbody>
     </table></div>
-    <ng-template #empty><div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div></ng-template>
+    <ng-template #empty><div class="empty-state"><i class="bi bi-box-seam" aria-hidden="true"></i><strong>No usage recorded</strong></div></ng-template>
     <footer>Showing {{ visibleUsage.length }} usage records</footer>
   </section>
 </section>
 
 <div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeRecord()"></div>
 <aside class="drawer" *ngIf="drawerOpen" role="dialog" aria-modal="true" aria-labelledby="backbar-title">
-  <header><h2 id="backbar-title">{{ 'inventory.ui.56e45c0150' | translate }}</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="closeRecord()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <header><h2 id="backbar-title">Record Product Usage</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="closeRecord()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
   <div class="drawer-body">
-    <p class="message error" *ngIf="error">{{ error }}</p>
+    <p class="message error" *ngIf="error || formError">{{ error || formError }}</p>
+    <p class="approval-rule"><i class="bi bi-info-circle" aria-hidden="true"></i> Over-limit usage requires owner approval</p>
     <label>{{ 'inventory.ui.329cb8b6ba' | translate }}<select [(ngModel)]="draft.serviceId" (ngModelChange)="serviceChanged()"><option value="">{{ 'inventory.ui.c8588f8dfe' | translate }}</option><option *ngFor="let row of services" [value]="row.id">{{ row.name }}</option></select></label>
     <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select required [(ngModel)]="draft.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let row of availableItems" [value]="row.id">{{ row.name }} · {{ row.stockQuantity }} {{ row.unit }}</option></select></label>
     <label>{{ 'inventory.ui.a4730a22cf' | translate }}<select [(ngModel)]="draft.staffId"><option value="">{{ 'inventory.ui.7f4946a53f' | translate }}</option><option *ngFor="let row of staff" [value]="row.id">{{ staffName(row) }}</option></select></label>
+    <label>Client<select [(ngModel)]="draft.clientId"><option value="">No client attribution</option><option *ngFor="let row of clients" [value]="row.id">{{ clientName(row) }}</option></select></label>
     <div class="quantity-grid"><label>{{ 'inventory.ui.6ac87f3446' | translate }}<input [value]="expectedQuantity || '—'" readonly /></label><label>{{ 'inventory.ui.3b9aeac662' | translate }}<input required type="number" min="1" step="1" [(ngModel)]="draft.actualQuantity" /></label></div>
     <label>{{ 'inventory.ui.70440046a3' | translate }}<textarea maxlength="500" [(ngModel)]="draft.notes"></textarea></label>
   </div>
-  <footer><button type="button" (click)="closeRecord()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : 'Record usage' }}</button></footer>
+  <footer><button type="button" (click)="closeRecord()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : 'Submit Usage' }}</button></footer>
 </aside>

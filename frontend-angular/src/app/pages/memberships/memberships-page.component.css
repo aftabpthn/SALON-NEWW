@@ -147,3 +147,13 @@ tbody tr:hover, tbody tr.selected { background: #f1f6ff; }
   .membership-drawer, .sell-drawer, .member360-drawer { width: calc(100vw - 48px); }
 }
 .card-action{width:100%;margin:12px 0;padding:10px 12px;border:1px solid var(--border,#c9d8e8);border-radius:8px;background:#fff;color:#102a43;font-weight:600;cursor:pointer}.card-action:hover{background:#eef6ff}.membership-card{display:flex;align-items:center;gap:14px;padding:12px;border:1px solid var(--border,#c9d8e8);border-radius:10px;background:#f8fbff;margin-bottom:14px}.membership-card-qr{width:132px;height:132px;flex:0 0 132px}.membership-card-qr svg{display:block;width:100%;height:100%}.membership-card>div:last-child{display:grid;gap:5px}.membership-card a{color:#155eef;font-weight:600}
+
+@media (max-width: 640px) {
+  .membership-drawer, .sell-drawer, .member360-drawer { width: 100vw; }
+  .tier-setting { grid-template-columns: 1fr; }
+  .heading-actions, .panel-controls { align-items: stretch; flex-direction: column; }
+  .heading-actions > *, .panel-controls > * { width: 100%; min-width: 0; }
+  .membership-card { align-items: flex-start; flex-direction: column; }
+  .table-wrap { overscroll-behavior-x: contain; }
+  button, input:not([type='checkbox']), select { min-height: 44px; }
+}

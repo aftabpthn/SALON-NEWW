@@ -1,17 +1,63 @@
 <section class="wa-page">
   <header class="command-strip"><div><span class="section-label">Messaging</span><h1>WhatsApp automation</h1></div><button type="button" (click)="reload()" [disabled]="loading">{{ loading ? 'Loading' : 'Refresh' }}</button></header>
-  <p class="inline-error" *ngIf="error">{{ error }}</p>
-  <nav class="tabs" aria-label="WhatsApp automation sections"><button type="button" *ngFor="let item of ['overview','inbox','rules','handoffs','campaigns','templates']" [class.active]="tab === item" [attr.aria-current]="tab === item ? 'page' : null" (click)="tab = item">{{ label(item) }}</button></nav>
+  @if (error) {
+    <p class="inline-error">{{ error }}</p>
+  }
+  <nav class="tabs" aria-label="WhatsApp automation sections">@for (item of ['overview','inbox','rules','handoffs','campaigns','templates']; track item) {
+    <button type="button" [class.active]="tab === item" [attr.aria-current]="tab === item ? 'page' : null" (click)="tab = item">{{ label(item) }}</button>
+  }</nav>
 
-  <div class="kpis" *ngIf="tab === 'overview'"><article><span>Messages</span><strong>{{ summary.totalMessages }}</strong></article><article><span>Inbound</span><strong>{{ summary.inboundMessages }}</strong></article><article><span>Delivered</span><strong>{{ summary.deliveredMessages }}</strong></article><article><span>Failed</span><strong>{{ summary.failedMessages }}</strong></article><article><span>Threads</span><strong>{{ summary.threadCount }}</strong></article></div>
+  @if (tab === 'overview') {
+    <div class="kpis"><article><span>Messages</span><strong>{{ summary.totalMessages }}</strong></article><article><span>Inbound</span><strong>{{ summary.inboundMessages }}</strong></article><article><span>Delivered</span><strong>{{ summary.deliveredMessages }}</strong></article><article><span>Failed</span><strong>{{ summary.failedMessages }}</strong></article><article><span>Threads</span><strong>{{ summary.threadCount }}</strong></article></div>
+  }
 
-  <section class="workspace" *ngIf="tab === 'overview' || tab === 'inbox'"><div class="panel"><div class="panel-head"><h2>Conversation threads</h2><span>{{ threads.length }} records</span></div><div class="rows" *ngIf="threads.length; else noThreads"><button type="button" class="row" *ngFor="let row of threads" (click)="selectThread(row)" [class.selected]="selectedClientId === row.clientId"><strong>{{ row.clientName || row.clientId }}</strong><small>{{ row.recipient }} · {{ formatDate(row.lastOccurredAt) }}</small><p>{{ row.lastBody || 'No message body' }}</p></button></div><ng-template #noThreads><div class="empty">No WhatsApp threads yet</div></ng-template></div><div class="panel detail"><h2>Message history</h2><div class="message" *ngFor="let row of selectedMessages"><span>{{ label(row.direction) }} · {{ label(row.status) }}</span><p>{{ row.body }}</p><small>{{ formatDate(row.occurredAt) }}</small></div><div class="empty" *ngIf="!selectedMessages.length">Select a thread</div><div class="inline-form"><input [(ngModel)]="handoffReason" placeholder="Handoff reason" /><button type="button" (click)="createHandoff()" [disabled]="busy || !handoffReason.trim()">Create handoff</button></div></div></section>
+  @if (tab === 'overview' || tab === 'inbox') {
+    <section class="workspace"><div class="panel"><div class="panel-head"><h2>Conversation threads</h2><span>{{ threads.length }} records</span></div>@if (threads.length) {
+    <div class="rows">@for (row of threads; track row) {
+      <button type="button" class="row" (click)="selectThread(row)" [class.selected]="selectedClientId === row.clientId"><strong>{{ row.clientName || row.clientId }}</strong><small>{{ row.recipient }} · {{ formatDate(row.lastOccurredAt) }}</small><p>{{ row.lastBody || 'No message body' }}</p></button>
+    }</div>
+  } @else {
+    <div class="empty">No WhatsApp threads yet</div>
+    }</div><div class="panel detail"><h2>Message history</h2>@for (row of selectedMessages; track row) {
+    <div class="message"><span>{{ label(row.direction) }} · {{ label(row.status) }}</span><p>{{ row.body }}</p><small>{{ formatDate(row.occurredAt) }}</small></div>
+    }@if (!selectedMessages.length) {
+    <div class="empty">Select a thread</div>
+    }<div class="inline-form"><input [(ngModel)]="handoffReason" placeholder="Handoff reason" /><button type="button" (click)="createHandoff()" [disabled]="busy || !handoffReason.trim()">Create handoff</button></div></div></section>
+  }
 
-  <section class="panel" *ngIf="tab === 'rules'"><div class="panel-head"><h2>Automation rules</h2><span>{{ rules.length }} records</span></div><div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Trigger</th><th scope="col">Action</th><th scope="col">Status</th><th scope="col" class="numeric">Priority</th></tr></thead><tbody><tr *ngFor="let row of rules"><td>{{ row.name }}</td><td>{{ label(row.triggerEvent) }}</td><td>{{ row.actionTemplate || '-' }}</td><td>{{ label(row.status) }}</td><td class="numeric">{{ row.priority }}</td></tr></tbody></table></div><div class="empty" *ngIf="!rules.length">No automation rules yet</div></section>
+  @if (tab === 'rules') {
+    <section class="panel"><div class="panel-head"><h2>Automation rules</h2><span>{{ rules.length }} records</span></div><div class="table-wrap"><table><thead><tr><th scope="col">Name</th><th scope="col">Trigger</th><th scope="col">Action</th><th scope="col">Status</th><th scope="col" class="numeric">Priority</th></tr></thead><tbody>@for (row of rules; track row) {
+    <tr><td>{{ row.name }}</td><td>{{ label(row.triggerEvent) }}</td><td>{{ row.actionTemplate || '-' }}</td><td>{{ label(row.status) }}</td><td class="numeric">{{ row.priority }}</td></tr>
+  }</tbody></table></div>@if (!rules.length) {
+  <div class="empty">No automation rules yet</div>
+}</section>
+}
 
-  <section class="panel" *ngIf="tab === 'handoffs'"><div class="panel-head"><h2>Human handoffs</h2><span>{{ handoffs.length }} records</span></div><div class="table-wrap"><table><thead><tr><th scope="col">Thread</th><th scope="col">Reason</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Assigned to</th><th scope="col">Created</th></tr></thead><tbody><tr *ngFor="let row of handoffs"><td>{{ row.threadId }}</td><td>{{ row.reason }}</td><td>{{ label(row.priority) }}</td><td>{{ label(row.status) }}</td><td>{{ row.assignedTo || '-' }}</td><td>{{ formatDate(row.createdAt) }}</td></tr></tbody></table></div><div class="empty" *ngIf="!handoffs.length">No handoffs yet</div></section>
+@if (tab === 'handoffs') {
+  <section class="panel"><div class="panel-head"><h2>Human handoffs</h2><span>{{ handoffs.length }} records</span></div><div class="table-wrap"><table><thead><tr><th scope="col">Thread</th><th scope="col">Reason</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Assigned to</th><th scope="col">Created</th></tr></thead><tbody>@for (row of handoffs; track row) {
+  <tr><td>{{ row.threadId }}</td><td>{{ row.reason }}</td><td>{{ label(row.priority) }}</td><td>{{ label(row.status) }}</td><td>{{ row.assignedTo || '-' }}</td><td>{{ formatDate(row.createdAt) }}</td></tr>
+}</tbody></table></div>@if (!handoffs.length) {
+<div class="empty">No handoffs yet</div>
+}</section>
+}
 
-  <section class="panel" *ngIf="tab === 'campaigns'"><div class="panel-head"><h2>Campaign planner</h2><span>{{ plans.length }} records</span></div><div class="form-grid"><input [(ngModel)]="planTitle" placeholder="Plan title" /><select [(ngModel)]="planType"><option value="empty_slot_fill">Empty slot fill</option><option value="inactive_client_recovery">Inactive client recovery</option><option value="membership_renewal">Membership renewal</option><option value="vip_retention">VIP retention</option></select><textarea [(ngModel)]="planMessage" placeholder="Approved message text"></textarea><button type="button" (click)="createPlan()" [disabled]="busy || !planTitle.trim() || !planMessage.trim()">Save draft</button></div><div class="table-wrap"><table><thead><tr><th scope="col">Title</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Scheduled</th><th scope="col">Actions</th></tr></thead><tbody><tr *ngFor="let row of plans"><td>{{ row.title }}</td><td>{{ label(row.campaignType) }}</td><td>{{ label(row.status) }}</td><td>{{ row.scheduledFor ? formatDate(row.scheduledFor) : '-' }}</td><td><button type="button" *ngIf="row.status === 'draft'" (click)="approve(row)">Approve</button><button type="button" *ngIf="row.status === 'approved'" (click)="schedule(row)">Schedule</button></td></tr></tbody></table></div><div class="empty" *ngIf="!plans.length">No campaign plans yet</div></section>
+@if (tab === 'campaigns') {
+  <section class="panel"><div class="panel-head"><h2>Campaign planner</h2><span>{{ plans.length }} records</span></div><div class="form-grid"><input [(ngModel)]="planTitle" placeholder="Plan title" /><select [(ngModel)]="planType"><option value="empty_slot_fill">Empty slot fill</option><option value="inactive_client_recovery">Inactive client recovery</option><option value="membership_renewal">Membership renewal</option><option value="vip_retention">VIP retention</option></select><textarea [(ngModel)]="planMessage" placeholder="Approved message text"></textarea><button type="button" (click)="createPlan()" [disabled]="busy || !planTitle.trim() || !planMessage.trim()">Save draft</button></div><div class="table-wrap"><table><thead><tr><th scope="col">Title</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Scheduled</th><th scope="col">Actions</th></tr></thead><tbody>@for (row of plans; track row) {
+  <tr><td>{{ row.title }}</td><td>{{ label(row.campaignType) }}</td><td>{{ label(row.status) }}</td><td>{{ row.scheduledFor ? formatDate(row.scheduledFor) : '-' }}</td><td>@if (row.status === 'draft') {
+  <button type="button" (click)="approve(row)">Approve</button>
+  }@if (row.status === 'approved') {
+  <button type="button" (click)="schedule(row)">Schedule</button>
+}</td></tr>
+}</tbody></table></div>@if (!plans.length) {
+<div class="empty">No campaign plans yet</div>
+}</section>
+}
 
-  <section class="panel" *ngIf="tab === 'templates'"><div class="panel-head"><h2>Template studio</h2><span>{{ templates.length }} WhatsApp templates</span></div><div class="form-grid"><input [(ngModel)]="templateName" placeholder="Template name" /><textarea [(ngModel)]="templateBody" placeholder="Template body, use {{'{{Name}}'}} for variables"></textarea><button type="button" (click)="createTemplate()" [disabled]="busy || !templateName.trim() || !templateBody.trim()">Save template</button></div><div class="template-grid"><article *ngFor="let row of templates"><span>{{ label(row.status) }}</span><h3>{{ row.name }}</h3><p>{{ row.body }}</p><small>{{ row.templateKey }} · {{ formatDate(row.updatedAt) }}</small></article></div><div class="empty" *ngIf="!templates.length">No WhatsApp templates yet</div></section>
+@if (tab === 'templates') {
+  <section class="panel"><div class="panel-head"><h2>Template studio</h2><span>{{ templates.length }} WhatsApp templates</span></div><div class="form-grid"><input [(ngModel)]="templateName" placeholder="Template name" /><textarea [(ngModel)]="templateBody" placeholder="Template body, use {{'{{Name}}'}} for variables"></textarea><button type="button" (click)="createTemplate()" [disabled]="busy || !templateName.trim() || !templateBody.trim()">Save template</button></div><div class="template-grid">@for (row of templates; track row) {
+  <article><span>{{ label(row.status) }}</span><h3>{{ row.name }}</h3><p>{{ row.body }}</p><small>{{ row.templateKey }} · {{ formatDate(row.updatedAt) }}</small></article>
+}</div>@if (!templates.length) {
+<div class="empty">No WhatsApp templates yet</div>
+}</section>
+}
 </section>

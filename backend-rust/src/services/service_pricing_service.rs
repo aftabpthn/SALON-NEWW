@@ -15,6 +15,9 @@ pub struct ServicePriceQuote {
     pub starts_at: DateTime<Utc>,
     pub base_price_paise: i64,
     pub staff_price_paise: Option<i64>,
+    pub pricing_level_id: Option<String>,
+    pub pricing_level_name: Option<String>,
+    pub pricing_level_price_paise: Option<i64>,
     pub variant_id: Option<String>,
     pub variant_adjustment_paise: i64,
     pub addon_total_paise: i64,
@@ -64,7 +67,10 @@ pub async fn quote(
 }
 
 fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> ServicePriceQuote {
-    let effective_base = source.staff_price_paise.unwrap_or(source.base_price_paise);
+    let effective_base = source
+        .staff_price_paise
+        .or(source.pricing_level_price_paise)
+        .unwrap_or(source.base_price_paise);
     let variant_subtotal = effective_base
         .saturating_add(source.variant_price_delta_paise)
         .max(0);
@@ -83,6 +89,9 @@ fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> Se
         starts_at,
         base_price_paise: source.base_price_paise,
         staff_price_paise: source.staff_price_paise,
+        pricing_level_id: source.pricing_level_id,
+        pricing_level_name: source.pricing_level_name,
+        pricing_level_price_paise: source.pricing_level_price_paise,
         variant_id: source.variant_id,
         variant_adjustment_paise: source.variant_price_delta_paise,
         addon_total_paise: source.addon_price_paise,
@@ -117,6 +126,9 @@ mod tests {
                 base_price_paise: 100_00,
                 base_duration_minutes: 45,
                 staff_price_paise: Some(120_00),
+                pricing_level_id: Some("level-1".into()),
+                pricing_level_name: Some("Senior Stylist".into()),
+                pricing_level_price_paise: Some(130_00),
                 variant_id: Some("variant-1".into()),
                 variant_price_delta_paise: 20_00,
                 variant_duration_delta_minutes: 15,

@@ -1,6 +1,56 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Months, Utc};
+use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
+use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub struct OnboardingWrite {
+    pub idempotency_key: String,
+    pub request_fingerprint: String,
+    pub salon_name: String,
+    pub salon_slug: String,
+    pub plan_id: String,
+    pub owner_full_name: String,
+    pub owner_email: String,
+    pub owner_password_hash: String,
+    pub owner_permissions: Value,
+    pub branch_name: String,
+    pub branch_code: String,
+    pub branch_address: String,
+    pub domain: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub trial_ends_at: DateTime<Utc>,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingResult {
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub owner_user_id: String,
+    pub subscription_id: String,
+    pub trial_ends_at: DateTime<Utc>,
+    pub domain_mapping_id: Option<String>,
+    pub domain: Option<String>,
+    pub domain_verified: Option<bool>,
+    pub replayed: bool,
+}
+
+#[derive(Debug)]
+pub enum OnboardingError {
+    Database(sqlx::Error),
+    IdempotencyConflict,
+    PlanUnavailable,
+    TrialOutsideFirstPeriod,
+}
+
+impl From<sqlx::Error> for OnboardingError {
+    fn from(error: sqlx::Error) -> Self {
+        Self::Database(error)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SlaWrite {
@@ -64,6 +114,248 @@ pub struct UsageSnapshot {
     pub api_calls: i64,
     pub messages: i64,
     pub storage_mb: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct EntitlementContext {
+    pub tenant_status: String,
+    pub subscription_status: Option<String>,
+    pub included_branches: Option<i32>,
+    pub overage_branch_paise: Option<i64>,
+    pub active_branch_count: i64,
+}
+
+const ENTITLEMENT_CONTEXT_SQL: &str = r#"
+    SELECT tenant.status AS tenant_status,
+           subscription.status AS subscription_status,
+           subscription.included_branches,
+           subscription.overage_branch_paise,
+           (SELECT COUNT(*) FROM branches branch
+             WHERE branch.tenant_id=tenant.id AND branch.active=TRUE) AS active_branch_count
+      FROM tenants tenant
+      LEFT JOIN LATERAL (
+        SELECT current.status,plan.included_branches,plan.overage_branch_paise
+          FROM saas_subscriptions current
+          JOIN saas_plans plan ON plan.id=current.plan_id
+         WHERE current.tenant_id=tenant.id::text
+         ORDER BY CASE WHEN current.status IN ('trialing','active','past_due','paused')
+                       THEN 0 ELSE 1 END,
+                  current.created_at DESC
+         LIMIT 1
+      ) subscription ON TRUE
+     WHERE tenant.id::text=$1
+"#;
+
+pub async fn entitlement_context(
+    db: &PgPool,
+    tenant_id: &str,
+) -> Result<Option<EntitlementContext>, sqlx::Error> {
+    sqlx::query_as(ENTITLEMENT_CONTEXT_SQL)
+        .bind(tenant_id)
+        .fetch_optional(db)
+        .await
+}
+
+pub async fn entitlement_context_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+) -> Result<Option<EntitlementContext>, sqlx::Error> {
+    sqlx::query_as(ENTITLEMENT_CONTEXT_SQL)
+        .bind(tenant_id)
+        .fetch_optional(&mut **tx)
+        .await
+}
+
+pub async fn onboard_salon(
+    db: &PgPool,
+    input: &OnboardingWrite,
+) -> Result<OnboardingResult, OnboardingError> {
+    let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(&input.idempotency_key)
+        .execute(&mut *tx)
+        .await?;
+
+    if let Some(mut existing) = sqlx::query_as::<_, OnboardingResult>(
+        r#"SELECT request.tenant_id,request.branch_id,request.owner_user_id,
+                  request.subscription_id,subscription.trial_ends_at,
+                  request.domain_mapping_id,domain.domain,domain.verified AS domain_verified,
+                  TRUE AS replayed
+             FROM saas_onboarding_requests request
+             JOIN saas_subscriptions subscription ON subscription.id=request.subscription_id
+             LEFT JOIN tenant_domain_mappings domain ON domain.id=request.domain_mapping_id
+            WHERE request.idempotency_key=$1 AND request.request_fingerprint=$2"#,
+    )
+    .bind(&input.idempotency_key)
+    .bind(&input.request_fingerprint)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        existing.replayed = true;
+        tx.commit().await?;
+        return Ok(existing);
+    }
+    if sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM saas_onboarding_requests WHERE idempotency_key=$1)",
+    )
+    .bind(&input.idempotency_key)
+    .fetch_one(&mut *tx)
+    .await?
+    {
+        return Err(OnboardingError::IdempotencyConflict);
+    }
+
+    let billing_interval = sqlx::query_scalar::<_, String>(
+        "SELECT billing_interval FROM saas_plans WHERE id=$1 AND active=TRUE FOR SHARE",
+    )
+    .bind(&input.plan_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(OnboardingError::PlanUnavailable)?;
+    let period_end = input
+        .started_at
+        .checked_add_months(Months::new(if billing_interval == "yearly" {
+            12
+        } else {
+            1
+        }))
+        .ok_or(OnboardingError::TrialOutsideFirstPeriod)?;
+    if input.trial_ends_at <= input.started_at || input.trial_ends_at > period_end {
+        return Err(OnboardingError::TrialOutsideFirstPeriod);
+    }
+
+    let tenant_id = Uuid::new_v4().to_string();
+    let branch_id = Uuid::new_v4().to_string();
+
+    sqlx::query(
+        "INSERT INTO tenants(id,name,slug,status,scope_id) VALUES($1::uuid,$2,$3,'active',$1)",
+    )
+    .bind(&tenant_id)
+    .bind(&input.salon_name)
+    .bind(&input.salon_slug)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO branches(id,tenant_id,name,code,address,active,scope_id)
+           VALUES($1::uuid,$2::uuid,$3,$4,$5,TRUE,$1)"#,
+    )
+    .bind(&branch_id)
+    .bind(&tenant_id)
+    .bind(&input.branch_name)
+    .bind(&input.branch_code)
+    .bind(&input.branch_address)
+    .execute(&mut *tx)
+    .await?;
+
+    let owner_role_id = sqlx::query_scalar::<_, String>(
+        r#"INSERT INTO roles(tenant_id,name,permissions_json,is_system)
+           VALUES($1,'Owner',$2,TRUE) RETURNING id"#,
+    )
+    .bind(&tenant_id)
+    .bind(&input.owner_permissions)
+    .fetch_one(&mut *tx)
+    .await?;
+    let owner_user_id = sqlx::query_scalar::<_, String>(
+        r#"INSERT INTO users(
+             tenant_id,branch_id,role_id,role_name,login_id,email,password_hash,full_name,
+             active,must_change_password,password_changed_at
+           ) VALUES($1,$2,$3,'Owner',$4,$4,$5,$6,TRUE,FALSE,NOW()) RETURNING id"#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&owner_role_id)
+    .bind(&input.owner_email)
+    .bind(&input.owner_password_hash)
+    .bind(&input.owner_full_name)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO user_branch_roles(
+             tenant_id,user_id,branch_id,role_id,role_name,is_default,active
+           ) VALUES($1,$2,$3,$4,'Owner',TRUE,TRUE)"#,
+    )
+    .bind(&tenant_id)
+    .bind(&owner_user_id)
+    .bind(&branch_id)
+    .bind(&owner_role_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let subscription_id = sqlx::query_scalar::<_, String>(
+        r#"INSERT INTO saas_subscriptions(
+             tenant_id,plan_id,status,current_period_start,current_period_end,trial_ends_at,
+             provider,created_by,updated_by
+           ) VALUES($1,$2,'trialing',$3,$4,$5,'manual',$6,$6) RETURNING id"#,
+    )
+    .bind(&tenant_id)
+    .bind(&input.plan_id)
+    .bind(input.started_at)
+    .bind(period_end)
+    .bind(input.trial_ends_at)
+    .bind(&input.actor)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let domain_mapping_id = if let Some(domain) = input.domain.as_deref() {
+        Some(
+            sqlx::query_scalar::<_, String>(
+                r#"INSERT INTO tenant_domain_mappings(tenant_id,domain,created_by)
+                   VALUES($1,$2,$3) RETURNING id"#,
+            )
+            .bind(&tenant_id)
+            .bind(domain)
+            .bind(&input.actor)
+            .fetch_one(&mut *tx)
+            .await?,
+        )
+    } else {
+        None
+    };
+
+    sqlx::query(
+        r#"INSERT INTO saas_onboarding_requests(
+             idempotency_key,request_fingerprint,tenant_id,branch_id,owner_user_id,
+             subscription_id,domain_mapping_id,created_by
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)"#,
+    )
+    .bind(&input.idempotency_key)
+    .bind(&input.request_fingerprint)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&owner_user_id)
+    .bind(&subscription_id)
+    .bind(&domain_mapping_id)
+    .bind(&input.actor)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO auth_audit_logs(
+             tenant_id,user_id,branch_id,event_type,outcome,details_json
+           ) VALUES($1,$2,$3,'saas.onboarding.completed','success',$4)"#,
+    )
+    .bind(&tenant_id)
+    .bind(&input.actor)
+    .bind(&branch_id)
+    .bind(json!({
+        "ownerUserId": owner_user_id,
+        "subscriptionId": subscription_id,
+        "domainMappingId": domain_mapping_id,
+    }))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    Ok(OnboardingResult {
+        tenant_id,
+        branch_id,
+        owner_user_id,
+        subscription_id,
+        trial_ends_at: input.trial_ends_at,
+        domain_mapping_id,
+        domain: input.domain.clone(),
+        domain_verified: input.domain.as_ref().map(|_| false),
+        replayed: false,
+    })
 }
 
 pub async fn platform_overview(db: &PgPool) -> Result<Value, sqlx::Error> {
@@ -569,4 +861,74 @@ async fn insert_ticket_event(
 ) -> Result<(), sqlx::Error> {
     sqlx::query("INSERT INTO saas_support_events(tenant_id,branch_id,ticket_id,event_type,from_status,to_status,actor_id,details_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(tenant).bind(branch).bind(ticket).bind(event_type).bind(from_status).bind(to_status).bind(actor).bind(details).execute(&mut **tx).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{onboard_salon, OnboardingError, OnboardingWrite};
+    use chrono::{Duration, Utc};
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    #[sqlx::test]
+    async fn onboarding_is_atomic_and_idempotent(pool: PgPool) {
+        let plan_id = sqlx::query_scalar::<_, String>(
+            r#"INSERT INTO saas_plans(
+                 code,name,billing_interval,base_price_paise,created_by,updated_by
+               ) VALUES('ONBOARD-TEST','Onboarding Test','monthly',0,'test','test')
+               RETURNING id"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let started_at = Utc::now();
+        let input = OnboardingWrite {
+            idempotency_key: "onboarding-test-1".into(),
+            request_fingerprint: "fingerprint-1".into(),
+            salon_name: "Atomic Salon".into(),
+            salon_slug: "atomic-salon".into(),
+            plan_id,
+            owner_full_name: "Salon Owner".into(),
+            owner_email: "owner@atomic-salon.test".into(),
+            owner_password_hash: "argon-hash".into(),
+            owner_permissions: json!(["tenant.read", "management.write"]),
+            branch_name: "Main Branch".into(),
+            branch_code: "MAIN".into(),
+            branch_address: "".into(),
+            domain: Some("atomic-salon.example.com".into()),
+            started_at,
+            trial_ends_at: started_at + Duration::days(14),
+            actor: "platform-user".into(),
+        };
+
+        let created = onboard_salon(&pool, &input).await.unwrap();
+        let replayed = onboard_salon(&pool, &input).await.unwrap();
+        assert_eq!(created.tenant_id, replayed.tenant_id);
+        assert!(replayed.replayed);
+
+        let mut changed_request = input.clone();
+        changed_request.request_fingerprint = "different-fingerprint".into();
+        assert!(matches!(
+            onboard_salon(&pool, &changed_request).await,
+            Err(OnboardingError::IdempotencyConflict)
+        ));
+
+        let mut domain_conflict = input.clone();
+        domain_conflict.idempotency_key = "onboarding-test-2".into();
+        domain_conflict.request_fingerprint = "fingerprint-2".into();
+        domain_conflict.salon_name = "Rolled Back Salon".into();
+        domain_conflict.salon_slug = "rolled-back-salon".into();
+        domain_conflict.owner_email = "owner@rolled-back.test".into();
+        assert!(matches!(
+            onboard_salon(&pool, &domain_conflict).await,
+            Err(OnboardingError::Database(_))
+        ));
+        let partial_tenant_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM tenants WHERE slug='rolled-back-salon')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(!partial_tenant_exists);
+    }
 }

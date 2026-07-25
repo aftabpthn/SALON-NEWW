@@ -5,7 +5,9 @@ import { DatePickerComponent } from '../../../shared/date-picker/date-picker.com
 import { ApiService } from '../../../shared/services/api.service';
 
 type Summary = Record<string, number>;
-@Component({ selector: 'app-advanced-report', standalone: true, imports: [CommonModule, CurrencyPipe, RouterLink, DatePickerComponent], templateUrl: './advanced-report-page.component.html', styleUrls: ['./advanced-report-page.component.css'] })
+@Component({
+    selector: 'app-advanced-report', imports: [CommonModule, CurrencyPipe, RouterLink, DatePickerComponent], templateUrl: './advanced-report-page.component.html', styleUrls: ['./advanced-report-page.component.css']
+})
 export class AdvancedReportPageComponent implements OnInit {
   private readonly api = inject(ApiService); private readonly route = inject(ActivatedRoute); fromDate = this.date(-29); toDate = this.date(0); summary: Summary | null = null; loading = false; error = ''; report = '';
   ngOnInit(): void { this.report = this.route.snapshot.queryParamMap.get('report') ?? ''; this.load(); }

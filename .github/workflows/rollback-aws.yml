@@ -1,0 +1,117 @@
+name: Roll back AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      task_definition:
+        description: Optional known-good task definition ARN; blank selects the previous revision
+        required: false
+        type: string
+      frontend_release:
+        description: Optional Git SHA stored under the frontend releases prefix
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: aurashine-rollback-${{ github.run_id }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+
+      - name: Read environment state
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN is required"; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "TF_STATE_BUCKET is required"; exit 1; }
+          terraform init -reconfigure \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=aurashine/${{ inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Roll back ECS task definition
+        id: ecs
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          CLUSTER=$(terraform output -raw ecs_cluster_name)
+          SERVICE=$(terraform output -raw ecs_service_name)
+          CURRENT=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
+          TARGET="${{ inputs.task_definition }}"
+          if [ -z "$TARGET" ]; then
+            FAMILY="aurashine-${{ inputs.environment }}-app"
+            TARGET=$(aws ecs list-task-definitions --family-prefix "$FAMILY" --status ACTIVE --sort DESC --query 'taskDefinitionArns' --output json | jq -r --arg current "$CURRENT" '[.[] | select(. != $current)][0] // empty')
+          fi
+          test -n "$TARGET" || { echo "No previous active task definition exists."; exit 1; }
+          aws ecs describe-task-definition --task-definition "$TARGET" >/dev/null
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TARGET" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          ACTIVE=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
+          test "$ACTIVE" = "$TARGET" || { echo "Rollback did not reach the requested revision."; exit 1; }
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Restore frontend release
+        if: ${{ inputs.frontend_release != '' }}
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          BUCKET=$(terraform output -raw frontend_bucket)
+          DISTRIBUTION=$(terraform output -raw cloudfront_distribution_id)
+          PREFIX="s3://$BUCKET/releases/${{ inputs.frontend_release }}/"
+          aws s3 ls "$PREFIX" >/dev/null
+          aws s3 cp "$PREFIX" "s3://$BUCKET/" --recursive --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' >/dev/null
+
+      - name: Verify rollback health
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          URL=$(terraform output -raw application_url)
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 "$URL/health"
+          {
+            echo "### AWS rollback completed"
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Replaced: ${{ steps.ecs.outputs.current }}"
+            echo "- Active: ${{ steps.ecs.outputs.target }}"
+            echo "- URL: $URL"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -28,12 +28,16 @@
         <span>Name</span>
         <strong>{{ selectedClient ? recordName(selectedClient) : 'Walk-in client' }}</strong>
         <small>{{ selectedClient?.phone || selectedClient?.mobile || 'No client selected' }}</small>
-        <div class="client-kpi-actions" *ngIf="selectedClient as client">
-          <a [routerLink]="['/clients']" [queryParams]="{ edit: client.id }">Edit contact</a>
-          <a [routerLink]="['/clients', client.id]">View history</a>
-        </div>
+        @if (selectedClient; as client) {
+          <div class="client-kpi-actions">
+            <a [routerLink]="['/clients']" [queryParams]="{ edit: client.id }">Edit contact</a>
+            <a [routerLink]="['/clients', client.id]">View history</a>
+          </div>
+        }
       </div>
-      <button type="button" *ngIf="!selectedClient" (click)="walkInClient()">Walk-in</button>
+      @if (!selectedClient) {
+        <button type="button" (click)="walkInClient()">Walk-in</button>
+      }
     </article>
     <article class="client-card"><span>E-wallet amt</span><strong>{{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
     <article class="client-card"><span>Unpaid amt</span><strong>{{ clientKpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ selectedClientId ? 'Live' : 'Select client' }}</small></article>
@@ -51,309 +55,501 @@
           <button type="button" (click)="addSaleLine('custom')"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 7h10M4 17h10M18 5v4M18 15v4M14 7h6M14 17h6"></path><circle cx="18" cy="7" r="2"></circle><circle cx="18" cy="17" r="2"></circle></svg></span>Custom</button>
         </div>
 
-        <section class="catalog-picker" *ngIf="catalogPickerType as type">
-          <div class="catalog-picker-head"><strong>Select {{ type === 'service' ? 'services' : 'products' }}</strong><button type="button" (click)="closeCatalogPicker()">×</button></div>
-          <input type="search" [(ngModel)]="catalogPickerSearch" [placeholder]="type === 'service' ? 'Search services' : 'Search products'" />
-          <div class="catalog-picker-list">
-            <button type="button" *ngFor="let item of catalogPickerItems(); trackBy: trackById" [class.selected]="catalogPickerSelected(item)" (click)="toggleCatalogPickerItem(item)">
-              <span class="picker-check" [class.checked]="catalogPickerSelected(item)"></span><span><strong>{{ recordName(item) }}</strong><small>{{ resultMeta(item) }}</small></span>
-            </button>
-          </div>
-          <button class="solid-action" type="button" [disabled]="!catalogPickerSelectedCount()" (click)="addCatalogPickerItems()">Add selected</button>
-        </section>
+        @if (catalogPickerType; as type) {
+          <section class="catalog-picker">
+            <div class="catalog-picker-head"><strong>Select {{ type === 'service' ? 'services' : 'products' }}</strong><button type="button" (click)="closeCatalogPicker()">×</button></div>
+            <input type="search" [(ngModel)]="catalogPickerSearch" [placeholder]="type === 'service' ? 'Search services' : 'Search products'" />
+            <div class="catalog-picker-list">
+              @for (item of catalogPickerItems(); track trackById($index, item)) {
+                <button type="button" [class.selected]="catalogPickerSelected(item)" (click)="toggleCatalogPickerItem(item)">
+                  <span class="picker-check" [class.checked]="catalogPickerSelected(item)"></span><span><strong>{{ recordName(item) }}</strong><small>{{ resultMeta(item) }}</small></span>
+                </button>
+              }
+            </div>
+            <button class="solid-action" type="button" [disabled]="!catalogPickerSelectedCount()" (click)="addCatalogPickerItems()">Add selected</button>
+          </section>
+        }
       </div>
 
-      <div class="status-row" *ngIf="message || error || !isOnline || offlineCheckouts.length">
-        <span class="success" *ngIf="message">{{ message }}</span>
-        <span class="error" *ngIf="error">{{ error }}</span>
-        <span [class.error]="!isOnline">{{ isOnline ? 'Online' : 'Offline' }}</span>
-        <span *ngIf="offlineCheckouts.length">Pending sync: {{ offlineCheckouts.length }}</span>
-        <span class="error" *ngIf="offlineConflictMessage">{{ offlineConflictMessage }}</span>
-        <button type="button" class="secondary-action" *ngIf="isOnline && offlineCheckouts.length > offlineConflictCount" [disabled]="syncingOffline" (click)="syncOfflineCheckouts()">{{ syncingOffline ? 'Syncing...' : 'Retry sync' }}</button>
-        <button type="button" class="secondary-action" *ngIf="offlineConflictCount" (click)="discardOfflineConflicts()">Discard failed ({{ offlineConflictCount }})</button>
-      </div>
+      @if (message || error || !isOnline || offlineCheckouts.length) {
+        <div class="status-row">
+          @if (message) {
+            <span class="success">{{ message }}</span>
+          }
+          @if (error) {
+            <span class="error">{{ error }}</span>
+          }
+          @if (!isOnline) {
+            <span class="error">Offline</span>
+          }
+          @if (offlineCheckouts.length) {
+            <span>Pending sync: {{ offlineCheckouts.length }}</span>
+          }
+          @if (offlineConflictMessage) {
+            <span class="error">{{ offlineConflictMessage }}</span>
+          }
+          @if (isOnline && offlineCheckouts.length > offlineConflictCount) {
+            <button type="button" class="secondary-action" [disabled]="syncingOffline" (click)="syncOfflineCheckouts()">{{ syncingOffline ? 'Syncing...' : 'Retry sync' }}</button>
+          }
+          @if (offlineConflictCount) {
+            <button type="button" class="secondary-action" (click)="discardOfflineConflicts()">Discard failed ({{ offlineConflictCount }})</button>
+          }
+        </div>
+      }
 
       <div class="form-grid compact">
         <label class="smart-field client-search-field">
           <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [ngModel]="clientSearchText" (ngModelChange)="setClientSearch($event)" (focus)="clientSearchActive = true" (blur)="closeClientSearchSoon()" placeholder="Search client by name, mobile, email or ID" /></div>
-          <div class="search-results client-results" *ngIf="showClientResults()">
-            <div class="client-results-head"><strong>{{ clientSearchHeading() }}</strong><span>{{ filteredClients().length }} shown</span></div>
-            <article class="client-result" *ngFor="let client of filteredClients(); trackBy: trackById">
-              <button type="button" class="client-result-main" (mousedown)="$event.preventDefault()" (click)="selectClient(client)">
-                <strong>{{ recordName(client) }}</strong><span>{{ client.phone || client.mobile || client.whatsapp || '-' }}</span><small *ngIf="client.email">{{ client.email }}</small>
-                <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em><em *ngIf="clientHasDuplicates(client)">Duplicate</em>
+          @if (showClientResults()) {
+            <div class="search-results client-results">
+              <div class="client-results-head"><strong>{{ clientSearchHeading() }}</strong><span>{{ filteredClients().length }} shown</span></div>
+              @for (client of filteredClients(); track trackById($index, client)) {
+                <article class="client-result">
+                  <button type="button" class="client-result-main" (mousedown)="$event.preventDefault()" (click)="selectClient(client)">
+                    <strong>{{ recordName(client) }}</strong><span>{{ client.phone || client.mobile || client.whatsapp || '-' }}</span>@if (client.email) {
+                    <small>{{ client.email }}</small>
+                  }
+                  <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em>@if (clientHasDuplicates(client)) {
+                  <em>Duplicate</em>
+                }
               </button>
               <div class="client-result-actions">
-                <a *ngIf="whatsappUrl(client)" [href]="whatsappUrl(client)" target="_blank" rel="noopener" (click)="$event.stopPropagation()">WA</a>
-                <a *ngIf="callUrl(client)" [href]="callUrl(client)" (click)="$event.stopPropagation()">Call</a>
+                @if (whatsappUrl(client)) {
+                  <a [href]="whatsappUrl(client)" target="_blank" rel="noopener" (click)="$event.stopPropagation()">WA</a>
+                }
+                @if (callUrl(client)) {
+                  <a [href]="callUrl(client)" (click)="$event.stopPropagation()">Call</a>
+                }
               </div>
             </article>
-          </div>
-        </label>
-        <button class="quick-add-client" type="button" (mousedown)="$event.preventDefault()" (click)="openQuickClient()"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"></circle><path d="M3.5 20c.8-4 3.1-6 6.5-6"></path><path d="M17 10v7M13.5 13.5h7"></path></svg></span>Add client</button>
-        <button class="solid-action" type="button" (click)="walkInClient()"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M5 20c1-4 3.4-6 7-6s6 2 7 6"></path></svg></span>Walk-in Client</button>
-        <button class="secondary-action" type="button" (click)="holdInvoice()" [disabled]="!canSave"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 5h8l8 8-7 7-8-8V5Z"></path><circle cx="9" cy="9" r="1.5"></circle></svg></span>Hold invoice</button>
+          }
+        </div>
+      }
+    </label>
+    <button class="quick-add-client" type="button" (mousedown)="$event.preventDefault()" (click)="openQuickClient()"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"></circle><path d="M3.5 20c.8-4 3.1-6 6.5-6"></path><path d="M17 10v7M13.5 13.5h7"></path></svg></span>Add client</button>
+    <button class="solid-action" type="button" (click)="walkInClient()"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M5 20c1-4 3.4-6 7-6s6 2 7 6"></path></svg></span>Walk-in Client</button>
+    <button class="secondary-action" type="button" (click)="holdInvoice()" [disabled]="!canSave"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 5h8l8 8-7 7-8-8V5Z"></path><circle cx="9" cy="9" r="1.5"></circle></svg></span>Hold invoice</button>
 
-        <section class="inline-client-form" *ngIf="quickClientOpen">
-          <div class="inline-client-heading"><h3>New client details</h3><button type="button" class="text-action" (click)="closeQuickClient()">Cancel</button></div>
-          <div class="inline-client-fields">
-            <label><span>Name</span><input type="text" [ngModel]="quickClient.name" name="quickClientName" (ngModelChange)="setQuickClientName($event)" /></label>
-            <label><span>Mobile</span><input type="tel" [(ngModel)]="quickClient.phone" name="quickClientPhone" /></label>
-            <label><span>Email</span><input type="email" [(ngModel)]="quickClient.email" name="quickClientEmail" /></label>
-            <label><span>Birthday</span><input type="text" [(ngModel)]="quickClient.birthday" name="quickClientBirthday" placeholder="DD/MM/YYYY" inputmode="numeric" /></label>
-            <label><span>Anniversary</span><input type="text" [(ngModel)]="quickClient.anniversary" name="quickClientAnniversary" placeholder="DD/MM/YYYY" inputmode="numeric" /></label>
-            <label><span>Tags</span><input type="text" [(ngModel)]="quickClient.tags" name="quickClientTags" placeholder="Tag 1, Tag 2" /></label>
-            <label class="notes-field"><span>Notes</span><textarea [(ngModel)]="quickClient.notes" name="quickClientNotes" rows="2"></textarea></label>
-          </div>
-          <div class="inline-client-footer"><span class="quick-client-error" *ngIf="quickClientError">{{ quickClientError }}</span><button class="solid-action" type="button" [disabled]="quickClientSaving" (click)="saveQuickClient()">{{ quickClientSaving ? 'Saving...' : 'Save client' }}</button></div>
+    @if (quickClientOpen) {
+      <section class="inline-client-form">
+        <div class="inline-client-heading"><h3>New client details</h3><button type="button" class="text-action" (click)="closeQuickClient()">Cancel</button></div>
+        <div class="inline-client-fields">
+          <label><span>Name</span><input type="text" [ngModel]="quickClient.name" name="quickClientName" (ngModelChange)="setQuickClientName($event)" /></label>
+          <label><span>Mobile</span><input type="tel" [(ngModel)]="quickClient.phone" name="quickClientPhone" /></label>
+          <label><span>Email</span><input type="email" [(ngModel)]="quickClient.email" name="quickClientEmail" /></label>
+          <label><span>Birthday</span><input type="text" [(ngModel)]="quickClient.birthday" name="quickClientBirthday" placeholder="DD/MM/YYYY" inputmode="numeric" /></label>
+          <label><span>Anniversary</span><input type="text" [(ngModel)]="quickClient.anniversary" name="quickClientAnniversary" placeholder="DD/MM/YYYY" inputmode="numeric" /></label>
+          <label><span>Tags</span><input type="text" [(ngModel)]="quickClient.tags" name="quickClientTags" placeholder="Tag 1, Tag 2" /></label>
+          <label class="notes-field"><span>Notes</span><textarea [(ngModel)]="quickClient.notes" name="quickClientNotes" rows="2"></textarea></label>
+        </div>
+        <div class="inline-client-footer">@if (quickClientError) {
+          <span class="quick-client-error">{{ quickClientError }}</span>
+          }<button class="solid-action" type="button" [disabled]="quickClientSaving" (click)="saveQuickClient()">{{ quickClientSaving ? 'Saving...' : 'Save client' }}</button></div>
         </section>
+      }
 
-        <label><span>Branch</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-7h6v7M8 9h.01M12 9h.01M16 9h.01"></path></svg></span><input type="text" [value]="branchName" readonly /></div></label>
-        <label><span>Date</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg></span><input type="text" [(ngModel)]="invoiceDate" placeholder="DD/MM/YYYY" /></div></label>
-        <label class="smart-field">
-          <span>Staff</span>
-          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M5 20c1-4 3.4-6 7-6s6 2 7 6"></path></svg></span><input type="search" [ngModel]="staffSearchText" (ngModelChange)="setHeaderStaffSearch($event)" (focus)="staffSearchActive = true" (blur)="closeHeaderStaffSearchSoon()" placeholder="Search staff" /></div>
-          <div class="search-results" *ngIf="showHeaderStaffResults()">
-            <button type="button" *ngFor="let person of filteredHeaderStaff(); trackBy: trackById" (mousedown)="$event.preventDefault()" (click)="selectHeaderStaff(person)">
-              <strong>{{ recordName(person) }}</strong>
-            </button>
-          </div>
-        </label>
-        <label><span>Source</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9S14.5 18.3 12 21M12 3C9.5 5.7 8.2 8.7 8.2 12S9.5 18.3 12 21"></path></svg></span><input type="text" [(ngModel)]="source" placeholder="Counter" /></div></label>
-        <label *ngIf="cashTills.length"><span>Cash till</span><div class="control-with-icon"><select [(ngModel)]="selectedCashTillId"><option value="" [disabled]="cashTills.length > 1">Select till</option><option *ngFor="let till of cashTills" [value]="till.id">{{ till.tillName }} ({{ till.tillCode }})</option></select></div></label>
-        <label *ngIf="terminals.length"><span>Terminal</span><div class="control-with-icon"><select [(ngModel)]="selectedTerminalId"><option value="">Select terminal</option><option *ngFor="let terminal of terminals" [value]="terminal.id">{{ terminal.terminalName }} ({{ terminal.terminalCode }})</option></select></div></label>
-        <label class="wide-half">
-          <span>Appointment</span>
-          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M8 13h5"></path></svg></span><select [ngModel]="reference" (ngModelChange)="setCompletedAppointment($event)">
-            <option value="">Walk-in / no appointment</option>
-            <option *ngFor="let appointment of appointments; trackBy: trackById" [value]="appointment.id">{{ appointmentOptionLabel(appointment) }}</option>
-          </select></div>
-        </label>
-      </div>
-
-      <div class="quick-catalog-row">
-        <label class="smart-field">
-          <span>Add service</span>
-          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [(ngModel)]="quickServiceSearch" (focus)="quickServiceActive = true" (blur)="closeQuickServiceSearchSoon()" placeholder="Search service by name or code" /></div>
-          <div class="search-results" *ngIf="showQuickServiceResults()">
-            <button type="button" *ngFor="let service of filteredQuickServices(); trackBy: trackById" [class.selected]="isQuickServiceSelected(service)" (mousedown)="$event.preventDefault()" (click)="addQuickService(service)">
-              <strong>{{ recordName(service) }}</strong>
-              <span>{{ resultMeta(service) }}</span>
-              <em>{{ isQuickServiceSelected(service) ? 'Selected' : 'Select' }}</em>
-            </button>
-          </div>
-        </label>
-        <button type="button" class="secondary-action" (click)="addQuickService()">{{ quickServiceAddLabel() }}</button>
-        <label class="smart-field">
-          <span>Add product</span>
-          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [(ngModel)]="quickProductSearch" (focus)="quickProductActive = true" (blur)="closeQuickProductSearchSoon()" placeholder="Search product by name or code" /></div>
-          <div class="search-results" *ngIf="showQuickProductResults()">
-            <button type="button" *ngFor="let product of filteredQuickProducts(); trackBy: trackById" [class.selected]="isQuickProductSelected(product)" (mousedown)="$event.preventDefault()" (click)="addQuickProduct(product)">
-              <strong>{{ recordName(product) }}</strong>
-              <span>{{ resultMeta(product) }}</span>
-              <em>{{ isQuickProductSelected(product) ? 'Selected' : 'Select' }}</em>
-            </button>
-          </div>
-        </label>
-        <button type="button" class="secondary-action" (click)="addQuickProduct()">{{ quickProductAddLabel() }}</button>
-      </div>
-
-      <div class="addon-strip">
-        <button *ngIf="membershipSalesVisible" type="button" class="addon-field" [class.active]="activeAddonSale === 'membership'" [attr.aria-expanded]="activeAddonSale === 'membership'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('membership')">
-            <span><span class="ui-icon addon-icon green"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="M4 10h16M8 15h4"></path></svg></span>Membership sale</span>
-            <span class="addon-chevron" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="addon-field" [class.active]="activeAddonSale === 'package'" [attr.aria-expanded]="activeAddonSale === 'package'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('package')">
-          <span><span class="ui-icon addon-icon blue"><svg viewBox="0 0 24 24"><path d="M4 9h16v11H4z"></path><path d="M4 9l8-5 8 5M12 4v16"></path></svg></span>Package sale</span>
-          <span class="addon-chevron" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="addon-field" [class.active]="activeAddonSale === 'gift_card'" [attr.aria-expanded]="activeAddonSale === 'gift_card'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('gift_card')">
-          <span><span class="ui-icon addon-icon violet"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M4 14h16M12 10v10M8 10c-2-2-1-5 1.5-5 1.5 0 2.5 2 2.5 5M16 10c2-2 1-5-1.5-5-1.5 0-2.5 2-2.5 5"></path></svg></span>Gift card sale</span>
-          <span class="addon-chevron" aria-hidden="true">›</span>
-        </button>
-
-        <div id="addon-sale-editor" class="addon-editor" *ngIf="activeAddonSale">
-          <label *ngIf="activeAddonSale === 'membership'">Membership<select [(ngModel)]="selectedMembershipId"><option value="">Choose membership</option><option *ngFor="let plan of posMemberships; trackBy: trackById" [value]="plan.id">{{ addonLabel(plan) }}</option></select></label>
-          <label *ngIf="activeAddonSale === 'package'">Package<select [(ngModel)]="selectedPackageId"><option value="">Choose package</option><option *ngFor="let itemPackage of packages; trackBy: trackById" [value]="itemPackage.id">{{ addonLabel(itemPackage) }}</option></select></label>
-          <label *ngIf="activeAddonSale === 'gift_card'">Gift card amount<input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" /></label>
-          <button *ngIf="activeAddonSale === 'membership'" type="button" class="secondary-action" (click)="addMembershipSale()" [disabled]="!selectedMembershipId">Add membership</button>
-          <button *ngIf="activeAddonSale === 'package'" type="button" class="secondary-action" (click)="addPackageSale()" [disabled]="!selectedPackageId">Add package</button>
-          <button *ngIf="activeAddonSale === 'gift_card'" type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">Add gift card</button>
-        </div>
-      </div>
-
-      <section class="package-redemption" *ngIf="membershipRedeemRows.length">
-        <div class="package-active" *ngIf="membershipRedeemRows[0] as firstMembership">
-          <div><span>Active membership</span><strong>{{ firstMembership.membershipName }}</strong></div>
-          <div><span>Credits</span><strong>{{ membershipRedeemRows.length }}</strong></div>
-        </div>
-        <div class="package-redeem-head"><strong>Membership redemption</strong><span>{{ membershipRedeemRows.length }} row(s)</span></div>
-        <div class="package-redeem-table">
-          <div class="package-redeem-row package-redeem-title"><span>Membership</span><span>Service</span><span>Pending</span><span>Redeem</span><span>Staff</span><span></span></div>
-          <div class="package-redeem-row" *ngFor="let row of membershipRedeemRows; trackBy: trackById">
-            <div><strong>{{ row.membershipName }}</strong><small>Expiry {{ formatDate(row.expiresAt) }}</small></div><span>{{ row.serviceName }}</span><strong>{{ row.pendingQty }}</strong>
-            <input type="number" min="0" [max]="row.pendingQty" [disabled]="!membershipSettings.redemptionRules.allowPartialCredits" [ngModel]="row.redeemQty" (ngModelChange)="setMembershipRedeemQty(row, $event)" />
-            <select [ngModel]="row.staffId || ''" (ngModelChange)="setMembershipRedeemStaff(row, $event)"><option value="">{{ membershipSettings.redemptionRules.requireStaffConfirmation ? 'Select staff' : 'Staff' }}</option><option *ngFor="let person of staff; trackBy: trackById" [value]="person.id">{{ recordName(person) }}</option></select>
-            <button type="button" class="secondary-action" (click)="redeemMembershipRow(row)" [disabled]="row.pendingQty <= 0">Redeem</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="package-redemption" *ngIf="packageRedeemRows.length">
-        <div class="package-active" *ngIf="packageRedeemRows[0] as firstPackage">
-          <div><span>Active package</span><strong>{{ firstPackage.packageName }}</strong></div>
-          <div><span>Credits</span><strong>{{ packageRedeemRows.length }}</strong></div>
-        </div>
-        <div class="package-redeem-head">
-          <strong>Package redemption</strong>
-          <span>{{ packageRedeemRows.length }} row(s)</span>
-        </div>
-        <div class="package-redeem-table">
-          <div class="package-redeem-row package-redeem-title"><span>Package</span><span>Service</span><span>Pending</span><span>Redeem</span><span>Staff</span><span></span></div>
-          <div class="package-redeem-row" *ngFor="let row of packageRedeemRows; trackBy: trackById">
-            <div><strong>{{ row.packageName }}</strong><small>Expiry {{ formatDate(row.expiresAt) }}</small></div>
-            <span>{{ row.serviceName }}</span>
-            <strong>{{ row.pendingQty }}</strong>
-            <input type="number" min="0" [max]="row.pendingQty" [ngModel]="row.redeemQty" (ngModelChange)="setPackageRedeemQty(row, $event)" />
-            <select [ngModel]="row.staffId || ''" (ngModelChange)="setPackageRedeemStaff(row, $event)">
-              <option value="">Staff</option>
-              <option *ngFor="let person of staff; trackBy: trackById" [value]="person.id">{{ recordName(person) }}</option>
-            </select>
-            <button type="button" class="secondary-action" (click)="redeemPackageRow(row)" [disabled]="row.pendingQty <= 0">Redeem</button>
-          </div>
-        </div>
-      </section>
-
-      <div class="items-table">
-        <div class="items-head"><span>#</span><span>Item</span><span>Staff</span><span>Qty</span><span>Unit Price</span><span>Discount</span><span>Tax</span><span>Amount</span><span></span></div>
-        <div class="item-row" *ngFor="let line of saleLines; let lineIndex = index; trackBy: trackByLine">
-          <span class="line-index">{{ lineIndex + 1 }}</span>
-          <div class="item-summary">
-            <span class="type-chip" [class.product-chip]="line.lineType === 'product'">{{ typeLabel(line.lineType) }}</span>
-            <strong *ngIf="line.lineType !== 'custom'">{{ line.itemName }}</strong>
-            <small class="roundoff-line" *ngIf="settlementDiscountForLine(line) > 0">Round-off discount {{ settlementDiscountForLine(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</small>
-            <input *ngIf="line.lineType === 'custom'" type="text" [ngModel]="line.customName" (ngModelChange)="setLineItemSearch(line, $event)" placeholder="Custom item" />
-          </div>
-          <div class="staff-cell smart-field">
-            <div class="staff-primary">
-              <input type="search" [ngModel]="line.staffSearchText" (ngModelChange)="setLineStaffSearch(line, $event)" (focus)="activeLineStaffId = line.id" (blur)="closeLineStaffSearchSoon(line)" placeholder="Search staff" />
-              <button class="split-button" type="button" (click)="addStaffSplit(line)">+ Staff</button>
-            </div>
-            <div class="search-results" *ngIf="showLineStaffResults(line)">
-              <button type="button" *ngFor="let person of filteredLineStaff(line); trackBy: trackById" (mousedown)="$event.preventDefault()" (click)="selectLineStaff(line, person)">
+      <label><span>Branch</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-7h6v7M8 9h.01M12 9h.01M16 9h.01"></path></svg></span><input type="text" [value]="branchName" readonly /></div></label>
+      <label><span>Date</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M4 10h16"></path></svg></span><input type="text" [(ngModel)]="invoiceDate" placeholder="DD/MM/YYYY" /></div></label>
+      <label class="smart-field">
+        <span>Staff</span>
+        <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M5 20c1-4 3.4-6 7-6s6 2 7 6"></path></svg></span><input type="search" [ngModel]="staffSearchText" (ngModelChange)="setHeaderStaffSearch($event)" (focus)="staffSearchActive = true" (blur)="closeHeaderStaffSearchSoon()" placeholder="Search staff" /></div>
+        @if (showHeaderStaffResults()) {
+          <div class="search-results">
+            @for (person of filteredHeaderStaff(); track trackById($index, person)) {
+              <button type="button" (mousedown)="$event.preventDefault()" (click)="selectHeaderStaff(person)">
                 <strong>{{ recordName(person) }}</strong>
               </button>
-            </div>
-            <div class="split-lines" *ngIf="line.staffSplits.length">
-              <div class="split-line" *ngFor="let split of line.staffSplits; let splitIndex = index; trackBy: trackBySplit">
+            }
+          </div>
+        }
+      </label>
+      <label><span>Source</span><div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9S14.5 18.3 12 21M12 3C9.5 5.7 8.2 8.7 8.2 12S9.5 18.3 12 21"></path></svg></span><input type="text" [(ngModel)]="source" placeholder="Counter" /></div></label>
+      @if (cashTills.length) {
+        <label><span>Cash till</span><div class="control-with-icon"><select [(ngModel)]="selectedCashTillId"><option value="" [disabled]="cashTills.length > 1">Select till</option>@for (till of cashTills; track till) {
+        <option [value]="till.id">{{ till.tillName }} ({{ till.tillCode }})</option>
+      }</select></div></label>
+    }
+    @if (terminals.length) {
+      <label><span>Terminal</span><div class="control-with-icon"><select [(ngModel)]="selectedTerminalId"><option value="">Select terminal</option>@for (terminal of terminals; track terminal) {
+      <option [value]="terminal.id">{{ terminal.terminalName }} ({{ terminal.terminalCode }})</option>
+    }</select></div></label>
+  }
+  <label class="wide-half">
+    <span>Appointment</span>
+    <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M8 13h5"></path></svg></span><select [ngModel]="reference" (ngModelChange)="setCompletedAppointment($event)">
+    <option value="">Walk-in / no appointment</option>
+    @for (appointment of appointments; track trackById($index, appointment)) {
+      <option [value]="appointment.id">{{ appointmentOptionLabel(appointment) }}</option>
+    }
+  </select></div>
+</label>
+</div>
+
+<div class="quick-catalog-row">
+  <label class="smart-field">
+    <span>Add service</span>
+    <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [(ngModel)]="quickServiceSearch" (focus)="quickServiceActive = true" (blur)="closeQuickServiceSearchSoon()" placeholder="Search service by name or code" /></div>
+    @if (showQuickServiceResults()) {
+      <div class="search-results">
+        @for (service of filteredQuickServices(); track trackById($index, service)) {
+          <button type="button" [class.selected]="isQuickServiceSelected(service)" (mousedown)="$event.preventDefault()" (click)="addQuickService(service)">
+            <strong>{{ recordName(service) }}</strong>
+            <span>{{ resultMeta(service) }}</span>
+            <em>{{ isQuickServiceSelected(service) ? 'Selected' : 'Select' }}</em>
+          </button>
+        }
+      </div>
+    }
+  </label>
+  <button type="button" class="secondary-action" (click)="addQuickService()">{{ quickServiceAddLabel() }}</button>
+  <label class="smart-field">
+    <span>Add product</span>
+    <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [(ngModel)]="quickProductSearch" (focus)="quickProductActive = true" (blur)="closeQuickProductSearchSoon()" placeholder="Search product by name or code" /></div>
+    @if (showQuickProductResults()) {
+      <div class="search-results">
+        @for (product of filteredQuickProducts(); track trackById($index, product)) {
+          <button type="button" [class.selected]="isQuickProductSelected(product)" (mousedown)="$event.preventDefault()" (click)="addQuickProduct(product)">
+            <strong>{{ recordName(product) }}</strong>
+            <span>{{ resultMeta(product) }}</span>
+            <em>{{ isQuickProductSelected(product) ? 'Selected' : 'Select' }}</em>
+          </button>
+        }
+      </div>
+    }
+  </label>
+  <button type="button" class="secondary-action" (click)="addQuickProduct()">{{ quickProductAddLabel() }}</button>
+</div>
+
+<div class="addon-strip">
+  @if (membershipSalesVisible) {
+    <button type="button" class="addon-field" [class.active]="activeAddonSale === 'membership'" [attr.aria-expanded]="activeAddonSale === 'membership'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('membership')">
+      <span><span class="ui-icon addon-icon green"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="M4 10h16M8 15h4"></path></svg></span>Membership sale</span>
+      <span class="addon-chevron" aria-hidden="true">›</span>
+    </button>
+  }
+  <button type="button" class="addon-field" [class.active]="activeAddonSale === 'package'" [attr.aria-expanded]="activeAddonSale === 'package'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('package')">
+    <span><span class="ui-icon addon-icon blue"><svg viewBox="0 0 24 24"><path d="M4 9h16v11H4z"></path><path d="M4 9l8-5 8 5M12 4v16"></path></svg></span>Package sale</span>
+    <span class="addon-chevron" aria-hidden="true">›</span>
+  </button>
+  <button type="button" class="addon-field" [class.active]="activeAddonSale === 'gift_card'" [attr.aria-expanded]="activeAddonSale === 'gift_card'" aria-controls="addon-sale-editor" (click)="toggleAddonSale('gift_card')">
+    <span><span class="ui-icon addon-icon violet"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"></rect><path d="M4 14h16M12 10v10M8 10c-2-2-1-5 1.5-5 1.5 0 2.5 2 2.5 5M16 10c2-2 1-5-1.5-5-1.5 0-2.5 2-2.5 5"></path></svg></span>Gift card sale</span>
+    <span class="addon-chevron" aria-hidden="true">›</span>
+  </button>
+
+  @if (activeAddonSale) {
+    <div id="addon-sale-editor" class="addon-editor">
+      @if (activeAddonSale === 'membership') {
+        <label>Membership<select [(ngModel)]="selectedMembershipId"><option value="">Choose membership</option>@for (plan of posMemberships; track trackById($index, plan)) {
+        <option [value]="plan.id">{{ addonLabel(plan) }}</option>
+      }</select></label>
+    }
+    @if (activeAddonSale === 'package') {
+      <label>Package<select [(ngModel)]="selectedPackageId"><option value="">Choose package</option>@for (itemPackage of packages; track trackById($index, itemPackage)) {
+      <option [value]="itemPackage.id">{{ addonLabel(itemPackage) }}</option>
+    }</select></label>
+  }
+  @if (activeAddonSale === 'gift_card') {
+    <label>Gift card amount<input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" /></label>
+  }
+  @if (activeAddonSale === 'membership') {
+    <button type="button" class="secondary-action" (click)="addMembershipSale()" [disabled]="!selectedMembershipId">Add membership</button>
+  }
+  @if (activeAddonSale === 'package') {
+    <button type="button" class="secondary-action" (click)="addPackageSale()" [disabled]="!selectedPackageId">Add package</button>
+  }
+  @if (activeAddonSale === 'gift_card') {
+    <button type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">Add gift card</button>
+  }
+</div>
+}
+</div>
+
+@if (membershipRedeemRows.length) {
+  <section class="package-redemption">
+    @if (membershipRedeemRows[0]; as firstMembership) {
+      <div class="package-active">
+        <div><span>Active membership</span><strong>{{ firstMembership.membershipName }}</strong></div>
+        <div><span>Credits</span><strong>{{ membershipRedeemRows.length }}</strong></div>
+      </div>
+    }
+    <div class="package-redeem-head"><strong>Membership redemption</strong><span>{{ membershipRedeemRows.length }} row(s)</span></div>
+    <div class="package-redeem-table">
+      <div class="package-redeem-row package-redeem-title"><span>Membership</span><span>Service</span><span>Pending</span><span>Redeem</span><span>Staff</span><span></span></div>
+      @for (row of membershipRedeemRows; track trackById($index, row)) {
+        <div class="package-redeem-row">
+          <div><strong>{{ row.membershipName }}</strong><small>Expiry {{ formatDate(row.expiresAt) }}</small></div><span>{{ row.serviceName }}</span><strong>{{ row.pendingQty }}</strong>
+          <input type="number" min="0" [max]="row.pendingQty" [disabled]="!membershipSettings.redemptionRules.allowPartialCredits" [ngModel]="row.redeemQty" (ngModelChange)="setMembershipRedeemQty(row, $event)" />
+          <select [ngModel]="row.staffId || ''" (ngModelChange)="setMembershipRedeemStaff(row, $event)"><option value="">{{ membershipSettings.redemptionRules.requireStaffConfirmation ? 'Select staff' : 'Staff' }}</option>@for (person of staff; track trackById($index, person)) {
+          <option [value]="person.id">{{ recordName(person) }}</option>
+        }</select>
+        <button type="button" class="secondary-action" (click)="redeemMembershipRow(row)" [disabled]="row.pendingQty <= 0">Redeem</button>
+      </div>
+    }
+  </div>
+</section>
+}
+
+@if (packageRedeemRows.length) {
+  <section class="package-redemption">
+    @if (packageRedeemRows[0]; as firstPackage) {
+      <div class="package-active">
+        <div><span>Active package</span><strong>{{ firstPackage.packageName }}</strong></div>
+        <div><span>Credits</span><strong>{{ packageRedeemRows.length }}</strong></div>
+      </div>
+    }
+    <div class="package-redeem-head">
+      <strong>Package redemption</strong>
+      <span>{{ packageRedeemRows.length }} row(s)</span>
+    </div>
+    <div class="package-redeem-table">
+      <div class="package-redeem-row package-redeem-title"><span>Package</span><span>Service</span><span>Pending</span><span>Redeem</span><span>Staff</span><span></span></div>
+      @for (row of packageRedeemRows; track trackById($index, row)) {
+        <div class="package-redeem-row">
+          <div><strong>{{ row.packageName }}</strong><small>Expiry {{ formatDate(row.expiresAt) }}</small></div>
+          <span>{{ row.serviceName }}</span>
+          <strong>{{ row.pendingQty }}</strong>
+          <input type="number" min="0" [max]="row.pendingQty" [ngModel]="row.redeemQty" (ngModelChange)="setPackageRedeemQty(row, $event)" />
+          <select [ngModel]="row.staffId || ''" (ngModelChange)="setPackageRedeemStaff(row, $event)">
+            <option value="">Staff</option>
+            @for (person of staff; track trackById($index, person)) {
+              <option [value]="person.id">{{ recordName(person) }}</option>
+            }
+          </select>
+          <button type="button" class="secondary-action" (click)="redeemPackageRow(row)" [disabled]="row.pendingQty <= 0">Redeem</button>
+        </div>
+      }
+    </div>
+  </section>
+}
+
+<div class="items-table">
+  <div class="items-head"><span>#</span><span>Item</span><span>Staff</span><span>Qty</span><span>Unit Price</span><span>Discount</span><span>Tax</span><span>Amount</span><span></span></div>
+  @for (line of saleLines; track trackByLine(lineIndex, line); let lineIndex = $index) {
+    <div class="item-row">
+      <span class="line-index">{{ lineIndex + 1 }}</span>
+      <div class="item-summary">
+        <span class="type-chip" [class.product-chip]="line.lineType === 'product'">{{ typeLabel(line.lineType) }}</span>
+        @if (line.lineType !== 'custom') {
+          <strong>{{ line.itemName }}</strong>
+        }
+        @if (settlementDiscountForLine(line) > 0) {
+          <small class="roundoff-line">Round-off discount {{ settlementDiscountForLine(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</small>
+        }
+        @if (line.lineType === 'custom') {
+          <input type="text" [ngModel]="line.customName" (ngModelChange)="setLineItemSearch(line, $event)" placeholder="Custom item" />
+        }
+      </div>
+      <div class="staff-cell smart-field">
+        <div class="staff-primary">
+          <input type="search" [ngModel]="line.staffSearchText" (ngModelChange)="setLineStaffSearch(line, $event)" (focus)="activeLineStaffId = line.id" (blur)="closeLineStaffSearchSoon(line)" placeholder="Search staff" />
+          <button class="split-button" type="button" (click)="addStaffSplit(line)">+ Staff</button>
+        </div>
+        @if (showLineStaffResults(line)) {
+          <div class="search-results">
+            @for (person of filteredLineStaff(line); track trackById($index, person)) {
+              <button type="button" (mousedown)="$event.preventDefault()" (click)="selectLineStaff(line, person)">
+                <strong>{{ recordName(person) }}</strong>
+              </button>
+            }
+          </div>
+        }
+        @if (line.staffSplits.length) {
+          <div class="split-lines">
+            @for (split of line.staffSplits; track trackBySplit(splitIndex, split); let splitIndex = $index) {
+              <div class="split-line">
                 <span>{{ splitIndex + 1 }}</span>
                 <select [ngModel]="split.staffId || ''" (ngModelChange)="setLineSplitStaff(line, splitIndex, $event)">
                   <option value="">Staff</option>
-                  <option *ngFor="let person of staff; trackBy: trackById" [value]="person.id">{{ recordName(person) }}</option>
+                  @for (person of staff; track trackById($index, person)) {
+                    <option [value]="person.id">{{ recordName(person) }}</option>
+                  }
                 </select>
                 <label class="split-percent"><input type="number" min="0" max="100" [ngModel]="split.percent" (ngModelChange)="setLineSplitPercent(line, splitIndex, $event)" [attr.aria-label]="'Staff ' + (splitIndex + 1) + ' split percentage'" /><span>%</span></label>
                 <button class="split-remove" type="button" (click)="removeStaffSplit(line, splitIndex)">×</button>
               </div>
-              <small [class.warning-text]="splitPercentTotal(line) !== 100">Split total {{ splitPercentTotal(line) }}%</small>
-            </div>
+            }
+            <small [class.warning-text]="splitPercentTotal(line) !== 100">Split total {{ splitPercentTotal(line) }}%</small>
           </div>
-          <div class="qty-stepper">
-            <button type="button" (click)="decrementLineQty(line)">−</button>
-            <input type="number" min="0.01" step="0.01" [(ngModel)]="line.quantity" />
-            <button type="button" (click)="incrementLineQty(line)">+</button>
-          </div>
-          <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.unitPrice" placeholder="0" /></label>
-          <label class="item-cell discount-combo"><select [ngModel]="line.discountType" (ngModelChange)="setLineDiscountType(line, $event)"><option value="amount">₹</option><option value="percent">%</option></select><input type="number" min="0" step="0.01" [ngModel]="line.discount" (ngModelChange)="setLineDiscount(line, $event)" placeholder="0" /></label>
-          <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.taxPercent" placeholder="0" /></label>
-          <strong class="line-total">{{ lineTotalPaise(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
-          <button class="icon-action kebab-action" type="button" (click)="removeSaleLine(line)" aria-label="Remove line"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
-        </div>
+        }
       </div>
-      <div class="items-footer">
-        <button type="button" class="secondary-action clear-lines" (click)="clearSaleLines()"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></span>Clear all</button>
-        <div class="items-footer-total"><span>Items: {{ itemCount }}</span><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></div>
+      <div class="qty-stepper">
+        <button type="button" (click)="decrementLineQty(line)">−</button>
+        <input type="number" min="0.01" step="0.01" [(ngModel)]="line.quantity" />
+        <button type="button" (click)="incrementLineQty(line)">+</button>
       </div>
-    </section>
+      <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.unitPrice" placeholder="0" /></label>
+      <label class="item-cell discount-combo"><select [ngModel]="line.discountType" (ngModelChange)="setLineDiscountType(line, $event)"><option value="amount">₹</option><option value="percent">%</option></select><input type="number" min="0" step="0.01" [ngModel]="line.discount" (ngModelChange)="setLineDiscount(line, $event)" placeholder="0" /></label>
+      <label class="item-cell"><input type="number" min="0" step="0.01" [(ngModel)]="line.taxPercent" placeholder="0" /></label>
+      <strong class="line-total">{{ lineTotalPaise(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
+      <button class="icon-action kebab-action" type="button" (click)="removeSaleLine(line)" aria-label="Remove line"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="12" cy="19" r="1.8"></circle></svg></button>
+    </div>
+  }
+</div>
+<div class="items-footer">
+  <button type="button" class="secondary-action clear-lines" (click)="clearSaleLines()"><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"></path><path d="M10 11v5M14 11v5"></path></svg></span>Clear all</button>
+  <div class="items-footer-total"><span>Items: {{ itemCount }}</span><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><span class="ui-icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"></path></svg></span></div>
+</div>
+</section>
 
-    <aside class="settlement-panel">
-      <section class="card-section">
-        <p class="eyebrow">Settlement</p>
-        <h2>Cart and payment</h2>
-        <div class="settlement-grid">
-          <label><span>Discount</span><input type="number" min="0" step="0.01" [(ngModel)]="billDiscount" placeholder="0" /></label>
-          <label><span>Type</span><select [(ngModel)]="billDiscountType"><option value="amount">₹</option><option value="percent">%</option></select></label>
-          <label><span>Tip</span><input type="number" min="0" step="0.01" [(ngModel)]="tipAmount" placeholder="0" /></label>
-          <label class="wide"><span>Coupon code</span><input type="text" [(ngModel)]="couponCode" placeholder="Coupon" /></label>
-          <label class="check-line wide"><input type="checkbox" [(ngModel)]="roundTotal" /><span>Round invoice to nearest ₹1</span></label>
-        </div>
-      </section>
+<aside class="settlement-panel">
+  <section class="card-section">
+    <p class="eyebrow">Settlement</p>
+    <h2>Cart and payment</h2>
+    <div class="settlement-grid">
+      <label><span>Discount</span><input type="number" min="0" step="0.01" [(ngModel)]="billDiscount" placeholder="0" /></label>
+      <label><span>Type</span><select [(ngModel)]="billDiscountType"><option value="amount">₹</option><option value="percent">%</option></select></label>
+      <label><span>Tip</span><input type="number" min="0" step="0.01" [(ngModel)]="tipAmount" placeholder="0" /></label>
+      <label class="wide"><span>Coupon code</span><div class="coupon-input"><input type="text" [ngModel]="couponCode" (ngModelChange)="onCouponCodeInput($event)" placeholder="Coupon" /><button type="button" (click)="applyCoupon()" [disabled]="couponApplying || !couponCode">{{ couponApplying ? 'Checking...' : 'Apply' }}</button></div>@if (couponDiscountPaise > 0) {
+      <small class="gift-card-state success">Applied · {{ couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }} off</small>
+      }@if (couponError) {
+      <small class="gift-card-state error">{{ couponError }}</small>
+    }</label>
+    <label class="check-line wide"><input type="checkbox" [(ngModel)]="roundTotal" /><span>Round invoice to nearest ₹1</span></label>
+  </div>
+</section>
 
-      <section class="summary-card">
-        <div><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div><span>Manual discount</span><strong>{{ billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div><span>Membership discount</span><strong>{{ lineDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div *ngIf="roundOffDiscountPaise > 0"><span>Round-off service discount</span><strong>-{{ roundOffDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div *ngIf="membershipRedeemCount() > 0"><span>Membership redeem</span><strong>{{ membershipRedeemCount() }}</strong></div>
-        <div *ngIf="packageRedeemCount() > 0"><span>Package redeem</span><strong>{{ packageRedeemCount() }}</strong></div>
-        <div><span>GST</span><strong>{{ gstPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div><span>Staff tips</span><strong>{{ tipPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div class="total"><span>Total</span><strong>{{ totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div><span>Paid now</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-        <div class="due"><span>Balance due</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-      </section>
+<section class="summary-card">
+  <div><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  <div><span>Manual discount</span><strong>{{ billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  @if (couponDiscountPaise > 0) {
+    <div><span>Coupon discount</span><strong>-{{ couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  }
+  <div><span>Membership discount</span><strong>{{ lineDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  @if (roundOffDiscountPaise > 0) {
+    <div><span>Round-off service discount</span><strong>-{{ roundOffDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  }
+  @if (membershipRedeemCount() > 0) {
+    <div><span>Membership redeem</span><strong>{{ membershipRedeemCount() }}</strong></div>
+  }
+  @if (packageRedeemCount() > 0) {
+    <div><span>Package redeem</span><strong>{{ packageRedeemCount() }}</strong></div>
+  }
+  <div><span>GST</span><strong>{{ gstPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  <div><span>Staff tips</span><strong>{{ tipPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  <div class="total"><span>Total</span><strong>{{ totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  <div><span>Paid now</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  <div class="due"><span>Balance due</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+</section>
 
-      <section class="payment-card" id="tip-register">
-        <div class="payment-head"><h3>Payment collection</h3><div><button type="button" (click)="clearPayments()">Clear</button></div></div>
-        <div class="payment-grid">
-          <label class="payment-method" [class.gift-card-method]="method.code === 'gift_card'" *ngFor="let method of paymentMethods; trackBy: trackByPayment" (click)="fillPayment(method)">
-            <span>{{ method.label }}</span>
-            <button type="button" (click)="$event.stopPropagation(); fillPayment(method)">Click {{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</button>
-            <input type="number" min="0" step="0.01" [(ngModel)]="paymentInputs[method.code]" placeholder="0" (click)="$event.stopPropagation()" (focus)="(!paymentInputs[method.code] || paymentInputs[method.code] === '0') && fillPayment(method)" />
-            <div class="gift-card-reference" *ngIf="method.code === 'gift_card'" (click)="$event.stopPropagation()">
-              <input type="text" aria-label="Gift card code" placeholder="Gift card code" autocomplete="off" [ngModel]="giftCardPaymentCode" (ngModelChange)="onGiftCardCodeInput($event)" (keydown.enter)="$event.preventDefault(); verifyGiftCard()" />
-              <button type="button" [disabled]="giftCardLookupLoading || !giftCardPaymentCode" (click)="verifyGiftCard()">{{ giftCardLookupLoading ? 'Checking...' : 'Verify' }}</button>
-            </div>
-            <small class="gift-card-state success" *ngIf="method.code === 'gift_card' && verifiedGiftCard">{{ verifiedGiftCard.clientName || verifiedGiftCard.code }} · {{ verifiedGiftCard.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }} available</small>
-            <small class="gift-card-state error" *ngIf="method.code === 'gift_card' && giftCardLookupError">{{ giftCardLookupError }}</small>
-          </label>
-          <p class="empty" *ngIf="!paymentMethods.length">No payment modes yet.</p>
-        </div>
-        <div class="overpay-actions" *ngIf="unappliedOverpayPaise > 0">
-          <span>Extra {{ unappliedOverpayPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
-          <button type="button" (click)="applyOverpayToWallet()">Add wallet</button>
-          <button type="button" (click)="applyOverpayToTip()">Staff tip</button>
-        </div>
-        <div class="balance-settlement" *ngIf="paidNowPaise > 0 && partialBalancePaise > 0">
-          <button type="button" [class.active]="balanceSettlement === 'unpaid'" (click)="selectBalanceSettlement('unpaid')"><span>Next time / Unpaid</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
-          <button type="button" [class.active]="balanceSettlement === 'round_off'" (click)="selectBalanceSettlement('round_off')"><span>Round off due</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
-        </div>
-        <p class="settlement-error" *ngIf="roundOffError">{{ roundOffError }}</p>
-        <p class="wallet-line" *ngIf="walletCreditPaise > 0">Wallet credit: {{ walletCreditPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
-        <p class="wallet-line">Wallet balance: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
-        <label class="reward-redemption" *ngIf="selectedClientId && clientKpi.hasActiveMembership && membershipSettings.creditsBenefits.rewardPointsEnabled && clientKpi.rewardPointsBalance > 0">
-          <span>Reward points <small>{{ clientKpi.rewardPointsBalance }} available</small></span>
-          <input type="number" min="0" step="1" [max]="clientKpi.rewardPointsBalance" [(ngModel)]="rewardPointsToRedeem" placeholder="Points to redeem" />
+<section class="payment-card" id="tip-register">
+  <div class="payment-head"><h3>Payment collection</h3><div><button type="button" (click)="clearPayments()">Clear</button></div></div>
+  @if (selectedClientId && clientKpi.unpaidPaise > 0) {
+    <section class="unpaid-receive">
+      <div class="unpaid-receive-head">
+        <span>Previous unpaid</span>
+        <strong>{{ clientKpi.unpaidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong>
+      </div>
+      <div class="unpaid-receive-grid">
+        <label>
+          <span>Amount</span>
+          <input type="number" min="0" step="0.01" [max]="clientKpi.unpaidPaise / 100" [(ngModel)]="unpaidReceiveAmount" (ngModelChange)="onUnpaidReceiveEdit()" placeholder="Amount" />
         </label>
-      </section>
-
-      <section class="review-card">
-        <h3>Review payment split</h3>
-        <div class="review-grid">
-          <div><span>Advance adjusted</span><strong>{{ advanceAdjustedPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-          <div><span>Collection amount</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
-          <div><span>Due after save</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+        <label>
+          <span>Mode</span>
+          <select [(ngModel)]="unpaidReceiveMethod" (ngModelChange)="onUnpaidReceiveEdit()">
+            @for (mode of paymentMethods; track trackByPayment($index, mode)) {
+              <option [value]="mode.code">{{ mode.label }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Reference</span>
+          <input type="text" [(ngModel)]="unpaidReceiveReference" (ngModelChange)="onUnpaidReceiveEdit()" placeholder="Optional reference" />
+        </label>
+        <div class="unpaid-receive-actions">
+          <button type="button" (click)="fillClientUnpaid()">Fill due</button>
+          <button class="receive-due-button" type="button" [disabled]="unpaidReceiveLoading" (click)="receiveClientUnpaid()">{{ unpaidReceiveLoading ? 'Receiving...' : 'Receive unpaid' }}</button>
         </div>
-      </section>
-
-      <div class="save-actions">
-        <button class="save-button" type="button" (click)="finalizeSale()" [disabled]="!canSave">{{ saving ? 'Saving...' : isOnline ? 'Save sale and invoice' : 'Save offline checkout' }}</button>
       </div>
+      @if (unpaidReceiveMethod === 'wallet') {
+        <small>Wallet available: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</small>
+      }
+      @if (unpaidReceiveMessage) {
+        <p class="unpaid-receive-result">{{ unpaidReceiveMessage }}</p>
+      }
+    </section>
+  }
+  <div class="payment-grid">
+    @for (method of paymentMethods; track trackByPayment($index, method)) {
+      <label class="payment-method" [class.gift-card-method]="method.code === 'gift_card'" (click)="fillPayment(method)">
+        <span>{{ method.label }}</span>
+        <button type="button" (click)="$event.stopPropagation(); fillPayment(method)">Click {{ paymentFillPaise(method) / 100 | currency:'INR':'symbol':'1.0-2' }}</button>
+        <input type="number" min="0" step="0.01" [(ngModel)]="paymentInputs[method.code]" placeholder="0" (click)="$event.stopPropagation()" (focus)="(!paymentInputs[method.code] || paymentInputs[method.code] === '0') && fillPayment(method)" />
+        @if (method.code === 'wallet') {
+          <small class="gift-card-state">{{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }} available</small>
+        }
+        @if (method.code === 'wallet' && walletRedemptionError()) {
+          <small class="gift-card-state error">{{ walletRedemptionError() }}</small>
+        }
+        @if (method.code === 'gift_card') {
+          <div class="gift-card-reference" (click)="$event.stopPropagation()">
+            <input type="text" aria-label="Gift card code" placeholder="Gift card code" autocomplete="off" [ngModel]="giftCardPaymentCode" (ngModelChange)="onGiftCardCodeInput($event)" (keydown.enter)="$event.preventDefault(); verifyGiftCard()" />
+            <button type="button" [disabled]="giftCardLookupLoading || !giftCardPaymentCode" (click)="verifyGiftCard()">{{ giftCardLookupLoading ? 'Checking...' : 'Verify' }}</button>
+          </div>
+        }
+        @if (method.code === 'gift_card' && verifiedGiftCard) {
+          <small class="gift-card-state success">{{ verifiedGiftCard.clientName || verifiedGiftCard.code }} · {{ verifiedGiftCard.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }} available</small>
+        }
+        @if (method.code === 'gift_card' && giftCardLookupError) {
+          <small class="gift-card-state error">{{ giftCardLookupError }}</small>
+        }
+      </label>
+    }
+    @if (!paymentMethods.length) {
+      <p class="empty">No payment modes yet.</p>
+    }
+  </div>
+  @if (unappliedOverpayPaise > 0) {
+    <div class="overpay-actions">
+      <span>Extra {{ unappliedOverpayPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span>
+      <button type="button" (click)="applyOverpayToWallet()">Add wallet</button>
+      <button type="button" (click)="applyOverpayToTip()">Staff tip</button>
+    </div>
+  }
+  @if (paidNowPaise > 0 && partialBalancePaise > 0) {
+    <div class="balance-settlement">
+      <button type="button" [class.active]="balanceSettlement === 'unpaid'" (click)="selectBalanceSettlement('unpaid')"><span>Next time / Unpaid</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
+      <button type="button" [class.active]="balanceSettlement === 'round_off'" (click)="selectBalanceSettlement('round_off')"><span>Round off due</span><strong>{{ partialBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></button>
+    </div>
+  }
+  @if (roundOffError) {
+    <p class="settlement-error">{{ roundOffError }}</p>
+  }
+  @if (walletCreditPaise > 0) {
+    <p class="wallet-line">Wallet credit: {{ walletCreditPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
+  }
+  <p class="wallet-line">Wallet balance: {{ clientKpi.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</p>
+  @if (selectedClientId && clientKpi.hasActiveMembership && membershipSettings.creditsBenefits.rewardPointsEnabled && clientKpi.rewardPointsBalance > 0) {
+    <label class="reward-redemption">
+      <span>Reward points <small>{{ clientKpi.rewardPointsBalance }} available</small></span>
+      <input type="number" min="0" step="1" [max]="clientKpi.rewardPointsBalance" [(ngModel)]="rewardPointsToRedeem" placeholder="Points to redeem" />
+    </label>
+  }
+</section>
 
-      <section class="saved-card" *ngIf="selectedSale">
-        <div><span>Invoice</span><strong>{{ selectedSale.invoiceNumber || selectedSale.invoice_number || selectedSale.id }}</strong></div>
-        <button type="button" (click)="printSelectedSale()">Print</button>
-      </section>
-    </aside>
-  </main>
+<section class="review-card">
+  <h3>Review payment split</h3>
+  <div class="review-grid">
+    <div><span>Advance adjusted</span><strong>{{ advanceAdjustedPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+    <div><span>Collection amount</span><strong>{{ paidNowPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+    <div><span>Due after save</span><strong>{{ balanceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  </div>
+</section>
+
+<div class="save-actions">
+  @if (balanceDuePaise > 0) {
+    <button class="secondary-action" type="button" (click)="saveAsUnpaid()" [disabled]="!canSave">Save as unpaid</button>
+  }
+  <button class="save-button" type="button" (click)="finalizeSale()" [disabled]="!canSave">{{ saving ? 'Saving...' : isOnline ? 'Save sale and invoice' : 'Save offline checkout' }}</button>
+</div>
+
+@if (selectedSale) {
+  <section class="saved-card">
+    <div><span>Invoice</span><strong>{{ selectedSale.invoiceNumber || selectedSale.invoice_number || selectedSale.id }}</strong></div>
+    <button type="button" (click)="printSelectedSale()">Print</button>
+  </section>
+}
+</aside>
+</main>
 
 </section>

@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { BranchNamePipe } from '../../../shared/pipes/branch-name.pipe';
 
 type Tab = 'overview' | 'comparison' | 'ledger' | 'fixedAssets' | 'deferredRevenue' | 'periods';
 type Drawer = 'journal' | 'asset' | 'depreciation' | 'recognition' | 'closePeriod' | 'reopenPeriod' | 'costCenter' | 'tagCostCenter' | null;
@@ -104,11 +105,10 @@ type JournalDraftLine = { accountCode: string; debitRupees: string; creditRupees
 type ComparisonRow = AccountDefinition & { currentPaise: number; comparisonPaise: number; variancePaise: number };
 
 @Component({
-  selector: 'page-balance-sheet',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './balance-sheet-page.component.html',
-  styleUrls: ['./balance-sheet-page.component.css'],
+    selector: 'page-balance-sheet',
+    imports: [CommonModule, FormsModule, DatePickerComponent, BranchNamePipe],
+    templateUrl: './balance-sheet-page.component.html',
+    styleUrls: ['./balance-sheet-page.component.css']
 })
 export class BalanceSheetPageComponent implements OnInit {
   private readonly api = inject(ApiService);

@@ -14,6 +14,7 @@ shared-database deployment.
 - **Tenant** = one salon business (SaaS customer). **Branch** = one physical location of a tenant.
 - Shared PostgreSQL database, shared schema, **row-level isolation**: every tenant-owned table carries `tenantId` (+ `branchId`), and every repository read/write filters on it.
 - Users belong to a tenant with a role; staff/front-desk users additionally hold assigned branch ids.
+- `tenants.id` and `branches.id` UUIDs are the canonical IDs returned by APIs and stored in operational `tenant_id`/`branch_id` fields. Legacy scope IDs and old branch codes resolve through `tenant_id_aliases` and `branch_id_aliases`; `scope_id` remains only as a backward-compatible mirror of the canonical UUID.
 
 ## 3. Tenant Resolution
 
@@ -26,8 +27,12 @@ Branch context comes from `x-branch-id`, constrained server-side by role (RBAC.m
 ## 4. Subscription & Metering
 
 - Subscription states: `trialing` → `active` (plus suspension); plan limits and usage checks enforced at write time with friendly errors.
+- Entitlements are backend-enforced: `trialing`/`active` allow normal access, `past_due` keeps existing operations available but blocks branch expansion, and `paused`/`cancelled` or a non-active tenant block access. Branches above `includedBranches` are allowed only when `overageBranchPaise > 0`, so billing can charge the saved overage rate.
+- Enterprise branch onboarding supports a header-only CSV template, dry-run validation, downloadable row failures, atomic/idempotent import, automatic Owner/Admin access, and additive UUID-cursor listing under `/api/settings/branches/*`.
 - Usage events persisted for metering and SaaS billing (`saas-billing-metering.test.js`).
 - Onboarding is one atomic workflow: tenant + trial subscription + owner user + first branch + optional domain mapping (`POST /api/saas/onboarding`).
+- Only a platform superadmin can call onboarding. The camelCase request contains `idempotencyKey`, salon name/slug, `planId`, owner name/email/password, first-branch name/code/address, and optional `trialEndsAt`/`domain`.
+- The default trial is 14 days. A supplied domain is created unverified, and the same idempotency key replays the original result; reusing it with different non-secret onboarding data returns `409 CONFLICT`.
 
 Key endpoints: `/api/saas/context`, `/api/saas/plans`, `/api/saas/usage`,
 `/api/saas/domain-mappings`, `PATCH /api/saas/subscription`; platform controls

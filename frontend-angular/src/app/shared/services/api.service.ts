@@ -1,12 +1,13 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { map, Observable } from 'rxjs';
+import { firstValueFrom, map, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export type ApiEnvelope<T> = {
   success?: boolean;
   data?: T;
   error?: any;
+  meta?: { page?: number; pageSize?: number; total?: number };
 };
 
 type HealthStatus = { status: string; service: string; environment?: string; env?: string };
@@ -62,6 +63,46 @@ export class ApiService {
 
   delete<T>(path: string): Observable<T> {
     return this.http.delete<T>(this.url(path));
+  }
+
+  async getAllPages<T>(path: string, pageSize = 200): Promise<T[]> {
+    const [pathname, query = ''] = path.split('?', 2);
+    const params = new URLSearchParams(query);
+    const size = Math.min(Math.max(pageSize, 1), 200);
+
+    const loadPage = async (page: number) => {
+      const pageParams = new URLSearchParams(params);
+      pageParams.set('page', String(page));
+      pageParams.set('pageSize', String(size));
+      const response = await firstValueFrom(this.get<ApiEnvelope<T[]>>(`${pathname}?${pageParams}`));
+      if (!response.data) throw new Error('API response did not contain data');
+      return response;
+    };
+
+    const first = await loadPage(1);
+    const rows = [...(first.data ?? [])];
+    const total = first.meta?.total;
+    if (Number.isFinite(total)) {
+      const totalPages = Math.ceil(Math.max(total ?? 0, 0) / size);
+      for (let page = 2; page <= totalPages; page += 4) {
+        const batch = Array.from(
+          { length: Math.min(4, totalPages - page + 1) },
+          (_, index) => loadPage(page + index),
+        );
+        for (const response of await Promise.all(batch)) rows.push(...(response.data ?? []));
+      }
+      return rows;
+    }
+
+    for (let page = 2; first.data?.length === size; page += 1) {
+      params.set('page', String(page));
+      params.set('pageSize', String(size));
+      const response = await firstValueFrom(this.get<ApiEnvelope<T[]>>(`${pathname}?${params}`));
+      if (!response.data) throw new Error('API response did not contain data');
+      rows.push(...response.data);
+      if (response.data.length < size) break;
+    }
+    return rows;
   }
 
   private url(path: string) {

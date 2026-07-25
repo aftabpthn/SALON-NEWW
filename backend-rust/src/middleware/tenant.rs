@@ -60,6 +60,17 @@ const FRONT_DESK_WRITE_ROLES: &[&str] = &[
     "front_desk",
     "frontdesk",
 ];
+const CASH_DRAWER_WRITE_ROLES: &[&str] = &[
+    "owner",
+    "admin",
+    "manager",
+    "cashier",
+    "receptionist",
+    "frontDesk",
+    "front-desk",
+    "front_desk",
+    "frontdesk",
+];
 const INVENTORY_WRITE_ROLES: &[&str] = &[
     "owner",
     "admin",
@@ -117,7 +128,7 @@ const REPORT_PREFIXES: &[&str] = &[
     "/profit-intelligence",
     "/reports",
 ];
-const PLATFORM_PREFIXES: &[&str] = &["/platform", "/super-admin"];
+const PLATFORM_PREFIXES: &[&str] = &["/platform", "/super-admin", "/saas/onboarding"];
 
 #[derive(Clone, Copy)]
 struct RouteAccess {
@@ -543,9 +554,22 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         });
     }
     if path_starts_with(path, "/inventory") {
+        if path_starts_with(path, "/inventory/transfer-optimizer") {
+            return Some(access(
+                TENANT_ROLES,
+                &[
+                    "purchases.manage",
+                    "inventory.read",
+                    "inventory.manage",
+                    "tenant.read",
+                ],
+            ));
+        }
         if (path_starts_with(path, "/inventory/backbar-usage")
             || path_starts_with(path, "/inventory/backbar-overrides")
-            || path_starts_with(path, "/inventory/negative-stock-requests"))
+            || path_starts_with(path, "/inventory/negative-stock-requests")
+            || path_starts_with(path, "/inventory/exception-recommendations")
+            || path_starts_with(path, "/inventory/autonomous-operations/actions"))
             && path.ends_with("/review")
             && !is_read_method(method)
         {
@@ -895,6 +919,12 @@ fn pos_access(path: &str, method: &Method) -> RouteAccess {
             &["reports.export", "finance.read", "tenant.read"],
         );
     }
+    if !is_read_method(method) && path.contains("/provider-reconciliations") {
+        return access(MANAGEMENT_ROLES, &["management.write", "finance.write"]);
+    }
+    if !is_read_method(method) && path.contains("/cash-drawer") {
+        return access(CASH_DRAWER_WRITE_ROLES, &["pos.manage", "front_desk.write"]);
+    }
     if !is_read_method(method) && path.contains("/refund") {
         return access(
             FRONT_DESK_WRITE_ROLES,
@@ -1006,11 +1036,23 @@ pub async fn require_platform_admin(req: Request<Body>, next: Next) -> Result<Re
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_route_path, role_or_permissions_allowed, route_access, MANAGEMENT_ROLES,
-        TENANT_ROLES,
+        normalize_route_path, requires_platform_access, role_or_permissions_allowed, route_access,
+        MANAGEMENT_ROLES, TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
+
+    #[test]
+    fn salon_onboarding_requires_platform_admin() {
+        assert!(requires_platform_access(
+            normalize_route_path("/api/saas/onboarding"),
+            &Method::POST,
+        ));
+        assert!(!requires_platform_access(
+            normalize_route_path("/api/saas/context"),
+            &Method::GET,
+        ));
+    }
 
     #[test]
     fn protected_domains_have_named_permission_mappings() {
@@ -1034,6 +1076,11 @@ mod tests {
                 "inventory.manage",
             ),
             (
+                "/api/v1/inventory/transfer-optimizer",
+                Method::POST,
+                "purchases.manage",
+            ),
+            (
                 "/api/v1/inventory/backbar-usage/1/review",
                 Method::PATCH,
                 "inventory.approve",
@@ -1045,6 +1092,16 @@ mod tests {
             ),
             (
                 "/api/v1/inventory/negative-stock-requests/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/autonomous-operations/actions/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/exception-recommendations/missing-recipe/review",
                 Method::POST,
                 "inventory.approve",
             ),
@@ -1236,6 +1293,34 @@ mod tests {
             claims.role = role.into();
             claims.denied_permissions.clear();
             assert!(role_or_permissions_allowed(&claims, TENANT_ROLES, &[]));
+        }
+    }
+
+    #[test]
+    fn cash_drawer_role_matrix_keeps_operations_and_approvals_separate() {
+        let operations = route_access(
+            normalize_route_path("/api/v1/pos/cash-drawer/open"),
+            &Method::POST,
+        )
+        .expect("cash drawer operations are mapped");
+        for role in ["owner", "manager", "cashier", "receptionist"] {
+            assert!(
+                operations.roles.contains(&role),
+                "{role} must operate a drawer"
+            );
+        }
+        assert!(!operations.roles.contains(&"staff"));
+
+        let reconciliation = route_access(
+            normalize_route_path("/api/v1/pos/provider-reconciliations"),
+            &Method::POST,
+        )
+        .expect("provider reconciliation is mapped");
+        for role in ["owner", "manager"] {
+            assert!(reconciliation.roles.contains(&role));
+        }
+        for role in ["cashier", "receptionist"] {
+            assert!(!reconciliation.roles.contains(&role));
         }
     }
 }

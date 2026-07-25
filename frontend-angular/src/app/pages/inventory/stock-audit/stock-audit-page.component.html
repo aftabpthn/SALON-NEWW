@@ -3,34 +3,76 @@
     <div><h1>{{ 'inventory.ui.c22cdbe69e' | translate }}</h1><span class="data-pill">{{ loading ? 'Loading' : sessions.length + ' sessions' }}</span></div>
     <button type="button" (click)="load()" [disabled]="loading">{{ 'inventory.ui.56e3badc4e' | translate }}</button>
   </header>
-  <p class="message error" *ngIf="error" role="alert">{{ error }}</p>
-  <p class="message success" *ngIf="notice">{{ notice }}</p>
+  @if (error) {
+    <p class="message error" role="alert">{{ error }}</p>
+  }
+  @if (notice) {
+    <p class="message success">{{ notice }}</p>
+  }
 
   <section class="workspace">
     <aside class="sessions-card">
       <h2>{{ 'inventory.ui.96b7e8194e' | translate }}</h2>
       <form (ngSubmit)="create()" class="create-form">
         <label>{{ 'inventory.ui.709a23220f' | translate }}<input name="name" [(ngModel)]="createForm.name" required maxlength="160" /></label>
-        <label>{{ 'inventory.ui.f5f8a0edf3' | translate }}<select name="counters" [(ngModel)]="createForm.requiredCounters"><option *ngFor="let count of [1,2,3,4,5]" [ngValue]="count">{{ count }}</option></select></label>
+        <label>{{ 'inventory.ui.f5f8a0edf3' | translate }}<select name="counters" [(ngModel)]="createForm.requiredCounters">@for (count of [1,2,3,4,5]; track count) {
+          <option [ngValue]="count">{{ count }}</option>
+        }</select></label>
         <label>{{ 'inventory.ui.2e0b4927fe' | translate }}<input type="number" min="0" step="1" name="threshold" [(ngModel)]="createForm.recountThreshold" /></label>
         <label class="checkbox"><input type="checkbox" name="blind" [(ngModel)]="createForm.blindCounting" />{{ 'inventory.ui.388c2604a0' | translate }}</label>
         <button class="primary" type="submit" [disabled]="saving">{{ 'inventory.ui.d1df08890b' | translate }}</button>
       </form>
       <h2>{{ 'inventory.ui.e11e37a925' | translate }}</h2>
-      <button class="session" *ngFor="let row of sessions" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.createdAt | date:'dd/MM/yyyy' }}</span></button>
-      <p class="empty" *ngIf="!sessions.length && !loading">{{ 'inventory.ui.e0e86ccf92' | translate }}</p>
+      @for (row of sessions; track row) {
+        <button class="session" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.createdAt | date:'dd/MM/yyyy' }}</span></button>
+      }
+      @if (!sessions.length && !loading) {
+        <p class="empty">{{ 'inventory.ui.e0e86ccf92' | translate }}</p>
+      }
     </aside>
 
-    <main class="audit-card" *ngIf="selected as detail; else noSelection">
-      <header class="detail-head"><div><h2>{{ detail.session.name }}</h2><span>{{ detail.session.status.replace('_', ' ') }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="actions"><button *ngIf="canCount()" type="button" (click)="action('close-counting')" [disabled]="saving">{{ 'inventory.ui.ef2e693a28' | translate }}</button><button *ngIf="canReview()" type="button" (click)="action('submit')" [disabled]="saving">{{ 'inventory.ui.46a9603925' | translate }}</button><button *ngIf="canApprove()" class="primary" type="button" (click)="action('approve')" [disabled]="saving">{{ 'inventory.ui.f9a63b82cb' | translate }}</button></div></header>
-
-      <form *ngIf="canCount()" class="count-form" (ngSubmit)="submitCount()"><label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select name="countItem" [(ngModel)]="countForm.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let item of detail.items" [value]="item.inventoryItemId">{{ item.itemName }} · {{ item.sku }}</option></select></label><label>{{ 'inventory.ui.17ee7c23a9' | translate }}<input type="number" name="quantity" [(ngModel)]="countForm.quantity" min="0" step="1" required /></label><button class="primary" type="submit" [disabled]="saving">{{ 'inventory.ui.b64c0a4d76' | translate }}</button></form>
-
-      <div class="table-wrap"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th *ngIf="!detail.session.blindCounting || !canCount()">{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.ac3222574b' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.87176429ca' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th></tr></thead><tbody><tr *ngFor="let item of detail.items"><td><strong>{{ item.itemName }}</strong><small>{{ item.sku }} · {{ item.unit }}</small></td><td *ngIf="!detail.session.blindCounting || !canCount()">{{ item.expectedQuantity ?? 'Hidden' }}</td><td>{{ item.approvedQuantity ?? '—' }}</td><td [class.variance]="item.varianceQuantity">{{ item.varianceQuantity ?? '—' }}</td><td>{{ countFor(item) }}</td><td><div *ngIf="canReview() && item.varianceQuantity"><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" [attr.placeholder]="'inventory.ui.ec4bfc89d1' | translate" /><button type="button" (click)="saveReason(item)" [disabled]="saving">{{ 'inventory.ui.efc007a393' | translate }}</button></div><span *ngIf="!canReview() || !item.varianceQuantity">{{ item.varianceReason || '—' }}</span></td></tr><tr *ngIf="!detail.items.length"><td colspan="6">{{ 'inventory.ui.b7a856107b' | translate }}</td></tr></tbody></table></div>
-
-      <section class="review-grid"><form *ngIf="canReview()" (ngSubmit)="addFinding()"><h3>{{ 'inventory.ui.ee355bb8e5' | translate }}</h3><label>{{ 'inventory.ui.ecdda59aea' | translate }}<select name="findingItem" [(ngModel)]="findingForm.itemId"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option><option *ngFor="let item of detail.items" [value]="item.inventoryItemId">{{ item.itemName }}</option></select></label><label>{{ 'inventory.ui.57e8becd7a' | translate }}<select name="findingType" [(ngModel)]="findingForm.findingType"><option value="variance">{{ 'inventory.ui.eb39bbf6cc' | translate }}</option><option value="leakage">{{ 'inventory.ui.8de75557ef' | translate }}</option><option value="theft">{{ 'inventory.ui.89beae0abd' | translate }}</option></select></label><label>{{ 'inventory.ui.70440046a3' | translate }}<input name="findingNotes" [(ngModel)]="findingForm.notes" /></label><label>{{ 'inventory.ui.38221c4dc3' | translate }}<input name="evidenceReference" [(ngModel)]="findingForm.evidenceReference" [attr.placeholder]="'inventory.ui.d250b1b45a' | translate" /></label><button type="submit" [disabled]="saving">{{ 'inventory.ui.b716abb68d' | translate }}</button></form><form *ngIf="canApprove()" (ngSubmit)="reject()"><h3>{{ 'inventory.ui.d2c4974efb' | translate }}</h3><label>{{ 'inventory.ui.f219cc0614' | translate }}<input name="rejectionReason" [(ngModel)]="rejectionReason" required /></label><button type="submit" [disabled]="saving">{{ 'inventory.ui.2b03b59293' | translate }}</button></form></section>
-      <section class="findings" *ngIf="detail.findings.length"><h3>{{ 'inventory.ui.97b268899d' | translate }}</h3><p *ngFor="let finding of detail.findings"><strong>{{ finding.findingType }}</strong> · {{ finding.notes || 'No notes' }}</p></section>
-    </main>
-    <ng-template #noSelection><main class="empty-panel"><strong>{{ 'inventory.ui.2f0b7413c9' | translate }}</strong><span>{{ 'inventory.ui.b0fd09c7f0' | translate }}</span></main></ng-template>
-  </section>
+    @if (selected; as detail) {
+      <main class="audit-card">
+        <header class="detail-head"><div><h2>{{ detail.session.name }}</h2><span>{{ detail.session.status.replace('_', ' ') }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="actions">@if (canCount()) {
+        <button type="button" (click)="action('close-counting')" [disabled]="saving">{{ 'inventory.ui.ef2e693a28' | translate }}</button>
+        }@if (canReview()) {
+        <button type="button" (click)="action('submit')" [disabled]="saving">{{ 'inventory.ui.46a9603925' | translate }}</button>
+        }@if (canApprove()) {
+        <button class="primary" type="button" (click)="action('approve')" [disabled]="saving">{{ 'inventory.ui.f9a63b82cb' | translate }}</button>
+      }</div></header>
+      @if (canCount()) {
+        <form class="count-form" (ngSubmit)="submitCount()"><label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select name="countItem" [(ngModel)]="countForm.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (item of detail.items; track item) {
+        <option [value]="item.inventoryItemId">{{ item.itemName }} · {{ item.sku }}</option>
+        }</select></label><label>{{ 'inventory.ui.17ee7c23a9' | translate }}<input type="number" name="quantity" [(ngModel)]="countForm.quantity" min="0" step="1" required /></label><button class="primary" type="submit" [disabled]="saving">{{ 'inventory.ui.b64c0a4d76' | translate }}</button></form>
+      }
+      <div class="table-wrap"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th>@if (!detail.session.blindCounting || !canCount()) {
+      <th>{{ 'inventory.ui.6ac87f3446' | translate }}</th>
+      }<th>{{ 'inventory.ui.ac3222574b' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.87176429ca' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th></tr></thead><tbody>@for (item of detail.items; track item) {
+      <tr><td><strong>{{ item.itemName }}</strong><small>{{ item.sku }} · {{ item.unit }}</small></td>@if (!detail.session.blindCounting || !canCount()) {
+      <td>{{ item.expectedQuantity ?? 'Hidden' }}</td>
+      }<td>{{ item.approvedQuantity ?? '—' }}</td><td [class.variance]="item.varianceQuantity">{{ item.varianceQuantity ?? '—' }}</td><td>{{ countFor(item) }}</td><td>@if (canReview() && item.varianceQuantity) {
+      <div><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" [attr.placeholder]="'inventory.ui.ec4bfc89d1' | translate" /><button type="button" (click)="saveReason(item)" [disabled]="saving">{{ 'inventory.ui.efc007a393' | translate }}</button></div>
+      }@if (!canReview() || !item.varianceQuantity) {
+      <span>{{ item.varianceReason || '—' }}</span>
+    }</td></tr>
+    }@if (!detail.items.length) {
+    <tr><td colspan="6">{{ 'inventory.ui.b7a856107b' | translate }}</td></tr>
+  }</tbody></table></div>
+  <section class="review-grid">@if (canReview()) {
+    <form (ngSubmit)="addFinding()"><h3>{{ 'inventory.ui.ee355bb8e5' | translate }}</h3><label>{{ 'inventory.ui.ecdda59aea' | translate }}<select name="findingItem" [(ngModel)]="findingForm.itemId"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of detail.items; track item) {
+    <option [value]="item.inventoryItemId">{{ item.itemName }}</option>
+    }</select></label><label>{{ 'inventory.ui.57e8becd7a' | translate }}<select name="findingType" [(ngModel)]="findingForm.findingType"><option value="variance">{{ 'inventory.ui.eb39bbf6cc' | translate }}</option><option value="leakage">{{ 'inventory.ui.8de75557ef' | translate }}</option><option value="theft">{{ 'inventory.ui.89beae0abd' | translate }}</option></select></label><label>{{ 'inventory.ui.70440046a3' | translate }}<input name="findingNotes" [(ngModel)]="findingForm.notes" /></label><label>{{ 'inventory.ui.38221c4dc3' | translate }}<input name="evidenceReference" [(ngModel)]="findingForm.evidenceReference" [attr.placeholder]="'inventory.ui.d250b1b45a' | translate" /></label><button type="submit" [disabled]="saving">{{ 'inventory.ui.b716abb68d' | translate }}</button></form>
+    }@if (canApprove()) {
+    <form (ngSubmit)="reject()"><h3>{{ 'inventory.ui.d2c4974efb' | translate }}</h3><label>{{ 'inventory.ui.f219cc0614' | translate }}<input name="rejectionReason" [(ngModel)]="rejectionReason" required /></label><button type="submit" [disabled]="saving">{{ 'inventory.ui.2b03b59293' | translate }}</button></form>
+  }</section>
+  @if (detail.findings.length) {
+    <section class="findings"><h3>{{ 'inventory.ui.97b268899d' | translate }}</h3>@for (finding of detail.findings; track finding) {
+    <p><strong>{{ finding.findingType }}</strong> · {{ finding.notes || 'No notes' }}</p>
+  }</section>
+}
+</main>
+} @else {
+  <main class="empty-panel"><strong>{{ 'inventory.ui.2f0b7413c9' | translate }}</strong><span>{{ 'inventory.ui.b0fd09c7f0' | translate }}</span></main>
+}
+</section>
 </section>

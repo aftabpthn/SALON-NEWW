@@ -1,8 +1,10 @@
 use crate::{
-    repositories::services_repository,
-    routes::pos,
+    repositories::{payment_methods_repository, services_repository},
+    routes::{context::current_business_date, pos},
     services::{
-        benefit_notification_service, booking_intelligence_service, service_pricing_service,
+        accounting_service, auth_service::AuthClaims, benefit_notification_service,
+        booking_intelligence_service, cash_drawer_service, service_pricing_service,
+        wallet_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -10,7 +12,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -111,7 +113,7 @@ pub fn router() -> Router<AppState> {
         .route("/appointments", axum::routing::post(create_appointment))
         .route(
             "/appointments/batch",
-            axum::routing::post(save_appointment_batch),
+            axum::routing::post(save_appointment_batch_authenticated),
         )
         .route(
             "/appointment-resources",
@@ -449,6 +451,27 @@ pub(crate) struct AppointmentBatchPayload {
     pub(crate) recurrence_interval_days: Option<i64>,
     #[serde(default)]
     pub(crate) lines: Vec<AppointmentBatchLinePayload>,
+    #[serde(default)]
+    pub(crate) advance_payment: Option<AppointmentAdvancePaymentPayload>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AppointmentAdvancePaymentPayload {
+    pub(crate) amount_paise: i64,
+    #[serde(default)]
+    pub(crate) method: String,
+    #[serde(default)]
+    pub(crate) reference: String,
+    #[serde(default)]
+    pub(crate) cash_drawer_till_id: String,
+}
+
+struct ValidatedAdvancePayment {
+    amount_paise: i64,
+    method: String,
+    settlement_type: String,
+    reference: String,
+    cash_drawer_till_id: String,
 }
 
 #[derive(Deserialize)]
@@ -2917,10 +2940,86 @@ pub async fn create_appointment(
     .await
 }
 
+async fn save_appointment_batch_authenticated(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
+    Json(payload): Json<AppointmentBatchPayload>,
+) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
+    save_appointment_batch_inner(state, headers, payload, Some(claims.sub)).await
+}
+
 pub(crate) async fn save_appointment_batch(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<AppointmentBatchPayload>,
+) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
+    save_appointment_batch_inner(state, headers, payload, None).await
+}
+
+async fn validate_advance_payment(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    input: Option<&AppointmentAdvancePaymentPayload>,
+    actor_user_id: Option<&str>,
+    recurrence_count: i32,
+    booking: &AppointmentBatchPayload,
+) -> Result<Option<ValidatedAdvancePayment>, ApiError> {
+    let Some(input) = input else { return Ok(None) };
+    if actor_user_id.is_none() {
+        return Err(ApiError::unauthorized(
+            "authenticated staff is required to collect an advance",
+        ));
+    }
+    if input.amount_paise <= 0 {
+        return Err(ApiError::bad_request(
+            "advance payment amount must be positive",
+        ));
+    }
+    if recurrence_count != 1
+        || !booking.removed_appointment_ids.is_empty()
+        || booking
+            .lines
+            .iter()
+            .any(|line| !line.appointment_id.trim().is_empty())
+    {
+        return Err(ApiError::conflict(
+            "advance payment is available only while creating a one-time booking",
+        ));
+    }
+    payment_methods_repository::ensure_defaults(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| ApiError::internal("failed to initialize payment methods"))?;
+    let modes = payment_methods_repository::list(&state.db, tenant_id, branch_id, true)
+        .await
+        .map_err(|_| ApiError::internal("failed to validate payment method"))?;
+    let mode = modes
+        .into_iter()
+        .find(|mode| mode.code == input.method.trim())
+        .ok_or_else(|| ApiError::bad_request("payment method is inactive or unavailable"))?;
+    if (mode.reference_required
+        || matches!(mode.settlement_type.as_str(), "store_credit" | "gift_card"))
+        && input.reference.trim().is_empty()
+    {
+        return Err(ApiError::bad_request(
+            "payment reference is required for this method",
+        ));
+    }
+    Ok(Some(ValidatedAdvancePayment {
+        amount_paise: input.amount_paise,
+        method: mode.code,
+        settlement_type: mode.settlement_type,
+        reference: input.reference.trim().to_string(),
+        cash_drawer_till_id: input.cash_drawer_till_id.trim().to_string(),
+    }))
+}
+
+async fn save_appointment_batch_inner(
+    state: AppState,
+    headers: HeaderMap,
+    payload: AppointmentBatchPayload,
+    actor_user_id: Option<String>,
 ) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let client_id = payload.client_id.trim();
@@ -2973,6 +3072,16 @@ pub(crate) async fn save_appointment_batch(
             "recurrence can only be used for a new booking",
         ));
     }
+    let advance_payment = validate_advance_payment(
+        &state,
+        &tenant_id,
+        &branch_id,
+        payload.advance_payment.as_ref(),
+        actor_user_id.as_deref(),
+        recurrence_count,
+        &payload,
+    )
+    .await?;
     let mut current_by_id = std::collections::HashMap::new();
     for appointment_id in payload
         .removed_appointment_ids
@@ -3123,6 +3232,14 @@ pub(crate) async fn save_appointment_batch(
             .await?;
             planned_prices.push(booked_total_paise);
         }
+    }
+    if advance_payment
+        .as_ref()
+        .is_some_and(|payment| payment.amount_paise > planned_prices.iter().sum())
+    {
+        return Err(ApiError::bad_request(
+            "advance payment cannot exceed the booking total",
+        ));
     }
 
     let mut tx = state
@@ -3310,6 +3427,81 @@ pub(crate) async fn save_appointment_batch(
                 },
                 activity_reason,
             ));
+        }
+    }
+    if let Some(payment) = advance_payment {
+        let appointment_id = changes
+            .first()
+            .map(|(_, appointment, _, _)| appointment.id.as_str())
+            .ok_or_else(|| ApiError::internal("booking advance has no appointment"))?;
+        let payment_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO appointment_payment_links (
+                id, tenant_id, branch_id, appointment_id, provider, provider_payment_id,
+                amount_paise, status, idempotency_key, payload_json, paid_at, created_at, updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,'paid',$8,$9,NOW(),NOW(),NOW())",
+        )
+        .bind(&payment_id)
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(appointment_id)
+        .bind(&payment.method)
+        .bind(&payment.reference)
+        .bind(payment.amount_paise)
+        .bind(format!("crm-booking-advance:{appointment_id}"))
+        .bind(json!({
+            "source": "crm_appointment_booking",
+            "collectedByUserId": actor_user_id.as_deref().unwrap_or_default(),
+            "settlementType": payment.settlement_type,
+            "accountedAtCollection": true,
+        }))
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| ApiError::internal("failed to save booking advance"))?;
+        if payment.settlement_type == "cash" {
+            cash_drawer_service::record_booking_cash_advance(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                actor_user_id.as_deref().unwrap_or_default(),
+                current_business_date(),
+                &payment_id,
+                payment.amount_paise,
+                &payment.cash_drawer_till_id,
+            )
+            .await
+            .map_err(|_| {
+                ApiError::conflict("cash advance requires an open cash drawer and till")
+            })?;
+        }
+        if matches!(
+            payment.settlement_type.as_str(),
+            "wallet" | "store_credit" | "gift_card"
+        ) {
+            wallet_service::settle_booking_advance(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                client_id,
+                appointment_id,
+                &payment_id,
+                &payment.settlement_type,
+                &payment.reference,
+                payment.amount_paise,
+            )
+            .await
+            .map_err(|error| ApiError::with_status(error.status_code(), error.message()))?;
+        } else {
+            accounting_service::post_pos_advance(
+                &mut tx,
+                &tenant_id,
+                &branch_id,
+                &payment_id,
+                &payment.settlement_type,
+                payment.amount_paise,
+            )
+            .await
+            .map_err(|_| ApiError::internal("failed to account for booking advance"))?;
         }
     }
     tx.commit()

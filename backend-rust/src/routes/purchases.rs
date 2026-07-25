@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::get,
     Extension, Json, Router,
@@ -157,6 +157,13 @@ struct PaymentRequest {
     reference: Option<String>,
     idempotency_key: String,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PurchaseListQuery {
+    page: Option<i64>,
+    page_size: Option<i64>,
+    with_count: Option<bool>,
+}
 
 async fn list_suppliers(
     State(state): State<AppState>,
@@ -237,9 +244,11 @@ async fn save_supplier(
 async fn list_orders(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PurchaseListQuery>,
 ) -> ApiResult<Vec<purchase_repository::PurchaseOrderRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let rows = purchase_repository::list_orders(&state.db, &tenant_id, &branch_id)
+    let (limit, offset) = resolve_purchase_pagination(&query, Some(200));
+    let rows = purchase_repository::list_orders(&state.db, &tenant_id, &branch_id, limit, offset)
         .await
         .map_err(|_| AppError::internal("failed to list purchase orders"))?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -390,9 +399,11 @@ async fn order_action(
 async fn list_receipts(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PurchaseListQuery>,
 ) -> ApiResult<Vec<purchase_repository::PurchaseReceipt>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let rows = purchase_repository::list(&state.db, &tenant_id, &branch_id)
+    let (limit, offset) = resolve_purchase_pagination(&query, Some(100));
+    let rows = purchase_repository::list(&state.db, &tenant_id, &branch_id, limit, offset)
         .await
         .map_err(|_| AppError::internal("failed to list GRNs"))?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -447,9 +458,11 @@ async fn receive(
 async fn list_returns(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PurchaseListQuery>,
 ) -> ApiResult<Vec<purchase_repository::PurchaseReturnRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let rows = purchase_repository::list_returns(&state.db, &tenant_id, &branch_id)
+    let (limit, offset) = resolve_purchase_pagination(&query, None);
+    let rows = purchase_repository::list_returns(&state.db, &tenant_id, &branch_id, limit, offset)
         .await
         .map_err(|_| AppError::internal("failed to list purchase returns"))?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -483,9 +496,11 @@ async fn create_return(
 async fn list_payables(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Query(query): Query<PurchaseListQuery>,
 ) -> ApiResult<Vec<purchase_repository::PayableRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let rows = purchase_repository::list_payables(&state.db, &tenant_id, &branch_id)
+    let (limit, offset) = resolve_purchase_pagination(&query, None);
+    let rows = purchase_repository::list_payables(&state.db, &tenant_id, &branch_id, limit, offset)
         .await
         .map_err(|_| AppError::internal("failed to list supplier payables"))?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -510,6 +525,22 @@ async fn create_payment(
     )))
 }
 
+fn resolve_purchase_pagination(
+    query: &PurchaseListQuery,
+    default_limit: Option<i64>,
+) -> (Option<i64>, Option<i64>) {
+    let _ = query.with_count;
+    if query.page_size.is_none() && query.page.is_none() {
+        return default_limit
+            .map(|value| (Some(value.clamp(1, 500)), Some(0)))
+            .unwrap_or((None, None));
+    }
+
+    let requested_limit = query.page_size.unwrap_or(50).clamp(1, 500);
+    let page = query.page.unwrap_or(1).max(1);
+    let offset = (page - 1).saturating_mul(requested_limit);
+    (Some(requested_limit), Some(offset))
+}
 fn require_approver(claims: &AuthClaims) -> Result<(), AppError> {
     let role = claims.role.trim().to_ascii_lowercase();
     if matches!(

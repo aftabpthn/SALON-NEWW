@@ -12,11 +12,10 @@ type WorkspaceTab = 'command' | 'workforce' | 'development' | 'systems' | 'gover
 type Row = Record<string, any>;
 
 @Component({
-  selector: 'page-staff-control-center',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './staff-control-center-page.component.html',
-  styleUrls: ['./staff-control-center-page.component.css'],
+    selector: 'page-staff-control-center',
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
+    templateUrl: './staff-control-center-page.component.html',
+    styleUrls: ['./staff-control-center-page.component.css']
 })
 export class StaffControlCenterPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -71,39 +70,53 @@ export class StaffControlCenterPageComponent implements OnInit {
   async refresh() {
     this.loading = true;
     this.error = '';
+    const results = await Promise.allSettled(this.tabRequests(this.activeTab));
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length) this.error = `${failures.length} section${failures.length === 1 ? '' : 's'} could not be loaded`;
+    this.lastLoaded = new Date().toISOString();
+    this.loading = false;
+  }
+
+  private tabRequests(tab: WorkspaceTab): Array<Promise<void>> {
     const period = this.periodQuery();
     const today = this.periodEnd;
-    const requests: Array<Promise<void>> = [
+    if (tab === 'command') return [
       this.loadOne(`/staff-enterprise/command-center?${period}`, (value) => this.command = value),
       this.loadList(`/staff-enterprise/floor-control?date=${today}`, (value) => this.floor = value),
+    ];
+    if (tab === 'workforce') return [
       this.loadList('/staff/shift-swaps', (value) => this.swaps = value),
       this.loadList('/staff/branch-transfers', (value) => this.transfers = value),
       this.loadOne(`/staff/roster/coverage?${period}`, (value) => this.coverage = value),
       this.loadOne(`/staff/manpower/forecast?${period}`, (value) => this.manpower = value),
+    ];
+    if (tab === 'development') return [
       this.loadList('/staff-enterprise/skill-matrix', (value) => this.skillMatrix = value),
       this.loadList('/staff/skill-licenses', (value) => this.licenses = value),
       this.loadList('/staff/performance-reviews', (value) => this.reviews = value),
       this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value),
       this.loadList('/staff-enterprise/training', (value) => this.training = value),
+    ];
+    if (tab === 'systems') return [
       this.loadList('/staff/biometric/devices', (value) => this.devices = value),
       this.loadList('/staff/biometric/gateways', (value) => this.gateways = value),
       this.loadList('/staff/biometric/mappings', (value) => this.mappings = value),
       this.loadList('/staff/biometric/consents', (value) => this.consents = value),
       this.loadList('/staff/biometric/exceptions', (value) => this.biometricExceptions = value),
       this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value),
+      this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value).catch((error) => {
+        if ((error as { status?: number }).status === 404) this.selfService = null;
+        else throw error;
+      }),
+    ];
+    return [
       this.loadList('/staff/approvals?status=pending', (value) => this.approvals = value),
       this.loadList('/staff/audit?eventPrefix=staff.', (value) => this.auditRows = value),
       this.loadList('/staff/notifications', (value) => this.notifications = value),
       this.loadList('/staff/notification-delivery-logs', (value) => this.notificationLogs = value),
       this.loadList(`/staff/tips/summary?${period}`, (value) => this.tips = value),
       this.loadOne(`/staff/payroll-compliance/summary?${period}`, (value) => this.compliance = value),
-      this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value),
     ];
-    const results = await Promise.allSettled(requests);
-    const failures = results.filter((result) => result.status === 'rejected');
-    if (failures.length) this.error = `${failures.length} section${failures.length === 1 ? '' : 's'} could not be loaded`;
-    this.lastLoaded = new Date().toISOString();
-    this.loading = false;
   }
 
   async decideSwap(row: Row, decision: 'approved' | 'rejected') {
@@ -369,7 +382,11 @@ export class StaffControlCenterPageComponent implements OnInit {
     });
   }
 
-  selectTab(tab: WorkspaceTab) { this.activeTab = tab; }
+  async selectTab(tab: WorkspaceTab) {
+    if (tab === this.activeTab || this.loading) return;
+    this.activeTab = tab;
+    await this.refresh();
+  }
   backToStaff() { void this.router.navigate(['/staff']); }
   openPayroll() { void this.router.navigate(['/staff/payroll']); }
   openAttendance() { void this.router.navigate(['/staff/attendance-summary']); }

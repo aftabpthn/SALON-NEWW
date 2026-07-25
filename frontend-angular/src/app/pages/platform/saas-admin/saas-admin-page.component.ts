@@ -21,8 +21,8 @@ type TicketDetail = { ticket: Ticket; messages: Message[]; events: Array<{ id: s
 type TenantContext = { subscription?: Subscription; usage?: Usage; invoices: Invoice[]; tickets: Ticket[]; plans: Plan[] };
 
 @Component({
-  selector: 'page-saas-admin', standalone: true, imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './saas-admin-page.component.html', styleUrls: ['./saas-admin-page.component.css'],
+    selector: 'page-saas-admin', imports: [CommonModule, FormsModule, DatePickerComponent],
+    templateUrl: './saas-admin-page.component.html', styleUrls: ['./saas-admin-page.component.css']
 })
 export class SaasAdminPageComponent implements OnInit {
   private readonly api = inject(ApiService);

@@ -667,4 +667,40 @@ h3 {
     align-items: stretch;
     flex-direction: column;
   }
+
+  .settings-panel {
+    margin-inline: 12px;
+    padding: 12px;
+  }
+
+  .settings-panel header,
+  .panel-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panel-actions,
+  .panel-actions > *,
+  .form-grid label,
+  .royalty-toolbar input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .color-table {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .color-head,
+  .color-row {
+    min-width: 650px;
+  }
+
+  a,
+  button,
+  input,
+  select {
+    min-height: 44px;
+  }
 }

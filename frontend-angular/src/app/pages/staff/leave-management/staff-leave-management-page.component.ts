@@ -42,11 +42,10 @@ type LeaveBalance = {
 type CalendarDay = { iso: string; day: number; inMonth: boolean };
 
 @Component({
-  selector: 'page-staff-leave-management',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './staff-leave-management-page.component.html',
-  styleUrls: ['./staff-leave-management-page.component.css'],
+    selector: 'page-staff-leave-management',
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
+    templateUrl: './staff-leave-management-page.component.html',
+    styleUrls: ['./staff-leave-management-page.component.css']
 })
 export class StaffLeaveManagementPageComponent implements OnInit {
   private readonly language = inject(LanguageService);

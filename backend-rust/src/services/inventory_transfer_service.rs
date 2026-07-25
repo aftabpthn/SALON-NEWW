@@ -183,6 +183,7 @@ pub async fn dispatch(
             "transfer_out",
             -line.quantity,
             source.unit_cost_paise,
+            source.stock_quantity - line.quantity,
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer dispatch"))?;
@@ -301,6 +302,7 @@ pub async fn receive(
             "transfer_in",
             line.quantity,
             line.unit_cost_paise,
+            quantity,
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer receipt"))?;
@@ -397,6 +399,7 @@ pub async fn cancel(
             "transfer_reversal",
             line.quantity,
             line.unit_cost_paise,
+            quantity,
         )
         .await
         .map_err(|_| AppError::internal("failed to record inventory transfer cancellation"))?;

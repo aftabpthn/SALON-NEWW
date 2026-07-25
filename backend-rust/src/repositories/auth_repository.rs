@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::{FromRow, PgPool};
+use sqlx::{Executor, FromRow, PgPool, Postgres, Transaction};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct AuthUser {
@@ -84,7 +84,7 @@ pub struct AuthAuditInput<'a> {
 
 const AUTH_USER_COLUMNS: &str = "id, tenant_id, branch_id, role_id, role_name, login_id, email, password_hash, locked_until, permission_version, must_change_password";
 const EXPLICIT_BRANCH_ACCESS_SQL: &str = r#"
-    SELECT COALESCE(NULLIF(b.scope_id, ''), b.id::text) AS branch_id,
+    SELECT b.id::text AS branch_id,
            b.name AS branch_name,
            b.region_name,
            b.zone_name,
@@ -100,10 +100,10 @@ const EXPLICIT_BRANCH_ACCESS_SQL: &str = r#"
            ubr.is_default
     FROM user_branch_roles ubr
     JOIN tenants t
-      ON COALESCE(NULLIF(t.scope_id, ''), t.id::text) = ubr.tenant_id
+      ON t.id::text = ubr.tenant_id
     JOIN branches b
       ON b.tenant_id = t.id
-     AND COALESCE(NULLIF(b.scope_id, ''), b.id::text) = ubr.branch_id
+     AND b.id::text = ubr.branch_id
      AND b.active = TRUE
     JOIN roles r
       ON r.tenant_id = ubr.tenant_id
@@ -126,16 +126,20 @@ pub async fn resolve_auth_tenant_id(
         r#"
         SELECT tenant_id
         FROM (
-          SELECT $1::text AS tenant_id, 0 AS priority
-          WHERE EXISTS (SELECT 1 FROM users WHERE tenant_id = $1)
+          SELECT 'platform'::text AS tenant_id, 0 AS priority
+          WHERE LOWER($1)='platform'
+            AND EXISTS (SELECT 1 FROM users WHERE tenant_id='platform' AND active=TRUE)
           UNION ALL
-          SELECT COALESCE(NULLIF(scope_id, ''), id::text) AS tenant_id, 1 AS priority
-          FROM tenants
-          WHERE status = 'active'
+          SELECT tenant.id::text AS tenant_id, 1 AS priority
+          FROM tenants tenant
+          WHERE tenant.status = 'active'
             AND (
-              id::text = $1
-              OR LOWER(slug) = LOWER($1)
-              OR LOWER(scope_id) = LOWER($1)
+              tenant.id::text = $1
+              OR LOWER(tenant.slug) = LOWER($1)
+              OR EXISTS (
+                SELECT 1 FROM tenant_id_aliases alias
+                WHERE alias.tenant_id=tenant.id AND LOWER(alias.alias)=LOWER($1)
+              )
             )
         ) resolved
         ORDER BY priority
@@ -207,7 +211,13 @@ pub async fn find_branch_access(
     branch_id: &str,
 ) -> Result<Option<BranchAccess>, sqlx::Error> {
     let row = sqlx::query_as::<_, BranchAccessRow>(&format!(
-        "{EXPLICIT_BRANCH_ACCESS_SQL} AND ubr.branch_id=$3 LIMIT 1"
+        "{EXPLICIT_BRANCH_ACCESS_SQL} AND (
+           ubr.branch_id=$3 OR EXISTS (
+             SELECT 1 FROM branch_id_aliases alias
+             WHERE alias.tenant_id=t.id AND alias.branch_id=b.id
+               AND LOWER(alias.alias)=LOWER($3)
+           )
+         ) LIMIT 1"
     ))
     .bind(&user.tenant_id)
     .bind(&user.id)
@@ -396,6 +406,20 @@ pub async fn session_id_for_token(
 }
 
 pub async fn audit(db: &PgPool, input: AuthAuditInput<'_>) -> Result<(), sqlx::Error> {
+    insert_audit(db, input).await
+}
+
+pub async fn audit_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    input: AuthAuditInput<'_>,
+) -> Result<(), sqlx::Error> {
+    insert_audit(&mut **tx, input).await
+}
+
+async fn insert_audit<'e, E>(executor: E, input: AuthAuditInput<'_>) -> Result<(), sqlx::Error>
+where
+    E: Executor<'e, Database = Postgres>,
+{
     sqlx::query(
         r#"
         INSERT INTO auth_audit_logs (
@@ -414,7 +438,7 @@ pub async fn audit(db: &PgPool, input: AuthAuditInput<'_>) -> Result<(), sqlx::E
     .bind(input.ip_address)
     .bind(input.user_agent)
     .bind(input.details)
-    .execute(db)
+    .execute(executor)
     .await?;
     Ok(())
 }
@@ -484,7 +508,8 @@ fn permission_list(value: Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::EXPLICIT_BRANCH_ACCESS_SQL;
+    use super::{resolve_auth_tenant_id, EXPLICIT_BRANCH_ACCESS_SQL};
+    use sqlx::PgPool;
 
     #[test]
     fn branch_access_requires_explicit_active_tenant_scope() {
@@ -499,9 +524,48 @@ mod tests {
             "ubr.access_type='permanent'",
             "Asia/Kolkata",
             "BETWEEN ubr.valid_from AND ubr.valid_until",
+            "b.id::text AS branch_id",
         ] {
             assert!(EXPLICIT_BRANCH_ACCESS_SQL.contains(required));
         }
         assert!(!EXPLICIT_BRANCH_ACCESS_SQL.contains("LEFT JOIN"));
+        assert!(!EXPLICIT_BRANCH_ACCESS_SQL.contains("b.scope_id"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn suspended_tenant_with_active_user_cannot_resolve_for_login(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE tenants(
+              id UUID PRIMARY KEY,slug TEXT,status TEXT NOT NULL
+            );
+            CREATE TABLE users(
+              id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,active BOOLEAN NOT NULL
+            );
+            CREATE TABLE tenant_id_aliases(
+              tenant_id UUID NOT NULL,alias TEXT NOT NULL
+            );
+            INSERT INTO tenants(id,slug,status)
+            VALUES('11111111-1111-4111-8111-111111111111','suspended-salon','suspended');
+            INSERT INTO users(id,tenant_id,active)
+            VALUES('owner-1','11111111-1111-4111-8111-111111111111',TRUE);
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let active_user_exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM users WHERE tenant_id=$1 AND active=TRUE)",
+        )
+        .bind("11111111-1111-4111-8111-111111111111")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(active_user_exists);
+        assert!(resolve_auth_tenant_id(&pool, "suspended-salon")
+            .await
+            .unwrap()
+            .is_none());
     }
 }

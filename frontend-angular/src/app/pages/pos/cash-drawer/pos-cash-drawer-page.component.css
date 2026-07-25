@@ -48,6 +48,12 @@ dd, .count-total strong, .payment-summary strong { text-align: right; font-varia
 .row-actions { display: flex; gap: 6px; }
 .row-actions button { min-height: 32px; padding: 0 10px; }
 .empty { margin-top: 12px; }
+.section-state, .section-error { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; }
+.section-error { color: var(--text); font-size: 12px; font-weight: 700; }
+.section-error button { min-height: 30px; margin-left: 8px; padding: 0 10px; }
+.staff-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.staff-pagination span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.staff-pagination button { min-height: 32px; padding: 0 10px; }
 .reconciliation-list, .till-list { display: grid; gap: 8px; margin-top: 14px; }
 .reconciliation-list article > div:first-child, .till-list article > div:first-child { display: grid; gap: 3px; margin-right: auto; }
 .reconciliation-list span, .till-list span { color: var(--muted); font-size: 12px; }

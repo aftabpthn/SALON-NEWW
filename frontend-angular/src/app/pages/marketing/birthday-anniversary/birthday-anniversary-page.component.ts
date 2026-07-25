@@ -104,11 +104,10 @@ const emptySettings = (): Settings => ({
 });
 
 @Component({
-  selector: 'page-birthday-anniversary',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './birthday-anniversary-page.component.html',
-  styleUrls: ['./birthday-anniversary-page.component.css'],
+    selector: 'page-birthday-anniversary',
+    imports: [CommonModule, FormsModule, DatePickerComponent],
+    templateUrl: './birthday-anniversary-page.component.html',
+    styleUrls: ['./birthday-anniversary-page.component.css']
 })
 export class BirthdayAnniversaryPageComponent implements OnInit {
   private readonly api = inject(ApiService);

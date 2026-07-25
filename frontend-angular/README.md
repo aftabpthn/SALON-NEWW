@@ -17,6 +17,7 @@
 - `npm run build`
 
 ## Notes
-- Backend health API expected at `http://localhost:8080/api/v1/health`.
+- Backend health API expected at `http://localhost:8082/api/v1/health`.
 - Placeholder pages are intentionally minimal in this phase; business logic can be added module by module.
+
 

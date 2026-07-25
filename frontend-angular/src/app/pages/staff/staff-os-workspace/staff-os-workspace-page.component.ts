@@ -6,12 +6,11 @@ import { STAFF_OS_VIEWS, StaffOsAction, StaffOsSection } from '../../../features
 import { StaffOsStore } from '../../../features/staff-os/application/staff-os.store';
 
 @Component({
-  selector: 'page-staff-os-workspace',
-  standalone: true,
-  imports: [CommonModule, TranslatePipe],
-  providers: [StaffOsStore],
-  templateUrl: './staff-os-workspace-page.component.html',
-  styleUrls: ['./staff-os-workspace-page.component.css'],
+    selector: 'page-staff-os-workspace',
+    imports: [CommonModule, TranslatePipe],
+    providers: [StaffOsStore],
+    templateUrl: './staff-os-workspace-page.component.html',
+    styleUrls: ['./staff-os-workspace-page.component.css']
 })
 export class StaffOsWorkspacePageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);

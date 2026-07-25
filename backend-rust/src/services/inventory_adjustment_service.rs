@@ -35,6 +35,8 @@ pub struct BackbarUsageInput<'a> {
     pub inventory_item_id: &'a str,
     pub service_id: Option<&'a str>,
     pub staff_id: Option<&'a str>,
+    pub client_id: Option<&'a str>,
+    pub appointment_id: Option<&'a str>,
     pub actual_quantity: i32,
     pub notes: &'a str,
     pub actor_user_id: &'a str,
@@ -95,6 +97,8 @@ pub async fn record_backbar_usage(
         if existing.inventory_item_id != input.inventory_item_id
             || existing.service_id.as_deref() != input.service_id
             || existing.staff_id.as_deref() != input.staff_id
+            || existing.client_id.as_deref() != input.client_id
+            || existing.appointment_id.as_deref() != input.appointment_id
             || existing.actual_quantity != i64::from(input.actual_quantity)
         {
             return Err(AppError::conflict(
@@ -130,6 +134,27 @@ pub async fn record_backbar_usage(
         .map_err(|_| AppError::internal("failed to validate staff"))?;
         if !exists {
             return Err(AppError::validation("staff is not available"));
+        }
+    }
+    if input.appointment_id.is_some() && input.client_id.is_none() {
+        return Err(AppError::validation(
+            "clientId is required with appointmentId",
+        ));
+    }
+    if let Some(client_id) = input.client_id {
+        let exists = inventory_repository::client_attribution_exists(
+            &mut tx,
+            input.tenant_id,
+            input.branch_id,
+            client_id,
+            input.appointment_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate client attribution"))?;
+        if !exists {
+            return Err(AppError::validation(
+                "client or appointment is not available",
+            ));
         }
     }
     let policy = if let Some(service_id) = input.service_id {
@@ -172,6 +197,8 @@ pub async fn record_backbar_usage(
         input.inventory_item_id,
         input.service_id,
         input.staff_id,
+        input.client_id,
+        input.appointment_id,
         &item.unit,
         policy.expected_quantity,
         input.actual_quantity,
@@ -471,6 +498,284 @@ pub fn recipe_quantities(recipe: &str) -> Result<HashMap<String, i64>, AppError>
     Ok(quantities)
 }
 
+pub async fn consume_pos_sale(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) -> Result<i64, AppError> {
+    let lines = sqlx::query_as::<_, (String, String, String, i64)>(
+        "SELECT id,line_type,item_id,quantity FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load sale lines for inventory"))?;
+    let recipe_required = sqlx::query_scalar::<_, bool>(
+        "SELECT COALESCE(settings_json #> '{recipeInventory,requireRecipeForService}','false'::JSONB)='true'::JSONB FROM service_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load POS recipe policy"))?
+    .unwrap_or(false);
+    let mut moved = 0;
+    for (line_id, line_type, item_id, line_quantity) in lines {
+        let quantities = match line_type.as_str() {
+            "product" => {
+                if item_id.trim().is_empty() {
+                    return Err(AppError::validation(
+                        "product sale line requires an inventory item id",
+                    ));
+                }
+                HashMap::from([(item_id, line_quantity)])
+            }
+            "service" if !item_id.trim().is_empty() => {
+                pos_service_recipe(
+                    tx,
+                    tenant_id,
+                    branch_id,
+                    &item_id,
+                    line_quantity,
+                    recipe_required,
+                )
+                .await?
+            }
+            "service" if recipe_required => {
+                return Err(AppError::validation(
+                    "service sale line requires a service id when recipes are required",
+                ));
+            }
+            _ => HashMap::new(),
+        };
+        for (inventory_item_id, quantity) in quantities {
+            let quantity = i32::try_from(quantity)
+                .ok()
+                .filter(|quantity| *quantity > 0)
+                .ok_or_else(|| AppError::validation("inventory consumption quantity is invalid"))?;
+            if deduct_pos_inventory_item(
+                tx,
+                tenant_id,
+                branch_id,
+                sale_id,
+                &line_id,
+                &inventory_item_id,
+                quantity,
+            )
+            .await?
+            {
+                moved += 1;
+            }
+        }
+    }
+    Ok(moved)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn restock_pos_product_return(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    refund_id: &str,
+    sale_line_id: &str,
+    line_type: &str,
+    inventory_item_id: &str,
+    quantity: i64,
+) -> Result<(), AppError> {
+    let quantity = i32::try_from(quantity)
+        .ok()
+        .filter(|quantity| *quantity > 0)
+        .filter(|_| line_type == "product" && !inventory_item_id.trim().is_empty())
+        .ok_or_else(|| AppError::validation("only valid product return lines can be restocked"))?;
+    let sale_movement = sqlx::query_as::<_, (String, String, i64)>(
+        "SELECT id,inventory_item_id,unit_cost_paise FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .bind(sale_line_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to validate product inventory movement"))?
+    .ok_or_else(|| {
+        AppError::validation("product line was not deducted from inventory and cannot be restocked")
+    })?;
+    if sale_movement.1 != inventory_item_id {
+        return Err(AppError::internal(
+            "product return inventory reference mismatch",
+        ));
+    }
+    let item =
+        inventory_repository::lock_for_adjustment(tx, tenant_id, branch_id, inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock returned inventory item"))?
+            .ok_or_else(|| AppError::not_found("returned inventory item was not found"))?;
+    let stock_after = item
+        .stock_quantity
+        .checked_add(quantity)
+        .ok_or_else(|| AppError::validation("returned inventory quantity is too large"))?;
+    let created = sqlx::query_scalar::<_, String>(
+        "INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,sale_id,sale_line_id,refund_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity) VALUES($1,$2,$3,$4,$5,$6,'return',$7,$8,$9) ON CONFLICT DO NOTHING RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(inventory_item_id)
+    .bind(sale_id)
+    .bind(sale_line_id)
+    .bind(refund_id)
+    .bind(quantity)
+    .bind(sale_movement.2)
+    .bind(stock_after)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to write inventory return ledger"))?;
+    if let Some(return_ledger_id) = created {
+        sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(inventory_item_id)
+            .bind(stock_after)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to restock returned product"))?;
+        if item.batch_tracked {
+            restore_sale_batches(
+                tx,
+                tenant_id,
+                branch_id,
+                &sale_movement.0,
+                &return_ledger_id,
+                quantity,
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+async fn pos_service_recipe(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    service_id: &str,
+    service_quantity: i64,
+    recipe_required: bool,
+) -> Result<HashMap<String, i64>, AppError> {
+    let recipe = sqlx::query_scalar::<_, String>(
+        "SELECT product_consumption_json::TEXT FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(service_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load service inventory recipe"))?;
+    let quantities = recipe
+        .as_deref()
+        .map(recipe_quantities)
+        .transpose()?
+        .unwrap_or_default();
+    enforce_pos_recipe(recipe_required, &quantities)?;
+    Ok(quantities
+        .into_iter()
+        .map(|(item_id, quantity)| (item_id, service_quantity.saturating_mul(quantity)))
+        .collect())
+}
+
+fn enforce_pos_recipe(
+    recipe_required: bool,
+    quantities: &HashMap<String, i64>,
+) -> Result<(), AppError> {
+    if recipe_required && quantities.is_empty() {
+        return Err(AppError::validation(
+            "service recipe is required by Service Settings before POS checkout",
+        ));
+    }
+    Ok(())
+}
+
+async fn deduct_pos_inventory_item(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    sale_line_id: &str,
+    inventory_item_id: &str,
+    quantity: i32,
+) -> Result<bool, AppError> {
+    let existing = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(inventory_item_id)
+    .bind(sale_line_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to read inventory ledger"))?;
+    if existing.is_some() {
+        return Ok(false);
+    }
+    let item =
+        inventory_repository::lock_for_adjustment(tx, tenant_id, branch_id, inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock inventory item"))?
+            .filter(|item| item.active)
+            .ok_or_else(|| {
+                AppError::validation("inventory item is not available for POS consumption")
+            })?;
+    let already_posted = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND sale_line_id=$4 AND movement_type='sale'",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(inventory_item_id)
+    .bind(sale_line_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to recheck inventory ledger"))?;
+    if already_posted.is_some() {
+        return Ok(false);
+    }
+    if item.stock_quantity < quantity {
+        return Err(AppError::validation(
+            "insufficient inventory for POS checkout",
+        ));
+    }
+    let stock_after = item.stock_quantity - quantity;
+    let ledger_id = sqlx::query_scalar::<_, String>(
+        "INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,sale_id,sale_line_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity) VALUES($1,$2,$3,$4,$5,'sale',$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(inventory_item_id)
+    .bind(sale_id)
+    .bind(sale_line_id)
+    .bind(-quantity)
+    .bind(item.unit_cost_paise)
+    .bind(stock_after)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to write inventory ledger"))?;
+    let Some(ledger_id) = ledger_id else {
+        return Ok(false);
+    };
+    allocate_fefo_batches(tx, tenant_id, branch_id, &item, &ledger_id, quantity).await?;
+    sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(inventory_item_id)
+        .bind(stock_after)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to deduct inventory"))?;
+    Ok(true)
+}
+
 fn recipe_quantity(value: &Value) -> Option<i64> {
     value
         .as_i64()
@@ -527,7 +832,8 @@ fn map_backbar_error(error: sqlx::Error) -> AppError {
 
 #[cfg(test)]
 mod recipe_tests {
-    use super::{recipe_quantities, recipe_usage_policy};
+    use super::{enforce_pos_recipe, recipe_quantities, recipe_usage_policy};
+    use std::collections::HashMap;
 
     #[test]
     fn reads_saved_standard_quantity_and_legacy_aliases() {
@@ -550,6 +856,14 @@ mod recipe_tests {
         assert!(excessive.approval_required);
         assert_eq!(excessive.max_quantity, 12);
         assert_eq!(excessive.wastage_percent, 25.0);
+    }
+
+    #[test]
+    fn pos_blocks_only_when_saved_settings_require_a_recipe() {
+        let empty = HashMap::new();
+        assert!(enforce_pos_recipe(false, &empty).is_ok());
+        assert!(enforce_pos_recipe(true, &empty).is_err());
+        assert!(enforce_pos_recipe(true, &HashMap::from([("item".into(), 1)])).is_ok());
     }
 }
 

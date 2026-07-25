@@ -11,6 +11,7 @@ use crate::{
             self, AttendanceRuleRecord, CatalogOptionRecord, CommissionRuleRecord,
             LeavePolicyOverviewRecord, LeavePolicyRecord, PayRateRecord, ReplaceConfigurationInput,
             ReplaceStaffMastersInput, RoleOptionRecord, ShiftTemplateRecord, StaffCategoryRecord,
+            StaffPricingLevelRecord,
         },
         staff_hr_repository::{self, BulkImportResult, BulkStaffInput},
         staff_repository::{
@@ -20,6 +21,17 @@ use crate::{
     },
     services::auth_service::{self, TENANT_PERMISSION_CATALOG},
 };
+
+pub(crate) fn is_supported_photo_url(url: &str) -> bool {
+    if url.starts_with("/staff/files/") {
+        return true;
+    }
+    if !(url.starts_with("https://") || url.starts_with('/')) {
+        return false;
+    }
+    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".png")
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +47,7 @@ pub struct StaffConfigurationData {
 #[serde(rename_all = "camelCase")]
 pub struct StaffMastersData {
     pub categories: Vec<StaffCategoryRecord>,
+    pub pricing_levels: Vec<StaffPricingLevelRecord>,
     pub shift_templates: Vec<ShiftTemplateRecord>,
     pub attendance_rule: Option<AttendanceRuleRecord>,
     pub leave_policies: Vec<LeavePolicyOverviewRecord>,
@@ -470,9 +483,11 @@ fn validate_bulk_row(row: &BulkStaffInput) -> Result<(), AppError> {
     {
         return Err(AppError::validation("invalid HR option in bulk import"));
     }
-    if row.photo_url.as_deref().is_some_and(|url| {
-        url.len() > 2048 || !(url.starts_with("https://") || url.starts_with('/'))
-    }) {
+    if row
+        .photo_url
+        .as_deref()
+        .is_some_and(|url| url.len() > 2048 || !is_supported_photo_url(url))
+    {
         return Err(AppError::validation("invalid photoUrl in bulk import"));
     }
     Ok(())
@@ -483,15 +498,18 @@ pub async fn load_masters(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<StaffMastersData, AppError> {
-    let (categories, shift_templates, attendance_rule, leave_policies) = tokio::try_join!(
-        staff_configuration_repository::list_staff_categories(db, tenant_id, branch_id),
-        staff_configuration_repository::list_shift_templates(db, tenant_id, branch_id),
-        staff_configuration_repository::get_attendance_rule(db, tenant_id, branch_id),
-        staff_configuration_repository::list_leave_policy_overview(db, tenant_id, branch_id),
-    )
-    .map_err(|_| AppError::internal("failed to load staff masters"))?;
+    let (categories, pricing_levels, shift_templates, attendance_rule, leave_policies) =
+        tokio::try_join!(
+            staff_configuration_repository::list_staff_categories(db, tenant_id, branch_id),
+            staff_configuration_repository::list_staff_pricing_levels(db, tenant_id, branch_id),
+            staff_configuration_repository::list_shift_templates(db, tenant_id, branch_id),
+            staff_configuration_repository::get_attendance_rule(db, tenant_id, branch_id),
+            staff_configuration_repository::list_leave_policy_overview(db, tenant_id, branch_id),
+        )
+        .map_err(|_| AppError::internal("failed to load staff masters"))?;
     Ok(StaffMastersData {
         categories,
+        pricing_levels,
         shift_templates,
         attendance_rule,
         leave_policies,
@@ -682,7 +700,7 @@ fn normalize_login_id(value: &str) -> Result<String, AppError> {
     Ok(login_id)
 }
 
-fn normalize_login_email(value: &str) -> Result<String, AppError> {
+pub(crate) fn normalize_login_email(value: &str) -> Result<String, AppError> {
     let email = value.trim().to_ascii_lowercase();
     let valid = email.len() <= 254
         && email.split_once('@').is_some_and(|(local, domain)| {
@@ -928,6 +946,9 @@ fn validate_configuration(input: &ReplaceConfigurationInput) -> Result<(), AppEr
             || item
                 .commission_percent
                 .is_some_and(|rate| !(0..=100).contains(&rate))
+            || item
+                .pricing_level_price_paise
+                .is_some_and(|price| price < 0)
         {
             return Err(AppError::validation("invalid catalog assignment"));
         }
@@ -965,10 +986,14 @@ fn validate_configuration(input: &ReplaceConfigurationInput) -> Result<(), AppEr
 }
 
 fn validate_masters(input: &ReplaceStaffMastersInput) -> Result<(), AppError> {
-    if input.categories.len() > 100 || input.shift_templates.len() > 100 {
+    if input.categories.len() > 100
+        || input.pricing_levels.len() > 50
+        || input.shift_templates.len() > 100
+    {
         return Err(AppError::validation("staff masters are too large"));
     }
     if !all_unique(input.categories.iter().map(|item| item.code.as_str()))
+        || !all_unique(input.pricing_levels.iter().map(|item| item.code.as_str()))
         || !all_unique(input.shift_templates.iter().map(|item| item.code.as_str()))
     {
         return Err(AppError::validation("staff master codes must be unique"));
@@ -980,6 +1005,15 @@ fn validate_masters(input: &ReplaceStaffMastersInput) -> Result<(), AppError> {
             || category.designation.chars().count() > 100
         {
             return Err(AppError::validation("invalid staff category"));
+        }
+    }
+    for level in &input.pricing_levels {
+        if !valid_master_code(&level.code)
+            || level.name.trim().is_empty()
+            || level.name.chars().count() > 100
+            || !(0..=1000).contains(&level.rank)
+        {
+            return Err(AppError::validation("invalid staff pricing level"));
         }
     }
     for shift in &input.shift_templates {

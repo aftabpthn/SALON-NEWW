@@ -68,6 +68,7 @@ export default {
   'nav.Daily Closing & Enterprise': 'Daily Closing & Enterprise',
   'nav.Dashboard': 'Dashboard',
   'nav.Executive Overview': 'Executive Overview',
+  'nav.Enterprise POS Controls': 'Enterprise POS Controls',
   'nav.Face Punch': 'Face Punch',
   'nav.Finance': 'Finance',
   'nav.Fines & Deductions': 'Fines & Deductions',

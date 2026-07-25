@@ -17,8 +17,8 @@ type UploadSession = { id: string; missingParts: number[]; receivedBytes: number
 type MappingSuggestions = { source: string; suggestions: Record<string, string>; unmatchedColumns: string[] };
 
 @Component({
-  selector: 'page-integrations-data', standalone: true, imports: [CommonModule, FormsModule],
-  templateUrl: './integrations-data-page.component.html', styleUrls: ['./integrations-data-page.component.css', './integrations-data-connectors.css'],
+    selector: 'page-integrations-data', imports: [CommonModule, FormsModule],
+    templateUrl: './integrations-data-page.component.html', styleUrls: ['./integrations-data-page.component.css', './integrations-data-connectors.css']
 })
 export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);

@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 
 type ReportItem = {
   id: string;
@@ -77,11 +78,10 @@ const LEGACY_REPORT_METADATA: Record<string, Pick<ReportItem, 'category' | 'desc
 };
 
 @Component({
-  selector: 'page-reports',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './reports-page.component.html',
-  styleUrls: ['./reports-page.component.css'],
+    selector: 'page-reports',
+    imports: [CommonModule, FormsModule, DatePickerComponent, BranchNamePipe],
+    templateUrl: './reports-page.component.html',
+    styleUrls: ['./reports-page.component.css']
 })
 export class ReportsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -224,7 +224,11 @@ export class ReportsPageComponent implements OnInit {
 
   openReport(report: ReportItem): void {
     if (report.id === 'advanced-business') { void this.router.navigateByUrl('/reports/advanced'); return; }
-    if (['financial-summary', 'daily-revenue', 'daily-sheet', 'deleted-invoices', 'gst-summary', 'discount-summary', 'staff-sales', 'wallet-ledger', 'rewards-loyalty', 'membership-sales', 'package-sales', 'tips-payout', 'message-history'].includes(report.id)) { void this.router.navigateByUrl(`/reports/advanced?report=${report.id}`); return; }
+    if (['detailed-invoice', 'invoice-activity', 'due-recovery', 'recovery-history', 'wallet-ledger', 'payment-collection', 'staff-service-discount', 'service-trends', 'service-clients', 'product-sales', 'product-movements', 'payment-modes'].includes(report.id)) {
+      void this.router.navigateByUrl(`/reports/invoices?report=${report.id}`);
+      return;
+    }
+    if (['financial-summary', 'daily-revenue', 'daily-sheet', 'deleted-invoices', 'gst-summary', 'discount-summary', 'staff-sales', 'rewards-loyalty', 'membership-sales', 'package-sales', 'tips-payout', 'message-history'].includes(report.id)) { void this.router.navigateByUrl(`/reports/advanced?report=${report.id}`); return; }
     this.liveOpen = false;
     this.liveState = null;
     this.liveError = '';
@@ -233,10 +237,7 @@ export class ReportsPageComponent implements OnInit {
       void this.loadProfitWorkspace();
       return;
     }
-    if (['invoice-activity', 'due-recovery', 'service-trends', 'service-clients', 'product-sales', 'product-movements'].includes(report.id)) {
-      void this.router.navigateByUrl(`/reports/invoices?report=${report.id}`);
-      return;
-    }
+
     if (report.id === 'appointments') { void this.router.navigateByUrl('/appointment-reports'); return; }
     if (report.id === 'staff-performance') { void this.router.navigateByUrl('/reports/staff-bookings'); return; }
     if (report.id === 'cash-drawer-eod') { void this.router.navigateByUrl('/pos/cash-drawer'); return; }
@@ -1025,3 +1026,4 @@ export class ReportsPageComponent implements OnInit {
     }
   }
 }
+

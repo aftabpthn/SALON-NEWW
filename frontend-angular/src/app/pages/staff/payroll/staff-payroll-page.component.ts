@@ -78,11 +78,10 @@ type PayrollPreview = {
 };
 
 @Component({
-  selector: 'page-staff-payroll',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './staff-payroll-page.component.html',
-  styleUrls: ['./staff-payroll-page.component.css'],
+    selector: 'page-staff-payroll',
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
+    templateUrl: './staff-payroll-page.component.html',
+    styleUrls: ['./staff-payroll-page.component.css']
 })
 export class StaffPayrollPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -178,7 +177,7 @@ export class StaffPayrollPageComponent implements OnInit {
   get isStaffOsSalaryGenerate() { return Boolean(this.route.snapshot.data['staffOsSalaryGenerate']) || this.router.url.includes('/staff-os/'); }
   get pageTitle() { return this.isStaffOsSalaryGenerate ? 'Salary Generate' : 'Employee Payroll'; }
   get backLabel() { return this.isStaffOsSalaryGenerate ? 'Staff OS' : 'Back to staff'; }
-  get branchLabel() { return this.auth.branchName || localStorage.getItem('aurashine_branch_id') || 'Current branch'; }
+  get branchLabel() { return this.auth.branchName || 'Current branch'; }
   get categoryOptions() {
     return [...new Set(this.staff.map((row) => (row.jobTitle || '').trim()).filter(Boolean))].sort();
   }

@@ -3,71 +3,231 @@
     <div class="title-row"><h1>Integrations &amp; Data</h1><span class="data-pill" [class.online]="!error">{{ error ? 'Action required' : 'API connected' }}</span></div>
     <button type="button" (click)="reload()" [disabled]="busy || loading">Reload</button>
   </header>
-  <nav class="tabs" aria-label="Integrations and data sections"><button type="button" *ngFor="let tab of visibleTabs" [class.active]="activeTab === tab" [attr.aria-current]="activeTab === tab ? 'page' : null" (click)="activeTab = tab">{{ tab }}</button></nav>
-  <p class="alert" *ngIf="error">{{ error }}</p>
-  <p class="secret" *ngIf="revealedSecret"><strong>Copy now — shown once</strong><code>{{ revealedSecret }}</code><button type="button" (click)="revealedSecret = ''">Dismiss</button></p>
-  <main class="content" [ngSwitch]="activeTab">
-    <section *ngSwitchCase="'Overview'" class="overview"><article *ngIf="canViewApiClients"><h2>API keys</h2><strong>{{ apiKeys.length }}</strong></article><article><h2>Webhooks</h2><strong>{{ webhooks.length }}</strong></article></section>
-    <section *ngSwitchCase="'Integrations'" class="panel"><header><h2>Connectors</h2></header><div class="provider-row"><strong>Tally accounting</strong><span>Built in</span><span>Z-report XML export</span><span>Active</span></div><div class="connector-row" *ngFor="let connector of connectors"><div><strong>{{ connector.label }}</strong><small>{{ connector.category }}</small></div><span>{{ connector.configured ? connector.authMode : 'Credentials required' }}</span><span><strong>{{ connector.status }}</strong><small *ngIf="connector.externalAccountName || connector.externalAccountId">{{ connector.externalAccountName || connector.externalAccountId }}</small><small *ngIf="connector.lastError">{{ connector.lastError }}</small></span><label *ngIf="connector.provider === 'netsuite' && connector.status !== 'connected'">Account ID<input [(ngModel)]="netsuiteAccountId" /></label><span class="row-actions"><button type="button" *ngIf="connector.status !== 'connected'" [disabled]="busy" (click)="connectConnector(connector)">{{ connector.provider === 'zapier' ? 'API setup' : 'Connect' }}</button><button type="button" *ngIf="connector.status === 'connected' && connector.provider !== 'zapier'" [disabled]="busy" (click)="syncConnector(connector)">Sync now</button><button type="button" *ngIf="connector.status === 'connected' && connector.provider !== 'zapier'" [disabled]="busy" (click)="disconnectConnector(connector)">Disconnect</button></span></div><div class="section-label" *ngIf="connectorJobs.length">Recent connector jobs</div><div class="provider-row" *ngFor="let job of connectorJobs"><strong>{{ providerLabel(job.provider) }}</strong><span>{{ job.triggerSource }}</span><span>{{ job.status }}</span><span>{{ job.lastError || formatDate(job.completedAt || job.createdAt) }}</span></div><div class="section-label">Delivery providers</div><div class="provider-row" *ngFor="let provider of providers"><strong>{{ providerLabel(provider.provider) }}</strong><span>{{ provider.enabled ? 'Enabled' : 'Not configured' }}</span><span>{{ provider.webhookConfigured ? 'Signed webhook ready' : 'Webhook not configured' }}</span><span>{{ provider.environment || '—' }}</span></div></section>
-    <section *ngSwitchCase="'API Keys'" class="panel"><header><h2>API keys</h2><button *ngIf="canManageApiClients" class="primary" type="button" (click)="openApiKey()">New API key</button></header><div class="simple-head"><span>Name</span><span>Prefix</span><span>Scopes</span><span>Status</span><span>Actions</span></div><div class="simple-row" *ngFor="let row of apiKeys"><strong>{{ row.name }}</strong><code>{{ row.keyPrefix }}</code><span>{{ row.scopesJson.join(', ') }}</span><span>{{ row.status }}</span><span class="row-actions"><button *ngIf="canManageApiClients" type="button" (click)="rotateApiKey(row)" [disabled]="row.status !== 'active' || busy">Rotate</button><button *ngIf="canManageApiClients" type="button" (click)="revokeApiKey(row)" [disabled]="row.status !== 'active' || busy">Revoke</button></span></div><div class="empty" *ngIf="!loading && !apiKeys.length">No API keys yet</div></section>
-    <section *ngSwitchCase="'Webhooks'" class="panel"><header><h2>Webhook subscriptions</h2><button class="primary" type="button" (click)="openWebhook()">New webhook</button></header><div class="simple-head"><span>Name</span><span>Endpoint</span><span>Events</span><span>Status</span><span>Actions</span></div><div class="simple-row" *ngFor="let row of webhooks"><strong>{{ row.name }}</strong><span>{{ row.endpointUrl }}</span><span>{{ row.events.join(', ') }}</span><span>{{ row.active ? 'Active' : 'Inactive' }}</span><span class="row-actions"><button type="button" (click)="testWebhook(row)" [disabled]="!row.active || busy">Test</button><button type="button" (click)="deactivateWebhook(row)" [disabled]="!row.active || busy">Deactivate</button></span></div><div class="empty" *ngIf="!loading && !webhooks.length">No webhook subscriptions yet</div></section>
-    <section *ngSwitchCase="'Imports'" class="panel migration-panel" aria-label="Data Migration workspace">
-      <header class="migration-command"><div><span class="section-label">Data Migration</span><h2>Import control center</h2></div><div class="command-actions"><span class="data-pill">{{ migration.activeWorkers() }} active</span><span class="data-pill" [class.attention]="migration.pendingApprovals()">{{ migration.pendingApprovals() }} approvals</span><span class="data-pill" [class.attention]="migration.monitoring()?.alerts?.length">{{ migration.monitoring()?.alerts?.length || 0 }} alerts</span><button class="primary" type="button" (click)="openImport()">New import</button></div></header>
-      <div class="migration-steps" aria-label="Migration workflow"><span>Source / upload</span><span>Mapping</span><span>Validation</span><span>Worker progress</span><span>Approval</span><span>Reconciliation</span><span>History / rollback</span></div>
-      <div class="migration-alerts" *ngIf="migration.monitoring()?.alerts?.length"><span *ngFor="let alert of migration.monitoring()?.alerts"><strong>{{ alert.code }}</strong>{{ alert.count }}</span></div>
-      <header class="subheader"><h3>Source / upload</h3></header>
-      <div class="evidence-head"><span>File</span><span>Format</span><span>Size</span><span>SHA-256</span><span>Status</span><span>Action</span></div>
-      <div class="evidence-row" *ngFor="let file of sourceFiles"><strong>{{ file.originalFileName }}</strong><span>{{ file.format }}</span><span>{{ file.sizeBytes | number }} B</span><code>{{ file.sha256 | slice:0:12 }}…</code><span>{{ file.evidenceStatus }}</span><span class="row-actions"><button type="button" (click)="queueEvidence(file)" [disabled]="busy">Queue</button><button type="button" (click)="downloadEvidence(file)" [disabled]="busy">Evidence</button></span></div>
-      <div class="compact-empty" *ngIf="!loading && !sourceFiles.length">No source evidence yet</div>
-      <header class="subheader"><h3>Worker progress, approval and history</h3></header>
-      <div class="table-head"><span>Entity</span><span>File</span><span>Mode</span><span>Status</span><span>Rows</span><span>Created</span><span>Action</span></div>
-      <div class="table-row" *ngFor="let job of jobs">
+  <nav class="tabs" aria-label="Integrations and data sections">@for (tab of visibleTabs; track tab) {
+    <button type="button" [class.active]="activeTab === tab" [attr.aria-current]="activeTab === tab ? 'page' : null" (click)="activeTab = tab">{{ tab }}</button>
+  }</nav>
+  @if (error) {
+    <p class="alert">{{ error }}</p>
+  }
+  @if (revealedSecret) {
+    <p class="secret"><strong>Copy now — shown once</strong><code>{{ revealedSecret }}</code><button type="button" (click)="revealedSecret = ''">Dismiss</button></p>
+  }
+  <main class="content">
+    @switch (activeTab) {
+      @case ('Overview') {
+        <section class="overview">@if (canViewApiClients) {
+          <article><h2>API keys</h2><strong>{{ apiKeys.length }}</strong></article>
+          }<article><h2>Webhooks</h2><strong>{{ webhooks.length }}</strong></article></section>
+        }
+        @case ('Integrations') {
+          <section class="panel"><header><h2>Connectors</h2></header><div class="provider-row"><strong>Tally accounting</strong><span>Built in</span><span>Z-report XML export</span><span>Active</span></div>@for (connector of connectors; track connector) {
+          <div class="connector-row"><div><strong>{{ connector.label }}</strong><small>{{ connector.category }}</small></div><span>{{ connector.configured ? connector.authMode : 'Credentials required' }}</span><span><strong>{{ connector.status }}</strong>@if (connector.externalAccountName || connector.externalAccountId) {
+          <small>{{ connector.externalAccountName || connector.externalAccountId }}</small>
+          }@if (connector.lastError) {
+          <small>{{ connector.lastError }}</small>
+        }</span>@if (connector.provider === 'netsuite' && connector.status !== 'connected') {
+        <label>Account ID<input [(ngModel)]="netsuiteAccountId" /></label>
+        }<span class="row-actions">@if (connector.status !== 'connected') {
+        <button type="button" [disabled]="busy" (click)="connectConnector(connector)">{{ connector.provider === 'zapier' ? 'API setup' : 'Connect' }}</button>
+        }@if (connector.status === 'connected' && connector.provider !== 'zapier') {
+        <button type="button" [disabled]="busy" (click)="syncConnector(connector)">Sync now</button>
+        }@if (connector.status === 'connected' && connector.provider !== 'zapier') {
+        <button type="button" [disabled]="busy" (click)="disconnectConnector(connector)">Disconnect</button>
+      }</span></div>
+      }@if (connectorJobs.length) {
+      <div class="section-label">Recent connector jobs</div>
+      }@for (job of connectorJobs; track job) {
+      <div class="provider-row"><strong>{{ providerLabel(job.provider) }}</strong><span>{{ job.triggerSource }}</span><span>{{ job.status }}</span><span>{{ job.lastError || formatDate(job.completedAt || job.createdAt) }}</span></div>
+      }<div class="section-label">Delivery providers</div>@for (provider of providers; track provider) {
+      <div class="provider-row"><strong>{{ providerLabel(provider.provider) }}</strong><span>{{ provider.enabled ? 'Enabled' : 'Not configured' }}</span><span>{{ provider.webhookConfigured ? 'Signed webhook ready' : 'Webhook not configured' }}</span><span>{{ provider.environment || '—' }}</span></div>
+    }</section>
+  }
+  @case ('API Keys') {
+    <section class="panel"><header><h2>API keys</h2>@if (canManageApiClients) {
+    <button class="primary" type="button" (click)="openApiKey()">New API key</button>
+    }</header><div class="simple-head"><span>Name</span><span>Prefix</span><span>Scopes</span><span>Status</span><span>Actions</span></div>@for (row of apiKeys; track row) {
+    <div class="simple-row"><strong>{{ row.name }}</strong><code>{{ row.keyPrefix }}</code><span>{{ row.scopesJson.join(', ') }}</span><span>{{ row.status }}</span><span class="row-actions">@if (canManageApiClients) {
+    <button type="button" (click)="rotateApiKey(row)" [disabled]="row.status !== 'active' || busy">Rotate</button>
+    }@if (canManageApiClients) {
+    <button type="button" (click)="revokeApiKey(row)" [disabled]="row.status !== 'active' || busy">Revoke</button>
+  }</span></div>
+  }@if (!loading && !apiKeys.length) {
+  <div class="empty">No API keys yet</div>
+}</section>
+}
+@case ('Webhooks') {
+  <section class="panel"><header><h2>Webhook subscriptions</h2><button class="primary" type="button" (click)="openWebhook()">New webhook</button></header><div class="simple-head"><span>Name</span><span>Endpoint</span><span>Events</span><span>Status</span><span>Actions</span></div>@for (row of webhooks; track row) {
+  <div class="simple-row"><strong>{{ row.name }}</strong><span>{{ row.endpointUrl }}</span><span>{{ row.events.join(', ') }}</span><span>{{ row.active ? 'Active' : 'Inactive' }}</span><span class="row-actions"><button type="button" (click)="testWebhook(row)" [disabled]="!row.active || busy">Test</button><button type="button" (click)="deactivateWebhook(row)" [disabled]="!row.active || busy">Deactivate</button></span></div>
+  }@if (!loading && !webhooks.length) {
+  <div class="empty">No webhook subscriptions yet</div>
+}</section>
+}
+@case ('Imports') {
+  <section class="panel migration-panel" aria-label="Data Migration workspace">
+    <header class="migration-command"><div><span class="section-label">Data Migration</span><h2>Import control center</h2></div><div class="command-actions"><span class="data-pill">{{ migration.activeWorkers() }} active</span><span class="data-pill" [class.attention]="migration.pendingApprovals()">{{ migration.pendingApprovals() }} approvals</span><span class="data-pill" [class.attention]="migration.monitoring()?.alerts?.length">{{ migration.monitoring()?.alerts?.length || 0 }} alerts</span><button class="primary" type="button" (click)="openImport()">New import</button></div></header>
+    <div class="migration-steps" aria-label="Migration workflow"><span>Source / upload</span><span>Mapping</span><span>Validation</span><span>Worker progress</span><span>Approval</span><span>Reconciliation</span><span>History / rollback</span></div>
+    @if (migration.monitoring()?.alerts?.length) {
+      <div class="migration-alerts">@for (alert of migration.monitoring()?.alerts; track alert) {
+        <span><strong>{{ alert.code }}</strong>{{ alert.count }}</span>
+      }</div>
+    }
+    <header class="subheader"><h3>Source / upload</h3></header>
+    <div class="evidence-head"><span>File</span><span>Format</span><span>Size</span><span>SHA-256</span><span>Status</span><span>Action</span></div>
+    @for (file of sourceFiles; track file) {
+      <div class="evidence-row"><strong>{{ file.originalFileName }}</strong><span>{{ file.format }}</span><span>{{ file.sizeBytes | number }} B</span><code>{{ file.sha256 | slice:0:12 }}…</code><span>{{ file.evidenceStatus }}</span><span class="row-actions"><button type="button" (click)="queueEvidence(file)" [disabled]="busy">Queue</button><button type="button" (click)="downloadEvidence(file)" [disabled]="busy">Evidence</button></span></div>
+    }
+    @if (!loading && !sourceFiles.length) {
+      <div class="compact-empty">No source evidence yet</div>
+    }
+    <header class="subheader"><h3>Worker progress, approval and history</h3></header>
+    <div class="table-head"><span>Entity</span><span>File</span><span>Mode</span><span>Status</span><span>Rows</span><span>Created</span><span>Action</span></div>
+    @for (job of jobs; track job) {
+      <div class="table-row">
         <strong>{{ job.entity }}</strong><span>{{ job.fileName }}</span><span>{{ job.mode }}</span>
-        <span><span class="status-pill" [class.good]="job.status === 'completed'" [class.attention]="job.status === 'failed' || job.approvalStatus === 'pending'">{{ job.status }}</span><small *ngIf="job.approvalStatus !== 'not_required'">Approval {{ job.approvalStatus }}</small><small *ngIf="job.sourceFileId && job.totalChunks">{{ job.completedChunks }}/{{ job.totalChunks }} chunks</small><small *ngIf="job.heartbeatAt">Heartbeat {{ formatDate(job.heartbeatAt) }}</small></span>
-        <span><progress [attr.aria-label]="'Import progress for ' + job.fileName" [max]="job.totalRows || 1" [value]="job.processedRows"></progress>{{ job.processedRows }}/{{ job.totalRows }}<small *ngIf="job.failedChunks">{{ job.failedChunks }} failed chunks</small><small *ngIf="job.errorRowCount">{{ job.errorRowCount }} errors</small><small class="warning-text" *ngIf="job.warningRowCount">{{ job.warningRowCount }} warnings</small><small class="warning-text" *ngIf="job.duplicateRowCount">{{ job.duplicateRowCount }} duplicates</small></span>
-        <span>{{ formatDate(job.createdAt) }}</span>
-        <span class="row-actions"><button type="button" [disabled]="busy" (click)="reviewJob(job)">Review</button><button class="primary" *ngIf="job.approvalStatus === 'pending'" type="button" [disabled]="busy" (click)="decideApproval(job, true)">Approve</button><button *ngIf="job.approvalStatus === 'pending'" type="button" [disabled]="busy" (click)="decideApproval(job, false)">Reject</button><button *ngIf="job.sourceFileId && ['staging','queued','processing'].includes(job.status)" type="button" [disabled]="busy" (click)="pause(job)">Pause</button><button *ngIf="job.status === 'paused'" type="button" [disabled]="busy" (click)="resume(job)">Resume</button><button *ngIf="job.sourceFileId && job.status === 'failed'" type="button" [disabled]="busy" (click)="retryFailed(job)">Retry</button><button *ngIf="!job.sourceFileId && job.status === 'failed' && !job.errorsJson.length" type="button" [disabled]="busy" (click)="resume(job)">Resume</button><button *ngIf="job.sourceFileId && ['staging','queued','processing','paused','failed'].includes(job.status)" type="button" [disabled]="busy" (click)="cancelImport(job)">Cancel</button></span>
-      </div>
-      <div class="compact-empty" *ngIf="!loading && !jobs.length">No import jobs yet</div>
-    </section>
-    <section *ngSwitchCase="'Exports'" class="panel"><header><h2>Exports</h2></header><div class="export-row"><div><strong>Clients</strong><span>Current branch client records</span></div><button type="button" (click)="exportClients()" [disabled]="busy">Export JSON</button></div><div class="export-row"><div><strong>Staff import template</strong><span>Supported CSV columns</span></div><button type="button" (click)="downloadStaffTemplate()">Download CSV</button></div><div class="export-row"><div><strong>OpenAPI 3.1</strong><span>Versioned API contract</span></div><button type="button" (click)="downloadOpenApi()">Open spec</button></div></section>
-  </main>
-  <aside class="drawer" *ngIf="drawer" role="dialog" aria-modal="true" aria-labelledby="integration-drawer-title"><header><h2 id="integration-drawer-title">{{ drawer === 'import' ? 'New import' : drawer === 'api-key' ? 'New API key' : drawer === 'webhook' ? 'New webhook' : 'Migration review' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
-    <div class="drawer-body" *ngIf="drawer === 'import'">
+        <span><span class="status-pill" [class.good]="job.status === 'completed'" [class.attention]="job.status === 'failed' || job.approvalStatus === 'pending'">{{ job.status }}</span>@if (job.approvalStatus !== 'not_required') {
+        <small>Approval {{ job.approvalStatus }}</small>
+        }@if (job.sourceFileId && job.totalChunks) {
+        <small>{{ job.completedChunks }}/{{ job.totalChunks }} chunks</small>
+        }@if (job.heartbeatAt) {
+        <small>Heartbeat {{ formatDate(job.heartbeatAt) }}</small>
+      }</span>
+      <span><progress [attr.aria-label]="'Import progress for ' + job.fileName" [max]="job.totalRows || 1" [value]="job.processedRows"></progress>{{ job.processedRows }}/{{ job.totalRows }}@if (job.failedChunks) {
+      <small>{{ job.failedChunks }} failed chunks</small>
+      }@if (job.errorRowCount) {
+      <small>{{ job.errorRowCount }} errors</small>
+      }@if (job.warningRowCount) {
+      <small class="warning-text">{{ job.warningRowCount }} warnings</small>
+      }@if (job.duplicateRowCount) {
+      <small class="warning-text">{{ job.duplicateRowCount }} duplicates</small>
+    }</span>
+    <span>{{ formatDate(job.createdAt) }}</span>
+    <span class="row-actions"><button type="button" [disabled]="busy" (click)="reviewJob(job)">Review</button>@if (job.approvalStatus === 'pending') {
+    <button class="primary" type="button" [disabled]="busy" (click)="decideApproval(job, true)">Approve</button>
+    }@if (job.approvalStatus === 'pending') {
+    <button type="button" [disabled]="busy" (click)="decideApproval(job, false)">Reject</button>
+    }@if (job.sourceFileId && ['staging','queued','processing'].includes(job.status)) {
+    <button type="button" [disabled]="busy" (click)="pause(job)">Pause</button>
+    }@if (job.status === 'paused') {
+    <button type="button" [disabled]="busy" (click)="resume(job)">Resume</button>
+    }@if (job.sourceFileId && job.status === 'failed') {
+    <button type="button" [disabled]="busy" (click)="retryFailed(job)">Retry</button>
+    }@if (!job.sourceFileId && job.status === 'failed' && !job.errorsJson.length) {
+    <button type="button" [disabled]="busy" (click)="resume(job)">Resume</button>
+    }@if (job.sourceFileId && ['staging','queued','processing','paused','failed'].includes(job.status)) {
+    <button type="button" [disabled]="busy" (click)="cancelImport(job)">Cancel</button>
+  }</span>
+</div>
+}
+@if (!loading && !jobs.length) {
+  <div class="compact-empty">No import jobs yet</div>
+}
+</section>
+}
+@case ('Exports') {
+  <section class="panel"><header><h2>Exports</h2></header><div class="export-row"><div><strong>Clients</strong><span>Current branch client records</span></div><button type="button" (click)="exportClients()" [disabled]="busy">Export JSON</button></div><div class="export-row"><div><strong>Staff import template</strong><span>Supported CSV columns</span></div><button type="button" (click)="downloadStaffTemplate()">Download CSV</button></div><div class="export-row"><div><strong>OpenAPI 3.1</strong><span>Versioned API contract</span></div><button type="button" (click)="downloadOpenApi()">Open spec</button></div></section>
+}
+}
+</main>
+@if (drawer) {
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="integration-drawer-title"><header><h2 id="integration-drawer-title">{{ drawer === 'import' ? 'New import' : drawer === 'api-key' ? 'New API key' : drawer === 'webhook' ? 'New webhook' : 'Migration review' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+  @if (drawer === 'import') {
+    <div class="drawer-body">
       <span class="drawer-section-label">Source / upload</span>
       <label>Entity<select [(ngModel)]="entity" (ngModelChange)="entityChanged()"><option value="">Select entity</option><option value="clients">Clients</option><option value="staff">Staff</option><option value="services">Services</option><option value="products">Products</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory / opening stock</option><option value="memberships">Memberships</option><option value="packages">Packages</option><option value="appointments">Appointments</option><option value="sales">Sales</option><option value="invoices">Invoices</option><option value="payments">Payments</option><option value="expenses">Expenses</option><option value="purchase-bills">Historical purchase bills</option></select></label>
       <label class="file">Source file<input type="file" accept=".csv,.xlsx,.zip,text/csv,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="chooseFile($event)" /><span>{{ fileName || selectedSourceFile?.name || 'Choose file' }}</span></label>
       <span class="drawer-section-label">Mapping</span>
-      <label>Saved mapping<select [(ngModel)]="selectedMappingId" (ngModelChange)="mappingSource = ''; suggestedMapping = {}; importAnalysis = null"><option value="">Automatic mapping</option><option *ngFor="let mapping of availableMappings" [value]="mapping.id">{{ mapping.name }}</option></select></label>
-      <span class="drawer-section-label">Validation</span>
-      <label>Mode<div class="mode"><button type="button" [class.active]="mode === 'dry-run'" (click)="mode = 'dry-run'">Dry run</button><button type="button" [class.active]="mode === 'commit'" (click)="mode = 'commit'">Commit</button></div></label>
-      <label *ngIf="selectedSourceFileId && !csvText">Chunk size<input type="number" min="100" max="10000" step="100" [(ngModel)]="chunkSize" /></label>
-      <label class="choice" *ngIf="selectedSourceFileId && !csvText"><input type="checkbox" [(ngModel)]="allowPartialImport" />Allow valid rows when other rows fail</label>
-      <p class="validation">{{ uploadStatus || 'Choose CSV, XLSX or ZIP' }}<strong *ngIf="uploadProgress"> {{ uploadProgress }}%</strong><span *ngIf="rowCount"> · {{ rowCount }} rows loaded</span></p>
-      <button type="button" *ngIf="uploadSessionId && uploadStatus === 'Upload paused'" [disabled]="busy" (click)="resumeSourceUpload()">Resume upload</button>
-      <div class="row-actions"><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="suggestMapping()">{{ csvText ? 'AI mapping + analyze' : 'AI mapping' }}</button><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="analyzeImport()">Analyze without writes</button></div>
-      <p class="validation" *ngIf="mappingSource">Mapping source: {{ mappingSource }}</p>
-      <section class="analysis" *ngIf="importAnalysis">
+      <label>Saved mapping<select [(ngModel)]="selectedMappingId" (ngModelChange)="mappingSource = ''; suggestedMapping = {}; importAnalysis = null"><option value="">Automatic mapping</option>@for (mapping of availableMappings; track mapping) {
+      <option [value]="mapping.id">{{ mapping.name }}</option>
+    }</select></label>
+    <span class="drawer-section-label">Validation</span>
+    <label>Mode<div class="mode"><button type="button" [class.active]="mode === 'dry-run'" (click)="mode = 'dry-run'">Dry run</button><button type="button" [class.active]="mode === 'commit'" (click)="mode = 'commit'">Commit</button></div></label>
+    @if (selectedSourceFileId && !csvText) {
+      <label>Chunk size<input type="number" min="100" max="10000" step="100" [(ngModel)]="chunkSize" /></label>
+    }
+    @if (selectedSourceFileId && !csvText) {
+      <label class="choice"><input type="checkbox" [(ngModel)]="allowPartialImport" />Allow valid rows when other rows fail</label>
+    }
+    <p class="validation">{{ uploadStatus || 'Choose CSV, XLSX or ZIP' }}@if (uploadProgress) {
+      <strong> {{ uploadProgress }}%</strong>
+      }@if (rowCount) {
+      <span> · {{ rowCount }} rows loaded</span>
+    }</p>
+    @if (uploadSessionId && uploadStatus === 'Upload paused') {
+      <button type="button" [disabled]="busy" (click)="resumeSourceUpload()">Resume upload</button>
+    }
+    <div class="row-actions"><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="suggestMapping()">{{ csvText ? 'AI mapping + analyze' : 'AI mapping' }}</button><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="analyzeImport()">Analyze without writes</button></div>
+    @if (mappingSource) {
+      <p class="validation">Mapping source: {{ mappingSource }}</p>
+    }
+    @if (importAnalysis) {
+      <section class="analysis">
         <div class="analysis-summary"><span>{{ importAnalysis.summary.readyRows }}/{{ importAnalysis.summary.sourceRows }} ready</span><span>{{ importAnalysis.summary.errorRows }} errors</span><span>{{ importAnalysis.summary.warningRows }} warnings</span><span>{{ importAnalysis.summary.duplicateRows }} duplicates</span></div>
-        <p class="unmatched" *ngIf="importAnalysis.unmatchedColumns.length">Unmatched: {{ importAnalysis.unmatchedColumns.join(', ') }}</p>
-        <div class="analysis-row" *ngFor="let row of analysisRows"><span><strong>Row {{ row.sourceRowNumber }}</strong><small *ngIf="row.errors.length">{{ row.errors[0].message }}</small><small *ngIf="!row.errors.length && row.warnings.length">{{ row.warnings[0].message }}</small></span><select *ngIf="row.duplicateTargetId" [ngModel]="duplicateDecisions[duplicateDecisionKey(row)] || row.duplicateDecision || ''" (ngModelChange)="chooseDuplicateDecision(row, $event)"><option value="">Choose action</option><option value="merge">Merge</option><option value="keep">Keep existing</option><option value="link">Link only</option></select><span *ngIf="!row.duplicateTargetId">{{ row.status }}</span></div>
-        <label>Mapping name<div class="mapping-save"><input [(ngModel)]="mappingName" /><button type="button" [disabled]="busy || !mappingName.trim()" (click)="saveCurrentMapping()">Save</button></div></label>
-      </section>
-      <p class="template-fields" *ngIf="activeTemplate">Supported: {{ activeTemplate.columns.length }} columns</p>
-    </div>
-    <div class="drawer-body governance-body" *ngIf="drawer === 'governance'">
-      <div class="compact-empty" *ngIf="migration.governanceLoading()">Loading review…</div>
-      <ng-container *ngIf="governance as report">
-        <section class="review-section"><span class="drawer-section-label">Job</span><dl class="review-grid"><div><dt>Entity</dt><dd>{{ report.job.entity }}</dd></div><div><dt>Status</dt><dd>{{ report.job.status }}</dd></div><div><dt>Owner</dt><dd>{{ report.job.ownerUserId }}</dd></div><div><dt>Approval</dt><dd>{{ report.job.approvalStatus }}</dd></div></dl></section>
-        <section class="review-section"><span class="drawer-section-label">Reconciliation</span><div class="reconciliation-status" [class.good]="report.reconciliation.status === 'matched'">{{ report.reconciliation.status }}</div><dl class="review-grid"><div><dt>Expected valid</dt><dd>{{ report.reconciliation.expectedValidRows }}</dd></div><div><dt>Processed</dt><dd>{{ report.reconciliation.actualProcessedRows }}</dd></div><div><dt>Created</dt><dd>{{ report.actual.created }}</dd></div><div><dt>Merged / linked</dt><dd>{{ report.actual.merged + report.actual.linked }}</dd></div><div><dt>Failed</dt><dd>{{ report.actual.failed }}</dd></div><div><dt>Branch entity jobs</dt><dd>{{ report.branchEntityTotals.jobs }}</dd></div></dl></section>
-        <section class="review-section"><span class="drawer-section-label">Rollback impact</span><dl class="review-grid"><div><dt>Delete</dt><dd>{{ report.preRollbackImpact.actions.wouldDelete }}</dd></div><div><dt>Restore</dt><dd>{{ report.preRollbackImpact.actions.wouldRestore }}</dd></div><div><dt>Unlink</dt><dd>{{ report.preRollbackImpact.actions.wouldUnlink }}</dd></div><div><dt>Blocked dependencies</dt><dd>{{ report.preRollbackImpact.dependencies.blockingRecords }}</dd></div></dl></section>
-        <section class="review-section" *ngIf="report.recoveryRecommendations.length"><span class="drawer-section-label">Recovery recommendations</span><ul><li *ngFor="let recommendation of report.recoveryRecommendations">{{ recommendation }}</li></ul></section>
-        <section class="review-section" *ngIf="migration.failureAssistant() as assistant"><span class="drawer-section-label">Failure assistant · {{ assistant.source }}</span><strong>{{ assistant.summary }}</strong><ul><li *ngFor="let recommendation of assistant.recommendations">{{ recommendation }}</li></ul></section>
-      </ng-container>
-    </div>
-    <div class="drawer-body" *ngIf="drawer === 'api-key'"><label>Name<input [ngModel]="apiKeyDraft.name" (ngModelChange)="apiKeyDraft.name = $event" /></label><label>Scopes<span class="choice" *ngFor="let scope of apiScopes"><input type="checkbox" [checked]="apiKeyDraft.scopes.includes(scope)" (change)="toggleScope(scope)" />{{ scope }}</span></label></div>
-    <div class="drawer-body" *ngIf="drawer === 'webhook'"><label>Name<input [(ngModel)]="webhookDraft.name" /></label><label>HTTPS endpoint<input type="url" [(ngModel)]="webhookDraft.endpointUrl" /></label><label>Events<span class="choice" *ngFor="let event of webhookEvents"><input type="checkbox" [checked]="webhookDraft.events.includes(event)" (change)="toggleEvent(event)" />{{ event }}</span></label></div>
-    <footer *ngIf="drawer !== 'governance'"><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'import' && (!entity || (!csvText && !selectedSourceFileId)))" (click)="drawer === 'import' ? applyImport() : drawer === 'api-key' ? saveApiKey() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
-    <footer *ngIf="drawer === 'governance'"><button type="button" [disabled]="busy" (click)="closeDrawer()">Close</button><span class="row-actions" *ngIf="selectedJob as job"><button type="button" [disabled]="busy" (click)="downloadProofPack(job)">Proof pack</button><button type="button" *ngIf="job.errorRowCount" [disabled]="busy" (click)="downloadFailedRows(job)">Failed rows</button><button type="button" *ngIf="job.status === 'completed'" [disabled]="busy || !governance?.preRollbackImpact?.safeToRollback" (click)="rollback(job)">Rollback</button></span></footer>
-  </aside>
+        @if (importAnalysis.unmatchedColumns.length) {
+          <p class="unmatched">Unmatched: {{ importAnalysis.unmatchedColumns.join(', ') }}</p>
+        }
+        @for (row of analysisRows; track row) {
+          <div class="analysis-row"><span><strong>Row {{ row.sourceRowNumber }}</strong>@if (row.errors.length) {
+          <small>{{ row.errors[0].message }}</small>
+          }@if (!row.errors.length && row.warnings.length) {
+          <small>{{ row.warnings[0].message }}</small>
+        }</span>@if (row.duplicateTargetId) {
+        <select [ngModel]="duplicateDecisions[duplicateDecisionKey(row)] || row.duplicateDecision || ''" (ngModelChange)="chooseDuplicateDecision(row, $event)"><option value="">Choose action</option><option value="merge">Merge</option><option value="keep">Keep existing</option><option value="link">Link only</option></select>
+        }@if (!row.duplicateTargetId) {
+        <span>{{ row.status }}</span>
+      }</div>
+    }
+    <label>Mapping name<div class="mapping-save"><input [(ngModel)]="mappingName" /><button type="button" [disabled]="busy || !mappingName.trim()" (click)="saveCurrentMapping()">Save</button></div></label>
+  </section>
+}
+@if (activeTemplate) {
+  <p class="template-fields">Supported: {{ activeTemplate.columns.length }} columns</p>
+}
+</div>
+}
+@if (drawer === 'governance') {
+  <div class="drawer-body governance-body">
+    @if (migration.governanceLoading()) {
+      <div class="compact-empty">Loading review…</div>
+    }
+    @if (governance; as report) {
+      <section class="review-section"><span class="drawer-section-label">Job</span><dl class="review-grid"><div><dt>Entity</dt><dd>{{ report.job.entity }}</dd></div><div><dt>Status</dt><dd>{{ report.job.status }}</dd></div><div><dt>Owner</dt><dd>{{ report.job.ownerUserId }}</dd></div><div><dt>Approval</dt><dd>{{ report.job.approvalStatus }}</dd></div></dl></section>
+      <section class="review-section"><span class="drawer-section-label">Reconciliation</span><div class="reconciliation-status" [class.good]="report.reconciliation.status === 'matched'">{{ report.reconciliation.status }}</div><dl class="review-grid"><div><dt>Expected valid</dt><dd>{{ report.reconciliation.expectedValidRows }}</dd></div><div><dt>Processed</dt><dd>{{ report.reconciliation.actualProcessedRows }}</dd></div><div><dt>Created</dt><dd>{{ report.actual.created }}</dd></div><div><dt>Merged / linked</dt><dd>{{ report.actual.merged + report.actual.linked }}</dd></div><div><dt>Failed</dt><dd>{{ report.actual.failed }}</dd></div><div><dt>Branch entity jobs</dt><dd>{{ report.branchEntityTotals.jobs }}</dd></div></dl></section>
+      <section class="review-section"><span class="drawer-section-label">Rollback impact</span><dl class="review-grid"><div><dt>Delete</dt><dd>{{ report.preRollbackImpact.actions.wouldDelete }}</dd></div><div><dt>Restore</dt><dd>{{ report.preRollbackImpact.actions.wouldRestore }}</dd></div><div><dt>Unlink</dt><dd>{{ report.preRollbackImpact.actions.wouldUnlink }}</dd></div><div><dt>Blocked dependencies</dt><dd>{{ report.preRollbackImpact.dependencies.blockingRecords }}</dd></div></dl></section>
+      @if (report.recoveryRecommendations.length) {
+        <section class="review-section"><span class="drawer-section-label">Recovery recommendations</span><ul>@for (recommendation of report.recoveryRecommendations; track recommendation) {
+        <li>{{ recommendation }}</li>
+      }</ul></section>
+    }
+    @if (migration.failureAssistant(); as assistant) {
+      <section class="review-section"><span class="drawer-section-label">Failure assistant · {{ assistant.source }}</span><strong>{{ assistant.summary }}</strong><ul>@for (recommendation of assistant.recommendations; track recommendation) {
+      <li>{{ recommendation }}</li>
+    }</ul></section>
+  }
+}
+</div>
+}
+@if (drawer === 'api-key') {
+  <div class="drawer-body"><label>Name<input [ngModel]="apiKeyDraft.name" (ngModelChange)="apiKeyDraft.name = $event" /></label><label>Scopes@for (scope of apiScopes; track scope) {
+  <span class="choice"><input type="checkbox" [checked]="apiKeyDraft.scopes.includes(scope)" (change)="toggleScope(scope)" />{{ scope }}</span>
+}</label></div>
+}
+@if (drawer === 'webhook') {
+  <div class="drawer-body"><label>Name<input [(ngModel)]="webhookDraft.name" /></label><label>HTTPS endpoint<input type="url" [(ngModel)]="webhookDraft.endpointUrl" /></label><label>Events@for (event of webhookEvents; track event) {
+  <span class="choice"><input type="checkbox" [checked]="webhookDraft.events.includes(event)" (change)="toggleEvent(event)" />{{ event }}</span>
+}</label></div>
+}
+@if (drawer !== 'governance') {
+  <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'import' && (!entity || (!csvText && !selectedSourceFileId)))" (click)="drawer === 'import' ? applyImport() : drawer === 'api-key' ? saveApiKey() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
+}
+@if (drawer === 'governance') {
+  <footer><button type="button" [disabled]="busy" (click)="closeDrawer()">Close</button>@if (selectedJob; as job) {
+  <span class="row-actions"><button type="button" [disabled]="busy" (click)="downloadProofPack(job)">Proof pack</button>@if (job.errorRowCount) {
+  <button type="button" [disabled]="busy" (click)="downloadFailedRows(job)">Failed rows</button>
+  }@if (job.status === 'completed') {
+  <button type="button" [disabled]="busy || !governance?.preRollbackImpact?.safeToRollback" (click)="rollback(job)">Rollback</button>
+}</span>
+}</footer>
+}
+</aside>
+}
 </section>

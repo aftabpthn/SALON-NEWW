@@ -2,6 +2,7 @@ use crate::{
     config::is_local_env,
     middleware::{
         auth as auth_middleware, security_headers as security_headers_middleware,
+        request_timing as request_timing_middleware,
         tenant as tenant_middleware,
     },
     state::AppState,
@@ -160,6 +161,7 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api", api)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn(request_timing_middleware::request_timing))
         .layer(cors)
         .layer(from_fn_with_state(
             state.clone(),

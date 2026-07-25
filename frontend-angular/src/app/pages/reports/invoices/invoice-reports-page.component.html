@@ -1,14 +1,28 @@
 <section class="report-page">
-  <header><div><p>REPORTS</p><h1>Invoice, Service & Product Reports</h1></div><a routerLink="/pos/invoices">Invoices</a></header>
+  <header class="report-header"><div><p>REPORTS</p><h1>Invoice Reports</h1></div><div class="header-actions">@if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice') {
+  <button type="button" (click)="exportDetailedCsv()" [disabled]="!detailedRows.length">Export CSV</button><button type="button" (click)="exportDetailedPdf()" [disabled]="!detailedRows.length">Export PDF</button>
+  }@if (activeTab === 'receivable-recovery' || activeTab === 'due-recovery' || activeTab === 'recovery-history') {
+  <button type="button" (click)="exportCurrentUnpaidCsv()" [disabled]="!dueRows.length">Export CSV</button><button type="button" (click)="exportCurrentUnpaidPdf()" [disabled]="!dueRows.length">Export PDF</button>
+  <button type="button" (click)="exportRecoveryHistoryCsv()" [disabled]="!recoveryRows.length">Recovery CSV</button>
+  }@if (activeTab === 'payment-wallet' || activeTab === 'wallet-ledger' || activeTab === 'payment-collection') {
+  <button type="button" (click)="exportWalletLedgerCsv()" [disabled]="!walletRows.length">Export CSV</button><button type="button" (click)="exportWalletLedgerPdf()" [disabled]="!walletRows.length">Export PDF</button>
+  <button type="button" (click)="exportPaymentCollectionCsv()" [disabled]="!paymentRows.length">Collection CSV</button>
+  }@if (activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') {
+  <button type="button" (click)="exportStaffServiceDiscountCsv()" [disabled]="!staffDiscountRows.length">Export CSV</button><button type="button" (click)="exportStaffServiceDiscountPdf()" [disabled]="!staffDiscountRows.length">Export PDF</button>
+  }<a routerLink="/pos/invoices">Invoices</a></div></header>
 
   <nav class="tabs" aria-label="Invoice report views">
-    <button type="button" [class.active]="activeTab === 'invoices'" (click)="selectTab('invoices')">Invoices</button>
-    <button type="button" [class.active]="activeTab === 'invoice-activity'" (click)="selectTab('invoice-activity')">Invoice Activity</button>
-    <button type="button" [class.active]="activeTab === 'due-recovery'" (click)="selectTab('due-recovery')">Due Recovery</button>
-    <button type="button" [class.active]="activeTab === 'service-trends'" (click)="selectTab('service-trends')">Service Trends</button>
-    <button type="button" [class.active]="activeTab === 'service-clients'" (click)="selectTab('service-clients')">Service Clients</button>
-    <button type="button" [class.active]="activeTab === 'product-sales'" (click)="selectTab('product-sales')">Product Sales</button>
-    <button type="button" [class.active]="activeTab === 'product-movements'" (click)="selectTab('product-movements')">Product Stock Movement</button>
+    <button type="button" [class.active]="activeTab === 'invoice-360'" (click)="selectTab('invoice-360')">Invoice 360</button>
+    <button type="button" [class.active]="activeTab === 'receivable-recovery'" (click)="selectTab('receivable-recovery')">Receivable & Recovery</button>
+    <button type="button" [class.active]="activeTab === 'payment-wallet'" (click)="selectTab('payment-wallet')">Payment & Wallet</button>
+    <button type="button" [class.active]="activeTab === 'staff-service-360'" (click)="selectTab('staff-service-360')">Staff-Service 360</button>
+    <button type="button" [class.active]="activeTab === 'finance-control'" (click)="selectTab('finance-control')">Finance Control</button>
+    <button type="button" [class.active]="activeTab === 'detailed-invoice'" (click)="selectTab('detailed-invoice')">Detailed Invoice</button>
+    <button type="button" [class.active]="activeTab === 'due-recovery'" (click)="selectTab('due-recovery')">Current Unpaid</button>
+    <button type="button" [class.active]="activeTab === 'recovery-history'" (click)="selectTab('recovery-history')">Recovery History</button>
+    <button type="button" [class.active]="activeTab === 'wallet-ledger'" (click)="selectTab('wallet-ledger')">Wallet Ledger</button>
+    <button type="button" [class.active]="activeTab === 'payment-collection'" (click)="selectTab('payment-collection')">Payment Collection</button>
+    <button type="button" [class.active]="activeTab === 'staff-service-discount'" (click)="selectTab('staff-service-discount')">Staff-Service-Discount</button>
   </nav>
 
   <nav class="linked-views" aria-label="Linked invoice workspaces">
@@ -19,61 +33,263 @@
     <label>Branch<input [value]="branchName" readonly /></label>
     <label>Date from<as-date-picker ariaLabel="Date from" [(value)]="filters.dateFrom"></as-date-picker></label>
     <label>Date to<as-date-picker ariaLabel="Date to" [(value)]="filters.dateTo"></as-date-picker></label>
-    <label *ngIf="activeTab === 'service-trends' || activeTab === 'service-clients'">Service<select [(ngModel)]="filters.serviceId" name="service"><option value="">All services</option><option *ngFor="let service of services" [value]="service.id">{{ service.name }}</option></select></label>
-    <label *ngIf="activeTab.startsWith('product-')">Product<select [(ngModel)]="filters.productId" name="product"><option value="">All products</option><option *ngFor="let product of products" [value]="product.id">{{ product.name }}</option></select></label>
-    <label *ngIf="activeTab === 'invoices' || activeTab === 'service-trends' || activeTab === 'service-clients'">Staff<select [(ngModel)]="filters.staffId" name="staff"><option value="">All staff</option><option *ngFor="let person of staff" [value]="person.id">{{ person.name }}</option></select></label>
-    <label *ngIf="activeTab === 'invoices' || activeTab === 'service-trends' || activeTab === 'service-clients'">Client<select [(ngModel)]="filters.clientId" name="client"><option value="">All clients</option><option *ngFor="let client of clients" [value]="client.id">{{ client.name }}</option></select></label>
-    <ng-container *ngIf="activeTab === 'invoices'">
-      <label>Payment mode<select [(ngModel)]="filters.paymentMethod" name="payment"><option value="">All modes</option><option *ngFor="let mode of modes" [value]="mode.code">{{ mode.name }}</option></select></label>
-      <label>Recovery<select [(ngModel)]="filters.recovery" name="recovery"><option value="">All</option><option value="paid">Paid</option><option value="due">Due</option></select></label>
-      <label>Ageing days<input [(ngModel)]="filters.ageingDays" name="ageing" type="number" min="0" placeholder="Minimum" /></label>
-      <label class="follow"><input [(ngModel)]="filters.followUp" name="followUp" type="checkbox" />Follow-up required</label>
-    </ng-container>
-    <label *ngIf="activeTab === 'due-recovery'">Recovery<select [(ngModel)]="filters.recovery" name="dueRecovery"><option value="">Outstanding</option><option value="paid">Recovered</option><option value="all">All</option></select></label>
-    <label *ngIf="activeTab !== 'invoices' && activeTab !== 'invoice-activity' && activeTab !== 'due-recovery'">Search<input [(ngModel)]="filters.q" name="search" type="search" /></label>
-    <div class="filter-actions"><button type="button" (click)="load()">Apply</button><button type="button" (click)="clear()">Clear</button></div>
+    @if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice' || activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') {
+      <label>Service<select [(ngModel)]="filters.serviceId" name="service"><option value="">All services</option>@for (service of services; track service) {
+      <option [value]="service.id">{{ service.name }}</option>
+    }</select></label>
+  }
+  @if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice' || activeTab === 'finance-control') {
+    <label>Product<select [(ngModel)]="filters.productId" name="product"><option value="">All products</option>@for (product of products; track product) {
+    <option [value]="product.id">{{ product.name }}</option>
+  }</select></label>
+}
+@if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice' || activeTab === 'receivable-recovery' || activeTab === 'due-recovery' || activeTab === 'recovery-history' || activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') {
+  <label>Staff<select [(ngModel)]="filters.staffId" name="staff"><option value="">All staff</option>@for (person of staff; track person) {
+  <option [value]="person.id">{{ person.name }}</option>
+}</select></label>
+}
+@if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice' || activeTab === 'receivable-recovery' || activeTab === 'due-recovery' || activeTab === 'recovery-history' || activeTab === 'payment-wallet' || activeTab === 'wallet-ledger' || activeTab === 'payment-collection' || activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') {
+  <label>Client<select [(ngModel)]="filters.clientId" name="client"><option value="">All clients</option>@for (client of clients; track client) {
+  <option [value]="client.id">{{ client.name }}</option>
+}</select></label>
+}
+@if (activeTab === 'invoice-360' || activeTab === 'detailed-invoice') {
+  <label>Payment mode<select [(ngModel)]="filters.paymentMethod" name="detailedPayment"><option value="">All modes</option>@for (mode of modes; track mode) {
+  <option [value]="mode.code">{{ mode.name }}</option>
+}</select></label>
+<label>Status<select [(ngModel)]="filters.status" name="detailedStatus"><option value="">All active</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option><option value="due">All due</option><option value="voided">Voided</option></select></label>
+<label>Search<input [(ngModel)]="filters.q" name="detailedSearch" type="search" placeholder="Invoice, client or item" /></label>
+}
+@if (activeTab === 'receivable-recovery' || activeTab === 'due-recovery' || activeTab === 'recovery-history') {
+  <label>Aging bucket<select [(ngModel)]="filters.ageingBucket" name="ageingBucket"><option value="">All buckets</option><option value="0-7">0–7 days</option><option value="8-15">8–15 days</option><option value="16-30">16–30 days</option><option value="31-60">31–60 days</option><option value="61+">61+ days</option></select></label>
+  <label>Search<input [(ngModel)]="filters.q" name="dueSearch" type="search" placeholder="Invoice, client, phone or service" /></label>
+}
+@if (activeTab === 'payment-wallet' || activeTab === 'wallet-ledger' || activeTab === 'payment-collection') {
+  <label>Transaction type<select [(ngModel)]="filters.transactionType" name="walletTransactionType"><option value="">All wallet entries</option><option value="recharge">Recharge / overpayment</option><option value="use">Redemption</option><option value="refund">Refund</option><option value="adjustment_credit">Adjustment credit</option><option value="adjustment_debit">Adjustment debit</option></select></label>
+  <label>Payment mode<select [(ngModel)]="filters.paymentMethod" name="collectionPayment"><option value="">All modes</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="wallet">Wallet / store credit</option><option value="gift_card">Gift card</option><option value="online">Online / bank</option>@for (mode of modes; track mode) {
+  <option [value]="mode.code">{{ mode.name }}</option>
+}</select></label>
+<label>Collection<select [(ngModel)]="filters.collectionTiming" name="collectionTiming"><option value="">Invoice + due receipts</option><option value="invoice_time">Invoice-time payment</option><option value="due_receipt">Later due receipt</option></select></label>
+<label>Search<input [(ngModel)]="filters.q" name="collectionSearch" type="search" placeholder="Invoice, client, reference or note" /></label>
+}
+@if (activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') {
+  <label>Search<input [(ngModel)]="filters.q" name="staffDiscountSearch" type="search" placeholder="Invoice, client, staff or service" /></label>
+}
+@if (activeTab === 'finance-control') {
+  <label>Search<input [(ngModel)]="filters.q" name="financeSearch" type="search" placeholder="Product, category or SKU" /></label>
+}
+<div class="filter-actions"><button type="button" (click)="load()">Apply</button><button type="button" (click)="clear()">Clear</button></div>
+</section>
+
+@if (loading) {
+  <p class="state">Loading…</p>
+  }@if (message) {
+  <p class="state">{{ message }}</p>
+  }@if (error) {
+  <p class="error">{{ error }}</p>
+}
+
+@if (!loading && (activeTab === 'invoice-360' || activeTab === 'detailed-invoice') && detailedSummary; as summary) {
+  <section class="summary-strip detailed-summary">
+    <div><span>Invoices</span><strong>{{ summary.invoiceCount }}</strong></div><div><span>Gross</span><strong>{{ summary.grossPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Discount</span><strong>{{ summary.discountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Paid</span><strong>{{ summary.paidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Due</span><strong>{{ summary.duePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Wallet</span><strong>{{ summary.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
   </section>
+}
 
-  <p class="state" *ngIf="loading">Loading…</p><p class="state" *ngIf="message">{{ message }}</p><p class="error" *ngIf="error">{{ error }}</p>
+@if (!loading && (activeTab === 'invoice-360' || activeTab === 'detailed-invoice')) {
+  <section class="report-table detailed-report">
+    <div class="table-toolbar"><strong>Detailed Invoice Register</strong><span>{{ detailedRows.length }} of {{ detailedSummary?.lineCount || 0 }} lines</span></div>
+    @if (detailedRows.length) {
+      <div class="table-scroll desktop-register"><table><thead><tr><th>Invoice</th><th>Date</th><th>Client</th><th>Service / Product</th><th>Staff split</th><th>Qty</th><th>Original price</th><th>All discounts</th><th>GST</th><th>Paid</th><th>Due</th><th>Payment mode</th></tr></thead><tbody>@for (row of detailedRows; track row; let i = $index) {
+      <tr><td><button type="button" class="invoice-link" (click)="toggleInvoice(row.invoiceId)" [attr.aria-expanded]="expandedInvoiceId === row.invoiceId">{{ row.invoiceNumber }}</button><span class="status-badge" [class.due]="row.duePaise > 0">{{ label(row.paymentStatus) }}</span></td><td>{{ formatDate(row.businessDate) }}</td><td><strong>{{ row.clientName }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td><span class="type-badge">{{ label(row.lineType) }}</span><strong>{{ row.itemName }}</strong></td><td>{{ row.staffName }}</td><td>{{ row.quantity }}</td><td><strong>{{ row.grossPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ row.unitPricePaise / 100 | currency:'INR':'symbol':'1.0-2' }} × {{ row.quantity }}</small></td><td><strong>{{ row.discountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong><small>{{ label(row.discountType) }}</small></td><td>{{ row.gstPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ showInvoiceAmounts(i, row) ? (row.paidPaise / 100 | currency:'INR':'symbol':'1.0-2') : '—' }}</td><td><strong>{{ showInvoiceAmounts(i, row) ? (row.duePaise / 100 | currency:'INR':'symbol':'1.0-2') : '—' }}</strong></td><td>{{ showInvoiceAmounts(i, row) ? label(row.paymentModes) : '—' }}</td></tr>@if (expandedInvoiceId === row.invoiceId && showInvoiceAmounts(i, row)) {
+      <tr class="detail-row"><td colspan="12"><div class="invoice-detail"><div><span>Invoice subtotal</span><strong>{{ row.invoiceSubtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Bill discount</span><strong>{{ row.billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Coupon</span><strong>{{ row.couponCode || '—' }} · {{ row.couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Total discount</span><strong>{{ row.invoiceDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>GST</span><strong>{{ row.invoiceTaxPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Tip</span><strong>{{ row.tipPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Round off</span><strong>{{ row.roundOffPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Invoice total</span><strong>{{ row.invoiceTotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId }">Open invoice</a></div></td></tr>
+    }
+  }</tbody></table></div>
+}
+@if (detailedRows.length) {
+  <div class="mobile-register">@for (row of detailedRows; track row; let i = $index) {
+    <article><header><div><button type="button" class="invoice-link" (click)="toggleInvoice(row.invoiceId)">{{ row.invoiceNumber }}</button><small>{{ formatDate(row.businessDate) }}</small></div><span class="status-badge" [class.due]="row.duePaise > 0">{{ label(row.paymentStatus) }}</span></header><strong>{{ row.clientName }}</strong><p><span class="type-badge">{{ label(row.lineType) }}</span> {{ row.itemName }}</p><dl><div><dt>Staff</dt><dd>{{ row.staffName }}</dd></div><div><dt>Original</dt><dd>{{ row.grossPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</dd></div><div><dt>Discount</dt><dd>{{ row.discountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</dd></div><div><dt>GST</dt><dd>{{ row.gstPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</dd></div>@if (showInvoiceAmounts(i, row)) {
+    <div><dt>Paid</dt><dd>{{ row.paidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+    }@if (showInvoiceAmounts(i, row)) {
+    <div><dt>Due</dt><dd>{{ row.duePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+  }</dl>@if (expandedInvoiceId === row.invoiceId && showInvoiceAmounts(i, row)) {
+  <div class="mobile-detail"><span>Total {{ row.invoiceTotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</span><span>{{ label(row.paymentModes) }}</span><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId }">Open invoice</a></div>
+}</article>
+}</div>
+}
+@if (!detailedRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
 
-  <section class="report-table" *ngIf="!loading && activeTab === 'invoice-activity'">
-    <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>Activity</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Created</th></tr></thead><tbody><tr *ngFor="let row of activityRows"><td><a [routerLink]="['/billing/invoices', row.invoiceId]">{{ row.invoiceNumber }}</a></td><td>{{ row.activityType }}</td><td>{{ row.channel || '—' }}</td><td>{{ row.recipient || '—' }}</td><td>{{ row.status }}</td><td>{{ formatDate(row.createdAt) }}</td></tr></tbody></table></div><p *ngIf="!activityRows.length">No records yet</p>
+@if (!loading && activeTab === 'invoice-360') {
+  <section class="report-table">
+    <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>Activity</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Created</th></tr></thead><tbody>@for (row of activityRows; track row) {
+    <tr><td><a [routerLink]="['/billing/invoices', row.invoiceId]">{{ row.invoiceNumber }}</a></td><td>{{ row.activityType }}</td><td>{{ row.channel || '—' }}</td><td>{{ row.recipient || '—' }}</td><td>{{ row.status }}</td><td>{{ formatDate(row.createdAt) }}</td></tr>
+  }</tbody></table></div>@if (!activityRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
+
+@if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'due-recovery')) {
+  <section class="summary-strip unpaid-summary">
+    <div><span>Outstanding invoices</span><strong>{{ currentUnpaidSummary.invoiceCount }}</strong></div><div><span>Original due</span><strong>{{ currentUnpaidSummary.originalDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Received due</span><strong>{{ currentUnpaidSummary.receivedDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Remaining due</span><strong>{{ currentUnpaidSummary.remainingDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>31+ days</span><strong>{{ currentUnpaidSummary.overdue31Count }}</strong></div>
   </section>
+}
 
-  <section class="report-table" *ngIf="!loading && activeTab === 'due-recovery'">
-    <div class="table-actions"><button type="button" [disabled]="reminderLoading" (click)="queueDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button></div>
-    <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>Client</th><th>Status</th><th>Total</th><th>Paid</th><th>Due</th><th>Ageing</th><th>Recovery days</th><th>Last payment</th><th>Follow-ups</th><th>Recovery manager</th><th>Last follow-up</th><th>Action</th></tr></thead><tbody><tr *ngFor="let row of dueRows"><td><a [routerLink]="['/billing/invoices', row.invoiceId]">{{ row.invoiceNumber }}</a></td><td>{{ row.clientName || 'Walk-in client' }}</td><td>{{ row.recovered ? 'Recovered' : 'Outstanding' }}</td><td>{{ row.totalPaise / 100 | currency:'INR' }}</td><td>{{ row.paidPaise / 100 | currency:'INR' }}</td><td>{{ row.balancePaise / 100 | currency:'INR' }}</td><td>{{ row.ageingDays }} days</td><td>{{ row.recoveryDays !== null && row.recoveryDays !== undefined ? row.recoveryDays + ' days' : '—' }}</td><td>{{ row.lastPaymentAt ? formatDate(row.lastPaymentAt) : '—' }}</td><td>{{ row.followUpCount }}</td><td><select [(ngModel)]="recoveryManagers[row.invoiceId]" [disabled]="row.recovered"><option value="">{{ row.recoveryManagerName || 'Select manager' }}</option><option *ngFor="let person of staff" [value]="person.id">{{ person.name }}</option></select><button type="button" [disabled]="row.recovered || followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'assign_manager')">Assign</button></td><td>{{ row.lastFollowUpAt ? formatDate(row.lastFollowUpAt) : '—' }}</td><td><ng-container *ngIf="!row.recovered; else recoveredInvoice"><input [(ngModel)]="followUpNotes[row.invoiceId]" maxlength="1000" placeholder="Follow-up note" /><button type="button" [disabled]="followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'follow_up')">Save note</button><button type="button" [disabled]="followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'call_done')">Call done</button></ng-container><ng-template #recoveredInvoice>Recovered</ng-template></td></tr></tbody></table></div><p *ngIf="!dueRows.length">No records yet</p>
+@if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'due-recovery')) {
+  <section class="report-table unpaid-report">
+    <div class="table-toolbar"><strong>Current Unpaid</strong><button type="button" [disabled]="reminderLoading" (click)="queueDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button></div>
+    <div class="table-scroll"><table><thead><tr><th>Invoice / date</th><th>Client / phone</th><th>Services</th><th>Staff</th><th>Original due</th><th>Received due</th><th>Remaining due</th><th>Aging</th><th>Last payment</th><th>Follow-ups</th><th>Recovery manager</th><th>Last follow-up</th><th>Action</th></tr></thead><tbody>@for (row of dueRows; track row) {
+    <tr><td><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId }">{{ row.invoiceNumber }}</a><small>{{ formatDate(row.businessDate) }}</small></td><td><strong>{{ row.clientName || 'Walk-in client' }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td class="wrap">{{ row.serviceNames }}</td><td class="wrap">{{ row.staffNames }}</td><td>{{ row.originalDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ row.receivedDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td><strong>{{ row.balancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td><span class="status-badge due">{{ row.ageingBucket }}</span><small>{{ row.ageingDays }} days</small></td><td>{{ row.lastPaymentAt ? formatDate(row.lastPaymentAt) : '—' }}</td><td>{{ row.followUpCount }}</td><td><select [(ngModel)]="recoveryManagers[row.invoiceId]"><option value="">{{ row.recoveryManagerName || 'Select manager' }}</option>@for (person of staff; track person) {
+    <option [value]="person.id">{{ person.name }}</option>
+    }</select><button type="button" [disabled]="followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'assign_manager')">Assign</button></td><td>{{ row.lastFollowUpAt ? formatDate(row.lastFollowUpAt) : '—' }}</td><td><input [(ngModel)]="followUpNotes[row.invoiceId]" maxlength="1000" placeholder="Follow-up note" /><button type="button" [disabled]="followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'follow_up')">Save note</button><button type="button" [disabled]="followUpLoadingId === row.invoiceId" (click)="recordFollowUp(row, 'call_done')">Call done</button></td></tr>
+  }</tbody></table></div>@if (!dueRows.length) {
+  <p>No outstanding invoices</p>
+}
+</section>
+}
+
+@if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'recovery-history')) {
+  <section class="summary-strip recovery-summary">
+    <div><span>Recovered invoices</span><strong>{{ recoverySummary.invoiceCount }}</strong></div><div><span>Recovered due</span><strong>{{ recoverySummary.recoveredPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Avg recovery days</span><strong>{{ recoverySummary.averageRecoveryDays }}</strong></div><div><span>Partial payments</span><strong>{{ recoverySummary.partialPaymentCount }}</strong></div><div><span>FIFO allocations</span><strong>{{ recoverySummary.fifoAllocationCount }}</strong></div>
   </section>
+}
 
-  <section class="summary-strip" *ngIf="!loading && activeTab === 'service-trends' && trendSummary as summary">
+@if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'recovery-history')) {
+  <section class="report-table recovery-report">
+    <div class="table-toolbar"><strong>Recovery History</strong><span>{{ recoveryRows.length }} invoices</span></div>
+    <div class="table-scroll"><table><thead><tr><th>Invoice / date</th><th>Client / phone</th><th>Services</th><th>Staff</th><th>Status</th><th>Original due</th><th>Recovered</th><th>Unpaid at</th><th>Paid at</th><th>Recovery days</th><th>Payment mode / ref</th><th>Received by</th><th>Partial-payment history</th><th>FIFO allocation</th></tr></thead><tbody>@for (row of recoveryRows; track row) {
+    <tr><td><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId, view: 'full' }">{{ row.invoiceNumber }}</a><small>{{ formatDate(row.businessDate) }}</small></td><td><strong>{{ row.clientName || 'Walk-in client' }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td class="wrap">{{ row.serviceNames }}</td><td class="wrap">{{ row.staffNames }}</td><td><span class="status-badge paid">Unpaid → Paid</span></td><td>{{ row.originalDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td><strong>{{ row.receivedDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td>{{ formatDateTime(row.unpaidAt) }}</td><td>{{ row.fullPaidAt ? formatDateTime(row.fullPaidAt) : '—' }}</td><td>{{ row.recoveryDays ?? '—' }}</td><td class="wrap"><strong>{{ row.paymentModes || '—' }}</strong><small>{{ row.paymentReferences || '—' }}</small></td><td>{{ row.receivedBy || '—' }}</td><td class="wrap">@for (payment of row.recoveryPaymentHistory; track payment) {
+    <div>{{ formatDateTime(payment.paidAt) }} · {{ payment.paymentMode }} · {{ payment.amountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}<small>{{ payment.reference || '—' }}</small></div>
+  }</td><td class="wrap">@for (allocation of row.fifoAllocations; track allocation) {
+  <div>{{ allocation.receivedPaise / 100 | currency:'INR':'symbol':'1.0-2' }}<small>{{ allocation.balanceBeforePaise / 100 | currency:'INR':'symbol':'1.0-2' }} → {{ allocation.balanceAfterPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</small></div>
+}</td></tr>
+}</tbody></table></div>@if (!recoveryRows.length) {
+<p>No recovered dues yet</p>
+}
+</section>
+}
+
+@if (!loading && (activeTab === 'payment-wallet' || activeTab === 'wallet-ledger') && walletSummary; as summary) {
+  <section class="summary-strip wallet-summary">
+    <div><span>Transactions</span><strong>{{ summary.transactionCount }}</strong></div><div><span>Clients</span><strong>{{ summary.clientCount }}</strong></div><div><span>Credits</span><strong>{{ summary.creditPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Debits</span><strong>{{ summary.debitPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Opening</span><strong>{{ summary.openingBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Closing</span><strong>{{ summary.closingBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Wallet liability</span><strong>{{ summary.currentLiabilityPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Clients with balance</span><strong>{{ summary.clientsWithBalance }}</strong></div>
+  </section>
+}
+
+@if (!loading && (activeTab === 'payment-wallet' || activeTab === 'wallet-ledger')) {
+  <section class="report-table wallet-report">
+    <div class="table-toolbar"><strong>Wallet Ledger</strong><span>{{ walletRows.length }} entries</span></div>
+    <div class="table-scroll"><table><thead><tr><th>Date</th><th>Client / phone</th><th>Type</th><th>Credit</th><th>Debit</th><th>Opening</th><th>Closing</th><th>Linked invoice / reference</th><th>Notes</th></tr></thead><tbody>@for (row of walletRows; track row) {
+    <tr><td>{{ formatDate(row.createdAt) }}</td><td><strong>{{ row.clientName || 'Walk-in client' }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td><span class="status-badge" [class.due]="row.direction === 'debit'">{{ label(row.transactionType) }}</span></td><td>{{ row.creditPaise ? (row.creditPaise / 100 | currency:'INR':'symbol':'1.0-2') : '—' }}</td><td>{{ row.debitPaise ? (row.debitPaise / 100 | currency:'INR':'symbol':'1.0-2') : '—' }}</td><td>{{ row.openingBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td><strong>{{ row.closingBalancePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td class="wrap">@if (row.invoiceNumber) {
+    <a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.referenceId }">{{ row.invoiceNumber }}</a>
+  } @else {
+    {{ row.referenceId || '—' }}
+    }<small>{{ label(row.referenceType) }}</small></td><td class="wrap">{{ row.notes || '—' }}</td></tr>
+  }</tbody></table></div>@if (!walletRows.length) {
+  <p>No wallet entries yet</p>
+}
+</section>
+}
+
+@if (!loading && (activeTab === 'payment-wallet' || activeTab === 'payment-collection') && paymentSummary; as summary) {
+  <section class="summary-strip payment-summary">
+    <div><span>Total collected</span><strong>{{ summary.totalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Invoice-time</span><strong>{{ summary.invoiceTimePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Later due receipt</span><strong>{{ summary.dueReceiptPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Cash</span><strong>{{ summary.cashPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>UPI</span><strong>{{ summary.upiPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Card</span><strong>{{ summary.cardPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Wallet</span><strong>{{ summary.walletPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Gift card</span><strong>{{ summary.giftCardPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Online</span><strong>{{ summary.onlinePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Split invoices</span><strong>{{ summary.splitInvoiceCount }}</strong></div>
+  </section>
+}
+
+@if (!loading && (activeTab === 'payment-wallet' || activeTab === 'payment-collection')) {
+  <section class="report-table payment-report">
+    <div class="table-toolbar"><strong>Payment Collection</strong><span>{{ paymentRows.length }} payments · {{ paymentSummary?.invoiceCount || 0 }} invoices</span></div>
+    <div class="table-scroll"><table><thead><tr><th>Paid date</th><th>Invoice / date</th><th>Client / phone</th><th>Mode</th><th>Amount</th><th>Collection</th><th>Split detail</th><th>Reference</th><th>Received by</th><th>Reconciliation</th></tr></thead><tbody>@for (row of paymentRows; track row) {
+    <tr><td>{{ formatDate(row.paidAt) }}</td><td><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId }">{{ row.invoiceNumber }}</a><small>{{ formatDate(row.businessDate) }}</small></td><td><strong>{{ row.clientName || 'Walk-in client' }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td><span class="status-badge">{{ label(row.paymentMethod) }}</span><small>{{ label(row.methodGroup) }}</small></td><td><strong>{{ row.amountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td><span class="status-badge" [class.due]="row.collectionTiming === 'due_receipt'">{{ label(row.collectionTiming) }}</span></td><td class="wrap">{{ row.splitPaymentCount }} payment(s)<small>{{ row.splitMethods }}</small></td><td class="wrap">{{ row.methodReference || '—' }}<small>{{ row.label || row.notes || '—' }}</small></td><td>{{ row.receivedBy || '—' }}</td><td><small>Total {{ row.invoiceTotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</small><small>Paid {{ row.invoicePaidPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</small><small>Due {{ row.invoiceDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</small></td></tr>
+  }</tbody></table></div>@if (!paymentRows.length) {
+  <p>No payment collections yet</p>
+}
+</section>
+}
+
+@if (!loading && (activeTab === 'staff-service-360' || activeTab === 'staff-service-discount') && staffDiscountSummary; as summary) {
+  <section class="summary-strip staff-discount-summary">
+    <div><span>Rows</span><strong>{{ summary.rowCount }}</strong></div><div><span>Staff</span><strong>{{ summary.staffCount }}</strong></div><div><span>Services</span><strong>{{ summary.serviceCount }}</strong></div><div><span>Gross</span><strong>{{ summary.grossPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Final sale</span><strong>{{ summary.finalSalePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Manual discount</span><strong>{{ summary.manualDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Coupon</span><strong>{{ summary.couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Membership</span><strong>{{ summary.membershipDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Pending approval</span><strong>{{ summary.pendingApprovalCount }}</strong></div>
+  </section>
+}
+
+@if (!loading && (activeTab === 'staff-service-360' || activeTab === 'staff-service-discount')) {
+  <section class="report-table staff-discount-report">
+    <div class="table-toolbar"><strong>Staff-Service-Discount</strong><span>{{ staffDiscountRows.length }} attributed rows</span></div>
+    <div class="table-scroll"><table><thead><tr><th>Invoice / date</th><th>Client</th><th>Staff</th><th>Service</th><th>Split</th><th>Qty</th><th>Gross</th><th>Final sale</th><th>Manual</th><th>Coupon</th><th>Membership</th><th>Discount %</th><th>Approval</th></tr></thead><tbody>@for (row of staffDiscountRows; track row) {
+    <tr><td><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId }">{{ row.invoiceNumber }}</a><small>{{ formatDate(row.businessDate) }}</small></td><td>{{ row.clientName || 'Walk-in client' }}</td><td><strong>{{ row.staffName || 'Unassigned' }}</strong></td><td>{{ row.serviceName }}</td><td>{{ row.splitPercent }}%</td><td>{{ row.quantity }}</td><td>{{ row.grossPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td><strong>{{ row.finalSalePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td>{{ row.manualDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ row.couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ row.membershipDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td>{{ row.discountBps / 100 | number:'1.0-2' }}%</td><td><span class="status-badge" [class.due]="row.approvalStatus === 'pending'">{{ label(row.approvalStatus) }}</span></td></tr>
+  }</tbody></table></div>@if (!staffDiscountRows.length) {
+  <p>No staff service discount rows yet</p>
+}
+</section>
+}
+
+@if (!loading && activeTab === 'staff-service-360' && trendSummary; as summary) {
+  <section class="summary-strip">
     <div><span>Services sold</span><strong>{{ summary.totalServicesSold }}</strong></div><div><span>Revenue</span><strong>{{ summary.totalServiceRevenuePaise / 100 | currency:'INR' }}</strong></div><div><span>Average price</span><strong>{{ summary.averageServicePricePaise / 100 | currency:'INR' }}</strong></div><div><span>Top service</span><strong>{{ summary.topService || '—' }}</strong></div><div><span>Discount</span><strong>{{ summary.discountLeakagePaise / 100 | currency:'INR' }}</strong></div><div><span>GST</span><strong>{{ summary.serviceGstCollectedPaise / 100 | currency:'INR' }}</strong></div>
   </section>
-  <section class="summary-strip" *ngIf="!loading && activeTab === 'service-clients' && clientSummary as summary">
+}
+@if (!loading && activeTab === 'staff-service-360' && clientSummary; as summary) {
+  <section class="summary-strip">
     <div><span>Clients</span><strong>{{ summary.totalClients }}</strong></div><div><span>Revenue</span><strong>{{ summary.totalServiceRevenuePaise / 100 | currency:'INR' }}</strong></div><div><span>Service rows</span><strong>{{ summary.totalServiceRows }}</strong></div><div><span>Appointments</span><strong>{{ summary.appointmentRows }}</strong></div><div><span>Quick sales</span><strong>{{ summary.quickSaleRows }}</strong></div>
   </section>
-  <section class="summary-strip" *ngIf="!loading && activeTab === 'product-sales' && productSalesSummary as summary">
+}
+@if (!loading && activeTab === 'finance-control' && balanceSheet; as sheet) {
+  <section class="summary-strip">
+    <div><span>Assets</span><strong>{{ sheet.totals.assetsPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Liabilities</span><strong>{{ sheet.totals.liabilitiesPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Equity</span><strong>{{ sheet.totals.equityPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Difference</span><strong>{{ sheet.totals.accountingEquationDifferencePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Status</span><strong>{{ sheet.balanced ? 'Balanced' : 'Needs review' }}</strong></div><div><span>As of</span><strong>{{ formatDate(sheet.asOfDate) }}</strong></div>
+  </section>
+}
+@if (!loading && activeTab === 'finance-control' && workingCapital; as capital) {
+  <section class="summary-strip">
+    <div><span>Current assets</span><strong>{{ capital.currentAssetsPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Current liabilities</span><strong>{{ capital.currentLiabilitiesPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Working capital</span><strong>{{ capital.workingCapitalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Branches</span><strong>{{ capital.branchCount }}</strong></div><div><span>Balance sheet</span><strong><a routerLink="/finance/balance-sheet">Open ledger</a></strong></div>
+  </section>
+}
+@if (!loading && activeTab === 'finance-control' && productSalesSummary; as summary) {
+  <section class="summary-strip">
     <div><span>Products sold</span><strong>{{ summary.totalProductsSold }}</strong></div><div><span>Revenue</span><strong>{{ summary.totalProductRevenuePaise / 100 | currency:'INR' }}</strong></div><div><span>Average price</span><strong>{{ summary.averageProductPricePaise / 100 | currency:'INR' }}</strong></div><div><span>Top product</span><strong>{{ summary.topProduct || '—' }}</strong></div><div><span>Discount</span><strong>{{ summary.discountPaise / 100 | currency:'INR' }}</strong></div><div><span>GST</span><strong>{{ summary.gstCollectedPaise / 100 | currency:'INR' }}</strong></div>
   </section>
+}
 
-  <section class="report-table invoice-table" *ngIf="!loading && activeTab === 'invoices'">
-    <div class="head"><span>Invoice</span><span>Client</span><span>Staff</span><span>Date</span><span>Total</span><span>Paid</span><span>Due</span><span>Ageing</span><span>Follow-up</span></div>
-    <div class="row" *ngFor="let row of rows"><strong>{{ row.invoiceNumber }}</strong><span>{{ row.clientName }}</span><span>{{ row.staffName }}</span><span>{{ formatDate(row.businessDate) }}</span><span>{{ row.totalPaise / 100 | currency:'INR' }}</span><span>{{ row.paidPaise / 100 | currency:'INR' }}</span><strong>{{ row.balancePaise / 100 | currency:'INR' }}</strong><span>{{ row.ageingDays }} days</span><span>{{ row.followUpRequired ? 'Required' : '—' }}</span></div>
-    <p *ngIf="!rows.length">No records yet</p>
-  </section>
+@if (!loading && activeTab === 'staff-service-360') {
+  <section class="report-table">
+    <div class="table-scroll"><table><thead><tr><th>Service</th><th>Group</th><th>Staff</th><th>Qty</th><th>Net sale</th><th>Discount</th><th>GST</th><th>Product cost / COGS</th><th>Margin</th><th>Clients</th><th>Repeat clients</th><th>Invoices</th><th>Peak hour</th><th>Last sold</th></tr></thead><tbody>@for (row of trendRows; track row) {
+    <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.quantitySold }}</td><td>{{ row.netSalePaise / 100 | currency:'INR' }}</td><td>{{ row.discountPaise / 100 | currency:'INR' }}</td><td>{{ row.gstPaise / 100 | currency:'INR' }}</td><td>{{ row.productCostPaise ? (row.productCostPaise / 100 | currency:'INR') : 'Cost missing' }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ row.clientCount }}</td><td>{{ row.repeatClientCount }}</td><td>{{ row.invoiceCount }}</td><td>{{ row.peakSellingHour || '—' }}</td><td>{{ formatDate(row.lastSoldAt) }}</td></tr>
+  }</tbody></table></div>@if (!trendRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
 
-  <section class="report-table" *ngIf="!loading && activeTab === 'service-trends'">
-    <div class="table-scroll"><table><thead><tr><th>Service</th><th>Group</th><th>Staff</th><th>Qty</th><th>Net sale</th><th>Discount</th><th>GST</th><th>Product cost / COGS</th><th>Margin</th><th>Clients</th><th>Repeat clients</th><th>Invoices</th><th>Peak hour</th><th>Last sold</th></tr></thead><tbody><tr *ngFor="let row of trendRows"><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.quantitySold }}</td><td>{{ row.netSalePaise / 100 | currency:'INR' }}</td><td>{{ row.discountPaise / 100 | currency:'INR' }}</td><td>{{ row.gstPaise / 100 | currency:'INR' }}</td><td>{{ row.productCostPaise ? (row.productCostPaise / 100 | currency:'INR') : 'Cost missing' }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ row.clientCount }}</td><td>{{ row.repeatClientCount }}</td><td>{{ row.invoiceCount }}</td><td>{{ row.peakSellingHour || '—' }}</td><td>{{ formatDate(row.lastSoldAt) }}</td></tr></tbody></table></div><p *ngIf="!trendRows.length">No records yet</p>
-  </section>
+@if (!loading && activeTab === 'staff-service-360') {
+  <section class="report-table">
+    <div class="table-scroll"><table><thead><tr><th>Date</th><th>Service</th><th>Group</th><th>Client</th><th>Phone</th><th>Price</th><th>Sale type</th><th>Staff</th><th>Invoice</th></tr></thead><tbody>@for (row of clientRows; track row) {
+    <tr><td>{{ formatDate(row.businessDate) }}</td><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.clientName }}</td><td>{{ row.clientPhone || '—' }}</td><td>{{ row.servicePricePaise / 100 | currency:'INR' }}</td><td>{{ row.saleType }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.invoiceNumber }}</td></tr>
+  }</tbody></table></div>@if (!clientRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
 
-  <section class="report-table" *ngIf="!loading && activeTab === 'service-clients'">
-    <div class="table-scroll"><table><thead><tr><th>Date</th><th>Service</th><th>Group</th><th>Client</th><th>Phone</th><th>Price</th><th>Sale type</th><th>Staff</th><th>Invoice</th></tr></thead><tbody><tr *ngFor="let row of clientRows"><td>{{ formatDate(row.businessDate) }}</td><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.serviceGroup || '—' }}</td><td>{{ row.clientName }}</td><td>{{ row.clientPhone || '—' }}</td><td>{{ row.servicePricePaise / 100 | currency:'INR' }}</td><td>{{ row.saleType }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.invoiceNumber }}</td></tr></tbody></table></div><p *ngIf="!clientRows.length">No records yet</p>
-  </section>
+@if (!loading && activeTab === 'finance-control') {
+  <section class="report-table">
+    <div class="table-scroll"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Qty</th><th>Net sale</th><th>Discount</th><th>GST</th><th>COGS</th><th>Margin</th><th>Clients</th><th>Invoices</th><th>Last sold</th></tr></thead><tbody>@for (row of productSalesRows; track row) {
+    <tr><td><strong>{{ row.productName }}</strong></td><td>{{ row.category || '—' }}</td><td>{{ row.sku || '—' }}</td><td>{{ row.quantitySold }}</td><td>{{ row.netSalePaise / 100 | currency:'INR' }}</td><td>{{ row.discountPaise / 100 | currency:'INR' }}</td><td>{{ row.gstPaise / 100 | currency:'INR' }}</td><td>{{ row.productCostPaise ? (row.productCostPaise / 100 | currency:'INR') : 'Cost missing' }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ row.clientCount }}</td><td>{{ row.invoiceCount }}</td><td>{{ formatDate(row.lastSoldAt) }}</td></tr>
+  }</tbody></table></div>@if (!productSalesRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
 
-  <section class="report-table" *ngIf="!loading && activeTab === 'product-sales'">
-    <div class="table-scroll"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Qty</th><th>Net sale</th><th>Discount</th><th>GST</th><th>COGS</th><th>Margin</th><th>Clients</th><th>Invoices</th><th>Last sold</th></tr></thead><tbody><tr *ngFor="let row of productSalesRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.category || '—' }}</td><td>{{ row.sku || '—' }}</td><td>{{ row.quantitySold }}</td><td>{{ row.netSalePaise / 100 | currency:'INR' }}</td><td>{{ row.discountPaise / 100 | currency:'INR' }}</td><td>{{ row.gstPaise / 100 | currency:'INR' }}</td><td>{{ row.productCostPaise ? (row.productCostPaise / 100 | currency:'INR') : 'Cost missing' }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ row.clientCount }}</td><td>{{ row.invoiceCount }}</td><td>{{ formatDate(row.lastSoldAt) }}</td></tr></tbody></table></div><p *ngIf="!productSalesRows.length">No records yet</p>
-  </section>
-
-  <section class="report-table" *ngIf="!loading && activeTab === 'product-movements'">
-    <div class="table-scroll"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Current stock</th><th>Sold</th><th>Returned</th><th>Purchased</th><th>Transfer out</th><th>Transfer in</th><th>Adjustment</th><th>Consumed</th><th>Stock value</th><th>Last movement</th></tr></thead><tbody><tr *ngFor="let row of productMovementRows"><td><strong>{{ row.productName }}</strong></td><td>{{ row.category || '—' }}</td><td>{{ row.sku || '—' }}</td><td>{{ row.currentStock }}</td><td>{{ row.soldQuantity }}</td><td>{{ row.returnedQuantity }}</td><td>{{ row.purchasedQuantity }}</td><td>{{ row.transferOutQuantity }}</td><td>{{ row.transferInQuantity }}</td><td>{{ row.adjustmentQuantity }}</td><td>{{ row.consumedQuantity }}</td><td>{{ row.currentStockValuePaise / 100 | currency:'INR' }}</td><td>{{ row.lastMovementAt ? formatDate(row.lastMovementAt) : '—' }}</td></tr></tbody></table></div><p *ngIf="!productMovementRows.length">No records yet</p>
-  </section>
+@if (!loading && activeTab === 'finance-control') {
+  <section class="report-table">
+    <div class="table-scroll"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Current stock</th><th>Sold</th><th>Returned</th><th>Purchased</th><th>Transfer out</th><th>Transfer in</th><th>Adjustment</th><th>Consumed</th><th>Stock value</th><th>Last movement</th></tr></thead><tbody>@for (row of productMovementRows; track row) {
+    <tr><td><strong>{{ row.productName }}</strong></td><td>{{ row.category || '—' }}</td><td>{{ row.sku || '—' }}</td><td>{{ row.currentStock }}</td><td>{{ row.soldQuantity }}</td><td>{{ row.returnedQuantity }}</td><td>{{ row.purchasedQuantity }}</td><td>{{ row.transferOutQuantity }}</td><td>{{ row.transferInQuantity }}</td><td>{{ row.adjustmentQuantity }}</td><td>{{ row.consumedQuantity }}</td><td>{{ row.currentStockValuePaise / 100 | currency:'INR' }}</td><td>{{ row.lastMovementAt ? formatDate(row.lastMovementAt) : '—' }}</td></tr>
+  }</tbody></table></div>@if (!productMovementRows.length) {
+  <p>No records yet</p>
+}
+</section>
+}
 </section>

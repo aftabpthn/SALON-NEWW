@@ -7,17 +7,36 @@ import { DatePickerComponent } from '../../shared/date-picker/date-picker.compon
 import { LanguageService } from '../../core/i18n/language.service';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { AuthBranchAccess, AuthService } from '../../core/services/auth.service';
+import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from './purchase-order-register';
 
 type Tab = 'products' | 'batches' | 'ledger' | 'reorder' | 'valuation' | 'suppliers' | 'orders' | 'grn' | 'returns' | 'payables' | 'transfers';
 type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'orderHistory' | 'grn' | 'return' | 'payment' | 'transfer' | null;
 type Supplier = { id: string; code: string; name: string; gstin: string; contactName: string; phone: string; email: string; address: string; paymentTermsDays: number; active: boolean };
 type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' };
-type SupplierGovernance = { priceLists: Array<{ id:string; supplierId:string; productName:string; unitCostPaise:number; effectiveFrom:string }>; terms: Array<{ supplierId:string; inventoryItemId:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number }>; scorecards: Array<{ supplierId:string; purchaseOrders:number; receivedOrders:number; onTimeRateBps?:number; fillRateBps?:number; lastReceiptDate?:string }>; communications: Array<{ id:string; supplierId:string; channel:string; status:string; createdAt:string }> };
+type SupplierGovernance = {
+  priceLists: Array<{ id:string; supplierId:string; productName:string; unitCostPaise:number; effectiveFrom:string }>;
+  terms: Array<{ supplierId:string; inventoryItemId:string; productName?:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number }>;
+  scorecards: Array<{ supplierId:string; purchaseOrders:number; receivedOrders:number; onTimeRateBps?:number; fillRateBps?:number; lastReceiptDate?:string }>;
+  communications: Array<{ id:string; supplierId:string; channel:string; status:string; createdAt:string }>;
+  qualityEvents: Array<{ supplierId:string; returnCount:number; returnedQuantity:number; returnedValuePaise:number; lastReturnAt?:string; reasons:string[] }>;
+  expiryRisk: Array<{ supplierId:string; expiredQuantity:number; expiring30Quantity:number; riskValuePaise:number; nextExpiryDate?:string }>;
+  replacementOptions: Array<{ supplierId:string; inventoryItemId:string; productName:string; replacementSupplierId:string; replacementSupplierName:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number; unitCostPaise?:number; currentUnitCostPaise?:number; priceDifferencePaise?:number }>;
+};
 type SupplierDraft = Omit<Supplier, 'paymentTermsDays'> & { paymentTermsDays: number | null };
 type Item = { id: string; sku: string; name: string; category: string; unit: string; stockQuantity: number; reorderPoint: number; unitCostPaise: number; hsnCode: string; gstPercent: number; barcode: string; batchTracked: boolean; active: boolean; createdAt: string; updatedAt?: string };
 type KitComponent = { componentInventoryItemId: string; componentName: string; quantity: number };
-type Product360 = { product: Item; stockInQuantity: number; stockOutQuantity: number; lastMovementAt?: string; lastReceiptDate?: string; lastSupplier?: string; recipeCount: number; consumedQuantity: number; kitComponents: KitComponent[] };
+type Product360 = {
+  product: Item; stockInQuantity: number; stockOutQuantity: number; lastMovementAt?: string;
+  lastReceiptDate?: string; lastSupplier?: string; recipeCount: number; consumedQuantity: number;
+  kitComponents: KitComponent[];
+  branchStocks: Array<{ branchId:string; branchName:string; inventoryItemId:string; stockQuantity:number; reorderPoint:number; unitCostPaise:number; stockValuePaise:number }>;
+  expiryTimeline: Array<{ branchId:string; branchName:string; batchNumber:string; expiryDate?:string; receivedDate:string; quantity:number; unitCostPaise:number }>;
+  clientUsage: Array<{ clientId:string; clientName:string; quantity:number; visits:number; lastUsedAt:string }>;
+  entityLedger: Array<{ id:string; branchId:string; branchName:string; movementType:string; quantityDelta:number; unitCostPaise:number; stockBeforeQuantity:number; stockAfterQuantity:number; recordedStockAfterQuantity?:number; source:string; sourceType:string; sourceId:string; actorUserId?:string; clientId?:string; appointmentId?:string; serviceId?:string; staffId?:string; backbarContainerId?:string; batchAllocations:Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }>; provenanceComplete:boolean; snapshotStatus:'verified'|'reconstructed'|'mismatch'; createdAt:string }>;
+  margin: { revenuePaise?:number; costPaise?:number; marginPaise?:number };
+};
 type Order = { id: string; orderNumber: string; supplierId: string; supplierName: string; status: string; expectedDate?: string; notes: string; totalPaise: number; lineCount: number; createdAt: string };
 type OrderLine = { id: string; inventoryItemId: string; itemName: string; quantity: number; receivedQuantity: number; unitCostPaise: number; gstPercent: number; totalPaise: number };
 type OrderEvent = { id: string; eventType: string; fromStatus: string; toStatus: string; note: string; actorUserId: string; details: Record<string, unknown>; createdAt: string };
@@ -26,9 +45,17 @@ type ReceiptLine = { id: string; inventoryItemId: string; quantity: number; unit
 type PurchaseReturn = { id: string; purchaseReceiptId: string; supplierName: string; reason: string; totalPaise: number; createdAt: string };
 type Payable = { purchaseReceiptId: string; supplierName: string; supplierInvoiceNumber: string; dueDate?: string; totalPaise: number; returnedPaise: number; paidPaise: number; balancePaise: number };
 type Transfer = { id: string; sourceBranchId: string; destinationBranchId: string; status: string; notes: string; dispatchedAt: string };
+type TransferOptimization = {
+  sourceBranchName: string; destinationBranchName: string; productName: string; suggestedQuantity: number;
+  earliestBatchNumber?: string; earliestExpiryDate?: string; destinationCoverageDaysAfter?: number;
+  sourceCoverageDaysAfter?: number; sourceSafe: boolean; distanceKm?: number; stockTransferCostPaise?: number;
+  transportCostPaise?: number; handlingCostPaise?: number; delayCostPaise?: number; estimatedTransferCostPaise?: number;
+  savingsPaise?: number; costDecision: string;
+  ownerApprovalRequired: boolean; approvalReason: string;
+};
 type EntryLine = { inventoryItemId: string; quantity: number | null; unitCostRupees: number | null; gstPercent: number | null; batchNumber?: string; batchBarcode?: string; expiryDate?: string; sourceLineId?: string; maxQuantity?: number };
 type Batch = { id: string; inventoryItemId: string; productName: string; batchNumber: string; barcode: string; expiryDate?: string; receivedDate: string; quantity: number; unitCostPaise: number };
-type LedgerRow = { id: string; inventoryItemId: string; itemName: string; movementType: string; quantityDelta: number; unitCostPaise: number; valuePaise: number; stockAfterQuantity?: number; source: string; createdAt: string };
+type LedgerRow = { id: string; inventoryItemId: string; itemName: string; movementType: string; quantityDelta: number; unitCostPaise: number; valuePaise: number; stockBeforeQuantity: number; stockAfterQuantity: number; recordedStockAfterQuantity?: number; source: string; sourceType: string; sourceId: string; actorUserId?: string; clientId?: string; appointmentId?: string; serviceId?: string; staffId?: string; backbarContainerId?: string; batchAllocations: Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }>; provenanceComplete: boolean; snapshotStatus: 'verified'|'reconstructed'|'mismatch'; createdAt: string };
 type ReorderRow = { id?: string; productId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; priority: string; reason: string; estimatedValuePaise: number; confidenceBps?: number; status?: string };
 type ReorderForecast = { run: { id: string; modelVersion: string; createdAt: string }; recommendations: Array<{ id: string; inventoryItemId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; unitCostPaise: number; confidenceBps: number; status: string; explanation: Record<string, unknown> }> };
 type ValuationRow = { inventoryItemId: string; productName: string; category: string; stockQuantity: number; unitCostPaise: number; stockValuePaise: number; reorderPoint: number };
@@ -45,14 +72,14 @@ const CODE39: Record<string, string> = {
 };
 
 @Component({
-  selector: 'page-inventory',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './inventory-page.component.html',
-  styleUrls: ['./inventory-page.component.css'],
+    selector: 'page-inventory',
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe, BranchNamePipe],
+    templateUrl: './inventory-page.component.html',
+    styleUrls: ['./inventory-page.component.css']
 })
 export class InventoryPageComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   readonly language = inject(LanguageService);
   readonly tabs: { id: Tab; labelKey: string }[] = [
@@ -73,7 +100,46 @@ export class InventoryPageComponent implements OnInit {
   notice = '';
   suppliers: Supplier[] = [];
   inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block' };
-  supplierGovernance: SupplierGovernance = { priceLists: [], terms: [], scorecards: [], communications: [] };
+  private readonly inventoryPageSize = 50;
+  private reloadRequestId = 0;
+  private readonly referenceCacheMs = 30_000;
+  private readonly referenceCache = new Map<string, { data: unknown; loadedAt: number }>();
+  private readonly referenceRequests = new Map<string, Promise<unknown>>();
+  private tabLoading = new Set<Tab>(['products']);
+  private reloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly itemById = new Map<string, Item>();
+  private readonly batchTrackedInventoryItemIds = new Set<string>();
+  private readonly supplierScorecardById = new Map<string, SupplierGovernance['scorecards'][number]>();
+  private readonly supplierTermsById = new Map<string, SupplierGovernance['terms']>();
+  private readonly supplierPriceListsById = new Map<string, SupplierGovernance['priceLists']>();
+  private readonly supplierQualityById = new Map<string, SupplierGovernance['qualityEvents'][number]>();
+  private readonly supplierExpiryRiskById = new Map<string, SupplierGovernance['expiryRisk'][number]>();
+  private readonly supplierReplacementsById = new Map<string, SupplierGovernance['replacementOptions']>();
+  private readonly orderStatusCounts = new Map<string, number>();
+  private productCategoriesCache: string[] = [];
+  private filteredItemsCache: Item[] = [];
+  private lowStockItemsCache: Item[] = [];
+  private outOfStockItemsCache: Item[] = [];
+  private inventoryValueCache = 0;
+  private filteredReorderRowsCache: ReorderRow[] = [];
+  private reorderValueCache = 0;
+  private valuationValueCache = 0;
+  private valuationUnitsCache = 0;
+  private valuationLowStockValueCache = 0;
+  private valuationExceptionsCache = 0;
+  private ledgerStockInCache = 0;
+  private ledgerStockOutCache = 0;
+  private ledgerAdjustmentsCache = 0;
+  private filteredReceiptsCache: Receipt[] = [];
+  private receiptSuppliersCache: string[] = [];
+  private receiptTaxableCache = 0;
+  private receiptTotalCache = 0;
+  private receiptGstCache = 0;
+  private receiptPayableTotalCache = 0;
+  private filteredOrdersCache: Order[] = [];
+  private orderStatusesCache: string[] = [];
+  private orderOpenValueCache = 0;
+  supplierGovernance: SupplierGovernance = { priceLists: [], terms: [], scorecards: [], communications: [], qualityEvents: [], expiryRisk: [], replacementOptions: [] };
   supplierTermsDraft = { inventoryItemId: '', leadTimeDays: null as number | null, minimumOrderQuantity: null as number | null, packSize: null as number | null, safetyStockDays: 7 };
   supplierPriceDraft = { inventoryItemId: '', unitCostRupees: null as number | null, effectiveFrom: new Date().toISOString().slice(0,10) };
   supplierCommunicationDraft = { channel: 'email', destination: '', subject: '', message: '' };
@@ -93,6 +159,7 @@ export class InventoryPageComponent implements OnInit {
   returns: PurchaseReturn[] = [];
   payables: Payable[] = [];
   transfers: Transfer[] = [];
+  branches: AuthBranchAccess[] = [];
   batches: Batch[] = [];
   ledgerRows: LedgerRow[] = [];
   reorderRows: ReorderRow[] = [];
@@ -117,12 +184,16 @@ export class InventoryPageComponent implements OnInit {
   supplierId = '';
   supplierDraft = this.emptySupplier();
   orderDraft = { supplierId: '', expectedDate: '', notes: '', lines: [this.emptyLine()] as EntryLine[] };
+  orderOptimizations: TransferOptimization[] = [];
+  orderOptimizerSignature = '';
+  orderOptimizerAcknowledged = '';
   grnDraft = { supplierId: '', purchaseOrderId: '', invoiceNumber: '', receivedDate: '', dueDate: '', lines: [this.emptyLine()] as EntryLine[] };
   returnDraft = { receiptId: '', reason: '', lines: [] as EntryLine[] };
   paymentDraft = { receiptId: '', amountRupees: null as number | null, method: 'bank', reference: '' };
   transferDraft = { destinationBranchId: '', notes: '', lines: [{ sourceInventoryItemId: '', destinationInventoryItemId: '', quantity: null as number | null }] };
 
   async ngOnInit() {
+    void firstValueFrom(this.auth.loadProfile()).then((profile) => { this.branches = profile.branches; }).catch(() => undefined);
     const data = this.route.snapshot.data;
     this.standaloneOrders = this.route.snapshot.routeConfig?.path === 'purchase-orders';
     this.tab = data['inventoryTab'] ?? this.tab; this.pageTitle = data['inventoryTitle'] ?? '';
@@ -131,118 +202,365 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async reload() {
-    this.loading = true; this.error = '';
+    const requestId = ++this.reloadRequestId;
+    const activeTab = this.tab;
+    this.setTabLoading(activeTab, true);
+    this.error = '';
     try {
-      const [suppliers, items, orders, receipts, returns, payables, transfers, batches, governance, policy] = await Promise.all([
-        this.get<Supplier[]>('/purchases/suppliers'), this.get<Item[]>('/inventory?pageSize=200'),
-        this.get<Order[]>('/purchases/orders'), this.get<Receipt[]>('/purchases/grn'),
-        this.get<PurchaseReturn[]>('/purchases/returns'), this.get<Payable[]>('/purchases/payables'), this.get<Transfer[]>('/inventory/transfers'), this.get<Batch[]>('/inventory/batches'), this.get<SupplierGovernance>('/inventory/supplier-governance'), this.get<InventoryPolicy>('/inventory/policy'),
-      ]);
-      this.suppliers = suppliers; this.items = items; this.orders = orders;
-      this.receipts = receipts; this.returns = returns; this.payables = payables; this.transfers = transfers; this.batches = batches; this.supplierGovernance = governance; this.inventoryPolicy = policy;
-      await this.loadOperationalTab();
-    } catch (error) { this.error = this.message(error, this.language.text('inventory.errors.procurementLoad')); }
-    finally { this.loading = false; }
+      const needsTabReferences = activeTab === 'products' || activeTab === 'reorder' || activeTab === 'valuation';
+      const references = needsTabReferences ? this.loadReferences(activeTab, requestId) : Promise.resolve();
+      await Promise.all([references, this.loadOperationalTab(activeTab, requestId)]);
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.errors.procurementLoad'));
+    } finally {
+      if (requestId === this.reloadRequestId) {
+        this.setTabLoading(activeTab, false);
+      }
+    }
+  }
+  private async loadReferences(tab: Tab, requestId: number) {
+    const requests = [] as Promise<unknown>[];
+    if (tab === 'products' || tab === 'reorder' || tab === 'valuation') {
+      requests.push(this.loadInventoryRows(tab, requestId));
+      requests.push(this.getCached<InventoryPolicy>('inventory:policy', () => this.get<InventoryPolicy>('/inventory/policy')).then((policy) => {
+        if (this.isCurrentLoad(requestId)) {
+          this.inventoryPolicy = policy;
+        }
+      }));
+    }
+    if (requests.length) {
+      await Promise.all(requests);
+    }
+  }
+  private async loadInventoryRows(tab: Tab, requestId: number) {
+    const requestIdSnapshot = requestId;
+    const params = new URLSearchParams({
+      page: '1',
+      pageSize: String(this.inventoryPageSize),
+      withCount: 'false',
+    });
+    const query = tab === 'products' ? this.productQuery.trim() : '';
+    if (query) params.set('q', query);
+    const rows = await this.get<Item[]>(`/inventory?` + params.toString());
+    if (this.isCurrentLoad(requestIdSnapshot)) {
+      this.items = rows;
+      this.rebuildItemLookup();
+      this.recomputeProductViews();
+    }
+  }
+  onProductSearchChange(query: string) {
+    this.productQuery = query;
+    this.recomputeProductViews();
+    if (this.tab === 'products') {
+      this.scheduleReload();
+    }
+  }
+  onProductCategoryChange(category: string) {
+    this.productCategory = category;
+    this.recomputeProductViews();
+    if (this.tab === 'products') {
+      this.scheduleReload();
+    }
+  }
+  clearProductFilters() {
+    this.productQuery = '';
+    this.productCategory = '';
+    this.recomputeProductViews();
+    if (this.tab === 'products') {
+      this.scheduleReload();
+    }
   }
 
-  selectTab(tab: Tab) { this.tab = tab; this.pageTitle = ''; this.closeDrawer(); void this.loadOperationalTab(); }
+  onOrderQueryChange(orderQuery: string) {
+    this.orderQuery = orderQuery;
+    this.recomputeOrderViews();
+  }
+
+  onOrderSupplierChange(orderSupplier: string) {
+    this.orderSupplier = orderSupplier;
+    this.recomputeOrderViews();
+  }
+
+  onReceiptQueryChange(receiptQuery: string) {
+    this.receiptQuery = receiptQuery;
+    this.recomputeReceiptViews();
+  }
+
+  onReceiptSupplierChange(receiptSupplier: string) {
+    this.receiptSupplier = receiptSupplier;
+    this.recomputeReceiptViews();
+  }
+
+  onReceiptFromChange(receiptFrom: string) {
+    this.receiptFrom = receiptFrom;
+    this.recomputeReceiptViews();
+  }
+
+  onReceiptToChange(receiptTo: string) {
+    this.receiptTo = receiptTo;
+    this.recomputeReceiptViews();
+  }
+  selectTab(tab: Tab) { if (this.tab === tab) return; this.tab = tab; this.pageTitle = ''; this.closeDrawer(); void this.reload(); }
   closeDrawer() { if (!this.saving) { this.drawer = null; this.productEditing = false; this.productCreating = false; } }
   money(paise: number) { return this.language.formatCurrency((paise || 0) / 100); }
-  date(value?: string) { return value ? this.language.formatDate(new Date(`${value.slice(0, 10)}T00:00:00`)) : '—'; }
-  itemName(id: string) { return this.items.find((item) => item.id === id)?.name ?? id; }
+  date(value?: string) { return value ? this.language.formatDate(new Date(`${value.slice(0, 10)}T00:00:00`)) : 'â€”'; }
+  itemName(id: string) { return this.itemById.get(id)?.name ?? id; }
   remaining(line: OrderLine) { return Math.max(line.quantity - line.receivedQuantity, 0); }
   receiptGst(row: Receipt) { return row.cgstPaise + row.sgstPaise + row.igstPaise; }
-  receiptSum(field: 'taxablePaise' | 'totalPaise') { return this.filteredReceipts.reduce((sum, row) => sum + row[field], 0); }
-  get receiptGstTotal() { return this.filteredReceipts.reduce((sum, row) => sum + this.receiptGst(row), 0); }
-  get receiptPayableTotal() {
-    const ids = new Set(this.filteredReceipts.map((row) => row.id));
-    return this.payables.filter((row) => ids.has(row.purchaseReceiptId)).reduce((sum, row) => sum + row.balancePaise, 0);
-  }
-  supplierScorecard(id: string) { return this.supplierGovernance.scorecards.find((row) => row.supplierId === id); }
-  supplierTerms(id: string) { return this.supplierGovernance.terms.filter((row) => row.supplierId === id); }
-  supplierPrices(id: string) { return this.supplierGovernance.priceLists.filter((row) => row.supplierId === id); }
+  receiptSum(field: 'taxablePaise' | 'totalPaise') { return field === 'taxablePaise' ? this.receiptTaxableCache : this.receiptTotalCache; }
+  get receiptGstTotal() { return this.receiptGstCache; }
+  get receiptPayableTotal() { return this.receiptPayableTotalCache; }
+  supplierScorecard(id: string) { return this.supplierScorecardById.get(id); }
+  supplierTerms(id: string) { return this.supplierTermsById.get(id) ?? []; }
+  supplierPrices(id: string) { return this.supplierPriceListsById.get(id) ?? []; }
+  supplierQuality(id: string) { return this.supplierQualityById.get(id); }
+  supplierExpiryRisk(id: string) { return this.supplierExpiryRiskById.get(id); }
+  supplierReplacements(id: string) { return this.supplierReplacementsById.get(id) ?? []; }
 
-  get receiptSuppliers() { return [...new Set(this.receipts.map((row) => row.supplierName))].sort((a, b) => a.localeCompare(b)); }
+  get receiptSuppliers() { return this.receiptSuppliersCache; }
   get heading() {
     if (this.pageTitle) return this.pageTitle;
     const key = ({ products: 'inventory.title', batches: 'inventory.batchesExpiry', ledger: 'inventory.stockLedger', reorder: 'inventory.reorderSuggestions', valuation: 'inventory.inventoryValuation', orders: 'inventory.purchaseOrders' } as Partial<Record<Tab, string>>)[this.tab] ?? 'inventory.procurement';
     return this.language.text(key);
   }
-  get productCategories() { return [...new Set(this.items.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)); }
-  get filteredItems() {
-    const query = this.productQuery.trim().toLowerCase();
-    return this.items.filter((row) => (!query || `${row.name} ${row.sku} ${row.barcode}`.toLowerCase().includes(query))
-      && (!this.productCategory || row.category === this.productCategory));
-  }
-  get lowStockItems() { return this.items.filter((row) => row.stockQuantity > 0 && row.stockQuantity <= row.reorderPoint); }
-  get outOfStockItems() { return this.items.filter((row) => row.stockQuantity <= 0); }
-  get inventoryValue() { return this.items.reduce((sum, row) => sum + row.stockQuantity * row.unitCostPaise, 0); }
-  get filteredReorderRows() { return this.reorderRows.filter((row) => !this.reorderPriority || row.priority === this.reorderPriority); }
-  get reorderValue() { return this.filteredReorderRows.reduce((sum, row) => sum + row.estimatedValuePaise, 0); }
-  get valuationValue() { return this.valuationRows.reduce((sum, row) => sum + row.stockValuePaise, 0); }
-  get valuationUnits() { return this.valuationRows.reduce((sum, row) => sum + row.stockQuantity, 0); }
-  get valuationLowStockValue() { return this.valuationRows.filter((row) => row.stockQuantity <= row.reorderPoint).reduce((sum, row) => sum + row.stockValuePaise, 0); }
-  get valuationExceptions() { return this.valuationRows.filter((row) => row.stockQuantity > 0 && row.unitCostPaise <= 0).length; }
-  get ledgerStockIn() { return this.ledgerRows.filter((row) => row.quantityDelta > 0).length; }
-  get ledgerStockOut() { return this.ledgerRows.filter((row) => row.quantityDelta < 0).length; }
-  get ledgerAdjustments() { return this.ledgerRows.filter((row) => row.movementType === 'adjustment').length; }
-  get filteredReceipts() {
-    const query = this.receiptQuery.trim().toLowerCase();
-    return this.receipts.filter((row) => {
-      const received = row.receivedDate.slice(0, 10);
-      return (!this.receiptFrom || received >= this.receiptFrom)
-        && (!this.receiptTo || received <= this.receiptTo)
-        && (!this.receiptSupplier || row.supplierName === this.receiptSupplier)
-        && (!query || `${row.supplierName} ${row.supplierInvoiceNumber} ${row.supplierGstin}`.toLowerCase().includes(query));
-    });
-  }
+  get productCategories() { return this.productCategoriesCache; }
+  get filteredItems() { return this.filteredItemsCache; }
+  get lowStockItems() { return this.lowStockItemsCache; }
+  get outOfStockItems() { return this.outOfStockItemsCache; }
+  get inventoryValue() { return this.inventoryValueCache; }
+  get filteredReorderRows() { return this.filteredReorderRowsCache; }
+  get reorderValue() { return this.reorderValueCache; }
+  get valuationValue() { return this.valuationValueCache; }
+  get valuationUnits() { return this.valuationUnitsCache; }
+  get valuationLowStockValue() { return this.valuationLowStockValueCache; }
+  get valuationExceptions() { return this.valuationExceptionsCache; }
+  get ledgerStockIn() { return this.ledgerStockInCache; }
+  get ledgerStockOut() { return this.ledgerStockOutCache; }
+  get ledgerAdjustments() { return this.ledgerAdjustmentsCache; }
+  get filteredReceipts() { return this.filteredReceiptsCache; }
 
-  get filteredOrders() {
-    return filterPurchaseOrders(this.orders, { query: this.orderQuery, status: this.orderStatus, supplierId: this.orderSupplier, stage: this.orderStage });
-  }
-  get orderStatuses() { return [...new Set(this.orders.map((row) => row.status))].sort(); }
-  get orderOpenValue() { return openPurchaseOrderValue(this.orders); }
-  orderCount(status: string) { return this.orders.filter((row) => row.status === status).length; }
-  selectOrderStage(stage: Exclude<PurchaseOrderStage, ''>) { this.orderStage = stage; this.orderStatus = ''; }
-  selectOrderStatus(status: string) { this.orderStatus = status; if (status) this.orderStage = ''; }
+  get filteredOrders() { return this.filteredOrdersCache; }
+  get orderStatuses() { return this.orderStatusesCache; }
+  get orderOpenValue() { return this.orderOpenValueCache; }
+  orderCount(status: string) { return this.orderStatusCounts.get(status) ?? 0; }
+  selectOrderStage(stage: Exclude<PurchaseOrderStage, ''>) { this.orderStage = stage; this.orderStatus = ''; this.recomputeOrderViews(); }
+  selectOrderStatus(status: string) { this.orderStatus = status; if (status) this.orderStage = ''; this.recomputeOrderViews(); }
 
-  async loadOperationalTab() {
+  async loadOperationalTab(tab: Tab = this.tab, requestId: number = this.reloadRequestId) {
+    if (!this.isCurrentLoad(requestId)) {
+      return;
+    }
     try {
-      if (this.tab === 'ledger') await this.loadLedger();
-      if (this.tab === 'reorder') await this.loadReorder();
-      if (this.tab === 'valuation') await this.loadValuation();
-    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.c9afc27eb9')); }
+      if (tab === 'batches') {
+        const rows = await this.get<Batch[]>('/inventory/batches');
+        if (this.isCurrentLoad(requestId)) this.batches = rows;
+      }
+      if (tab === 'ledger') {
+        await this.loadLedger(requestId);
+      }
+      if (tab === 'reorder') {
+        await this.loadReorder(requestId);
+      }
+      if (tab === 'valuation') {
+        await this.loadValuation(requestId);
+      }
+      if (tab === 'transfers') {
+        const rows = await this.get<Transfer[]>('/inventory/transfers');
+        if (this.isCurrentLoad(requestId)) this.transfers = rows;
+      }
+      if (tab === 'suppliers') {
+        const [suppliers, supplierGovernance] = await Promise.all([
+          this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
+          this.getCached<SupplierGovernance>('inventory.supplierGovernance', () => this.get<SupplierGovernance>('/inventory/supplier-governance')),
+        ]);
+        if (this.isCurrentLoad(requestId)) {
+          this.suppliers = suppliers;
+          this.supplierGovernance = supplierGovernance;
+          this.rebuildSupplierGovernanceLookups();
+        }
+      }
+      if (tab === 'orders') {
+        const [orders, suppliers] = await Promise.all([
+          this.getCached<Order[]>('inventory.orders', () => this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')),
+          this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
+        ]);
+        if (this.isCurrentLoad(requestId)) {
+          this.orders = orders;
+          this.suppliers = suppliers;
+          this.recomputeOrderViews();
+        }
+      }
+      if (tab === 'grn') {
+        const [receipts, suppliers, orders] = await Promise.all([
+          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+          this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
+          this.getCached<Order[]>('inventory.orders', () => this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')),
+        ]);
+        if (this.isCurrentLoad(requestId)) {
+          this.receipts = receipts;
+          this.suppliers = suppliers;
+          this.orders = orders;
+          this.recomputeReceiptViews();
+          this.recomputeOrderViews();
+        }
+      }
+      if (tab === 'returns') {
+        const [rows, receipts] = await Promise.all([
+          this.getCached<PurchaseReturn[]>('inventory.returns', () => this.get<PurchaseReturn[]>('/purchases/returns?page=1&pageSize=50&withCount=false')),
+          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+        ]);
+        if (this.isCurrentLoad(requestId)) {
+          this.returns = rows;
+          this.receipts = receipts;
+          this.recomputeReceiptViews();
+        }
+      }
+      if (tab === 'payables') {
+        const [rows, receipts] = await Promise.all([
+          this.getCached<Payable[]>('inventory.payables', () => this.get<Payable[]>('/purchases/payables?page=1&pageSize=50&withCount=false')),
+          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+        ]);
+        if (this.isCurrentLoad(requestId)) {
+          this.payables = rows;
+          this.receipts = receipts;
+          this.recomputeReceiptViews();
+        }
+      }
+    } catch (error) {
+      if (this.isCurrentLoad(requestId)) {
+        this.error = this.message(error, this.language.text('inventory.message.c9afc27eb9'));
+      }
+    }
   }
 
-  async loadLedger() {
+  async loadLedger(requestId: number = this.reloadRequestId) {
     const query = new URLSearchParams();
     if (this.ledgerFrom) query.set('from', this.ledgerFrom);
     if (this.ledgerTo) query.set('to', this.ledgerTo);
     if (this.ledgerMovement) query.set('movement', this.ledgerMovement);
     if (this.ledgerQuery.trim()) query.set('q', this.ledgerQuery.trim());
-    this.ledgerRows = await this.get<LedgerRow[]>(`/inventory/ledger?${query}`);
+    const rows = await this.get<LedgerRow[]>(`/inventory/ledger?${query}`);
+    if (this.isCurrentLoad(requestId)) {
+      this.ledgerRows = rows;
+      this.recomputeLedgerViews();
+    }
   }
 
-  async loadReorder() {
+  async loadReorder(requestId: number = this.reloadRequestId) {
     const forecast = await this.get<ReorderForecast | null>('/inventory/reorder-forecasts');
+    if (!this.isCurrentLoad(requestId)) return;
     this.reorderRun = forecast?.run ?? null;
-    this.reorderRows = forecast?.recommendations.map((row) => ({ id: row.id, productId: row.inventoryItemId, productName: row.productName, sku: row.sku, currentStock: row.currentStock, reorderLevel: row.reorderLevel, suggestedQuantity: row.suggestedQuantity, priority: row.confidenceBps >= 7500 ? 'high' : 'medium', reason: `AI forecast · ${Math.round(row.confidenceBps / 100)}% confidence`, estimatedValuePaise: row.suggestedQuantity * row.unitCostPaise, confidenceBps: row.confidenceBps, status: row.status })) ?? [];
+    this.reorderRows = forecast?.recommendations.map((row) => ({
+      id: row.id,
+      productId: row.inventoryItemId,
+      productName: row.productName,
+      sku: row.sku,
+      currentStock: row.currentStock,
+      reorderLevel: row.reorderLevel,
+      suggestedQuantity: row.suggestedQuantity,
+      priority: row.confidenceBps >= 7500 ? 'high' : 'medium',
+      reason: `AI forecast · ${Math.round(row.confidenceBps / 100)}% confidence`,
+      estimatedValuePaise: row.suggestedQuantity * row.unitCostPaise,
+      confidenceBps: row.confidenceBps,
+      status: row.status
+    })) ?? [];
+    this.recomputeReorderViews();
   }
+
   async generateReorder() {
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(this.api.post('/inventory/reorder-forecasts', {})); await this.loadReorder(); this.notice = this.language.text('inventory.message.398da20892'); }
-    catch (error) { this.error = this.message(error, this.language.text('inventory.message.8283ad1a35')); }
-    finally { this.saving = false; }
+    try {
+      await firstValueFrom(this.api.post('/inventory/reorder-forecasts', {}));
+      await this.reload();
+      this.notice = this.language.text('inventory.message.398da20892');
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.8283ad1a35'));
+    } finally {
+      this.saving = false;
+    }
   }
+
   async approveReorder(row: ReorderRow) {
     if (!row.id) { this.createOrderFromSuggestion(row); return; }
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(this.api.post(`/inventory/reorder-recommendations/${row.id}/approve`, {})); await this.reload(); this.notice = this.language.text('inventory.message.69bcbb3f55'); }
-    catch (error) { this.error = this.message(error, this.language.text('inventory.message.012f9fd0ea')); }
-    finally { this.saving = false; }
+    try {
+      await firstValueFrom(this.api.post(`/inventory/reorder-recommendations/${row.id}/approve`, {}));
+      await this.reload();
+      this.notice = this.language.text('inventory.message.69bcbb3f55');
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.012f9fd0ea'));
+    } finally {
+      this.saving = false;
+    }
   }
-  async loadValuation() { this.valuationRows = await this.get<ValuationRow[]>(`/inventory/valuation?asOf=${this.valuationAsOf}`); }
 
+  async loadValuation(requestId: number = this.reloadRequestId) {
+    const rows = await this.get<ValuationRow[]>(`/inventory/valuation?asOf=${this.valuationAsOf}`);
+    if (this.isCurrentLoad(requestId)) {
+      this.valuationRows = rows;
+      this.recomputeValuationViews();
+    }
+  }
+
+  private isCurrentLoad(requestId: number) {
+    return requestId === this.reloadRequestId;
+  }
+
+  private scheduleReload(delayMs = 280) {
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+    }
+    this.reloadDebounceTimer = setTimeout(() => {
+      this.reloadDebounceTimer = null;
+      void this.reload();
+    }, delayMs);
+  }
+
+  private setTabLoading(tab: Tab, isLoading: boolean) {
+    if (isLoading) {
+      this.tabLoading.add(tab);
+    } else {
+      this.tabLoading.delete(tab);
+    }
+    this.loading = this.tabLoading.has(this.tab);
+  }
+
+  private async getCached<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    const cached = this.referenceCache.get(key);
+    const now = Date.now();
+    if (cached && now - cached.loadedAt < this.referenceCacheMs) {
+      return cached.data as T;
+    }
+    const inFlight = this.referenceRequests.get(key);
+    if (inFlight) {
+      return inFlight as Promise<T>;
+    }
+    const request = loader()
+      .then((data: T) => {
+        this.referenceCache.set(key, { data, loadedAt: Date.now() });
+        this.referenceRequests.delete(key);
+        return data;
+      })
+      .catch((error: unknown) => {
+        this.referenceRequests.delete(key);
+        throw error;
+      });
+    this.referenceRequests.set(key, request);
+    return request as Promise<T>;
+  }
+
+  private clearReferenceCache(keys?: string | string[]) {
+    if (!keys) {
+      this.referenceCache.clear();
+      this.referenceRequests.clear();
+      return;
+    }
+    const list = Array.isArray(keys) ? keys : [keys];
+    for (const key of list) {
+      this.referenceCache.delete(key);
+      this.referenceRequests.delete(key);
+    }
+  }
   exportLedger() {
     const rows = this.ledgerRows.map((row) => [this.date(row.createdAt), row.itemName, row.movementType, row.quantityDelta, row.valuePaise / 100, row.source]);
     this.downloadCsv(`stock-ledger-${new Date().toISOString().slice(0, 10)}.csv`, ['Date', 'Product', 'Movement', 'Quantity', 'Value', 'Source'].map((value) => this.language.textValue(value)), rows);
@@ -382,7 +700,7 @@ export class InventoryPageComponent implements OnInit {
     popup.document.close(); popup.focus(); popup.print();
   }
 
-  isBatchTracked(id: string) { return this.items.find((item) => item.id === id)?.batchTracked ?? false; }
+  isBatchTracked(id: string) { return this.batchTrackedInventoryItemIds.has(id); }
 
   async applyStocktake() {
     const product = this.productDetail?.product;
@@ -415,6 +733,7 @@ export class InventoryPageComponent implements OnInit {
 
   openOrder() {
     this.orderDraft = { supplierId: '', expectedDate: '', notes: '', lines: [this.emptyLine()] };
+    this.orderOptimizations = []; this.orderOptimizerSignature = ''; this.orderOptimizerAcknowledged = '';
     this.drawer = 'order'; this.clearFeedback();
   }
 
@@ -465,6 +784,182 @@ export class InventoryPageComponent implements OnInit {
     if (item) { line.unitCostRupees = item.unitCostPaise / 100; line.gstPercent = item.gstPercent; }
   }
 
+
+  private rebuildItemLookup() {
+    this.itemById.clear();
+    this.batchTrackedInventoryItemIds.clear();
+    for (const row of this.items) {
+      this.itemById.set(row.id, row);
+      if (row.batchTracked) this.batchTrackedInventoryItemIds.add(row.id);
+    }
+  }
+
+  private recomputeProductViews() {
+    const query = this.productQuery.trim().toLowerCase();
+    const categories = new Set<string>();
+    const filtered: Item[] = [];
+    const lowStockItems: Item[] = [];
+    const outOfStockItems: Item[] = [];
+    let inventoryValue = 0;
+
+    for (const row of this.items) {
+      if (row.category) categories.add(row.category);
+      if (row.stockQuantity > 0 && row.stockQuantity <= row.reorderPoint) {
+        lowStockItems.push(row);
+      }
+      if (row.stockQuantity <= 0) {
+        outOfStockItems.push(row);
+      }
+      inventoryValue += row.stockQuantity * row.unitCostPaise;
+
+      if (!query || `${row.name} ${row.sku} ${row.barcode}`.toLowerCase().includes(query)) {
+        if (!this.productCategory || row.category === this.productCategory) {
+          filtered.push(row);
+        }
+      }
+    }
+
+    this.productCategoriesCache = [...categories].sort((a, b) => a.localeCompare(b));
+    this.filteredItemsCache = filtered;
+    this.lowStockItemsCache = lowStockItems;
+    this.outOfStockItemsCache = outOfStockItems;
+    this.inventoryValueCache = inventoryValue;
+  }
+
+  private recomputeReorderViews() {
+    this.filteredReorderRowsCache = this.reorderPriority
+      ? this.reorderRows.filter((row) => row.priority === this.reorderPriority)
+      : this.reorderRows;
+    this.reorderValueCache = this.filteredReorderRowsCache.reduce((sum, row) => sum + row.estimatedValuePaise, 0);
+  }
+
+  private recomputeValuationViews() {
+    let valuationValue = 0;
+    let valuationUnits = 0;
+    let valuationLowStockValue = 0;
+    let valuationExceptions = 0;
+    for (const row of this.valuationRows) {
+      valuationValue += row.stockValuePaise;
+      valuationUnits += row.stockQuantity;
+      if (row.stockQuantity <= row.reorderPoint) {
+        valuationLowStockValue += row.stockValuePaise;
+      }
+      if (row.stockQuantity > 0 && row.unitCostPaise <= 0) {
+        valuationExceptions += 1;
+      }
+    }
+    this.valuationValueCache = valuationValue;
+    this.valuationUnitsCache = valuationUnits;
+    this.valuationLowStockValueCache = valuationLowStockValue;
+    this.valuationExceptionsCache = valuationExceptions;
+  }
+
+  private recomputeLedgerViews() {
+    let ledgerStockIn = 0;
+    let ledgerStockOut = 0;
+    let ledgerAdjustments = 0;
+    for (const row of this.ledgerRows) {
+      if (row.quantityDelta > 0) ledgerStockIn += 1;
+      if (row.quantityDelta < 0) ledgerStockOut += 1;
+      if (row.movementType === 'adjustment') ledgerAdjustments += 1;
+    }
+    this.ledgerStockInCache = ledgerStockIn;
+    this.ledgerStockOutCache = ledgerStockOut;
+    this.ledgerAdjustmentsCache = ledgerAdjustments;
+  }
+
+  private recomputeReceiptViews() {
+    const query = this.receiptQuery.trim().toLowerCase();
+    const filteredReceipts = this.receipts.filter((row) => {
+      const received = row.receivedDate.slice(0, 10);
+      return (!this.receiptFrom || received >= this.receiptFrom)
+        && (!this.receiptTo || received <= this.receiptTo)
+        && (!this.receiptSupplier || row.supplierName === this.receiptSupplier)
+        && (!query || `${row.supplierName} ${row.supplierInvoiceNumber} ${row.supplierGstin}`.toLowerCase().includes(query));
+    });
+
+    const receiptSupplierSet = new Set(this.receipts.map((row) => row.supplierName));
+    let receiptTaxable = 0;
+    let receiptTotal = 0;
+    let receiptGst = 0;
+    for (const row of filteredReceipts) {
+      receiptTaxable += row.taxablePaise;
+      receiptTotal += row.totalPaise;
+      receiptGst += this.receiptGst(row);
+    }
+
+    const ids = new Set(filteredReceipts.map((row) => row.id));
+    let receiptPayableTotal = 0;
+    for (const row of this.payables) {
+      if (ids.has(row.purchaseReceiptId)) {
+        receiptPayableTotal += row.balancePaise;
+      }
+    }
+
+    this.receiptSuppliersCache = [...receiptSupplierSet].sort((a, b) => a.localeCompare(b));
+    this.filteredReceiptsCache = filteredReceipts;
+    this.receiptTaxableCache = receiptTaxable;
+    this.receiptTotalCache = receiptTotal;
+    this.receiptGstCache = receiptGst;
+    this.receiptPayableTotalCache = receiptPayableTotal;
+  }
+
+  private recomputeOrderViews() {
+    this.filteredOrdersCache = filterPurchaseOrders(this.orders, {
+      query: this.orderQuery,
+      status: this.orderStatus,
+      supplierId: this.orderSupplier,
+      stage: this.orderStage,
+    });
+
+    const statuses = new Set<string>();
+    const orderStatusCounts = new Map<string, number>();
+    for (const row of this.orders) {
+      statuses.add(row.status);
+      orderStatusCounts.set(row.status, (orderStatusCounts.get(row.status) ?? 0) + 1);
+    }
+
+    this.orderStatusesCache = [...statuses].sort();
+    this.orderOpenValueCache = openPurchaseOrderValue(this.orders);
+    this.orderStatusCounts.clear();
+    for (const [status, count] of orderStatusCounts) {
+      this.orderStatusCounts.set(status, count);
+    }
+  }
+
+  private rebuildSupplierGovernanceLookups() {
+    this.supplierScorecardById.clear();
+    this.supplierTermsById.clear();
+    this.supplierPriceListsById.clear();
+    this.supplierQualityById.clear();
+    this.supplierExpiryRiskById.clear();
+    this.supplierReplacementsById.clear();
+
+    for (const row of this.supplierGovernance.scorecards) {
+      this.supplierScorecardById.set(row.supplierId, row);
+    }
+    for (const row of this.supplierGovernance.terms) {
+      const current = this.supplierTermsById.get(row.supplierId) ?? [];
+      current.push(row);
+      this.supplierTermsById.set(row.supplierId, current);
+    }
+    for (const row of this.supplierGovernance.priceLists) {
+      const current = this.supplierPriceListsById.get(row.supplierId) ?? [];
+      current.push(row);
+      this.supplierPriceListsById.set(row.supplierId, current);
+    }
+    for (const row of this.supplierGovernance.qualityEvents ?? []) {
+      this.supplierQualityById.set(row.supplierId, row);
+    }
+    for (const row of this.supplierGovernance.expiryRisk ?? []) {
+      this.supplierExpiryRiskById.set(row.supplierId, row);
+    }
+    for (const row of this.supplierGovernance.replacementOptions ?? []) {
+      const current = this.supplierReplacementsById.get(row.supplierId) ?? [];
+      current.push(row);
+      this.supplierReplacementsById.set(row.supplierId, current);
+    }
+  }
   titleCase(value: string) { return value.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
 
   async saveSupplier() {
@@ -475,20 +970,67 @@ export class InventoryPageComponent implements OnInit {
   async saveSupplierTerms() {
     const draft = this.supplierTermsDraft;
     if (!this.supplierId || !draft.inventoryItemId || draft.leadTimeDays === null || draft.minimumOrderQuantity === null || draft.packSize === null) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/reorder-supplier-terms', { supplierId: this.supplierId, ...draft })); await this.reload(); this.notice = this.language.text('inventory.message.1c28eea79e'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.7f6964929f')); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback();
+    try {
+      await firstValueFrom(this.api.post('/inventory/reorder-supplier-terms', { supplierId: this.supplierId, ...draft }));
+      this.clearReferenceCache('inventory.supplierGovernance');
+      await this.reload();
+      this.notice = this.language.text('inventory.message.1c28eea79e');
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.7f6964929f'));
+    } finally {
+      this.saving = false;
+    }
   }
   async saveSupplierPrice() {
     if (!this.supplierId || !this.supplierPriceDraft.inventoryItemId || this.supplierPriceDraft.unitCostRupees === null) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/prices', { supplierId: this.supplierId, inventoryItemId: this.supplierPriceDraft.inventoryItemId, unitCostPaise: Math.round(Number(this.supplierPriceDraft.unitCostRupees) * 100), effectiveFrom: this.supplierPriceDraft.effectiveFrom, effectiveTo: null })); await this.reload(); this.notice = this.language.text('inventory.message.570d7c46a0'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.628af52a7a')); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback();
+    try {
+      await firstValueFrom(this.api.post('/inventory/supplier-governance/prices', { supplierId: this.supplierId, inventoryItemId: this.supplierPriceDraft.inventoryItemId, unitCostPaise: Math.round(Number(this.supplierPriceDraft.unitCostRupees) * 100), effectiveFrom: this.supplierPriceDraft.effectiveFrom, effectiveTo: null }));
+      this.clearReferenceCache('inventory.supplierGovernance');
+      await this.reload();
+      this.notice = this.language.text('inventory.message.570d7c46a0');
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.628af52a7a'));
+    } finally {
+      this.saving = false;
+    }
   }
   async queueSupplierCommunication() {
     if (!this.supplierId || !this.supplierCommunicationDraft.destination.trim() || !this.supplierCommunicationDraft.message.trim()) return;
-    this.saving = true; this.clearFeedback(); try { await firstValueFrom(this.api.post('/inventory/supplier-governance/communications', { supplierId: this.supplierId, purchaseOrderId: null, ...this.supplierCommunicationDraft, idempotencyKey: crypto.randomUUID() })); await this.reload(); this.notice = this.language.text('inventory.message.ff44ae0a75'); } catch (error) { this.error = this.message(error, this.language.text('inventory.message.84b2c1ec7f')); } finally { this.saving = false; }
+    this.saving = true; this.clearFeedback();
+    try {
+      await firstValueFrom(this.api.post('/inventory/supplier-governance/communications', { supplierId: this.supplierId, purchaseOrderId: null, ...this.supplierCommunicationDraft, idempotencyKey: crypto.randomUUID() }));
+      this.clearReferenceCache('inventory.supplierGovernance');
+      await this.reload();
+      this.notice = this.language.text('inventory.message.ff44ae0a75');
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.84b2c1ec7f'));
+    } finally {
+      this.saving = false;
+    }
   }
   async saveOrder() {
     const lines = this.validLines(this.orderDraft.lines, false);
     if (!this.orderDraft.supplierId || !lines.length) { this.error = this.language.text('inventory.message.67fac0e7a7'); return; }
+    const signature = JSON.stringify(lines.map((line) => [line.inventoryItemId, line.quantity, line.unitCostPaise]));
+    if (this.orderOptimizerAcknowledged !== signature) {
+      this.saving = true; this.clearFeedback();
+      try {
+        const response = await firstValueFrom(this.api.post<ApiEnvelope<TransferOptimization[]>>('/inventory/transfer-optimizer', { lines }));
+        this.orderOptimizations = response.data ?? [];
+        this.orderOptimizerSignature = signature;
+        if (this.orderOptimizations.length) return;
+      } catch (error) {
+        this.error = this.message(error, 'Unable to run cross-branch purchase precheck'); return;
+      } finally { this.saving = false; }
+    }
     await this.mutate(this.api.post('/purchases/orders', { supplierId: this.orderDraft.supplierId, expectedDate: this.orderDraft.expectedDate || null, notes: this.orderDraft.notes, lines }), 'Purchase order created');
+  }
+
+  continuePurchaseAfterOptimization() {
+    this.orderOptimizerAcknowledged = this.orderOptimizerSignature;
+    void this.saveOrder();
   }
 
   async orderAction(order: Order, action: 'submit' | 'approve' | 'reject' | 'send' | 'close' | 'cancel' | 'reopen') {
@@ -546,11 +1088,19 @@ export class InventoryPageComponent implements OnInit {
 
   private async mutate(request: any, success: string, close = true) {
     this.saving = true; this.clearFeedback();
-    try { await firstValueFrom(request); this.notice = success; if (close) this.drawer = null; await this.reload(); this.notice = success; }
-    catch (error) { this.error = this.message(error, this.language.text('inventory.message.78b92a0634')); }
-    finally { this.saving = false; }
+    try {
+      await firstValueFrom(request);
+      this.notice = success;
+      if (close) this.drawer = null;
+      this.clearReferenceCache();
+      await this.reload();
+      this.notice = success;
+    } catch (error) {
+      this.error = this.message(error, this.language.text('inventory.message.78b92a0634'));
+    } finally {
+      this.saving = false;
+    }
   }
-
   private async get<T>(path: string) { const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
   private async loadProduct(id: string) {
     this.productLoading = true; this.productDetail = null;
@@ -576,3 +1126,21 @@ export class InventoryPageComponent implements OnInit {
   private emptyLine(): EntryLine { return { inventoryItemId: '', quantity: null, unitCostRupees: null, gstPercent: null, batchNumber: '', batchBarcode: '', expiryDate: '' }; }
   private emptySupplier(): SupplierDraft { return { id: '', code: '', name: '', gstin: '', contactName: '', phone: '', email: '', address: '', paymentTermsDays: null, active: true }; }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

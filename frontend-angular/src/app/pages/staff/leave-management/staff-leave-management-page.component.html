@@ -5,83 +5,143 @@
   </header>
 
   <nav class="tabs" [attr.aria-label]="'staff.ui.3089d914b4' | translate">
-    <button *ngFor="let tab of tabs" type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
+    @for (tab of tabs; track tab) {
+      <button type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
+    }
   </nav>
 
   <section class="filter-bar" [attr.aria-label]="'staff.ui.7e30b7a23a' | translate">
-    <label>{{ 'staff.ui.082bc378cd' | translate }}<select [(ngModel)]="month" (ngModelChange)="reload()"><option *ngFor="let name of months; let index = index" [ngValue]="index + 1">{{ name }}</option></select></label>
-    <label>{{ 'staff.ui.879e32326c' | translate }}<select [(ngModel)]="year" (ngModelChange)="reload()"><option *ngFor="let item of years" [ngValue]="item">{{ item }}</option></select></label>
-    <label class="employee-filter">{{ 'staff.ui.079711ea16' | translate }}<select [(ngModel)]="staffId" (ngModelChange)="reload()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
-    <label>{{ 'staff.ui.bae7d5be70' | translate }}<select [(ngModel)]="status" (ngModelChange)="reload()"><option value="">{{ 'staff.ui.6405179d24' | translate }}</option><option value="pending">{{ 'staff.ui.96f608c16c' | translate }}</option><option value="approved">{{ 'staff.ui.41b81eb8db' | translate }}</option><option value="rejected">{{ 'staff.ui.27eeb7a291' | translate }}</option></select></label>
-    <button type="button" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise"></i>{{ 'staff.ui.56e3badc4e' | translate }}</button>
-    <span class="filter-spacer"></span>
-    <span class="count-pill pending">{{ pendingCount }} pending</span><span class="count-pill approved">{{ approvedCount }} approved</span>
-    <button type="button" [disabled]="!requests.length" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
-  </section>
+    <label>{{ 'staff.ui.082bc378cd' | translate }}<select [(ngModel)]="month" (ngModelChange)="reload()">@for (name of months; track name; let index = $index) {
+      <option [ngValue]="index + 1">{{ name }}</option>
+    }</select></label>
+    <label>{{ 'staff.ui.879e32326c' | translate }}<select [(ngModel)]="year" (ngModelChange)="reload()">@for (item of years; track item) {
+      <option [ngValue]="item">{{ item }}</option>
+    }</select></label>
+    <label class="employee-filter">{{ 'staff.ui.079711ea16' | translate }}<select [(ngModel)]="staffId" (ngModelChange)="reload()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option>@for (employee of staff; track employee) {
+    <option [value]="employee.id">{{ staffLabel(employee) }}</option>
+  }</select></label>
+  <label>{{ 'staff.ui.bae7d5be70' | translate }}<select [(ngModel)]="status" (ngModelChange)="reload()"><option value="">{{ 'staff.ui.6405179d24' | translate }}</option><option value="pending">{{ 'staff.ui.96f608c16c' | translate }}</option><option value="approved">{{ 'staff.ui.41b81eb8db' | translate }}</option><option value="rejected">{{ 'staff.ui.27eeb7a291' | translate }}</option></select></label>
+  <button type="button" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise"></i>{{ 'staff.ui.56e3badc4e' | translate }}</button>
+  <span class="filter-spacer"></span>
+  <span class="count-pill pending">{{ pendingCount }} pending</span><span class="count-pill approved">{{ approvedCount }} approved</span>
+  <button type="button" [disabled]="!requests.length" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
+</section>
 
-  <p class="message error" *ngIf="error"><i class="bi bi-exclamation-circle"></i>{{ error }}</p>
-  <p class="message success" *ngIf="success"><i class="bi bi-check-circle"></i>{{ success }}</p>
+@if (error) {
+  <p class="message error"><i class="bi bi-exclamation-circle"></i>{{ error }}</p>
+}
+@if (success) {
+  <p class="message success"><i class="bi bi-check-circle"></i>{{ success }}</p>
+}
 
-  <section class="content-card" *ngIf="activeTab === 'requests'">
+@if (activeTab === 'requests') {
+  <section class="content-card">
     <header class="card-heading"><div><h2>{{ 'staff.ui.61abb6b0ab' | translate }}</h2><span>{{ months[month - 1] }} {{ year }}</span></div></header>
-    <div class="table-scroll" *ngIf="requests.length">
-      <table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.7e3520a973' | translate }}</th><th scope="col">{{ 'staff.ui.c65ea4ae01' | translate }}</th><th scope="col">{{ 'staff.ui.f6bb0f468a' | translate }}</th><th scope="col">{{ 'staff.ui.f219cc0614' | translate }}</th><th scope="col">{{ 'staff.ui.bae7d5be70' | translate }}</th><th scope="col">{{ 'staff.ui.97c89a4d66' | translate }}</th></tr></thead>
-        <tbody><tr *ngFor="let row of requests">
-          <td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td>
-          <td><span class="type-pill">{{ label(row.leaveType) }}</span></td>
-          <td><strong>{{ displayDate(row.startDate) }}</strong><small>{{ row.endDate === row.startDate ? 'Single day' : 'to ' + displayDate(row.endDate) }}</small></td>
-          <td>{{ row.days }}</td><td>{{ row.reason || '—' }}</td>
-          <td><span class="status-pill" [ngClass]="row.status">{{ label(row.status) }}</span><small *ngIf="row.reviewNote">{{ row.reviewNote }}</small></td>
-          <td><button type="button" *ngIf="row.status === 'pending'" (click)="openReview(row)">{{ 'staff.ui.e29a79fe0c' | translate }}<i class="bi bi-chevron-right"></i></button><span *ngIf="row.status !== 'pending'">—</span></td>
-        </tr></tbody>
-      </table>
-    </div>
-    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin"></i>{{ 'staff.ui.3221687baf' | translate }}</div>
-    <div class="empty-state" *ngIf="!loading && !requests.length"><i class="bi bi-calendar-x"></i><strong>{{ 'staff.ui.d21e373ec3' | translate }}</strong><button type="button" (click)="openCreate()">{{ 'staff.ui.4d99c82195' | translate }}</button></div>
-  </section>
+    @if (requests.length) {
+      <div class="table-scroll">
+        <table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.7e3520a973' | translate }}</th><th scope="col">{{ 'staff.ui.c65ea4ae01' | translate }}</th><th scope="col">{{ 'staff.ui.f6bb0f468a' | translate }}</th><th scope="col">{{ 'staff.ui.f219cc0614' | translate }}</th><th scope="col">{{ 'staff.ui.bae7d5be70' | translate }}</th><th scope="col">{{ 'staff.ui.97c89a4d66' | translate }}</th></tr></thead>
+        <tbody>@for (row of requests; track row) {
+          <tr>
+            <td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td>
+            <td><span class="type-pill">{{ label(row.leaveType) }}</span></td>
+            <td><strong>{{ displayDate(row.startDate) }}</strong><small>{{ row.endDate === row.startDate ? 'Single day' : 'to ' + displayDate(row.endDate) }}</small></td>
+            <td>{{ row.days }}</td><td>{{ row.reason || '—' }}</td>
+            <td><span class="status-pill" [ngClass]="row.status">{{ label(row.status) }}</span>@if (row.reviewNote) {
+            <small>{{ row.reviewNote }}</small>
+          }</td>
+          <td>@if (row.status === 'pending') {
+            <button type="button" (click)="openReview(row)">{{ 'staff.ui.e29a79fe0c' | translate }}<i class="bi bi-chevron-right"></i></button>
+            }@if (row.status !== 'pending') {
+            <span>—</span>
+          }</td>
+        </tr>
+      }</tbody>
+    </table>
+  </div>
+}
+@if (loading) {
+  <div class="loading-state"><i class="bi bi-arrow-repeat spin"></i>{{ 'staff.ui.3221687baf' | translate }}</div>
+}
+@if (!loading && !requests.length) {
+  <div class="empty-state"><i class="bi bi-calendar-x"></i><strong>{{ 'staff.ui.d21e373ec3' | translate }}</strong><button type="button" (click)="openCreate()">{{ 'staff.ui.4d99c82195' | translate }}</button></div>
+}
+</section>
+}
 
-  <section class="content-card" *ngIf="activeTab === 'balances'">
+@if (activeTab === 'balances') {
+  <section class="content-card">
     <header class="card-heading"><div><h2>{{ 'staff.ui.af2ca71067' | translate }}</h2><span>{{ year }}</span></div></header>
-    <div class="table-scroll" *ngIf="balances.length">
-      <table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.95f7c209f3' | translate }}</th><th scope="col">{{ 'staff.ui.0fcc88a6a3' | translate }}</th><th scope="col">{{ 'staff.ui.41b81eb8db' | translate }}</th><th scope="col">{{ 'staff.ui.96f608c16c' | translate }}</th><th scope="col">{{ 'staff.ui.cc632b5e2f' | translate }}</th></tr></thead>
-        <tbody><tr *ngFor="let row of balances"><td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td><td><span class="type-pill">{{ label(row.leaveType) }}</span></td><td>{{ row.annualDays }} days</td><td>{{ row.usedDays }} days</td><td>{{ row.pendingDays }} days</td><td><strong class="remaining">{{ row.remainingDays }} days</strong></td></tr></tbody>
+    @if (balances.length) {
+      <div class="table-scroll">
+        <table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.95f7c209f3' | translate }}</th><th scope="col">{{ 'staff.ui.0fcc88a6a3' | translate }}</th><th scope="col">{{ 'staff.ui.41b81eb8db' | translate }}</th><th scope="col">{{ 'staff.ui.96f608c16c' | translate }}</th><th scope="col">{{ 'staff.ui.cc632b5e2f' | translate }}</th></tr></thead>
+        <tbody>@for (row of balances; track row) {
+          <tr><td><strong>{{ row.staffName }}</strong><small>{{ row.employeeCode || 'No employee code' }}</small></td><td><span class="type-pill">{{ label(row.leaveType) }}</span></td><td>{{ row.annualDays }} days</td><td>{{ row.usedDays }} days</td><td>{{ row.pendingDays }} days</td><td><strong class="remaining">{{ row.remainingDays }} days</strong></td></tr>
+        }</tbody>
       </table>
     </div>
-    <div class="loading-state" *ngIf="loading"><i class="bi bi-arrow-repeat spin"></i>{{ 'staff.ui.31f32c82d6' | translate }}</div>
-    <div class="empty-state" *ngIf="!loading && !balances.length"><i class="bi bi-bar-chart"></i><strong>{{ 'staff.ui.93500531ad' | translate }}</strong><button type="button" (click)="backToStaff()">{{ 'staff.ui.c011973879' | translate }}</button></div>
-  </section>
+  }
+  @if (loading) {
+    <div class="loading-state"><i class="bi bi-arrow-repeat spin"></i>{{ 'staff.ui.31f32c82d6' | translate }}</div>
+  }
+  @if (!loading && !balances.length) {
+    <div class="empty-state"><i class="bi bi-bar-chart"></i><strong>{{ 'staff.ui.93500531ad' | translate }}</strong><button type="button" (click)="backToStaff()">{{ 'staff.ui.c011973879' | translate }}</button></div>
+  }
+</section>
+}
 
-  <section class="content-card calendar-card" *ngIf="activeTab === 'calendar'">
+@if (activeTab === 'calendar') {
+  <section class="content-card calendar-card">
     <header class="card-heading"><div><h2>{{ 'staff.ui.eb47a5268d' | translate }}</h2><span>{{ months[month - 1] }} {{ year }}</span></div></header>
-    <div class="calendar-week"><span *ngFor="let day of weekDays">{{ day }}</span></div>
+    <div class="calendar-week">@for (day of weekDays; track day) {
+      <span>{{ day }}</span>
+    }</div>
     <div class="calendar-grid">
-      <article *ngFor="let day of calendarDays" [class.outside]="!day.inMonth">
-        <b>{{ day.day }}</b>
-        <button type="button" class="calendar-leave" *ngFor="let row of calendarLeaves(day.iso)" [class.pending]="row.status === 'pending'" (click)="row.status === 'pending' && openReview(row)"><span>{{ row.staffName }}</span><small>{{ label(row.leaveType) }}</small></button>
-      </article>
+      @for (day of calendarDays; track day) {
+        <article [class.outside]="!day.inMonth">
+          <b>{{ day.day }}</b>
+          @for (row of calendarLeaves(day.iso); track row) {
+            <button type="button" class="calendar-leave" [class.pending]="row.status === 'pending'" (click)="row.status === 'pending' && openReview(row)"><span>{{ row.staffName }}</span><small>{{ label(row.leaveType) }}</small></button>
+          }
+        </article>
+      }
     </div>
-    <div class="calendar-empty" *ngIf="!loading && !requests.length">{{ 'staff.ui.09658e166d' | translate }}</div>
+    @if (!loading && !requests.length) {
+      <div class="calendar-empty">{{ 'staff.ui.09658e166d' | translate }}</div>
+    }
   </section>
+}
 </main>
 
-<div class="drawer-backdrop" *ngIf="createOpen" (click)="closeCreate()"></div>
-<aside class="leave-drawer" *ngIf="createOpen" role="dialog" aria-modal="true" [attr.aria-label]="'staff.ui.4d99c82195' | translate">
-  <header><div><span class="section-label">{{ 'staff.ui.7e3520a973' | translate }}</span><h2>{{ 'staff.ui.4d99c82195' | translate }}</h2></div><button type="button" [attr.aria-label]="'staff.ui.7f4cda1ba2' | translate" (click)="closeCreate()"><i class="bi bi-x-lg"></i></button></header>
-  <div class="drawer-body">
-    <label>{{ 'staff.ui.079711ea16' | translate }}<select [(ngModel)]="form.staffId"><option value="">{{ 'staff.ui.c70121d9fc' | translate }}</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
-    <label>{{ 'staff.ui.95f7c209f3' | translate }}<select [(ngModel)]="form.leaveType"><option *ngFor="let type of leaveTypes" [value]="type.value">{{ type.label }}</option></select></label>
+@if (createOpen) {
+  <div class="drawer-backdrop" (click)="closeCreate()"></div>
+}
+@if (createOpen) {
+  <aside class="leave-drawer" role="dialog" aria-modal="true" [attr.aria-label]="'staff.ui.4d99c82195' | translate">
+    <header><div><span class="section-label">{{ 'staff.ui.7e3520a973' | translate }}</span><h2>{{ 'staff.ui.4d99c82195' | translate }}</h2></div><button type="button" [attr.aria-label]="'staff.ui.7f4cda1ba2' | translate" (click)="closeCreate()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      <label>{{ 'staff.ui.079711ea16' | translate }}<select [(ngModel)]="form.staffId"><option value="">{{ 'staff.ui.c70121d9fc' | translate }}</option>@for (employee of staff; track employee) {
+      <option [value]="employee.id">{{ staffLabel(employee) }}</option>
+    }</select></label>
+    <label>{{ 'staff.ui.95f7c209f3' | translate }}<select [(ngModel)]="form.leaveType">@for (type of leaveTypes; track type) {
+      <option [value]="type.value">{{ type.label }}</option>
+    }</select></label>
     <label>{{ 'staff.ui.c65ea4ae01' | translate }}<as-date-picker ariaLabel="Leave date range" [rangeMode]="true" [(value)]="form.startDate" [(rangeEnd)]="form.endDate"></as-date-picker></label>
     <label>{{ 'staff.ui.f219cc0614' | translate }}<textarea maxlength="500" rows="4" [(ngModel)]="form.reason" [attr.placeholder]="'staff.ui.f219cc0614' | translate"></textarea></label>
   </div>
   <footer><button type="button" (click)="closeCreate()">{{ 'staff.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="createRequest()">{{ saving ? 'Saving…' : 'Save request' }}</button></footer>
 </aside>
+}
 
-<div class="drawer-backdrop" *ngIf="selectedRequest" (click)="closeReview()"></div>
-<aside class="leave-drawer" *ngIf="selectedRequest" role="dialog" aria-modal="true" [attr.aria-label]="'staff.ui.eb4d5c2abc' | translate">
-  <header><div><span class="section-label">{{ 'staff.ui.b095f897b9' | translate }}</span><h2>{{ selectedRequest.staffName }}</h2></div><button type="button" [attr.aria-label]="'staff.ui.7d2202aa3f' | translate" (click)="closeReview()"><i class="bi bi-x-lg"></i></button></header>
-  <div class="drawer-body review-body">
-    <div class="review-summary"><span>{{ 'staff.ui.95f7c209f3' | translate }}<strong>{{ label(selectedRequest.leaveType) }}</strong></span><span>{{ 'staff.ui.c65ea4ae01' | translate }}<strong>{{ displayDate(selectedRequest.startDate) }} – {{ displayDate(selectedRequest.endDate) }}</strong></span><span>{{ 'staff.ui.f6bb0f468a' | translate }}<strong>{{ selectedRequest.days }}</strong></span><span>{{ 'staff.ui.f219cc0614' | translate }}<strong>{{ selectedRequest.reason || '—' }}</strong></span></div>
-    <label>{{ 'staff.ui.0e846b753e' | translate }}<textarea maxlength="500" rows="4" [(ngModel)]="reviewNote" [attr.placeholder]="'staff.ui.a1a2e5578f' | translate"></textarea></label>
-  </div>
-  <footer><button class="reject" type="button" [disabled]="saving" (click)="decide('reject')"><i class="bi bi-x-circle"></i>{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="decide('approve')"><i class="bi bi-check-circle"></i>{{ 'staff.ui.7b2c7f146a' | translate }}</button></footer>
-</aside>
+@if (selectedRequest) {
+  <div class="drawer-backdrop" (click)="closeReview()"></div>
+}
+@if (selectedRequest) {
+  <aside class="leave-drawer" role="dialog" aria-modal="true" [attr.aria-label]="'staff.ui.eb4d5c2abc' | translate">
+    <header><div><span class="section-label">{{ 'staff.ui.b095f897b9' | translate }}</span><h2>{{ selectedRequest.staffName }}</h2></div><button type="button" [attr.aria-label]="'staff.ui.7d2202aa3f' | translate" (click)="closeReview()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body review-body">
+      <div class="review-summary"><span>{{ 'staff.ui.95f7c209f3' | translate }}<strong>{{ label(selectedRequest.leaveType) }}</strong></span><span>{{ 'staff.ui.c65ea4ae01' | translate }}<strong>{{ displayDate(selectedRequest.startDate) }} – {{ displayDate(selectedRequest.endDate) }}</strong></span><span>{{ 'staff.ui.f6bb0f468a' | translate }}<strong>{{ selectedRequest.days }}</strong></span><span>{{ 'staff.ui.f219cc0614' | translate }}<strong>{{ selectedRequest.reason || '—' }}</strong></span></div>
+      <label>{{ 'staff.ui.0e846b753e' | translate }}<textarea maxlength="500" rows="4" [(ngModel)]="reviewNote" [attr.placeholder]="'staff.ui.a1a2e5578f' | translate"></textarea></label>
+    </div>
+    <footer><button class="reject" type="button" [disabled]="saving" (click)="decide('reject')"><i class="bi bi-x-circle"></i>{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="decide('approve')"><i class="bi bi-check-circle"></i>{{ 'staff.ui.7b2c7f146a' | translate }}</button></footer>
+  </aside>
+}

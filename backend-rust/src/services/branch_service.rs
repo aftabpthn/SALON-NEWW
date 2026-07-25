@@ -1,14 +1,15 @@
 use std::collections::HashSet;
 
 use chrono::{Datelike, FixedOffset, NaiveDate, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
     repositories::branch_repository::{self, BranchRecord, RoyaltyRuleInput},
-    services::accounting_service,
+    services::{accounting_service, entitlement_service},
 };
 
 const FRANCHISE_OVERRIDE_FIELDS: &[&str] = &[
@@ -128,6 +129,111 @@ pub struct BranchUpdateInput {
     pub active: Option<bool>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchPage {
+    pub items: Vec<BranchRecord>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchBulkFailure {
+    pub row: usize,
+    pub code: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchBulkPreview {
+    pub total_rows: usize,
+    pub valid_rows: usize,
+    pub invalid_rows: usize,
+    pub failures: Vec<BranchBulkFailure>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchBulkImportResult {
+    pub import_id: String,
+    pub created_count: usize,
+    pub branches: Vec<BranchRecord>,
+    pub mode: String,
+    pub failures: Vec<BranchBulkFailure>,
+    pub replayed: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BranchBulkImportMode {
+    FullRollback,
+    Partial,
+}
+
+impl BranchBulkImportMode {
+    pub(crate) fn parse(value: Option<&str>) -> Result<Self, AppError> {
+        match value.unwrap_or("full").trim().to_ascii_lowercase().as_str() {
+            "partial" => Ok(Self::Partial),
+            "full" => Ok(Self::FullRollback),
+            "" => Ok(Self::FullRollback),
+            value => Err(AppError::validation(format!(
+                "unsupported branch import mode: {value}"
+            ))),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::FullRollback => "full",
+            Self::Partial => "partial",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BranchCsvRow {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    code: String,
+    #[serde(default)]
+    region_name: String,
+    #[serde(default)]
+    zone_name: String,
+    #[serde(default)]
+    cluster_name: String,
+    #[serde(default)]
+    address: String,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    booking_deposit_percent: Option<i32>,
+}
+
+struct PreparedBranch {
+    row: usize,
+    name: String,
+    code: String,
+    region_name: String,
+    zone_name: String,
+    cluster_name: String,
+    address: String,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    booking_deposit_percent: i32,
+}
+
+struct PreparedBranchBulk {
+    total_rows: usize,
+    branches: Vec<PreparedBranch>,
+    failures: Vec<BranchBulkFailure>,
+}
+
+const BRANCH_IMPORT_TEMPLATE: &str =
+    "name,code,regionName,zoneName,clusterName,address,latitude,longitude,bookingDepositPercent\n";
+const MAX_BRANCH_IMPORT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_BRANCH_IMPORT_ROWS: usize = 1000;
+
 pub async fn list(
     db: &PgPool,
     tenant_id: &str,
@@ -142,6 +248,255 @@ pub async fn list(
     branch_repository::list(db, tenant_id, query)
         .await
         .map_err(|_| AppError::internal("failed to load branches"))
+}
+
+pub async fn list_page(
+    db: &PgPool,
+    tenant_id: &str,
+    query: Option<&str>,
+    cursor: Option<&str>,
+    limit: Option<i64>,
+) -> Result<BranchPage, AppError> {
+    let query = query.unwrap_or("").trim();
+    if query.chars().count() > 100 {
+        return Err(AppError::validation(
+            "branch search must be at most 100 characters",
+        ));
+    }
+    let cursor = cursor
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(uuid::Uuid::parse_str)
+        .transpose()
+        .map_err(|_| AppError::validation("invalid branch cursor"))?
+        .map(|value| value.to_string());
+    let limit = limit.unwrap_or(50).clamp(1, 200);
+    let mut items =
+        branch_repository::list_page(db, tenant_id, query, cursor.as_deref(), limit + 1)
+            .await
+            .map_err(|_| AppError::internal("failed to load branches"))?;
+    let next_cursor = (items.len() as i64 > limit).then(|| {
+        items.truncate(limit as usize);
+        items.last().map(|item| item.id.clone())
+    });
+    Ok(BranchPage {
+        items,
+        next_cursor: next_cursor.flatten(),
+    })
+}
+
+pub fn branch_import_template() -> &'static str {
+    BRANCH_IMPORT_TEMPLATE
+}
+
+pub async fn preview_bulk(
+    db: &PgPool,
+    tenant_id: &str,
+    csv_bytes: &[u8],
+) -> Result<BranchBulkPreview, AppError> {
+    let mut prepared = parse_bulk_csv(csv_bytes)?;
+    let existing = branch_repository::existing_branch_keys(db, tenant_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate existing branches"))?;
+    reject_existing_branches(&mut prepared, &existing);
+    if !prepared.branches.is_empty() {
+        entitlement_service::ensure_can_create_branches(
+            db,
+            tenant_id,
+            prepared.branches.len() as i64,
+        )
+        .await?;
+    }
+    Ok(bulk_preview(&prepared))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn import_bulk(
+    db: &PgPool,
+    tenant_id: &str,
+    requested_from_branch_id: &str,
+    actor_user_id: &str,
+    idempotency_key: &str,
+    mode: BranchBulkImportMode,
+    csv_bytes: &[u8],
+) -> Result<BranchBulkImportResult, AppError> {
+    let idempotency_key = normalize_idempotency_key(idempotency_key)?;
+    let request_fingerprint = format!("{:x}", Sha256::digest(csv_bytes));
+    let mut prepared = parse_bulk_csv(csv_bytes)?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start branch import"))?;
+    branch_repository::lock_bulk_import_key(&mut tx, tenant_id, &idempotency_key)
+        .await
+        .map_err(|_| AppError::internal("failed to lock branch import"))?;
+    if let Some(replay) =
+        branch_repository::bulk_import_replay(&mut tx, tenant_id, &idempotency_key)
+            .await
+            .map_err(|_| AppError::internal("failed to validate branch import replay"))?
+    {
+        if replay.request_fingerprint != request_fingerprint {
+            return Err(AppError::conflict(
+                "idempotency key was already used with different CSV content",
+            ));
+        }
+        if replay.import_mode.as_str() != mode.as_str() {
+            return Err(AppError::conflict(
+                "idempotency key was already used with different import mode",
+            ));
+        }
+        let mut result: BranchBulkImportResult = serde_json::from_value(replay.result_json)
+            .map_err(|_| AppError::internal("stored branch import result is invalid"))?;
+        result.replayed = true;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to finish branch import replay"))?;
+        return Ok(result);
+    }
+    if !branch_repository::lock_tenant(&mut tx, tenant_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate tenant"))?
+    {
+        return Err(AppError::not_found("tenant was not found"));
+    }
+    let existing = branch_repository::existing_branch_keys_tx(&mut tx, tenant_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate existing branches"))?;
+    reject_existing_branches(&mut prepared, &existing);
+    if mode == BranchBulkImportMode::FullRollback && !prepared.failures.is_empty() {
+        return Err(AppError::validation("CSV contains invalid branch rows")
+            .with_details(json!(bulk_preview(&prepared))));
+    }
+
+    if prepared.branches.is_empty() {
+        return Ok(BranchBulkImportResult {
+            import_id: uuid::Uuid::new_v4().to_string(),
+            created_count: 0,
+            branches: Vec::new(),
+            mode: mode.as_str().to_string(),
+            failures: prepared.failures,
+            replayed: false,
+        });
+    }
+
+    entitlement_service::ensure_can_create_branches_tx(
+        &mut tx,
+        tenant_id,
+        prepared.branches.len() as i64,
+    )
+    .await?;
+
+    let mut branches = Vec::with_capacity(prepared.branches.len());
+    for row in prepared.branches {
+        let created = if mode == BranchBulkImportMode::Partial {
+            branch_repository::create_if_not_exists(
+                &mut tx,
+                tenant_id,
+                &row.name,
+                &row.code,
+                &row.region_name,
+                &row.zone_name,
+                &row.cluster_name,
+                &row.address,
+                row.latitude,
+                row.longitude,
+                row.booking_deposit_percent,
+            )
+            .await
+            .map_err(map_write_error)?
+        } else {
+            branch_repository::create(
+                &mut tx,
+                tenant_id,
+                &row.name,
+                &row.code,
+                &row.region_name,
+                &row.zone_name,
+                &row.cluster_name,
+                &row.address,
+                row.latitude,
+                row.longitude,
+                row.booking_deposit_percent,
+            )
+            .await
+            .map_err(map_write_error)?
+        };
+
+        let branch = match created {
+            Some(branch) => branch,
+            None => {
+                if mode == BranchBulkImportMode::Partial {
+                    prepared.failures.push(BranchBulkFailure {
+                        row: row.row,
+                        code: "CODE_EXISTS".into(),
+                        message: format!("branch code {} already exists", row.code),
+                    });
+                    continue;
+                }
+                return Err(AppError::not_found("tenant was not found"));
+            }
+        };
+
+        branch_repository::grant_management_access(&mut tx, tenant_id, &branch.id)
+            .await
+            .map_err(|_| AppError::internal("failed to grant branch access"))?;
+        branches.push(branch);
+    }
+    let import_id = uuid::Uuid::new_v4().to_string();
+    let result = BranchBulkImportResult {
+        import_id: import_id.clone(),
+        created_count: branches.len(),
+        branches,
+        mode: mode.as_str().to_string(),
+        failures: prepared.failures,
+        replayed: false,
+    };
+    let result_json = serde_json::to_value(&result)
+        .map_err(|_| AppError::internal("failed to save branch import result"))?;
+    if !branch_repository::save_bulk_import(
+        &mut tx,
+        &import_id,
+        tenant_id,
+        requested_from_branch_id,
+        &idempotency_key,
+        mode.as_str(),
+        &request_fingerprint,
+        prepared.total_rows as i32,
+        result.created_count as i32,
+        &result_json,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save branch import"))?
+    {
+        return Err(AppError::not_found("current branch was not found"));
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit branch import"))?;
+    Ok(result)
+}
+
+pub fn branch_failure_report_csv(failures: &[BranchBulkFailure]) -> Result<String, AppError> {
+    let mut writer = csv::Writer::from_writer(Vec::new());
+    writer
+        .write_record(["row", "code", "message"])
+        .map_err(|_| AppError::internal("failed to create branch failure report"))?;
+    for failure in failures {
+        writer
+            .write_record([
+                failure.row.to_string(),
+                failure.code.clone(),
+                failure.message.clone(),
+            ])
+            .map_err(|_| AppError::internal("failed to create branch failure report"))?;
+    }
+    String::from_utf8(
+        writer
+            .into_inner()
+            .map_err(|_| AppError::internal("failed to finish branch failure report"))?,
+    )
+    .map_err(|_| AppError::internal("failed to encode branch failure report"))
 }
 
 pub async fn create(
@@ -174,6 +529,7 @@ pub async fn create(
     {
         return Err(AppError::not_found("tenant was not found"));
     }
+    entitlement_service::ensure_can_create_branch(&mut tx, tenant_id).await?;
     let branch = branch_repository::create(
         &mut tx,
         tenant_id,
@@ -274,6 +630,9 @@ pub async fn update(
             .unwrap_or(current.booking_deposit_percent),
     )?;
     let active = input.active.unwrap_or(current.active);
+    if !current.active && active {
+        entitlement_service::ensure_can_create_branch(&mut tx, tenant_id).await?;
+    }
     if current.active && !active {
         if branch_id == current_branch_id {
             return Err(AppError::conflict(
@@ -1256,6 +1615,190 @@ fn validate_royalty_period(period_start: NaiveDate) -> Result<(), AppError> {
     Ok(())
 }
 
+fn parse_bulk_csv(csv_bytes: &[u8]) -> Result<PreparedBranchBulk, AppError> {
+    if csv_bytes.is_empty() || csv_bytes.len() > MAX_BRANCH_IMPORT_BYTES {
+        return Err(AppError::validation(
+            "branch CSV must be between 1 byte and 2 MB",
+        ));
+    }
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(csv_bytes);
+    let headers = reader
+        .headers()
+        .map_err(|_| AppError::validation("branch CSV header is invalid"))?
+        .clone();
+    for required in ["name", "code"] {
+        if !headers.iter().any(|header| header == required) {
+            return Err(AppError::validation(format!(
+                "branch CSV is missing required {required} column"
+            )));
+        }
+    }
+
+    let mut prepared = PreparedBranchBulk {
+        total_rows: 0,
+        branches: Vec::new(),
+        failures: Vec::new(),
+    };
+    let mut codes = HashSet::new();
+    let mut city_names = HashSet::new();
+    for (index, result) in reader.deserialize::<BranchCsvRow>().enumerate() {
+        prepared.total_rows += 1;
+        if prepared.total_rows > MAX_BRANCH_IMPORT_ROWS {
+            return Err(AppError::validation(
+                "branch CSV supports at most 1000 rows",
+            ));
+        }
+        let row_number = index + 2;
+        let row = match result {
+            Ok(row) => row,
+            Err(_) => {
+                prepared.failures.push(BranchBulkFailure {
+                    row: row_number,
+                    code: "CSV_ROW_INVALID".into(),
+                    message: "row does not match the branch CSV template".into(),
+                });
+                continue;
+            }
+        };
+        let branch = match normalize_csv_branch(row_number, row) {
+            Ok(branch) => branch,
+            Err(message) => {
+                prepared.failures.push(BranchBulkFailure {
+                    row: row_number,
+                    code: "BRANCH_INVALID".into(),
+                    message,
+                });
+                continue;
+            }
+        };
+        if !codes.insert(branch.code.to_ascii_lowercase()) {
+            prepared.failures.push(BranchBulkFailure {
+                row: row_number,
+                code: "DUPLICATE_CODE".into(),
+                message: format!("branch code {} is duplicated in the CSV", branch.code),
+            });
+            continue;
+        }
+        if !branch.zone_name.is_empty()
+            && !city_names.insert((
+                branch.zone_name.to_ascii_lowercase(),
+                branch.name.to_ascii_lowercase(),
+            ))
+        {
+            prepared.failures.push(BranchBulkFailure {
+                row: row_number,
+                code: "DUPLICATE_CITY_BRANCH".into(),
+                message: "branch name is duplicated in the same zone/city".into(),
+            });
+            continue;
+        }
+        prepared.branches.push(branch);
+    }
+    if prepared.total_rows == 0 {
+        return Err(AppError::validation("branch CSV has no data rows"));
+    }
+    Ok(prepared)
+}
+
+fn normalize_csv_branch(row: usize, value: BranchCsvRow) -> Result<PreparedBranch, String> {
+    let name = normalize_name(&value.name)
+        .map_err(|_| "branch name must be between 2 and 100 characters".to_string())?;
+    let code = normalize_code(&value.code).map_err(|_| {
+        "branch code must be 2 to 24 letters, numbers, hyphens, or underscores".to_string()
+    })?;
+    let (region_name, zone_name, cluster_name) =
+        normalize_hierarchy(&value.region_name, &value.zone_name, &value.cluster_name)
+            .map_err(|_| "zone requires a region and cluster requires a zone".to_string())?;
+    let address = normalize_address(&value.address)
+        .map_err(|_| "branch address must be at most 300 characters".to_string())?;
+    validate_coordinates(value.latitude, value.longitude)
+        .map_err(|_| "latitude and longitude must both be valid coordinates".to_string())?;
+    let booking_deposit_percent =
+        normalize_deposit_percent(value.booking_deposit_percent.unwrap_or(0))
+            .map_err(|_| "booking deposit percent must be between 0 and 100".to_string())?;
+    Ok(PreparedBranch {
+        row,
+        name,
+        code,
+        region_name,
+        zone_name,
+        cluster_name,
+        address,
+        latitude: value.latitude,
+        longitude: value.longitude,
+        booking_deposit_percent,
+    })
+}
+
+fn reject_existing_branches(
+    prepared: &mut PreparedBranchBulk,
+    existing: &[branch_repository::BranchKeyRecord],
+) {
+    let codes = existing
+        .iter()
+        .map(|branch| branch.code.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    let city_names = existing
+        .iter()
+        .filter(|branch| !branch.zone_name.is_empty())
+        .map(|branch| {
+            (
+                branch.zone_name.to_ascii_lowercase(),
+                branch.name.to_ascii_lowercase(),
+            )
+        })
+        .collect::<HashSet<_>>();
+    let mut valid = Vec::with_capacity(prepared.branches.len());
+    for branch in prepared.branches.drain(..) {
+        if codes.contains(&branch.code.to_ascii_lowercase()) {
+            prepared.failures.push(BranchBulkFailure {
+                row: branch.row,
+                code: "CODE_EXISTS".into(),
+                message: format!("branch code {} already exists", branch.code),
+            });
+        } else if !branch.zone_name.is_empty()
+            && city_names.contains(&(
+                branch.zone_name.to_ascii_lowercase(),
+                branch.name.to_ascii_lowercase(),
+            ))
+        {
+            prepared.failures.push(BranchBulkFailure {
+                row: branch.row,
+                code: "CITY_BRANCH_EXISTS".into(),
+                message: "branch name already exists in the same zone/city".into(),
+            });
+        } else {
+            valid.push(branch);
+        }
+    }
+    prepared.branches = valid;
+}
+
+fn bulk_preview(prepared: &PreparedBranchBulk) -> BranchBulkPreview {
+    BranchBulkPreview {
+        total_rows: prepared.total_rows,
+        valid_rows: prepared.branches.len(),
+        invalid_rows: prepared.failures.len(),
+        failures: prepared.failures.clone(),
+    }
+}
+
+fn normalize_idempotency_key(value: &str) -> Result<String, AppError> {
+    let value = value.trim();
+    if !(8..=128).contains(&value.len())
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+    {
+        return Err(AppError::validation(
+            "Idempotency-Key must use 8 to 128 letters, numbers, dots, colons, hyphens or underscores",
+        ));
+    }
+    Ok(value.to_string())
+}
+
 fn normalize_address(value: &str) -> Result<String, AppError> {
     let value = value.trim();
     if value.chars().count() > 300 || value.chars().any(char::is_control) {
@@ -1353,8 +1896,8 @@ mod tests {
     use super::{
         decide_multi_branch_approval, normalize_code, normalize_deposit_percent,
         normalize_hierarchy, normalize_multi_branch_filters, normalize_name,
-        normalize_override_fields, request_multi_branch_approval, settle_inter_branch_redemption,
-        validate_coordinates, MultiBranchFilterInput,
+        normalize_override_fields, parse_bulk_csv, request_multi_branch_approval,
+        settle_inter_branch_redemption, validate_coordinates, MultiBranchFilterInput,
     };
     use crate::repositories::branch_repository;
     use sqlx::PgPool;
@@ -1402,6 +1945,81 @@ mod tests {
             ..Default::default()
         })
         .is_err());
+
+        let csv = b"name,code,regionName,zoneName\nMumbai One,MUM-01,West,Mumbai\nMumbai Two,MUM-01,West,Mumbai\n";
+        let prepared = parse_bulk_csv(csv).unwrap();
+        assert_eq!(prepared.total_rows, 2);
+        assert_eq!(prepared.branches.len(), 1);
+        assert_eq!(prepared.failures[0].code, "DUPLICATE_CODE");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn new_branch_uses_one_canonical_uuid(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            CREATE TABLE tenants(
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              scope_id TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE branches(
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              tenant_id UUID NOT NULL REFERENCES tenants(id),
+              scope_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              code TEXT NOT NULL,
+              region_name TEXT NOT NULL DEFAULT '',
+              zone_name TEXT NOT NULL DEFAULT '',
+              cluster_name TEXT NOT NULL DEFAULT '',
+              address TEXT NOT NULL DEFAULT '',
+              latitude DOUBLE PRECISION,
+              longitude DOUBLE PRECISION,
+              booking_deposit_percent INTEGER NOT NULL DEFAULT 0,
+              royalty_bps INTEGER NOT NULL DEFAULT 0,
+              royalty_minimum_paise BIGINT NOT NULL DEFAULT 0,
+              active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ
+            );
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let tenant_id: String = sqlx::query_scalar(
+            "WITH tenant AS (SELECT gen_random_uuid() id) INSERT INTO tenants(id,scope_id) SELECT id,id::TEXT FROM tenant RETURNING id::TEXT",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let mut tx = pool.begin().await.unwrap();
+        let branch = branch_repository::create(
+            &mut tx,
+            &tenant_id,
+            "Mumbai Central",
+            "MUM-01",
+            "West",
+            "Mumbai",
+            "Central",
+            "",
+            None,
+            None,
+            0,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        tx.commit().await.unwrap();
+        let scope_id: String =
+            sqlx::query_scalar("SELECT scope_id FROM branches WHERE id::TEXT=$1")
+                .bind(&branch.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(branch.id, scope_id);
     }
 
     #[sqlx::test(migrations = false)]

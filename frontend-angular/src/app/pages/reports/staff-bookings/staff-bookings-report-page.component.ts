@@ -7,7 +7,9 @@ import { DatePickerComponent } from '../../../shared/date-picker/date-picker.com
 import { ApiService } from '../../../shared/services/api.service';
 import { LanguageService } from '../../../core/i18n/language.service';
 type Row = { staffId: string; staffName: string; staffType: string; appointmentCount: number; appointmentValuePaise: number; };
-@Component({ selector: 'app-staff-bookings-report-page', standalone: true, imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent, CurrencyPipe, TranslatePipe], templateUrl: './staff-bookings-report-page.component.html', styleUrls: ['./staff-bookings-report-page.component.css'] })
+@Component({
+    selector: 'app-staff-bookings-report-page', imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent, CurrencyPipe, TranslatePipe], templateUrl: './staff-bookings-report-page.component.html', styleUrls: ['./staff-bookings-report-page.component.css']
+})
 export class StaffBookingsReportPageComponent implements OnInit {
   private readonly api = inject(ApiService); private readonly language = inject(LanguageService); rows: Row[] = []; fromDate = ''; toDate = ''; search = ''; loading = false; error = '';
   ngOnInit(): void { this.load(); }

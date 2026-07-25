@@ -38,7 +38,7 @@
     </article>
     <article class="kpi-card">
       <span class="icon-badge amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
-      <div><span>Low stock</span>@if (!canReadInventory) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ reorderSuggestions.length }}</strong> }</div>
+      <div><span>Stock risk</span>@if (!canReadInventory) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ (inventoryCommand?.summary?.stockoutRisk || 0) + (inventoryCommand?.summary?.overstockRisk || 0) }}</strong> }</div>
     </article>
     <article class="kpi-card">
       <span class="icon-badge red"><i class="bi bi-shield-exclamation" aria-hidden="true"></i></span>
@@ -197,52 +197,90 @@
 
   <section class="panel inventory-panel">
     <header class="panel-header">
-      <div><span class="eyebrow">Stock</span><h2>Inventory Autopilot</h2></div>
+      <div><span class="eyebrow">Digital twin</span><h2>Inventory Command Center</h2></div>
       @if (canReadInventory) { <a routerLink="/inventory/advanced-controls">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
     </header>
     @if (!canReadInventory) {
       <div class="compact-state">Access restricted</div>
     } @else if (controlsLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading inventory controls</div>
-    } @else if (errors.has('inventory') && errors.has('inventory-controls')) {
-      <div class="compact-state">Inventory controls unavailable</div>
+    } @else if (errors.has('inventory-command')) {
+      <div class="compact-state">Inventory command center unavailable</div>
     } @else {
       <div class="inventory-grid">
-        <section aria-label="Inventory control summary">
-          <h3>Control summary</h3>
-          <dl class="metric-list">
-            <div><dt>Critical</dt><dd>{{ inventoryControls?.summary?.critical || 0 }}</dd></div>
-            <div><dt>Warnings</dt><dd>{{ inventoryControls?.summary?.warnings || 0 }}</dd></div>
-            <div><dt>Pending approvals</dt><dd>{{ inventoryControls?.summary?.pendingApprovals || 0 }}</dd></div>
-            <div><dt>Expiry alerts</dt><dd>{{ inventoryControls?.summary?.expiryAlerts ?? '—' }}</dd></div>
-            <div><dt>Dead stock</dt><dd>{{ inventoryControls?.summary?.deadStock || 0 }}</dd></div>
-          </dl>
+        <section aria-label="Stock position">
+          <h3>Stock position</h3>
+          <div class="signal-list">
+            @for (signal of inventoryStockSignals; track signal.key) {
+              <a [routerLink]="signal.route" [attr.data-severity]="signal.severity"><span><strong>{{ signal.label }}</strong><small>{{ signal.detail }}</small></span><b>{{ inventorySignalValue(signal) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            }
+          </div>
         </section>
-        <section aria-label="Reorder queue">
-          <h3>Reorder queue · {{ money(reorderValuePaise) }}</h3>
-          @if (topReorderSuggestions.length === 0) {
-            <div class="section-empty">No records yet</div>
-          } @else {
-            <div class="rank-list">
-              @for (row of topReorderSuggestions; track row.productId) {
-                <div><span>{{ row.productName }}</span><strong>{{ row.suggestedQuantity }} units</strong></div>
-              }
-            </div>
-          }
+        <section aria-label="Inventory flow">
+          <h3>Flow &amp; variance</h3>
+          <div class="signal-list">
+            @for (signal of inventoryFlowSignals; track signal.key) {
+              <a [routerLink]="signal.route" [attr.data-severity]="signal.severity"><span><strong>{{ signal.label }}</strong><small>{{ signal.detail }}</small></span><b>{{ inventorySignalValue(signal) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            }
+          </div>
         </section>
-        <section aria-label="Inventory exceptions">
-          <h3>Exceptions</h3>
-          @if (topInventoryExceptions.length === 0) {
-            <div class="section-empty">No records yet</div>
-          } @else {
-            <div class="rank-list leaks">
-              @for (row of topInventoryExceptions; track row.control + row.title) {
-                <div><span>{{ row.title }}</span><strong>{{ money(row.valuePaise) }}</strong></div>
-              }
-            </div>
-          }
+        <section aria-label="Inventory governance">
+          <h3>Governance &amp; action</h3>
+          <div class="signal-list">
+            @for (signal of inventoryGovernanceSignals; track signal.key) {
+              <a [routerLink]="signal.route" [attr.data-severity]="signal.severity"><span><strong>{{ signal.label }}</strong><small>{{ signal.detail }}</small></span><b>{{ inventorySignalValue(signal) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            }
+          </div>
         </section>
       </div>
+      <section class="optimizer-engine" aria-label="Cross-branch inventory optimizer">
+        <header><div><span class="eyebrow">Purchase precheck</span><h3>Cross-Branch Optimizer</h3></div><b>{{ inventoryTransferOptimizations.length }} opportunity</b></header>
+        @if (!inventoryTransferOptimizations.length) {
+          <div class="compact-state">No safe transfer opportunities</div>
+        } @else {
+          <div class="optimizer-list">
+            @for (row of inventoryTransferOptimizations; track row.sourceInventoryItemId + row.destinationInventoryItemId) {
+              <article>
+                <div><strong>{{ row.productName }}</strong><small>{{ row.sourceBranchName }} → {{ row.destinationBranchName }} · {{ row.suggestedQuantity }} units</small></div>
+                <span><small>Earliest batch</small><b>{{ row.earliestBatchNumber || 'Not batch tracked' }} @if (row.earliestExpiryDate) { · {{ row.earliestExpiryDate | date:'dd/MM/yyyy' }} }</b></span>
+                <span><small>Coverage after transfer</small><b>{{ inventoryCoverage(row.destinationCoverageDaysAfter) }}</b></span>
+                <span><small>Source safety</small><b [class.risk]="!row.sourceSafe">{{ row.sourceSafe ? inventoryCoverage(row.sourceCoverageDaysAfter) : 'Unsafe' }}</b></span>
+                <span><small>Landed transfer</small><b>@if (row.estimatedTransferCostPaise !== null && row.estimatedTransferCostPaise !== undefined) { {{ money(row.estimatedTransferCostPaise) }} · stock {{ money(row.stockTransferCostPaise || 0) }} + transport {{ money(row.transportCostPaise || 0) }} + handling {{ money(row.handlingCostPaise || 0) }} + delay {{ money(row.delayCostPaise || 0) }} } @else { Cost policy required }</b></span>
+                <span><small>Cost decision</small><b>{{ label(row.costDecision) }} @if (row.savingsPaise !== null && row.savingsPaise !== undefined) { · {{ money(row.savingsPaise) }} }</b></span>
+                <span><small>Approval</small><b [class.risk]="row.ownerApprovalRequired">{{ row.ownerApprovalRequired ? 'Owner required' : 'Policy passed' }}</b></span>
+                <a routerLink="/inventory/transfers" aria-label="Open inventory transfers"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+              </article>
+            }
+          </div>
+        }
+      </section>
+      <section class="exception-engine" aria-label="AI inventory exception recommendations">
+        <header><div><span class="eyebrow">Explainable intelligence</span><h3>AI Exception Engine</h3></div><b>{{ inventoryRecommendations.length }} review</b></header>
+        @if (inventoryRecommendationError) { <div class="inline-status error">{{ inventoryRecommendationError }}</div> }
+        @if (!inventoryRecommendations.length) {
+          <div class="compact-state">No inventory exceptions</div>
+        } @else {
+          <div class="recommendation-list">
+            @for (recommendation of inventoryRecommendations; track recommendation.key) {
+              <article [attr.data-severity]="recommendation.severity">
+                <span class="priority-dot" [class.critical]="recommendation.severity === 'critical'" aria-hidden="true"></span>
+                <a class="recommendation-body" [routerLink]="recommendation.route"><strong>{{ recommendation.title }}</strong><small>{{ recommendation.explanation }}</small><em>{{ recommendation.recommendedAction }}</em></a>
+                <span class="recommendation-control">
+                  <b>{{ inventoryConfidence(recommendation.confidenceBps) }}</b>
+                  <small>{{ label(recommendation.category) }} · {{ label(recommendation.approval.status) }}</small>
+                  @if (canApproveInventory && recommendation.approval.status === 'review_required') {
+                    <span class="recommendation-actions">
+                      <button type="button" [disabled]="!!inventoryRecommendationBusy" (click)="reviewInventoryRecommendation(recommendation, 'approve')">Approve</button>
+                      <button type="button" [disabled]="!!inventoryRecommendationBusy" (click)="reviewInventoryRecommendation(recommendation, 'reject')">Reject</button>
+                    </span>
+                  }
+                </span>
+                <a class="recommendation-open" [routerLink]="recommendation.route" aria-label="Open recommendation action"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+              </article>
+            }
+          </div>
+        }
+      </section>
     }
   </section>
 
@@ -403,113 +441,117 @@
           <div class="action-list">
             @for (conflict of locationConflicts.slice(0, 6); track conflict.kind + conflict.branchId) {
               <article><span class="priority-dot" [ngClass]="conflict.severity" aria-hidden="true"></span><div><strong>{{ conflict.branchName }}</strong><span>{{ conflict.message }}</span></div><b>{{ label(conflict.severity) }}</b></article>
-            } @empty { <div class="mini-empty">No records yet</div> }
-          </div>
-        </section>
-        <section aria-label="Location approval queue">
-          <h3>Approval queue</h3>
-          <div class="approval-list">
-            @for (approval of pendingLocationApprovals; track approval.id) {
-              <article><div><strong>{{ label(approval.action) }}</strong><span>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</span></div>@if (canManageLocations) { <div class="row-actions"><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'rejected')">Reject</button><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'approved')">Approve</button></div> }</article>
-            } @empty { <div class="mini-empty">No records yet</div> }
-          </div>
-        </section>
-        <section aria-label="Location audit trail">
-          <h3>Audit</h3>
-          <div class="audit-list">
-            @for (event of locationAudit; track event.id) {
-              <article><strong>{{ label(event.eventType.replace('multi_branch.', '')) }}</strong><span>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId || 'System' }}<ng-container *ngIf="event.details?.published !== undefined"> · {{ event.details?.published }} records · gaps {{ (event.details?.before?.serviceSyncGap || 0) + (event.details?.before?.productSyncGap || 0) }} → {{ (event.details?.after?.serviceSyncGap || 0) + (event.details?.after?.productSyncGap || 0) }}</ng-container></span></article>
-            } @empty { <div class="mini-empty">No records yet</div> }
-          </div>
-        </section>
-      </div>
-
-      @if (errors.has('multi-branch')) {
-        <div class="section-empty">Branch comparison unavailable</div>
-      } @else if (branchComparisons.length === 0) {
-        <div class="section-empty">No records yet</div>
-      } @else {
-        <div class="location-table-wrap">
-          <table>
-            <thead><tr><th scope="col">Branch</th><th scope="col">Hierarchy</th><th scope="col">Revenue</th><th scope="col">Average ticket</th><th scope="col">Refunds</th><th scope="col">Tips</th><th scope="col">Sales</th><th scope="col">Voids</th><th scope="col">Appointments</th><th scope="col">Lost</th><th scope="col">Utilization</th><th scope="col">Cash variance</th><th scope="col">Open tills</th><th scope="col">Transfers</th><th scope="col">Shortages</th><th scope="col">Inventory</th><th scope="col">Member liability</th><th scope="col">Redeemed</th><th scope="col">Cross redeemed</th><th scope="col">Gift liability</th><th scope="col">Loyalty points</th><th scope="col">Shared clients</th><th scope="col">Sharing</th><th scope="col">Sync gaps</th><th scope="col">Conflicts</th></tr></thead>
-            <tbody>
-              @for (branch of branchComparisons; track branch.branchId) {
-                <tr>
-                  <td><strong>{{ branch.branchName }}</strong><small>{{ branch.branchCode }} · {{ branch.active ? 'Active' : 'Inactive' }}</small></td>
-                  <td>{{ comparisonHierarchy(branch) }}</td>
-                  <td>{{ money(branch.revenuePaise) }}</td>
-                  <td>{{ money(branch.averageTicketPaise) }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('refunds', branch.branchId)">{{ money(branch.refundPaise) }}</button></td>
-                  <td>{{ money(branch.tipPaise) }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('sales', branch.branchId)">{{ branch.saleCount }}</button></td>
-                  <td>{{ branch.voidCount }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('appointments', branch.branchId)">{{ branch.appointmentCount }}</button></td>
-                  <td>{{ branch.lostAppointmentCount }}</td>
-                  <td>{{ margin(branch.utilizationBps) }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ money(branch.cashVariancePaise) }}</button></td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ branch.openTillCount }}</button></td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('transfers', branch.branchId)">{{ branch.transferCount }}</button></td>
-                  <td>{{ branch.shortageCount }}</td>
-                  <td>{{ money(branch.inventoryValuePaise) }}</td>
-                  <td>{{ money(branch.membershipLiabilityPaise) }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('membershipRedemptions', branch.branchId)">{{ money(branch.membershipRedeemedPaise) }}</button></td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('interBranchSettlements', branch.branchId)">{{ money(branch.crossLocationRedeemedPaise) }}</button></td>
-                  <td>{{ money(branch.giftCardLiabilityPaise) }}</td>
-                  <td>{{ branch.loyaltyPointsBalance }}</td>
-                  <td>{{ branch.sharedCustomerCount }}</td>
-                  <td>{{ branch.sharingEnabled ? (branch.acceptInbound ? 'Two-way' : 'Outbound') : (branch.acceptInbound ? 'Inbound' : 'Disabled') }}</td>
-                  <td><button type="button" class="data-link" (click)="loadLocationDrilldown('conflicts', branch.branchId)">{{ branch.serviceSyncGap + branch.productSyncGap }}</button></td>
-                  <td><span class="state-badge" [class.inactive]="conflictCount(branch.branchId) > 0">{{ conflictCount(branch.branchId) }}</span></td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-      @if (locationDrilldownKind) {
-        <section class="location-drilldown" aria-label="Branch drilldown">
-          <header><h3>{{ label(locationDrilldownKind) }}</h3><button type="button" (click)="closeLocationDrilldown()">Close</button></header>
-          @if (locationDrilldownLoading) { <div class="mini-empty">Loading…</div> }
-          @else {
-            <div class="drilldown-list">
-              @for (row of locationDrilldownRows; track row['id']) {
-                @if (locationDrilldownKind === 'conflicts') {
-                  <article><strong>{{ row['branchName'] }} · {{ label(row['entityType']) }} · {{ row['entityName'] }}</strong><span>{{ label(row['fieldName']) }}: {{ row['branchValue'] ?? 'Missing' }} → {{ row['centralValue'] ?? 'Missing' }}</span><b>{{ row['overridden'] ? 'Controlled override' : 'Mismatch' }}</b></article>
-                } @else if (locationDrilldownKind === 'registerClosings') {
-                  <article><strong>{{ row['branchName'] }} · {{ row['tillName'] }} · {{ row['businessDate'] | date:'dd/MM/yyyy' }}</strong><span>Expected {{ money(row['expectedCashPaise']) }} · Counted {{ row['countedCashPaise'] === null ? 'Pending' : money(row['countedCashPaise']) }} · {{ label(row['status']) }}</span><b>{{ money(row['variancePaise'] || 0) }}</b></article>
-                } @else if (locationDrilldownKind === 'interBranchSettlements') {
-                  <article><strong>{{ row['sourceBranchName'] }} → {{ row['redemptionBranchName'] }}</strong><span>{{ row['membershipName'] }} · {{ row['serviceName'] }} · {{ label(row['status']) }}<ng-container *ngIf="row['settlementReference']"> · {{ row['settlementReference'] }}</ng-container></span><b>@if (row['status'] === 'open' && canManageLocations) { <button type="button" [disabled]="locationActionBusy" (click)="settleInterBranchRedemption(row)">Settle {{ money(row['valuePaise']) }}</button> } @else { {{ money(row['valuePaise']) }} }</b></article>
-                } @else {
-                  <article><strong>{{ row['branchName'] }} · {{ row['invoiceNumber'] || row['invoiceId'] || row['id'] }}</strong><span>{{ row['staffName'] || row['serviceName'] || row['membershipName'] || label(row['status'] || row['kind']) }} · {{ row['occurredAt'] | date:'dd/MM/yyyy HH:mm' }}</span><b>{{ money(row['totalPaise'] || row['amountPaise'] || row['valuePaise'] || 0) }}</b></article>
-                }
               } @empty { <div class="mini-empty">No records yet</div> }
             </div>
+          </section>
+          <section aria-label="Location approval queue">
+            <h3>Approval queue</h3>
+            <div class="approval-list">
+              @for (approval of pendingLocationApprovals; track approval.id) {
+                <article><div><strong>{{ label(approval.action) }}</strong><span>{{ approval.createdAt | date:'dd/MM/yyyy HH:mm' }}</span></div>@if (canManageLocations) { <div class="row-actions"><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'rejected')">Reject</button><button type="button" [disabled]="locationActionBusy" (click)="decideLocationApproval(approval, 'approved')">Approve</button></div> }</article>
+                } @empty { <div class="mini-empty">No records yet</div> }
+              </div>
+            </section>
+            <section aria-label="Location audit trail">
+              <h3>Audit</h3>
+              <div class="audit-list">
+                @for (event of locationAudit; track event.id) {
+                  <article><strong>{{ label(event.eventType.replace('multi_branch.', '')) }}</strong><span>{{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId || 'System' }}@if (event.details?.published !== undefined) {
+                  · {{ event.details?.published }} records · gaps {{ (event.details?.before?.serviceSyncGap || 0) + (event.details?.before?.productSyncGap || 0) }} → {{ (event.details?.after?.serviceSyncGap || 0) + (event.details?.after?.productSyncGap || 0) }}
+                }</span></article>
+                } @empty { <div class="mini-empty">No records yet</div> }
+              </div>
+            </section>
+          </div>
+
+          @if (errors.has('multi-branch')) {
+            <div class="section-empty">Branch comparison unavailable</div>
+          } @else if (branchComparisons.length === 0) {
+            <div class="section-empty">No records yet</div>
+          } @else {
+            <div class="location-table-wrap">
+              <table>
+                <thead><tr><th scope="col">Branch</th><th scope="col">Hierarchy</th><th scope="col">Revenue</th><th scope="col">Average ticket</th><th scope="col">Refunds</th><th scope="col">Tips</th><th scope="col">Sales</th><th scope="col">Voids</th><th scope="col">Appointments</th><th scope="col">Lost</th><th scope="col">Utilization</th><th scope="col">Cash variance</th><th scope="col">Open tills</th><th scope="col">Transfers</th><th scope="col">Shortages</th><th scope="col">Inventory</th><th scope="col">Member liability</th><th scope="col">Redeemed</th><th scope="col">Cross redeemed</th><th scope="col">Gift liability</th><th scope="col">Loyalty points</th><th scope="col">Shared clients</th><th scope="col">Sharing</th><th scope="col">Sync gaps</th><th scope="col">Conflicts</th></tr></thead>
+                <tbody>
+                  @for (branch of branchComparisons; track branch.branchId) {
+                    <tr>
+                      <td><strong>{{ branch.branchName }}</strong><small>{{ branch.branchCode }} · {{ branch.active ? 'Active' : 'Inactive' }}</small></td>
+                      <td>{{ comparisonHierarchy(branch) }}</td>
+                      <td>{{ money(branch.revenuePaise) }}</td>
+                      <td>{{ money(branch.averageTicketPaise) }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('refunds', branch.branchId)">{{ money(branch.refundPaise) }}</button></td>
+                      <td>{{ money(branch.tipPaise) }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('sales', branch.branchId)">{{ branch.saleCount }}</button></td>
+                      <td>{{ branch.voidCount }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('appointments', branch.branchId)">{{ branch.appointmentCount }}</button></td>
+                      <td>{{ branch.lostAppointmentCount }}</td>
+                      <td>{{ margin(branch.utilizationBps) }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ money(branch.cashVariancePaise) }}</button></td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('registerClosings', branch.branchId)">{{ branch.openTillCount }}</button></td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('transfers', branch.branchId)">{{ branch.transferCount }}</button></td>
+                      <td>{{ branch.shortageCount }}</td>
+                      <td>{{ money(branch.inventoryValuePaise) }}</td>
+                      <td>{{ money(branch.membershipLiabilityPaise) }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('membershipRedemptions', branch.branchId)">{{ money(branch.membershipRedeemedPaise) }}</button></td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('interBranchSettlements', branch.branchId)">{{ money(branch.crossLocationRedeemedPaise) }}</button></td>
+                      <td>{{ money(branch.giftCardLiabilityPaise) }}</td>
+                      <td>{{ branch.loyaltyPointsBalance }}</td>
+                      <td>{{ branch.sharedCustomerCount }}</td>
+                      <td>{{ branch.sharingEnabled ? (branch.acceptInbound ? 'Two-way' : 'Outbound') : (branch.acceptInbound ? 'Inbound' : 'Disabled') }}</td>
+                      <td><button type="button" class="data-link" (click)="loadLocationDrilldown('conflicts', branch.branchId)">{{ branch.serviceSyncGap + branch.productSyncGap }}</button></td>
+                      <td><span class="state-badge" [class.inactive]="conflictCount(branch.branchId) > 0">{{ conflictCount(branch.branchId) }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           }
-        </section>
-      }
-    }
-  </section>
+          @if (locationDrilldownKind) {
+            <section class="location-drilldown" aria-label="Branch drilldown">
+              <header><h3>{{ label(locationDrilldownKind) }}</h3><button type="button" (click)="closeLocationDrilldown()">Close</button></header>
+              @if (locationDrilldownLoading) { <div class="mini-empty">Loading…</div> }
+              @else {
+              <div class="drilldown-list">
+                @for (row of locationDrilldownRows; track row['id']) {
+                  @if (locationDrilldownKind === 'conflicts') {
+                    <article><strong>{{ row['branchName'] }} · {{ label(row['entityType']) }} · {{ row['entityName'] }}</strong><span>{{ label(row['fieldName']) }}: {{ row['branchValue'] ?? 'Missing' }} → {{ row['centralValue'] ?? 'Missing' }}</span><b>{{ row['overridden'] ? 'Controlled override' : 'Mismatch' }}</b></article>
+                  } @else if (locationDrilldownKind === 'registerClosings') {
+                    <article><strong>{{ row['branchName'] }} · {{ row['tillName'] }} · {{ row['businessDate'] | date:'dd/MM/yyyy' }}</strong><span>Expected {{ money(row['expectedCashPaise']) }} · Counted {{ row['countedCashPaise'] === null ? 'Pending' : money(row['countedCashPaise']) }} · {{ label(row['status']) }}</span><b>{{ money(row['variancePaise'] || 0) }}</b></article>
+                  } @else if (locationDrilldownKind === 'interBranchSettlements') {
+                    <article><strong>{{ row['sourceBranchName'] }} → {{ row['redemptionBranchName'] }}</strong><span>{{ row['membershipName'] }} · {{ row['serviceName'] }} · {{ label(row['status']) }}@if (row['settlementReference']) {
+                    · {{ row['settlementReference'] }}
+                    }</span><b>@if (row['status'] === 'open' && canManageLocations) { <button type="button" [disabled]="locationActionBusy" (click)="settleInterBranchRedemption(row)">Settle {{ money(row['valuePaise']) }}</button> } @else { {{ money(row['valuePaise']) }} }</b></article>
+                  } @else {
+                    <article><strong>{{ row['branchName'] }} · {{ row['invoiceNumber'] || row['invoiceId'] || row['id'] }}</strong><span>{{ row['staffName'] || row['serviceName'] || row['membershipName'] || label(row['status'] || row['kind']) }} · {{ row['occurredAt'] | date:'dd/MM/yyyy HH:mm' }}</span><b>{{ money(row['totalPaise'] || row['amountPaise'] || row['valuePaise'] || 0) }}</b></article>
+                  }
+                  } @empty { <div class="mini-empty">No records yet</div> }
+                </div>
+              }
+            </section>
+          }
+        }
+      </section>
 
-  <section class="panel workspace-panel">
-    <header class="panel-header"><div><span class="eyebrow">Operations</span><h2>Workspaces</h2></div></header>
-    <div class="workspace-grid">
-      <a routerLink="/reports"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-      @if (canReadStaff) { <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
-      @if (canReadInventory) { <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
-      @if (canReadPaymentControls) { <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
-      @if (canReadSecurity) { <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
-      <a routerLink="/dashboard"><span class="icon-badge blue"><i class="bi bi-grid-1x2" aria-hidden="true"></i></span><strong>Operational Dashboard</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-    </div>
-  </section>
+      <section class="panel workspace-panel">
+        <header class="panel-header"><div><span class="eyebrow">Operations</span><h2>Workspaces</h2></div></header>
+        <div class="workspace-grid">
+          <a routerLink="/reports"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+          @if (canReadStaff) { <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+          @if (canReadInventory) { <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+          @if (canReadPaymentControls) { <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+          @if (canReadSecurity) { <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+          <a routerLink="/dashboard"><span class="icon-badge blue"><i class="bi bi-grid-1x2" aria-hidden="true"></i></span><strong>Operational Dashboard</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+        </div>
+      </section>
 
-  <footer class="load-state">
-    @if (loading) {
-      <span><span class="spinner" aria-hidden="true"></span>Loading live metrics</span>
-    } @else if (errors.size) {
-      <span><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{ errors.size }} data sources unavailable</span>
-    } @else {
-      <span><i class="bi bi-check-circle" aria-hidden="true"></i>All data sources connected</span>
-    }
-    <span>Updated {{ updatedLabel() }}</span>
-  </footer>
-</main>
+      <footer class="load-state">
+        @if (loading) {
+          <span><span class="spinner" aria-hidden="true"></span>Loading live metrics</span>
+        } @else if (errors.size) {
+          <span><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{ errors.size }} data sources unavailable</span>
+        } @else {
+          <span><i class="bi bi-check-circle" aria-hidden="true"></i>All data sources connected</span>
+        }
+        <span>Updated {{ updatedLabel() }}</span>
+      </footer>
+    </main>

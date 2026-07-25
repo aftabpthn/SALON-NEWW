@@ -3,140 +3,276 @@
     <div><h1>{{ isPlatform ? 'SaaS Administration' : 'Subscription & Support' }}</h1></div>
     <div class="header-actions">
       <button class="secondary-button" type="button" (click)="reload()" [disabled]="loading"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-      <button class="primary-button" type="button" (click)="openTicket()" *ngIf="!isPlatform"><i class="bi bi-plus-lg"></i> New ticket</button>
+      @if (!isPlatform) {
+        <button class="primary-button" type="button" (click)="openTicket()"><i class="bi bi-plus-lg"></i> New ticket</button>
+      }
     </div>
   </header>
 
   <nav class="tab-bar" aria-label="SaaS sections">
-    <button *ngFor="let item of tabs" type="button" [class.active]="tab === item.key" (click)="selectTab(item.key)">{{ item.label }}</button>
+    @for (item of tabs; track item) {
+      <button type="button" [class.active]="tab === item.key" (click)="selectTab(item.key)">{{ item.label }}</button>
+    }
   </nav>
 
-  <div class="alert error" *ngIf="error">{{ error }}</div>
-  <div class="alert success" *ngIf="message">{{ message }}</div>
-  <div class="loading-state" *ngIf="loading">Loading…</div>
+  @if (error) {
+    <div class="alert error">{{ error }}</div>
+  }
+  @if (message) {
+    <div class="alert success">{{ message }}</div>
+  }
+  @if (loading) {
+    <div class="loading-state">Loading…</div>
+  }
 
-  <ng-container *ngIf="!loading">
-    <section *ngIf="tab === 'overview'">
-      <div class="summary-strip">
-        <div><span>{{ isPlatform ? 'Active plans' : 'Subscription' }}</span><strong>{{ isPlatform ? overview.activePlans : (tenantSubscription ? label(tenantSubscription.status) : 'None') }}</strong></div>
-        <div><span>Active subscriptions</span><strong>{{ overview.activeSubscriptions }}</strong></div>
-        <div [class.alert-value]="overview.pastDueSubscriptions > 0"><span>Past due</span><strong>{{ overview.pastDueSubscriptions }}</strong></div>
-        <div [class.alert-value]="overview.outstandingPaise > 0"><span>Outstanding</span><strong>{{ money(overview.outstandingPaise) }}</strong></div>
-        <div [class.alert-value]="overview.breachedTickets > 0"><span>Open / breached</span><strong>{{ overview.openTickets }} / {{ overview.breachedTickets }}</strong></div>
-      </div>
-
-      <div class="overview-grid" *ngIf="isPlatform">
-        <section class="panel">
-          <header class="panel-header"><h2>Subscription health</h2></header>
-          <div class="compact-table"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Period ends</th></tr></thead><tbody><tr *ngFor="let row of subscriptions | slice:0:8"><td>{{ row.tenantName }}</td><td>{{ row.planName }}</td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>{{ date(row.currentPeriodEnd) }}</td></tr></tbody></table><div class="empty-state compact" *ngIf="!subscriptions.length">No subscriptions yet</div></div>
+  @if (!loading) {
+    @if (tab === 'overview') {
+      <section>
+        <div class="summary-strip">
+          <div><span>{{ isPlatform ? 'Active plans' : 'Subscription' }}</span><strong>{{ isPlatform ? overview.activePlans : (tenantSubscription ? label(tenantSubscription.status) : 'None') }}</strong></div>
+          <div><span>Active subscriptions</span><strong>{{ overview.activeSubscriptions }}</strong></div>
+          <div [class.alert-value]="overview.pastDueSubscriptions > 0"><span>Past due</span><strong>{{ overview.pastDueSubscriptions }}</strong></div>
+          <div [class.alert-value]="overview.outstandingPaise > 0"><span>Outstanding</span><strong>{{ money(overview.outstandingPaise) }}</strong></div>
+          <div [class.alert-value]="overview.breachedTickets > 0"><span>Open / breached</span><strong>{{ overview.openTickets }} / {{ overview.breachedTickets }}</strong></div>
+        </div>
+        @if (isPlatform) {
+          <div class="overview-grid">
+            <section class="panel">
+              <header class="panel-header"><h2>Subscription health</h2></header>
+              <div class="compact-table"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Period ends</th></tr></thead><tbody>@for (row of subscriptions | slice:0:8; track row) {
+              <tr><td>{{ row.tenantName }}</td><td>{{ row.planName }}</td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>{{ date(row.currentPeriodEnd) }}</td></tr>
+            }</tbody></table>@if (!subscriptions.length) {
+            <div class="empty-state compact">No subscriptions yet</div>
+          }</div>
         </section>
         <section class="panel">
           <header class="panel-header"><h2>Support queue</h2></header>
-          <div class="compact-table"><table><thead><tr><th>Ticket</th><th>Tenant</th><th>SLA</th></tr></thead><tbody><tr *ngFor="let row of tickets | slice:0:8"><td><button class="text-button" (click)="openTicketDetail(row)">{{ row.ticketNumber }}</button><small>{{ row.subject }}</small></td><td>{{ row.tenantName }}</td><td><span [class.breach-text]="row.resolutionBreached">{{ row.resolutionBreached ? 'Breached' : label(row.status) }}</span></td></tr></tbody></table><div class="empty-state compact" *ngIf="!tickets.length">No support tickets yet</div></div>
-        </section>
+          <div class="compact-table"><table><thead><tr><th>Ticket</th><th>Tenant</th><th>SLA</th></tr></thead><tbody>@for (row of tickets | slice:0:8; track row) {
+          <tr><td><button class="text-button" (click)="openTicketDetail(row)">{{ row.ticketNumber }}</button><small>{{ row.subject }}</small></td><td>{{ row.tenantName }}</td><td><span [class.breach-text]="row.resolutionBreached">{{ row.resolutionBreached ? 'Breached' : label(row.status) }}</span></td></tr>
+        }</tbody></table>@if (!tickets.length) {
+        <div class="empty-state compact">No support tickets yet</div>
+      }</div>
+    </section>
+  </div>
+}
+@if (!isPlatform) {
+  <div class="overview-grid">
+    <section class="panel subscription-card">
+      <header class="panel-header"><h2>Current plan</h2>@if (tenantSubscription) {
+      <span class="status-chip" [attr.data-status]="tenantSubscription.status">{{ label(tenantSubscription.status) }}</span>
+    }</header>
+    @if (!tenantSubscription) {
+      <div class="empty-state compact">No subscription assigned</div>
+    }
+    @if (tenantSubscription) {
+      <dl class="detail-grid">
+        <div><dt>Plan</dt><dd>{{ tenantSubscription.planName }}</dd></div><div><dt>Provider</dt><dd>{{ label(tenantSubscription.provider) }}</dd></div>
+        <div><dt>Period starts</dt><dd>{{ date(tenantSubscription.currentPeriodStart) }}</dd></div><div><dt>Period ends</dt><dd>{{ date(tenantSubscription.currentPeriodEnd) }}</dd></div>
+      </dl>
+    }
+  </section>
+  <section class="panel">
+    <header class="panel-header"><h2>Current usage</h2></header>
+    @if (!tenantUsage) {
+      <div class="empty-state compact">No active usage period</div>
+    }
+    @if (tenantUsage) {
+      <div class="usage-list">
+        <div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div>
       </div>
-
-      <div class="overview-grid" *ngIf="!isPlatform">
-        <section class="panel subscription-card">
-          <header class="panel-header"><h2>Current plan</h2><span class="status-chip" *ngIf="tenantSubscription" [attr.data-status]="tenantSubscription.status">{{ label(tenantSubscription.status) }}</span></header>
-          <div class="empty-state compact" *ngIf="!tenantSubscription">No subscription assigned</div>
-          <dl class="detail-grid" *ngIf="tenantSubscription">
-            <div><dt>Plan</dt><dd>{{ tenantSubscription.planName }}</dd></div><div><dt>Provider</dt><dd>{{ label(tenantSubscription.provider) }}</dd></div>
-            <div><dt>Period starts</dt><dd>{{ date(tenantSubscription.currentPeriodStart) }}</dd></div><div><dt>Period ends</dt><dd>{{ date(tenantSubscription.currentPeriodEnd) }}</dd></div>
-          </dl>
-        </section>
-        <section class="panel">
-          <header class="panel-header"><h2>Current usage</h2></header>
-          <div class="empty-state compact" *ngIf="!tenantUsage">No active usage period</div>
-          <div class="usage-list" *ngIf="tenantUsage">
-            <div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div>
-          </div>
-        </section>
-      </div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'plans' && isPlatform">
-      <header class="panel-header toolbar-header"><h2>Plans</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search plans" /><button class="primary-button" type="button" (click)="openPlan()"><i class="bi bi-plus-lg"></i> New plan</button></div></header>
-      <div class="table-scroll"><table><thead><tr><th>Plan</th><th>Cycle</th><th>Base price</th><th>Allowances</th><th>Subscriptions</th><th>Status</th><th></th></tr></thead><tbody><tr *ngFor="let row of filteredPlans"><td><strong>{{ row.name }}</strong><small>{{ row.code }}</small></td><td>{{ label(row.billingInterval) }}</td><td>{{ money(row.basePricePaise) }}</td><td>{{ row.includedBranches }} branches · {{ row.includedUsers }} users · {{ row.includedAppointments }} appointments</td><td>{{ row.activeSubscriptions }}</td><td><span class="status-chip" [attr.data-status]="row.active ? 'active' : 'cancelled'">{{ row.active ? 'Active' : 'Inactive' }}</span></td><td><button class="utility-button" type="button" (click)="openPlan(row)" aria-label="Edit plan"><i class="bi bi-pencil"></i></button></td></tr></tbody></table><div class="empty-state" *ngIf="!filteredPlans.length">No plans yet</div></div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'subscriptions' && isPlatform">
-      <header class="panel-header toolbar-header"><h2>Subscriptions</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search subscriptions" /><button class="primary-button" type="button" (click)="openSubscription()"><i class="bi bi-plus-lg"></i> Assign plan</button></div></header>
-      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Current period</th><th>Provider</th><th></th></tr></thead><tbody><tr *ngFor="let row of filteredSubscriptions"><td><strong>{{ row.tenantName }}</strong><small>{{ row.tenantId }}</small></td><td>{{ row.planName }}</td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>{{ date(row.currentPeriodStart) }}<small>to {{ date(row.currentPeriodEnd) }}</small></td><td>{{ label(row.provider) }}</td><td><button class="utility-button" type="button" (click)="openSubscription(row)" aria-label="Edit subscription"><i class="bi bi-pencil"></i></button></td></tr></tbody></table><div class="empty-state" *ngIf="!filteredSubscriptions.length">No subscriptions yet</div></div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'billing'">
-      <header class="panel-header toolbar-header"><h2>Billing</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search invoices" /><button class="secondary-button" type="button" (click)="openBillingRun()" *ngIf="isPlatform">Run due billing</button><button class="primary-button" type="button" (click)="openInvoice()" *ngIf="isPlatform"><i class="bi bi-plus-lg"></i> Issue invoice</button></div></header>
-      <div class="table-scroll"><table><thead><tr><th>Invoice</th><th *ngIf="isPlatform">Tenant</th><th>Plan</th><th>Period</th><th>Total</th><th>Paid / due</th><th>Status</th><th></th></tr></thead><tbody><tr *ngFor="let row of filteredInvoices"><td><strong>{{ row.invoiceNumber }}</strong><small>{{ date(row.issuedAt) }}</small></td><td *ngIf="isPlatform">{{ row.tenantName }}</td><td>{{ row.planName }}</td><td>{{ date(row.periodStart) }}<small>to {{ date(row.periodEnd) }}</small></td><td>{{ money(row.totalPaise) }}<small>Usage {{ money(row.usageAmountPaise) }} · Tax {{ money(row.taxAmountPaise) }}</small></td><td>{{ money(row.paidPaise) }}<small>{{ money(remaining(row)) }} due</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td><button class="secondary-button small" type="button" *ngIf="isPlatform && remaining(row) > 0 && !['void','paid'].includes(row.status)" (click)="openPayment(row)">Payment</button></td></tr></tbody></table><div class="empty-state" *ngIf="!filteredInvoices.length">No invoices yet</div></div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'usage'">
-      <header class="panel-header"><h2>Usage</h2></header>
-      <div class="usage-list tenant-usage" *ngIf="!isPlatform && tenantUsage"><div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div><div><span>API calls</span><strong>{{ tenantUsage.apiCalls }}</strong></div><div><span>Messages</span><strong>{{ tenantUsage.messages }}</strong></div><div><span>Storage</span><strong>{{ tenantUsage.storageMb }} MB</strong></div></div>
-      <div class="empty-state" *ngIf="!isPlatform && !tenantUsage">No active usage period</div>
-      <div class="table-scroll" *ngIf="isPlatform"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Branches</th><th>Users</th><th>Appointments</th><th>API calls</th><th>Messages</th><th>Storage</th></tr></thead><tbody><tr *ngFor="let row of usageRows"><td>{{ row.subscription.tenantName }}</td><td>{{ row.subscription.planName }}</td><td>{{ row.usage.branchCount }}</td><td>{{ row.usage.activeUserCount }}</td><td>{{ row.usage.appointmentCount }}</td><td>{{ row.usage.apiCalls }}</td><td>{{ row.usage.messages }}</td><td>{{ row.usage.storageMb }} MB</td></tr></tbody></table><div class="empty-state" *ngIf="!usageRows.length">No usage periods yet</div></div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'support'">
-      <header class="panel-header toolbar-header"><h2>Support tickets</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search tickets" /><button class="primary-button" type="button" (click)="openTicket()" *ngIf="!isPlatform"><i class="bi bi-plus-lg"></i> New ticket</button></div></header>
-      <div class="table-scroll"><table><thead><tr><th>Ticket</th><th *ngIf="isPlatform">Tenant</th><th>Severity</th><th>Status</th><th>First response</th><th>Resolution SLA</th><th></th></tr></thead><tbody><tr *ngFor="let row of filteredTickets" [class.breached-row]="row.resolutionBreached"><td><strong>{{ row.ticketNumber }}</strong><small>{{ row.subject }}</small></td><td *ngIf="isPlatform">{{ row.tenantName }}</td><td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ label(row.status) }}</td><td [class.breach-text]="row.responseBreached">{{ row.firstRespondedAt ? date(row.firstRespondedAt) : date(row.firstResponseDueAt) }}</td><td [class.breach-text]="row.resolutionBreached">{{ row.resolvedAt ? date(row.resolvedAt) : date(row.resolutionDueAt) }}</td><td><button class="utility-button" type="button" (click)="openTicketDetail(row)" aria-label="Open ticket"><i class="bi bi-chevron-right"></i></button></td></tr></tbody></table><div class="empty-state" *ngIf="!filteredTickets.length">No support tickets yet</div></div>
-    </section>
-
-    <section class="panel" *ngIf="tab === 'sla' && isPlatform">
-      <header class="panel-header"><h2>SLA policies</h2></header>
-      <div class="table-scroll"><table><thead><tr><th>Plan</th><th>Severity</th><th>First response</th><th>Resolution</th><th>Clock</th><th></th></tr></thead><tbody><ng-container *ngFor="let plan of plans"><tr *ngFor="let row of plan.sla"><td>{{ plan.name }}</td><td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ minutes(row.firstResponseMinutes) }}</td><td>{{ minutes(row.resolutionMinutes) }}</td><td>{{ row.businessHoursOnly ? 'Business hours' : '24 × 7' }}</td><td><button class="utility-button" type="button" (click)="openPlan(plan)" aria-label="Edit SLA"><i class="bi bi-pencil"></i></button></td></tr></ng-container></tbody></table><div class="empty-state" *ngIf="!plans.length">No SLA policies yet</div></div>
-    </section>
-  </ng-container>
+    }
+  </section>
+</div>
+}
+</section>
+}
+@if (tab === 'plans' && isPlatform) {
+  <section class="panel">
+    <header class="panel-header toolbar-header"><h2>Plans</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search plans" /><button class="primary-button" type="button" (click)="openPlan()"><i class="bi bi-plus-lg"></i> New plan</button></div></header>
+    <div class="table-scroll"><table><thead><tr><th>Plan</th><th>Cycle</th><th>Base price</th><th>Allowances</th><th>Subscriptions</th><th>Status</th><th></th></tr></thead><tbody>@for (row of filteredPlans; track row) {
+    <tr><td><strong>{{ row.name }}</strong><small>{{ row.code }}</small></td><td>{{ label(row.billingInterval) }}</td><td>{{ money(row.basePricePaise) }}</td><td>{{ row.includedBranches }} branches · {{ row.includedUsers }} users · {{ row.includedAppointments }} appointments</td><td>{{ row.activeSubscriptions }}</td><td><span class="status-chip" [attr.data-status]="row.active ? 'active' : 'cancelled'">{{ row.active ? 'Active' : 'Inactive' }}</span></td><td><button class="utility-button" type="button" (click)="openPlan(row)" aria-label="Edit plan"><i class="bi bi-pencil"></i></button></td></tr>
+  }</tbody></table>@if (!filteredPlans.length) {
+  <div class="empty-state">No plans yet</div>
+}</div>
+</section>
+}
+@if (tab === 'subscriptions' && isPlatform) {
+  <section class="panel">
+    <header class="panel-header toolbar-header"><h2>Subscriptions</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search subscriptions" /><button class="primary-button" type="button" (click)="openSubscription()"><i class="bi bi-plus-lg"></i> Assign plan</button></div></header>
+    <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Status</th><th>Current period</th><th>Provider</th><th></th></tr></thead><tbody>@for (row of filteredSubscriptions; track row) {
+    <tr><td><strong>{{ row.tenantName }}</strong><small>{{ row.tenantId }}</small></td><td>{{ row.planName }}</td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>{{ date(row.currentPeriodStart) }}<small>to {{ date(row.currentPeriodEnd) }}</small></td><td>{{ label(row.provider) }}</td><td><button class="utility-button" type="button" (click)="openSubscription(row)" aria-label="Edit subscription"><i class="bi bi-pencil"></i></button></td></tr>
+  }</tbody></table>@if (!filteredSubscriptions.length) {
+  <div class="empty-state">No subscriptions yet</div>
+}</div>
+</section>
+}
+@if (tab === 'billing') {
+  <section class="panel">
+    <header class="panel-header toolbar-header"><h2>Billing</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search invoices" />@if (isPlatform) {
+    <button class="secondary-button" type="button" (click)="openBillingRun()">Run due billing</button>
+    }@if (isPlatform) {
+    <button class="primary-button" type="button" (click)="openInvoice()"><i class="bi bi-plus-lg"></i> Issue invoice</button>
+  }</div></header>
+  <div class="table-scroll"><table><thead><tr><th>Invoice</th>@if (isPlatform) {
+  <th>Tenant</th>
+  }<th>Plan</th><th>Period</th><th>Total</th><th>Paid / due</th><th>Status</th><th></th></tr></thead><tbody>@for (row of filteredInvoices; track row) {
+  <tr><td><strong>{{ row.invoiceNumber }}</strong><small>{{ date(row.issuedAt) }}</small></td>@if (isPlatform) {
+  <td>{{ row.tenantName }}</td>
+  }<td>{{ row.planName }}</td><td>{{ date(row.periodStart) }}<small>to {{ date(row.periodEnd) }}</small></td><td>{{ money(row.totalPaise) }}<small>Usage {{ money(row.usageAmountPaise) }} · Tax {{ money(row.taxAmountPaise) }}</small></td><td>{{ money(row.paidPaise) }}<small>{{ money(remaining(row)) }} due</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>@if (isPlatform && remaining(row) > 0 && !['void','paid'].includes(row.status)) {
+  <button class="secondary-button small" type="button" (click)="openPayment(row)">Payment</button>
+}</td></tr>
+}</tbody></table>@if (!filteredInvoices.length) {
+<div class="empty-state">No invoices yet</div>
+}</div>
+</section>
+}
+@if (tab === 'usage') {
+  <section class="panel">
+    <header class="panel-header"><h2>Usage</h2></header>
+    @if (!isPlatform && tenantUsage) {
+      <div class="usage-list tenant-usage"><div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div><div><span>API calls</span><strong>{{ tenantUsage.apiCalls }}</strong></div><div><span>Messages</span><strong>{{ tenantUsage.messages }}</strong></div><div><span>Storage</span><strong>{{ tenantUsage.storageMb }} MB</strong></div></div>
+    }
+    @if (!isPlatform && !tenantUsage) {
+      <div class="empty-state">No active usage period</div>
+    }
+    @if (isPlatform) {
+      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Branches</th><th>Users</th><th>Appointments</th><th>API calls</th><th>Messages</th><th>Storage</th></tr></thead><tbody>@for (row of usageRows; track row) {
+      <tr><td>{{ row.subscription.tenantName }}</td><td>{{ row.subscription.planName }}</td><td>{{ row.usage.branchCount }}</td><td>{{ row.usage.activeUserCount }}</td><td>{{ row.usage.appointmentCount }}</td><td>{{ row.usage.apiCalls }}</td><td>{{ row.usage.messages }}</td><td>{{ row.usage.storageMb }} MB</td></tr>
+    }</tbody></table>@if (!usageRows.length) {
+    <div class="empty-state">No usage periods yet</div>
+  }</div>
+}
+</section>
+}
+@if (tab === 'support') {
+  <section class="panel">
+    <header class="panel-header toolbar-header"><h2>Support tickets</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search tickets" />@if (!isPlatform) {
+    <button class="primary-button" type="button" (click)="openTicket()"><i class="bi bi-plus-lg"></i> New ticket</button>
+  }</div></header>
+  <div class="table-scroll"><table><thead><tr><th>Ticket</th>@if (isPlatform) {
+  <th>Tenant</th>
+  }<th>Severity</th><th>Status</th><th>First response</th><th>Resolution SLA</th><th></th></tr></thead><tbody>@for (row of filteredTickets; track row) {
+  <tr [class.breached-row]="row.resolutionBreached"><td><strong>{{ row.ticketNumber }}</strong><small>{{ row.subject }}</small></td>@if (isPlatform) {
+  <td>{{ row.tenantName }}</td>
+  }<td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ label(row.status) }}</td><td [class.breach-text]="row.responseBreached">{{ row.firstRespondedAt ? date(row.firstRespondedAt) : date(row.firstResponseDueAt) }}</td><td [class.breach-text]="row.resolutionBreached">{{ row.resolvedAt ? date(row.resolvedAt) : date(row.resolutionDueAt) }}</td><td><button class="utility-button" type="button" (click)="openTicketDetail(row)" aria-label="Open ticket"><i class="bi bi-chevron-right"></i></button></td></tr>
+}</tbody></table>@if (!filteredTickets.length) {
+<div class="empty-state">No support tickets yet</div>
+}</div>
+</section>
+}
+@if (tab === 'sla' && isPlatform) {
+  <section class="panel">
+    <header class="panel-header"><h2>SLA policies</h2></header>
+    <div class="table-scroll"><table><thead><tr><th>Plan</th><th>Severity</th><th>First response</th><th>Resolution</th><th>Clock</th><th></th></tr></thead><tbody>@for (plan of plans; track plan) {
+    @for (row of plan.sla; track row) {
+      <tr><td>{{ plan.name }}</td><td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ minutes(row.firstResponseMinutes) }}</td><td>{{ minutes(row.resolutionMinutes) }}</td><td>{{ row.businessHoursOnly ? 'Business hours' : '24 × 7' }}</td><td><button class="utility-button" type="button" (click)="openPlan(plan)" aria-label="Edit SLA"><i class="bi bi-pencil"></i></button></td></tr>
+    }
+  }</tbody></table>@if (!plans.length) {
+  <div class="empty-state">No SLA policies yet</div>
+}</div>
+</section>
+}
+}
 </section>
 
-<div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
+@if (drawer) {
+  <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+}
 
-<aside class="drawer" *ngIf="drawer === 'plan' && isPlatform">
-  <header class="drawer-header"><h2>{{ editingPlanId ? 'Edit plan' : 'New plan' }}</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
-  <form class="drawer-form" (ngSubmit)="savePlan()"><div class="drawer-body">
-    <section class="form-section"><h3>Plan</h3><div class="field-grid"><label>Code<input [(ngModel)]="planDraft.code" name="planCode" required maxlength="40" /></label><label>Name<input [(ngModel)]="planDraft.name" (ngModelChange)="planDraft.name = titleCase($event)" name="planName" required maxlength="100" /></label><label>Billing cycle<select [(ngModel)]="planDraft.billingInterval" name="billingInterval"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label><label>Base price<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.basePriceRupees" name="basePrice" placeholder="Enter amount" required /></label><label class="check-field"><input type="checkbox" [(ngModel)]="planDraft.active" name="planActive" /> Active</label></div></section>
-    <section class="form-section"><h3>Included usage</h3><div class="field-grid three"><label>Branches<input type="number" min="0" [(ngModel)]="planDraft.includedBranches" name="includedBranches" placeholder="Enter quantity" required /></label><label>Users<input type="number" min="0" [(ngModel)]="planDraft.includedUsers" name="includedUsers" placeholder="Enter quantity" required /></label><label>Appointments<input type="number" min="0" [(ngModel)]="planDraft.includedAppointments" name="includedAppointments" placeholder="Enter quantity" required /></label></div></section>
-    <section class="form-section"><h3>Overage rates</h3><div class="field-grid three"><label>Per branch<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageBranchRupees" name="overageBranch" placeholder="Enter amount" /></label><label>Per user<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageUserRupees" name="overageUser" placeholder="Enter amount" /></label><label>Per appointment<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageAppointmentRupees" name="overageAppointment" placeholder="Enter amount" /></label></div></section>
-    <section class="form-section"><h3>Features</h3><label>One feature per line<textarea [(ngModel)]="planDraft.features" name="features" rows="5"></textarea></label></section>
-    <section class="form-section"><h3>SLA</h3><div class="sla-editor" *ngFor="let row of planDraft.sla; let index=index"><strong>{{ label(row.severity) }}</strong><label>First response (minutes)<input type="number" min="1" [(ngModel)]="row.firstResponseMinutes" [name]="'response'+index" placeholder="Enter minutes" required /></label><label>Resolution (minutes)<input type="number" min="1" [(ngModel)]="row.resolutionMinutes" [name]="'resolution'+index" placeholder="Enter minutes" required /></label><label class="check-field"><input type="checkbox" [(ngModel)]="row.businessHoursOnly" [name]="'businessHours'+index" /> Business hours only</label></div></section>
-  </div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Save plan' }}</button></footer></form>
-</aside>
+@if (drawer === 'plan' && isPlatform) {
+  <aside class="drawer">
+    <header class="drawer-header"><h2>{{ editingPlanId ? 'Edit plan' : 'New plan' }}</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-form" (ngSubmit)="savePlan()"><div class="drawer-body">
+      <section class="form-section"><h3>Plan</h3><div class="field-grid"><label>Code<input [(ngModel)]="planDraft.code" name="planCode" required maxlength="40" /></label><label>Name<input [(ngModel)]="planDraft.name" (ngModelChange)="planDraft.name = titleCase($event)" name="planName" required maxlength="100" /></label><label>Billing cycle<select [(ngModel)]="planDraft.billingInterval" name="billingInterval"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label><label>Base price<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.basePriceRupees" name="basePrice" placeholder="Enter amount" required /></label><label class="check-field"><input type="checkbox" [(ngModel)]="planDraft.active" name="planActive" /> Active</label></div></section>
+      <section class="form-section"><h3>Included usage</h3><div class="field-grid three"><label>Branches<input type="number" min="0" [(ngModel)]="planDraft.includedBranches" name="includedBranches" placeholder="Enter quantity" required /></label><label>Users<input type="number" min="0" [(ngModel)]="planDraft.includedUsers" name="includedUsers" placeholder="Enter quantity" required /></label><label>Appointments<input type="number" min="0" [(ngModel)]="planDraft.includedAppointments" name="includedAppointments" placeholder="Enter quantity" required /></label></div></section>
+      <section class="form-section"><h3>Overage rates</h3><div class="field-grid three"><label>Per branch<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageBranchRupees" name="overageBranch" placeholder="Enter amount" /></label><label>Per user<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageUserRupees" name="overageUser" placeholder="Enter amount" /></label><label>Per appointment<input type="number" min="0" step="0.01" [(ngModel)]="planDraft.overageAppointmentRupees" name="overageAppointment" placeholder="Enter amount" /></label></div></section>
+      <section class="form-section"><h3>Features</h3><label>One feature per line<textarea [(ngModel)]="planDraft.features" name="features" rows="5"></textarea></label></section>
+      <section class="form-section"><h3>SLA</h3>@for (row of planDraft.sla; track row; let index = $index) {
+      <div class="sla-editor"><strong>{{ label(row.severity) }}</strong><label>First response (minutes)<input type="number" min="1" [(ngModel)]="row.firstResponseMinutes" [name]="'response'+index" placeholder="Enter minutes" required /></label><label>Resolution (minutes)<input type="number" min="1" [(ngModel)]="row.resolutionMinutes" [name]="'resolution'+index" placeholder="Enter minutes" required /></label><label class="check-field"><input type="checkbox" [(ngModel)]="row.businessHoursOnly" [name]="'businessHours'+index" /> Business hours only</label></div>
+    }</section>
+    </div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Save plan' }}</button></footer></form>
+  </aside>
+}
 
-<aside class="drawer" *ngIf="drawer === 'subscription' && isPlatform">
-  <header class="drawer-header"><h2>{{ editingSubscriptionId ? 'Edit subscription' : 'Assign subscription' }}</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
-  <form class="drawer-form" (ngSubmit)="saveSubscription()"><div class="drawer-body"><section class="form-section"><div class="field-grid">
-    <label>Tenant<select [(ngModel)]="subscriptionDraft.tenantId" name="tenantId" [disabled]="!!editingSubscriptionId" required><option value="">Select tenant</option><option *ngFor="let tenant of tenants" [value]="tenant.id">{{ tenant.name }}</option></select></label>
-    <label>Plan<select [(ngModel)]="subscriptionDraft.planId" name="planId" required><option value="">Select plan</option><option *ngFor="let plan of plans" [value]="plan.id" [disabled]="!plan.active">{{ plan.name }}</option></select></label>
-    <label>Status<select [(ngModel)]="subscriptionDraft.status" name="subscriptionStatus"><option *ngFor="let status of statuses" [value]="status">{{ label(status) }}</option></select></label>
-    <label *ngIf="!editingSubscriptionId">Provider<select [(ngModel)]="subscriptionDraft.provider" name="provider"><option value="manual">Manual</option><option value="razorpay">Razorpay</option><option value="stripe">Stripe</option></select></label>
-    <label *ngIf="!editingSubscriptionId">Starts date<as-date-picker [(value)]="subscriptionDraft.startsDate" ariaLabel="Subscription starts date"></as-date-picker></label><label *ngIf="!editingSubscriptionId">Starts time<input type="time" [(ngModel)]="subscriptionDraft.startsTime" name="startsTime" /></label>
-    <label *ngIf="!editingSubscriptionId">Trial ends date<as-date-picker [(value)]="subscriptionDraft.trialDate" ariaLabel="Trial ends date"></as-date-picker></label><label *ngIf="!editingSubscriptionId">Trial ends time<input type="time" [(ngModel)]="subscriptionDraft.trialTime" name="trialTime" /></label>
-    <label *ngIf="!editingSubscriptionId">Customer reference<input [(ngModel)]="subscriptionDraft.providerCustomerRef" name="customerRef" /></label><label *ngIf="!editingSubscriptionId">Subscription reference<input [(ngModel)]="subscriptionDraft.providerSubscriptionRef" name="subscriptionRef" /></label>
-    <label class="check-field" *ngIf="editingSubscriptionId"><input type="checkbox" [(ngModel)]="subscriptionDraft.cancelAtPeriodEnd" name="cancelAtPeriodEnd" /> Cancel at period end</label>
+@if (drawer === 'subscription' && isPlatform) {
+  <aside class="drawer">
+    <header class="drawer-header"><h2>{{ editingSubscriptionId ? 'Edit subscription' : 'Assign subscription' }}</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-form" (ngSubmit)="saveSubscription()"><div class="drawer-body"><section class="form-section"><div class="field-grid">
+      <label>Tenant<select [(ngModel)]="subscriptionDraft.tenantId" name="tenantId" [disabled]="!!editingSubscriptionId" required><option value="">Select tenant</option>@for (tenant of tenants; track tenant) {
+      <option [value]="tenant.id">{{ tenant.name }}</option>
+    }</select></label>
+    <label>Plan<select [(ngModel)]="subscriptionDraft.planId" name="planId" required><option value="">Select plan</option>@for (plan of plans; track plan) {
+    <option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }}</option>
+  }</select></label>
+  <label>Status<select [(ngModel)]="subscriptionDraft.status" name="subscriptionStatus">@for (status of statuses; track status) {
+    <option [value]="status">{{ label(status) }}</option>
+  }</select></label>
+  @if (!editingSubscriptionId) {
+    <label>Provider<select [(ngModel)]="subscriptionDraft.provider" name="provider"><option value="manual">Manual</option><option value="razorpay">Razorpay</option><option value="stripe">Stripe</option></select></label>
+  }
+  @if (!editingSubscriptionId) {
+    <label>Starts date<as-date-picker [(value)]="subscriptionDraft.startsDate" ariaLabel="Subscription starts date"></as-date-picker></label>
+    }@if (!editingSubscriptionId) {
+    <label>Starts time<input type="time" [(ngModel)]="subscriptionDraft.startsTime" name="startsTime" /></label>
+  }
+  @if (!editingSubscriptionId) {
+    <label>Trial ends date<as-date-picker [(value)]="subscriptionDraft.trialDate" ariaLabel="Trial ends date"></as-date-picker></label>
+    }@if (!editingSubscriptionId) {
+    <label>Trial ends time<input type="time" [(ngModel)]="subscriptionDraft.trialTime" name="trialTime" /></label>
+  }
+  @if (!editingSubscriptionId) {
+    <label>Customer reference<input [(ngModel)]="subscriptionDraft.providerCustomerRef" name="customerRef" /></label>
+    }@if (!editingSubscriptionId) {
+    <label>Subscription reference<input [(ngModel)]="subscriptionDraft.providerSubscriptionRef" name="subscriptionRef" /></label>
+  }
+  @if (editingSubscriptionId) {
+    <label class="check-field"><input type="checkbox" [(ngModel)]="subscriptionDraft.cancelAtPeriodEnd" name="cancelAtPeriodEnd" /> Cancel at period end</label>
+  }
   </div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Save subscription' }}</button></footer></form>
 </aside>
+}
 
-<aside class="drawer narrow" *ngIf="drawer === 'invoice' && isPlatform">
-  <header class="drawer-header"><h2>Issue invoice</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="issueInvoice()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subscription<select [(ngModel)]="invoiceDraft.subscriptionId" name="invoiceSubscription" required><option value="">Select subscription</option><option *ngFor="let row of subscriptions" [value]="row.id">{{ row.tenantName }} · {{ row.planName }}</option></select></label><label>Tax %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="invoiceDraft.taxPercent" name="taxPercent" placeholder="Enter tax" /></label><label>Due days<input type="number" min="1" max="90" [(ngModel)]="invoiceDraft.dueDays" name="dueDays" required /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Issue invoice</button></footer></form>
-</aside>
+@if (drawer === 'invoice' && isPlatform) {
+  <aside class="drawer narrow">
+    <header class="drawer-header"><h2>Issue invoice</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="issueInvoice()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subscription<select [(ngModel)]="invoiceDraft.subscriptionId" name="invoiceSubscription" required><option value="">Select subscription</option>@for (row of subscriptions; track row) {
+    <option [value]="row.id">{{ row.tenantName }} · {{ row.planName }}</option>
+    }</select></label><label>Tax %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="invoiceDraft.taxPercent" name="taxPercent" placeholder="Enter tax" /></label><label>Due days<input type="number" min="1" max="90" [(ngModel)]="invoiceDraft.dueDays" name="dueDays" required /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Issue invoice</button></footer></form>
+  </aside>
+}
 
-<aside class="drawer narrow" *ngIf="drawer === 'billingRun' && isPlatform">
-  <header class="drawer-header"><h2>Run due billing</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="runBilling()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Tax %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="billingRunDraft.taxPercent" name="runTaxPercent" placeholder="Enter tax" /></label><label>Due days<input type="number" min="1" max="90" [(ngModel)]="billingRunDraft.dueDays" name="runDueDays" required /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Run billing</button></footer></form>
-</aside>
+@if (drawer === 'billingRun' && isPlatform) {
+  <aside class="drawer narrow">
+    <header class="drawer-header"><h2>Run due billing</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="runBilling()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Tax %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="billingRunDraft.taxPercent" name="runTaxPercent" placeholder="Enter tax" /></label><label>Due days<input type="number" min="1" max="90" [(ngModel)]="billingRunDraft.dueDays" name="runDueDays" required /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Run billing</button></footer></form>
+  </aside>
+}
 
-<aside class="drawer narrow" *ngIf="drawer === 'payment' && selectedInvoice">
-  <header class="drawer-header"><h2>Record payment</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="recordPayment()"><div class="drawer-body"><section class="form-section"><p class="balance-line">Balance <strong>{{ money(remaining(selectedInvoice)) }}</strong></p><div class="field-grid one"><label>Amount<input type="number" min="0.01" step="0.01" [(ngModel)]="paymentDraft.amountRupees" name="paymentAmount" placeholder="Enter amount" required /></label><label>Method<select [(ngModel)]="paymentDraft.paymentMethod" name="paymentMethod"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="provider">Provider</option></select></label><label>Reference<input [(ngModel)]="paymentDraft.reference" name="paymentReference" /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Record payment</button></footer></form>
-</aside>
+@if (drawer === 'payment' && selectedInvoice) {
+  <aside class="drawer narrow">
+    <header class="drawer-header"><h2>Record payment</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="recordPayment()"><div class="drawer-body"><section class="form-section"><p class="balance-line">Balance <strong>{{ money(remaining(selectedInvoice)) }}</strong></p><div class="field-grid one"><label>Amount<input type="number" min="0.01" step="0.01" [(ngModel)]="paymentDraft.amountRupees" name="paymentAmount" placeholder="Enter amount" required /></label><label>Method<select [(ngModel)]="paymentDraft.paymentMethod" name="paymentMethod"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="provider">Provider</option></select></label><label>Reference<input [(ngModel)]="paymentDraft.reference" name="paymentReference" /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Record payment</button></footer></form>
+  </aside>
+}
 
-<aside class="drawer narrow" *ngIf="drawer === 'ticket' && !isPlatform">
-  <header class="drawer-header"><h2>New support ticket</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="createTicket()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subject<input [(ngModel)]="ticketDraft.subject" name="ticketSubject" maxlength="160" required /></label><label>Category<select [(ngModel)]="ticketDraft.category" name="ticketCategory"><option value="billing">Billing</option><option value="technical">Technical</option><option value="account">Account</option><option value="data">Data</option><option value="security">Security</option><option value="other">Other</option></select></label><label>Severity<select [(ngModel)]="ticketDraft.severity" name="ticketSeverity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><label>Priority<select [(ngModel)]="ticketDraft.priority" name="ticketPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label>Message<textarea [(ngModel)]="ticketDraft.message" name="ticketMessage" rows="6" maxlength="5000" required></textarea></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Create ticket</button></footer></form>
-</aside>
+@if (drawer === 'ticket' && !isPlatform) {
+  <aside class="drawer narrow">
+    <header class="drawer-header"><h2>New support ticket</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="createTicket()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subject<input [(ngModel)]="ticketDraft.subject" name="ticketSubject" maxlength="160" required /></label><label>Category<select [(ngModel)]="ticketDraft.category" name="ticketCategory"><option value="billing">Billing</option><option value="technical">Technical</option><option value="account">Account</option><option value="data">Data</option><option value="security">Security</option><option value="other">Other</option></select></label><label>Severity<select [(ngModel)]="ticketDraft.severity" name="ticketSeverity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><label>Priority<select [(ngModel)]="ticketDraft.priority" name="ticketPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label>Message<textarea [(ngModel)]="ticketDraft.message" name="ticketMessage" rows="6" maxlength="5000" required></textarea></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Create ticket</button></footer></form>
+  </aside>
+}
 
-<aside class="drawer detail-drawer" *ngIf="drawer === 'ticketDetail' && ticketDetail">
-  <header class="drawer-header"><div><h2>{{ ticketDetail.ticket.ticketNumber }}</h2><span class="status-chip" [attr.data-status]="ticketDetail.ticket.status">{{ label(ticketDetail.ticket.status) }}</span></div><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
-  <div class="drawer-body">
-    <section class="form-section"><h3>{{ ticketDetail.ticket.subject }}</h3><dl class="detail-grid"><div><dt>Severity</dt><dd>{{ label(ticketDetail.ticket.severity) }}</dd></div><div><dt>Priority</dt><dd>{{ label(ticketDetail.ticket.priority) }}</dd></div><div><dt>First response due</dt><dd>{{ date(ticketDetail.ticket.firstResponseDueAt) }}</dd></div><div><dt>Resolution due</dt><dd>{{ date(ticketDetail.ticket.resolutionDueAt) }}</dd></div></dl></section>
-    <section class="form-section" *ngIf="isPlatform"><h3>Support control</h3><div class="field-grid"><label>Status<select [(ngModel)]="ticketUpdate.status"><option *ngFor="let status of ticketStatuses" [value]="status">{{ label(status) }}</option></select></label><label>Priority<select [(ngModel)]="ticketUpdate.priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label class="wide-field">Assigned to<input [(ngModel)]="ticketUpdate.assignedTo" maxlength="120" /></label></div><button class="secondary-button section-action" type="button" (click)="updateTicket()" [disabled]="busy">Update ticket</button></section>
-    <section class="form-section"><h3>Conversation</h3><div class="conversation"><article *ngFor="let row of ticketDetail.messages" [class.support-message]="row.authorType === 'support'" [class.internal-message]="row.visibility === 'internal'"><header><strong>{{ row.authorType === 'support' ? 'Support' : 'Customer' }}</strong><span>{{ row.visibility === 'internal' ? 'Internal' : date(row.createdAt) }}</span></header><p>{{ row.body }}</p></article></div><div class="reply-box"><textarea [(ngModel)]="replyDraft.body" rows="4" maxlength="5000" placeholder="Write reply"></textarea><div><select [(ngModel)]="replyDraft.visibility" *ngIf="isPlatform"><option value="customer">Customer reply</option><option value="internal">Internal note</option></select><button class="primary-button" type="button" (click)="reply()" [disabled]="busy || !replyDraft.body.trim()">Send</button></div></div></section>
-  </div>
-</aside>
+@if (drawer === 'ticketDetail' && ticketDetail) {
+  <aside class="drawer detail-drawer">
+    <header class="drawer-header"><div><h2>{{ ticketDetail.ticket.ticketNumber }}</h2><span class="status-chip" [attr.data-status]="ticketDetail.ticket.status">{{ label(ticketDetail.ticket.status) }}</span></div><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      <section class="form-section"><h3>{{ ticketDetail.ticket.subject }}</h3><dl class="detail-grid"><div><dt>Severity</dt><dd>{{ label(ticketDetail.ticket.severity) }}</dd></div><div><dt>Priority</dt><dd>{{ label(ticketDetail.ticket.priority) }}</dd></div><div><dt>First response due</dt><dd>{{ date(ticketDetail.ticket.firstResponseDueAt) }}</dd></div><div><dt>Resolution due</dt><dd>{{ date(ticketDetail.ticket.resolutionDueAt) }}</dd></div></dl></section>
+      @if (isPlatform) {
+        <section class="form-section"><h3>Support control</h3><div class="field-grid"><label>Status<select [(ngModel)]="ticketUpdate.status">@for (status of ticketStatuses; track status) {
+        <option [value]="status">{{ label(status) }}</option>
+        }</select></label><label>Priority<select [(ngModel)]="ticketUpdate.priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label class="wide-field">Assigned to<input [(ngModel)]="ticketUpdate.assignedTo" maxlength="120" /></label></div><button class="secondary-button section-action" type="button" (click)="updateTicket()" [disabled]="busy">Update ticket</button></section>
+      }
+      <section class="form-section"><h3>Conversation</h3><div class="conversation">@for (row of ticketDetail.messages; track row) {
+      <article [class.support-message]="row.authorType === 'support'" [class.internal-message]="row.visibility === 'internal'"><header><strong>{{ row.authorType === 'support' ? 'Support' : 'Customer' }}</strong><span>{{ row.visibility === 'internal' ? 'Internal' : date(row.createdAt) }}</span></header><p>{{ row.body }}</p></article>
+      }</div><div class="reply-box"><textarea [(ngModel)]="replyDraft.body" rows="4" maxlength="5000" placeholder="Write reply"></textarea><div>@if (isPlatform) {
+      <select [(ngModel)]="replyDraft.visibility"><option value="customer">Customer reply</option><option value="internal">Internal note</option></select>
+      }<button class="primary-button" type="button" (click)="reply()" [disabled]="busy || !replyDraft.body.trim()">Send</button></div></div></section>
+    </div>
+  </aside>
+}

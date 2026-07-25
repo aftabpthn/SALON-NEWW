@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LanguageService } from '../../core/i18n/language.service';
@@ -14,11 +14,10 @@ type CalendarDay = {
 };
 
 @Component({
-  selector: 'as-date-picker',
-  standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
-  templateUrl: './date-picker.component.html',
-  styleUrls: ['./date-picker.component.css'],
+    selector: 'as-date-picker',
+    imports: [FormsModule, TranslatePipe],
+    templateUrl: './date-picker.component.html',
+    styleUrls: ['./date-picker.component.css']
 })
 export class DatePickerComponent implements OnChanges {
   readonly language = inject(LanguageService);

@@ -5,172 +5,199 @@
       <span class="brand-name">AuraShine CRM</span>
     </header>
 
-    <form *ngIf="view === 'signin'" class="auth-form" [formGroup]="loginForm" (ngSubmit)="submitLogin()">
-      <div class="title-block">
-        <h1 id="login-title">Sign in</h1>
-      </div>
-
-      <label class="field-label" for="login-id">Login ID or email</label>
-      <div class="input-shell" [class.invalid]="loginForm.controls.loginId.touched && loginForm.controls.loginId.invalid">
-        <i class="bi bi-person" aria-hidden="true"></i>
-        <input
-          id="login-id"
-          type="text"
-          formControlName="loginId"
-          autocomplete="username"
-          spellcheck="false"
-          placeholder="Enter login ID or email"
-        />
-      </div>
-
-      <label class="field-label" for="login-password">Password</label>
-      <div class="input-shell" [class.invalid]="loginForm.controls.password.touched && loginForm.controls.password.invalid">
-        <i class="bi bi-lock" aria-hidden="true"></i>
-        <input
-          id="login-password"
-          [type]="showPassword ? 'text' : 'password'"
-          formControlName="password"
-          autocomplete="current-password"
-          placeholder="Enter password"
-        />
-        <button
-          class="icon-button"
-          type="button"
-          [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
-          (click)="showPassword = !showPassword"
-        >
-          <i class="bi" [class.bi-eye]="!showPassword" [class.bi-eye-slash]="showPassword" aria-hidden="true"></i>
-        </button>
-      </div>
-
-      <ng-container *ngIf="mfaRequired">
-        <label class="field-label" for="mfa-code">Authenticator or recovery code</label>
-        <div class="input-shell">
-          <i class="bi bi-shield-lock" aria-hidden="true"></i>
-          <input
-            id="mfa-code"
-            type="text"
-            formControlName="mfaCode"
-            autocomplete="one-time-code"
-            maxlength="16"
-            placeholder="Enter code"
-          />
+    @if (view === 'signin') {
+      <form class="auth-form" [formGroup]="loginForm" (ngSubmit)="submitLogin()">
+        <div class="title-block">
+          <h1 id="login-title">Sign in</h1>
         </div>
-      </ng-container>
-
-      <p *ngIf="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-      <p *ngIf="successMessage" class="form-success" role="status">{{ successMessage }}</p>
-
-      <button class="primary-button" type="submit" [disabled]="signingIn">
-        <span>{{ signingIn ? 'Signing in...' : 'Sign in' }}</span>
-        <i *ngIf="!signingIn" class="bi bi-arrow-right" aria-hidden="true"></i>
-        <span *ngIf="signingIn" class="button-spinner" aria-hidden="true"></span>
-      </button>
-      <button *ngIf="webauthn.supported" class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithPasskey()">
-        <i class="bi bi-key" aria-hidden="true"></i>
-        <span>Sign in with passkey</span>
-      </button>
-      <button *ngIf="ssoProviders.google" class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('google')">
-        <i class="bi bi-google" aria-hidden="true"></i>
-        <span>Sign in with Google</span>
-      </button>
-      <button *ngIf="ssoProviders.microsoft" class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('microsoft')">
-        <i class="bi bi-microsoft" aria-hidden="true"></i>
-        <span>Sign in with Microsoft</span>
-      </button>
-      <button *ngIf="ssoProviders.saml" class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('saml')">
-        <i class="bi bi-building-lock" aria-hidden="true"></i>
-        <span>Sign in with enterprise SSO</span>
-      </button>
-    </form>
-
-    <section *ngIf="view === 'branches'" class="branch-view" aria-labelledby="branch-title">
-      <div class="title-block">
-        <h1 id="branch-title">Select branch</h1>
-      </div>
-
-      <label class="search-shell" for="branch-search">
-        <i class="bi bi-search" aria-hidden="true"></i>
-        <input
-          id="branch-search"
-          type="search"
-          [formControl]="branchSearch"
-          autocomplete="off"
-          placeholder="Search assigned branches"
-        />
-      </label>
-
-      <div class="branch-list" *ngIf="filteredBranches.length; else emptyBranches">
-        <button
-          *ngFor="let branch of filteredBranches; trackBy: trackBranch"
-          class="branch-row"
-          type="button"
-          [disabled]="!!selectingBranchId"
-          (click)="selectBranch(branch)"
-        >
-          <span class="branch-icon" aria-hidden="true"><i class="bi bi-building"></i></span>
-          <span class="branch-copy">
-            <strong>{{ branch.branchName }}</strong>
-            <small>{{ branch.roleName }}<ng-container *ngIf="branch.regionName"> · {{ branch.regionName }}<ng-container *ngIf="branch.zoneName"> / {{ branch.zoneName }}</ng-container><ng-container *ngIf="branch.clusterName"> / {{ branch.clusterName }}</ng-container></ng-container></small>
-          </span>
-          <span *ngIf="selectingBranchId !== branch.branchId" class="branch-arrow" aria-hidden="true">
-            <i class="bi bi-chevron-right"></i>
-          </span>
-          <span *ngIf="selectingBranchId === branch.branchId" class="row-spinner" aria-hidden="true"></span>
+        <label class="field-label" for="login-id">Login ID or email</label>
+        <div class="input-shell" [class.invalid]="loginForm.controls.loginId.touched && loginForm.controls.loginId.invalid">
+          <i class="bi bi-person" aria-hidden="true"></i>
+          <input
+            id="login-id"
+            type="text"
+            formControlName="loginId"
+            autocomplete="username"
+            spellcheck="false"
+            placeholder="Enter login ID or email"
+            />
+        </div>
+        <label class="field-label" for="login-password">Password</label>
+        <div class="input-shell" [class.invalid]="loginForm.controls.password.touched && loginForm.controls.password.invalid">
+          <i class="bi bi-lock" aria-hidden="true"></i>
+          <input
+            id="login-password"
+            [type]="showPassword ? 'text' : 'password'"
+            formControlName="password"
+            autocomplete="current-password"
+            placeholder="Enter password"
+            />
+          <button
+            class="icon-button"
+            type="button"
+            [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
+            (click)="showPassword = !showPassword"
+            >
+            <i class="bi" [class.bi-eye]="!showPassword" [class.bi-eye-slash]="showPassword" aria-hidden="true"></i>
+          </button>
+        </div>
+        @if (mfaRequired) {
+          <label class="field-label" for="mfa-code">Authenticator or recovery code</label>
+          <div class="input-shell">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            <input
+              id="mfa-code"
+              type="text"
+              formControlName="mfaCode"
+              autocomplete="one-time-code"
+              maxlength="16"
+              placeholder="Enter code"
+              />
+          </div>
+        }
+        @if (errorMessage) {
+          <p class="form-error" role="alert">{{ errorMessage }}</p>
+        }
+        @if (successMessage) {
+          <p class="form-success" role="status">{{ successMessage }}</p>
+        }
+        <button class="primary-button" type="submit" [disabled]="signingIn">
+          <span>{{ signingIn ? 'Signing in...' : 'Sign in' }}</span>
+          @if (!signingIn) {
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+          }
+          @if (signingIn) {
+            <span class="button-spinner" aria-hidden="true"></span>
+          }
         </button>
-      </div>
+        @if (webauthn.supported) {
+          <button class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithPasskey()">
+            <i class="bi bi-key" aria-hidden="true"></i>
+            <span>Sign in with passkey</span>
+          </button>
+        }
+        @if (ssoProviders.google) {
+          <button class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('google')">
+            <i class="bi bi-google" aria-hidden="true"></i>
+            <span>Sign in with Google</span>
+          </button>
+        }
+        @if (ssoProviders.microsoft) {
+          <button class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('microsoft')">
+            <i class="bi bi-microsoft" aria-hidden="true"></i>
+            <span>Sign in with Microsoft</span>
+          </button>
+        }
+        @if (ssoProviders.saml) {
+          <button class="passkey-button" type="button" [disabled]="signingIn" (click)="signInWithSso('saml')">
+            <i class="bi bi-building-lock" aria-hidden="true"></i>
+            <span>Sign in with enterprise SSO</span>
+          </button>
+        }
+      </form>
+    }
 
-      <ng-template #emptyBranches>
+    @if (view === 'branches') {
+      <section class="branch-view" aria-labelledby="branch-title">
+        <div class="title-block">
+          <h1 id="branch-title">Select branch</h1>
+        </div>
+        <label class="search-shell" for="branch-search">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input
+            id="branch-search"
+            type="search"
+            [formControl]="branchSearch"
+            autocomplete="off"
+            placeholder="Search assigned branches"
+            />
+        </label>
+        @if (filteredBranches.length) {
+          <div class="branch-list">
+            @for (branch of filteredBranches; track trackBranch($index, branch)) {
+              <button
+                class="branch-row"
+                type="button"
+                [disabled]="!!selectingBranchId"
+                (click)="selectBranch(branch)"
+                >
+                <span class="branch-icon" aria-hidden="true"><i class="bi bi-building"></i></span>
+                <span class="branch-copy">
+                  <strong>{{ branch.branchName }}</strong>
+                  <small>{{ branch.roleName }}@if (branch.regionName) {
+                    · {{ branch.regionName }}@if (branch.zoneName) {
+                    / {{ branch.zoneName }}
+                    }@if (branch.clusterName) {
+                    / {{ branch.clusterName }}
+                  }
+                }</small>
+              </span>
+              @if (selectingBranchId !== branch.branchId) {
+                <span class="branch-arrow" aria-hidden="true">
+                  <i class="bi bi-chevron-right"></i>
+                </span>
+              }
+              @if (selectingBranchId === branch.branchId) {
+                <span class="row-spinner" aria-hidden="true"></span>
+              }
+            </button>
+          }
+        </div>
+      } @else {
         <div class="empty-state">
           <span class="empty-icon" aria-hidden="true"><i class="bi bi-building-slash"></i></span>
           <strong>No assigned branches</strong>
         </div>
-      </ng-template>
-
-      <p *ngIf="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-
+      }
+      @if (errorMessage) {
+        <p class="form-error" role="alert">{{ errorMessage }}</p>
+      }
       <button class="back-button" type="button" (click)="backToSignIn()">
         <i class="bi bi-arrow-left" aria-hidden="true"></i>
         <span>Back to sign in</span>
       </button>
     </section>
+  }
 
+  @if (view === 'password-change') {
     <form
-      *ngIf="view === 'password-change'"
       class="auth-form"
       [formGroup]="passwordChangeForm"
       (ngSubmit)="submitPasswordChange()"
-    >
+      >
       <div class="title-block">
         <h1>Change password</h1>
       </div>
-
       <label class="field-label" for="new-password">New password</label>
       <div class="input-shell" [class.invalid]="passwordChangeForm.controls.newPassword.touched && passwordChangeForm.controls.newPassword.invalid">
         <i class="bi bi-lock" aria-hidden="true"></i>
         <input id="new-password" type="password" formControlName="newPassword" autocomplete="new-password" placeholder="12 to 128 characters" />
       </div>
-      <p *ngIf="passwordChangeForm.controls.newPassword.touched && passwordChangeForm.controls.newPassword.invalid" class="form-error" role="alert">
-        New password must contain 12 to 128 characters.
-      </p>
-
+      @if (passwordChangeForm.controls.newPassword.touched && passwordChangeForm.controls.newPassword.invalid) {
+        <p class="form-error" role="alert">
+          New password must contain 12 to 128 characters.
+        </p>
+      }
       <label class="field-label" for="confirm-password">Confirm password</label>
       <div class="input-shell" [class.invalid]="passwordChangeForm.controls.confirmPassword.touched && passwordChangeForm.controls.confirmPassword.invalid">
         <i class="bi bi-shield-check" aria-hidden="true"></i>
         <input id="confirm-password" type="password" formControlName="confirmPassword" autocomplete="new-password" placeholder="Confirm new password" />
       </div>
-
-      <p *ngIf="errorMessage" class="form-error" role="alert">{{ errorMessage }}</p>
-
+      @if (errorMessage) {
+        <p class="form-error" role="alert">{{ errorMessage }}</p>
+      }
       <button class="primary-button" type="submit" [disabled]="changingPassword || passwordChangeForm.invalid">
         <span>{{ changingPassword ? 'Changing password...' : 'Change password' }}</span>
-        <span *ngIf="changingPassword" class="button-spinner" aria-hidden="true"></span>
+        @if (changingPassword) {
+          <span class="button-spinner" aria-hidden="true"></span>
+        }
       </button>
       <button class="back-button" type="button" (click)="signOutFromPasswordChange()">
         <i class="bi bi-box-arrow-left" aria-hidden="true"></i>
         <span>Sign out</span>
       </button>
     </form>
+  }
 
-  </section>
+</section>
 </main>

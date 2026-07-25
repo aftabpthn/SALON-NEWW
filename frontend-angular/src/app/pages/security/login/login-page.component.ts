@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -14,11 +14,10 @@ import {
 import { WebauthnService } from '../../../core/services/webauthn.service';
 
 @Component({
-  selector: 'aura-login-page',
-  standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  templateUrl: './login-page.component.html',
-  styleUrls: ['./login-page.component.css'],
+    selector: 'aura-login-page',
+    imports: [ReactiveFormsModule],
+    templateUrl: './login-page.component.html',
+    styleUrls: ['./login-page.component.css']
 })
 export class LoginPageComponent implements OnInit {
   private readonly auth = inject(AuthService);

@@ -46,11 +46,10 @@ type MembershipSettings = {
 };
 
 @Component({
-  selector: 'page-memberships',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive],
-  templateUrl: './memberships-page.component.html',
-  styleUrls: ['./memberships-page.component.css'],
+    selector: 'page-memberships',
+    imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive],
+    templateUrl: './memberships-page.component.html',
+    styleUrls: ['./memberships-page.component.css']
 })
 export class MembershipsPageComponent implements OnInit {
   private readonly api = inject(ApiService);

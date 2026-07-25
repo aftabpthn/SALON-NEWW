@@ -21,277 +21,350 @@
         <label class="control-label">
           <span>Branch</span>
           <select [(ngModel)]="branchId" (ngModelChange)="loadCatalog()" [disabled]="busy">
-            <option *ngFor="let branch of branches" [value]="branch.id">
-              {{ branch.name }}{{ branch.distanceKm != null ? ' · ' + branch.distanceKm + ' km' : '' }}
-            </option>
+            @for (branch of branches; track branch) {
+              <option [value]="branch.id">
+                {{ branch.name }}{{ branch.distanceKm != null ? ' · ' + branch.distanceKm + ' km' : '' }}
+              </option>
+            }
           </select>
         </label>
       </div>
     </header>
 
-    <p class="state error" *ngIf="error">{{ error }}</p>
-    <p class="state success" *ngIf="success">{{ success }}</p>
+    @if (error) {
+      <p class="state error">{{ error }}</p>
+    }
+    @if (success) {
+      <p class="state success">{{ success }}</p>
+    }
 
-    <div class="booking-filters" *ngIf="!loading && !success && !showMyBookings">
-      <label class="search-field">
-        <i class="bi bi-search"></i>
-        <input [(ngModel)]="serviceSearch" placeholder="Search services" />
-      </label>
-      <select [(ngModel)]="selectedCategory">
-        <option value="all">All Categories</option>
-        <option *ngFor="let category of serviceCategories" [value]="category">{{ category }}</option>
-      </select>
-      <select [(ngModel)]="staffMode">
-        <option value="any">Any Staff</option>
-        <option value="specific">Specific Staff</option>
-      </select>
-      <as-date-picker [(value)]="bookingDate" ariaLabel="Booking date" (valueChange)="selectedSlot = null; loadSlots()" />
-    </div>
-
-    <div class="loading-layout" *ngIf="loading">
-      <div class="empty-card"><span class="spinner"></span><b>Loading</b></div>
-    </div>
-
-    <section class="confirmation-panel" *ngIf="!loading && success && !showMyBookings">
-      <span class="confirmation-icon"><i class="bi bi-check2"></i></span>
-      <h2>{{ success }}</h2>
-      <div class="payment-card" *ngIf="payment">
-        <p><span>Deposit</span><b>{{ money(payment.amountPaise) }}</b></p>
-        <p><span>Status</span><b class="status-pill" [class.paid]="payment.status === 'paid'">{{ payment.status | titlecase }}</b></p>
-        <p class="state error" *ngIf="paymentError">{{ paymentError }}</p>
-        <div class="confirmation-actions">
-          <a class="primary action-link" *ngIf="payment.url && payment.status !== 'paid'" [href]="payment.url" target="_blank" rel="noopener">Pay deposit</a>
-          <button type="button" *ngIf="!payment.url && payment.status !== 'paid'" (click)="createPaymentLink()" [disabled]="paymentBusy">Create payment link</button>
-          <button type="button" (click)="refreshPayment()" [disabled]="paymentBusy">Refresh status</button>
-        </div>
+    @if (!loading && !success && !showMyBookings) {
+      <div class="booking-filters">
+        <label class="search-field">
+          <i class="bi bi-search"></i>
+          <input [(ngModel)]="serviceSearch" placeholder="Search services" />
+        </label>
+        <select [(ngModel)]="selectedCategory">
+          <option value="all">All Categories</option>
+          @for (category of serviceCategories; track category) {
+            <option [value]="category">{{ category }}</option>
+          }
+        </select>
+        <select [(ngModel)]="staffMode">
+          <option value="any">Any Staff</option>
+          <option value="specific">Specific Staff</option>
+        </select>
+        <as-date-picker [(value)]="bookingDate" ariaLabel="Booking date" (valueChange)="selectedSlot = null; loadSlots()" />
       </div>
-      <div class="confirmation-actions">
-        <button type="button" class="primary" (click)="openMyBookings()">My Bookings</button>
-        <button type="button" (click)="success = ''; step = 1">Book another</button>
+    }
+
+    @if (loading) {
+      <div class="loading-layout">
+        <div class="empty-card"><span class="spinner"></span><b>Loading</b></div>
       </div>
-    </section>
+    }
 
-    <section class="panel my-bookings-panel" *ngIf="!loading && showMyBookings">
-      <header class="panel-head">
-        <h2>My Bookings</h2>
-        <button type="button" class="icon-btn" (click)="closeMyBookings()" aria-label="Close My Bookings"><i class="bi bi-x-lg"></i></button>
-      </header>
-      <div class="booking-records" *ngIf="myBookings.length; else noBookings">
-        <article class="booking-record" *ngFor="let booking of myBookings">
-          <div class="booking-record-main">
-            <span class="booking-date"><b>{{ date(booking.start_at) }}</b><small>{{ time(booking.start_at) }}</small></span>
-            <span><b>{{ serviceNames(booking) }}</b><small>{{ branchName(booking.branch_id) }}</small></span>
-            <span class="status-pill" [class.paid]="booking.status === 'confirmed' || booking.status === 'paid'">{{ booking.status | titlecase }}</span>
-          </div>
-          <div class="booking-payment" *ngIf="bookingPayments[booking.id] as recordPayment">
-            <span>Deposit {{ money(recordPayment.amountPaise) }}</span>
-            <b>{{ recordPayment.status | titlecase }}</b>
-          </div>
-          <div class="booking-record-actions">
-            <button type="button" (click)="refreshPayment(booking.id)" *ngIf="bookingPayments[booking.id] && bookingPayments[booking.id]?.status !== 'refunded'" [disabled]="paymentBusy">Payment status</button>
-            <button type="button" (click)="openReschedule(booking)" *ngIf="canChangeBooking(booking)" [disabled]="busy">Reschedule</button>
-            <button type="button" class="danger" (click)="cancelBooking(booking)" *ngIf="canChangeBooking(booking)" [disabled]="busy">
-              {{ cancelPendingId === booking.id ? 'Confirm cancel' : 'Cancel' }}
-            </button>
-            <button type="button" (click)="refundDeposit(booking)" *ngIf="booking.status === 'cancelled' && bookingPayments[booking.id]?.status === 'paid'" [disabled]="busy">Refund deposit</button>
-          </div>
-        </article>
-      </div>
-      <ng-template #noBookings>
-        <div class="empty-card">
-          <span class="spinner" *ngIf="busy"></span>
-          <i class="bi bi-calendar2" *ngIf="!busy"></i>
-          <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
-        </div>
-      </ng-template>
-    </section>
-
-    <div class="booking-grid" *ngIf="!loading && !success && !showMyBookings">
-      <section class="panel service-panel">
-        <header class="panel-head">
-          <h2>Services</h2>
-          <span>{{ selectedServiceIds.length }} selected</span>
-        </header>
-
-        <div class="service-list" *ngIf="filteredServices.length; else noServices">
-          <article class="service-row" *ngFor="let service of filteredServices" [class.selected]="selectedServiceIds.includes(service.id)">
-            <button type="button" class="service-toggle" (click)="toggleService(service.id)">
-              <span>
-                <b>{{ service.name }}</b>
-                <small>{{ service.category || 'Service' }}</small>
-              </span>
-              <span class="service-meta">{{ service.durationMinutes }} min · {{ money(servicePrice(service)) }}</span>
-            </button>
-
-            <div class="service-options" *ngIf="selectedServiceIds.includes(service.id)">
-              <label *ngIf="service.variants.length">
-                <span>Variant</span>
-                <select [ngModel]="selection(service.id).variantId" (ngModelChange)="setVariant(service.id, $event)">
-                  <option value="">Standard</option>
-                  <option *ngFor="let variant of service.variants" [value]="variant.id">
-                    {{ variant.name }} · {{ money(variant.priceDeltaPaise) }}
-                  </option>
-                </select>
-              </label>
-              <label class="addon-option" *ngFor="let addon of service.addons">
-                <input type="checkbox" [checked]="selection(service.id).addonIds.includes(addon.id)" (change)="toggleAddon(service.id, addon.id)" />
-                <span>{{ addon.name }} · {{ money(addon.pricePaise) }}</span>
-              </label>
+    @if (!loading && success && !showMyBookings) {
+      <section class="confirmation-panel">
+        <span class="confirmation-icon"><i class="bi bi-check2"></i></span>
+        <h2>{{ success }}</h2>
+        @if (payment) {
+          <div class="payment-card">
+            <p><span>Deposit</span><b>{{ money(payment.amountPaise) }}</b></p>
+            <p><span>Status</span><b class="status-pill" [class.paid]="payment.status === 'paid'">{{ payment.status | titlecase }}</b></p>
+            @if (paymentError) {
+              <p class="state error">{{ paymentError }}</p>
+            }
+            <div class="confirmation-actions">
+              @if (payment.url && payment.status !== 'paid') {
+                <a class="primary action-link" [href]="payment.url" target="_blank" rel="noopener">Pay deposit</a>
+              }
+              @if (!payment.url && payment.status !== 'paid') {
+                <button type="button" (click)="createPaymentLink()" [disabled]="paymentBusy">Create payment link</button>
+              }
+              <button type="button" (click)="refreshPayment()" [disabled]="paymentBusy">Refresh status</button>
             </div>
-          </article>
-        </div>
-
-        <ng-template #noServices>
-          <div class="empty-card">
-            <i class="bi bi-inbox"></i>
-            <b>No records yet</b>
           </div>
-        </ng-template>
+        }
+        <div class="confirmation-actions">
+          <button type="button" class="primary" (click)="openMyBookings()">My Bookings</button>
+          <button type="button" (click)="success = ''; step = 1">Book another</button>
+        </div>
       </section>
+    }
 
-      <section class="panel slot-panel">
+    @if (!loading && showMyBookings) {
+      <section class="panel my-bookings-panel">
         <header class="panel-head">
-          <div class="tab-row">
-            <button type="button" [class.active]="step <= 2" (click)="step = 2">Staff</button>
-            <button type="button" [class.active]="step >= 3" (click)="selectedServiceIds.length && loadSlots()">Slots</button>
-          </div>
+          <h2>My Bookings</h2>
+          <button type="button" class="icon-btn" (click)="closeMyBookings()" aria-label="Close My Bookings"><i class="bi bi-x-lg"></i></button>
         </header>
-
-        <div class="staff-list" *ngIf="staffMode === 'specific'">
-          <button type="button" *ngFor="let person of staff" [class.selected]="staffId === person.id" (click)="staffId = person.id; selectedSlot = null; clearQuote()">
-            <i class="bi bi-person"></i>
-            <span><b>{{ person.name }}</b><small>{{ person.jobTitle || 'Staff' }}</small></span>
-          </button>
-          <div class="empty-card compact" *ngIf="!staff.length"><b>No records yet</b></div>
-        </div>
-
-        <div class="any-staff" *ngIf="staffMode === 'any'">
-          <i class="bi bi-magic"></i>
-          <span><b>Any available staff</b><small>{{ selectedStaffLabel }}</small></span>
-        </div>
-
-        <div class="date-strip">
-          <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-left"></i></button>
-          <span><i class="bi bi-calendar3"></i>{{ bookingDate }}</span>
-          <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-right"></i></button>
-        </div>
-
-        <div class="slot-list" *ngIf="slots.length; else noSlots">
-          <button type="button" *ngFor="let slot of slots" [class.selected]="selectedSlot === slot" (click)="chooseSlot(slot)">
-            {{ time(slot.startAt) }}
-          </button>
-        </div>
-
-        <ng-template #noSlots>
+        @if (myBookings.length) {
+          <div class="booking-records">
+            @for (booking of myBookings; track booking) {
+              <article class="booking-record">
+                <div class="booking-record-main">
+                  <span class="booking-date"><b>{{ date(booking.start_at) }}</b><small>{{ time(booking.start_at) }}</small></span>
+                  <span><b>{{ serviceNames(booking) }}</b><small>{{ branchName(booking.branch_id) }}</small></span>
+                  <span class="status-pill" [class.paid]="booking.status === 'confirmed' || booking.status === 'paid'">{{ booking.status | titlecase }}</span>
+                </div>
+                @if (bookingPayments[booking.id]; as recordPayment) {
+                  <div class="booking-payment">
+                    <span>Deposit {{ money(recordPayment.amountPaise) }}</span>
+                    <b>{{ recordPayment.status | titlecase }}</b>
+                  </div>
+                }
+                <div class="booking-record-actions">
+                  @if (bookingPayments[booking.id] && bookingPayments[booking.id]?.status !== 'refunded') {
+                    <button type="button" (click)="refreshPayment(booking.id)" [disabled]="paymentBusy">Payment status</button>
+                  }
+                  @if (canChangeBooking(booking)) {
+                    <button type="button" (click)="openReschedule(booking)" [disabled]="busy">Reschedule</button>
+                  }
+                  @if (canChangeBooking(booking)) {
+                    <button type="button" class="danger" (click)="cancelBooking(booking)" [disabled]="busy">
+                      {{ cancelPendingId === booking.id ? 'Confirm cancel' : 'Cancel' }}
+                    </button>
+                  }
+                  @if (booking.status === 'cancelled' && bookingPayments[booking.id]?.status === 'paid') {
+                    <button type="button" (click)="refundDeposit(booking)" [disabled]="busy">Refund deposit</button>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        } @else {
           <div class="empty-card">
-            <span class="spinner" *ngIf="busy"></span>
-            <i class="bi bi-calendar2" *ngIf="!busy"></i>
+            @if (busy) {
+              <span class="spinner"></span>
+            }
+            @if (!busy) {
+              <i class="bi bi-calendar2"></i>
+            }
             <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
           </div>
-          <section class="nearby-alternatives" *ngIf="!busy && nearbyAlternatives.length" aria-label="Nearby branch availability">
-            <header><b>Available at nearby branches</b></header>
-            <article *ngFor="let alternative of nearbyAlternatives">
-              <div><b>{{ alternative.branchName }}</b><small>{{ alternative.distanceKm != null ? alternative.distanceKm + ' km away' : alternative.address }}</small></div>
-              <div class="slot-list compact">
-                <button type="button" *ngFor="let slot of alternative.slots" (click)="chooseNearbyAlternative(alternative, slot)">{{ time(slot.startAt) }}</button>
-              </div>
-            </article>
-          </section>
-        </ng-template>
+        }
       </section>
+    }
 
-      <aside class="panel summary-panel">
-        <header class="panel-head">
-          <h2>Booking Summary</h2>
-          <button type="button" class="icon-btn" disabled><i class="bi bi-x-lg"></i></button>
+    @if (!loading && !success && !showMyBookings) {
+      <div class="booking-grid">
+        <section class="panel service-panel">
+          <header class="panel-head">
+            <h2>Services</h2>
+            <span>{{ selectedServiceIds.length }} selected</span>
+          </header>
+          @if (filteredServices.length) {
+            <div class="service-list">
+              @for (service of filteredServices; track service) {
+                <article class="service-row" [class.selected]="selectedServiceIds.includes(service.id)">
+                  <button type="button" class="service-toggle" (click)="toggleService(service.id)">
+                    <span>
+                      <b>{{ service.name }}</b>
+                      <small>{{ service.category || 'Service' }}</small>
+                    </span>
+                    <span class="service-meta">{{ service.durationMinutes }} min · {{ money(servicePrice(service)) }}</span>
+                  </button>
+                  @if (selectedServiceIds.includes(service.id)) {
+                    <div class="service-options">
+                      @if (service.variants.length) {
+                        <label>
+                          <span>Variant</span>
+                          <select [ngModel]="selection(service.id).variantId" (ngModelChange)="setVariant(service.id, $event)">
+                            <option value="">Standard</option>
+                            @for (variant of service.variants; track variant) {
+                              <option [value]="variant.id">
+                                {{ variant.name }} · {{ money(variant.priceDeltaPaise) }}
+                              </option>
+                            }
+                          </select>
+                        </label>
+                      }
+                      @for (addon of service.addons; track addon) {
+                        <label class="addon-option">
+                          <input type="checkbox" [checked]="selection(service.id).addonIds.includes(addon.id)" (change)="toggleAddon(service.id, addon.id)" />
+                          <span>{{ addon.name }} · {{ money(addon.pricePaise) }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                </article>
+              }
+            </div>
+          } @else {
+            <div class="empty-card">
+              <i class="bi bi-inbox"></i>
+              <b>No records yet</b>
+            </div>
+          }
+        </section>
+        <section class="panel slot-panel">
+          <header class="panel-head">
+            <div class="tab-row">
+              <button type="button" [class.active]="step <= 2" (click)="step = 2">Staff</button>
+              <button type="button" [class.active]="step >= 3" (click)="selectedServiceIds.length && loadSlots()">Slots</button>
+            </div>
+          </header>
+          @if (staffMode === 'specific') {
+            <div class="staff-list">
+              @for (person of staff; track person) {
+                <button type="button" [class.selected]="staffId === person.id" (click)="staffId = person.id; selectedSlot = null; clearQuote()">
+                  <i class="bi bi-person"></i>
+                  <span><b>{{ person.name }}</b><small>{{ person.jobTitle || 'Staff' }}</small></span>
+                </button>
+              }
+              @if (!staff.length) {
+                <div class="empty-card compact"><b>No records yet</b></div>
+              }
+            </div>
+          }
+          @if (staffMode === 'any') {
+            <div class="any-staff">
+              <i class="bi bi-magic"></i>
+              <span><b>Any available staff</b><small>{{ selectedStaffLabel }}</small></span>
+            </div>
+          }
+          <div class="date-strip">
+            <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-left"></i></button>
+            <span><i class="bi bi-calendar3"></i>{{ bookingDate }}</span>
+            <button type="button" class="icon-btn" disabled><i class="bi bi-chevron-right"></i></button>
+          </div>
+          @if (slots.length) {
+            <div class="slot-list">
+              @for (slot of slots; track slot) {
+                <button type="button" [class.selected]="selectedSlot === slot" (click)="chooseSlot(slot)">
+                  {{ time(slot.startAt) }}
+                </button>
+              }
+            </div>
+          } @else {
+            <div class="empty-card">
+              @if (busy) {
+                <span class="spinner"></span>
+              }
+              @if (!busy) {
+                <i class="bi bi-calendar2"></i>
+              }
+              <b>{{ busy ? 'Loading' : 'No records yet' }}</b>
+            </div>
+            @if (!busy && nearbyAlternatives.length) {
+              <section class="nearby-alternatives" aria-label="Nearby branch availability">
+                <header><b>Available at nearby branches</b></header>
+                @for (alternative of nearbyAlternatives; track alternative) {
+                  <article>
+                    <div><b>{{ alternative.branchName }}</b><small>{{ alternative.distanceKm != null ? alternative.distanceKm + ' km away' : alternative.address }}</small></div>
+                    <div class="slot-list compact">
+                      @for (slot of alternative.slots; track slot) {
+                        <button type="button" (click)="chooseNearbyAlternative(alternative, slot)">{{ time(slot.startAt) }}</button>
+                      }
+                    </div>
+                  </article>
+                }
+              </section>
+            }
+          }
+        </section>
+        <aside class="panel summary-panel">
+          <header class="panel-head">
+            <h2>Booking Summary</h2>
+            <button type="button" class="icon-btn" disabled><i class="bi bi-x-lg"></i></button>
+          </header>
+          <section class="summary-section">
+            <h3>Services</h3>
+            @if (selectedServices.length) {
+              <div>
+                @for (service of selectedServices; track service) {
+                  <p><span>{{ service.name }}</span><b>{{ money(servicePrice(service)) }}</b></p>
+                }
+              </div>
+            } @else {
+              <div class="skeleton short"></div>
+              <div class="skeleton"></div>
+            }
+          </section>
+          <section class="summary-section">
+            <h3>Staff</h3>
+            <p><span><i class="bi bi-person"></i>{{ selectedStaffLabel }}</span></p>
+            <h3>Date & Time</h3>
+            <p><span><i class="bi bi-calendar3"></i>{{ selectedSlot ? time(selectedSlot.startAt) : 'Select a slot' }}</span></p>
+          </section>
+          <section class="summary-section">
+            <h3>Deposit</h3>
+            <p class="status-row"><span><i class="bi bi-credit-card"></i>{{ depositPaise ? money(depositPaise) : 'Deposit' }}</span><b>{{ depositPaise ? 'Pending' : 'Not required' }}</b></p>
+          </section>
+          <section class="summary-section">
+            <h3>OTP Verification</h3>
+            <label class="field">
+              <span>Mobile</span>
+              <input [(ngModel)]="mobile" inputmode="tel" placeholder="Mobile number" />
+            </label>
+            @if (captcha.required) {
+              <div id="booking-turnstile" class="captcha-host" aria-label="CAPTCHA verification"></div>
+            }
+            <div class="otp-row">
+              <input [(ngModel)]="otp" inputmode="numeric" maxlength="6" placeholder="OTP" />
+              <button type="button" (click)="sendOtp()" [disabled]="busy || !mobile.trim()">Send OTP</button>
+              <button type="button" class="primary" (click)="verifyOtp()" [disabled]="busy || !otp.trim()">Verify</button>
+            </div>
+            <small>{{ otpVerified ? 'Verified' : 'Pending verification' }}</small>
+          </section>
+          <section class="summary-section">
+            <h3>Payment Status</h3>
+            <p class="status-row"><span><i class="bi bi-wallet2"></i>Total {{ money(totalPaise) }}</span><b>{{ depositPaise ? 'Deposit pending' : 'Pay at salon' }}</b></p>
+          </section>
+          <footer class="summary-actions">
+            <button type="button" (click)="back()" [disabled]="step === 1 || busy">Back</button>
+            <button class="primary" type="button" (click)="continue()" [disabled]="!canContinue">{{ step === 5 ? 'Confirm' : 'Continue' }}</button>
+          </footer>
+        </aside>
+      </div>
+    }
+
+    @if (!loading && !success && !showMyBookings) {
+      <section class="mobile-app-panel" aria-label="Customer app preview">
+        <header>
+          <h2>Customer App</h2>
+          <button type="button" class="icon-btn" disabled><i class="bi bi-bell"></i></button>
         </header>
-
-        <section class="summary-section">
-          <h3>Services</h3>
-          <div *ngIf="selectedServices.length; else noSelection">
-            <p *ngFor="let service of selectedServices"><span>{{ service.name }}</span><b>{{ money(servicePrice(service)) }}</b></p>
-          </div>
-          <ng-template #noSelection>
-            <div class="skeleton short"></div>
-            <div class="skeleton"></div>
-          </ng-template>
-        </section>
-
-        <section class="summary-section">
-          <h3>Staff</h3>
-          <p><span><i class="bi bi-person"></i>{{ selectedStaffLabel }}</span></p>
-          <h3>Date & Time</h3>
-          <p><span><i class="bi bi-calendar3"></i>{{ selectedSlot ? time(selectedSlot.startAt) : 'Select a slot' }}</span></p>
-        </section>
-
-        <section class="summary-section">
-          <h3>Deposit</h3>
-          <p class="status-row"><span><i class="bi bi-credit-card"></i>{{ depositPaise ? money(depositPaise) : 'Deposit' }}</span><b>{{ depositPaise ? 'Pending' : 'Not required' }}</b></p>
-        </section>
-
-        <section class="summary-section">
-          <h3>OTP Verification</h3>
-          <label class="field">
-            <span>Mobile</span>
-            <input [(ngModel)]="mobile" inputmode="tel" placeholder="Mobile number" />
-          </label>
-          <div id="booking-turnstile" class="captcha-host" *ngIf="captcha.required" aria-label="CAPTCHA verification"></div>
-          <div class="otp-row">
-            <input [(ngModel)]="otp" inputmode="numeric" maxlength="6" placeholder="OTP" />
-            <button type="button" (click)="sendOtp()" [disabled]="busy || !mobile.trim()">Send OTP</button>
-            <button type="button" class="primary" (click)="verifyOtp()" [disabled]="busy || !otp.trim()">Verify</button>
-          </div>
-          <small>{{ otpVerified ? 'Verified' : 'Pending verification' }}</small>
-        </section>
-
-        <section class="summary-section">
-          <h3>Payment Status</h3>
-          <p class="status-row"><span><i class="bi bi-wallet2"></i>Total {{ money(totalPaise) }}</span><b>{{ depositPaise ? 'Deposit pending' : 'Pay at salon' }}</b></p>
-        </section>
-
-        <footer class="summary-actions">
-          <button type="button" (click)="back()" [disabled]="step === 1 || busy">Back</button>
-          <button class="primary" type="button" (click)="continue()" [disabled]="!canContinue">{{ step === 5 ? 'Confirm' : 'Continue' }}</button>
-        </footer>
-      </aside>
-    </div>
-
-    <section class="mobile-app-panel" *ngIf="!loading && !success && !showMyBookings" aria-label="Customer app preview">
-      <header>
-        <h2>Customer App</h2>
-        <button type="button" class="icon-btn" disabled><i class="bi bi-bell"></i></button>
-      </header>
-      <div class="quick-actions">
-        <button type="button" disabled><i class="bi bi-wallet2"></i><span>Wallet</span></button>
-        <button type="button" disabled><i class="bi bi-gem"></i><span>Membership</span></button>
-        <button type="button" disabled><i class="bi bi-gift"></i><span>Gift Card</span></button>
-      </div>
-      <div class="mobile-card">
-        <b>Nearby</b>
-        <span>{{ branches.length ? branches.length + ' branch(es)' : 'No records yet' }}</span>
-      </div>
-      <div class="mobile-card">
-        <b>Booking Summary</b>
-        <span>{{ selectedServices.length ? selectedServices.length + ' service(s)' : 'No records yet' }}</span>
-      </div>
-    </section>
+        <div class="quick-actions">
+          <button type="button" disabled><i class="bi bi-wallet2"></i><span>Wallet</span></button>
+          <button type="button" disabled><i class="bi bi-gem"></i><span>Membership</span></button>
+          <button type="button" disabled><i class="bi bi-gift"></i><span>Gift Card</span></button>
+        </div>
+        <div class="mobile-card">
+          <b>Nearby</b>
+          <span>{{ branches.length ? branches.length + ' branch(es)' : 'No records yet' }}</span>
+        </div>
+        <div class="mobile-card">
+          <b>Booking Summary</b>
+          <span>{{ selectedServices.length ? selectedServices.length + ' service(s)' : 'No records yet' }}</span>
+        </div>
+      </section>
+    }
   </section>
 
-  <aside class="reschedule-drawer" *ngIf="rescheduleBooking">
-    <header>
-      <div><span class="section-label">My Bookings</span><h2>Reschedule</h2></div>
-      <button type="button" class="icon-btn" (click)="closeReschedule()" aria-label="Close reschedule"><i class="bi bi-x-lg"></i></button>
-    </header>
-    <div class="drawer-body">
-      <as-date-picker [(value)]="rescheduleDate" ariaLabel="Reschedule date" (valueChange)="loadRescheduleSlots()" />
-      <div class="slot-list" *ngIf="rescheduleSlots.length; else noRescheduleSlots">
-        <button type="button" *ngFor="let slot of rescheduleSlots" [class.selected]="selectedRescheduleSlot === slot" (click)="selectedRescheduleSlot = slot">{{ time(slot.startAt) }}</button>
+  @if (rescheduleBooking) {
+    <aside class="reschedule-drawer">
+      <header>
+        <div><span class="section-label">My Bookings</span><h2>Reschedule</h2></div>
+        <button type="button" class="icon-btn" (click)="closeReschedule()" aria-label="Close reschedule"><i class="bi bi-x-lg"></i></button>
+      </header>
+      <div class="drawer-body">
+        <as-date-picker [(value)]="rescheduleDate" ariaLabel="Reschedule date" (valueChange)="loadRescheduleSlots()" />
+        @if (rescheduleSlots.length) {
+          <div class="slot-list">
+            @for (slot of rescheduleSlots; track slot) {
+              <button type="button" [class.selected]="selectedRescheduleSlot === slot" (click)="selectedRescheduleSlot = slot">{{ time(slot.startAt) }}</button>
+            }
+          </div>
+        } @else {
+          <div class="empty-card compact"><b>{{ busy ? 'Loading' : 'No records yet' }}</b></div>
+        }
       </div>
-      <ng-template #noRescheduleSlots><div class="empty-card compact"><b>{{ busy ? 'Loading' : 'No records yet' }}</b></div></ng-template>
-    </div>
-    <footer>
-      <button type="button" (click)="closeReschedule()">Cancel</button>
-      <button type="button" class="primary" (click)="confirmReschedule()" [disabled]="!selectedRescheduleSlot || busy">Confirm</button>
-    </footer>
-  </aside>
+      <footer>
+        <button type="button" (click)="closeReschedule()">Cancel</button>
+        <button type="button" class="primary" (click)="confirmReschedule()" [disabled]="!selectedRescheduleSlot || busy">Confirm</button>
+      </footer>
+    </aside>
+  }
 </main>

@@ -23,3 +23,10 @@ button, a { display:inline-flex; align-items:center; justify-content:center; pad
 
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
 @media (max-width:680px) { .timeline-drawer { width:calc(100vw - 48px); } }
+
+@media (max-width: 720px) {
+  .timeline-drawer { width: 100vw; }
+  .timeline-drawer button,
+  .timeline-drawer input:not([type='checkbox']):not([type='radio']),
+  .timeline-drawer select { min-height: 44px; }
+}

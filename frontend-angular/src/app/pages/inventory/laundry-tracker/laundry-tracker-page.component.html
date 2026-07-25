@@ -17,7 +17,9 @@
     <div [class.alert-value]="summary.openIssues > 0"><span>{{ 'inventory.ui.aa010679b1' | translate }}</span><strong>{{ summary.openIssues }}</strong></div>
   </div>
 
-  <div class="alert error" *ngIf="error">{{ error }}</div>
+  @if (error) {
+    <div class="alert error">{{ error }}</div>
+  }
 
   <div class="toolbar">
     <label class="search-field">
@@ -25,7 +27,9 @@
       <input [(ngModel)]="query" (keyup.enter)="reload()" [attr.placeholder]="'inventory.ui.74190ce1d8' | translate" [attr.aria-label]="'inventory.ui.3a8fdf3228' | translate" />
     </label>
     <select [(ngModel)]="status" (ngModelChange)="reload()" [attr.aria-label]="'inventory.ui.f43653d7fa' | translate">
-      <option *ngFor="let value of statuses" [value]="value">{{ label(value) }}</option>
+      @for (value of statuses; track value) {
+        <option [value]="value">{{ label(value) }}</option>
+      }
     </select>
     <button class="utility-button" type="button" (click)="exportCsv()" [disabled]="!orders.length">{{ 'inventory.ui.3281188351' | translate }}</button><button class="utility-button" type="button" (click)="printRegister()" [disabled]="!orders.length">{{ 'inventory.ui.5b221e9c2a' | translate }}</button>
     <button class="utility-button" type="button" (click)="reload()" [disabled]="loading" [attr.aria-label]="'inventory.ui.4d3ab42e49' | translate">
@@ -39,192 +43,236 @@
   </div>
 
   <div class="table-card">
-    <div class="loading-state" *ngIf="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
-    <div class="empty-state" *ngIf="!loading && !orders.length">{{ 'inventory.ui.64c5498e35' | translate }}</div>
-    <div class="table-scroll" *ngIf="!loading && orders.length">
-      <table>
-        <thead>
-          <tr>
-            <th>{{ 'inventory.ui.1d75774c0f' | translate }}</th>
-            <th>{{ 'inventory.ui.89ff31225c' | translate }}</th>
-            <th>{{ 'inventory.ui.bae7d5be70' | translate }}</th>
-            <th>{{ 'inventory.ui.44d25b5d1b' | translate }}</th>
-            <th>{{ 'inventory.ui.145caf2928' | translate }}</th>
-            <th>{{ 'inventory.ui.d96159ff30' | translate }}</th>
-            <th>{{ 'inventory.ui.30ce4cb25f' | translate }}</th>
-            <th [attr.aria-label]="'inventory.ui.c3cd636a58' | translate"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let order of orders" [class.overdue-row]="isOverdue(order)">
-            <td>
-              <button class="order-link" type="button" (click)="openDetail(order)">{{ order.orderNumber }}</button>
-              <small>{{ formatDate(order.intakeAt) }}</small>
-            </td>
-            <td>{{ order.ownerType === 'client' ? (order.clientName || 'Client') : 'Salon' }}</td>
-            <td><span class="status-chip" [attr.data-status]="order.status">{{ label(order.status) }}</span></td>
-            <td>{{ order.totalItems }}</td>
-            <td [class.overdue-text]="isOverdue(order)">{{ formatDate(order.dueAt) }}</td>
-            <td>{{ order.supplierName || '—' }}</td>
-            <td><span class="issue-count" [class.has-issues]="order.openIssues > 0">{{ order.openIssues }}</span></td>
-            <td><button class="utility-button" type="button" (click)="openDetail(order)" [attr.aria-label]="'inventory.ui.378785c747' | translate"><i class="bi bi-chevron-right"></i></button></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    @if (loading) {
+      <div class="loading-state">{{ 'inventory.ui.33ce417454' | translate }}</div>
+    }
+    @if (!loading && !orders.length) {
+      <div class="empty-state">{{ 'inventory.ui.64c5498e35' | translate }}</div>
+    }
+    @if (!loading && orders.length) {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ 'inventory.ui.1d75774c0f' | translate }}</th>
+              <th>{{ 'inventory.ui.89ff31225c' | translate }}</th>
+              <th>{{ 'inventory.ui.bae7d5be70' | translate }}</th>
+              <th>{{ 'inventory.ui.44d25b5d1b' | translate }}</th>
+              <th>{{ 'inventory.ui.145caf2928' | translate }}</th>
+              <th>{{ 'inventory.ui.d96159ff30' | translate }}</th>
+              <th>{{ 'inventory.ui.30ce4cb25f' | translate }}</th>
+              <th [attr.aria-label]="'inventory.ui.c3cd636a58' | translate"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (order of orders; track order) {
+              <tr [class.overdue-row]="isOverdue(order)">
+                <td>
+                  <button class="order-link" type="button" (click)="openDetail(order)">{{ order.orderNumber }}</button>
+                  <small>{{ formatDate(order.intakeAt) }}</small>
+                </td>
+                <td>{{ order.ownerType === 'client' ? (order.clientName || 'Client') : 'Salon' }}</td>
+                <td><span class="status-chip" [attr.data-status]="order.status">{{ label(order.status) }}</span></td>
+                <td>{{ order.totalItems }}</td>
+                <td [class.overdue-text]="isOverdue(order)">{{ formatDate(order.dueAt) }}</td>
+                <td>{{ order.supplierName || '—' }}</td>
+                <td><span class="issue-count" [class.has-issues]="order.openIssues > 0">{{ order.openIssues }}</span></td>
+                <td><button class="utility-button" type="button" (click)="openDetail(order)" [attr.aria-label]="'inventory.ui.378785c747' | translate"><i class="bi bi-chevron-right"></i></button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   </div>
 </section>
 
-<div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
+@if (drawer) {
+  <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+}
 
-<aside class="drawer" *ngIf="drawer === 'create'" [attr.aria-label]="'inventory.ui.61ba457419' | translate">
-  <header class="drawer-header">
-    <h2>{{ 'inventory.ui.61ba457419' | translate }}</h2>
-    <button class="utility-button" type="button" (click)="closeDrawer()" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate"><i class="bi bi-x-lg"></i></button>
-  </header>
-  <form class="drawer-form" (ngSubmit)="createOrder()">
-    <div class="drawer-body">
-      <section class="form-section">
-        <h3>{{ 'inventory.ui.3e90e4cbf4' | translate }}</h3>
-        <div class="field-grid">
-          <label>Owner
-            <select [(ngModel)]="draft.ownerType" name="ownerType">
-              <option value="salon">{{ 'inventory.ui.24215794fc' | translate }}</option>
-              <option value="client">{{ 'inventory.ui.1bdd79b126' | translate }}</option>
-            </select>
-          </label>
-          <div class="client-picker wide-field" *ngIf="draft.ownerType === 'client'">
-            <label>Find client
-              <div class="inline-search"><input [(ngModel)]="clientSearch" name="clientSearch" (keyup.enter)="$event.preventDefault(); searchClients()" [attr.placeholder]="'inventory.ui.abdced015b' | translate" /><button class="utility-button" type="button" (click)="searchClients()" [attr.aria-label]="'inventory.ui.b50bf58c8b' | translate"><i class="bi bi-search"></i></button></div>
+@if (drawer === 'create') {
+  <aside class="drawer" [attr.aria-label]="'inventory.ui.61ba457419' | translate">
+    <header class="drawer-header">
+      <h2>{{ 'inventory.ui.61ba457419' | translate }}</h2>
+      <button class="utility-button" type="button" (click)="closeDrawer()" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <form class="drawer-form" (ngSubmit)="createOrder()">
+      <div class="drawer-body">
+        <section class="form-section">
+          <h3>{{ 'inventory.ui.3e90e4cbf4' | translate }}</h3>
+          <div class="field-grid">
+            <label>Owner
+              <select [(ngModel)]="draft.ownerType" name="ownerType">
+                <option value="salon">{{ 'inventory.ui.24215794fc' | translate }}</option>
+                <option value="client">{{ 'inventory.ui.1bdd79b126' | translate }}</option>
+              </select>
             </label>
-            <label>Client
-              <select [(ngModel)]="draft.clientId" name="clientId" required>
-                <option value="">{{ 'inventory.ui.34cfafeaf8' | translate }}</option>
-                <option *ngFor="let client of clients" [value]="client.id">{{ clientName(client) }}</option>
+            @if (draft.ownerType === 'client') {
+              <div class="client-picker wide-field">
+                <label>Find client
+                  <div class="inline-search"><input [(ngModel)]="clientSearch" name="clientSearch" (keyup.enter)="$event.preventDefault(); searchClients()" [attr.placeholder]="'inventory.ui.abdced015b' | translate" /><button class="utility-button" type="button" (click)="searchClients()" [attr.aria-label]="'inventory.ui.b50bf58c8b' | translate"><i class="bi bi-search"></i></button></div>
+                </label>
+                <label>Client
+                  <select [(ngModel)]="draft.clientId" name="clientId" required>
+                    <option value="">{{ 'inventory.ui.34cfafeaf8' | translate }}</option>
+                    @for (client of clients; track client) {
+                      <option [value]="client.id">{{ clientName(client) }}</option>
+                    }
+                  </select>
+                </label>
+              </div>
+            }
+            <label>Vendor
+              <select [(ngModel)]="draft.supplierId" name="supplierId">
+                <option value="">{{ 'inventory.ui.27bc8a12de' | translate }}</option>
+                @for (supplier of suppliers; track supplier) {
+                  <option [value]="supplier.id">{{ supplier.name }}</option>
+                }
+              </select>
+            </label>
+            <label>Priority
+              <select [(ngModel)]="draft.priority" name="priority">
+                <option value="normal">{{ 'inventory.ui.45e118d056' | translate }}</option>
+                <option value="urgent">{{ 'inventory.ui.ecb26f46e3' | translate }}</option>
               </select>
             </label>
           </div>
-          <label>Vendor
-            <select [(ngModel)]="draft.supplierId" name="supplierId">
-              <option value="">{{ 'inventory.ui.27bc8a12de' | translate }}</option>
-              <option *ngFor="let supplier of suppliers" [value]="supplier.id">{{ supplier.name }}</option>
-            </select>
-          </label>
-          <label>Priority
-            <select [(ngModel)]="draft.priority" name="priority">
-              <option value="normal">{{ 'inventory.ui.45e118d056' | translate }}</option>
-              <option value="urgent">{{ 'inventory.ui.ecb26f46e3' | translate }}</option>
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h3>{{ 'inventory.ui.56b0ea4948' | translate }}</h3>
-        <div class="field-grid">
-          <label>Due date
-            <as-date-picker [(value)]="draft.dueDate" ariaLabel="Laundry due date"></as-date-picker>
-          </label>
-          <label>{{ 'inventory.ui.fa23c73d64' | translate }}<input type="time" [(ngModel)]="draft.dueTime" name="dueTime" /></label>
-          <label>{{ 'inventory.ui.d249832062' | translate }}<input type="number" min="0.001" step="0.001" [(ngModel)]="draft.totalWeightKg" name="totalWeightKg" [attr.placeholder]="'inventory.ui.56ade4b4b4' | translate" /></label>
-          <label>{{ 'inventory.ui.516cbee26f' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="draft.estimatedCostRupees" name="estimatedCostRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="section-heading">
-          <h3>{{ 'inventory.ui.44d25b5d1b' | translate }}</h3>
-          <button class="secondary-button" type="button" (click)="addItem()"><i class="bi bi-plus-lg"></i>{{ 'inventory.ui.5bcf4db433' | translate }}</button>
-        </div>
-        <div class="item-card" *ngFor="let item of draft.items; let index = index">
-          <div class="item-heading"><strong>Item {{ index + 1 }}</strong><button class="utility-button" type="button" (click)="removeItem(index)" [disabled]="draft.items.length === 1" [attr.aria-label]="'inventory.ui.76ecba1f27' | translate"><i class="bi bi-trash3"></i></button></div>
-          <div class="field-grid item-grid">
-            <label class="wide-field">{{ 'inventory.ui.b56b71bb7f' | translate }}<input [(ngModel)]="item.itemName" (ngModelChange)="item.itemName = titleCase($event)" [name]="'itemName' + index" maxlength="120" required /></label>
-            <label>Category
-              <select [(ngModel)]="item.category" [name]="'category' + index"><option *ngFor="let category of categories" [value]="category">{{ label(category) }}</option></select>
+        </section>
+        <section class="form-section">
+          <h3>{{ 'inventory.ui.56b0ea4948' | translate }}</h3>
+          <div class="field-grid">
+            <label>Due date
+              <as-date-picker [(value)]="draft.dueDate" ariaLabel="Laundry due date"></as-date-picker>
             </label>
-            <label>{{ 'inventory.ui.44f6af6945' | translate }}<input type="number" min="1" max="1000" [(ngModel)]="item.quantity" [name]="'quantity' + index" required /></label>
-            <label>{{ 'inventory.ui.8e54dc5331' | translate }}<input [(ngModel)]="item.barcode" [name]="'barcode' + index" maxlength="120" /></label>
-            <label>{{ 'inventory.ui.1d0c8304ba' | translate }}<input [(ngModel)]="item.color" (ngModelChange)="item.color = titleCase($event)" [name]="'color' + index" maxlength="120" /></label>
-            <label>{{ 'inventory.ui.d8169782b5' | translate }}<input [(ngModel)]="item.material" (ngModelChange)="item.material = titleCase($event)" [name]="'material' + index" maxlength="120" /></label>
-            <label class="wide-field">{{ 'inventory.ui.f9bcf28c11' | translate }}<input [(ngModel)]="item.conditionIn" [name]="'conditionIn' + index" maxlength="240" /></label>
+            <label>{{ 'inventory.ui.fa23c73d64' | translate }}<input type="time" [(ngModel)]="draft.dueTime" name="dueTime" /></label>
+            <label>{{ 'inventory.ui.d249832062' | translate }}<input type="number" min="0.001" step="0.001" [(ngModel)]="draft.totalWeightKg" name="totalWeightKg" [attr.placeholder]="'inventory.ui.56ade4b4b4' | translate" /></label>
+            <label>{{ 'inventory.ui.516cbee26f' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="draft.estimatedCostRupees" name="estimatedCostRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
           </div>
-        </div>
-      </section>
-
-      <label class="notes-field">{{ 'inventory.ui.70440046a3' | translate }}<textarea [(ngModel)]="draft.notes" name="notes" rows="3" maxlength="2000"></textarea></label>
-    </div>
-    <footer class="drawer-footer">
-      <button class="secondary-button" type="button" (click)="closeDrawer()">{{ 'inventory.ui.77dfd2135f' | translate }}</button>
-      <button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Create intake' }}</button>
-    </footer>
-  </form>
-</aside>
-
-<aside class="drawer detail-drawer" *ngIf="drawer === 'detail' && detail" [attr.aria-label]="'inventory.ui.efaf8a7e97' | translate">
-  <header class="drawer-header">
-    <div><h2>{{ detail.order.orderNumber }}</h2><span class="status-chip" [attr.data-status]="detail.order.status">{{ label(detail.order.status) }}</span></div>
-    <button class="utility-button" type="button" (click)="closeDrawer()" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate"><i class="bi bi-x-lg"></i></button>
-  </header>
-  <div class="drawer-body">
-    <dl class="detail-grid">
-      <div><dt>{{ 'inventory.ui.89ff31225c' | translate }}</dt><dd>{{ detail.order.ownerType === 'client' ? (detail.order.clientName || 'Client') : 'Salon' }}</dd></div>
-      <div><dt>{{ 'inventory.ui.d96159ff30' | translate }}</dt><dd>{{ detail.order.supplierName || 'In-house' }}</dd></div>
-      <div><dt>{{ 'inventory.ui.d9e7bddeb5' | translate }}</dt><dd>{{ formatDate(detail.order.intakeAt) }}</dd></div>
-      <div><dt>{{ 'inventory.ui.145caf2928' | translate }}</dt><dd>{{ formatDate(detail.order.dueAt) }}</dd></div>
-      <div><dt>{{ 'inventory.ui.ae64c7cf8d' | translate }}</dt><dd>{{ money(detail.order.estimatedCostPaise) }}</dd></div>
-      <div><dt>{{ 'inventory.ui.7bb2ee60f7' | translate }}</dt><dd>{{ money(detail.order.actualCostPaise) }}</dd></div>
-    </dl>
-
-    <section class="detail-section" *ngIf="nextStatuses(detail.order.status).length">
-      <h3>{{ 'inventory.ui.3dce9001cd' | translate }}</h3>
-      <div class="field-grid">
-        <label>{{ 'inventory.ui.1f054bbf11' | translate }}<input [(ngModel)]="transitionNote" maxlength="1000" /></label>
-        <label>{{ 'inventory.ui.edf3964d31' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="actualCostRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
+        </section>
+        <section class="form-section">
+          <div class="section-heading">
+            <h3>{{ 'inventory.ui.44d25b5d1b' | translate }}</h3>
+            <button class="secondary-button" type="button" (click)="addItem()"><i class="bi bi-plus-lg"></i>{{ 'inventory.ui.5bcf4db433' | translate }}</button>
+          </div>
+          @for (item of draft.items; track item; let index = $index) {
+            <div class="item-card">
+              <div class="item-heading"><strong>Item {{ index + 1 }}</strong><button class="utility-button" type="button" (click)="removeItem(index)" [disabled]="draft.items.length === 1" [attr.aria-label]="'inventory.ui.76ecba1f27' | translate"><i class="bi bi-trash3"></i></button></div>
+              <div class="field-grid item-grid">
+                <label class="wide-field">{{ 'inventory.ui.b56b71bb7f' | translate }}<input [(ngModel)]="item.itemName" (ngModelChange)="item.itemName = titleCase($event)" [name]="'itemName' + index" maxlength="120" required /></label>
+                <label>Category
+                  <select [(ngModel)]="item.category" [name]="'category' + index">@for (category of categories; track category) {
+                    <option [value]="category">{{ label(category) }}</option>
+                  }</select>
+                </label>
+                <label>{{ 'inventory.ui.44f6af6945' | translate }}<input type="number" min="1" max="1000" [(ngModel)]="item.quantity" [name]="'quantity' + index" required /></label>
+                <label>{{ 'inventory.ui.8e54dc5331' | translate }}<input [(ngModel)]="item.barcode" [name]="'barcode' + index" maxlength="120" /></label>
+                <label>{{ 'inventory.ui.1d0c8304ba' | translate }}<input [(ngModel)]="item.color" (ngModelChange)="item.color = titleCase($event)" [name]="'color' + index" maxlength="120" /></label>
+                <label>{{ 'inventory.ui.d8169782b5' | translate }}<input [(ngModel)]="item.material" (ngModelChange)="item.material = titleCase($event)" [name]="'material' + index" maxlength="120" /></label>
+                <label class="wide-field">{{ 'inventory.ui.f9bcf28c11' | translate }}<input [(ngModel)]="item.conditionIn" [name]="'conditionIn' + index" maxlength="240" /></label>
+              </div>
+            </div>
+          }
+        </section>
+        <label class="notes-field">{{ 'inventory.ui.70440046a3' | translate }}<textarea [(ngModel)]="draft.notes" name="notes" rows="3" maxlength="2000"></textarea></label>
       </div>
-      <div class="action-row">
-        <button *ngFor="let next of nextStatuses(detail.order.status)" [class.danger-button]="next === 'cancelled'" [class.primary-button]="next !== 'cancelled'" type="button" (click)="moveTo(next)" [disabled]="busy">{{ label(next) }}</button>
-      </div>
-    </section>
+      <footer class="drawer-footer">
+        <button class="secondary-button" type="button" (click)="closeDrawer()">{{ 'inventory.ui.77dfd2135f' | translate }}</button>
+        <button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Saving…' : 'Create intake' }}</button>
+      </footer>
+    </form>
+  </aside>
+}
 
-    <section class="detail-section">
-      <h3>{{ 'inventory.ui.44d25b5d1b' | translate }}</h3>
-      <div class="compact-table"><table><thead><tr><th>{{ 'inventory.ui.ecdda59aea' | translate }}</th><th>{{ 'inventory.ui.1e5ff9e500' | translate }}</th><th>{{ 'inventory.ui.8e54dc5331' | translate }}</th><th>{{ 'inventory.ui.2f4979324e' | translate }}</th></tr></thead><tbody><tr *ngFor="let item of detail.items"><td>{{ item.itemName }}<small>{{ label(item.category) }}</small></td><td>{{ item.quantity }}</td><td>{{ item.barcode || '—' }}</td><td>{{ item.conditionIn || '—' }}</td></tr></tbody></table></div>
+@if (drawer === 'detail' && detail) {
+  <aside class="drawer detail-drawer" [attr.aria-label]="'inventory.ui.efaf8a7e97' | translate">
+    <header class="drawer-header">
+      <div><h2>{{ detail.order.orderNumber }}</h2><span class="status-chip" [attr.data-status]="detail.order.status">{{ label(detail.order.status) }}</span></div>
+      <button class="utility-button" type="button" (click)="closeDrawer()" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <div class="drawer-body">
+      <dl class="detail-grid">
+        <div><dt>{{ 'inventory.ui.89ff31225c' | translate }}</dt><dd>{{ detail.order.ownerType === 'client' ? (detail.order.clientName || 'Client') : 'Salon' }}</dd></div>
+        <div><dt>{{ 'inventory.ui.d96159ff30' | translate }}</dt><dd>{{ detail.order.supplierName || 'In-house' }}</dd></div>
+        <div><dt>{{ 'inventory.ui.d9e7bddeb5' | translate }}</dt><dd>{{ formatDate(detail.order.intakeAt) }}</dd></div>
+        <div><dt>{{ 'inventory.ui.145caf2928' | translate }}</dt><dd>{{ formatDate(detail.order.dueAt) }}</dd></div>
+        <div><dt>{{ 'inventory.ui.ae64c7cf8d' | translate }}</dt><dd>{{ money(detail.order.estimatedCostPaise) }}</dd></div>
+        <div><dt>{{ 'inventory.ui.7bb2ee60f7' | translate }}</dt><dd>{{ money(detail.order.actualCostPaise) }}</dd></div>
+      </dl>
+      @if (nextStatuses(detail.order.status).length) {
+        <section class="detail-section">
+          <h3>{{ 'inventory.ui.3dce9001cd' | translate }}</h3>
+          <div class="field-grid">
+            <label>{{ 'inventory.ui.1f054bbf11' | translate }}<input [(ngModel)]="transitionNote" maxlength="1000" /></label>
+            <label>{{ 'inventory.ui.edf3964d31' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="actualCostRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
+          </div>
+          <div class="action-row">
+            @for (next of nextStatuses(detail.order.status); track next) {
+              <button [class.danger-button]="next === 'cancelled'" [class.primary-button]="next !== 'cancelled'" type="button" (click)="moveTo(next)" [disabled]="busy">{{ label(next) }}</button>
+            }
+          </div>
+        </section>
+      }
+      <section class="detail-section">
+        <h3>{{ 'inventory.ui.44d25b5d1b' | translate }}</h3>
+        <div class="compact-table"><table><thead><tr><th>{{ 'inventory.ui.ecdda59aea' | translate }}</th><th>{{ 'inventory.ui.1e5ff9e500' | translate }}</th><th>{{ 'inventory.ui.8e54dc5331' | translate }}</th><th>{{ 'inventory.ui.2f4979324e' | translate }}</th></tr></thead><tbody>@for (item of detail.items; track item) {
+        <tr><td>{{ item.itemName }}<small>{{ label(item.category) }}</small></td><td>{{ item.quantity }}</td><td>{{ item.barcode || '—' }}</td><td>{{ item.conditionIn || '—' }}</td></tr>
+      }</tbody></table></div>
     </section>
-
     <section class="detail-section">
       <h3>{{ 'inventory.ui.6e2c712363' | translate }}</h3>
       <div class="field-grid">
-        <label>{{ 'inventory.ui.ecdda59aea' | translate }}<select [(ngModel)]="issueDraft.itemId"><option value="">{{ 'inventory.ui.397134bb26' | translate }}</option><option *ngFor="let item of detail.items" [value]="item.id">{{ item.itemName }}</option></select></label>
-        <label>{{ 'inventory.ui.3deb745651' | translate }}<select [(ngModel)]="issueDraft.issueType"><option value="stain">{{ 'inventory.ui.0ae42b6fda' | translate }}</option><option value="damage">{{ 'inventory.ui.7bf6d1d3a5' | translate }}</option><option value="lost">{{ 'inventory.ui.75a7bf994e' | translate }}</option><option value="shortage">{{ 'inventory.ui.7ce60ebb30' | translate }}</option><option value="other">{{ 'inventory.ui.6e6a6f2086' | translate }}</option></select></label>
-        <label>{{ 'inventory.ui.de314fa0c9' | translate }}<select [(ngModel)]="issueDraft.severity"><option value="low">{{ 'inventory.ui.a124947cbd' | translate }}</option><option value="medium">{{ 'inventory.ui.d404968ea9' | translate }}</option><option value="high">{{ 'inventory.ui.b1a5954a48' | translate }}</option></select></label>
-        <label>{{ 'inventory.ui.d4e1aee46c' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="issueDraft.chargeRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
-        <label class="wide-field">{{ 'inventory.ui.55f8ebc805' | translate }}<input [(ngModel)]="issueDraft.description" maxlength="1000" /></label>
-      </div>
-      <button class="secondary-button" type="button" (click)="reportIssue()" [disabled]="busy || !issueDraft.description.trim()">{{ 'inventory.ui.6e2c712363' | translate }}</button>
-    </section>
-
-    <section class="detail-section" *ngIf="detail.issues.length">
-      <h3>{{ 'inventory.ui.30ce4cb25f' | translate }}</h3>
-      <article class="issue-card" *ngFor="let issue of detail.issues">
-        <div class="issue-heading"><strong>{{ label(issue.issueType) }}</strong><span class="severity" [attr.data-severity]="issue.severity">{{ label(issue.severity) }}</span><span>{{ label(issue.status) }}</span></div>
-        <p>{{ issue.description }}</p>
-        <small *ngIf="issue.chargePaise">Charge: {{ money(issue.chargePaise) }}</small>
-        <div class="resolution-row" *ngIf="issue.status === 'open'">
-          <input [(ngModel)]="issueResolutions[issue.id]" maxlength="1000" [attr.placeholder]="'inventory.ui.9e0bc8a8e8' | translate" />
-          <button class="secondary-button" type="button" (click)="resolveIssue(issue, 'waived')" [disabled]="busy || !issueResolutions[issue.id]">{{ 'inventory.ui.b65ef47871' | translate }}</button>
-          <button class="primary-button" type="button" (click)="resolveIssue(issue, 'resolved')" [disabled]="busy || !issueResolutions[issue.id]">{{ 'inventory.ui.ac7f958cc0' | translate }}</button>
-        </div>
-        <small *ngIf="issue.status !== 'open'">{{ issue.resolution }}</small>
-      </article>
-    </section>
-
+        <label>{{ 'inventory.ui.ecdda59aea' | translate }}<select [(ngModel)]="issueDraft.itemId"><option value="">{{ 'inventory.ui.397134bb26' | translate }}</option>@for (item of detail.items; track item) {
+        <option [value]="item.id">{{ item.itemName }}</option>
+      }</select></label>
+      <label>{{ 'inventory.ui.3deb745651' | translate }}<select [(ngModel)]="issueDraft.issueType"><option value="stain">{{ 'inventory.ui.0ae42b6fda' | translate }}</option><option value="damage">{{ 'inventory.ui.7bf6d1d3a5' | translate }}</option><option value="lost">{{ 'inventory.ui.75a7bf994e' | translate }}</option><option value="shortage">{{ 'inventory.ui.7ce60ebb30' | translate }}</option><option value="other">{{ 'inventory.ui.6e6a6f2086' | translate }}</option></select></label>
+      <label>{{ 'inventory.ui.de314fa0c9' | translate }}<select [(ngModel)]="issueDraft.severity"><option value="low">{{ 'inventory.ui.a124947cbd' | translate }}</option><option value="medium">{{ 'inventory.ui.d404968ea9' | translate }}</option><option value="high">{{ 'inventory.ui.b1a5954a48' | translate }}</option></select></label>
+      <label>{{ 'inventory.ui.d4e1aee46c' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="issueDraft.chargeRupees" [attr.placeholder]="'inventory.ui.01f20462f8' | translate" /></label>
+      <label class="wide-field">{{ 'inventory.ui.55f8ebc805' | translate }}<input [(ngModel)]="issueDraft.description" maxlength="1000" /></label>
+    </div>
+    <button class="secondary-button" type="button" (click)="reportIssue()" [disabled]="busy || !issueDraft.description.trim()">{{ 'inventory.ui.6e2c712363' | translate }}</button>
+  </section>
+  @if (detail.issues.length) {
     <section class="detail-section">
-      <h3>{{ 'inventory.ui.5d5350ccfe' | translate }}</h3>
-      <div class="empty-state compact" *ngIf="!detail.events.length">{{ 'inventory.ui.81ab95b9f0' | translate }}</div>
-      <ol class="timeline" *ngIf="detail.events.length">
-        <li *ngFor="let event of detail.events"><span class="timeline-dot"></span><div><strong>{{ label(event.eventType) }}</strong><p *ngIf="event.fromStatus || event.toStatus">{{ label(event.fromStatus) }} → {{ label(event.toStatus) }}</p><p *ngIf="event.note">{{ event.note }}</p><small>{{ formatDate(event.createdAt) }}</small></div></li>
-      </ol>
+      <h3>{{ 'inventory.ui.30ce4cb25f' | translate }}</h3>
+      @for (issue of detail.issues; track issue) {
+        <article class="issue-card">
+          <div class="issue-heading"><strong>{{ label(issue.issueType) }}</strong><span class="severity" [attr.data-severity]="issue.severity">{{ label(issue.severity) }}</span><span>{{ label(issue.status) }}</span></div>
+          <p>{{ issue.description }}</p>
+          @if (issue.chargePaise) {
+            <small>Charge: {{ money(issue.chargePaise) }}</small>
+          }
+          @if (issue.status === 'open') {
+            <div class="resolution-row">
+              <input [(ngModel)]="issueResolutions[issue.id]" maxlength="1000" [attr.placeholder]="'inventory.ui.9e0bc8a8e8' | translate" />
+              <button class="secondary-button" type="button" (click)="resolveIssue(issue, 'waived')" [disabled]="busy || !issueResolutions[issue.id]">{{ 'inventory.ui.b65ef47871' | translate }}</button>
+              <button class="primary-button" type="button" (click)="resolveIssue(issue, 'resolved')" [disabled]="busy || !issueResolutions[issue.id]">{{ 'inventory.ui.ac7f958cc0' | translate }}</button>
+            </div>
+          }
+          @if (issue.status !== 'open') {
+            <small>{{ issue.resolution }}</small>
+          }
+        </article>
+      }
     </section>
-  </div>
+  }
+  <section class="detail-section">
+    <h3>{{ 'inventory.ui.5d5350ccfe' | translate }}</h3>
+    @if (!detail.events.length) {
+      <div class="empty-state compact">{{ 'inventory.ui.81ab95b9f0' | translate }}</div>
+    }
+    @if (detail.events.length) {
+      <ol class="timeline">
+        @for (event of detail.events; track event) {
+          <li><span class="timeline-dot"></span><div><strong>{{ label(event.eventType) }}</strong>@if (event.fromStatus || event.toStatus) {
+          <p>{{ label(event.fromStatus) }} → {{ label(event.toStatus) }}</p>
+          }@if (event.note) {
+          <p>{{ event.note }}</p>
+          }<small>{{ formatDate(event.createdAt) }}</small></div></li>
+        }
+      </ol>
+    }
+  </section>
+</div>
 </aside>
+}

@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, net::SocketAddr};
+use std::{collections::BTreeSet, net::SocketAddr, time::{Duration, Instant}};
 
 use axum::{
     body::{to_bytes, Body},
@@ -15,10 +15,13 @@ use crate::{
     repositories::auth_repository::{self, AuthAuditInput},
     services::{
         auth_service::{self, AuthClaims},
-        security_service,
+        entitlement_service, security_service,
     },
-    state::AppState,
+    state::{AppSessionCacheEntry, AppState},
 };
+
+const AUTH_CACHE_TTL: Duration = Duration::from_secs(30);
+const AUTH_SESSION_CHECK_TTL: Duration = Duration::from_secs(15);
 
 #[allow(dead_code)]
 pub async fn require_auth(
@@ -46,80 +49,120 @@ pub async fn require_auth(
     if is_local_dev_admin {
         require_loopback_dev_claim(&req)?;
     } else {
-        let user = auth_repository::find_user_by_id(&state.db, &claims.tenant_id, &claims.sub)
-            .await
-            .map_err(|_| AppError::internal("failed to validate user session"))?
-            .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
-
-        if claims.permission_version != 0 && claims.permission_version != user.permission_version {
-            return Err(AppError::unauthenticated(
-                "user permissions changed; please sign in again",
-            ));
-        }
-        if !claims.session_id.is_empty()
-            && !auth_repository::is_session_active(
-                &state.db,
-                &claims.tenant_id,
-                &claims.sub,
-                &claims.session_id,
-            )
-            .await
-            .map_err(|_| AppError::internal("failed to validate session"))?
-        {
-            return Err(AppError::unauthenticated("session is no longer active"));
-        }
-        if password_change_required(req.uri().path(), user.must_change_password) {
-            return Err(AppError::forbidden(
-                "password change is required before using the application",
-            ));
-        }
-
-        claims.tenant_id = user.tenant_id.clone();
-        claims.permission_version = user.permission_version;
-        if let Some(branch_id) = claims.branch_id.as_deref() {
-            let access = auth_repository::find_branch_access(&state.db, &user, branch_id)
-                .await
-                .map_err(|_| AppError::internal("failed to validate branch access"))?
-                .ok_or_else(|| AppError::forbidden("current branch access was removed"))?;
-            claims.role = access.role_name;
-            claims.role_id = access.role_id;
-            claims.permissions = access.permissions;
-            claims.denied_permissions = access.denied_permissions;
-            claims.masked_fields = access.masked_fields;
-            claims.max_discount_paise = access.max_discount_paise;
-            claims.max_refund_paise = access.max_refund_paise;
-            claims.max_cash_movement_paise = access.max_cash_movement_paise;
-            let elevated = crate::repositories::security_repository::active_elevated_permissions(
-                &state.db,
-                &claims.tenant_id,
-                branch_id,
-                &claims.sub,
-            )
-            .await
-            .map_err(|_| AppError::internal("failed to validate temporary access"))?;
-            for permission in elevated {
-                if !claims.denied_permissions.contains(&permission)
-                    && !claims.permissions.contains(&permission)
-                {
-                    claims.permissions.push(permission);
-                }
-            }
+        let cache_key = auth_cache_key(
+            &claims.tenant_id,
+            &claims.sub,
+            &claims.session_id,
+            claims.branch_id.as_deref(),
+        );
+        let used_cache = if !claims.session_id.is_empty() {
+            apply_auth_cache(&state, &mut claims, req.uri().path(), &cache_key).await?
         } else {
-            claims.role = user.role_name;
-            claims.role_id = user.role_id;
-        }
+            false
+        };
+        if !used_cache {
+            let user = auth_repository::find_user_by_id(&state.db, &claims.tenant_id, &claims.sub)
+                .await
+                .map_err(|_| AppError::internal("failed to validate user session"))?
+                .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
 
-        if mfa_enrollment_required(req.uri().path(), claims.mfa_enrollment_required) {
-            return Err(
-                AppError::forbidden("MFA setup is required before using the application")
-                    .with_details(serde_json::json!({ "mfaEnrollmentRequired": true })),
-            );
+            if claims.permission_version != 0 && claims.permission_version != user.permission_version {
+                return Err(AppError::unauthenticated(
+                    "user permissions changed; please sign in again",
+                ));
+            }
+            if !claims.session_id.is_empty()
+                && !auth_repository::is_session_active(
+                    &state.db,
+                    &claims.tenant_id,
+                    &claims.sub,
+                    &claims.session_id,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to validate session"))?
+            {
+                return Err(AppError::unauthenticated("session is no longer active"));
+            }
+            if password_change_required(req.uri().path(), user.must_change_password) {
+                return Err(AppError::forbidden(
+                    "password change is required before using the application",
+                ));
+            }
+
+            claims.tenant_id = user.tenant_id.clone();
+            claims.permission_version = user.permission_version;
+            if let Some(branch_id) = claims.branch_id.as_deref() {
+                let access = auth_repository::find_branch_access(&state.db, &user, branch_id)
+                    .await
+                    .map_err(|_| AppError::internal("failed to validate branch access"))?
+                    .ok_or_else(|| AppError::forbidden("current branch access was removed"))?;
+                claims.role = access.role_name;
+                claims.role_id = access.role_id;
+                claims.permissions = access.permissions;
+                claims.denied_permissions = access.denied_permissions;
+                claims.masked_fields = access.masked_fields;
+                claims.max_discount_paise = access.max_discount_paise;
+                claims.max_refund_paise = access.max_refund_paise;
+                claims.max_cash_movement_paise = access.max_cash_movement_paise;
+                let elevated = crate::repositories::security_repository::active_elevated_permissions(
+                    &state.db,
+                    &claims.tenant_id,
+                    branch_id,
+                    &claims.sub,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to validate temporary access"))?;
+                for permission in elevated {
+                    if !claims.denied_permissions.contains(&permission)
+                        && !claims.permissions.contains(&permission)
+                    {
+                        claims.permissions.push(permission);
+                    }
+                }
+            } else {
+                claims.role = user.role_name;
+                claims.role_id = user.role_id;
+            }
+
+            if mfa_enrollment_required(req.uri().path(), claims.mfa_enrollment_required) {
+                return Err(
+                    AppError::forbidden("MFA setup is required before using the application")
+                        .with_details(serde_json::json!({ "mfaEnrollmentRequired": true })),
+                );
+            }
+
+            if !claims.session_id.is_empty() {
+                let now = Instant::now();
+                let cache_entry = AppSessionCacheEntry {
+                    tenant_id: claims.tenant_id.clone(),
+                    user_id: claims.sub.clone(),
+                    branch_id: claims.branch_id.clone(),
+                    role_name: claims.role.clone(),
+                    role_id: claims.role_id.clone(),
+                    permissions: claims.permissions.clone(),
+                    denied_permissions: claims.denied_permissions.clone(),
+                    masked_fields: claims.masked_fields.clone(),
+                    max_discount_paise: claims.max_discount_paise,
+                    max_refund_paise: claims.max_refund_paise,
+                    max_cash_movement_paise: claims.max_cash_movement_paise,
+                    permission_version: user.permission_version,
+                    must_change_password: user.must_change_password,
+                    last_session_check: now,
+                    expires_at: now + AUTH_CACHE_TTL,
+                };
+                let mut cache = state.auth_cache.write().await;
+                cache.insert(cache_key, cache_entry);
+            }
         }
     }
 
     if let Some((reason, message)) = scope_header_mismatch(req.headers(), &claims) {
         audit_denied(&state, &claims, reason).await;
         return Err(AppError::forbidden(message));
+    }
+
+    if request_mutates_data(req.method()) {
+        entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)
@@ -162,6 +205,100 @@ pub async fn require_auth(
         &masked_fields,
     )
     .await
+}
+
+fn request_mutates_data(method: &axum::http::Method) -> bool {
+    !matches!(
+        *method,
+        axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+    )
+}
+
+fn auth_cache_key(
+    tenant_id: &str,
+    user_id: &str,
+    session_id: &str,
+    branch_id: Option<&str>,
+) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        tenant_id,
+        user_id,
+        session_id,
+        branch_id.unwrap_or("default"),
+    )
+}
+
+async fn apply_auth_cache(
+    state: &AppState,
+    claims: &mut AuthClaims,
+    request_path: &str,
+    cache_key: &str,
+) -> Result<bool, AppError> {
+    let now = Instant::now();
+    let mut cache_entry = {
+        let cache = state.auth_cache.read().await;
+        cache.get(cache_key).cloned()
+    };
+    let Some(mut cached) = cache_entry.take() else {
+        return Ok(false);
+    };
+
+    if now > cached.expires_at {
+        let mut cache = state.auth_cache.write().await;
+        cache.remove(cache_key);
+        return Ok(false);
+    }
+
+    if claims.permission_version != 0 && claims.permission_version != cached.permission_version {
+        let mut cache = state.auth_cache.write().await;
+        cache.remove(cache_key);
+        return Err(AppError::unauthenticated(
+            "user permissions changed; please sign in again",
+        ));
+    }
+
+    if !claims.session_id.is_empty()
+        && now.duration_since(cached.last_session_check) > AUTH_SESSION_CHECK_TTL
+    {
+        if !auth_repository::is_session_active(
+            &state.db,
+            &claims.tenant_id,
+            &claims.sub,
+            &claims.session_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate session"))?
+        {
+            let mut cache = state.auth_cache.write().await;
+            cache.remove(cache_key);
+            return Err(AppError::unauthenticated("session is no longer active"));
+        }
+        cached.last_session_check = now;
+        cached.expires_at = now + AUTH_CACHE_TTL;
+        let mut cache = state.auth_cache.write().await;
+        cache.insert(cache_key.to_string(), cached.clone());
+    }
+
+    claims.tenant_id = cached.tenant_id;
+    claims.permission_version = cached.permission_version;
+    claims.role = cached.role_name;
+    claims.role_id = cached.role_id;
+    claims.permissions = cached.permissions;
+    claims.denied_permissions = cached.denied_permissions;
+    claims.masked_fields = cached.masked_fields;
+    claims.max_discount_paise = cached.max_discount_paise;
+    claims.max_refund_paise = cached.max_refund_paise;
+    claims.max_cash_movement_paise = cached.max_cash_movement_paise;
+    claims.branch_id = cached.branch_id;
+
+    if password_change_required(request_path, cached.must_change_password) {
+        return Err(AppError::forbidden(
+            "password change is required before using the application",
+        ));
+    }
+
+    Ok(true)
 }
 
 fn require_loopback_dev_claim(req: &Request<Body>) -> Result<(), AppError> {
@@ -424,7 +561,7 @@ mod tests {
 
     use super::{
         mask_value, masked_export_blocked, mfa_enrollment_required, password_change_required,
-        scope_header_mismatch,
+        request_mutates_data, scope_header_mismatch,
     };
     use crate::services::auth_service::AuthClaims;
 
@@ -459,6 +596,14 @@ mod tests {
             true
         ));
         assert!(!password_change_required("/api/v1/staff", false));
+    }
+
+    #[test]
+    fn write_requests_require_active_entitlement() {
+        assert!(!request_mutates_data(&axum::http::Method::GET));
+        assert!(!request_mutates_data(&axum::http::Method::HEAD));
+        assert!(request_mutates_data(&axum::http::Method::POST));
+        assert!(request_mutates_data(&axum::http::Method::PATCH));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -27,11 +27,10 @@ interface PaymentModeDraft {
 }
 
 @Component({
-  selector: 'app-pos-payment-modes-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './pos-payment-modes-page.component.html',
-  styleUrls: ['./pos-payment-modes-page.component.css'],
+    selector: 'app-pos-payment-modes-page',
+    imports: [FormsModule, RouterLink],
+    templateUrl: './pos-payment-modes-page.component.html',
+    styleUrls: ['./pos-payment-modes-page.component.css']
 })
 export class PosPaymentModesPageComponent implements OnInit {
   modes: PaymentMode[] = [];

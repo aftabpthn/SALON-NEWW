@@ -1,5 +1,5 @@
 import { LanguageService } from '../../../core/i18n/language.service';
-import { CommonModule } from '@angular/common';
+
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -65,14 +65,11 @@ type CorrectionForm = {
   breaks: Array<{ startedAt: string; endedAt: string; comments: string }>;
 };
 
-type StaffListPage = { items: Array<{ id: string; firstName: string; lastName: string; appointmentDisplayName: string }>; };
-
 @Component({
-  selector: 'app-staff-attendance-summary-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
-  templateUrl: './staff-attendance-summary-page.component.html',
-  styleUrls: ['./staff-attendance-summary-page.component.css'],
+    selector: 'app-staff-attendance-summary-page',
+    imports: [FormsModule, TranslatePipe],
+    templateUrl: './staff-attendance-summary-page.component.html',
+    styleUrls: ['./staff-attendance-summary-page.component.css']
 })
 export class StaffAttendanceSummaryPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -114,9 +111,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   correctionForm: CorrectionForm | null = null;
   correctionSaving = false;
 
-  async ngOnInit() {
-    await Promise.all([this.loadStaff(), this.loadSummary()]);
-  }
+  ngOnInit() { void this.loadSummary(); }
 
   isVisible(column: AttendanceColumn) { return this.visibleColumns[column]; }
 
@@ -131,6 +126,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     try {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<AttendanceSummaryRow[]>>(`/staff-attendance/summary?${this.query()}`));
       this.rows = result.data || [];
+      if (!this.staffId) this.staffOptions = this.rows.map(({ staffId: id, name }) => ({ id, name }));
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.9106518826'));
       this.rows = [];
@@ -297,18 +293,6 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   }
 
   private toIso(value: string) { return value ? new Date(value).toISOString() : null; }
-
-  private async loadStaff() {
-    try {
-      const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffListPage>>('/staff/list?page=1&pageSize=100&sortBy=firstName&sortDirection=asc'));
-      this.staffOptions = (result.data?.items || []).map((staff) => ({
-        id: staff.id,
-        name: [staff.firstName, staff.lastName].filter(Boolean).join(' ') || staff.appointmentDisplayName,
-      }));
-    } catch {
-      this.staffOptions = [];
-    }
-  }
 
   private query(includeStaff = true) {
     const params = new URLSearchParams({ cycle: this.cycle, year: String(this.year), month: String(this.month) });

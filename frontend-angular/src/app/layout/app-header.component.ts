@@ -1,24 +1,28 @@
-import { CommonModule } from '@angular/common';
-import { Component, ElementRef, HostListener, OnInit, inject } from '@angular/core';
+
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
 import { AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
 import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
+import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
 
 @Component({
-  selector: 'app-header',
-  standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
-  templateUrl: './app-header.component.html',
-  styleUrls: ['./app-header.component.css'],
+    selector: 'app-header',
+    imports: [FormsModule, TranslatePipe],
+    templateUrl: './app-header.component.html',
+    styleUrls: ['./app-header.component.css']
 })
 export class AppHeaderComponent implements OnInit {
+  @Input() mobileNavOpen = false;
+  @Output() readonly mobileNavToggle = new EventEmitter<void>();
+
   private readonly auth = inject(AuthService);
   private readonly element = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
   private readonly concierge = inject(AiConciergeService);
+  readonly loadingTicker = inject(LoadingTickerService);
   readonly language = inject(LanguageService);
 
   readonly appName = localStorage.getItem('aurashine_tenant_name')
@@ -46,7 +50,6 @@ export class AppHeaderComponent implements OnInit {
       ?? localStorage.getItem('aurashine_branch_name')
       ?? localStorage.getItem('selectedBranchName')
       ?? localStorage.getItem('branchName')
-      ?? localStorage.getItem('aurashine_branch_id')
       ?? this.language.text('header.noBranchSelected');
   }
 

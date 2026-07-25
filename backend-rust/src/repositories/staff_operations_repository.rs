@@ -383,8 +383,9 @@ pub async fn list_branch_transfers(
 ) -> Result<Vec<BranchTransferRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
         "SELECT {TRANSFER_COLUMNS} FROM staff_branch_transfer_requests transfer
-         JOIN branches source ON source.id=transfer.source_branch_id AND source.tenant_id=transfer.tenant_id
-         JOIN branches target ON target.id=transfer.target_branch_id AND target.tenant_id=transfer.tenant_id
+         JOIN tenants tenant ON COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=transfer.tenant_id
+         JOIN branches source ON source.tenant_id=tenant.id AND COALESCE(NULLIF(source.scope_id,''),source.id::TEXT)=transfer.source_branch_id
+         JOIN branches target ON target.tenant_id=tenant.id AND COALESCE(NULLIF(target.scope_id,''),target.id::TEXT)=transfer.target_branch_id
          JOIN staff ON staff.id=transfer.staff_id
          JOIN roles role ON role.id=transfer.role_id AND role.tenant_id=transfer.tenant_id
          WHERE transfer.tenant_id=$1 AND transfer.source_branch_id=$2 AND ($3='' OR transfer.status=$3)

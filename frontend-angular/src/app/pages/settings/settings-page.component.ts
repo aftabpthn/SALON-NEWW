@@ -178,11 +178,10 @@ type ClientFormSettings = {
 };
 
 @Component({
-  selector: 'page-settings',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './settings-page.component.html',
-  styleUrls: ['./settings-page.component.css'],
+    selector: 'page-settings',
+    imports: [CommonModule, FormsModule, RouterLink],
+    templateUrl: './settings-page.component.html',
+    styleUrls: ['./settings-page.component.css']
 })
 export class SettingsPageComponent implements OnInit {
   private readonly api = inject(ApiService);

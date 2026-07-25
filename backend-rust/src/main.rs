@@ -12,7 +12,7 @@ mod state;
 
 use std::{net::SocketAddr, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use axum::serve;
 use chrono::Utc;
 use state::AppState;
@@ -27,9 +27,45 @@ async fn main() -> Result<()> {
         .init();
 
     let settings = config::Settings::load()?;
-    let db = infrastructure::db::create_pool(&settings.database_url).await?;
-    let redis = infrastructure::cache::create_client(&settings.redis_url).await?;
+    let db = infrastructure::db::create_pool(&settings.database_url)
+        .await
+        .context("Unable to initialize PostgreSQL pool")?;
+
+    if std::env::args().any(|arg| arg == "--migrate-only") {
+        tracing::info!("database migrations completed");
+        db.close().await;
+        return Ok(());
+    }
+
+    tokio::time::timeout(Duration::from_secs(5), sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&db))
+        .await
+        .context("Database readiness check timed out")?
+        .context("Database readiness check failed")?;
+
+    let redis = infrastructure::cache::create_client(&settings.redis_url)
+        .await
+        .context("Unable to initialize Redis client")?;
+
+    tokio::time::timeout(Duration::from_secs(5), infrastructure::cache::ping(&redis))
+        .await
+        .context("Redis ping timed out")?
+        .context("Redis ping check failed")?;
     let state = AppState::new(settings.clone(), db, redis);
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                if services::report_export_service::process_due(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("report export worker cycle failed");
+                }
+            }
+        });
+    }
 
     {
         let worker_state = state.clone();
@@ -280,6 +316,12 @@ async fn main() -> Result<()> {
                 {
                     tracing::warn!("POS financial integrity monitor cycle failed");
                 }
+                if services::inventory_controls_service::process_due_automation(&worker_state)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("autonomous inventory cycle failed");
+                }
             }
         });
     }
@@ -315,3 +357,5 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+

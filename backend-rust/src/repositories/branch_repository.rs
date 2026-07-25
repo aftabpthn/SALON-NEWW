@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
-#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[derive(Debug, Clone, FromRow, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchRecord {
     pub id: String,
@@ -21,8 +21,22 @@ pub struct BranchRecord {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct BranchKeyRecord {
+    pub code: String,
+    pub name: String,
+    pub zone_name: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct BranchBulkImportReplay {
+    pub request_fingerprint: String,
+    pub import_mode: String,
+    pub result_json: serde_json::Value,
+}
+
 const BRANCH_COLUMNS: &str = r#"
-    COALESCE(NULLIF(b.scope_id, ''), b.id::text) AS id,
+    b.id::text AS id,
     b.name,
     COALESCE(b.code, '') AS code,
     b.region_name,
@@ -218,6 +232,133 @@ pub async fn list(
     .await
 }
 
+pub async fn list_page(
+    db: &PgPool,
+    tenant_id: &str,
+    query: &str,
+    cursor: Option<&str>,
+    limit: i64,
+) -> Result<Vec<BranchRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        SELECT {BRANCH_COLUMNS}
+        FROM branches b
+        JOIN tenants t ON t.id=b.tenant_id
+        WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1
+          AND ($2='' OR b.name ILIKE '%' || $2 || '%' OR COALESCE(b.code, '') ILIKE '%' || $2 || '%'
+            OR b.region_name ILIKE '%' || $2 || '%' OR b.zone_name ILIKE '%' || $2 || '%'
+            OR b.cluster_name ILIKE '%' || $2 || '%')
+          AND ($3::uuid IS NULL OR b.id > $3::uuid)
+        ORDER BY b.id
+        LIMIT $4
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(query)
+    .bind(cursor)
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn existing_branch_keys(
+    db: &PgPool,
+    tenant_id: &str,
+) -> Result<Vec<BranchKeyRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT COALESCE(b.code,'') AS code,b.name,b.zone_name
+             FROM branches b JOIN tenants t ON t.id=b.tenant_id
+            WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1"#,
+    )
+    .bind(tenant_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn existing_branch_keys_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+) -> Result<Vec<BranchKeyRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT COALESCE(b.code,'') AS code,b.name,b.zone_name
+             FROM branches b JOIN tenants t ON t.id=b.tenant_id
+            WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1"#,
+    )
+    .bind(tenant_id)
+    .fetch_all(&mut **tx)
+    .await
+}
+
+pub async fn lock_bulk_import_key(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    idempotency_key: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2,0))")
+        .bind(tenant_id)
+        .bind(idempotency_key)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub async fn bulk_import_replay(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    idempotency_key: &str,
+) -> Result<Option<BranchBulkImportReplay>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT request_fingerprint, COALESCE(import_mode, 'full') AS import_mode, result_json
+             FROM branch_bulk_imports
+            WHERE tenant_id::text=$1 AND idempotency_key=$2"#,
+    )
+    .bind(tenant_id)
+    .bind(idempotency_key)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_bulk_import(
+    tx: &mut Transaction<'_, Postgres>,
+    import_id: &str,
+    tenant_id: &str,
+    requested_from_branch_id: &str,
+    idempotency_key: &str,
+    import_mode: &str,
+    request_fingerprint: &str,
+    row_count: i32,
+    created_branch_count: i32,
+    result_json: &serde_json::Value,
+    actor_user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query(
+        r#"INSERT INTO branch_bulk_imports(
+             id,tenant_id,requested_from_branch_id,idempotency_key,request_fingerprint,
+             import_mode,row_count,created_branch_count,result_json,created_by
+           )
+           SELECT $1::uuid,tenant.id,branch.id,$4,$5,$6,$7,$8,$9
+           ,$10
+             FROM tenants tenant
+             JOIN branches branch ON branch.tenant_id=tenant.id AND branch.id::text=$3
+            WHERE tenant.id::text=$2"#,
+    )
+    .bind(import_id)
+    .bind(tenant_id)
+    .bind(requested_from_branch_id)
+    .bind(idempotency_key)
+    .bind(request_fingerprint)
+    .bind(import_mode)
+    .bind(row_count)
+    .bind(created_branch_count)
+    .bind(result_json)
+    .bind(actor_user_id)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected()
+        == 1)
+}
+
 pub async fn accessible_branch_ids(
     db: &PgPool,
     tenant_id: &str,
@@ -280,14 +421,64 @@ pub async fn create(
 ) -> Result<Option<BranchRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
+        WITH new_branch AS (SELECT gen_random_uuid() AS id)
         INSERT INTO branches (
-          tenant_id, name, code, region_name, zone_name, cluster_name,
+          id, tenant_id, name, code, region_name, zone_name, cluster_name,
           address, latitude, longitude, booking_deposit_percent, active, scope_id
         )
-        SELECT t.id, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, gen_random_uuid()::text
-        FROM tenants t
+        SELECT new_branch.id, t.id, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+               TRUE, new_branch.id::text
+        FROM tenants t CROSS JOIN new_branch
         WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1 AND t.status='active'
-        RETURNING COALESCE(NULLIF(scope_id, ''), id::text) AS id,
+        RETURNING id::text AS id,
+                  name, COALESCE(code, '') AS code, region_name, zone_name, cluster_name,
+                  address, latitude, longitude, booking_deposit_percent,
+                  royalty_bps, royalty_minimum_paise,
+                  active, created_at, updated_at
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(name)
+    .bind(code)
+    .bind(region_name)
+    .bind(zone_name)
+    .bind(cluster_name)
+    .bind(address)
+    .bind(latitude)
+    .bind(longitude)
+    .bind(booking_deposit_percent)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn create_if_not_exists(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    name: &str,
+    code: &str,
+    region_name: &str,
+    zone_name: &str,
+    cluster_name: &str,
+    address: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    booking_deposit_percent: i32,
+) -> Result<Option<BranchRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH new_branch AS (SELECT gen_random_uuid() AS id)
+        INSERT INTO branches (
+          id, tenant_id, name, code, region_name, zone_name, cluster_name,
+          address, latitude, longitude, booking_deposit_percent, active, scope_id
+        )
+        SELECT new_branch.id, t.id, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+               TRUE, new_branch.id::text
+        FROM tenants t CROSS JOIN new_branch
+        WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1 AND t.status='active'
+        ON CONFLICT (tenant_id, LOWER(code))
+        WHERE code IS NOT NULL AND BTRIM(code) <> ''
+        DO NOTHING
+        RETURNING id::text AS id,
                   name, COALESCE(code, '') AS code, region_name, zone_name, cluster_name,
                   address, latitude, longitude, booking_deposit_percent,
                   royalty_bps, royalty_minimum_paise,
@@ -404,6 +595,25 @@ pub async fn update(
     booking_deposit_percent: i32,
     active: bool,
 ) -> Result<Option<BranchRecord>, sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO branch_id_aliases (tenant_id, branch_id, alias, source)
+        SELECT b.tenant_id, b.id, b.code, 'legacy_code'
+        FROM branches b
+        JOIN tenants t ON t.id=b.tenant_id
+        WHERE COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1
+          AND b.id::text=$2
+          AND BTRIM(COALESCE(b.code, ''))<>''
+          AND LOWER(b.code)<>LOWER($3)
+        ON CONFLICT DO NOTHING
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(code)
+    .execute(&mut **tx)
+    .await?;
+
     sqlx::query_as(
         r#"
         UPDATE branches b
@@ -414,7 +624,7 @@ pub async fn update(
         WHERE b.tenant_id=t.id
           AND COALESCE(NULLIF(t.scope_id, ''), t.id::text)=$1
           AND COALESCE(NULLIF(b.scope_id, ''), b.id::text)=$2
-        RETURNING COALESCE(NULLIF(b.scope_id, ''), b.id::text) AS id,
+        RETURNING b.id::text AS id,
                   b.name, COALESCE(b.code, '') AS code, b.region_name, b.zone_name,
                   b.cluster_name, b.address, b.latitude, b.longitude,
                   b.booking_deposit_percent, b.royalty_bps, b.royalty_minimum_paise,

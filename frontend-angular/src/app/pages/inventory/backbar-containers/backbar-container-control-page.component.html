@@ -1,0 +1,91 @@
+<section class="page-shell">
+  <header class="page-head">
+    <div class="title-block"><small>Inventory / Backbar / Containers</small><h1>Backbar Container Control</h1></div>
+    <div class="head-actions">
+      <div class="scan-control"><i class="bi bi-upc-scan" aria-hidden="true"></i><input aria-label="Scan QR or barcode" placeholder="Scan QR or barcode" [(ngModel)]="scanCode" (keyup.enter)="scan()" /></div>
+      <select aria-label="Container status" [(ngModel)]="status"><option value="">All statuses</option><option value="sealed">Sealed</option><option value="open">Open</option><option value="empty">Empty</option></select>
+      <button type="button" (click)="load()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh</button>
+      <button class="primary" type="button" (click)="openRegister()">Register Container</button>
+    </div>
+  </header>
+
+  <p class="message error" *ngIf="error">{{ error }}</p><p class="message success" *ngIf="notice">{{ notice }}</p>
+  <div class="loading" *ngIf="loading">Loading containers…</div>
+
+  <section class="kpis" *ngIf="!loading">
+    <article class="blue"><i class="bi bi-box-seam" aria-hidden="true"></i><span>Sealed</span><strong>{{ sealedCount }}</strong></article>
+    <article class="green"><i class="bi bi-droplet" aria-hidden="true"></i><span>Open</span><strong>{{ openCount }}</strong></article>
+    <article class="orange"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i><span>Near Empty</span><strong>{{ nearEmptyCount }}</strong></article>
+    <article class="teal"><i class="bi bi-shield-check" aria-hidden="true"></i><span>Pending Override</span><strong>{{ pendingOverrideCount }}</strong></article>
+  </section>
+
+  <nav class="tabs" *ngIf="!loading" aria-label="Backbar container views">
+    <button type="button" [class.active]="activeTab === 'containers'" (click)="activeTab = 'containers'">Containers</button>
+    <button type="button" [class.active]="activeTab === 'lifecycle'" (click)="activeTab = 'lifecycle'">Lifecycle</button>
+    <button type="button" [class.active]="activeTab === 'overrides'" (click)="activeTab = 'overrides'">Overrides</button>
+    <button type="button" [class.active]="activeTab === 'product360'" (click)="activeTab = 'product360'">Product 360</button>
+    <a routerLink="/inventory/backbar">Live Product Consume</a>
+  </nav>
+
+  <p class="lifecycle-rule" *ngIf="!loading"><i class="bi bi-info-circle" aria-hidden="true"></i> Only one active container can be opened per product unless an approved override exists.</p>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'containers'">
+    <header><h2>Container register</h2><input aria-label="Search containers" placeholder="Search product, barcode or ID" [(ngModel)]="search" /></header>
+    <div class="table-scroll" *ngIf="filteredContainers.length; else noContainers"><table><thead><tr><th>Container ID</th><th>Product</th><th>Barcode</th><th>Capacity</th><th>Remaining</th><th>Status</th><th>Opened</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of filteredContainers" [class.selected]="row.id === selectedContainerId">
+        <td><code>{{ row.id }}</code></td><td><strong>{{ row.productName }}</strong></td><td>{{ row.barcode }}</td><td>{{ quantity(row.capacityQuantity, row.unit) }}</td><td>{{ quantity(row.remainingQuantity, row.unit) }}</td><td><span class="status" [attr.data-status]="row.status">{{ statusLabel(row.status) }}</span></td><td>{{ date(row.openedAt) }}</td>
+        <td><div class="row-actions"><button type="button" (click)="openProduct360(row.inventoryItemId)">360</button><button type="button" (click)="printLabel(row)">QR Label</button><button *ngIf="row.status === 'sealed'" type="button" [disabled]="saving" (click)="openContainer(row)">Open</button><ng-container *ngIf="row.status === 'open'"><input class="consume-input" type="number" min="1" [max]="row.remainingQuantity" aria-label="Consume quantity" [(ngModel)]="consumeQuantity[row.id]" /><button type="button" [disabled]="saving" (click)="consumeContainer(row)">Consume</button><button type="button" [disabled]="saving || !!row.pendingOverrideId" (click)="requestOverride(row)">Override</button></ng-container></div></td>
+      </tr>
+    </tbody></table></div>
+    <ng-template #noContainers><div class="empty-state"><i class="bi bi-box-seam" aria-hidden="true"></i><strong>No containers registered</strong><span>Register a sealed bottle, tube or jar to start its lifecycle.</span></div></ng-template>
+    <footer>Showing {{ filteredContainers.length }} of {{ containers.length }} containers</footer>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'lifecycle'">
+    <header><h2>Immutable container lifecycle</h2></header>
+    <div class="table-scroll" *ngIf="lifecycleRows.length; else noLifecycle"><table><thead><tr><th>Date</th><th>Product</th><th>Barcode</th><th>Event</th><th>Quantity Delta</th><th>Remaining</th><th>Actor</th></tr></thead><tbody>
+      <tr *ngFor="let row of lifecycleRows"><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.productName }}</strong></td><td>{{ row.barcode }}</td><td><span class="status">{{ statusLabel(row.eventType) }}</span></td><td>{{ row.quantityDelta }}</td><td>{{ row.remainingAfter }}</td><td>{{ row.actorUserId }}</td></tr>
+    </tbody></table></div>
+    <ng-template #noLifecycle><div class="empty-state"><strong>No lifecycle events yet</strong></div></ng-template>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'overrides'">
+    <header><h2>Pending override approvals</h2></header>
+    <div class="table-scroll" *ngIf="overrideContainers.length; else noOverrides"><table><thead><tr><th>Product</th><th>Barcode</th><th>Current Remaining</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      <tr *ngFor="let row of overrideContainers"><td><strong>{{ row.productName }}</strong></td><td>{{ row.barcode }}</td><td>{{ quantity(row.remainingQuantity, row.unit) }}</td><td><span class="status">Pending Approval</span></td><td><div class="row-actions" *ngIf="canReview"><button type="button" [disabled]="saving" (click)="reviewOverride(row, 'approve')">Approve</button><button class="danger" type="button" [disabled]="saving" (click)="reviewOverride(row, 'reject')">Reject</button></div></td></tr>
+    </tbody></table></div>
+    <ng-template #noOverrides><div class="empty-state"><strong>No pending overrides</strong></div></ng-template>
+  </section>
+
+  <section class="product-select-card" *ngIf="!loading && activeTab === 'product360'">
+    <h2>Product 360</h2>
+    <select aria-label="Select product" [(ngModel)]="selectedProductId" (ngModelChange)="productSelectionChanged()"><option value="">Select product</option><option *ngFor="let row of items" [value]="row.id">{{ row.name }} · {{ row.sku }}</option></select>
+    <button type="button" [disabled]="!selectedProductId" (click)="openProduct360(selectedProductId)">Open Product 360</button>
+  </section>
+</section>
+
+<div class="drawer-backdrop" *ngIf="registerOpen" (click)="closeRegister()"></div>
+<aside class="drawer" *ngIf="registerOpen" role="dialog" aria-modal="true" aria-labelledby="register-container-title">
+  <header><h2 id="register-container-title">Register Container</h2><button class="icon-button" type="button" aria-label="Close" (click)="closeRegister()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <div class="drawer-body">
+    <label>Product<select [(ngModel)]="draft.inventoryItemId"><option value="">Select product</option><option *ngFor="let row of items" [value]="row.id">{{ row.name }} · {{ row.stockQuantity }} {{ row.unit }}</option></select></label>
+    <label>QR / Barcode<input [(ngModel)]="draft.barcode" maxlength="160" placeholder="Scan or enter code" /></label>
+    <div class="quantity-grid"><label>Capacity<input type="number" min="1" [(ngModel)]="draft.capacityQuantity" /></label><label>Unit<input [(ngModel)]="draft.unit" maxlength="24" /></label></div>
+  </div>
+  <footer><button type="button" (click)="closeRegister()">Cancel</button><button class="primary" type="button" [disabled]="saving" (click)="registerContainer()">{{ saving ? 'Saving…' : 'Register Container' }}</button></footer>
+</aside>
+
+<div class="drawer-backdrop" *ngIf="productDrawerOpen" (click)="closeProduct360()"></div>
+<aside class="drawer product-drawer" *ngIf="productDrawerOpen" role="dialog" aria-modal="true" aria-labelledby="product-360-title">
+  <header><h2 id="product-360-title">Product 360</h2><button class="icon-button" type="button" aria-label="Close" (click)="closeProduct360()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+  <div class="drawer-body">
+    <label>Select Product<select [(ngModel)]="selectedProductId" (ngModelChange)="productSelectionChanged()"><option value="">Select product</option><option *ngFor="let row of items" [value]="row.id">{{ row.name }}</option></select></label>
+    <div class="loading" *ngIf="productLoading">Loading Product 360…</div>
+    <ng-container *ngIf="product360 && !productLoading">
+      <section class="product-title"><div><strong>{{ product360.product.name }}</strong><span>{{ product360.product.sku }} · {{ product360.product.unit }}</span></div><span class="status">{{ product360.product.active ? 'Active' : 'Inactive' }}</span></section>
+      <section class="metric-grid"><article><span>Stock</span><strong>{{ product360.product.stockQuantity }}</strong></article><article><span>Open Containers</span><strong>{{ productContainers.length }}</strong></article><article><span>Consumed</span><strong>{{ product360.consumedQuantity }}</strong></article><article><span>Wastage Records</span><strong>{{ productWastage.length }}</strong></article></section>
+      <section class="detail-list"><article><i class="bi bi-box" aria-hidden="true"></i><div><span>Stock Summary</span><strong>In {{ product360.stockInQuantity }} · Out {{ product360.stockOutQuantity }}</strong></div></article><article><i class="bi bi-droplet" aria-hidden="true"></i><div><span>Open Containers</span><strong>{{ productContainers.length }}</strong></div></article><article><i class="bi bi-scissors" aria-hidden="true"></i><div><span>Services Using Product</span><strong>{{ product360.recipeCount }}</strong></div></article><article><i class="bi bi-truck" aria-hidden="true"></i><div><span>Last Supplier</span><strong>{{ product360.lastSupplier || '—' }}</strong></div></article><article><i class="bi bi-clock-history" aria-hidden="true"></i><div><span>Recent Ledger</span><strong>{{ date(product360.lastMovementAt) }}</strong></div></article></section>
+      <section class="mini-table" *ngIf="productUsage.length"><h3>Recent product usage</h3><table><tbody><tr *ngFor="let row of productUsage | slice:0:8"><td>{{ date(row.createdAt) }}</td><td>{{ row.serviceName || row.source }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td></tr></tbody></table></section>
+    </ng-container>
+  </div>
+</aside>

@@ -440,7 +440,7 @@ pub async fn find_transaction_duplicate(
         MigrationEntity::PurchaseBills => {
             let (gstin, invoice) = business_key.split_once(':').unwrap_or(("", business_key));
             sqlx::query_scalar(
-                "SELECT id FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND supplier_gstin=$3 AND supplier_invoice_number=$4 LIMIT 1",
+                "SELECT id FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND supplier_gstin=$3 AND supplier_invoice_number=$4 AND rolled_back_at IS NULL LIMIT 1",
             ).bind(tenant).bind(branch).bind(gstin).bind(invoice).fetch_optional(db).await
         }
         MigrationEntity::Appointments => sqlx::query_scalar(
@@ -1832,8 +1832,10 @@ pub async fn rollback_job(
                 restore_staff_snapshot(&mut tx, tenant, branch, &target_id, &snapshot).await?
             }
             _ => {
-                restore_master_snapshot(&mut tx, tenant, branch, &entity, &target_id, &snapshot)
-                    .await?
+                restore_master_snapshot(
+                    &mut tx, tenant, branch, &entity, &target_id, actor, &snapshot,
+                )
+                .await?
             }
         }
         restored += 1;
@@ -1877,6 +1879,24 @@ pub async fn rollback_job(
     .await?;
     tx.commit().await?;
     Ok(Some(report))
+}
+
+async fn reverse_inventory_ledger(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+    ledger_id: &str,
+    actor: &str,
+    reason: &str,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("SELECT reverse_inventory_stock_ledger($1,$2,$3,$4,$5)")
+        .bind(tenant)
+        .bind(branch)
+        .bind(ledger_id)
+        .bind(actor)
+        .bind(reason)
+        .fetch_one(&mut **tx)
+        .await
 }
 
 async fn rollback_transaction_job(
@@ -1958,17 +1978,28 @@ async fn rollback_transaction_job(
                     }
                     restored += 1;
                 } else {
-                    sqlx::query(r#"UPDATE inventory_items item SET stock_quantity=item.stock_quantity-source.quantity_delta,updated_at=NOW() FROM inventory_stock_ledger source WHERE source.tenant_id=$1 AND source.branch_id=$2 AND source.sale_id=$3 AND source.inventory_item_id=item.id AND item.tenant_id=$1 AND item.branch_id=$2"#)
-                        .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?;
-                    deleted += sqlx::query(
-                        "DELETE FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                    let ledger_ids: Vec<String> = sqlx::query_scalar(
+                        "SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND reversal_of_ledger_id IS NULL ORDER BY created_at,id",
                     )
                     .bind(tenant)
                     .bind(branch)
                     .bind(target_id)
-                    .execute(&mut *tx)
-                    .await?
-                    .rows_affected() as i64;
+                    .fetch_all(&mut *tx)
+                    .await?;
+                    for ledger_id in ledger_ids {
+                        reverse_inventory_ledger(
+                            &mut tx,
+                            tenant,
+                            branch,
+                            &ledger_id,
+                            actor,
+                            &format!("Migration rollback {job_id}"),
+                        )
+                        .await?;
+                    }
+                    deleted += sqlx::query("UPDATE pos_sales SET is_deleted=TRUE,deleted_at=NOW(),deleted_by_user_id=$4,delete_reason=$5,status='voided',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND is_deleted=FALSE")
+                        .bind(tenant).bind(branch).bind(target_id).bind(actor)
+                        .bind(format!("Migration rollback {job_id}")).execute(&mut *tx).await?.rows_affected() as i64;
                 }
             }
             "payments" => {
@@ -1997,9 +2028,17 @@ async fn rollback_transaction_job(
                     .and_then(Value::as_str)
                     .ok_or(sqlx::Error::RowNotFound)?;
                 if let Some(ledger) = snapshot.get("ledgerId").and_then(Value::as_str) {
-                    sqlx::query("DELETE FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND id=$3").bind(tenant).bind(branch).bind(ledger).execute(&mut *tx).await?;
+                    reverse_inventory_ledger(
+                        &mut tx,
+                        tenant,
+                        branch,
+                        ledger,
+                        actor,
+                        &format!("Migration rollback {job_id}"),
+                    )
+                    .await?;
                 }
-                let affected=sqlx::query("UPDATE inventory_items SET stock_quantity=($4->>'stockQuantity')::INTEGER,unit_cost_paise=($4->>'unitCostPaise')::BIGINT,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                let affected=sqlx::query("UPDATE inventory_items SET unit_cost_paise=($4->>'unitCostPaise')::BIGINT,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
                     .bind(tenant).bind(branch).bind(item_id).bind(snapshot).execute(&mut *tx).await?.rows_affected();
                 if affected != 1 {
                     return Err(sqlx::Error::RowNotFound);
@@ -2015,16 +2054,9 @@ async fn rollback_transaction_job(
             .map(|row| row.0.clone())
             .collect::<std::collections::HashSet<_>>();
         for receipt_id in receipt_ids {
-            sqlx::query("DELETE FROM purchase_receipt_lines WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=$3").bind(tenant).bind(branch).bind(&receipt_id).execute(&mut *tx).await?;
-            deleted += sqlx::query(
-                "DELETE FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
-            )
-            .bind(tenant)
-            .bind(branch)
-            .bind(&receipt_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected() as i64;
+            deleted += sqlx::query("UPDATE purchase_receipts SET rolled_back_at=NOW(),rolled_back_by=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND rolled_back_at IS NULL")
+                .bind(tenant).bind(branch).bind(&receipt_id).bind(actor)
+                .execute(&mut *tx).await?.rows_affected() as i64;
         }
     }
     let (linked,kept):(i64,i64)=sqlx::query_as("SELECT COUNT(*) FILTER(WHERE action='linked')::BIGINT,COUNT(*) FILTER(WHERE action='kept')::BIGINT FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3").bind(tenant).bind(branch).bind(job_id).fetch_one(&mut *tx).await?;
@@ -2143,22 +2175,23 @@ async fn restore_master_snapshot(
     branch: &str,
     entity: &str,
     target_id: &str,
+    actor: &str,
     snapshot: &Value,
 ) -> Result<(), sqlx::Error> {
     if entity == MigrationEntity::Inventory.as_str() {
         if let Some(ledger_id) = snapshot.get("ledgerId").and_then(Value::as_str) {
-            sqlx::query(
-                "DELETE FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+            reverse_inventory_ledger(
+                tx,
+                tenant,
+                branch,
+                ledger_id,
+                actor,
+                "Migration inventory rollback",
             )
-            .bind(tenant)
-            .bind(branch)
-            .bind(ledger_id)
-            .execute(&mut **tx)
             .await?;
         }
         let affected = sqlx::query(
-            r#"UPDATE inventory_items SET stock_quantity=($4->'record'->>'stock_quantity')::INTEGER,
-                 unit_cost_paise=($4->'record'->>'unit_cost_paise')::BIGINT,
+            r#"UPDATE inventory_items SET unit_cost_paise=($4->'record'->>'unit_cost_paise')::BIGINT,
                  updated_at=($4->'record'->>'updated_at')::TIMESTAMPTZ
                WHERE tenant_id=$1 AND branch_id=$2 AND id=$3"#,
         )

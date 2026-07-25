@@ -291,7 +291,72 @@ pub async fn settle_pos_internal_payment(
     method_reference: &str,
     amount_paise: i64,
 ) -> Result<(), AppError> {
-    let idempotency_key = format!("pos-payment:{payment_id}");
+    settle_internal_payment(
+        tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        sale_id,
+        payment_id,
+        method,
+        method_reference,
+        amount_paise,
+        "pos-payment",
+        "pos_sale",
+        "POS wallet payment",
+        "POS store credit payment",
+        "POS gift card payment",
+    )
+    .await
+}
+
+pub async fn settle_booking_advance(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    appointment_id: &str,
+    payment_id: &str,
+    method: &str,
+    method_reference: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    settle_internal_payment(
+        tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        appointment_id,
+        payment_id,
+        method,
+        method_reference,
+        amount_paise,
+        "booking-advance",
+        "booking_advance",
+        "Appointment booking advance",
+        "Appointment booking advance",
+        "Appointment booking advance",
+    )
+    .await
+}
+
+async fn settle_internal_payment(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    reference_id: &str,
+    payment_id: &str,
+    method: &str,
+    method_reference: &str,
+    amount_paise: i64,
+    idempotency_prefix: &str,
+    reference_type: &str,
+    wallet_notes: &str,
+    store_credit_notes: &str,
+    gift_card_notes: &str,
+) -> Result<(), AppError> {
+    let idempotency_key = format!("{idempotency_prefix}:{payment_id}");
     match method {
         "wallet" => match wallet_repository::write_wallet_transaction_in_tx(
             tx,
@@ -301,10 +366,10 @@ pub async fn settle_pos_internal_payment(
                 client_id,
                 transaction_type: "use",
                 delta_paise: -amount_paise,
-                reference_type: "pos_sale",
-                reference_id: sale_id,
+                reference_type,
+                reference_id,
                 idempotency_key: &idempotency_key,
-                notes: "POS wallet payment",
+                notes: wallet_notes,
             },
         )
         .await
@@ -331,10 +396,10 @@ pub async fn settle_pos_internal_payment(
                         client_id,
                         credit_id: method_reference,
                         amount_paise,
-                        reference_type: "pos_sale",
-                        reference_id: sale_id,
+                        reference_type,
+                        reference_id,
                         idempotency_key: &idempotency_key,
-                        notes: "POS store credit payment",
+                        notes: store_credit_notes,
                     },
                 )
                 .await
@@ -353,10 +418,11 @@ pub async fn settle_pos_internal_payment(
                 tenant_id,
                 branch_id,
                 client_id,
-                sale_id,
+                reference_id,
                 method_reference,
                 amount_paise,
                 &idempotency_key,
+                gift_card_notes,
             )
             .await
         }
@@ -410,6 +476,7 @@ async fn settle_gift_card_payment(
     code: &str,
     amount_paise: i64,
     idempotency_key: &str,
+    notes: &str,
 ) -> Result<(), AppError> {
     if amount_paise <= 0 {
         return Err(AppError::validation(
@@ -473,8 +540,8 @@ async fn settle_gift_card_payment(
         .bind(tenant_id).bind(&card.1).bind(&card.0).bind(balance).bind(status)
         .execute(&mut **tx).await
         .map_err(|_| AppError::internal("failed to update gift card balance"))?;
-    sqlx::query("INSERT INTO gift_card_transactions (tenant_id, branch_id, gift_card_id, sale_id, transaction_type, delta_paise, balance_after_paise, idempotency_key, notes) VALUES ($1,$2,$3,$4,'redeem',$5,$6,$7,'POS gift card payment')")
-        .bind(tenant_id).bind(&card.1).bind(&card.0).bind(sale_id).bind(-amount_paise).bind(balance).bind(idempotency_key)
+    sqlx::query("INSERT INTO gift_card_transactions (tenant_id, branch_id, gift_card_id, sale_id, transaction_type, delta_paise, balance_after_paise, idempotency_key, notes) VALUES ($1,$2,$3,$4,'redeem',$5,$6,$7,$8)")
+        .bind(tenant_id).bind(&card.1).bind(&card.0).bind(sale_id).bind(-amount_paise).bind(balance).bind(idempotency_key).bind(notes)
         .execute(&mut **tx).await
         .map_err(|_| AppError::internal("failed to save gift card redemption"))?;
     Ok(())

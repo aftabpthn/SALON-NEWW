@@ -1,0 +1,16 @@
+environment                   = "prod"
+vpc_cidr                      = "10.60.0.0/16"
+nat_gateway_count             = 2
+desired_count                 = 2
+autoscaling_min_capacity      = 2
+autoscaling_max_capacity      = 8
+db_instance_class             = "db.t4g.medium"
+db_allocated_storage_gb       = 100
+db_max_allocated_storage_gb   = 500
+db_multi_az                   = true
+db_deletion_protection        = true
+db_backup_retention_days      = 35
+redis_node_type               = "cache.t4g.small"
+redis_node_count              = 2
+log_retention_days            = 365
+waf_rate_limit                = 2000

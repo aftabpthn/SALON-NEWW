@@ -14,7 +14,7 @@ test('inventory production operations use real scoped APIs and reload after acti
   assert.match(component, /\/inventory\/operations-health/);
   assert.match(component, /\/supplier-governance\/communications\/\$\{id\}\/retry/);
   assert.match(component, /await this\.reload\(\)/);
-  assert.match(template, /Production Operations/);
+  assert.match(template, /Autonomous Inventory Operations/);
   assert.match(template, /ledgerStockMismatch/);
   assert.match(template, /terminalFailed/);
   assert.match(template, /retryCommunication\(row\.id\)/);

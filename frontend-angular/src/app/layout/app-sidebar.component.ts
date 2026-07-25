@@ -1,18 +1,28 @@
-import { Component, ElementRef, HostListener } from '@angular/core';
-import { NgFor } from '@angular/common';
+import { Component, ElementRef, EventEmitter, HostListener, Input, Output } from '@angular/core';
+
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../core/services/auth.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
 
 @Component({
-  selector: 'app-sidebar',
-  standalone: true,
-  imports: [NgFor, RouterLink, RouterLinkActive, TranslatePipe],
-  templateUrl: './app-sidebar.component.html',
-  styleUrls: ['./app-sidebar.component.css'],
+    selector: 'app-sidebar',
+    imports: [RouterLink, RouterLinkActive, TranslatePipe],
+    templateUrl: './app-sidebar.component.html',
+    styleUrls: ['./app-sidebar.component.css'],
+    host: { '[class.mobile-open]': 'mobileOpen' }
 })
 export class AppSidebarComponent {
   openGroup: string | null = null;
+  private mobileNavOpen = false;
+
+  @Input()
+  set mobileOpen(value: boolean) {
+    this.mobileNavOpen = value;
+    if (!value) this.openGroup = null;
+  }
+  get mobileOpen(): boolean { return this.mobileNavOpen; }
+
+  @Output() readonly navigationClosed = new EventEmitter<void>();
 
   readonly groups = [
     { label: 'Dashboard', icon: 'bi-grid-1x2', route: '/dashboard', exact: true, links: [
@@ -23,7 +33,6 @@ export class AppSidebarComponent {
       { label: 'Profit Intelligence', icon: 'bi-graph-up-arrow', route: '/reports', exact: false },
       { label: 'Staff Control', icon: 'bi-person-gear', route: '/staff/control-center', exact: false },
       { label: 'Inventory Autopilot', icon: 'bi-box-seam', route: '/inventory/advanced-controls', exact: false },
-      { label: 'Payment Intelligence', icon: 'bi-credit-card-2-front', route: '/pos/enterprise', exact: false },
       { label: 'Security Center', icon: 'bi-shield-lock', route: '/security', exact: false },
     ] },
     { label: 'Clients', icon: 'bi-people', route: '/clients', exact: false, links: [
@@ -62,7 +71,7 @@ export class AppSidebarComponent {
       { label: 'Tips', icon: 'bi-cash-coin', route: '/pos/tips', exact: false },
       { label: 'Cash Drawer & Reconciliation', icon: 'bi-cash-stack', route: '/pos/cash-drawer', exact: false },
       { label: 'Happy Hours', icon: 'bi-clock-history', route: '/pos/happy-hours', exact: false },
-      { label: 'Daily Closing & Enterprise', icon: 'bi-building-gear', route: '/pos/enterprise', exact: false },
+      { label: 'Enterprise POS Controls', icon: 'bi-building-gear', route: '/pos/enterprise', exact: false },
     ] },
     { label: 'Inventory', icon: 'bi-box-seam', route: '/inventory', exact: false, links: [
       { label: 'Inventory', icon: 'bi-box-seam', route: '/inventory', exact: true },
@@ -124,7 +133,13 @@ export class AppSidebarComponent {
     if (isPlatformAdmin) return this.groups.filter((group) => group.label === 'SaaS Admin');
     const canOpenCommandCenter = this.auth.hasRole('owner', 'admin', 'super-admin', 'manager', 'analyst')
       || this.auth.hasPermission('reports.read');
-    const tenantGroups = this.groups.filter((group) => group.label !== 'SaaS Admin');
+    const canManageEnterprise = this.auth.hasRole('owner', 'admin', 'manager');
+    const tenantGroups = this.groups
+      .filter((group) => group.label !== 'SaaS Admin')
+      .map((group) => canManageEnterprise ? group : {
+        ...group,
+        links: group.links.filter((link) => link.route !== '/pos/enterprise'),
+      });
     return canOpenCommandCenter ? tenantGroups : tenantGroups.filter((group) => group.label !== 'Command Center');
   }
 
@@ -136,10 +151,13 @@ export class AppSidebarComponent {
   }
 
   @HostListener('document:keydown.escape')
-  closeMenu() { this.openGroup = null; }
+  closeMenu() {
+    this.openGroup = null;
+    this.navigationClosed.emit();
+  }
 
   @HostListener('document:pointerdown', ['$event'])
   closeMenuOutside(event: PointerEvent) {
-    if (!this.elementRef.nativeElement.contains(event.target as Node)) this.closeMenu();
+    if (!this.elementRef.nativeElement.contains(event.target as Node)) this.openGroup = null;
   }
 }

@@ -32,11 +32,10 @@ const STATUS_OPTIONS: Array<{ value: ScheduleStatus; label: string }> = [
 ];
 
 @Component({
-  selector: 'page-availability',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './availability-page.component.html',
-  styleUrls: ['./availability-page.component.css'],
+    selector: 'page-availability',
+    imports: [CommonModule, FormsModule, DatePickerComponent],
+    templateUrl: './availability-page.component.html',
+    styleUrls: ['./availability-page.component.css']
 })
 export class AvailabilityPageComponent implements OnInit {
   private readonly api = inject(ApiService);

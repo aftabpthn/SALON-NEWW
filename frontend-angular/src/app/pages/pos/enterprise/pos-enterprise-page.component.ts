@@ -18,11 +18,10 @@ interface Provider { provider: string; enabled: boolean; webhookConfigured: bool
 interface NotificationProfile { senderEmail: string; senderPhone: string; logoUrl: string; signatureUrl: string; emailVerified: boolean; phoneVerified: boolean; ownerEmail: string; ownerPhone: string; reportingEmail: string; ownerEmailVerified: boolean; ownerPhoneVerified: boolean; reportingEmailVerified: boolean; clientEmailEnabled: boolean; clientWhatsappEnabled: boolean; ownerEmailEnabled: boolean; ownerWhatsappEnabled: boolean; dailyReportEnabled: boolean; dailyReportTime: string; dailyReportTimezone: string; }
 
 @Component({
-  selector: 'app-pos-enterprise-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './pos-enterprise-page.component.html',
-  styleUrls: ['./pos-enterprise-page.component.css'],
+    selector: 'app-pos-enterprise-page',
+    imports: [CommonModule, FormsModule, RouterLink],
+    templateUrl: './pos-enterprise-page.component.html',
+    styleUrls: ['./pos-enterprise-page.component.css']
 })
 export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   tab: 'eod' | 'terminals' | 'print' | 'risk' | 'corporate' | 'reliability' | 'notifications' = 'eod';
@@ -76,7 +75,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
 
   load(): void {
     this.loading = true; this.error = ''; this.message = '';
-    let pending = 13;
+    let pending = 14;
     const done = () => { pending -= 1; if (!pending) this.loading = false; };
     this.read<Terminal[]>('/api/v1/pos/terminals', (rows) => this.terminals = rows, done);
     this.read<PrintDevice[]>('/api/v1/pos/print-devices', (rows) => this.devices = rows, done);
@@ -91,7 +90,10 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
     this.read<any>(`/api/v1/pos/day-close/${this.isoDate()}/accounting-preview`, (row) => this.accountingPreview = row, done);
     this.read<any>(`/api/v1/pos/day-close/${this.isoDate()}/tax-register`, (row) => this.taxRegister = row, done);
     this.read<any>('/api/v1/pos/reliability', (row) => this.reliability = row, done);
-    this.api.get<any>(`/api/v1/pos/cash-drawer/current?businessDate=${this.isoDate()}`).subscribe({ next: (response) => this.drawer = response?.data ?? response ?? null, error: () => this.drawer = null });
+    this.api.get<any>(`/api/v1/pos/cash-drawer/current?businessDate=${this.isoDate()}`).subscribe({
+      next: (response) => { this.drawer = response?.data ?? null; done(); },
+      error: () => { this.drawer = null; done(); },
+    });
     this.api.get<any>('/api/v1/invoice-notifications/profile').subscribe({ next: (response) => { const row = response?.data ?? response; if (row) this.notification = row; }, error: () => {} });
     this.api.get<any>('/api/v1/invoice-notifications/queue').subscribe({ next: (response) => { const row = response?.data ?? response; this.notificationQueue = Array.isArray(row) ? row : []; }, error: () => this.notificationQueue = [] });
   }

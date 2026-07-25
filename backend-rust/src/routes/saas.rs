@@ -14,8 +14,8 @@ use crate::{
         auth_service::AuthClaims,
         saas_service::{
             self, BillingRunInput, InvoiceIssueInput, InvoicePaymentInput, PlanInput,
-            SubscriptionCreate, SubscriptionUpdate, TicketCreateInput, TicketMessageInput,
-            TicketUpdateInput, UsageEventInput,
+            SalonOnboardingInput, SubscriptionCreate, SubscriptionUpdate, TicketCreateInput,
+            TicketMessageInput, TicketUpdateInput, UsageEventInput,
         },
     },
     state::AppState,
@@ -24,6 +24,7 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/saas/context", get(tenant_context))
+        .route("/saas/onboarding", post(onboard_salon))
         .route("/saas/tickets", get(tenant_tickets).post(create_ticket))
         .route("/saas/tickets/:id", get(tenant_ticket_detail))
         .route("/saas/tickets/:id/messages", post(tenant_ticket_message))
@@ -59,6 +60,16 @@ pub fn router() -> Router<AppState> {
             "/platform/saas/tickets/:id/messages",
             post(platform_ticket_message),
         )
+}
+
+async fn onboard_salon(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(payload): Json<SalonOnboardingInput>,
+) -> ApiResult<Value> {
+    Ok(Json(ApiResponse::ok(
+        saas_service::onboard_salon(&state.db, &claims.sub, payload).await?,
+    )))
 }
 
 #[derive(Debug, Deserialize)]

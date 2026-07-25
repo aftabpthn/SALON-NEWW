@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -48,11 +48,10 @@ type SmsCenterCampaign = {
 type SmsCenterSummary = { eligibleRecipients: number; campaigns: SmsCenterCampaign[] };
 
 @Component({
-  selector: 'page-notifications',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './notifications-page.component.html',
-  styleUrls: ['./notifications-page.component.css'],
+    selector: 'page-notifications',
+    imports: [FormsModule],
+    templateUrl: './notifications-page.component.html',
+    styleUrls: ['./notifications-page.component.css']
 })
 export class NotificationsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);

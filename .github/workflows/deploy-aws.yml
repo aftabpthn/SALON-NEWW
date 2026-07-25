@@ -1,0 +1,201 @@
+name: Deploy AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      image_tag:
+        description: Optional immutable image tag suffix
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+      TF_VAR_alert_email: ${{ vars.ALERT_EMAIL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate protected environment configuration
+        shell: bash
+        run: |
+          test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN is required"; exit 1; }
+          test -n "$TF_STATE_BUCKET" || { echo "TF_STATE_BUCKET is required"; exit 1; }
+
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: aurashine-${{ inputs.environment }}-${{ github.run_id }}
+
+      - name: Sign in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Select immutable image URIs
+        shell: bash
+        run: |
+          SUFFIX="${{ inputs.image_tag }}"
+          if [ -z "$SUFFIX" ]; then SUFFIX="$GITHUB_SHA"; fi
+          TAG="${{ inputs.environment }}-$SUFFIX"
+          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "BACKEND_IMAGE=${{ steps.ecr.outputs.registry }}/aurashine/backend:$TAG" >> "$GITHUB_ENV"
+          echo "AI_IMAGE=${{ steps.ecr.outputs.registry }}/aurashine/ai:$TAG" >> "$GITHUB_ENV"
+
+      - name: Build and push Rust API image
+        shell: bash
+        run: |
+          if aws ecr describe-images --repository-name aurashine/backend --image-ids "imageTag=$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Backend image already exists; reusing immutable tag."
+          else
+            docker build --pull --tag "$BACKEND_IMAGE" backend-rust
+            docker push "$BACKEND_IMAGE"
+          fi
+
+      - name: Build and push AI image
+        shell: bash
+        run: |
+          if aws ecr describe-images --repository-name aurashine/ai --image-ids "imageTag=$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "AI image already exists; reusing immutable tag."
+          else
+            docker build --pull --tag "$AI_IMAGE" ai-service
+            docker push "$AI_IMAGE"
+          fi
+
+      - name: Build frontend
+        working-directory: frontend-angular
+        shell: bash
+        run: |
+          npm ci
+          npm run build:prod
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.2"
+          terraform_wrapper: false
+
+      - name: Terraform plan and apply
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=aurashine/${{ inputs.environment }}/terraform.tfstate" \
+            -backend-config="region=$AWS_REGION" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+          terraform plan \
+            -input=false \
+            -out=tfplan \
+            -var-file="environments/${{ inputs.environment }}.tfvars" \
+            -var="aws_region=$AWS_REGION" \
+            -var="backend_image=$BACKEND_IMAGE" \
+            -var="ai_image=$AI_IMAGE"
+          terraform apply -input=false -auto-approve tfplan
+
+      - name: Run database migrations
+        id: migrate
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          CLUSTER=$(terraform output -raw ecs_cluster_name)
+          TASK_DEF=$(terraform output -raw migration_task_definition_arn)
+          SUBNETS=$(terraform output -json private_subnet_ids | jq -r 'join(",")')
+          SECURITY_GROUP=$(terraform output -raw ecs_security_group_id)
+          RESULT=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEF" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}")
+          TASK_ARN=$(jq -r '.tasks[0].taskArn // empty' <<< "$RESULT")
+          if [ -z "$TASK_ARN" ]; then
+            jq '.failures' <<< "$RESULT"
+            exit 1
+          fi
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].containers[?name==`backend`].exitCode | [0]' --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --query 'tasks[0].{StoppedReason:stoppedReason,Containers:containers[*].{Name:name,Reason:reason,ExitCode:exitCode}}'
+            aws logs tail "/aurashine/${{ inputs.environment }}/api" --since 15m || true
+            exit 1
+          fi
+
+      - name: Deploy healthy ECS revision
+        id: ecs
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          CLUSTER=$(terraform output -raw ecs_cluster_name)
+          SERVICE=$(terraform output -raw ecs_service_name)
+          TASK_DEF=$(terraform output -raw app_task_definition_arn)
+          DESIRED_COUNT=$(terraform output -raw ecs_desired_count)
+          MIN_CAPACITY=$(terraform output -raw ecs_autoscaling_min_capacity)
+          MAX_CAPACITY=$(terraform output -raw ecs_autoscaling_max_capacity)
+          PREVIOUS_TASK_DEF=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
+          echo "previous_task_definition=$PREVIOUS_TASK_DEF" >> "$GITHUB_OUTPUT"
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_DEF" --desired-count "$DESIRED_COUNT" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          ACTIVE_TASK_DEF=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
+          if [ "$ACTIVE_TASK_DEF" != "$TASK_DEF" ]; then
+            echo "Deployment rolled back or did not reach the requested task definition."
+            exit 1
+          fi
+          aws application-autoscaling register-scalable-target \
+            --service-namespace ecs \
+            --resource-id "service/$CLUSTER/$SERVICE" \
+            --scalable-dimension ecs:service:DesiredCount \
+            --min-capacity "$MIN_CAPACITY" \
+            --max-capacity "$MAX_CAPACITY" >/dev/null
+
+      - name: Publish versioned frontend
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          FRONTEND_DIR="$GITHUB_WORKSPACE/frontend-angular/dist/aura-shine-frontend"
+          if [ -d "$FRONTEND_DIR/browser" ]; then FRONTEND_DIR="$FRONTEND_DIR/browser"; fi
+          test -f "$FRONTEND_DIR/index.html" || { echo "Frontend build output not found"; exit 1; }
+          BUCKET=$(terraform output -raw frontend_bucket)
+          DISTRIBUTION=$(terraform output -raw cloudfront_distribution_id)
+          aws s3 sync "$FRONTEND_DIR" "s3://$BUCKET/releases/$GITHUB_SHA/" --only-show-errors
+          aws s3 sync "$FRONTEND_DIR" "s3://$BUCKET/" --delete --exclude "releases/*" --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' >/dev/null
+
+      - name: Verify public health
+        working-directory: infra/aws/terraform
+        shell: bash
+        run: |
+          URL=$(terraform output -raw application_url)
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 "$URL/health"
+          {
+            echo "### AWS deployment completed"
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- URL: $URL"
+            echo "- Image tag: $IMAGE_TAG"
+            echo "- Previous task definition: ${{ steps.ecs.outputs.previous_task_definition }}"
+          } >> "$GITHUB_STEP_SUMMARY"

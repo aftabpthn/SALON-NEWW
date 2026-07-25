@@ -643,6 +643,7 @@ a:focus-visible {
 .client-card strong { margin-top: 3px; font-size: 18px; }
 .client-card small { margin-top: 2px; font-size: 12px; }
 .avatar { width: 34px; height: 34px; border-radius: 999px; font-size: 16px; }
+.client-card.primary > button { grid-column: 2; justify-self: start; min-width: 96px; padding-inline: 18px; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
 .client-kpi-actions { grid-column: 2; gap: 6px; margin-top: 4px; }
 .client-kpi-actions a { min-height: 26px; padding: 0 8px; border-radius: 7px; font-size: 11px; }
 
@@ -1022,6 +1023,8 @@ input, select { min-height: 38px; padding: 0 10px; border-radius: 7px; font-weig
 
 .gift-card-state.success { color: var(--green); }
 .gift-card-state.error { color: #b42318; }
+.coupon-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.coupon-input button { min-width: 76px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--navy); font-weight: 600; }
 
 .search-results button.selected {
   border-color: var(--green);
@@ -1812,4 +1815,101 @@ input, select { min-height: 38px; padding: 0 10px; border-radius: 7px; font-weig
 .roundoff-line { display: block; margin-top: 4px; color: #0f7a4f; font-size: 11px; font-weight: 600; }
 @media (max-width: 620px) {
   .balance-settlement { grid-template-columns: 1fr; }
+}
+
+.unpaid-receive {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid #f2c56b;
+  border-radius: 14px;
+  background: #fffbeb;
+}
+
+.unpaid-receive-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #78350f;
+}
+
+.unpaid-receive-head span,
+.unpaid-receive-grid span { font-size: 12px; font-weight: 700; }
+.unpaid-receive-head strong { font-size: 18px; }
+.unpaid-receive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.unpaid-receive-grid input,
+.unpaid-receive-grid select { min-height: 40px; border-radius: 10px; }
+.unpaid-receive-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; align-items: end; }
+.unpaid-receive-actions button { min-height: 40px; padding: 0 10px; border: 1px solid #d5b05f; border-radius: 10px; background: #fff; color: #78350f; font-weight: 700; }
+.unpaid-receive-actions .receive-due-button { border-color: var(--green); background: var(--green); color: #fff; }
+.unpaid-receive > small { color: #78350f; font-weight: 600; }
+.unpaid-receive-result { color: var(--green-dark); font-size: 12px; font-weight: 700; }
+
+@media (max-width: 620px) {
+  .unpaid-receive-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .pos-hero h1 {
+    transform: none;
+  }
+
+  .client-drawer {
+    width: 100vw;
+    max-width: none;
+  }
+
+  /* ponytail: editable billing rows scroll as one table; use cards only if device UAT proves row editing is unclear. */
+  .items-table,
+  .package-redeem-table {
+    margin-inline: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x pan-y;
+  }
+
+  .items-head,
+  .item-row {
+    grid-template-columns: 32px minmax(150px, 1.1fr) minmax(200px, 1.4fr) 84px 72px 94px 48px 78px 32px;
+    min-width: 820px;
+  }
+
+  .package-redeem-row {
+    min-width: 700px;
+  }
+
+  .items-footer,
+  .unpaid-option,
+  .unpaid-receive-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .items-footer-total {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .items-footer-total strong {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .coupon-input,
+  .gift-card-reference,
+  .reward-redemption,
+  .unpaid-receive-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions .secondary-action,
+  .panel-actions button,
+  .client-drawer-head button,
+  .client-drawer-foot button,
+  .payment-grid button,
+  .save-actions button,
+  .unpaid-receive-actions button {
+    min-height: 44px;
+  }
 }

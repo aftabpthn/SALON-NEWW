@@ -206,7 +206,7 @@ mod tests {
         let event = PosEvent {
             tenant_id: "tenant-a".into(),
             branch_id: "branch-a".into(),
-            entity_type: "invoice".into(),
+            entity_type: "cash_drawer".into(),
             entity_id: "invoice-a".into(),
             action: "invoice.updated".into(),
         };

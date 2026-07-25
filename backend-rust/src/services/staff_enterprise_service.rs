@@ -1500,14 +1500,20 @@ pub async fn enterprise_command_center(
     to: NaiveDate,
 ) -> Result<StaffEnterpriseCommandCenter, AppError> {
     validate_period(from, to, 367, "enterprise command center")?;
-    let performance = staff_advanced_service::performance(db, t, b, from, to, "").await?;
-    let approvals = repository::list_approval_requests(db, t, b, "")
-        .await
-        .map_err(internal("load command center approvals"))?;
-    let tasks = staff_advanced_service::list_tasks(db, t, b, "", "").await?;
-    let sales = repository::staff_sales_summary(db, t, b, from, to)
-        .await
-        .map_err(internal("load command center sales"))?;
+    let (performance, approvals, tasks, sales) = tokio::try_join!(
+        staff_advanced_service::performance(db, t, b, from, to, ""),
+        async {
+            repository::list_approval_requests(db, t, b, "")
+                .await
+                .map_err(internal("load command center approvals"))
+        },
+        staff_advanced_service::list_tasks(db, t, b, "", ""),
+        async {
+            repository::staff_sales_summary(db, t, b, from, to)
+                .await
+                .map_err(internal("load command center sales"))
+        },
+    )?;
     let pending_approvals = approvals
         .iter()
         .filter(|row| row.status == "pending")

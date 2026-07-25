@@ -86,6 +86,7 @@ export function authDeviceId(): string {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private refreshRequest$?: Observable<string>;
+  private readonly branchNames = new Map<string, string>();
 
   get accessToken(): string | null {
     return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -101,6 +102,12 @@ export class AuthService {
 
   get branchName(): string | null {
     return localStorage.getItem(BRANCH_NAME_KEY);
+  }
+
+  branchNameFor(branchId?: string | null): string {
+    if (!branchId) return '';
+    return this.branchNames.get(branchId)
+      ?? (branchId === this.branchId ? this.branchName ?? '' : '');
   }
 
   get userId(): string | null {
@@ -292,7 +299,13 @@ export class AuthService {
       .get<AuthApiEnvelope<AuthProfile>>(`${environment.apiBaseUrl}/auth/me`, {
         withCredentials: true,
       })
-      .pipe(map((response) => this.requireData(response, 'Unable to load session')));
+      .pipe(
+        map((response) => this.requireData(response, 'Unable to load session')),
+        tap((profile) => {
+          this.branchNames.clear();
+          profile.branches.forEach((branch) => this.branchNames.set(branch.branchId, branch.branchName));
+        }),
+      );
   }
 
   changePassword(newPassword: string): Observable<void> {

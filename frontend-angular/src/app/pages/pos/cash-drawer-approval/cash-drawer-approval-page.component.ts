@@ -5,11 +5,10 @@ import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../shared/services/api.service';
 
 @Component({
-  selector: 'app-cash-drawer-approval-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './cash-drawer-approval-page.component.html',
-  styleUrls: ['./cash-drawer-approval-page.component.css'],
+    selector: 'app-cash-drawer-approval-page',
+    imports: [CommonModule, FormsModule],
+    templateUrl: './cash-drawer-approval-page.component.html',
+    styleUrls: ['./cash-drawer-approval-page.component.css']
 })
 export class CashDrawerApprovalPageComponent implements OnInit {
   token = '';

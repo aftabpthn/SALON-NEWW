@@ -15,7 +15,7 @@ pub struct SupplierCommunicationDelivery {
     pub correlation_id: String,
 }
 pub async fn policy(db: &PgPool, tenant: &str, branch: &str) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('negativeStockRule',negative_stock_rule,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at) FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2")
+    sqlx::query_scalar("SELECT jsonb_build_object('negativeStockRule',negative_stock_rule,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at) FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2")
         .bind(tenant).bind(branch).fetch_optional(db).await
 }
 
@@ -28,10 +28,17 @@ pub async fn save_policy(
     valuation: &str,
     expiry: i32,
     threshold: i32,
+    reorder_history_days: i32,
+    reorder_coverage_days: i32,
+    transfer_base_transport_cost_paise: Option<i64>,
+    transfer_cost_per_km_paise: Option<i64>,
+    transfer_handling_cost_per_unit_paise: Option<i64>,
+    transfer_delay_cost_per_unit_day_paise: Option<i64>,
+    transfer_expected_days: Option<i32>,
     matrix: &Value,
 ) -> Result<Value, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO inventory_policies(tenant_id,branch_id,negative_stock_rule,valuation_method,expiry_window_days,count_variance_threshold_bps,approval_matrix,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET negative_stock_rule=EXCLUDED.negative_stock_rule,valuation_method=EXCLUDED.valuation_method,expiry_window_days=EXCLUDED.expiry_window_days,count_variance_threshold_bps=EXCLUDED.count_variance_threshold_bps,approval_matrix=EXCLUDED.approval_matrix,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING jsonb_build_object('negativeStockRule',negative_stock_rule,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at)")
-        .bind(tenant).bind(branch).bind(negative).bind(valuation).bind(expiry).bind(threshold).bind(matrix).bind(actor).fetch_one(db).await
+    sqlx::query_scalar("INSERT INTO inventory_policies(tenant_id,branch_id,negative_stock_rule,valuation_method,expiry_window_days,count_variance_threshold_bps,reorder_history_days,reorder_coverage_days,transfer_base_transport_cost_paise,transfer_cost_per_km_paise,transfer_handling_cost_per_unit_paise,transfer_delay_cost_per_unit_day_paise,transfer_expected_days,approval_matrix,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET negative_stock_rule=EXCLUDED.negative_stock_rule,valuation_method=EXCLUDED.valuation_method,expiry_window_days=EXCLUDED.expiry_window_days,count_variance_threshold_bps=EXCLUDED.count_variance_threshold_bps,reorder_history_days=EXCLUDED.reorder_history_days,reorder_coverage_days=EXCLUDED.reorder_coverage_days,transfer_base_transport_cost_paise=COALESCE(EXCLUDED.transfer_base_transport_cost_paise,inventory_policies.transfer_base_transport_cost_paise),transfer_cost_per_km_paise=COALESCE(EXCLUDED.transfer_cost_per_km_paise,inventory_policies.transfer_cost_per_km_paise),transfer_handling_cost_per_unit_paise=COALESCE(EXCLUDED.transfer_handling_cost_per_unit_paise,inventory_policies.transfer_handling_cost_per_unit_paise),transfer_delay_cost_per_unit_day_paise=COALESCE(EXCLUDED.transfer_delay_cost_per_unit_day_paise,inventory_policies.transfer_delay_cost_per_unit_day_paise),transfer_expected_days=COALESCE(EXCLUDED.transfer_expected_days,inventory_policies.transfer_expected_days),approval_matrix=EXCLUDED.approval_matrix,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING jsonb_build_object('negativeStockRule',negative_stock_rule,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at)")
+        .bind(tenant).bind(branch).bind(negative).bind(valuation).bind(expiry).bind(threshold).bind(reorder_history_days).bind(reorder_coverage_days).bind(transfer_base_transport_cost_paise).bind(transfer_cost_per_km_paise).bind(transfer_handling_cost_per_unit_paise).bind(transfer_delay_cost_per_unit_day_paise).bind(transfer_expected_days).bind(matrix).bind(actor).fetch_one(db).await
 }
 
 pub async fn supplier_governance(
@@ -54,13 +61,66 @@ pub async fn supplier_governance(
         'lastReceiptDate',MAX(pr.received_date))
       FROM suppliers s LEFT JOIN purchase_orders po ON po.tenant_id=s.tenant_id AND po.branch_id=s.branch_id AND po.supplier_id=s.id
       LEFT JOIN purchase_order_lines pol ON pol.purchase_order_id=po.id
-      LEFT JOIN purchase_receipts pr ON pr.purchase_order_id=po.id AND pr.tenant_id=po.tenant_id AND pr.branch_id=po.branch_id
+      LEFT JOIN purchase_receipts pr ON pr.purchase_order_id=po.id AND pr.tenant_id=po.tenant_id AND pr.branch_id=po.branch_id AND pr.rolled_back_at IS NULL
       WHERE s.tenant_id=$1 AND s.branch_id=$2 AND ($3::TEXT IS NULL OR s.id=$3)
       GROUP BY s.id,s.name ORDER BY s.name"#).bind(tenant).bind(branch).bind(supplier).fetch_all(db).await?;
     let communications=sqlx::query_scalar::<_,Value>("SELECT jsonb_build_object('id',q.id,'supplierId',q.supplier_id,'supplierName',s.name,'purchaseOrderId',q.purchase_order_id,'channel',q.channel,'destination',q.destination,'subject',q.subject,'message',q.message,'status',q.status,'attempts',q.attempts,'lastError',q.last_error,'createdAt',q.created_at,'sentAt',q.sent_at) FROM supplier_communication_queue q JOIN suppliers s ON s.id=q.supplier_id WHERE q.tenant_id=$1 AND q.branch_id=$2 AND ($3::TEXT IS NULL OR q.supplier_id=$3) ORDER BY q.created_at DESC LIMIT 200")
         .bind(tenant).bind(branch).bind(supplier).fetch_all(db).await?;
+    let quality_events=sqlx::query_scalar::<_,Value>(r#"SELECT jsonb_build_object(
+        'supplierId',s.id,'supplierName',s.name,'returnCount',COUNT(DISTINCT ret.id),
+        'returnedQuantity',COALESCE(SUM(line.quantity),0),'returnedValuePaise',COALESCE(SUM(line.total_paise),0),
+        'lastReturnAt',MAX(ret.created_at),
+        'reasons',COALESCE(jsonb_agg(DISTINCT ret.reason) FILTER (WHERE ret.reason IS NOT NULL),'[]'::JSONB))
+      FROM suppliers s
+      JOIN purchase_returns ret ON ret.tenant_id=s.tenant_id AND ret.branch_id=s.branch_id AND ret.supplier_id=s.id
+      LEFT JOIN purchase_return_lines line ON line.purchase_return_id=ret.id AND line.tenant_id=ret.tenant_id AND line.branch_id=ret.branch_id
+      WHERE s.tenant_id=$1 AND s.branch_id=$2 AND ($3::TEXT IS NULL OR s.id=$3)
+      GROUP BY s.id,s.name ORDER BY MAX(ret.created_at) DESC"#)
+        .bind(tenant).bind(branch).bind(supplier).fetch_all(db).await?;
+    let expiry_risk=sqlx::query_scalar::<_,Value>(r#"SELECT jsonb_build_object(
+        'supplierId',receipt.supplier_id,'supplierName',receipt.supplier_name,
+        'expiredQuantity',COALESCE(SUM(batch.quantity) FILTER (WHERE batch.expiry_date<CURRENT_DATE),0),
+        'expiring30Quantity',COALESCE(SUM(batch.quantity) FILTER (WHERE batch.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE+30),0),
+        'riskValuePaise',COALESCE(SUM(batch.quantity::BIGINT*batch.unit_cost_paise)
+          FILTER (WHERE batch.expiry_date<=CURRENT_DATE+30),0),
+        'nextExpiryDate',MIN(batch.expiry_date) FILTER (WHERE batch.quantity>0))
+      FROM purchase_receipts receipt
+      JOIN purchase_receipt_lines line ON line.purchase_receipt_id=receipt.id
+        AND line.tenant_id=receipt.tenant_id AND line.branch_id=receipt.branch_id
+      JOIN inventory_batches batch ON batch.tenant_id=line.tenant_id AND batch.branch_id=line.branch_id
+        AND batch.inventory_item_id=line.inventory_item_id AND batch.batch_number=line.batch_number
+      WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.rolled_back_at IS NULL AND batch.quantity>0
+        AND ($3::TEXT IS NULL OR receipt.supplier_id=$3)
+      GROUP BY receipt.supplier_id,receipt.supplier_name ORDER BY receipt.supplier_name"#)
+        .bind(tenant).bind(branch).bind(supplier).fetch_all(db).await?;
+    let replacement_options=sqlx::query_scalar::<_,Value>(r#"SELECT jsonb_build_object(
+        'supplierId',base.supplier_id,'inventoryItemId',base.inventory_item_id,'productName',item.name,
+        'replacementSupplierId',alternative.supplier_id,'replacementSupplierName',replacement.name,
+        'leadTimeDays',alternative.lead_time_days,'minimumOrderQuantity',alternative.minimum_order_quantity,
+        'packSize',alternative.pack_size,'unitCostPaise',alternative_price.unit_cost_paise,
+        'currentUnitCostPaise',base_price.unit_cost_paise,
+        'priceDifferencePaise',CASE WHEN alternative_price.unit_cost_paise IS NULL OR base_price.unit_cost_paise IS NULL
+          THEN NULL ELSE alternative_price.unit_cost_paise-base_price.unit_cost_paise END)
+      FROM supplier_inventory_terms base
+      JOIN inventory_items item ON item.id=base.inventory_item_id AND item.tenant_id=base.tenant_id AND item.branch_id=base.branch_id
+      JOIN supplier_inventory_terms alternative ON alternative.tenant_id=base.tenant_id AND alternative.branch_id=base.branch_id
+        AND alternative.inventory_item_id=base.inventory_item_id AND alternative.supplier_id<>base.supplier_id AND alternative.active=TRUE
+      JOIN suppliers replacement ON replacement.id=alternative.supplier_id AND replacement.tenant_id=alternative.tenant_id
+        AND replacement.branch_id=alternative.branch_id AND replacement.active=TRUE
+      LEFT JOIN LATERAL (SELECT unit_cost_paise FROM supplier_price_lists price WHERE price.tenant_id=base.tenant_id
+        AND price.branch_id=base.branch_id AND price.supplier_id=base.supplier_id AND price.inventory_item_id=base.inventory_item_id
+        AND price.effective_from<=CURRENT_DATE AND (price.effective_to IS NULL OR price.effective_to>=CURRENT_DATE)
+        ORDER BY price.effective_from DESC LIMIT 1) base_price ON TRUE
+      LEFT JOIN LATERAL (SELECT unit_cost_paise FROM supplier_price_lists price WHERE price.tenant_id=alternative.tenant_id
+        AND price.branch_id=alternative.branch_id AND price.supplier_id=alternative.supplier_id AND price.inventory_item_id=alternative.inventory_item_id
+        AND price.effective_from<=CURRENT_DATE AND (price.effective_to IS NULL OR price.effective_to>=CURRENT_DATE)
+        ORDER BY price.effective_from DESC LIMIT 1) alternative_price ON TRUE
+      WHERE base.tenant_id=$1 AND base.branch_id=$2 AND base.active=TRUE
+        AND ($3::TEXT IS NULL OR base.supplier_id=$3)
+      ORDER BY item.name,alternative_price.unit_cost_paise NULLS LAST,alternative.lead_time_days LIMIT 500"#)
+        .bind(tenant).bind(branch).bind(supplier).fetch_all(db).await?;
     Ok(
-        serde_json::json!({"priceLists":price_lists,"terms":terms,"scorecards":scorecards,"communications":communications}),
+        serde_json::json!({"priceLists":price_lists,"terms":terms,"scorecards":scorecards,"communications":communications,"qualityEvents":quality_events,"expiryRisk":expiry_risk,"replacementOptions":replacement_options}),
     )
 }
 
@@ -186,6 +246,48 @@ pub async fn operations_health(
         ),
         'negativeStock',(
           SELECT COUNT(*) FROM inventory_items i WHERE i.tenant_id=$1 AND i.branch_id=$2 AND i.stock_quantity<0
+        ),
+        'ledgerSnapshotMissing',(
+          SELECT COUNT(*) FROM inventory_stock_ledger ledger
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND ledger.stock_after_quantity IS NULL
+        ),
+        'ledgerSnapshotMismatch',(
+          SELECT COUNT(*) FROM inventory_digital_twin_ledger ledger
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND ledger.snapshot_status='mismatch'
+        ),
+        'provenanceIncomplete',(
+          SELECT COUNT(*) FROM inventory_digital_twin_ledger ledger
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND ledger.provenance_complete=FALSE
+        ),
+        'batchEvidenceMissing',(
+          SELECT COUNT(*)
+          FROM inventory_digital_twin_ledger ledger
+          JOIN inventory_items item
+            ON item.id=ledger.inventory_item_id
+           AND item.tenant_id=ledger.tenant_id
+           AND item.branch_id=ledger.branch_id
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND item.batch_tracked=TRUE
+            AND ledger.backbar_container_id IS NULL
+            AND jsonb_array_length(ledger.batch_allocations)=0
+            AND ledger.movement_type IN (
+              'sale','return','purchase','purchase_return',
+              'transfer_out','transfer_in','transfer_reversal',
+              'consumption','kit_component_out','kit_assembly_in'
+            )
+        ),
+        'trustedLedgerRows',(
+          SELECT COUNT(*) FROM inventory_digital_twin_ledger ledger
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND ledger.snapshot_status='verified' AND ledger.provenance_complete=TRUE
+        ),
+        'reconstructedLedgerRows',(
+          SELECT COUNT(*) FROM inventory_digital_twin_ledger ledger
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+            AND ledger.snapshot_status='reconstructed' AND ledger.provenance_complete=TRUE
         )
       ),
       'failedJobs',(
@@ -210,6 +312,16 @@ pub async fn containers(
 ) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'inventoryItemId',c.inventory_item_id,'productName',i.name,'barcode',c.barcode,'batchId',c.batch_id,'capacityQuantity',c.capacity_quantity,'remainingQuantity',c.remaining_quantity,'unit',c.unit,'status',c.status,'openedBy',c.opened_by,'openedAt',c.opened_at,'closedAt',c.closed_at,'pendingOverrideId',(SELECT o.id FROM inventory_backbar_overrides o WHERE o.container_id=c.id AND o.status='pending' LIMIT 1),'events',(SELECT COALESCE(jsonb_agg(jsonb_build_object('id',e.id,'eventType',e.event_type,'quantityDelta',e.quantity_delta,'remainingAfter',e.remaining_after,'actorUserId',e.actor_user_id,'metadata',e.metadata,'createdAt',e.created_at) ORDER BY e.created_at DESC),'[]'::JSONB) FROM inventory_backbar_container_events e WHERE e.container_id=c.id)) FROM inventory_backbar_containers c JOIN inventory_items i ON i.id=c.inventory_item_id WHERE c.tenant_id=$1 AND c.branch_id=$2 ORDER BY c.updated_at DESC")
         .bind(tenant).bind(branch).fetch_all(db).await
+}
+
+pub async fn container_label_data(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',c.id,'productName',i.name,'barcode',c.barcode,'capacityQuantity',c.capacity_quantity,'unit',c.unit,'status',c.status,'batchNumber',COALESCE(batch.batch_number,'')) FROM inventory_backbar_containers c JOIN inventory_items i ON i.id=c.inventory_item_id AND i.tenant_id=c.tenant_id AND i.branch_id=c.branch_id LEFT JOIN inventory_batches batch ON batch.id=c.batch_id AND batch.tenant_id=c.tenant_id AND batch.branch_id=c.branch_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3")
+        .bind(tenant).bind(branch).bind(id).fetch_one(db).await
 }
 
 pub async fn create_container(
@@ -245,7 +357,23 @@ pub async fn open_container(
         tx.commit().await?;
         return Ok(existing);
     }
-    let row=sqlx::query_as::<_,(String,i32,i64,i32)>("SELECT inventory_item_id,remaining_quantity,i.unit_cost_paise,i.stock_quantity FROM inventory_backbar_containers c JOIN inventory_items i ON i.id=c.inventory_item_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3 AND c.status='sealed' FOR UPDATE OF c,i").bind(tenant).bind(branch).bind(id).fetch_one(&mut *tx).await?;
+    let row = sqlx::query_as::<_, (String, i32, i64, i32)>(
+        r#"SELECT c.inventory_item_id,c.remaining_quantity,i.unit_cost_paise,i.stock_quantity
+      FROM inventory_backbar_containers c
+      JOIN inventory_items i ON i.id=c.inventory_item_id
+      WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3 AND c.status='sealed'
+        AND NOT EXISTS (
+          SELECT 1 FROM inventory_backbar_containers active
+          WHERE active.tenant_id=c.tenant_id AND active.branch_id=c.branch_id
+            AND active.inventory_item_id=c.inventory_item_id AND active.status='open'
+        )
+      FOR UPDATE OF c,i"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
     if row.3 <= 0 {
         return Err(sqlx::Error::RowNotFound);
     }

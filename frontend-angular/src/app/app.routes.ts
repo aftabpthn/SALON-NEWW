@@ -26,14 +26,33 @@ const legacyInvoiceReportRedirect: CanActivateFn = (route) => {
   const directRoute = directRoutes[report];
   if (directRoute) return inject(Router).createUrlTree([directRoute]);
   const tabs: Record<string, string> = {
-    'sale-summary': 'invoices', overview: 'invoices', 'invoice-activity': 'invoice-activity',
-    'due-recovery': 'due-recovery', 'due-aging': 'due-recovery', 'staff-unpaid': 'due-recovery',
+    'sale-summary': 'invoice-360', overview: 'invoice-360', 'invoice-activity': 'invoice-activity', 'detailed-invoice': 'detailed-invoice', 'recovery-history': 'recovery-history', 'wallet-ledger': 'wallet-ledger', 'payment-collection': 'payment-collection', 'staff-service-discount': 'staff-service-discount',
+    'due-recovery': 'due-recovery', 'due-aging': 'due-recovery', 'staff-unpaid': 'due-recovery', 'revenue-forecast': 'due-recovery', 'payment-modes': 'payment-modes',
     'service-trends': 'service-trends', 'service-clients': 'service-clients',
     products: 'product-sales', 'product-sales': 'product-sales', 'product-movements': 'product-movements',
   };
-  return inject(Router).createUrlTree(['/reports/invoices'], { queryParams: { report: tabs[report] ?? 'invoices' } });
+  return inject(Router).createUrlTree(['/reports/invoices'], { queryParams: { report: tabs[report] ?? 'invoice-360' } });
 };
 
+
+const legacyInvoicePathRedirect: CanActivateFn = (route) => {
+  const directReport = route.routeConfig?.path ?? '';
+  const mapping: Record<string, string> = {
+    'reports/invoice-activity': 'invoice-activity',
+    'reports/due-recovery': 'due-recovery',
+    'reports/wallet-ledger': 'wallet-ledger',
+    'reports/payment-collection': 'payment-collection',
+    'reports/staff-service-discount': 'staff-service-discount',
+    'reports/recovery-history': 'recovery-history',
+    'reports/service-trends': 'service-trends',
+    'reports/service-clients': 'service-clients',
+    'reports/product-sales': 'product-sales',
+    'reports/product-movements': 'product-movements',
+    'reports/payment-modes': 'payment-modes',
+  };
+
+  return inject(Router).createUrlTree(['/reports/invoices'], { queryParams: { report: mapping[directReport] ?? 'invoice-360' } });
+};
 export const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'login', loadComponent: () => import('./pages/security/login/login-page.component').then((m) => m.LoginPageComponent) },
@@ -70,7 +89,12 @@ export const routes: Routes = [
   { path: 'pos/cash-drawer-eod', redirectTo: 'pos/cash-drawer', pathMatch: 'full' },
   { path: 'cash-drawer-eod', redirectTo: 'pos/cash-drawer', pathMatch: 'full' },
   { path: 'pos/happy-hours', loadComponent: () => import('./pages/pos/happy-hours/happy-hours-page.component').then((m) => m.HappyHoursPageComponent), canActivate: [authGuard] },
-  { path: 'pos/enterprise', loadComponent: () => import('./pages/pos/enterprise/pos-enterprise-page.component').then((m) => m.PosEnterprisePageComponent), canActivate: [authGuard] },
+  {
+    path: 'pos/enterprise',
+    loadComponent: () => import('./pages/pos/enterprise/pos-enterprise-page.component').then((m) => m.PosEnterprisePageComponent),
+    canActivate: [authGuard],
+    data: { roles: ['owner', 'admin', 'manager'], deniedRedirect: '/pos/cash-drawer' },
+  },
   { path: 'billing', redirectTo: 'billing/core-money-flow', pathMatch: 'full' },
   { path: 'billing/core-money-flow', redirectTo: 'pos/enterprise', pathMatch: 'full' },
   { path: 'billing/pos', redirectTo: 'pos', pathMatch: 'full' },
@@ -83,10 +107,14 @@ export const routes: Routes = [
   { path: 'inventory/gl-reconciliation', loadComponent: () => import('./pages/inventory/gl-reconciliation/gl-reconciliation-page.component').then((m) => m.GlReconciliationPageComponent), canActivate: [authGuard] },
   { path: 'inventory/advanced-controls', loadComponent: () => import('./pages/inventory/advanced-controls/advanced-controls-page.component').then((m) => m.AdvancedControlsPageComponent), canActivate: [authGuard] },
   { path: 'inventory/recipes', loadComponent: () => import('./pages/inventory/service-recipes/service-recipes-page.component').then((m) => m.ServiceRecipesPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/backbar/containers', loadComponent: () => import('./pages/inventory/backbar-containers/backbar-container-control-page.component').then((m) => m.BackbarContainerControlPageComponent), canActivate: [authGuard] },
   { path: 'inventory/backbar', loadComponent: () => import('./pages/inventory/backbar-consumption/backbar-consumption-page.component').then((m) => m.BackbarConsumptionPageComponent), canActivate: [authGuard] },
   { path: 'inventory/scanner', loadComponent: () => import('./pages/inventory/scanner/inventory-scanner-page.component').then((m) => m.InventoryScannerPageComponent), canActivate: [authGuard] },
   { path: 'inventory/stock-audit', loadComponent: () => import('./pages/inventory/stock-audit/stock-audit-page.component').then((m) => m.StockAuditPageComponent), canActivate: [authGuard] },
   { path: 'inventory/laundry', loadComponent: () => import('./pages/inventory/laundry-tracker/laundry-tracker-page.component').then((m) => m.LaundryTrackerPageComponent), canActivate: [authGuard] },
+  { path: 'inventory/valuation', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'valuation' }, canActivate: [authGuard] },
+  { path: 'inventory/reorder', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'reorder' }, canActivate: [authGuard] },
+  { path: 'inventory/transfers', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'transfers' }, canActivate: [authGuard] },
   { path: 'inventory', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), canActivate: [authGuard] },
   { path: 'suppliers', loadComponent: () => import('./pages/suppliers/suppliers-page.component').then((m) => m.SuppliersPageComponent), canActivate: [authGuard] },
   { path: 'purchase-orders', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'orders' }, canActivate: [authGuard] },
@@ -114,6 +142,17 @@ export const routes: Routes = [
   { path: 'reports/staff-bookings', loadComponent: () => import('./pages/reports/staff-bookings/staff-bookings-report-page.component').then((m) => m.StaffBookingsReportPageComponent), canActivate: [authGuard] },
   { path: 'reports/invoices', loadComponent: () => import('./pages/reports/invoices/invoice-reports-page.component').then((m) => m.InvoiceReportsPageComponent), canActivate: [authGuard] },
   { path: 'reports/invoices/:reportId', canActivate: [legacyInvoiceReportRedirect], children: [] },
+  { path: 'reports/invoice-activity', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/due-recovery', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/wallet-ledger', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/payment-collection', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/staff-service-discount', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/recovery-history', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/service-trends', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/service-clients', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/product-sales', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/product-movements', canActivate: [legacyInvoicePathRedirect], children: [] },
+  { path: 'reports/payment-modes', canActivate: [legacyInvoicePathRedirect], children: [] },
   {
     path: 'finance',
     loadComponent: () => import('./pages/finance/balance-sheet/balance-sheet-page.component').then((m) => m.BalanceSheetPageComponent),
@@ -139,3 +178,5 @@ export const routes: Routes = [
   { path: 'platform/saas-admin', loadComponent: () => import('./pages/platform/saas-admin/saas-admin-page.component').then((m) => m.SaasAdminPageComponent), canActivate: [authGuard], data: { roles: ['superadmin', 'super-admin'], deniedRedirect: '/dashboard' } },
   { path: 'security', loadComponent: () => import('./pages/security/security-center/security-center-page.component').then((m) => m.SecurityCenterPageComponent), canActivate: [authGuard] },
 ];
+
+

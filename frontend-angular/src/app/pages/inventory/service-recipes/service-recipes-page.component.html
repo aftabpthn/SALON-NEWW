@@ -1,6 +1,6 @@
 <section class="page-shell">
   <header class="page-head">
-    <h1>{{ 'inventory.ui.f6a02bcc65' | translate }}</h1>
+    <div class="title-block"><small>Inventory / Recipes</small><h1>Service Recipe Command Center</h1></div>
     <div class="head-actions">
       <input [attr.aria-label]="'inventory.ui.d1e0a42e24' | translate" [attr.placeholder]="'inventory.ui.307704b474' | translate" [(ngModel)]="search" />
       <select [attr.aria-label]="'inventory.ui.fdd01f71b2' | translate" [(ngModel)]="status"><option value="">{{ 'inventory.ui.6405179d24' | translate }}</option><option value="with">{{ 'inventory.ui.eb6cba1e56' | translate }}</option><option value="missing">{{ 'inventory.ui.6880e91c32' | translate }}</option></select>
@@ -9,67 +9,133 @@
     </div>
   </header>
 
-  <p class="message error" *ngIf="error">{{ error }}</p>
-  <p class="message success" *ngIf="notice">{{ notice }}</p>
-  <div class="loading" *ngIf="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
+  @if (error) {
+    <p class="message error">{{ error }}</p>
+  }
+  @if (notice) {
+    <p class="message success">{{ notice }}</p>
+  }
+  @if (loading) {
+    <div class="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
+  }
 
-  <nav class="tabs" *ngIf="!loading" [attr.aria-label]="'inventory.ui.fef2a18293' | translate">
-    <button type="button" [class.active]="activeTab === 'recipes'" (click)="activeTab = 'recipes'">{{ 'inventory.ui.9fb1092f32' | translate }}</button>
-    <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">{{ 'inventory.ui.c452adfe90' | translate }}</button>
-    <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">{{ 'inventory.ui.eb39bbf6cc' | translate }}</button>
-  </nav>
+  @if (!loading) {
+    <nav class="tabs" [attr.aria-label]="'inventory.ui.fef2a18293' | translate">
+      <button type="button" [class.active]="activeTab === 'recipes'" (click)="activeTab = 'recipes'">{{ 'inventory.ui.9fb1092f32' | translate }}</button>
+      <button type="button" [class.active]="activeTab === 'demand'" (click)="activeTab = 'demand'">Demand 15 Days</button>
+      <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">{{ 'inventory.ui.c452adfe90' | translate }}</button>
+      <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">{{ 'inventory.ui.eb39bbf6cc' | translate }}</button>
+    </nav>
+  }
 
-  <section class="kpis" *ngIf="!loading">
-    <article class="blue"><i class="bi bi-scissors" aria-hidden="true"></i><span>{{ 'inventory.ui.5cbd584046' | translate }}</span><strong>{{ services.length }}</strong></article>
-    <article class="orange"><i class="bi bi-journal-check" aria-hidden="true"></i><span>{{ 'inventory.ui.eb6cba1e56' | translate }}</span><strong>{{ withRecipeCount }}</strong></article>
-    <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6880e91c32' | translate }}</span><strong>{{ services.length - withRecipeCount }}</strong></article>
-    <article class="green"><i class="bi bi-check-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ approvalRows.length }}</strong></article>
-  </section>
+  @if (!loading) {
+    <section class="kpis">
+      <article class="blue"><i class="bi bi-scissors" aria-hidden="true"></i><span>{{ 'inventory.ui.5cbd584046' | translate }}</span><strong>{{ services.length }}</strong></article>
+      <article class="orange"><i class="bi bi-journal-check" aria-hidden="true"></i><span>{{ 'inventory.ui.eb6cba1e56' | translate }}</span><strong>{{ withRecipeCount }}</strong></article>
+      <article class="teal"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6880e91c32' | translate }}</span><strong>{{ services.length - withRecipeCount }}</strong></article>
+      <article class="green"><i class="bi bi-check-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ approvalRows.length }}</strong></article>
+    </section>
+  }
 
-  <section class="recipe-workspace" *ngIf="!loading && activeTab === 'recipes'">
-    <div class="table-pane">
-      <header><h2>{{ 'inventory.ui.26ca3a7cb2' | translate }}</h2></header>
-      <div class="table-scroll" *ngIf="filteredServices.length; else empty">
-        <table><thead><tr><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.fe0a091fdb' | translate }}</th><th>{{ 'inventory.ui.b91328e568' | translate }}</th><th>{{ 'inventory.ui.792fe4aaaf' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.e609e9498c' | translate }}</th><th></th></tr></thead>
-          <tbody><tr *ngFor="let service of filteredServices">
-            <td><strong>{{ service.name }}</strong><small>{{ service.category || '—' }}</small></td>
-            <td>{{ service.productConsumption.length }}</td><td>{{ money(recipeCost(service)) }}</td><td>{{ money(service.pricePaise - recipeCost(service)) }}</td>
-            <td><span class="status" [class.muted]="!service.productConsumption.length">{{ service.productConsumption.length ? 'Configured' : 'Missing' }}</span></td>
-            <td>{{ service.productConsumption.length ? 'Yes' : 'No' }}</td><td><button type="button" (click)="editRecipe(service)">{{ service.productConsumption.length ? 'Edit' : 'Add' }}</button></td>
-          </tr></tbody>
-        </table>
-      </div>
-      <ng-template #empty><div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div></ng-template>
+  @if (!loading && activeTab === 'recipes') {
+    <section class="recipe-workspace">
+      <div class="table-pane">
+        <header><h2>{{ 'inventory.ui.26ca3a7cb2' | translate }}</h2></header>
+        @if (filteredServices.length) {
+          <div class="table-scroll">
+            <table><thead><tr><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.fe0a091fdb' | translate }}</th><th>{{ 'inventory.ui.b91328e568' | translate }}</th><th>{{ 'inventory.ui.792fe4aaaf' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.e609e9498c' | translate }}</th><th></th></tr></thead>
+            <tbody>@for (service of filteredServices; track service) {
+              <tr>
+                <td><strong>{{ service.name }}</strong><small>{{ service.category || '—' }}</small></td>
+                <td>{{ service.productConsumption.length }}</td><td>{{ money(recipeCost(service)) }}</td><td>{{ money(service.pricePaise - recipeCost(service)) }}</td>
+                <td><span class="status" [class.muted]="!service.productConsumption.length">{{ service.productConsumption.length ? 'Configured' : 'Missing' }}</span></td>
+                <td>{{ service.productConsumption.length ? 'Yes' : 'No' }}</td><td><button type="button" (click)="editRecipe(service)">{{ service.productConsumption.length ? 'Edit' : 'Add' }}</button></td>
+              </tr>
+            }</tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div>
+      }
       <footer>Showing {{ filteredServices.length }} of {{ services.length }} services</footer>
     </div>
-
     <aside class="editor">
       <header><h2>{{ 'inventory.ui.ad87a7bcd3' | translate }}</h2></header>
       <div class="editor-body">
-        <label>{{ 'inventory.ui.329cb8b6ba' | translate }}<select [(ngModel)]="selectedServiceId" (ngModelChange)="selectService()"><option value="">{{ 'inventory.ui.f216b2305e' | translate }}</option><option *ngFor="let service of services" [value]="service.id">{{ service.name }}</option></select></label>
-        <div class="line-list" *ngIf="selectedServiceId">
-          <article class="recipe-line" *ngFor="let line of lines; let i = index">
-            <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select required [(ngModel)]="line.productId" (ngModelChange)="selectItem(line)"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let item of items" [value]="item.id">{{ item.name }} · {{ item.sku }}</option></select></label>
+        <label>{{ 'inventory.ui.329cb8b6ba' | translate }}<select [(ngModel)]="selectedServiceId" (ngModelChange)="selectService()"><option value="">{{ 'inventory.ui.f216b2305e' | translate }}</option>@for (service of services; track service) {
+        <option [value]="service.id">{{ service.name }}</option>
+      }</select></label>
+      @if (selectedServiceId) {
+        <div class="line-list">
+          @for (line of lines; track line; let i = $index) {
+            <article class="recipe-line">
+              <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select required [(ngModel)]="line.productId" (ngModelChange)="selectItem(line)"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (item of items; track item) {
+              <option [value]="item.id">{{ item.name }} · {{ item.sku }}</option>
+            }</select></label>
             <div class="line-fields"><label>{{ 'inventory.ui.f6b935ab33' | translate }}<input [value]="line.unit || '—'" readonly /></label><label>{{ 'inventory.ui.cdf884a4d0' | translate }}<input type="number" min="1" step="1" [(ngModel)]="line.standardQty" /></label><label>{{ 'inventory.ui.b1d66dcc51' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.minQty" /></label><label>{{ 'inventory.ui.794ff3293c' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.maxQty" /></label><label>{{ 'inventory.ui.11f9a8d33d' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.wastePercent" /></label><label>{{ 'inventory.ui.31baca419a' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.ownerApprovalPercent" /></label></div>
             <div class="line-actions"><label>{{ 'inventory.ui.c86381cabe' | translate }}<input type="number" min="0" step="1" [(ngModel)]="line.hitLimit" /></label><button type="button" (click)="removeLine(i)">{{ 'inventory.ui.e963907dac' | translate }}</button></div>
           </article>
-          <button class="add-line" type="button" (click)="addLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{ 'inventory.ui.7c37958a3f' | translate }}</button>
-        </div>
-        <div class="empty-state compact" *ngIf="!selectedServiceId">{{ 'inventory.ui.c950ccc9e2' | translate }}</div>
-        <div class="empty-state compact" *ngIf="selectedServiceId && !lines.length">{{ 'inventory.ui.deecc9e2b9' | translate }}</div>
+        }
+        <button class="add-line" type="button" (click)="addLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{ 'inventory.ui.7c37958a3f' | translate }}</button>
       </div>
-      <footer><button class="primary" type="button" [disabled]="!selectedServiceId || saving" (click)="saveRecipe()">{{ saving ? 'Saving…' : 'Save recipe' }}</button></footer>
-    </aside>
-  </section>
+    }
+    @if (!selectedServiceId) {
+      <div class="empty-state compact">{{ 'inventory.ui.c950ccc9e2' | translate }}</div>
+    }
+    @if (selectedServiceId && !lines.length) {
+      <div class="empty-state compact">{{ 'inventory.ui.deecc9e2b9' | translate }}</div>
+    }
+    @if (selectedServiceId && recipeVersions.length) {
+      <div class="table-scroll"><table><thead><tr><th>Version</th><th>Recipe lines</th><th>Source</th><th>Date</th></tr></thead><tbody>
+        @for (version of recipeVersions; track version) {<tr><td><strong>v{{ version.versionNumber }}</strong></td><td>{{ version.recipe.length }}</td><td>{{ version.changeSource }}</td><td>{{ date(version.createdAt) }}</td></tr>}
+      </tbody></table></div>
+    }
+  </div>
+  <footer><button class="primary" type="button" [disabled]="!selectedServiceId || saving" (click)="saveRecipe()">{{ saving ? 'Saving…' : 'Save recipe' }}</button></footer>
+</aside>
+</section>
+}
 
-  <section class="review-card" *ngIf="!loading && activeTab !== 'recipes'">
-    <header><h2>{{ activeTab === 'approvals' ? 'Approval queue' : 'Consumption variance' }}</h2></header>
-    <div class="table-scroll" *ngIf="(activeTab === 'approvals' ? approvalRows : varianceRows) as rows">
-      <table *ngIf="rows.length; else noReviewRows"><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th *ngIf="activeTab === 'approvals'">{{ 'inventory.ui.c51f7b7227' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th></tr></thead>
-        <tbody><tr *ngFor="let row of rows"><td>{{ date(row.createdAt) }}</td><td>{{ row.serviceName || '—' }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td *ngIf="activeTab === 'approvals'">{{ approvalThreshold(row) }}%</td><td><span class="status">{{ activeTab === 'approvals' ? 'Pending review' : 'Recorded' }}</span></td></tr></tbody>
-      </table>
-    </div>
-    <ng-template #noReviewRows><div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div></ng-template>
-    <footer>Showing {{ (activeTab === 'approvals' ? approvalRows : varianceRows).length }} records</footer>
+@if (!loading && activeTab === 'demand') {
+  <section class="review-card">
+    <header><h2>Appointment-linked product demand</h2></header>
+    @if (missingRecipeAlerts.length) {
+      <div class="table-scroll"><table><thead><tr><th>Missing recipe alert</th><th>Booked appointments</th><th>Action</th></tr></thead><tbody>
+        @for (row of missingRecipeAlerts; track row) {<tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.appointmentCount }}</td><td><button type="button" (click)="selectedServiceId=row.serviceId; selectService(); activeTab='recipes'">Configure recipe</button></td></tr>}
+      </tbody></table></div>
+    }
+    @if (demandRows.length) {
+      <div class="table-scroll"><table><thead><tr><th>Service</th><th>Booked appointments</th><th>Product</th><th>Required quantity</th></tr></thead><tbody>
+        @for (row of demandRows; track row) {<tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.appointmentCount }}</td><td>{{ row.productName }}</td><td>{{ quantity(row.requiredQuantity, row.unit) }}</td></tr>}
+      </tbody></table></div>
+    } @else {
+      <div class="empty-state">No recipe demand in the next 15 days</div>
+    }
+    <footer>Calculated from current appointments and saved service recipes</footer>
   </section>
+}
+
+@if (!loading && activeTab !== 'recipes' && activeTab !== 'demand') {
+  <section class="review-card">
+    <header><h2>{{ activeTab === 'approvals' ? 'Approval queue' : 'Consumption variance' }}</h2></header>
+    @if ((activeTab === 'approvals' ? approvalRows : varianceRows); as rows) {
+      <div class="table-scroll">
+        @if (rows.length) {
+          <table><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th>@if (activeTab === 'approvals') {
+          <th>{{ 'inventory.ui.c51f7b7227' | translate }}</th>
+          }<th>{{ 'inventory.ui.bae7d5be70' | translate }}</th></tr></thead>
+          <tbody>@for (row of rows; track row) {
+            <tr><td>{{ date(row.createdAt) }}</td><td>{{ row.serviceName || '—' }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td>@if (activeTab === 'approvals') {
+            <td>{{ approvalThreshold(row) }}%</td>
+            }<td><span class="status">{{ activeTab === 'approvals' ? 'Pending review' : 'Recorded' }}</span></td></tr>
+          }</tbody>
+        </table>
+      } @else {
+        <div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div>
+      }
+    </div>
+  }
+  <footer>Showing {{ (activeTab === 'approvals' ? approvalRows : varianceRows).length }} records</footer>
+</section>
+}
 </section>

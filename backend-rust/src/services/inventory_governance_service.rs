@@ -1,3 +1,4 @@
+use qrcodegen::{QrCode, QrCodeEcc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -14,7 +15,22 @@ pub struct PolicyWrite {
     pub valuation_method: String,
     pub expiry_window_days: i32,
     pub count_variance_threshold_bps: i32,
+    #[serde(default = "default_reorder_history_days")]
+    pub reorder_history_days: i32,
+    #[serde(default = "default_reorder_coverage_days")]
+    pub reorder_coverage_days: i32,
+    pub transfer_base_transport_cost_paise: Option<i64>,
+    pub transfer_cost_per_km_paise: Option<i64>,
+    pub transfer_handling_cost_per_unit_paise: Option<i64>,
+    pub transfer_delay_cost_per_unit_day_paise: Option<i64>,
+    pub transfer_expected_days: Option<i32>,
     pub approval_matrix: Value,
+}
+fn default_reorder_history_days() -> i32 {
+    60
+}
+fn default_reorder_coverage_days() -> i32 {
+    30
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -93,7 +109,7 @@ fn text(value: &str, name: &str, max: usize) -> Result<String, AppError> {
 }
 
 pub async fn policy(db: &PgPool, t: &str, b: &str) -> Result<Value, AppError> {
-    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
+    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"reorderHistoryDays":60,"reorderCoverageDays":30,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
 }
 pub async fn save_policy(
     db: &PgPool,
@@ -111,9 +127,30 @@ pub async fn save_policy(
     if !matches!(p.valuation_method.as_str(), "weighted_average" | "fifo") {
         return Err(AppError::validation("valuation method is invalid"));
     }
+    let transfer_cost_fields = [
+        p.transfer_base_transport_cost_paise.is_some(),
+        p.transfer_cost_per_km_paise.is_some(),
+        p.transfer_handling_cost_per_unit_paise.is_some(),
+        p.transfer_delay_cost_per_unit_day_paise.is_some(),
+        p.transfer_expected_days.is_some(),
+    ];
     if !(1..=3650).contains(&p.expiry_window_days)
         || !(0..=10000).contains(&p.count_variance_threshold_bps)
+        || !(14..=365).contains(&p.reorder_history_days)
+        || !(7..=180).contains(&p.reorder_coverage_days)
         || !p.approval_matrix.is_object()
+        || (transfer_cost_fields.iter().any(|value| *value)
+            && !transfer_cost_fields.iter().all(|value| *value))
+        || p.transfer_base_transport_cost_paise
+            .is_some_and(|value| !(0..=1_000_000_000).contains(&value))
+        || p.transfer_cost_per_km_paise
+            .is_some_and(|value| !(0..=1_000_000_000).contains(&value))
+        || p.transfer_handling_cost_per_unit_paise
+            .is_some_and(|value| !(0..=10_000_000).contains(&value))
+        || p.transfer_delay_cost_per_unit_day_paise
+            .is_some_and(|value| !(0..=10_000_000).contains(&value))
+        || p.transfer_expected_days
+            .is_some_and(|value| !(0..=365).contains(&value))
     {
         return Err(AppError::validation("inventory policy values are invalid"));
     }
@@ -126,6 +163,13 @@ pub async fn save_policy(
         &p.valuation_method,
         p.expiry_window_days,
         p.count_variance_threshold_bps,
+        p.reorder_history_days,
+        p.reorder_coverage_days,
+        p.transfer_base_transport_cost_paise,
+        p.transfer_cost_per_km_paise,
+        p.transfer_handling_cost_per_unit_paise,
+        p.transfer_delay_cost_per_unit_day_paise,
+        p.transfer_expected_days,
         &p.approval_matrix,
     )
     .await
@@ -202,6 +246,40 @@ pub async fn containers(db: &PgPool, t: &str, b: &str) -> Result<Vec<Value>, App
     repo::containers(db, t, b)
         .await
         .map_err(|e| db_error(e, "failed to load backbar containers"))
+}
+
+pub async fn container_label(db: &PgPool, t: &str, b: &str, id: &str) -> Result<Value, AppError> {
+    let mut data = repo::container_label_data(db, t, b, id)
+        .await
+        .map_err(|e| db_error(e, "container was not found"))?;
+    let barcode = data
+        .get("barcode")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if barcode.is_empty() {
+        return Err(AppError::validation(
+            "container barcode is required for QR label",
+        ));
+    }
+    data["qrSvg"] = Value::String(qr_svg(barcode)?);
+    Ok(data)
+}
+
+fn qr_svg(value: &str) -> Result<String, AppError> {
+    let code = QrCode::encode_text(value, QrCodeEcc::Medium)
+        .map_err(|_| AppError::validation("container barcode is too long for QR label"))?;
+    let border = 4;
+    let size = code.size();
+    let view = size + border * 2;
+    let mut path = String::new();
+    for y in 0..size {
+        for x in 0..size {
+            if code.get_module(x, y) {
+                path.push_str(&format!("M{} {}h1v1h-1z", x + border, y + border));
+            }
+        }
+    }
+    Ok(format!("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {view} {view}\" role=\"img\" aria-label=\"Container QR code\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/><path fill=\"#102a43\" d=\"{path}\"/></svg>"))
 }
 pub async fn create_container(
     db: &PgPool,

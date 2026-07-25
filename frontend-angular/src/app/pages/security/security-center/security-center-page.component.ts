@@ -284,11 +284,10 @@ interface PermissionSimulation {
 }
 
 @Component({
-  selector: 'aura-security-center-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule],
-  templateUrl: './security-center-page.component.html',
-  styleUrls: ['./security-center-page.component.css'],
+    selector: 'aura-security-center-page',
+    imports: [CommonModule, FormsModule],
+    templateUrl: './security-center-page.component.html',
+    styleUrls: ['./security-center-page.component.css']
 })
 export class SecurityCenterPageComponent implements OnInit {
   private readonly api = inject(ApiService);

@@ -1,0 +1,14 @@
+environment              = "staging"
+vpc_cidr                 = "10.50.0.0/16"
+nat_gateway_count        = 1
+desired_count            = 1
+autoscaling_min_capacity = 1
+autoscaling_max_capacity = 3
+db_instance_class        = "db.t4g.small"
+db_multi_az              = false
+db_deletion_protection   = true
+db_backup_retention_days = 14
+redis_node_type          = "cache.t4g.small"
+redis_node_count         = 1
+log_retention_days       = 30
+waf_rate_limit           = 2500

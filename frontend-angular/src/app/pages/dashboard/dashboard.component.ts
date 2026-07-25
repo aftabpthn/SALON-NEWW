@@ -102,11 +102,10 @@ const EMPTY_SALES: SalesReport = {
 };
 
 @Component({
-  selector: 'page-dashboard',
-  standalone: true,
-  imports: [CommonModule, RouterLink],
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
+    selector: 'page-dashboard',
+    imports: [CommonModule, RouterLink],
+    templateUrl: './dashboard.component.html',
+    styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -137,15 +136,12 @@ export class DashboardComponent implements OnInit {
     this.loading = !this.loadedAt;
     this.error = '';
     this.sectionErrors.clear();
-
-    this.api.health().pipe(catchError(() => of(null))).subscribe((health) => {
-      this.status = health?.status ?? 'unavailable';
-    });
     this.api.get<ApiEnvelope<DashboardSnapshot> | DashboardSnapshot>('/api/v1/reports/dashboard')
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
         next: (snapshot) => {
           this.snapshot = this.unwrap(snapshot) ?? EMPTY_SNAPSHOT;
+          this.status = 'ok';
           this.loadedAt = new Date();
         },
         error: (error) => {
@@ -185,7 +181,9 @@ export class DashboardComponent implements OnInit {
         this.revenueForecast = this.unwrap(forecast) ?? undefined;
         this.appointmentTrend = this.groupAppointmentsByDate(appointmentRows);
         this.appointmentStatuses = this.groupAppointmentsByStatus(appointmentRows);
-        this.salesTrend = this.groupSalesByDate(this.sales.topInvoices ?? []);
+        this.salesTrend = (this.revenueForecast?.history ?? [])
+          .slice(-7)
+          .map(({ date, valuePaise }) => ({ date, value: valuePaise }));
         this.dues = this.unwrap(dues) ?? [];
         this.paymentModes = this.unwrap(payments) ?? [];
       },
@@ -312,19 +310,6 @@ export class DashboardComponent implements OnInit {
       .map(([status, count]) => ({ status, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
-  }
-
-  private groupSalesByDate(rows: SalesInvoice[]): TrendPoint[] {
-    const grouped = new Map<string, number>();
-    for (const row of rows) {
-      const date = String(row.createdAt || '').slice(0, 10);
-      if (!date) continue;
-      grouped.set(date, (grouped.get(date) ?? 0) + Number(row.totalPaise || 0));
-    }
-    return [...grouped.entries()]
-      .map(([date, value]) => ({ date, value }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-7);
   }
 
   private sortRecentActivity(rows: AppointmentActivity[]): AppointmentActivity[] {

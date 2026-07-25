@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -11,8 +11,8 @@ type Listing = { id: string; listingName: string; status: string; commissionBps:
 type Review = { id: string; platform: string; rating?: number; reviewText: string; reviewedAt: string; decision?: string };
 
 @Component({
-  selector: 'page-operations', standalone: true, imports: [CommonModule, FormsModule],
-  templateUrl: './operations-page.component.html', styleUrls: ['./operations-page.component.css'],
+    selector: 'page-operations', imports: [FormsModule],
+    templateUrl: './operations-page.component.html', styleUrls: ['./operations-page.component.css']
 })
 export class OperationsPageComponent implements OnInit {
   private readonly api = inject(ApiService);

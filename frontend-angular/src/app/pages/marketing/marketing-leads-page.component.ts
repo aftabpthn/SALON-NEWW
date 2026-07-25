@@ -1,9 +1,10 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 
 type Stage = 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
 type Campaign = { id: string; title: string; body: string; metadata?: any; createdAt: string };
@@ -30,11 +31,10 @@ type LeadAdvice = { leadId: string; leadName: string; stage: string; prioritySco
 type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: string; quietEnd: string; timezone: string; offerApprovalThresholdBps: number }; exclusions: { clientId: string; clientName: string }[] };
 
 @Component({
-  selector: 'page-marketing-leads',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './marketing-leads-page.component.html',
-  styleUrls: ['./marketing-leads-page.component.css'],
+    selector: 'page-marketing-leads',
+    imports: [FormsModule, DatePickerComponent, BranchNamePipe],
+    templateUrl: './marketing-leads-page.component.html',
+    styleUrls: ['./marketing-leads-page.component.css']
 })
 export class MarketingLeadsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -427,7 +427,7 @@ export class MarketingLeadsPageComponent implements OnInit {
   providerReady(channel: string) { return !!this.providers[`${channel}Delivery`]; }
   private leadNotes(source: string, followUp: string) { return [source && `Source: ${source}`, followUp && `Next follow-up: ${followUp}`].filter(Boolean).join(' | '); }
   private toIsoDate(value: string) { const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : value || undefined; }
-  titleCase(value: string) { return value.trim().toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase()); }
+  titleCase(value: string) { return value.replace(/\S+/gu, (word) => word[0].toLocaleUpperCase() + word.slice(1).toLocaleLowerCase()); }
   private campaignSchedule() {
     if (!this.campaignDraft.scheduledDate) return '';
     const value = new Date(`${this.toIsoDate(this.campaignDraft.scheduledDate)}T${this.campaignDraft.scheduledTime || '09:00'}:00`);

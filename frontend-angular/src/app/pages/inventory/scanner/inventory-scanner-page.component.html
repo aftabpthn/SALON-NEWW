@@ -11,24 +11,34 @@
   </header>
 
   <nav class="workflow-tabs" [attr.aria-label]="'inventory.ui.37ff367a5f' | translate">
-    <button *ngFor="let row of workflows" type="button" [class.active]="workflow === row.id" (click)="setWorkflow(row.id)">{{ row.label }}</button>
+    @for (row of workflows; track row) {
+      <button type="button" [class.active]="workflow === row.id" (click)="setWorkflow(row.id)">{{ row.label }}</button>
+    }
   </nav>
 
-  <p class="message error" *ngIf="error" role="alert">{{ error }}</p>
-  <p class="message success" *ngIf="notice">{{ notice }}</p>
+  @if (error) {
+    <p class="message error" role="alert">{{ error }}</p>
+  }
+  @if (notice) {
+    <p class="message success">{{ notice }}</p>
+  }
 
   <section class="scanner-grid">
     <article class="scan-panel">
       <h2>{{ 'inventory.ui.f672bd7525' | translate }}</h2>
       <div class="scan-zone">
-        <video #camera *ngIf="cameraActive" muted playsinline></video>
-        <ng-container *ngIf="!cameraActive">
+        @if (cameraActive) {
+          <video #camera muted playsinline></video>
+        }
+        @if (!cameraActive) {
           <span class="scan-icon" aria-hidden="true"><i class="bi bi-upc-scan"></i></span>
           <strong>{{ 'inventory.ui.ed20050dce' | translate }}</strong>
           <small>{{ 'inventory.ui.35eab7a329' | translate }}</small>
           <button type="button" (click)="openCamera()"><i class="bi bi-camera"></i>{{ 'inventory.ui.c34a61328e' | translate }}</button>
-        </ng-container>
-        <button class="camera-stop" *ngIf="cameraActive" type="button" (click)="stopCamera()">{{ 'inventory.ui.53e9605469' | translate }}</button>
+        }
+        @if (cameraActive) {
+          <button class="camera-stop" type="button" (click)="stopCamera()">{{ 'inventory.ui.53e9605469' | translate }}</button>
+        }
       </div>
       <form class="match-row" (ngSubmit)="match()">
         <input name="code" [(ngModel)]="code" autocomplete="off" autofocus [attr.placeholder]="'inventory.ui.03e7d8bec6' | translate" [attr.aria-label]="'inventory.ui.03e7d8bec6' | translate" />
@@ -39,53 +49,72 @@
     <article class="result-panel">
       <h2>{{ historyOpen ? 'Scan history' : 'Matched product' }}</h2>
 
-      <div class="history-list" *ngIf="historyOpen">
-        <article *ngFor="let row of history">
-          <i class="bi" [class.bi-check-circle]="row.status === 'matched'" [class.bi-x-circle]="row.status === 'unmatched'"></i>
-          <div><strong>{{ row.itemName || 'No product matched' }}</strong><span>{{ row.code }} · {{ row.workflow }}</span></div>
-          <time>{{ row.at | date:'HH:mm:ss' }}</time>
-        </article>
-        <div class="empty-result compact" *ngIf="!history.length"><strong>{{ 'inventory.ui.0e960d30ea' | translate }}</strong></div>
-      </div>
+      @if (historyOpen) {
+        <div class="history-list">
+          @for (row of history; track row) {
+            <article>
+              <i class="bi" [class.bi-check-circle]="row.status === 'matched'" [class.bi-x-circle]="row.status === 'unmatched'"></i>
+              <div><strong>{{ row.itemName || 'No product matched' }}</strong><span>{{ row.code }} · {{ row.workflow }}</span></div>
+              <time>{{ row.at | date:'HH:mm:ss' }}</time>
+            </article>
+          }
+          @if (!history.length) {
+            <div class="empty-result compact"><strong>{{ 'inventory.ui.0e960d30ea' | translate }}</strong></div>
+          }
+        </div>
+      }
 
-      <div class="empty-result" *ngIf="!historyOpen && !matched">
-        <span class="result-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
-        <strong>{{ 'inventory.ui.d7aa2bb20f' | translate }}</strong>
-      </div>
+      @if (!historyOpen && !matched) {
+        <div class="empty-result">
+          <span class="result-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+          <strong>{{ 'inventory.ui.d7aa2bb20f' | translate }}</strong>
+        </div>
+      }
 
-      <div class="product-result" *ngIf="!historyOpen && matched as item">
-        <header>
-          <div><strong>{{ item.name }}</strong><span>{{ item.sku || 'No SKU' }} · {{ item.category || 'Uncategorized' }}</span></div>
-          <span class="stock">{{ item.stockQuantity }} {{ item.unit }}</span>
-        </header>
-        <dl>
-          <div><dt>{{ 'inventory.ui.d1fed43097' | translate }}</dt><dd>{{ item.reorderPoint }}</dd></div>
-          <div><dt>{{ 'inventory.ui.b16e07e0bb' | translate }}</dt><dd>{{ money(item.unitCostPaise) }}</dd></div>
-          <div><dt>{{ 'inventory.ui.bae7d5be70' | translate }}</dt><dd>{{ item.active ? 'Active' : 'Inactive' }}</dd></div>
-        </dl>
-
-        <form class="workflow-form" *ngIf="workflow !== 'lookup'" (ngSubmit)="applyWorkflow()">
-          <label>{{ workflow === 'count' ? 'Counted quantity' : 'Quantity' }}
-            <input type="number" name="quantity" [(ngModel)]="quantity" [min]="workflow === 'count' ? 0 : 1" step="1" required />
-          </label>
-          <label *ngIf="workflow === 'transfer'">Destination branch ID
-            <input name="destinationBranchId" [(ngModel)]="destinationBranchId" required />
-          </label>
-          <label *ngIf="workflow === 'transfer'">Destination item ID
-            <input name="destinationInventoryItemId" [(ngModel)]="destinationInventoryItemId" required />
-          </label>
-          <label *ngIf="workflow === 'count'" class="wide">Stock audit session
-            <select name="auditSessionId" [(ngModel)]="auditSessionId" required>
-              <option value="">{{ 'inventory.ui.a65035c2c9' | translate }}</option>
-              <option *ngFor="let audit of audits" [value]="audit.id">{{ audit.name }}</option>
-            </select>
-          </label>
-          <label class="wide">Notes
-            <input name="notes" [(ngModel)]="notes" />
-          </label>
-          <button class="primary wide" type="submit" [disabled]="saving">{{ saving ? 'Saving' : 'Apply ' + workflow }}</button>
-        </form>
-      </div>
+      @if (!historyOpen && matched; as item) {
+        <div class="product-result">
+          <header>
+            <div><strong>{{ item.name }}</strong><span>{{ item.sku || 'No SKU' }} · {{ item.category || 'Uncategorized' }}</span></div>
+            <span class="stock">{{ item.stockQuantity }} {{ item.unit }}</span>
+          </header>
+          <dl>
+            <div><dt>{{ 'inventory.ui.d1fed43097' | translate }}</dt><dd>{{ item.reorderPoint }}</dd></div>
+            <div><dt>{{ 'inventory.ui.b16e07e0bb' | translate }}</dt><dd>{{ money(item.unitCostPaise) }}</dd></div>
+            <div><dt>{{ 'inventory.ui.bae7d5be70' | translate }}</dt><dd>{{ item.active ? 'Active' : 'Inactive' }}</dd></div>
+          </dl>
+          @if (workflow !== 'lookup') {
+            <form class="workflow-form" (ngSubmit)="applyWorkflow()">
+              <label>{{ workflow === 'count' ? 'Counted quantity' : 'Quantity' }}
+                <input type="number" name="quantity" [(ngModel)]="quantity" [min]="workflow === 'count' ? 0 : 1" step="1" required />
+              </label>
+              @if (workflow === 'transfer') {
+                <label>Destination branch ID
+                  <select name="destinationBranchId" [(ngModel)]="destinationBranchId" required><option value="">Select branch</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select>
+                </label>
+              }
+              @if (workflow === 'transfer') {
+                <label>Destination item ID
+                  <input name="destinationInventoryItemId" [(ngModel)]="destinationInventoryItemId" required />
+                </label>
+              }
+              @if (workflow === 'count') {
+                <label class="wide">Stock audit session
+                  <select name="auditSessionId" [(ngModel)]="auditSessionId" required>
+                    <option value="">{{ 'inventory.ui.a65035c2c9' | translate }}</option>
+                    @for (audit of audits; track audit) {
+                      <option [value]="audit.id">{{ audit.name }}</option>
+                    }
+                  </select>
+                </label>
+              }
+              <label class="wide">Notes
+                <input name="notes" [(ngModel)]="notes" />
+              </label>
+              <button class="primary wide" type="submit" [disabled]="saving">{{ saving ? 'Saving' : 'Apply ' + workflow }}</button>
+            </form>
+          }
+        </div>
+      }
     </article>
   </section>
 </section>

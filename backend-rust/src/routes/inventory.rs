@@ -23,6 +23,7 @@ pub struct InventoryListQuery {
     pub q: Option<String>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
+    pub with_count: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,12 +31,14 @@ pub struct InventoryListQuery {
 pub struct AdvancedControlsQuery {
     pub dead_stock_days: Option<i64>,
     pub limit: Option<usize>,
+    pub all_branches: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlReconciliationQuery {
     pub as_of: Option<chrono::NaiveDate>,
+    pub all_branches: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +71,8 @@ pub struct BackbarUsageRequest {
     pub inventory_item_id: String,
     pub service_id: Option<String>,
     pub staff_id: Option<String>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
     pub actual_quantity: i32,
     pub notes: Option<String>,
     pub idempotency_key: String,
@@ -78,6 +83,50 @@ pub struct BackbarUsageRequest {
 pub struct BackbarReviewRequest {
     pub decision: String,
     pub review_note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryExceptionReviewRequest {
+    pub evidence_hash: String,
+    pub decision: String,
+    pub review_note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InventoryAutomationPolicyRequest {
+    pub enabled: bool,
+    pub auto_transfer_drafts: bool,
+    pub auto_po_drafts: bool,
+    pub monthly_budget_paise: i64,
+    #[serde(default)]
+    pub category_budgets_paise: Option<serde_json::Value>,
+    pub expiry_rescue_days: i32,
+    pub run_interval_minutes: i32,
+    pub escalation_minutes: i32,
+    pub min_confidence_bps: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InventoryAutomationReviewRequest {
+    pub decision: String,
+    pub review_note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PurchaseOptimizerRequest {
+    pub lines: Vec<PurchaseOptimizerLineRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PurchaseOptimizerLineRequest {
+    pub inventory_item_id: String,
+    pub quantity: i32,
+    pub unit_cost_paise: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,6 +202,11 @@ pub struct Product360Response {
     pub recipe_count: i64,
     pub consumed_quantity: i64,
     pub kit_components: Vec<inventory_repository::InventoryKitComponentRecord>,
+    pub branch_stocks: serde_json::Value,
+    pub expiry_timeline: serde_json::Value,
+    pub client_usage: serde_json::Value,
+    pub entity_ledger: serde_json::Value,
+    pub margin: serde_json::Value,
 }
 
 pub fn router() -> Router<AppState> {
@@ -164,6 +218,27 @@ pub fn router() -> Router<AppState> {
         .route(
             "/inventory/advanced-controls",
             axum::routing::get(advanced_controls),
+        )
+        .route(
+            "/inventory/command-center",
+            axum::routing::get(command_center),
+        )
+        .route("/inventory/transfer-optimizer", post(transfer_optimizer))
+        .route(
+            "/inventory/autonomous-operations",
+            get(autonomous_operations).put(save_autonomous_operations),
+        )
+        .route(
+            "/inventory/autonomous-operations/run",
+            post(run_autonomous_operations),
+        )
+        .route(
+            "/inventory/autonomous-operations/actions/:id/review",
+            post(review_autonomous_operation),
+        )
+        .route(
+            "/inventory/exception-recommendations/:key/review",
+            post(review_exception_recommendation),
         )
         .route(
             "/inventory/gl-reconciliation",
@@ -183,6 +258,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/inventory/backbar-usage/:id/review",
             axum::routing::patch(review_backbar_usage),
+        )
+        .route(
+            "/inventory/service-recipes/:id/versions",
+            get(service_recipe_versions),
         )
         .route("/inventory/:id/360", axum::routing::get(product_360))
         .route("/inventory/:id/kit", get(get_kit).put(save_kit))
@@ -299,6 +378,8 @@ async fn record_backbar_usage(
             inventory_item_id: &payload.inventory_item_id,
             service_id: payload.service_id.as_deref(),
             staff_id: payload.staff_id.as_deref(),
+            client_id: payload.client_id.as_deref(),
+            appointment_id: payload.appointment_id.as_deref(),
             actual_quantity: payload.actual_quantity,
             notes: payload.notes.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
@@ -344,6 +425,7 @@ async fn review_backbar_usage(
 
 async fn advanced_controls(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<AdvancedControlsQuery>,
 ) -> ApiResult<inventory_controls_service::AdvancedControlsResponse> {
@@ -355,6 +437,17 @@ async fn advanced_controls(
         .get("expiryWindowDays")
         .and_then(serde_json::Value::as_i64)
         .unwrap_or(30);
+    let all_branches = query.all_branches.unwrap_or(false);
+    if all_branches
+        && !matches!(
+            claims.role.as_str(),
+            "owner" | "admin" | "manager" | "analyst" | "inventory_manager" | "inventoryManager"
+        )
+    {
+        return Err(AppError::forbidden(
+            "multi-branch inventory controls role is required",
+        ));
+    }
     let response = inventory_controls_service::advanced_controls(
         &state,
         &tenant_id,
@@ -362,13 +455,179 @@ async fn advanced_controls(
         query.dead_stock_days.unwrap_or(90).clamp(7, 730),
         expiry_window.clamp(1, 3650),
         query.limit.unwrap_or(80).clamp(1, 250),
+        all_branches,
     )
     .await?;
     Ok(Json(ApiResponse::ok(response)))
 }
 
+async fn command_center(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<inventory_controls_service::InventoryCommandCenterResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let response =
+        inventory_controls_service::command_center(&state, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+async fn transfer_optimizer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<PurchaseOptimizerRequest>,
+) -> ApiResult<Vec<inventory_repository::InventoryTransferOpportunity>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = inventory_controls_service::optimize_purchase(
+        &state,
+        &tenant_id,
+        &branch_id,
+        payload
+            .lines
+            .into_iter()
+            .map(|line| inventory_controls_service::PurchaseOptimizerLine {
+                inventory_item_id: line.inventory_item_id,
+                quantity: line.quantity,
+                unit_cost_paise: line.unit_cost_paise,
+            })
+            .collect(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn autonomous_operations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<inventory_controls_service::InventoryAutomationOverview> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let response =
+        inventory_controls_service::automation_overview(&state, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+async fn save_autonomous_operations(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<InventoryAutomationPolicyRequest>,
+) -> ApiResult<inventory_controls_service::InventoryAutomationOverview> {
+    if !matches!(claims.role.as_str(), "owner" | "admin") {
+        return Err(AppError::forbidden(
+            "owner or admin role is required to change autonomous inventory policy",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let response = inventory_controls_service::save_automation_policy(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        inventory_controls_service::InventoryAutomationPolicyInput {
+            enabled: payload.enabled,
+            auto_transfer_drafts: payload.auto_transfer_drafts,
+            auto_po_drafts: payload.auto_po_drafts,
+            monthly_budget_paise: payload.monthly_budget_paise,
+            category_budgets_paise: payload.category_budgets_paise,
+            expiry_rescue_days: payload.expiry_rescue_days,
+            run_interval_minutes: payload.run_interval_minutes,
+            escalation_minutes: payload.escalation_minutes,
+            min_confidence_bps: payload.min_confidence_bps,
+        },
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+async fn run_autonomous_operations(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<inventory_controls_service::InventoryAutomationOverview> {
+    if !matches!(claims.role.as_str(), "owner" | "admin" | "manager")
+        && !claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "inventory.manage")
+    {
+        return Err(AppError::forbidden(
+            "inventory management permission is required",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let response =
+        inventory_controls_service::run_automation(&state, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+async fn review_autonomous_operation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<InventoryAutomationReviewRequest>,
+) -> ApiResult<inventory_repository::InventoryAutomationAction> {
+    if !claims.role.eq_ignore_ascii_case("owner")
+        && !claims.role.eq_ignore_ascii_case("admin")
+        && !claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "inventory.approve")
+    {
+        return Err(AppError::forbidden(
+            "inventory approval permission is required",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let response = inventory_controls_service::review_automation_action(
+        &state,
+        &tenant_id,
+        &branch_id,
+        id.trim(),
+        &claims.sub,
+        payload.decision.trim(),
+        payload.review_note.as_deref().unwrap_or_default(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+async fn review_exception_recommendation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(key): Path<String>,
+    Json(payload): Json<InventoryExceptionReviewRequest>,
+) -> ApiResult<inventory_repository::InventoryExceptionReviewRecord> {
+    if !claims.role.eq_ignore_ascii_case("owner")
+        && !claims.role.eq_ignore_ascii_case("admin")
+        && !claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "inventory.approve")
+    {
+        return Err(AppError::forbidden(
+            "inventory approval permission is required",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let review = inventory_controls_service::review_exception_recommendation(
+        &state,
+        &tenant_id,
+        &branch_id,
+        key.trim(),
+        payload.evidence_hash.trim(),
+        payload.decision.trim(),
+        payload.review_note.as_deref().unwrap_or_default(),
+        &claims.sub,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(review)))
+}
+
 async fn gl_reconciliation(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<GlReconciliationQuery>,
 ) -> ApiResult<inventory_controls_service::GlReconciliationResponse> {
@@ -378,9 +637,25 @@ async fn gl_reconciliation(
     if as_of > today {
         return Err(AppError::validation("asOf cannot be in the future"));
     }
-    let response =
-        inventory_controls_service::gl_reconciliation(&state, &tenant_id, &branch_id, as_of)
-            .await?;
+    let all_branches = query.all_branches.unwrap_or(false);
+    if all_branches
+        && !matches!(
+            claims.role.as_str(),
+            "owner" | "admin" | "manager" | "analyst" | "accountant"
+        )
+    {
+        return Err(AppError::forbidden(
+            "multi-branch GL reconciliation role is required",
+        ));
+    }
+    let response = inventory_controls_service::gl_reconciliation(
+        &state,
+        &tenant_id,
+        &branch_id,
+        as_of,
+        all_branches,
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(response)))
 }
 
@@ -393,7 +668,7 @@ async fn stock_ledger(
     if query.from.zip(query.to).is_some_and(|(from, to)| from > to) {
         return Err(AppError::validation("from cannot be after to"));
     }
-    let movement = query.movement.unwrap_or_default();
+    let movement = query.movement.unwrap_or_default().trim().to_string();
     const MOVEMENTS: &[&str] = &[
         "sale",
         "return",
@@ -404,6 +679,8 @@ async fn stock_ledger(
         "transfer_reversal",
         "adjustment",
         "consumption",
+        "kit_component_out",
+        "kit_assembly_in",
     ];
     if !movement.is_empty() && !MOVEMENTS.contains(&movement.as_str()) {
         return Err(AppError::validation("movement is not supported"));
@@ -471,21 +748,44 @@ async fn list_inventory(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query.page_size.unwrap_or(50).clamp(1, 200);
-    let q = query.q.unwrap_or_default();
+    let q = query.q.unwrap_or_default().trim().to_string();
+    let with_count = query.with_count.unwrap_or(false);
 
-    let rows = inventory_repository::list(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &q,
-        page_size,
-        (page - 1) * page_size,
+    if !with_count {
+        let rows = inventory_repository::list(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &q,
+            page_size,
+            (page - 1) * page_size,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to list inventory"))?;
+
+        return Ok(Json(ApiResponse::ok(
+            rows.into_iter().map(InventoryResponse::from).collect(),
+        )));
+    }
+
+    let (rows, total) = tokio::try_join!(
+        inventory_repository::list(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &q,
+            page_size,
+            (page - 1) * page_size,
+        ),
+        inventory_repository::count(&state.db, &tenant_id, &branch_id, &q),
     )
-    .await
     .map_err(|_| AppError::internal("failed to list inventory"))?;
 
-    Ok(Json(ApiResponse::ok(
+    Ok(Json(ApiResponse::paged(
         rows.into_iter().map(InventoryResponse::from).collect(),
+        page,
+        page_size,
+        total,
     )))
 }
 
@@ -509,10 +809,11 @@ async fn product_360(
     Path(id): Path<String>,
 ) -> ApiResult<Product360Response> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let (product, summary, kit_components) = tokio::try_join!(
+    let (product, summary, kit_components, extended) = tokio::try_join!(
         inventory_repository::get(&state.db, &tenant_id, &branch_id, &id),
         inventory_repository::product_360_summary(&state.db, &tenant_id, &branch_id, &id),
         inventory_repository::kit_components(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::product_360_extended(&state.db, &tenant_id, &branch_id, &id),
     )
     .map_err(|_| AppError::internal("failed to load product details"))?;
     let product = product.ok_or_else(|| AppError::not_found("inventory item was not found"))?;
@@ -527,7 +828,25 @@ async fn product_360(
         recipe_count: summary.recipe_count,
         consumed_quantity: summary.consumed_quantity,
         kit_components,
+        branch_stocks: extended["branchStocks"].clone(),
+        expiry_timeline: extended["expiryTimeline"].clone(),
+        client_usage: extended["clientUsage"].clone(),
+        entity_ledger: extended["entityLedger"].clone(),
+        margin: extended["margin"].clone(),
     })))
+}
+
+async fn service_recipe_versions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows =
+        inventory_repository::service_recipe_versions(&state.db, &tenant_id, &branch_id, &id)
+            .await
+            .map_err(|_| AppError::internal("failed to load service recipe history"))?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn create_inventory(

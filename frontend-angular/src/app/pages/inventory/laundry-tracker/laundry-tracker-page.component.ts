@@ -1,5 +1,5 @@
 import { LanguageService } from '../../../core/i18n/language.service';
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -19,8 +19,8 @@ type Supplier = { id: string; name: string; active: boolean };
 type DraftItem = { itemName: string; category: string; quantity: string; barcode: string; color: string; material: string; conditionIn: string };
 
 @Component({
-  selector: 'page-laundry-tracker', standalone: true, imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './laundry-tracker-page.component.html', styleUrls: ['./laundry-tracker-page.component.css'],
+    selector: 'page-laundry-tracker', imports: [FormsModule, DatePickerComponent, TranslatePipe],
+    templateUrl: './laundry-tracker-page.component.html', styleUrls: ['./laundry-tracker-page.component.css']
 })
 export class LaundryTrackerPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -41,15 +41,20 @@ export class LaundryTrackerPageComponent implements OnInit {
     this.loading = true; this.error = '';
     try {
       const params = new URLSearchParams(); if (this.status) params.set('status', this.status); if (this.query.trim()) params.set('q', this.query.trim());
-      const [summary, orders, clients, suppliers] = await Promise.all([
+      const [summary, orders] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<Summary>>('/inventory/laundry/summary')),
         firstValueFrom(this.api.get<ApiEnvelope<Order[]>>(`/inventory/laundry/orders?${params}`)),
-        firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')),
-        firstValueFrom(this.api.get<ApiEnvelope<Supplier[]>>('/purchases/suppliers')),
       ]);
-      this.summary = summary.data || this.summary; this.orders = orders.data || []; this.clients = clients.data || []; this.suppliers = (suppliers.data || []).filter((row) => row.active);
+      this.summary = summary.data || this.summary; this.orders = orders.data || [];
+      void this.loadReferences();
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.ffe4abe68e')); }
     finally { this.loading = false; }
+  }
+  private async loadReferences() {
+    try {
+      const [clients, suppliers] = await Promise.all([firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')), firstValueFrom(this.api.get<ApiEnvelope<Supplier[]>>('/purchases/suppliers'))]);
+      this.clients = clients.data || []; this.suppliers = (suppliers.data || []).filter((row) => row.active);
+    } catch (error) { this.error ||= this.message(error, 'Laundry form options could not be loaded'); }
   }
   openCreate() { this.draft = this.emptyDraft(); this.clientSearch = ''; this.drawer = 'create'; }
   async openDetail(order: Order) { await this.action(async () => { await this.loadDetail(order.id); this.drawer = 'detail'; }, 'Laundry order could not be loaded'); }

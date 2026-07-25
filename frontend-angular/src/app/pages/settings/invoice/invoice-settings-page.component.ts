@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -126,18 +126,16 @@ interface ToggleOption {
 }
 
 @Component({
-  selector: 'app-invoice-settings-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './invoice-settings-page.component.html',
-  styleUrls: ['./invoice-settings-page.component.css'],
+    selector: 'app-invoice-settings-page',
+    imports: [FormsModule, RouterLink],
+    templateUrl: './invoice-settings-page.component.html',
+    styleUrls: ['./invoice-settings-page.component.css']
 })
 export class InvoiceSettingsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly branchName = localStorage.getItem('aurashine_branch_name')
     ?? localStorage.getItem('selectedBranchName')
     ?? localStorage.getItem('branchName')
-    ?? localStorage.getItem('aurashine_branch_id')
     ?? 'Current branch';
 
   activeTab: SettingsTab = 'common';

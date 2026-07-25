@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
@@ -23,6 +24,19 @@ use crate::{
 #[derive(Debug, Deserialize)]
 pub struct BranchListQuery {
     pub q: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BranchPageQuery {
+    pub q: Option<String>,
+    pub cursor: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchBulkImportQuery {
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -139,6 +153,23 @@ pub struct MultiBranchDrilldownQuery {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/settings/branches", axum::routing::get(list).post(create))
+        .route("/settings/branches/page", axum::routing::get(list_page))
+        .route(
+            "/settings/branches/import-template.csv",
+            axum::routing::get(download_branch_import_template),
+        )
+        .route(
+            "/settings/branches/imports/dry-run",
+            axum::routing::post(preview_branch_import),
+        )
+        .route(
+            "/settings/branches/imports/failure-report.csv",
+            axum::routing::post(download_branch_failure_report),
+        )
+        .route(
+            "/settings/branches/imports",
+            axum::routing::post(import_branches),
+        )
         .route("/settings/branches/:id", axum::routing::patch(update))
         .route(
             "/settings/franchise-controls",
@@ -770,6 +801,115 @@ async fn list(
     Ok(Json(ApiResponse::ok(branches)))
 }
 
+async fn list_page(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<BranchPageQuery>,
+) -> ApiResult<branch_service::BranchPage> {
+    require_branch_access(&claims, false)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        branch_service::list_page(
+            &state.db,
+            &tenant_id,
+            query.q.as_deref(),
+            query.cursor.as_deref(),
+            query.limit,
+        )
+        .await?,
+    )))
+}
+
+async fn download_branch_import_template(
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> Result<Response, AppError> {
+    require_branch_access(&claims, false)?;
+    tenant_branch(&headers)?;
+    csv_attachment(
+        branch_service::branch_import_template().to_string(),
+        "branch-import-template.csv",
+    )
+}
+
+async fn preview_branch_import(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    bytes: Bytes,
+) -> ApiResult<branch_service::BranchBulkPreview> {
+    require_branch_access(&claims, true)?;
+    require_csv_content_type(&headers)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        branch_service::preview_bulk(&state.db, &tenant_id, &bytes).await?,
+    )))
+}
+
+async fn download_branch_failure_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    bytes: Bytes,
+) -> Result<Response, AppError> {
+    require_branch_access(&claims, true)?;
+    require_csv_content_type(&headers)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let preview = branch_service::preview_bulk(&state.db, &tenant_id, &bytes).await?;
+    csv_attachment(
+        branch_service::branch_failure_report_csv(&preview.failures)?,
+        "branch-import-failures.csv",
+    )
+}
+
+async fn import_branches(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<BranchBulkImportQuery>,
+    bytes: Bytes,
+) -> ApiResult<branch_service::BranchBulkImportResult> {
+    require_branch_access(&claims, true)?;
+    require_csv_content_type(&headers)?;
+    let idempotency_key = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| AppError::validation("Idempotency-Key header is required"))?;
+    let (tenant_id, current_branch_id) = tenant_branch(&headers)?;
+    let result = branch_service::import_bulk(
+        &state.db,
+        &tenant_id,
+        &current_branch_id,
+        &claims.sub,
+        idempotency_key,
+        branch_service::BranchBulkImportMode::parse(query.mode.as_deref())?,
+        &bytes,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&current_branch_id),
+            identity: None,
+            event_type: "branch.bulk_imported",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({
+                "importId": result.import_id,
+                "createdCount": result.created_count,
+                "replayed": result.replayed,
+            }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
 async fn create(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -850,6 +990,35 @@ fn require_branch_access(claims: &AuthClaims, write: bool) -> Result<(), AppErro
             "branch management permission is required",
         ))
     }
+}
+
+fn require_csv_content_type(headers: &HeaderMap) -> Result<(), AppError> {
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim();
+    matches!(
+        content_type,
+        "text/csv" | "application/csv" | "application/vnd.ms-excel"
+    )
+    .then_some(())
+    .ok_or_else(|| AppError::validation("Content-Type must be text/csv"))
+}
+
+fn csv_attachment(content: String, file_name: &str) -> Result<Response, AppError> {
+    let mut response = content.into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/csv; charset=utf-8"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename={file_name}"))
+            .map_err(|_| AppError::internal("failed to set branch CSV filename"))?,
+    );
+    Ok(response)
 }
 
 fn require_org_report_access(claims: &AuthClaims) -> Result<(), AppError> {

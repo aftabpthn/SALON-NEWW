@@ -93,7 +93,6 @@ pub struct ProvisionStaffLoginInput<'a> {
 pub struct CreateStaff<'a> {
     pub tenant_id: &'a str,
     pub branch_id: &'a str,
-    pub employee_code: Option<&'a str>,
     pub first_name: &'a str,
     pub middle_name: &'a str,
     pub last_name: &'a str,
@@ -133,6 +132,7 @@ pub struct StaffProfileRecord {
     pub staff_id: String,
     pub category_id: Option<String>,
     pub shift_template_id: Option<String>,
+    pub pricing_level_id: Option<String>,
     pub designation: String,
     pub company_name: String,
     pub mandatory_break_minutes: Option<i32>,
@@ -168,6 +168,7 @@ pub struct UpsertStaffProfile<'a> {
     pub branch_id: &'a str,
     pub category_id: Option<&'a str>,
     pub shift_template_id: Option<&'a str>,
+    pub pricing_level_id: Option<&'a str>,
     pub designation: &'a str,
     pub company_name: &'a str,
     pub mandatory_break_minutes: Option<i32>,
@@ -710,7 +711,7 @@ pub async fn get_profile(
 ) -> Result<Option<StaffProfileRecord>, sqlx::Error> {
     sqlx::query_as::<_, StaffProfileRecord>(
         r#"
-        SELECT staff_id, category_id, shift_template_id, designation, company_name, mandatory_break_minutes, work_tasks_json,
+        SELECT staff_id, category_id, shift_template_id, pricing_level_id, designation, company_name, mandatory_break_minutes, work_tasks_json,
                max_work_hours, target_revenue_paise, vacation_days, special_leave_days,
                tenure_start_date, booking_interval_minutes, restrict_booking_to_returning_guests,
                photo_url, date_of_birth, joining_date, gender, employment_type, department,
@@ -734,7 +735,7 @@ pub async fn upsert_profile(
     sqlx::query_as::<_, StaffProfileRecord>(
         r#"
         INSERT INTO staff_profiles (
-          staff_id, tenant_id, branch_id, category_id, shift_template_id,
+          staff_id, tenant_id, branch_id, category_id, shift_template_id, pricing_level_id,
           designation, company_name, mandatory_break_minutes,
           work_tasks_json, max_work_hours, target_revenue_paise, vacation_days,
           special_leave_days, tenure_start_date, booking_interval_minutes,
@@ -743,10 +744,11 @@ pub async fn upsert_profile(
           state_name, postal_code, country, emergency_contact_name,
           emergency_contact_relationship, emergency_contact_phone
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
         ON CONFLICT (staff_id) DO UPDATE SET
           category_id = EXCLUDED.category_id,
           shift_template_id = EXCLUDED.shift_template_id,
+          pricing_level_id = EXCLUDED.pricing_level_id,
           designation = EXCLUDED.designation,
           company_name = EXCLUDED.company_name,
           mandatory_break_minutes = EXCLUDED.mandatory_break_minutes,
@@ -775,7 +777,7 @@ pub async fn upsert_profile(
           emergency_contact_relationship = EXCLUDED.emergency_contact_relationship,
           emergency_contact_phone = EXCLUDED.emergency_contact_phone,
           updated_at = NOW()
-        RETURNING staff_id, category_id, shift_template_id, designation, company_name, mandatory_break_minutes, work_tasks_json,
+        RETURNING staff_id, category_id, shift_template_id, pricing_level_id, designation, company_name, mandatory_break_minutes, work_tasks_json,
                   max_work_hours, target_revenue_paise, vacation_days, special_leave_days,
                   tenure_start_date, booking_interval_minutes, restrict_booking_to_returning_guests,
                   photo_url, date_of_birth, joining_date, gender, employment_type, department,
@@ -788,6 +790,7 @@ pub async fn upsert_profile(
     .bind(input.branch_id)
     .bind(input.category_id)
     .bind(input.shift_template_id)
+    .bind(input.pricing_level_id)
     .bind(input.designation)
     .bind(input.company_name)
     .bind(input.mandatory_break_minutes)
@@ -820,7 +823,24 @@ pub async fn upsert_profile(
 }
 
 pub async fn create(db: &PgPool, input: CreateStaff<'_>) -> Result<StaffRecord, sqlx::Error> {
-    sqlx::query_as::<_, StaffRecord>(
+    let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("staff-employee-code:{}", input.tenant_id))
+        .execute(&mut *tx)
+        .await?;
+    let next_code = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COALESCE(MAX(employee_code::BIGINT), 0) + 1
+        FROM staff
+        WHERE tenant_id = $1 AND employee_code ~ '^[0-9]{1,18}$'
+        "#,
+    )
+    .bind(input.tenant_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let employee_code = format!("{next_code:04}");
+
+    let row = sqlx::query_as::<_, StaffRecord>(
         r#"
         INSERT INTO staff (
           tenant_id, branch_id, employee_code, first_name, middle_name, last_name,
@@ -835,7 +855,7 @@ pub async fn create(db: &PgPool, input: CreateStaff<'_>) -> Result<StaffRecord, 
     )
     .bind(input.tenant_id)
     .bind(input.branch_id)
-    .bind(input.employee_code)
+    .bind(employee_code)
     .bind(input.first_name)
     .bind(input.middle_name)
     .bind(input.last_name)
@@ -845,8 +865,10 @@ pub async fn create(db: &PgPool, input: CreateStaff<'_>) -> Result<StaffRecord, 
     .bind(input.home_phone)
     .bind(input.work_phone)
     .bind(input.job_title)
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn update(

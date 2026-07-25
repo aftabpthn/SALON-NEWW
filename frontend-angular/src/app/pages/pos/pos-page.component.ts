@@ -79,7 +79,7 @@ interface PackageRedeemRow {
   expiresAt: string | null;
 }
 
-interface PaymentMode { code: string; label: string; balancePaise?: number; }
+interface PaymentMode { code: string; label: string; balancePaise?: number; referenceRequired: boolean; }
 interface GiftCardLookup {
   id: string;
   code: string;
@@ -90,6 +90,7 @@ interface GiftCardLookup {
   status: string;
   expiresAt: string | null;
 }
+interface CouponPreview { code: string; discountPaise: number; taxPaise: number; totalPaise: number; key: string; }
 interface QuickClient { name: string; phone: string; email: string; birthday: string; anniversary: string; tags: string; notes: string; }
 interface OfflineCheckout {
   operationId: string;
@@ -108,11 +109,10 @@ interface PosMembershipSettings {
 }
 
 @Component({
-  selector: 'app-pos-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './pos-page.component.html',
-  styleUrls: ['./pos-page.component.css'],
+    selector: 'app-pos-page',
+    imports: [CommonModule, FormsModule, RouterLink],
+    templateUrl: './pos-page.component.html',
+    styleUrls: ['./pos-page.component.css']
 })
 export class PosPageComponent implements OnInit, OnDestroy {
   clients: any[] = [];
@@ -139,7 +139,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
 
   selectedClientId: string | number | null = null;
   selectedStaffId: string | number | null = null;
-  clientSearchText = 'Walk-in client';
+  clientSearchText = '';
   staffSearchText = '';
   clientSearchActive = false;
   staffSearchActive = false;
@@ -174,8 +174,17 @@ export class PosPageComponent implements OnInit, OnDestroy {
   billDiscount = '';
   billDiscountType: DiscountType = 'amount';
   couponCode = '';
+  couponPreview: CouponPreview | null = null;
+  couponApplying = false;
+  couponError = '';
   tipAmount = '';
   walletCreditAmount = '';
+  unpaidReceiveAmount = '';
+  unpaidReceiveMethod = '';
+  unpaidReceiveReference = '';
+  unpaidReceiveLoading = false;
+  unpaidReceiveMessage = '';
+  private unpaidReceiveIdempotencyKey = '';
   bookingAdvancePaise = 0;
   rewardPointsToRedeem = '';
   roundTotal = false;
@@ -198,6 +207,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   private appointmentIdFromRoute = '';
   private membershipPrefillApplied = false;
   private membershipSettingsLoaded = false;
+  private workingDraftCommitted = false;
   private liveUpdates?: Subscription;
   private heartbeatTimer = 0;
 
@@ -206,8 +216,12 @@ export class PosPageComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadOfflineCheckouts();
     this.syncOfflineCheckouts();
-    this.appointmentIdFromRoute = this.route.snapshot.queryParamMap.get('appointmentId') || '';
-    this.reference = this.route.snapshot.queryParamMap.get('reference') || '';
+    const draftId = this.route.snapshot.queryParamMap.get('draft');
+    const appointmentDraftId = this.route.snapshot.queryParamMap.get('appointmentDraftId');
+    const autoHoldWorkingDraft = !!appointmentDraftId && this.takePendingPosAutoHold();
+    this.appointmentIdFromRoute = appointmentDraftId ? '' : this.route.snapshot.queryParamMap.get('appointmentId') || '';
+    if (!draftId && !this.appointmentIdFromRoute && !appointmentDraftId) this.restoreWorkingDraft();
+    this.reference = this.route.snapshot.queryParamMap.get('reference') || this.reference;
     this.loadClients();
     this.loadStaff();
     this.loadServices();
@@ -220,8 +234,18 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.loadPaymentMethods();
     this.loadCashTills();
     this.loadTerminals();
-    const draftId = this.route.snapshot.queryParamMap.get('draft');
     if (draftId) this.restoreHeldInvoice(draftId);
+    if (appointmentDraftId) {
+      if (autoHoldWorkingDraft && this.restoreWorkingDraft()) {
+        if (this.canSave) this.holdInvoice(() => {
+          this.draftId = null;
+          this.restoreAppointmentDraft(appointmentDraftId);
+        });
+        else this.error = 'Current POS bill could not be held automatically';
+      } else {
+        this.restoreAppointmentDraft(appointmentDraftId);
+      }
+    }
     this.liveUpdates = this.realtime.events().subscribe((event) => {
       if (event.entityType === 'terminal') this.loadTerminals();
       if (event.entityType === 'invoice' && event.entityId === this.draftId && !this.saving) this.restoreHeldInvoice(event.entityId);
@@ -230,8 +254,18 @@ export class PosPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.persistWorkingDraft();
     this.liveUpdates?.unsubscribe();
     window.clearInterval(this.heartbeatTimer);
+  }
+
+  @HostListener('window:beforeunload')
+  persistWorkingDraftBeforeUnload(): void { this.persistWorkingDraft(); }
+
+  @HostListener('window:storage', ['$event'])
+  handleStorageEvent(event: StorageEvent): void {
+    if (event.key !== this.posAutoHoldStorageKey() || !event.newValue || !this.canSave || this.draftId) return;
+    this.holdInvoice();
   }
 
   @HostListener('window:online')
@@ -254,10 +288,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
     return Math.min(Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.manualBillDiscountPaise), requested);
   }
   get billDiscountPaise(): number { return this.manualBillDiscountPaise + this.rewardDiscountPaise; }
-  get gstPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineGstPaise(l), 0); }
+  get gstPaise(): number { return this.activeCouponPreview()?.taxPaise ?? this.saleLines.reduce((s, l) => s + this.lineGstPaise(l), 0); }
   get tipPaise(): number { return this.toPaise(this.num(this.tipAmount)); }
   get totalBeforeRoundPaise(): number { return Math.max(0, this.subtotalPaise - this.lineDiscountPaise - this.billDiscountPaise + this.gstPaise + this.tipPaise); }
-  get totalPaise(): number { return this.roundTotal ? Math.round(this.totalBeforeRoundPaise / 100) * 100 : this.totalBeforeRoundPaise; }
+  get totalPaise(): number { return this.activeCouponPreview()?.totalPaise ?? (this.roundTotal ? Math.round(this.totalBeforeRoundPaise / 100) * 100 : this.totalBeforeRoundPaise); }
+  get couponDiscountPaise(): number { return this.activeCouponPreview()?.discountPaise ?? 0; }
   get paidNowPaise(): number { return this.paymentMethods.reduce((s, m) => s + this.toPaise(this.num(this.paymentInputs[m.code])), 0); }
   get invoicePaidPaise(): number { return Math.min(this.totalPaise, this.bookingAdvanceAppliedPaise + this.paidNowPaise); }
   get balanceDuePaise(): number { return Math.max(0, this.totalPaise - this.invoicePaidPaise); }
@@ -266,13 +301,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
   get roundOffError(): string { return this.balanceSettlement === 'round_off' ? this.activeSettlementPlan().error : ''; }
   get bookingAdvanceAppliedPaise(): number { return Math.min(this.totalPaise, Math.max(0, this.bookingAdvancePaise)); }
   get walletCreditPaise(): number {
-    return this.num(this.walletCreditAmount) > 0
-      ? Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise))
-      : 0;
+    return this.toPaise(this.num(this.walletCreditAmount));
   }
   get unappliedOverpayPaise(): number { return Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise) - this.walletCreditPaise); }
   get advanceAdjustedPaise(): number { return this.bookingAdvanceAppliedPaise; }
-  get canSave(): boolean { return !this.saving && this.saleLines.some((line) => this.isLineReady(line)) && !this.roundOffError && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption() && !this.hasInvalidRewardRedemption() && !this.giftCardRedemptionError() && !this.paymentAllocationError(); }
+  get canSave(): boolean { return !this.saving && (this.saleLines.some((line) => this.isLineReady(line)) || this.membershipRedeemCount() > 0 || this.packageRedeemCount() > 0) && !this.roundOffError && !this.hasInvalidStaffSplit() && !this.hasInvalidMembershipRedemption() && !this.hasInvalidPackageRedemption() && !this.hasInvalidRewardRedemption() && !this.couponApplicationError() && !this.walletRedemptionError() && !this.giftCardRedemptionError() && !this.paymentAllocationError(); }
   get itemCount(): number { return this.saleLines.filter((line) => this.isLineReady(line)).length; }
   get offlineConflictCount(): number { return this.offlineCheckouts.filter((item) => item.status === 'conflict').length; }
   get offlineConflictMessage(): string { return this.offlineCheckouts.find((item) => item.status === 'conflict')?.lastError || ''; }
@@ -291,6 +324,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   clearSaleLines(): void {
     this.saleLines = [];
     this.balanceSettlement = 'unpaid';
+    this.clearWorkingDraft();
   }
 
   loadClients(): void { this.loadList('/api/v1/clients', (rows) => { this.clients = rows; const routeClientId = this.route.snapshot.queryParamMap.get('clientId'); if (routeClientId && !this.selectedClientId) this.onClientChange(routeClientId); const client = rows.find((item) => String(item.id) === String(this.selectedClientId)); if (client) this.clientSearchText = this.recordName(client); this.applyMembershipFromRoute(); this.applyAppointmentFromRoute(); }); }
@@ -352,6 +386,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const modes = this.list(res).map((m) => this.paymentMode(m)).filter(Boolean) as PaymentMode[];
         this.paymentMethods = modes;
+        if (!this.paymentMethods.some((mode) => mode.code === this.unpaidReceiveMethod)) this.unpaidReceiveMethod = this.paymentMethods[0]?.code ?? '';
         this.ensurePaymentInputs();
       },
       error: () => { this.paymentMethods = []; this.ensurePaymentInputs(); },
@@ -725,10 +760,74 @@ export class PosPageComponent implements OnInit, OnDestroy {
   closeLineStaffSearchSoon(line: PosLine): void { setTimeout(() => { if (this.activeLineStaffId === line.id) this.activeLineStaffId = null; }, 120); }
 
   onClientChange(clientId: string | number | null): void {
+    const clientChanged = String(this.selectedClientId ?? '') !== String(clientId ?? '');
+    if (clientChanged && (this.paidNowPaise > 0 || this.walletCreditPaise > 0)) {
+      this.clearPayments();
+      this.message = 'Payment selection cleared because the client changed the invoice total';
+    }
     this.selectedClientId = clientId;
     this.selectedSale = null;
     this.rewardPointsToRedeem = '';
+    this.unpaidReceiveAmount = '';
+    this.unpaidReceiveReference = '';
+    this.unpaidReceiveMessage = '';
+    this.unpaidReceiveIdempotencyKey = '';
     this.refreshClientKpi(clientId);
+  }
+
+  fillClientUnpaid(): void {
+    const available = this.unpaidReceiveMethod === 'wallet'
+      ? Math.min(this.clientKpi.unpaidPaise, this.clientKpi.walletPaise)
+      : this.clientKpi.unpaidPaise;
+    this.unpaidReceiveAmount = this.paiseToInput(available);
+    this.unpaidReceiveMessage = '';
+    this.unpaidReceiveIdempotencyKey = '';
+  }
+
+  onUnpaidReceiveEdit(): void {
+    this.unpaidReceiveMessage = '';
+    this.unpaidReceiveIdempotencyKey = '';
+  }
+
+  receiveClientUnpaid(): void {
+    if (!this.selectedClientId || this.unpaidReceiveLoading) return;
+    const amountPaise = this.toPaise(this.num(this.unpaidReceiveAmount));
+    const method = this.paymentMethods.find((mode) => mode.code === this.unpaidReceiveMethod);
+    if (!method) { this.error = 'Select a payment mode'; return; }
+    if (amountPaise <= 0) { this.error = 'Receive amount must be greater than zero'; return; }
+    if (amountPaise > this.clientKpi.unpaidPaise) { this.error = 'Receive amount cannot exceed client unpaid balance'; return; }
+    if (method.code === 'wallet' && amountPaise > this.clientKpi.walletPaise) { this.error = 'Wallet balance cannot cover this payment'; return; }
+    if (method.referenceRequired && !this.unpaidReceiveReference.trim()) { this.error = `${method.label} reference is required`; return; }
+    this.error = '';
+    this.message = '';
+    this.unpaidReceiveMessage = '';
+    this.unpaidReceiveLoading = true;
+    this.unpaidReceiveIdempotencyKey ||= crypto.randomUUID();
+    this.api.post<any>(`/api/v1/pos/clients/${this.selectedClientId}/unpaid-payments`, {
+      method: method.code,
+      amountPaise,
+      methodReference: this.unpaidReceiveReference.trim(),
+      notes: 'Old unpaid balance received from POS',
+      idempotencyKey: this.unpaidReceiveIdempotencyKey,
+      cashDrawerTillId: this.selectedCashTillId || null,
+    }).subscribe({
+      next: (response: any) => {
+        const receipt = response?.data ?? response;
+        const receivedPaise = this.firstMoney(receipt, ['receivedPaise', 'received_paise']);
+        const remainingPaise = this.firstMoney(receipt, ['unpaidAfterPaise', 'unpaid_after_paise']);
+        const allocations = Array.isArray(receipt?.allocations) ? receipt.allocations.length : 0;
+        this.unpaidReceiveMessage = `₹${this.paiseToInput(receivedPaise)} received across ${allocations} oldest invoice${allocations === 1 ? '' : 's'}. Remaining ₹${this.paiseToInput(remainingPaise)}.`;
+        this.unpaidReceiveAmount = '';
+        this.unpaidReceiveReference = '';
+        this.unpaidReceiveIdempotencyKey = '';
+        this.unpaidReceiveLoading = false;
+        this.refreshClientKpi(this.selectedClientId);
+      },
+      error: (err: any) => {
+        this.error = this.errorText(err, 'Unable to receive unpaid amount');
+        this.unpaidReceiveLoading = false;
+      },
+    });
   }
 
   refreshClientKpi(clientId: string | number | null): void {
@@ -736,10 +835,15 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (this.selectedClient) this.clientKpi = this.kpiFrom(this.selectedClient);
     this.api.get<any>(`/api/v1/pos/clients/${clientId}/kpi`).subscribe({
       next: (res: any) => {
+        const totalBeforeBenefits = this.totalPaise;
         const kpi = res?.data?.kpi ?? res?.data ?? res?.kpi ?? res;
         this.clientKpi = this.kpiFrom(kpi);
         this.membershipRedeemRows = this.clientKpi.membershipCredits;
         this.packageRedeemRows = this.clientKpi.packageCredits;
+        if (this.paidNowPaise > 0 && this.totalPaise !== totalBeforeBenefits) {
+          this.clearPayments();
+          this.message = 'Payment selection cleared because client benefits changed the invoice total';
+        }
       },
       error: () => undefined,
     });
@@ -838,6 +942,41 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.giftCardLookupError = '';
   }
 
+  onCouponCodeInput(value: string): void {
+    this.couponCode = value.toUpperCase().replace(/\s+/g, '');
+    this.couponPreview = null;
+    this.couponError = '';
+  }
+
+  applyCoupon(): void {
+    const code = this.couponCode.trim().toUpperCase();
+    this.couponCode = code;
+    this.couponPreview = null;
+    this.couponError = '';
+    if (!code) { this.couponError = 'Enter coupon code'; return; }
+    if (!this.saleLines.some((line) => this.isLineReady(line))) { this.couponError = 'Add at least one item'; return; }
+    const key = this.couponRequestKey();
+    const payload = { ...this.salePayload('draft'), payments: [], paymentSplit: [], payment_split: [], walletCreditPaise: 0 };
+    this.couponApplying = true;
+    this.api.post<any>('/api/v1/pos/coupons/preview', payload).subscribe({
+      next: (response: any) => {
+        const data = response?.data ?? response;
+        this.couponPreview = {
+          code: String(data.code ?? code),
+          discountPaise: this.firstMoney(data, ['discountPaise', 'discount_paise']),
+          taxPaise: this.firstMoney(data, ['taxPaise', 'tax_paise']),
+          totalPaise: this.firstMoney(data, ['totalPaise', 'total_paise']),
+          key,
+        };
+        this.couponApplying = false;
+      },
+      error: (err: any) => {
+        this.couponError = this.errorText(err, 'Coupon could not be applied');
+        this.couponApplying = false;
+      },
+    });
+  }
+
   verifyGiftCard(): void {
     const code = this.giftCardPaymentCode.trim().toUpperCase();
     this.giftCardPaymentCode = code;
@@ -869,7 +1008,24 @@ export class PosPageComponent implements OnInit, OnDestroy {
     });
   }
 
-  fillPayment(method: PaymentMode): void { if (this.balanceDuePaise > 0) this.paymentInputs[method.code] = this.paiseToInput(this.balanceDuePaise); }
+  paymentFillPaise(method: PaymentMode): number {
+    const paidByOtherModes = this.paymentMethods
+      .filter((item) => item.code !== method.code)
+      .reduce((total, item) => total + this.toPaise(this.num(this.paymentInputs[item.code])), 0);
+    const remainingPaise = Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise - paidByOtherModes);
+    if (method.code === 'wallet') return Math.min(remainingPaise, this.clientKpi.walletPaise);
+    if (method.code === 'gift_card') return Math.min(remainingPaise, this.verifiedGiftCard?.balancePaise ?? remainingPaise);
+    return remainingPaise;
+  }
+  fillPayment(method: PaymentMode): void {
+    if (method.code === 'wallet' && !this.selectedClientId) { this.error = 'Select a client before using wallet'; return; }
+    const amountPaise = this.paymentFillPaise(method);
+    if (method.code === 'wallet' && amountPaise <= 0) { this.error = 'Wallet has no available balance'; return; }
+    if (amountPaise > 0) {
+      this.paymentInputs[method.code] = this.paiseToInput(amountPaise);
+      this.error = '';
+    }
+  }
   applyOverpayToWallet(): void { if (this.unappliedOverpayPaise > 0) this.walletCreditAmount = this.paiseToInput(this.walletCreditPaise + this.unappliedOverpayPaise); }
   applyOverpayToTip(): void { if (this.unappliedOverpayPaise > 0) this.tipAmount = this.paiseToInput(this.tipPaise + this.unappliedOverpayPaise); }
   clearPayments(): void {
@@ -880,14 +1036,18 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.giftCardLookupError = '';
     this.ensurePaymentInputs();
   }
-  holdInvoice(): void { this.saveSale('draft'); }
+  holdInvoice(afterHold?: () => void): void { this.saveSale('draft', {}, afterHold); }
   finalizeSale(): void {
     if (this.paidNowPaise === 0) {
       if (!window.confirm('No payment collected. Save invoice as unpaid?')) return;
-      this.clearPayments();
-      this.balanceSettlement = 'unpaid';
+      this.finalizeUnpaidSale();
+      return;
     }
     this.saveSale('finalized');
+  }
+  saveAsUnpaid(): void {
+    if (!window.confirm('Clear the payment selection and save this invoice as unpaid?')) return;
+    this.finalizeUnpaidSale();
   }
 
   syncOfflineCheckouts(): void {
@@ -1042,7 +1202,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   clientHasDuplicates(client: any): boolean { return this.firstNumber(client, ['duplicateCount', 'duplicate_count']) > 0; }
   whatsappUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `https://wa.me/${phone.length === 10 ? `91${phone}` : phone}` : ''; }
   callUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `tel:${phone}` : ''; }
-  staffResultMeta(person: any): string { return [person?.employeeCode ?? person?.employee_code, person?.jobTitle ?? person?.job_title ?? person?.role, person?.mobilePhone ?? person?.mobile_phone ?? person?.phone, person?.branchName ?? person?.branch_name ?? person?.branchId ?? person?.branch_id].filter(Boolean).join(' · '); }
+  staffResultMeta(person: any): string { return [person?.employeeCode ?? person?.employee_code, person?.jobTitle ?? person?.job_title ?? person?.role, person?.mobilePhone ?? person?.mobile_phone ?? person?.phone, person?.branchName ?? person?.branch_name ?? this.branchName].filter(Boolean).join(' · '); }
   typeLabel(type: LineType): string {
     return ({ service: 'Service', product: 'Product', membership: 'Membership', package: 'Package', gift_card: 'Gift card', custom: 'Custom' })[type];
   }
@@ -1149,18 +1309,22 @@ export class PosPageComponent implements OnInit, OnDestroy {
     return true;
   }
 
-  private saveSale(status: SaleStatus): void {
+  private saveSale(status: SaleStatus, options: { forceUnpaid?: boolean } = {}, afterSave?: () => void): void {
     this.error = '';
     this.message = '';
     if (this.hasInvalidStaffSplit()) { this.error = 'Staff split total must be 100%'; return; }
     if (this.hasMissingMembershipRedeemStaff()) { this.error = 'Select staff for membership redemption'; return; }
     if (this.hasInvalidMembershipRedemption()) { this.error = 'Membership redeem qty is not available'; return; }
     if (this.hasInvalidPackageRedemption()) { this.error = 'Package redeem qty is not available'; return; }
+    const couponError = this.couponApplicationError();
+    if (couponError) { this.error = couponError; return; }
+    const walletError = this.walletRedemptionError();
+    if (walletError) { this.error = walletError; return; }
     const giftCardError = this.giftCardRedemptionError();
     if (giftCardError) { this.error = giftCardError; return; }
     const rewardError = this.rewardRedemptionError();
     if (rewardError) { this.error = rewardError; return; }
-    const paymentError = this.paymentAllocationError();
+    const paymentError = options.forceUnpaid ? '' : this.paymentAllocationError();
     if (paymentError) { this.error = paymentError; return; }
     if (this.roundOffError) { this.error = this.roundOffError; return; }
     if (status === 'draft' && this.walletCreditPaise > 0) { this.error = 'Client advance can only be applied when finalizing the invoice'; return; }
@@ -1172,33 +1336,42 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (!this.isOnline) {
       if (this.giftCardPaymentPaise > 0) { this.error = 'Gift card redemption requires an internet connection'; return; }
       if (status === 'draft' || this.draftId) { this.error = 'Held invoices require an internet connection'; return; }
-      this.queueOfflineCheckout();
+      this.queueOfflineCheckout(options);
       return;
     }
     this.saving = true;
     if (this.draftId) {
       this.api.put<any>(`/api/v1/pos/invoices/${this.draftId}`, this.salePayload('draft')).subscribe({
-        next: (res: any) => status === 'draft' ? this.completeSave(res, 'draft') : this.finalizeHeldInvoice(),
+        next: (res: any) => status === 'draft' ? this.completeSave(res, 'draft', afterSave) : this.finalizeHeldInvoice(afterSave),
         error: (err: any) => this.saveError(err),
       });
       return;
     }
     const path = status === 'draft' ? '/api/v1/pos/invoices/draft' : '/api/v1/pos/sales';
-    this.api.post<any>(path, this.salePayload(status)).subscribe({ next: (res: any) => this.completeSave(res, status), error: (err: any) => this.saveError(err) });
+    this.api.post<any>(path, this.salePayload(status, options)).subscribe({ next: (res: any) => this.completeSave(res, status, afterSave), error: (err: any) => this.saveError(err) });
   }
 
-  private finalizeHeldInvoice(): void {
-    this.api.post<any>(`/api/v1/pos/invoices/${this.draftId}/finalize`, { cashDrawerTillId: this.selectedCashTillId || null }).subscribe({ next: (res: any) => this.completeSave(res, 'finalized'), error: (err: any) => this.saveError(err) });
+  private finalizeUnpaidSale(): void {
+    this.clearPayments();
+    this.balanceSettlement = 'unpaid';
+    this.saveSale('finalized', { forceUnpaid: true });
   }
 
-  private completeSave(res: any, status: SaleStatus): void {
+  private finalizeHeldInvoice(afterSave?: () => void): void {
+    this.api.post<any>(`/api/v1/pos/invoices/${this.draftId}/finalize`, { cashDrawerTillId: this.selectedCashTillId || null }).subscribe({ next: (res: any) => this.completeSave(res, 'finalized', afterSave), error: (err: any) => this.saveError(err) });
+  }
+
+  private completeSave(res: any, status: SaleStatus, afterSave?: () => void): void {
     const data = res?.data ?? res;
     this.selectedSale = data?.sale ?? data?.invoice ?? data;
     this.draftId = status === 'draft' ? String(this.selectedSale?.id ?? this.draftId) : null;
     this.message = status === 'draft' ? 'Invoice held' : 'Invoice saved';
+    this.workingDraftCommitted = true;
+    this.clearWorkingDraft();
     this.saving = false;
     this.loadPaymentMethods();
     if (this.selectedClientId) this.refreshClientKpi(this.selectedClientId);
+    afterSave?.();
     if (status === 'finalized') void this.router.navigate(['/pos/invoices']);
   }
 
@@ -1207,13 +1380,13 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.saving = false;
   }
 
-  private queueOfflineCheckout(): void {
+  private queueOfflineCheckout(options: { forceUnpaid?: boolean } = {}): void {
     const tenantId = localStorage.getItem('aurashine_tenant_id') || '';
     const branchId = localStorage.getItem('aurashine_branch_id') || '';
     if (!tenantId || !branchId) { this.error = 'Tenant or branch session is missing'; return; }
     const queued: OfflineCheckout = {
       operationId: crypto.randomUUID(),
-      checkout: this.salePayload('finalized'),
+      checkout: this.salePayload('finalized', options),
       createdAt: new Date().toISOString(),
       status: 'pending',
       lastError: '',
@@ -1232,7 +1405,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.saleLines = [];
     this.selectedSale = null;
     this.selectedClientId = null;
-    this.clientSearchText = 'Walk-in client';
+    this.clientSearchText = '';
     this.clientKpi = this.emptyKpi();
     this.membershipRedeemRows = [];
     this.packageRedeemRows = [];
@@ -1247,6 +1420,131 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.roundTotal = false;
     this.balanceSettlement = 'unpaid';
     this.clearPayments();
+    this.clearWorkingDraft();
+  }
+
+  private persistWorkingDraft(): void {
+    if (this.workingDraftCommitted || this.draftId || !this.saleLines.length) { this.clearWorkingDraft(); return; }
+    try {
+      sessionStorage.setItem(this.workingDraftStorageKey(), JSON.stringify({
+        version: 1,
+        selectedClientId: this.selectedClientId,
+        selectedStaffId: this.selectedStaffId,
+        clientSearchText: this.clientSearchText,
+        staffSearchText: this.staffSearchText,
+        branchName: this.branchName,
+        invoiceDate: this.invoiceDate,
+        source: this.source,
+        reference: this.reference,
+        selectedCashTillId: this.selectedCashTillId,
+        selectedTerminalId: this.selectedTerminalId,
+        selectedMembershipId: this.selectedMembershipId,
+        selectedPackageId: this.selectedPackageId,
+        giftCardAmount: this.giftCardAmount,
+        giftCardPaymentCode: this.giftCardPaymentCode,
+        verifiedGiftCard: this.verifiedGiftCard,
+        activeAddonSale: this.activeAddonSale,
+        billDiscount: this.billDiscount,
+        billDiscountType: this.billDiscountType,
+        couponCode: this.couponCode,
+        couponPreview: this.couponPreview,
+        tipAmount: this.tipAmount,
+        walletCreditAmount: this.walletCreditAmount,
+        bookingAdvancePaise: this.bookingAdvancePaise,
+        rewardPointsToRedeem: this.rewardPointsToRedeem,
+        rounding: this.roundTotal,
+        balanceSettlement: this.balanceSettlement,
+        saleLines: this.saleLines,
+        clientKpi: this.clientKpi,
+        membershipRedeemRows: this.membershipRedeemRows,
+        packageRedeemRows: this.packageRedeemRows,
+        paymentInputs: this.paymentInputs,
+      }));
+    } catch { /* session storage unavailable */ }
+  }
+
+  private restoreWorkingDraft(): boolean {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(this.workingDraftStorageKey()) || 'null');
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.saleLines) || !saved.saleLines.length) return false;
+      this.selectedClientId = saved.selectedClientId ?? null;
+      this.selectedStaffId = saved.selectedStaffId ?? null;
+      this.clientSearchText = String(saved.clientSearchText ?? '');
+      this.staffSearchText = String(saved.staffSearchText ?? '');
+      this.branchName = String(saved.branchName ?? this.branchName);
+      this.invoiceDate = String(saved.invoiceDate ?? this.invoiceDate);
+      this.source = String(saved.source ?? 'Counter');
+      this.reference = String(saved.reference ?? '');
+      this.selectedCashTillId = String(saved.selectedCashTillId ?? '');
+      this.selectedTerminalId = String(saved.selectedTerminalId ?? '');
+      this.selectedMembershipId = String(saved.selectedMembershipId ?? '');
+      this.selectedPackageId = String(saved.selectedPackageId ?? '');
+      this.giftCardAmount = String(saved.giftCardAmount ?? '');
+      this.giftCardPaymentCode = String(saved.giftCardPaymentCode ?? '');
+      this.verifiedGiftCard = saved.verifiedGiftCard?.code ? saved.verifiedGiftCard as GiftCardLookup : null;
+      this.activeAddonSale = ['membership', 'package', 'gift_card'].includes(saved.activeAddonSale) ? saved.activeAddonSale : null;
+      this.billDiscount = String(saved.billDiscount ?? '');
+      this.billDiscountType = saved.billDiscountType === 'percent' ? 'percent' : 'amount';
+      this.couponCode = String(saved.couponCode ?? '');
+      this.couponPreview = saved.couponPreview?.key ? saved.couponPreview as CouponPreview : null;
+      this.tipAmount = String(saved.tipAmount ?? '');
+      this.walletCreditAmount = String(saved.walletCreditAmount ?? '');
+      this.bookingAdvancePaise = Math.max(0, this.num(saved.bookingAdvancePaise));
+      this.rewardPointsToRedeem = String(saved.rewardPointsToRedeem ?? '');
+      this.roundTotal = saved.rounding === true;
+      this.balanceSettlement = saved.balanceSettlement === 'round_off' ? 'round_off' : 'unpaid';
+      const lineTypes: LineType[] = ['service', 'product', 'membership', 'package', 'gift_card', 'custom'];
+      this.saleLines = saved.saleLines.slice(0, 100).map((raw: any) => {
+        const lineType: LineType = lineTypes.includes(raw?.lineType) ? raw.lineType : 'custom';
+        const line = this.newSaleLine(lineType);
+        return {
+          ...line,
+          id: String(raw?.id ?? line.id), itemId: raw?.itemId ?? null,
+          itemName: String(raw?.itemName ?? ''), itemSearchText: String(raw?.itemSearchText ?? ''), staffSearchText: String(raw?.staffSearchText ?? ''), customName: String(raw?.customName ?? ''),
+          quantity: String(raw?.quantity ?? '1'), unitPrice: String(raw?.unitPrice ?? ''), discount: String(raw?.discount ?? ''), discountType: raw?.discountType === 'percent' ? 'percent' : 'amount',
+          discountSource: String(raw?.discountSource ?? ''), taxPercent: String(raw?.taxPercent ?? ''), staffId: raw?.staffId ?? null, staffSplits: this.parseStaffSplits(raw?.staffSplits),
+        };
+      });
+      this.clientKpi = saved.clientKpi ? this.kpiFrom(saved.clientKpi) : this.emptyKpi();
+      this.membershipRedeemRows = Array.isArray(saved.membershipRedeemRows) ? saved.membershipRedeemRows : [];
+      this.packageRedeemRows = Array.isArray(saved.packageRedeemRows) ? saved.packageRedeemRows : [];
+      this.paymentInputs = saved.paymentInputs && typeof saved.paymentInputs === 'object'
+        ? Object.fromEntries(Object.entries(saved.paymentInputs).map(([key, value]) => [key, String(value ?? '')]))
+        : {};
+      this.message = 'Unsaved bill restored';
+      return true;
+    } catch { this.clearWorkingDraft(); return false; }
+  }
+
+  private clearWorkingDraft(): void {
+    try { sessionStorage.removeItem(this.workingDraftStorageKey()); } catch { /* session storage unavailable */ }
+  }
+
+  private workingDraftStorageKey(): string {
+    const tenantId = localStorage.getItem('aurashine_tenant_id') || 'unknown';
+    const branchId = localStorage.getItem('aurashine_branch_id') || 'unknown';
+    return `aurashine_pos_working_draft:${tenantId}:${branchId}`;
+  }
+
+  private posAutoHoldStorageKey(): string {
+    const tenantId = localStorage.getItem('aurashine_tenant_id') || 'unknown';
+    const branchId = localStorage.getItem('aurashine_branch_id') || 'unknown';
+    return `aurashine_pos_auto_hold:${tenantId}:${branchId}`;
+  }
+
+  private takePendingPosAutoHold(): boolean {
+    try {
+      const key = this.posAutoHoldPendingStorageKey();
+      const pending = !!sessionStorage.getItem(key);
+      if (pending) sessionStorage.removeItem(key);
+      return pending;
+    } catch { return false; }
+  }
+
+  private posAutoHoldPendingStorageKey(): string {
+    const tenantId = localStorage.getItem('aurashine_tenant_id') || 'unknown';
+    const branchId = localStorage.getItem('aurashine_branch_id') || 'unknown';
+    return `aurashine_pos_auto_hold_pending:${tenantId}:${branchId}`;
   }
 
   private loadOfflineCheckouts(): void {
@@ -1283,44 +1581,66 @@ export class PosPageComponent implements OnInit, OnDestroy {
         const details = res?.sale ? res : res?.data ?? res;
         const sale = details.sale ?? details.invoice ?? details;
         if (sale.status !== 'draft') { this.error = 'Only held invoices can be resumed'; return; }
-        this.draftId = id;
-        this.selectedSale = sale;
-        this.selectedClientId = (sale.clientId ?? sale.client_id ?? null) as any;
-        const restoredClient = this.selectedClient;
-        this.clientSearchText = restoredClient
-          ? this.recordName(restoredClient)
-          : String(details.clientKpi?.clientName ?? details.client_kpi?.client_name ?? sale.clientName ?? sale.client_name ?? 'Walk-in client');
-        this.selectedStaffId = (sale.staffId ?? sale.staff_id ?? null) as any;
-        this.source = sale.source ?? 'Counter';
-        this.reference = sale.referenceId ?? sale.reference_id ?? '';
-        this.invoiceDate = this.formatDate(sale.businessDate ?? sale.business_date ?? sale.createdAt ?? sale.created_at);
-        const restoredLines = Array.isArray(details.lines) ? details.lines : [];
-        const rewardLine = restoredLines.find((line: any) => String(line.lineType ?? line.line_type) === 'redemption' && String(line.itemId ?? line.item_id) === 'reward_points');
-        const rewardPoints = Math.max(0, this.firstNumber(rewardLine, ['quantity', 'qty']));
-        this.rewardPointsToRedeem = rewardPoints ? String(rewardPoints) : '';
-        const storedBillDiscount = this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']);
-        this.billDiscount = this.paiseToInput(Math.max(0, storedBillDiscount - rewardPoints * this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise)));
-        this.couponCode = sale.couponCode ?? sale.coupon_code ?? '';
-        this.tipAmount = this.paiseToInput(this.firstMoney(sale, ['tipPaise', 'tip_paise']));
-        this.saleLines = restoredLines.filter((line: any) => line !== rewardLine).map((line: any) => this.restoreLine(line));
-        this.paymentInputs = {};
-        this.giftCardPaymentCode = '';
-        this.verifiedGiftCard = null;
-        (details.payments ?? []).forEach((payment: any) => {
-          const method = String(payment.method ?? payment.code);
-          this.paymentInputs[method] = this.paiseToInput(this.firstMoney(payment, ['amountPaise', 'amount_paise']));
-          if (method === 'gift_card') this.giftCardPaymentCode = String(payment.methodReference ?? payment.method_reference ?? payment.reference ?? '').toUpperCase();
-        });
-        this.ensurePaymentInputs();
-        if (this.giftCardPaymentCode) this.verifyGiftCard();
-        this.refreshClientKpi(this.selectedClientId);
-        if (String(sale.source ?? '').toLowerCase() === 'appointment' && this.reference) this.loadBookingAdvance(this.reference);
+        this.restoreDraftSale(id, details, sale);
         this.message = 'Held invoice restored';
       },
       error: (err: any) => this.error = err?.error?.message ?? err?.message ?? 'Unable to restore held invoice',
     });
   }
 
+  private restoreAppointmentDraft(id: string): void {
+    this.api.get<any>(`/api/v1/pos/invoices/${id}`).subscribe({
+      next: (res: any) => {
+        const details = res?.sale ? res : res?.data ?? res;
+        const sale = details.sale ?? details.invoice ?? details;
+        if (sale.status !== 'draft') { this.error = 'Only draft appointment invoices can be opened'; return; }
+        const source = String(sale.source ?? '').toLowerCase();
+        const reference = String(sale.referenceId ?? sale.reference_id ?? '');
+        if (source !== 'appointment' || !reference) {
+          this.error = 'Appointment POS can only open appointment-linked draft invoices';
+          return;
+        }
+        this.restoreDraftSale(id, details, sale);
+        this.message = 'Appointment invoice opened';
+      },
+      error: (err: any) => this.error = err?.error?.message ?? err?.message ?? 'Unable to open appointment invoice',
+    });
+  }
+
+  private restoreDraftSale(id: string, details: any, sale: any): void {
+    this.draftId = id;
+    this.selectedSale = sale;
+    this.selectedClientId = (sale.clientId ?? sale.client_id ?? null) as any;
+    const restoredClient = this.selectedClient;
+    this.clientSearchText = restoredClient
+      ? this.recordName(restoredClient)
+      : String(details.clientKpi?.clientName ?? details.client_kpi?.client_name ?? sale.clientName ?? sale.client_name ?? 'Walk-in client');
+    this.selectedStaffId = (sale.staffId ?? sale.staff_id ?? null) as any;
+    this.source = sale.source ?? 'Counter';
+    this.reference = sale.referenceId ?? sale.reference_id ?? '';
+    this.invoiceDate = this.formatDate(sale.businessDate ?? sale.business_date ?? sale.createdAt ?? sale.created_at);
+    const restoredLines = Array.isArray(details.lines) ? details.lines : [];
+    const rewardLine = restoredLines.find((line: any) => String(line.lineType ?? line.line_type) === 'redemption' && String(line.itemId ?? line.item_id) === 'reward_points');
+    const rewardPoints = Math.max(0, this.firstNumber(rewardLine, ['quantity', 'qty']));
+    this.rewardPointsToRedeem = rewardPoints ? String(rewardPoints) : '';
+    const storedBillDiscount = this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']);
+    this.billDiscount = this.paiseToInput(Math.max(0, storedBillDiscount - rewardPoints * this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise)));
+    this.couponCode = sale.couponCode ?? sale.coupon_code ?? '';
+    this.tipAmount = this.paiseToInput(this.firstMoney(sale, ['tipPaise', 'tip_paise']));
+    this.saleLines = restoredLines.filter((line: any) => line !== rewardLine).map((line: any) => this.restoreLine(line));
+    this.paymentInputs = {};
+    this.giftCardPaymentCode = '';
+    this.verifiedGiftCard = null;
+    (details.payments ?? []).forEach((payment: any) => {
+      const method = String(payment.method ?? payment.code);
+      this.paymentInputs[method] = this.paiseToInput(this.firstMoney(payment, ['amountPaise', 'amount_paise']));
+      if (method === 'gift_card') this.giftCardPaymentCode = String(payment.methodReference ?? payment.method_reference ?? payment.reference ?? '').toUpperCase();
+    });
+    this.ensurePaymentInputs();
+    if (this.giftCardPaymentCode) this.verifyGiftCard();
+    this.refreshClientKpi(this.selectedClientId);
+    if (String(sale.source ?? '').toLowerCase() === 'appointment' && this.reference) this.loadBookingAdvance(this.reference);
+  }
   private restoreLine(line: any): PosLine {
     const type = String(line.lineType ?? line.line_type ?? 'custom') as LineType;
     const rawDiscountType = String(line.discountType ?? line.discount_type ?? 'amount');
@@ -1330,7 +1650,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), discount, discountType: amountType, discountSource: rawDiscountType.startsWith('membership') ? rawDiscountType : '', taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
   }
 
-  private salePayload(status: SaleStatus): any {
+  private salePayload(status: SaleStatus, options: { forceUnpaid?: boolean } = {}): any {
     const clientId = this.idPayload(this.selectedClientId);
     const staffId = this.idPayload(this.selectedStaffId);
     const lines: any[] = this.saleLines.filter((line) => this.isLineReady(line)).map((line) => {
@@ -1403,8 +1723,14 @@ export class PosPageComponent implements OnInit, OnDestroy {
         discountValue: 0, discount_value: 0, gstPercent: 0, gst_percent: 0,
       });
     }
-    const paymentSplit = this.cappedPaymentSplit();
+    const paymentSplit = options.forceUnpaid ? [] : this.cappedPaymentSplit();
     const packageRedemptions = this.packageRedemptionPayload();
+    lines.push(...packageRedemptions.map((row) => ({
+      lineType: 'package_redeem', line_type: 'package_redeem', itemId: row.clientPackageCreditId, item_id: row.clientPackageCreditId,
+      itemName: `${row.packageName} · ${row.serviceName}`, item_name: `${row.packageName} · ${row.serviceName}`,
+      staffId: row.staffId, staff_id: row.staffId, qty: row.quantity, quantity: row.quantity,
+      unitPricePaise: 0, unit_price_paise: 0, discountType: 'amount', discount_type: 'amount', discountValue: 0, discount_value: 0, gstPercent: 0, gst_percent: 0,
+    })));
     return {
       status,
       clientId,
@@ -1430,7 +1756,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
       coupon_code: this.couponCode.trim() || null,
       tipPaise: this.tipPaise,
       tip_paise: this.tipPaise,
-      walletCreditPaise: this.walletCreditPaise,
+      forceUnpaid: options.forceUnpaid === true,
+      walletCreditPaise: options.forceUnpaid ? 0 : paymentSplit.length ? this.walletCreditPaise : 0,
       roundToNearestRupee: this.roundTotal,
       paymentSplit,
       payment_split: paymentSplit,
@@ -1467,6 +1794,33 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (this.verifiedGiftCard.status !== 'active') return 'Gift card is not active';
     if (this.giftCardPaymentPaise > this.verifiedGiftCard.balancePaise) return 'Gift card balance cannot cover this payment';
     return '';
+  }
+  walletRedemptionError(): string {
+    const amountPaise = this.toPaise(this.num(this.paymentInputs['wallet']));
+    if (amountPaise <= 0) return '';
+    if (!this.selectedClientId) return 'Select a client before using wallet';
+    if (amountPaise > this.clientKpi.walletPaise) return 'Wallet balance cannot cover this payment';
+    return '';
+  }
+  private activeCouponPreview(): CouponPreview | null {
+    return this.couponPreview?.key === this.couponRequestKey() ? this.couponPreview : null;
+  }
+  private couponApplicationError(): string {
+    return this.couponCode.trim() && !this.activeCouponPreview() ? (this.couponError || 'Apply coupon before saving') : '';
+  }
+  private couponRequestKey(): string {
+    return JSON.stringify({
+      clientId: this.selectedClientId,
+      couponCode: this.couponCode.trim().toUpperCase(),
+      billDiscount: this.billDiscount,
+      billDiscountType: this.billDiscountType,
+      rewardPoints: this.rewardPointsToRedeem,
+      tip: this.tipAmount,
+      rounding: this.roundTotal,
+      lines: this.saleLines.map((line) => [line.lineType, line.itemId, line.quantity, line.unitPrice, line.discount, line.discountType, line.taxPercent, line.staffId]),
+      membershipRedemptions: this.membershipRedeemRows.map((row) => [row.id, row.redeemQty, row.staffId]),
+      packageRedemptions: this.packageRedeemRows.map((row) => [row.id, row.redeemQty, row.staffId]),
+    });
   }
   private paymentAllocationError(): string {
     const overpayPaise = Math.max(0, this.paidNowPaise - Math.max(0, this.totalPaise - this.bookingAdvanceAppliedPaise));
@@ -1566,7 +1920,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
 
   private loadList(path: string, assign: (rows: any[]) => void): void { this.api.get<any>(path).subscribe({ next: (res: any) => assign(this.list(res).filter((x) => x?.id != null)), error: () => assign([]) }); }
   private list(res: any): any[] { if (Array.isArray(res)) return res; for (const key of ['rows', 'items', 'data', 'clients', 'staff', 'services', 'products', 'appointments', 'paymentMethods', 'payment_methods']) if (Array.isArray(res?.[key])) return res[key]; return []; }
-  private paymentMode(mode: any): PaymentMode | null { const raw = String(mode?.code ?? mode?.method ?? mode?.key ?? mode?.name ?? '').trim(); if (!raw) return null; const code = raw.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/\s+/g, '_'); return { code, label: String(mode?.label ?? mode?.name ?? this.labelFor(code)), balancePaise: this.firstMoney(mode, ['balancePaise', 'balance_paise']) }; }
+  private paymentMode(mode: any): PaymentMode | null { const raw = String(mode?.code ?? mode?.method ?? mode?.key ?? mode?.name ?? '').trim(); if (!raw) return null; const code = raw.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase().replace(/\s+/g, '_'); return { code, label: String(mode?.label ?? mode?.name ?? this.labelFor(code)), balancePaise: this.firstMoney(mode, ['balancePaise', 'balance_paise']), referenceRequired: mode?.referenceRequired === true || mode?.reference_required === true }; }
   private ensurePaymentInputs(): void { const next: Record<string, string> = {}; this.paymentMethods.forEach((m) => (next[m.code] = this.paymentInputs[m.code] ?? '')); this.paymentInputs = next; }
   private kpiFrom(data: any): ClientKpi {
     return {

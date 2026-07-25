@@ -1,116 +1,240 @@
 <section class="marketing-page">
-  <p class="alert" *ngIf="error">{{ error }}</p>
+  @if (error) {
+    <p class="alert">{{ error }}</p>
+  }
   <section class="workspace">
     <header class="page-head"><h1>Marketing & Messaging</h1><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header>
     <nav class="tabs" aria-label="Marketing sections"><button type="button" [class.active]="activeSection === 'overview'" (click)="activeSection = 'overview'">Overview</button><button type="button" [class.active]="activeSection === 'opportunities'" (click)="activeSection = 'opportunities'">AI Opportunities</button><button type="button" [class.active]="activeSection === 'segments'" (click)="activeSection = 'segments'">Segments</button><button type="button" [class.active]="activeSection === 'campaigns'" (click)="activeSection = 'campaigns'">Campaigns</button><button type="button" [class.active]="activeSection === 'automations'" (click)="activeSection = 'automations'">Automations</button><button type="button" [class.active]="activeSection === 'offers'" (click)="activeSection = 'offers'">Offers</button><button type="button" [class.active]="activeSection === 'templates'" (click)="activeSection = 'templates'">Templates</button><button type="button" [class.active]="activeSection === 'outbox'" (click)="activeSection = 'outbox'">Outbox</button><button type="button" [class.active]="activeSection === 'leads'" (click)="activeSection = 'leads'">Leads</button><button type="button" [class.active]="activeSection === 'analytics'" (click)="activeSection = 'analytics'">Analytics</button><button type="button" [class.active]="activeSection === 'governance'" (click)="activeSection = 'governance'">Governance</button></nav>
 
-    <section class="overview-workspace" *ngIf="activeSection === 'overview'">
-      <div class="overview-metrics"><article><span>Draft campaigns</span><strong>{{ campaignCount('draft') }}</strong></article><article><span>Scheduled</span><strong>{{ campaignCount('scheduled') }}</strong></article><article><span>Active leads</span><strong>{{ leads.length }}</strong></article><article><span>Win-back opportunities</span><strong>{{ winBackClients.length }}</strong></article></div>
-      <div class="bottom-grid"><section class="results"><header><h2>Campaign results</h2><span>Last 30 days</span></header><div><article><span>Sent</span><strong>{{ result(winBackResults.sent) }}</strong></article><article><span>Booked</span><strong>{{ result(winBackResults.booked) }}</strong></article><article><span>Revenue</span><strong>{{ money(winBackResults.revenuePaise) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(winBackResults.optOuts) }}</strong></article></div></section><section class="rules"><header><h2>Provider status</h2></header><p><span>WhatsApp</span><b>{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</b></p><p><span>SMS</span><b>{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</b></p><p><span>Email consent</span><b>{{ insights.consent?.email || 0 }}</b></p></section></div>
-      <div class="intelligence-grid"><section class="intelligence-list"><header><h2>Actionable clients</h2><span>{{ clientIntelligence.length }}</span></header><div class="intelligence-head"><span>Client</span><span>Last visit</span><span>Inactive</span><span>Services</span><span>Lifetime value</span><span>Consent</span><span>Churn</span><span>Next action</span></div><button type="button" *ngFor="let client of clientIntelligence" [class.selected]="selectedIntelligence?.clientId === client.clientId" (click)="selectIntelligence(client)"><strong>{{ client.clientName }}</strong><span>{{ client.lastVisitAt ? formatDate(client.lastVisitAt) : '—' }}</span><span>{{ client.inactiveDays }} days</span><span>{{ client.lastService || client.favouriteServices || '—' }}</span><span>{{ money(client.lifetimeValuePaise) }}</span><span>{{ client.consentStatus }}</span><b>{{ client.churnRiskScore }}</b><span>{{ client.nextBestAction }}</span></button><div class="empty" *ngIf="!loading && !clientIntelligence.length">No client intelligence yet</div></section>
-        <aside class="intelligence-detail"><header><h2>Client intelligence</h2></header><ng-container *ngIf="selectedIntelligence as client"><p><span>Average visit interval</span><b>{{ formatInterval(client.visitFrequencyDays) }}</b></p><p><span>Favourite services</span><b>{{ client.favouriteServices || '—' }}</b></p><p><span>Average spend</span><b>{{ money(client.averageSpendPaise) }}</b></p><p><span>No-show / cancellation</span><b>{{ percent(client.noShowRateBps) }} / {{ percent(client.cancellationRateBps) }}</b></p><p><span>Preferred staff</span><b>{{ client.preferredStaffName || '—' }}</b></p><p><span>Preferred channel</span><b>{{ client.preferredChannel || '—' }}</b></p><p><span>Upcoming appointment</span><b>{{ client.upcomingAppointmentAt ? formatDate(client.upcomingAppointmentAt) : 'None' }}</b></p><p><span>Membership</span><b>{{ client.membershipStatus }}</b></p><p><span>Loyalty points</span><b>{{ client.loyaltyPoints }}</b></p><p><span>Previous offers</span><b>{{ client.previousOfferCount }}</b></p><p><span>Campaign sent / responses</span><b>{{ client.campaignSentCount }} / {{ client.campaignResponseCount }}</b></p><p><span>Why this action</span><b>{{ client.nextBestActionReason }}</b></p><button class="advisor-trigger" type="button" [disabled]="advisorLoading" (click)="generateAdvisor('client', client.clientId)">{{ advisorLoading ? 'Generating…' : 'Generate AI recommendation' }}</button></ng-container><div class="empty" *ngIf="!selectedIntelligence">Select a client</div></aside></div>
-    </section>
-
-    <ng-container *ngIf="activeSection === 'opportunities'">
-    <div class="filters" aria-label="Win-back filters">
-      <span>Inactivity</span>
-      <button type="button" [class.active]="inactivityDays === 30" (click)="applyWinBackFilters(30)">30+ days</button>
-      <button type="button" [class.active]="inactivityDays === 60" (click)="applyWinBackFilters(60)">60+ days</button>
-      <button type="button" [class.active]="inactivityDays === 90" (click)="applyWinBackFilters(90)">90+ days</button>
-      <select [(ngModel)]="channel" aria-label="Preferred channel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select>
-      <select [(ngModel)]="status" aria-label="Consent"><option value="all">All consent</option><option value="consented">Consented only</option></select>
-      <div class="search"><span aria-hidden="true">⌕</span><input [(ngModel)]="clientSearch" (keyup.enter)="applyWinBackFilters()" placeholder="Search clients" aria-label="Search clients" /></div>
-    </div>
-
-    <div class="winback-grid">
-      <section class="client-panel">
-        <header><h2>Clients to win back</h2><span>{{ winBackClients.length }}</span></header>
-        <div class="client-table">
-          <div class="table-head"><span>Client</span><span>Last visit</span><span>Days away</span><span>Last service</span><span>Visit pattern</span><span>AI reason</span><span>Recommended offer</span><span>Consent</span><span>Action</span></div>
-          <ng-container *ngFor="let client of winBackClients">
-            <button class="table-row" type="button" [class.selected]="selectedClient?.clientId === client.clientId" [hidden]="(channel !== 'all' && client.preferredChannel !== channel) || (status === 'consented' && !client.consented)" (click)="selectClient(client)">
-              <strong>{{ client.clientName }}</strong><span>{{ client.lastVisitAt ? formatDate(client.lastVisitAt) : '—' }}</span><b>{{ client.inactiveDays }}</b><span>{{ client.lastService || '—' }}</span><span>{{ formatInterval(client.visitFrequencyDays) }}</span><span>{{ client.aiReason }}</span><span>{{ client.recommendedOffer }}</span><span class="consent" [class.ready]="client.consented">{{ client.consented ? (client.preferredChannel || 'Yes') : 'No consent' }}</span><span class="row-action" (click)="$event.stopPropagation(); openCampaign(client)">Create</span>
-            </button>
-          </ng-container>
-          <div class="loading" *ngIf="loading"><span *ngFor="let stage of stages"></span></div>
-          <div class="empty" *ngIf="!loading && !winBackClients.length"><strong>No eligible clients</strong></div>
-        </div>
-      </section>
-
-      <aside class="advisor">
-        <header><h2>AI Offer Advisor <small>BETA</small></h2></header>
-        <article><strong>Why they may not be returning</strong><p>{{ advisor?.probableReason || selectedClient?.aiReason || 'Select a client or segment' }}</p></article><article><strong>Service due</strong><p>{{ advisor?.dueService || selectedClient?.lastService || '—' }}</p></article><article><strong>Offer to send</strong><p>{{ advisor?.recommendedOffer || selectedClient?.recommendedOffer || 'Generate recommendation' }}</p></article><article><strong>Avoid offering</strong><p>{{ advisor?.avoidOffer || selectedClient?.avoidOffer || 'Generate recommendation' }}</p></article><article><strong>Safe discount ceiling</strong><p>{{ advisor ? percent(advisor.safeDiscountBps) : '—' }} · {{ advisor?.benefitType || '—' }}</p></article><article><strong>Best channel & time</strong><p>{{ advisor ? (advisor.bestChannel + ' · ' + advisor.bestSendingTime) : 'Generate recommendation' }}</p></article><article><strong>Suggested message</strong><p>{{ advisor?.suggestedMessage || 'Generate recommendation' }}</p></article><article><strong>Expected outcome</strong><p>{{ advisor?.expectedOutcome || 'Generate recommendation' }}</p></article><article><strong>Supporting CRM evidence</strong><p *ngFor="let evidence of advisor?.evidence">{{ evidence }}</p></article>
-        <footer><button type="button" [disabled]="!selectedClient || advisorLoading" (click)="selectedClient && generateAdvisor('client', selectedClient.clientId)">{{ advisorLoading ? 'Generating…' : 'Generate' }}</button><button type="button" [disabled]="!advisor || busy || !!advisorReview" (click)="reviewAdvisor('rejected')">Reject</button><button class="primary" type="button" [disabled]="!advisor || busy || !!advisorReview" (click)="reviewAdvisor('accepted')">Approve</button></footer><p class="review-state" *ngIf="advisorReview">Recommendation {{ advisorReview }}</p>
-      </aside>
-    </div>
-
-    <div class="bottom-grid">
-      <section class="results"><header><h2>Campaign results</h2><span>Last 30 days</span></header><div><article><span>Sent</span><strong>{{ result(winBackResults.sent) }}</strong></article><article><span>Booked</span><strong>{{ result(winBackResults.booked) }}</strong></article><article><span>Revenue</span><strong>{{ money(winBackResults.revenuePaise) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(winBackResults.optOuts) }}</strong></article></div></section>
-      <section class="rules"><header><h2>Automation rules</h2></header><p><span>60-day Hair service win-back</span><b>Not configured</b></p><p><span>45-day Colour follow-up</span><b>Not configured</b></p><p><span>90-day inactive client</span><b>Not configured</b></p></section>
-    </div>
-    </ng-container>
-
-    <section class="tab-workspace" *ngIf="activeSection === 'segments'">
-      <header><h2>Smart Segments</h2><button type="button" [disabled]="!segmentClients.length || advisorLoading" (click)="generateAdvisor('segment', selectedSegment)">{{ advisorLoading ? 'Generating…' : 'Generate segment advice' }}</button></header>
-      <div class="segment-layout"><nav class="segment-list" aria-label="Smart segments"><button type="button" *ngFor="let segment of segmentDefinitions" [class.active]="selectedSegment === segment[0]" (click)="selectedSegment = segment[0]"><span>{{ segment[1] }}</span><strong>{{ segmentCount(segment[0]) }}</strong></button></nav>
-        <section class="segment-audience"><header><div><h2>{{ selectedSegmentLabel }}</h2><span>{{ segmentClients.length }} clients</span></div><div class="segment-filters"><select [(ngModel)]="segmentStaff" aria-label="Filter by staff"><option value="all">All staff</option><option *ngFor="let staff of segmentStaffOptions" [value]="staff">{{ staff }}</option></select><select [(ngModel)]="segmentService" aria-label="Filter by service"><option value="all">All services</option><option *ngFor="let service of segmentServiceOptions" [value]="service">{{ service }}</option></select></div></header>
-          <div class="segment-table"><div><span>Client</span><span>Inactive</span><span>Service</span><span>Staff</span><span>Consent</span><span>Next action</span></div><button type="button" *ngFor="let client of segmentClients" (click)="selectIntelligence(client); activeSection = 'overview'"><strong>{{ client.clientName }}</strong><span>{{ client.inactiveDays }} days</span><span>{{ client.lastService || '—' }}</span><span>{{ client.preferredStaffName || '—' }}</span><span>{{ client.consentStatus }}</span><span>{{ client.nextBestAction }}</span></button><div class="empty" *ngIf="!segmentClients.length">No clients in this segment</div></div>
-        </section></div>
-    </section>
-
-    <section class="leads-workspace" *ngIf="activeSection === 'leads'">
-      <header><div><h2>Leads</h2><nav class="subtabs"><button [class.active]="leadSection === 'pipeline'" type="button" (click)="leadSection = 'pipeline'">Pipeline</button><button [class.active]="leadSection === 'priority'" type="button" (click)="leadSection = 'priority'">AI Priority</button><button [class.active]="leadSection === 'followups'" type="button" (click)="leadSection = 'followups'">Follow-ups</button><button [class.active]="leadSection === 'sources'" type="button" (click)="leadSection = 'sources'">Sources</button></nav></div><button class="primary" type="button" (click)="openLead()">Add lead</button></header>
-      <div class="pipeline" *ngIf="leadSection === 'pipeline'">
-        <section *ngFor="let stageName of stages"><header><strong>{{ stageName }}</strong><span>{{ stageLeads(stageName).length }}</span></header>
-          <article class="lead-card" *ngFor="let lead of stageLeads(stageName)" (click)="openActivity(lead)"><strong>{{ displayName(lead) }}</strong><span>{{ lead.phone || 'No phone' }} · Score {{ lead.score }}</span><small>{{ lead.qualificationStatus }} · {{ lead.source || 'other' }}</small><select [ngModel]="stageName" (click)="$event.stopPropagation()" (ngModelChange)="moveLead(lead, $event)" [disabled]="busy"><option *ngFor="let option of stages" [ngValue]="option">{{ option }}</option></select><select [ngModel]="lead.ownerUserId" (click)="$event.stopPropagation()" (ngModelChange)="changeOwner(lead, $event)" [disabled]="busy"><option value="">Unassigned</option><option *ngFor="let owner of owners" [value]="owner.id">{{ owner.name || owner.roleName }}</option></select></article>
-          <div class="column-empty" *ngIf="!stageLeads(stageName).length">No leads</div>
-        </section>
-      </div>
-      <div class="lead-advice" *ngIf="leadSection === 'priority'"><header><span>Priority</span><span>Lead</span><span>Why now</span><span>Channel</span><span>Suggested message</span><span>Next follow-up</span><span>Attribution</span></header><button type="button" *ngFor="let item of leadAdvice" (click)="openLeadAdvice(item)"><b>{{ item.priorityScore }}</b><strong>{{ item.leadName }}</strong><span>{{ item.reason }}</span><span>{{ item.bestChannel }}</span><span>{{ item.suggestedMessage }}</span><span>{{ formatDate(item.nextFollowUpDate) }}</span><span>{{ item.appointmentId ? 'Appointment ' + item.appointmentId : item.clientId ? 'Client ' + item.clientId : 'Not converted' }}</span></button><div class="empty" *ngIf="!leadAdvice.length">No active lead recommendations</div></div>
-      <div class="simple-table" *ngIf="leadSection === 'followups'"><header><span>Lead</span><span>Stage</span><span>Follow-up</span><span>Owner</span></header><button type="button" *ngFor="let lead of followUpLeads" (click)="openActivity(lead)"><strong>{{ displayName(lead) }}</strong><span>{{ stage(lead) }}</span><span>{{ formatDate(lead.nextFollowUpDate || '') }}</span><span>{{ lead.ownerUserId || 'Unassigned' }}</span></button><div class="empty" *ngIf="!followUpLeads.length">No follow-ups yet</div></div>
-      <div class="source-grid" *ngIf="leadSection === 'sources'"><article *ngFor="let item of leadSources"><span>{{ item.source }}</span><strong>{{ item.count }}</strong></article><div class="empty" *ngIf="!leadSources.length">No sources yet</div></div>
-      <div class="empty" *ngIf="loading">Loading leads…</div><div class="empty" *ngIf="!loading && !leads.length">No leads yet</div>
-    </section>
-
-    <section class="tab-workspace" *ngIf="activeSection === 'campaigns'"><header><h2>Campaigns</h2><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header><div *ngFor="let campaign of filteredCampaigns"><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channels?.join(', ') || campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || campaign.metadata?.approvalStatus || 'draft' }} <button type="button" *ngIf="campaign.metadata?.approvalStatus === 'pending'" [disabled]="busy" (click)="approveCampaign(campaign)">Approve</button><button type="button" *ngIf="campaign.metadata?.approvalStatus === 'approved' && campaign.metadata?.status === 'approved'" [disabled]="busy" (click)="sendCampaign(campaign)">Send</button></span></div><div class="empty" *ngIf="!filteredCampaigns.length">No campaigns yet</div></div></section>
-    <section class="tab-workspace" *ngIf="activeSection === 'automations'"><header><h2>Automation rules</h2><span>{{ automations.length }} ready</span></header><div class="automation-rules"><header><span>Automation</span><span>Trigger</span><span>Channel / time</span><span>Frequency</span><span>Approval</span><span>Results</span><span>Status</span></header><div class="rule-row" role="button" tabindex="0" *ngFor="let rule of automations" (click)="openAutomation(rule)" (keydown.enter)="openAutomation(rule)"><strong>{{ rule.name }}</strong><span>{{ rule.trigger.replaceAll('_', ' ') }}</span><span>{{ rule.config.channels.join(', ') }} · {{ rule.config.sendTime }}</span><span>{{ rule.config.frequencyCapDays ? rule.config.frequencyCapDays + ' days' : 'Event based' }}</span><span>{{ rule.config.approvalMode }}</span><span>{{ rule.performance.sent }} sent · {{ rule.performance.failed + rule.performance.blocked }} failed</span><span><b [class.active]="rule.status === 'active'">{{ rule.status }}</b><button type="button" (click)="$event.stopPropagation(); toggleAutomation(rule)">{{ rule.status === 'active' ? 'Pause' : 'Resume' }}</button></span></div><div class="empty" *ngIf="!automations.length">No automation rules</div></div></section>
-    <section class="tab-workspace" *ngIf="activeSection === 'offers'"><header><h2>Offers</h2><button class="primary" type="button" (click)="openOffer()">Create offer</button></header><div class="offer-table"><header><span>Code</span><span>Benefit</span><span>Client</span><span>Validity</span><span>Usage</span><span>Status</span><span>Action</span></header><div *ngFor="let offer of offers"><strong>{{ offer.code }}</strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.targetClientId || 'All eligible' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.approvalStatus === 'approved'">{{ offer.approvalStatus }}</b><button type="button" [disabled]="busy || offer.approvalStatus !== 'pending'" (click)="approveOffer(offer)">Approve</button></div><div class="empty" *ngIf="!offers.length">No offers yet</div></div></section>
-    <section class="tab-workspace" *ngIf="activeSection === 'templates'"><header><h2>Template library</h2><button class="primary" type="button" (click)="openTemplate()">Create template</button></header><div class="template-filters"><select [(ngModel)]="templateChannel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select><select [(ngModel)]="templateLanguage"><option value="all">All languages</option><option value="english">English</option><option value="hindi">Hindi</option></select></div><div class="template-grid"><article *ngFor="let template of filteredTemplates"><header><strong>{{ template.name }}</strong><b>{{ template.channel }} · {{ template.language }}</b></header><p>{{ template.body }}</p><footer><span>{{ template.serviceId || template.occasionKey || template.audience }}</span><span>{{ template.status }}</span></footer></article><div class="empty" *ngIf="!filteredTemplates.length">No templates yet</div></div></section>
-    <section class="tab-workspace" *ngIf="activeSection === 'outbox'"><header><h2>Outbox</h2></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header><div *ngFor="let campaign of outboxCampaigns"><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || '—' }}</span></div><div class="empty" *ngIf="!outboxCampaigns.length">No outbox records yet</div></div></section>
-    <section class="tab-workspace" *ngIf="activeSection === 'analytics'">
-      <header><h2>Booking &amp; Revenue Attribution</h2></header>
-      <div class="overview-metrics"><article><span>Audience</span><strong>{{ result(attributionTotal('audience')) }}</strong></article><article><span>Delivered</span><strong>{{ result(attributionTotal('delivered')) }}</strong></article><article><span>Bookings</span><strong>{{ result(attributionTotal('bookings')) }}</strong></article><article><span>Completed</span><strong>{{ result(attributionTotal('completedAppointments')) }}</strong></article><article><span>Revenue</span><strong>{{ money(attributionTotal('revenuePaise')) }}</strong></article><article><span>Discount cost</span><strong>{{ money(attributionTotal('discountCostPaise')) }}</strong></article><article><span>Net revenue</span><strong>{{ money(attributionTotal('netIncrementalRevenuePaise')) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(attributionTotal('optOuts')) }}</strong></article></div>
-      <div class="attribution-table">
-        <header><span>Campaign</span><span>Delivery</span><span>Engagement</span><span>Bookings</span><span>Revenue</span><span>Rates</span><span>Best result</span></header>
-        <div *ngFor="let item of attribution.campaigns"><b>{{ item.title }}</b><span>{{ item.sent }} sent · {{ item.delivered }} delivered · {{ item.failed }} failed</span><span>{{ item.opened }} opened · {{ item.clicked }} clicked</span><span>{{ item.bookings }} booked · {{ item.completedAppointments }} completed</span><span>{{ money(item.revenuePaise) }} · {{ money(item.discountCostPaise) }} cost · {{ item.offerRedemptions }} redeemed</span><span>{{ percent(item.conversionRateBps) }} conversion · {{ percent(item.reactivationRateBps) }} reactivation · {{ percent(item.roiBps) }} ROI</span><span>{{ item.bestService || '—' }} · {{ item.bestChannel || '—' }} · {{ item.bestTime || '—' }}</span></div>
-        <div class="empty" *ngIf="!attribution.campaigns.length">No attributed campaigns yet</div>
-      </div>
-      <div class="branch-performance" *ngFor="let branch of attribution.branchPerformance"><b>{{ branch.branchId }}</b><span>{{ branch.audience }} audience</span><span>{{ branch.bookings }} bookings</span><span>{{ money(branch.revenuePaise) }} revenue</span><span>{{ percent(branch.roiBps) }} ROI</span></div>
-    </section>
-    <section class="tab-workspace governance" *ngIf="activeSection === 'governance'"><header><h2>Permissions, Consent &amp; Governance</h2><button class="primary" type="button" [disabled]="busy" (click)="saveGovernance()">Save</button></header><div class="governance-fields"><label>Frequency cap (days)<input [(ngModel)]="governance.settings.frequencyCapDays" type="number" min="0" max="365" /></label><label>Quiet hours start<input [(ngModel)]="governance.settings.quietStart" type="time" /></label><label>Quiet hours end<input [(ngModel)]="governance.settings.quietEnd" type="time" /></label><label>Timezone<input [(ngModel)]="governance.settings.timezone" /></label><label>Offer approval threshold (%)<input [ngModel]="governance.settings.offerApprovalThresholdBps / 100" (ngModelChange)="governance.settings.offerApprovalThresholdBps = $event * 100" type="number" min="0" max="100" /></label></div><div class="governance-exclusions"><header><h2>Sensitive-client exclusions</h2><span><input [(ngModel)]="exclusionClientId" placeholder="Client ID" /><button type="button" [disabled]="busy || !exclusionClientId.trim()" (click)="setMarketingExclusion(exclusionClientId, true)">Exclude</button></span></header><p *ngFor="let client of governance.exclusions"><span>{{ client.clientName }} · {{ client.clientId }}</span><button type="button" [disabled]="busy" (click)="setMarketingExclusion(client.clientId, false)">Remove</button></p><div class="empty" *ngIf="!governance.exclusions.length">No sensitive-client exclusions</div></div></section>
+    @if (activeSection === 'overview') {
+      <section class="overview-workspace">
+        <div class="overview-metrics"><article><span>Draft campaigns</span><strong>{{ campaignCount('draft') }}</strong></article><article><span>Scheduled</span><strong>{{ campaignCount('scheduled') }}</strong></article><article><span>Active leads</span><strong>{{ leads.length }}</strong></article><article><span>Win-back opportunities</span><strong>{{ winBackClients.length }}</strong></article></div>
+        <div class="bottom-grid"><section class="results"><header><h2>Campaign results</h2><span>Last 30 days</span></header><div><article><span>Sent</span><strong>{{ result(winBackResults.sent) }}</strong></article><article><span>Booked</span><strong>{{ result(winBackResults.booked) }}</strong></article><article><span>Revenue</span><strong>{{ money(winBackResults.revenuePaise) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(winBackResults.optOuts) }}</strong></article></div></section><section class="rules"><header><h2>Provider status</h2></header><p><span>WhatsApp</span><b>{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</b></p><p><span>SMS</span><b>{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</b></p><p><span>Email consent</span><b>{{ insights.consent?.email || 0 }}</b></p></section></div>
+        <div class="intelligence-grid"><section class="intelligence-list"><header><h2>Actionable clients</h2><span>{{ clientIntelligence.length }}</span></header><div class="intelligence-head"><span>Client</span><span>Last visit</span><span>Inactive</span><span>Services</span><span>Lifetime value</span><span>Consent</span><span>Churn</span><span>Next action</span></div>@for (client of clientIntelligence; track client) {
+        <button type="button" [class.selected]="selectedIntelligence?.clientId === client.clientId" (click)="selectIntelligence(client)"><strong>{{ client.clientName }}</strong><span>{{ client.lastVisitAt ? formatDate(client.lastVisitAt) : '—' }}</span><span>{{ client.inactiveDays }} days</span><span>{{ client.lastService || client.favouriteServices || '—' }}</span><span>{{ money(client.lifetimeValuePaise) }}</span><span>{{ client.consentStatus }}</span><b>{{ client.churnRiskScore }}</b><span>{{ client.nextBestAction }}</span></button>
+        }@if (!loading && !clientIntelligence.length) {
+        <div class="empty">No client intelligence yet</div>
+      }</section>
+      <aside class="intelligence-detail"><header><h2>Client intelligence</h2></header>@if (selectedIntelligence; as client) {
+      <p><span>Average visit interval</span><b>{{ formatInterval(client.visitFrequencyDays) }}</b></p><p><span>Favourite services</span><b>{{ client.favouriteServices || '—' }}</b></p><p><span>Average spend</span><b>{{ money(client.averageSpendPaise) }}</b></p><p><span>No-show / cancellation</span><b>{{ percent(client.noShowRateBps) }} / {{ percent(client.cancellationRateBps) }}</b></p><p><span>Preferred staff</span><b>{{ client.preferredStaffName || '—' }}</b></p><p><span>Preferred channel</span><b>{{ client.preferredChannel || '—' }}</b></p><p><span>Upcoming appointment</span><b>{{ client.upcomingAppointmentAt ? formatDate(client.upcomingAppointmentAt) : 'None' }}</b></p><p><span>Membership</span><b>{{ client.membershipStatus }}</b></p><p><span>Loyalty points</span><b>{{ client.loyaltyPoints }}</b></p><p><span>Previous offers</span><b>{{ client.previousOfferCount }}</b></p><p><span>Campaign sent / responses</span><b>{{ client.campaignSentCount }} / {{ client.campaignResponseCount }}</b></p><p><span>Why this action</span><b>{{ client.nextBestActionReason }}</b></p><button class="advisor-trigger" type="button" [disabled]="advisorLoading" (click)="generateAdvisor('client', client.clientId)">{{ advisorLoading ? 'Generating…' : 'Generate AI recommendation' }}</button>
+      }@if (!selectedIntelligence) {
+      <div class="empty">Select a client</div>
+    }</aside></div>
   </section>
+}
 
-  <aside class="drawer" *ngIf="drawer === 'campaign'">
+@if (activeSection === 'opportunities') {
+  <div class="filters" aria-label="Win-back filters">
+    <span>Inactivity</span>
+    <button type="button" [class.active]="inactivityDays === 30" (click)="applyWinBackFilters(30)">30+ days</button>
+    <button type="button" [class.active]="inactivityDays === 60" (click)="applyWinBackFilters(60)">60+ days</button>
+    <button type="button" [class.active]="inactivityDays === 90" (click)="applyWinBackFilters(90)">90+ days</button>
+    <select [(ngModel)]="channel" aria-label="Preferred channel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select>
+    <select [(ngModel)]="status" aria-label="Consent"><option value="all">All consent</option><option value="consented">Consented only</option></select>
+    <div class="search"><span aria-hidden="true">⌕</span><input [(ngModel)]="clientSearch" (keyup.enter)="applyWinBackFilters()" placeholder="Search clients" aria-label="Search clients" /></div>
+  </div>
+  <div class="winback-grid">
+    <section class="client-panel">
+      <header><h2>Clients to win back</h2><span>{{ winBackClients.length }}</span></header>
+      <div class="client-table">
+        <div class="table-head"><span>Client</span><span>Last visit</span><span>Days away</span><span>Last service</span><span>Visit pattern</span><span>AI reason</span><span>Recommended offer</span><span>Consent</span><span>Action</span></div>
+        @for (client of winBackClients; track client) {
+          <button class="table-row" type="button" [class.selected]="selectedClient?.clientId === client.clientId" [hidden]="(channel !== 'all' && client.preferredChannel !== channel) || (status === 'consented' && !client.consented)" (click)="selectClient(client)">
+            <strong>{{ client.clientName }}</strong><span>{{ client.lastVisitAt ? formatDate(client.lastVisitAt) : '—' }}</span><b>{{ client.inactiveDays }}</b><span>{{ client.lastService || '—' }}</span><span>{{ formatInterval(client.visitFrequencyDays) }}</span><span>{{ client.aiReason }}</span><span>{{ client.recommendedOffer }}</span><span class="consent" [class.ready]="client.consented">{{ client.consented ? (client.preferredChannel || 'Yes') : 'No consent' }}</span><span class="row-action" (click)="$event.stopPropagation(); openCampaign(client)">Create</span>
+          </button>
+        }
+        @if (loading) {
+          <div class="loading">@for (stage of stages; track stage) {
+            <span></span>
+          }</div>
+        }
+        @if (!loading && !winBackClients.length) {
+          <div class="empty"><strong>No eligible clients</strong></div>
+        }
+      </div>
+    </section>
+    <aside class="advisor">
+      <header><h2>AI Offer Advisor <small>BETA</small></h2></header>
+      <article><strong>Why they may not be returning</strong><p>{{ advisor?.probableReason || selectedClient?.aiReason || 'Select a client or segment' }}</p></article><article><strong>Service due</strong><p>{{ advisor?.dueService || selectedClient?.lastService || '—' }}</p></article><article><strong>Offer to send</strong><p>{{ advisor?.recommendedOffer || selectedClient?.recommendedOffer || 'Generate recommendation' }}</p></article><article><strong>Avoid offering</strong><p>{{ advisor?.avoidOffer || selectedClient?.avoidOffer || 'Generate recommendation' }}</p></article><article><strong>Safe discount ceiling</strong><p>{{ advisor ? percent(advisor.safeDiscountBps) : '—' }} · {{ advisor?.benefitType || '—' }}</p></article><article><strong>Best channel & time</strong><p>{{ advisor ? (advisor.bestChannel + ' · ' + advisor.bestSendingTime) : 'Generate recommendation' }}</p></article><article><strong>Suggested message</strong><p>{{ advisor?.suggestedMessage || 'Generate recommendation' }}</p></article><article><strong>Expected outcome</strong><p>{{ advisor?.expectedOutcome || 'Generate recommendation' }}</p></article><article><strong>Supporting CRM evidence</strong>@for (evidence of advisor?.evidence; track evidence) {
+      <p>{{ evidence }}</p>
+    }</article>
+    <footer><button type="button" [disabled]="!selectedClient || advisorLoading" (click)="selectedClient && generateAdvisor('client', selectedClient.clientId)">{{ advisorLoading ? 'Generating…' : 'Generate' }}</button><button type="button" [disabled]="!advisor || busy || !!advisorReview" (click)="reviewAdvisor('rejected')">Reject</button><button class="primary" type="button" [disabled]="!advisor || busy || !!advisorReview" (click)="reviewAdvisor('accepted')">Approve</button></footer>@if (advisorReview) {
+    <p class="review-state">Recommendation {{ advisorReview }}</p>
+  }
+</aside>
+</div>
+<div class="bottom-grid">
+  <section class="results"><header><h2>Campaign results</h2><span>Last 30 days</span></header><div><article><span>Sent</span><strong>{{ result(winBackResults.sent) }}</strong></article><article><span>Booked</span><strong>{{ result(winBackResults.booked) }}</strong></article><article><span>Revenue</span><strong>{{ money(winBackResults.revenuePaise) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(winBackResults.optOuts) }}</strong></article></div></section>
+  <section class="rules"><header><h2>Automation rules</h2></header><p><span>60-day Hair service win-back</span><b>Not configured</b></p><p><span>45-day Colour follow-up</span><b>Not configured</b></p><p><span>90-day inactive client</span><b>Not configured</b></p></section>
+</div>
+}
+
+@if (activeSection === 'segments') {
+  <section class="tab-workspace">
+    <header><h2>Smart Segments</h2><button type="button" [disabled]="!segmentClients.length || advisorLoading" (click)="generateAdvisor('segment', selectedSegment)">{{ advisorLoading ? 'Generating…' : 'Generate segment advice' }}</button></header>
+    <div class="segment-layout"><nav class="segment-list" aria-label="Smart segments">@for (segment of segmentDefinitions; track segment) {
+      <button type="button" [class.active]="selectedSegment === segment[0]" (click)="selectedSegment = segment[0]"><span>{{ segment[1] }}</span><strong>{{ segmentCount(segment[0]) }}</strong></button>
+    }</nav>
+    <section class="segment-audience"><header><div><h2>{{ selectedSegmentLabel }}</h2><span>{{ segmentClients.length }} clients</span></div><div class="segment-filters"><select [(ngModel)]="segmentStaff" aria-label="Filter by staff"><option value="all">All staff</option>@for (staff of segmentStaffOptions; track staff) {
+    <option [value]="staff">{{ staff }}</option>
+    }</select><select [(ngModel)]="segmentService" aria-label="Filter by service"><option value="all">All services</option>@for (service of segmentServiceOptions; track service) {
+    <option [value]="service">{{ service }}</option>
+  }</select></div></header>
+  <div class="segment-table"><div><span>Client</span><span>Inactive</span><span>Service</span><span>Staff</span><span>Consent</span><span>Next action</span></div>@for (client of segmentClients; track client) {
+  <button type="button" (click)="selectIntelligence(client); activeSection = 'overview'"><strong>{{ client.clientName }}</strong><span>{{ client.inactiveDays }} days</span><span>{{ client.lastService || '—' }}</span><span>{{ client.preferredStaffName || '—' }}</span><span>{{ client.consentStatus }}</span><span>{{ client.nextBestAction }}</span></button>
+  }@if (!segmentClients.length) {
+  <div class="empty">No clients in this segment</div>
+}</div>
+</section></div>
+</section>
+}
+
+@if (activeSection === 'leads') {
+  <section class="leads-workspace">
+    <header><div><h2>Leads</h2><nav class="subtabs"><button [class.active]="leadSection === 'pipeline'" type="button" (click)="leadSection = 'pipeline'">Pipeline</button><button [class.active]="leadSection === 'priority'" type="button" (click)="leadSection = 'priority'">AI Priority</button><button [class.active]="leadSection === 'followups'" type="button" (click)="leadSection = 'followups'">Follow-ups</button><button [class.active]="leadSection === 'sources'" type="button" (click)="leadSection = 'sources'">Sources</button></nav></div><button class="primary" type="button" (click)="openLead()">Add lead</button></header>
+    @if (leadSection === 'pipeline') {
+      <div class="pipeline">
+        @for (stageName of stages; track stageName) {
+          <section><header><strong>{{ stageName }}</strong><span>{{ stageLeads(stageName).length }}</span></header>
+          @for (lead of stageLeads(stageName); track lead) {
+            <article class="lead-card" (click)="openActivity(lead)"><strong>{{ displayName(lead) }}</strong><span>{{ lead.phone || 'No phone' }} · Score {{ lead.score }}</span><small>{{ lead.qualificationStatus }} · {{ lead.source || 'other' }}</small><select [ngModel]="stageName" (click)="$event.stopPropagation()" (ngModelChange)="moveLead(lead, $event)" [disabled]="busy">@for (option of stages; track option) {
+            <option [ngValue]="option">{{ option }}</option>
+            }</select><select [ngModel]="lead.ownerUserId" (click)="$event.stopPropagation()" (ngModelChange)="changeOwner(lead, $event)" [disabled]="busy"><option value="">Unassigned</option>@for (owner of owners; track owner) {
+            <option [value]="owner.id">{{ owner.name || owner.roleName }}</option>
+          }</select></article>
+        }
+        @if (!stageLeads(stageName).length) {
+          <div class="column-empty">No leads</div>
+        }
+      </section>
+    }
+  </div>
+}
+@if (leadSection === 'priority') {
+  <div class="lead-advice"><header><span>Priority</span><span>Lead</span><span>Why now</span><span>Channel</span><span>Suggested message</span><span>Next follow-up</span><span>Attribution</span></header>@for (item of leadAdvice; track item) {
+  <button type="button" (click)="openLeadAdvice(item)"><b>{{ item.priorityScore }}</b><strong>{{ item.leadName }}</strong><span>{{ item.reason }}</span><span>{{ item.bestChannel }}</span><span>{{ item.suggestedMessage }}</span><span>{{ formatDate(item.nextFollowUpDate) }}</span><span>{{ item.appointmentId ? 'Appointment ' + item.appointmentId : item.clientId ? 'Client ' + item.clientId : 'Not converted' }}</span></button>
+  }@if (!leadAdvice.length) {
+  <div class="empty">No active lead recommendations</div>
+}</div>
+}
+@if (leadSection === 'followups') {
+  <div class="simple-table"><header><span>Lead</span><span>Stage</span><span>Follow-up</span><span>Owner</span></header>@for (lead of followUpLeads; track lead) {
+  <button type="button" (click)="openActivity(lead)"><strong>{{ displayName(lead) }}</strong><span>{{ stage(lead) }}</span><span>{{ formatDate(lead.nextFollowUpDate || '') }}</span><span>{{ lead.ownerUserId || 'Unassigned' }}</span></button>
+  }@if (!followUpLeads.length) {
+  <div class="empty">No follow-ups yet</div>
+}</div>
+}
+@if (leadSection === 'sources') {
+  <div class="source-grid">@for (item of leadSources; track item) {
+    <article><span>{{ item.source }}</span><strong>{{ item.count }}</strong></article>
+    }@if (!leadSources.length) {
+    <div class="empty">No sources yet</div>
+  }</div>
+}
+@if (loading) {
+  <div class="empty">Loading leads…</div>
+  }@if (!loading && !leads.length) {
+  <div class="empty">No leads yet</div>
+}
+</section>
+}
+
+@if (activeSection === 'campaigns') {
+  <section class="tab-workspace"><header><h2>Campaigns</h2><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header>@for (campaign of filteredCampaigns; track campaign) {
+  <div><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channels?.join(', ') || campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || campaign.metadata?.approvalStatus || 'draft' }} @if (campaign.metadata?.approvalStatus === 'pending') {
+  <button type="button" [disabled]="busy" (click)="approveCampaign(campaign)">Approve</button>
+  }@if (campaign.metadata?.approvalStatus === 'approved' && campaign.metadata?.status === 'approved') {
+  <button type="button" [disabled]="busy" (click)="sendCampaign(campaign)">Send</button>
+}</span></div>
+}@if (!filteredCampaigns.length) {
+<div class="empty">No campaigns yet</div>
+}</div></section>
+}
+@if (activeSection === 'automations') {
+  <section class="tab-workspace"><header><h2>Automation rules</h2><span>{{ automations.length }} ready</span></header><div class="automation-rules"><header><span>Automation</span><span>Trigger</span><span>Channel / time</span><span>Frequency</span><span>Approval</span><span>Results</span><span>Status</span></header>@for (rule of automations; track rule) {
+  <div class="rule-row" role="button" tabindex="0" (click)="openAutomation(rule)" (keydown.enter)="openAutomation(rule)"><strong>{{ rule.name }}</strong><span>{{ rule.trigger.replaceAll('_', ' ') }}</span><span>{{ rule.config.channels.join(', ') }} · {{ rule.config.sendTime }}</span><span>{{ rule.config.frequencyCapDays ? rule.config.frequencyCapDays + ' days' : 'Event based' }}</span><span>{{ rule.config.approvalMode }}</span><span>{{ rule.performance.sent }} sent · {{ rule.performance.failed + rule.performance.blocked }} failed</span><span><b [class.active]="rule.status === 'active'">{{ rule.status }}</b><button type="button" (click)="$event.stopPropagation(); toggleAutomation(rule)">{{ rule.status === 'active' ? 'Pause' : 'Resume' }}</button></span></div>
+  }@if (!automations.length) {
+  <div class="empty">No automation rules</div>
+}</div></section>
+}
+@if (activeSection === 'offers') {
+  <section class="tab-workspace"><header><h2>Offers</h2><button class="primary" type="button" (click)="openOffer()">Create offer</button></header><div class="offer-table"><header><span>Code</span><span>Benefit</span><span>Client</span><span>Validity</span><span>Usage</span><span>Status</span><span>Action</span></header>@for (offer of offers; track offer) {
+  <div><strong>{{ offer.code }}</strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.targetClientId || 'All eligible' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.approvalStatus === 'approved'">{{ offer.approvalStatus }}</b><button type="button" [disabled]="busy || offer.approvalStatus !== 'pending'" (click)="approveOffer(offer)">Approve</button></div>
+  }@if (!offers.length) {
+  <div class="empty">No offers yet</div>
+}</div></section>
+}
+@if (activeSection === 'templates') {
+  <section class="tab-workspace"><header><h2>Template library</h2><button class="primary" type="button" (click)="openTemplate()">Create template</button></header><div class="template-filters"><select [(ngModel)]="templateChannel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select><select [(ngModel)]="templateLanguage"><option value="all">All languages</option><option value="english">English</option><option value="hindi">Hindi</option></select></div><div class="template-grid">@for (template of filteredTemplates; track template) {
+  <article><header><strong>{{ template.name }}</strong><b>{{ template.channel }} · {{ template.language }}</b></header><p>{{ template.body }}</p><footer><span>{{ template.serviceId || template.occasionKey || template.audience }}</span><span>{{ template.status }}</span></footer></article>
+  }@if (!filteredTemplates.length) {
+  <div class="empty">No templates yet</div>
+}</div></section>
+}
+@if (activeSection === 'outbox') {
+  <section class="tab-workspace"><header><h2>Outbox</h2></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header>@for (campaign of outboxCampaigns; track campaign) {
+  <div><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || '—' }}</span></div>
+  }@if (!outboxCampaigns.length) {
+  <div class="empty">No outbox records yet</div>
+}</div></section>
+}
+@if (activeSection === 'analytics') {
+  <section class="tab-workspace">
+    <header><h2>Booking &amp; Revenue Attribution</h2></header>
+    <div class="overview-metrics"><article><span>Audience</span><strong>{{ result(attributionTotal('audience')) }}</strong></article><article><span>Delivered</span><strong>{{ result(attributionTotal('delivered')) }}</strong></article><article><span>Bookings</span><strong>{{ result(attributionTotal('bookings')) }}</strong></article><article><span>Completed</span><strong>{{ result(attributionTotal('completedAppointments')) }}</strong></article><article><span>Revenue</span><strong>{{ money(attributionTotal('revenuePaise')) }}</strong></article><article><span>Discount cost</span><strong>{{ money(attributionTotal('discountCostPaise')) }}</strong></article><article><span>Net revenue</span><strong>{{ money(attributionTotal('netIncrementalRevenuePaise')) }}</strong></article><article><span>Opt-outs</span><strong>{{ result(attributionTotal('optOuts')) }}</strong></article></div>
+    <div class="attribution-table">
+      <header><span>Campaign</span><span>Delivery</span><span>Engagement</span><span>Bookings</span><span>Revenue</span><span>Rates</span><span>Best result</span></header>
+      @for (item of attribution.campaigns; track item) {
+        <div><b>{{ item.title }}</b><span>{{ item.sent }} sent · {{ item.delivered }} delivered · {{ item.failed }} failed</span><span>{{ item.opened }} opened · {{ item.clicked }} clicked</span><span>{{ item.bookings }} booked · {{ item.completedAppointments }} completed</span><span>{{ money(item.revenuePaise) }} · {{ money(item.discountCostPaise) }} cost · {{ item.offerRedemptions }} redeemed</span><span>{{ percent(item.conversionRateBps) }} conversion · {{ percent(item.reactivationRateBps) }} reactivation · {{ percent(item.roiBps) }} ROI</span><span>{{ item.bestService || '—' }} · {{ item.bestChannel || '—' }} · {{ item.bestTime || '—' }}</span></div>
+      }
+      @if (!attribution.campaigns.length) {
+        <div class="empty">No attributed campaigns yet</div>
+      }
+    </div>
+    @for (branch of attribution.branchPerformance; track branch) {
+      <div class="branch-performance"><b>{{ branch.branchId | branchName }}</b><span>{{ branch.audience }} audience</span><span>{{ branch.bookings }} bookings</span><span>{{ money(branch.revenuePaise) }} revenue</span><span>{{ percent(branch.roiBps) }} ROI</span></div>
+    }
+  </section>
+}
+@if (activeSection === 'governance') {
+  <section class="tab-workspace governance"><header><h2>Permissions, Consent &amp; Governance</h2><button class="primary" type="button" [disabled]="busy" (click)="saveGovernance()">Save</button></header><div class="governance-fields"><label>Frequency cap (days)<input [(ngModel)]="governance.settings.frequencyCapDays" type="number" min="0" max="365" /></label><label>Quiet hours start<input [(ngModel)]="governance.settings.quietStart" type="time" /></label><label>Quiet hours end<input [(ngModel)]="governance.settings.quietEnd" type="time" /></label><label>Timezone<input [(ngModel)]="governance.settings.timezone" /></label><label>Offer approval threshold (%)<input [ngModel]="governance.settings.offerApprovalThresholdBps / 100" (ngModelChange)="governance.settings.offerApprovalThresholdBps = $event * 100" type="number" min="0" max="100" /></label></div><div class="governance-exclusions"><header><h2>Sensitive-client exclusions</h2><span><input [(ngModel)]="exclusionClientId" placeholder="Client ID" /><button type="button" [disabled]="busy || !exclusionClientId.trim()" (click)="setMarketingExclusion(exclusionClientId, true)">Exclude</button></span></header>@for (client of governance.exclusions; track client) {
+  <p><span>{{ client.clientName }} · {{ client.clientId }}</span><button type="button" [disabled]="busy" (click)="setMarketingExclusion(client.clientId, false)">Remove</button></p>
+  }@if (!governance.exclusions.length) {
+  <div class="empty">No sensitive-client exclusions</div>
+}</div></section>
+}
+</section>
+
+@if (drawer === 'campaign') {
+  <aside class="drawer">
     <header><h2>Campaign builder</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Goal<select [(ngModel)]="campaignDraft.goal"><option value="win_back">Win back clients</option><option value="rebooking">Drive rebooking</option><option value="loyalty">Reward loyalty</option><option value="fill_slots">Fill quiet slots</option><option value="promotion">Promote service</option></select></label>
-      <label>Audience<select [(ngModel)]="campaignDraft.audience" (ngModelChange)="loadCoverage()"><option value="all">All consented clients</option><option *ngFor="let segment of segmentDefinitions" [value]="segment[0]">{{ segment[1] }}</option></select></label>
-      <button type="button" [disabled]="advisorLoading" (click)="generateAdvisor('segment', campaignDraft.audience, true)">{{ advisorLoading ? 'Generating…' : 'Generate AI recommendation' }}</button>
-      <label>Campaign name<input [(ngModel)]="campaignDraft.name" placeholder="Campaign name" /></label>
-      <label>Approved offer<select [(ngModel)]="campaignDraft.offerId"><option value="">No offer</option><option *ngFor="let offer of offers" [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option></select></label>
-      <fieldset class="channel-box"><legend>Channels</legend><label><input type="checkbox" [(ngModel)]="campaignDraft.whatsapp" (ngModelChange)="loadCoverage()" /> WhatsApp <b>{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</b></label><label><input type="checkbox" [(ngModel)]="campaignDraft.sms" (ngModelChange)="loadCoverage()" /> SMS <b>{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</b></label><label><input type="checkbox" [(ngModel)]="campaignDraft.email" (ngModelChange)="loadCoverage()" /> Email <b>{{ providerReady('email') ? 'Ready' : 'Setup required' }}</b></label></fieldset>
-      <label>Delivery<select [(ngModel)]="campaignDraft.deliveryMode"><option value="or">OR · first available channel</option><option value="and">AND · every selected channel</option></select></label><label class="check"><input type="checkbox" [(ngModel)]="campaignDraft.smsFallback" /> WhatsApp failure → SMS fallback</label>
-      <section class="consent-check"><strong>Consent coverage</strong><p>Audience {{ coverage.audienceCount }} · WhatsApp {{ coverage.whatsapp }} · SMS {{ coverage.sms }} · Email {{ coverage.email }}</p></section>
-      <label>Send date<as-date-picker [(value)]="campaignDraft.scheduledDate" ariaLabel="Campaign send date" /></label>
-      <label>Send time<input type="time" [(ngModel)]="campaignDraft.scheduledTime" /></label>
-      <label>Recurrence<select [(ngModel)]="campaignDraft.recurrence"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
-      <label>Message preview<textarea [(ngModel)]="campaignDraft.message" rows="8" placeholder="Select a client or enter the approved campaign message"></textarea></label>
-      <label>Test client ID<input [(ngModel)]="campaignDraft.testClientId" placeholder="Client with channel consent" /></label><button type="button" [disabled]="busy || !campaignDraft.testClientId" (click)="sendTestCampaign()">Send test message</button><p class="review-state" *ngIf="testQueued">Test queued in shared outbox</p>
-    </div>
-    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !campaignDraft.scheduledDate" (click)="saveCampaign()">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
-  </aside>
+      <label>Audience<select [(ngModel)]="campaignDraft.audience" (ngModelChange)="loadCoverage()"><option value="all">All consented clients</option>@for (segment of segmentDefinitions; track segment) {
+      <option [value]="segment[0]">{{ segment[1] }}</option>
+    }</select></label>
+    <button type="button" [disabled]="advisorLoading" (click)="generateAdvisor('segment', campaignDraft.audience, true)">{{ advisorLoading ? 'Generating…' : 'Generate AI recommendation' }}</button>
+    <label>Campaign name<input [(ngModel)]="campaignDraft.name" placeholder="Campaign name" /></label>
+    <label>Approved offer<select [(ngModel)]="campaignDraft.offerId"><option value="">No offer</option>@for (offer of offers; track offer) {
+    <option [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option>
+  }</select></label>
+  <fieldset class="channel-box"><legend>Channels</legend><label><input type="checkbox" [(ngModel)]="campaignDraft.whatsapp" (ngModelChange)="loadCoverage()" /> WhatsApp <b>{{ providerReady('whatsapp') ? 'Ready' : 'Setup required' }}</b></label><label><input type="checkbox" [(ngModel)]="campaignDraft.sms" (ngModelChange)="loadCoverage()" /> SMS <b>{{ providerReady('sms') ? 'Ready' : 'Setup required' }}</b></label><label><input type="checkbox" [(ngModel)]="campaignDraft.email" (ngModelChange)="loadCoverage()" /> Email <b>{{ providerReady('email') ? 'Ready' : 'Setup required' }}</b></label></fieldset>
+  <label>Delivery<select [(ngModel)]="campaignDraft.deliveryMode"><option value="or">OR · first available channel</option><option value="and">AND · every selected channel</option></select></label><label class="check"><input type="checkbox" [(ngModel)]="campaignDraft.smsFallback" /> WhatsApp failure → SMS fallback</label>
+  <section class="consent-check"><strong>Consent coverage</strong><p>Audience {{ coverage.audienceCount }} · WhatsApp {{ coverage.whatsapp }} · SMS {{ coverage.sms }} · Email {{ coverage.email }}</p></section>
+  <label>Send date<as-date-picker [(value)]="campaignDraft.scheduledDate" ariaLabel="Campaign send date" /></label>
+  <label>Send time<input type="time" [(ngModel)]="campaignDraft.scheduledTime" /></label>
+  <label>Recurrence<select [(ngModel)]="campaignDraft.recurrence"><option value="once">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
+  <label>Message preview<textarea [(ngModel)]="campaignDraft.message" rows="8" placeholder="Select a client or enter the approved campaign message"></textarea></label>
+  <label>Test client ID<input [(ngModel)]="campaignDraft.testClientId" placeholder="Client with channel consent" /></label><button type="button" [disabled]="busy || !campaignDraft.testClientId" (click)="sendTestCampaign()">Send test message</button>@if (testQueued) {
+  <p class="review-state">Test queued in shared outbox</p>
+}
+</div>
+<footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !campaignDraft.scheduledDate" (click)="saveCampaign()">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
+</aside>
+}
 
-  <aside class="drawer" *ngIf="drawer === 'offer'">
+@if (drawer === 'offer') {
+  <aside class="drawer">
     <header><h2>Create controlled offer</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Offer code<input [(ngModel)]="offerDraft.code" placeholder="Single-use code" /></label>
@@ -118,52 +242,87 @@
       <label>Benefit value<input [(ngModel)]="offerDraft.benefitValue" type="number" min="0" placeholder="Enter value" /></label>
       <label>Client ID<input [(ngModel)]="offerDraft.targetClientId" placeholder="Optional personal offer" /></label>
       <label>Valid service ID<input [(ngModel)]="offerDraft.targetServiceId" placeholder="Optional service restriction" /></label>
-      <label *ngIf="offerDraft.benefitType === 'complimentary_add_on'">Complimentary service ID<input [(ngModel)]="offerDraft.complimentaryServiceId" placeholder="Required" /></label>
+      @if (offerDraft.benefitType === 'complimentary_add_on') {
+        <label>Complimentary service ID<input [(ngModel)]="offerDraft.complimentaryServiceId" placeholder="Required" /></label>
+      }
       <label>Start date<as-date-picker [(value)]="offerDraft.startsAt" ariaLabel="Offer start date" /></label><label>Expiry date<as-date-picker [(value)]="offerDraft.endsAt" ariaLabel="Offer expiry date" /></label>
       <label>Minimum bill (₹)<input [(ngModel)]="offerDraft.minimumBill" type="number" min="0" placeholder="Optional" /></label><label>Total usage limit<input [(ngModel)]="offerDraft.usageLimit" type="number" min="1" placeholder="Optional" /></label><label>Per-client limit<input [(ngModel)]="offerDraft.perClientLimit" type="number" min="1" /></label>
       <label class="check"><input [(ngModel)]="offerDraft.allowMembershipStacking" type="checkbox" /> Allow membership stacking</label><label class="check"><input [(ngModel)]="offerDraft.allowPackageStacking" type="checkbox" /> Allow package stacking</label>
     </div>
     <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !offerDraft.code" (click)="saveOffer()">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
   </aside>
+}
 
-  <aside class="drawer" *ngIf="drawer === 'automation' && selectedAutomation">
+@if (drawer === 'automation' && selectedAutomation) {
+  <aside class="drawer">
     <header><h2>{{ selectedAutomation.name }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Trigger<input [value]="selectedAutomation.trigger.replaceAll('_', ' ')" disabled /></label>
       <label>Conditions<textarea [(ngModel)]="automationDraft.conditions" rows="3" placeholder="Comma separated conditions"></textarea></label><label>Exclusions<textarea [(ngModel)]="automationDraft.exclusions" rows="3" placeholder="Comma separated exclusions"></textarea></label>
-      <label>Approved offer<select [(ngModel)]="automationDraft.offerId"><option value="">No offer</option><option *ngFor="let offer of offers" [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option></select></label>
-      <fieldset class="channel-box"><legend>Channels</legend><label><input type="checkbox" [(ngModel)]="automationDraft.whatsapp" /> WhatsApp</label><label><input type="checkbox" [(ngModel)]="automationDraft.sms" /> SMS</label><label><input type="checkbox" [(ngModel)]="automationDraft.email" /> Email</label></fieldset>
-      <label>Send time<input [(ngModel)]="automationDraft.sendTime" placeholder="09:00 or immediate" /></label><label>Frequency cap (days)<input [(ngModel)]="automationDraft.frequencyCapDays" type="number" min="0" max="3650" /></label><label>Approval mode<select [(ngModel)]="automationDraft.approvalMode"><option value="automatic">Automatic</option><option value="manual">Manual</option></select></label>
-      <section class="consent-check"><strong>Performance</strong><p>{{ selectedAutomation.performance.sent }} sent · {{ selectedAutomation.performance.failed }} failed · {{ selectedAutomation.performance.blocked }} consent blocked</p></section>
-    </div>
-    <footer><button type="button" (click)="toggleAutomation(selectedAutomation)">{{ selectedAutomation.status === 'active' ? 'Pause' : 'Resume' }}</button><button class="primary" type="button" [disabled]="busy" (click)="saveAutomation()">{{ busy ? 'Saving…' : 'Save rule' }}</button></footer>
-  </aside>
+      <label>Approved offer<select [(ngModel)]="automationDraft.offerId"><option value="">No offer</option>@for (offer of offers; track offer) {
+      <option [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option>
+    }</select></label>
+    <fieldset class="channel-box"><legend>Channels</legend><label><input type="checkbox" [(ngModel)]="automationDraft.whatsapp" /> WhatsApp</label><label><input type="checkbox" [(ngModel)]="automationDraft.sms" /> SMS</label><label><input type="checkbox" [(ngModel)]="automationDraft.email" /> Email</label></fieldset>
+    <label>Send time<input [(ngModel)]="automationDraft.sendTime" placeholder="09:00 or immediate" /></label><label>Frequency cap (days)<input [(ngModel)]="automationDraft.frequencyCapDays" type="number" min="0" max="3650" /></label><label>Approval mode<select [(ngModel)]="automationDraft.approvalMode"><option value="automatic">Automatic</option><option value="manual">Manual</option></select></label>
+    <section class="consent-check"><strong>Performance</strong><p>{{ selectedAutomation.performance.sent }} sent · {{ selectedAutomation.performance.failed }} failed · {{ selectedAutomation.performance.blocked }} consent blocked</p></section>
+  </div>
+  <footer><button type="button" (click)="toggleAutomation(selectedAutomation)">{{ selectedAutomation.status === 'active' ? 'Pause' : 'Resume' }}</button><button class="primary" type="button" [disabled]="busy" (click)="saveAutomation()">{{ busy ? 'Saving…' : 'Save rule' }}</button></footer>
+</aside>
+}
 
-  <aside class="drawer" *ngIf="drawer === 'template'">
+@if (drawer === 'template') {
+  <aside class="drawer">
     <header><h2>Create template</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Name<input [(ngModel)]="templateDraft.name" placeholder="Template name" /></label><label>Template key<input [(ngModel)]="templateDraft.key" placeholder="Optional unique key" /></label>
       <label>Channel<select [(ngModel)]="templateDraft.channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label><label>Language<select [(ngModel)]="templateDraft.language"><option value="english">English</option><option value="hindi">Hindi</option></select></label>
-      <label class="check"><input type="checkbox" [(ngModel)]="templateDraft.branchSpecific" /> Branch-specific</label><label>Audience / segment<select [(ngModel)]="templateDraft.segment"><option value="all">All clients</option><option *ngFor="let segment of segmentDefinitions" [value]="segment[0]">{{ segment[1] }}</option></select></label>
-      <label>Service ID<input [(ngModel)]="templateDraft.serviceId" placeholder="Optional service-specific template" /></label><label>Occasion<select [(ngModel)]="templateDraft.occasionKey"><option value="">No occasion</option><option value="birthday">Birthday</option><option value="anniversary">Anniversary</option><option value="win_back">Win-back</option><option value="review">Review</option><option value="rebooking">Rebooking</option></select></label>
-      <label>Approved offer<select [(ngModel)]="templateDraft.offerId"><option value="">No offer</option><option *ngFor="let offer of offers" [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option></select></label><label>Consent-check client ID<input [(ngModel)]="templateDraft.targetClientId" placeholder="Optional target client" /></label>
-      <button type="button" [disabled]="advisorLoading" (click)="generateTemplateAI()">{{ advisorLoading ? 'Generating…' : 'Generate with AI' }}</button>
-      <label>Message<textarea [(ngModel)]="templateDraft.body" rows="8" placeholder="Use approved variables only"></textarea></label><section class="variable-list"><button type="button" *ngFor="let variable of ['client_name','service_name','last_visit_date','days_inactive','preferred_staff','offer_code','offer_expiry','booking_link','branch_name']" (click)="templateDraft.body = templateDraft.body + '{{' + variable + '}}'">{{ '{{' + variable + '}}' }}</button></section>
-    </div>
-    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !templateDraft.name || !templateDraft.body" (click)="saveTemplate()">{{ busy ? 'Saving…' : 'Save template' }}</button></footer>
-  </aside>
+      <label class="check"><input type="checkbox" [(ngModel)]="templateDraft.branchSpecific" /> Branch-specific</label><label>Audience / segment<select [(ngModel)]="templateDraft.segment"><option value="all">All clients</option>@for (segment of segmentDefinitions; track segment) {
+      <option [value]="segment[0]">{{ segment[1] }}</option>
+    }</select></label>
+    <label>Service ID<input [(ngModel)]="templateDraft.serviceId" placeholder="Optional service-specific template" /></label><label>Occasion<select [(ngModel)]="templateDraft.occasionKey"><option value="">No occasion</option><option value="birthday">Birthday</option><option value="anniversary">Anniversary</option><option value="win_back">Win-back</option><option value="review">Review</option><option value="rebooking">Rebooking</option></select></label>
+    <label>Approved offer<select [(ngModel)]="templateDraft.offerId"><option value="">No offer</option>@for (offer of offers; track offer) {
+    <option [value]="offer.id" [disabled]="offer.approvalStatus !== 'approved'">{{ offer.code }} · {{ offer.approvalStatus }}</option>
+    }</select></label><label>Consent-check client ID<input [(ngModel)]="templateDraft.targetClientId" placeholder="Optional target client" /></label>
+    <button type="button" [disabled]="advisorLoading" (click)="generateTemplateAI()">{{ advisorLoading ? 'Generating…' : 'Generate with AI' }}</button>
+    <label>Message<textarea [(ngModel)]="templateDraft.body" rows="8" placeholder="Use approved variables only"></textarea></label><section class="variable-list">@for (variable of ['client_name','service_name','last_visit_date','days_inactive','preferred_staff','offer_code','offer_expiry','booking_link','branch_name']; track variable) {
+    <button type="button" (click)="templateDraft.body = templateDraft.body + '{{' + variable + '}}'">{{ '{{' + variable + '}}' }}</button>
+  }</section>
+</div>
+<footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !templateDraft.name || !templateDraft.body" (click)="saveTemplate()">{{ busy ? 'Saving…' : 'Save template' }}</button></footer>
+</aside>
+}
 
-  <aside class="drawer" *ngIf="drawer === 'lead' || drawer === 'activity'">
+@if (drawer === 'lead' || drawer === 'activity') {
+  <aside class="drawer">
     <header><h2>{{ drawer === 'lead' ? 'Add lead' : 'Lead activity' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
-    <div class="drawer-body" *ngIf="drawer === 'lead'">
-      <label>Name<input [ngModel]="leadDraft.name" (ngModelChange)="leadDraft.name = titleCase($event)" placeholder="Enter name" /></label><label>Phone<input [(ngModel)]="leadDraft.phone" inputmode="tel" placeholder="Enter phone" /></label><label>Email<input [(ngModel)]="leadDraft.email" type="email" placeholder="Enter email" /></label>
-      <label>Source<select [(ngModel)]="leadDraft.source"><option value="">Select source</option><option>Walk-in</option><option>Referral</option><option>Website</option><option>Social</option></select></label><label>Owner<select [(ngModel)]="leadDraft.ownerUserId"><option value="">Unassigned</option><option *ngFor="let owner of owners" [value]="owner.id">{{ owner.name || owner.roleName }}</option></select></label>
+    @if (drawer === 'lead') {
+      <div class="drawer-body">
+        <label>Name<input [ngModel]="leadDraft.name" (ngModelChange)="leadDraft.name = titleCase($event)" placeholder="Enter name" /></label><label>Phone<input [(ngModel)]="leadDraft.phone" inputmode="tel" placeholder="Enter phone" /></label><label>Email<input [(ngModel)]="leadDraft.email" type="email" placeholder="Enter email" /></label>
+        <label>Source<select [(ngModel)]="leadDraft.source"><option value="">Select source</option><option>Walk-in</option><option>Referral</option><option>Website</option><option>Social</option></select></label><label>Owner<select [(ngModel)]="leadDraft.ownerUserId"><option value="">Unassigned</option>@for (owner of owners; track owner) {
+        <option [value]="owner.id">{{ owner.name || owner.roleName }}</option>
+      }</select></label>
       <label>Qualification<select [(ngModel)]="leadDraft.qualificationStatus"><option value="unqualified">Unqualified</option><option value="qualified">Qualified</option><option value="disqualified">Disqualified</option></select></label><label>Score<input [(ngModel)]="leadDraft.score" type="number" min="0" max="100" placeholder="0-100" /></label><label>Next follow-up<as-date-picker [(value)]="leadDraft.followUp" ariaLabel="Next follow-up date" /></label>
     </div>
-    <div class="drawer-body" *ngIf="drawer === 'activity' && selectedLead">
-      <p><strong>{{ displayName(selectedLead) }}</strong> · {{ selectedLead.stage }} · {{ selectedLead.source || 'other' }}</p><p *ngIf="selectedLead.clientId || selectedLead.convertedAppointmentId"><b>Attribution:</b> {{ selectedLead.clientId ? 'Client ' + selectedLead.clientId : '' }} {{ selectedLead.convertedAppointmentId ? ' · Appointment ' + selectedLead.convertedAppointmentId : '' }}</p><div class="activity-list"><article *ngFor="let activity of activities"><strong>{{ activity.activityType }}</strong><p>{{ activity.body }}</p><small>{{ formatDate(activity.createdAt) }} · {{ activity.createdBy || 'Team' }}</small></article><div class="column-empty" *ngIf="!activities.length">No activity yet</div></div>
-      <label>Activity type<select [(ngModel)]="activityDraft.activityType"><option value="note">Note</option><option value="call">Call</option><option value="message">Message</option><option value="follow_up">Follow-up</option><option value="qualification">Qualification</option></select></label><label>Activity<textarea [(ngModel)]="activityDraft.body" rows="4" maxlength="4000" placeholder="Record the real interaction"></textarea></label><label>Next follow-up<as-date-picker [(value)]="activityDraft.nextFollowUpDate" ariaLabel="Next follow-up date" /></label><label>Client ID for conversion<input [(ngModel)]="conversionClientId" placeholder="Optional existing client ID" /></label><label>Appointment ID for conversion<input [(ngModel)]="conversionAppointmentId" placeholder="Optional existing appointment ID" /></label>
-    </div>
-    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button *ngIf="drawer === 'activity'" type="button" [disabled]="busy" (click)="saveActivity()">{{ busy ? 'Saving…' : 'Log activity' }}</button><button *ngIf="drawer === 'activity'" class="primary" type="button" [disabled]="busy" (click)="convertLead()">Mark converted</button><button *ngIf="drawer === 'lead'" class="primary" type="button" [disabled]="busy" (click)="saveLead()">{{ busy ? 'Saving…' : 'Save lead' }}</button></footer>
-  </aside>
+  }
+  @if (drawer === 'activity' && selectedLead) {
+    <div class="drawer-body">
+      <p><strong>{{ displayName(selectedLead) }}</strong> · {{ selectedLead.stage }} · {{ selectedLead.source || 'other' }}</p>@if (selectedLead.clientId || selectedLead.convertedAppointmentId) {
+      <p><b>Attribution:</b> {{ selectedLead.clientId ? 'Client ' + selectedLead.clientId : '' }} {{ selectedLead.convertedAppointmentId ? ' · Appointment ' + selectedLead.convertedAppointmentId : '' }}</p>
+      }<div class="activity-list">@for (activity of activities; track activity) {
+      <article><strong>{{ activity.activityType }}</strong><p>{{ activity.body }}</p><small>{{ formatDate(activity.createdAt) }} · {{ activity.createdBy || 'Team' }}</small></article>
+      }@if (!activities.length) {
+      <div class="column-empty">No activity yet</div>
+    }</div>
+    <label>Activity type<select [(ngModel)]="activityDraft.activityType"><option value="note">Note</option><option value="call">Call</option><option value="message">Message</option><option value="follow_up">Follow-up</option><option value="qualification">Qualification</option></select></label><label>Activity<textarea [(ngModel)]="activityDraft.body" rows="4" maxlength="4000" placeholder="Record the real interaction"></textarea></label><label>Next follow-up<as-date-picker [(value)]="activityDraft.nextFollowUpDate" ariaLabel="Next follow-up date" /></label><label>Client ID for conversion<input [(ngModel)]="conversionClientId" placeholder="Optional existing client ID" /></label><label>Appointment ID for conversion<input [(ngModel)]="conversionAppointmentId" placeholder="Optional existing appointment ID" /></label>
+  </div>
+}
+<footer><button type="button" (click)="closeDrawer()">Cancel</button>@if (drawer === 'activity') {
+<button type="button" [disabled]="busy" (click)="saveActivity()">{{ busy ? 'Saving…' : 'Log activity' }}</button>
+}@if (drawer === 'activity') {
+<button class="primary" type="button" [disabled]="busy" (click)="convertLead()">Mark converted</button>
+}@if (drawer === 'lead') {
+<button class="primary" type="button" [disabled]="busy" (click)="saveLead()">{{ busy ? 'Saving…' : 'Save lead' }}</button>
+}</footer>
+</aside>
+}
 </section>

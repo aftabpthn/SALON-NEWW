@@ -1498,7 +1498,7 @@ async fn customer_push_proof(
     let notifications = repo::account_notifications(&state.db, &claims.sub)
         .await
         .map_err(|_| AppError::internal("failed to load notification proof"))?;
-    let payment_providers: Vec<Value> = ["razorpay", "cashfree", "phonepe"]
+    let payment_providers: Vec<Value> = crate::config::PAYMENT_PROVIDERS
         .iter()
         .map(|provider| {
             json!({

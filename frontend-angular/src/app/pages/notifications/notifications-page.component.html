@@ -8,94 +8,130 @@
       <button type="button" (click)="reload()" [disabled]="loading">Refresh</button>
     </div>
   </header>
-  <p class="alert" *ngIf="error">{{ error }}</p>
+  @if (error) {
+    <p class="alert">{{ error }}</p>
+  }
 
-  <ng-container *ngIf="mode === 'center'; else conversations">
+  @if (mode === 'center') {
     <div class="control-shell">
       <section class="compose-card">
         <header><h2>Send message</h2><strong>{{ eligibleRecipients }} recipients</strong></header>
         <div class="control-grid">
           <label>Channel<select [(ngModel)]="controlChannel" (ngModelChange)="controlSelectionChanged()"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select></label>
-          <label>Category<select [(ngModel)]="controlCategory" (ngModelChange)="controlSelectionChanged()"><option *ngFor="let item of availableCategories" [value]="item.value">{{ item.label }}</option></select></label>
-          <label>Audience<select [(ngModel)]="controlAudience" (ngModelChange)="controlSelectionChanged()"><option *ngFor="let item of availableAudiences" [value]="item.value">{{ item.label }}</option></select></label>
-          <label *ngIf="controlChannel === 'email'">Subject<input [(ngModel)]="controlSubject" maxlength="160" /></label>
+          <label>Category<select [(ngModel)]="controlCategory" (ngModelChange)="controlSelectionChanged()">@for (item of availableCategories; track item) {
+            <option [value]="item.value">{{ item.label }}</option>
+          }</select></label>
+          <label>Audience<select [(ngModel)]="controlAudience" (ngModelChange)="controlSelectionChanged()">@for (item of availableAudiences; track item) {
+            <option [value]="item.value">{{ item.label }}</option>
+          }</select></label>
+          @if (controlChannel === 'email') {
+            <label>Subject<input [(ngModel)]="controlSubject" maxlength="160" /></label>
+          }
         </div>
         <small class="control-note">Booking OTP and customer verification remain rate-limited system messages; delivery activates when the provider is configured.</small>
         <label class="message-field">Message<textarea [(ngModel)]="controlMessage" rows="7" maxlength="1000"></textarea></label>
         <div class="compose-actions">
-          <div class="emoji-list" aria-label="Insert emoji"><button type="button" *ngFor="let emoji of emojis" (click)="addEmoji(emoji)">{{ emoji }}</button></div>
-          <label class="sensitive-check" *ngIf="isSalaryMessage"><input type="checkbox" [(ngModel)]="sensitiveConfirmed" /> Confirm salary message</label>
+          <div class="emoji-list" aria-label="Insert emoji">@for (emoji of emojis; track emoji) {
+            <button type="button" (click)="addEmoji(emoji)">{{ emoji }}</button>
+          }</div>
+          @if (isSalaryMessage) {
+            <label class="sensitive-check"><input type="checkbox" [(ngModel)]="sensitiveConfirmed" /> Confirm salary message</label>
+          }
           <button class="primary" type="button" (click)="sendControlMessage()" [disabled]="busy || !controlMessage.trim() || !eligibleRecipients || !providerReady(controlChannel) || (controlChannel === 'email' && !controlSubject.trim()) || (isSalaryMessage && !sensitiveConfirmed)">{{ busy ? 'Queuing…' : 'Queue message' }}</button>
         </div>
       </section>
-
       <section class="history-card">
         <header><h2>Delivery history</h2><button type="button" (click)="reloadControl()">Refresh</button></header>
         <div class="history-table-wrap">
           <table>
             <thead><tr><th scope="col">Message</th><th scope="col">Channel</th><th scope="col">Audience</th><th scope="col">Status</th><th scope="col">Delivery</th><th scope="col">Created</th></tr></thead>
             <tbody>
-              <tr *ngFor="let campaign of controlCampaigns">
-                <td><strong>{{ campaign.title }}</strong><small>{{ campaign.body }}</small></td>
-                <td>{{ campaign.metadata.channel || '—' }}</td>
-                <td>{{ campaign.metadata.audience || '—' }}</td>
-                <td>{{ campaign.metadata.status || 'scheduled' }}</td>
-                <td>{{ campaign.metadata.deliveredCount || 0 }}/{{ campaign.metadata.recipientCount || campaign.metadata.eligibleRecipients || 0 }}<small *ngIf="campaign.metadata.failedCount || campaign.metadata.blockedCount">Failed {{ campaign.metadata.failedCount || 0 }} · Blocked {{ campaign.metadata.blockedCount || 0 }}</small></td>
-                <td>{{ formatDateTime(campaign.createdAt) }}</td>
-              </tr>
-              <tr *ngIf="!controlCampaigns.length"><td colspan="6" class="empty">No records yet</td></tr>
+              @for (campaign of controlCampaigns; track campaign) {
+                <tr>
+                  <td><strong>{{ campaign.title }}</strong><small>{{ campaign.body }}</small></td>
+                  <td>{{ campaign.metadata.channel || '—' }}</td>
+                  <td>{{ campaign.metadata.audience || '—' }}</td>
+                  <td>{{ campaign.metadata.status || 'scheduled' }}</td>
+                  <td>{{ campaign.metadata.deliveredCount || 0 }}/{{ campaign.metadata.recipientCount || campaign.metadata.eligibleRecipients || 0 }}@if (campaign.metadata.failedCount || campaign.metadata.blockedCount) {
+                    <small>Failed {{ campaign.metadata.failedCount || 0 }} · Blocked {{ campaign.metadata.blockedCount || 0 }}</small>
+                  }</td>
+                  <td>{{ formatDateTime(campaign.createdAt) }}</td>
+                </tr>
+              }
+              @if (!controlCampaigns.length) {
+                <tr><td colspan="6" class="empty">No records yet</td></tr>
+              }
             </tbody>
           </table>
         </div>
       </section>
     </div>
-  </ng-container>
-
-  <ng-template #conversations>
-  <div class="inbox-shell" *ngIf="mode === 'client'; else teamChat">
-    <aside class="thread-list">
-      <button type="button" *ngFor="let thread of threads" [class.active]="thread.clientId === selectedClientId" (click)="selectThread(thread)">
-        <span><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }} · {{ formatDateTime(thread.occurredAt) }}</small></span>
-        <small>{{ thread.body || thread.subject }}</small>
-      </button>
-      <div class="empty" *ngIf="loading">Loading messages…</div>
-      <div class="empty" *ngIf="!loading && !threads.length">No messages yet</div>
-    </aside>
-
-    <section class="conversation">
-      <header *ngIf="selectedThread as thread"><div><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }}</small></div></header>
-      <div class="message-list" *ngIf="selectedClientId; else noConversation">
-        <article *ngFor="let message of selectedMessages" [class.outbound]="message.direction === 'outbound'">
-          <p>{{ message.body || message.subject }}</p>
-          <small>{{ message.status }} · {{ formatDateTime(message.occurredAt) }}</small>
-        </article>
+  } @else {
+    @if (mode === 'client') {
+      <div class="inbox-shell">
+        <aside class="thread-list">
+          @for (thread of threads; track thread) {
+            <button type="button" [class.active]="thread.clientId === selectedClientId" (click)="selectThread(thread)">
+              <span><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }} · {{ formatDateTime(thread.occurredAt) }}</small></span>
+              <small>{{ thread.body || thread.subject }}</small>
+            </button>
+          }
+          @if (loading) {
+            <div class="empty">Loading messages…</div>
+          }
+          @if (!loading && !threads.length) {
+            <div class="empty">No messages yet</div>
+          }
+        </aside>
+        <section class="conversation">
+          @if (selectedThread; as thread) {
+            <header><div><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }}</small></div></header>
+          }
+          @if (selectedClientId) {
+            <div class="message-list">
+              @for (message of selectedMessages; track message) {
+                <article [class.outbound]="message.direction === 'outbound'">
+                  <p>{{ message.body || message.subject }}</p>
+                  <small>{{ message.status }} · {{ formatDateTime(message.occurredAt) }}</small>
+                </article>
+              }
+            </div>
+          } @else {
+            <div class="empty conversation-empty">Select a conversation</div>
+          }
+          @if (selectedClientId) {
+            <footer>
+              <select [(ngModel)]="channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select>
+              <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a reply"></textarea>
+              <button class="primary" type="button" (click)="sendReply()" [disabled]="busy || !reply.trim() || !providerReady(channel)">{{ busy ? 'Queuing…' : 'Send' }}</button>
+            </footer>
+          }
+        </section>
       </div>
-      <ng-template #noConversation><div class="empty conversation-empty">Select a conversation</div></ng-template>
-      <footer *ngIf="selectedClientId">
-        <select [(ngModel)]="channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select>
-        <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a reply"></textarea>
-        <button class="primary" type="button" (click)="sendReply()" [disabled]="busy || !reply.trim() || !providerReady(channel)">{{ busy ? 'Queuing…' : 'Send' }}</button>
-      </footer>
-    </section>
-  </div>
+    } @else {
+      <section class="team-chat-shell">
+        <header><div><strong>Branch team</strong><small>Internal messages</small></div></header>
+        <div class="message-list team-message-list">
+          @for (message of teamMessages; track message) {
+            <article [class.outbound]="isOwnMessage(message)">
+              <strong>{{ message.senderName }}</strong>
+              <p>{{ message.body }}</p>
+              <small>{{ formatDateTime(message.createdAt) }}</small>
+            </article>
+          }
+          @if (loading) {
+            <div class="empty">Loading messages…</div>
+          }
+          @if (!loading && !teamMessages.length) {
+            <div class="empty">No team messages yet</div>
+          }
+        </div>
+        <footer>
+          <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a team message"></textarea>
+          <button class="primary" type="button" (click)="sendTeamMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
+        </footer>
+      </section>
+    }
+  }
 
-  <ng-template #teamChat>
-    <section class="team-chat-shell">
-      <header><div><strong>Branch team</strong><small>Internal messages</small></div></header>
-      <div class="message-list team-message-list">
-        <article *ngFor="let message of teamMessages" [class.outbound]="isOwnMessage(message)">
-          <strong>{{ message.senderName }}</strong>
-          <p>{{ message.body }}</p>
-          <small>{{ formatDateTime(message.createdAt) }}</small>
-        </article>
-        <div class="empty" *ngIf="loading">Loading messages…</div>
-        <div class="empty" *ngIf="!loading && !teamMessages.length">No team messages yet</div>
-      </div>
-      <footer>
-        <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a team message"></textarea>
-        <button class="primary" type="button" (click)="sendTeamMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
-      </footer>
-    </section>
-  </ng-template>
-  </ng-template>
 </section>

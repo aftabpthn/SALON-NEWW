@@ -12,235 +12,388 @@
     <button class="utility-button" type="button" [disabled]="loadingOverview || saving" (click)="refresh()">
       <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Refresh
     </button>
-    <button class="utility-button" type="button" *ngIf="canWrite" [disabled]="saving" (click)="openJournal()">
-      <i class="bi bi-journal-plus" aria-hidden="true"></i>Manual Journal
-    </button>
-    <button class="primary-button" type="button" *ngIf="canWrite" [disabled]="saving || loadingOverview" (click)="createSnapshot()">
-      <i class="bi bi-archive" aria-hidden="true"></i>{{ saving && !drawer ? 'Saving…' : 'Snapshot' }}
-    </button>
+    @if (canWrite) {
+      <button class="utility-button" type="button" [disabled]="saving" (click)="openJournal()">
+        <i class="bi bi-journal-plus" aria-hidden="true"></i>Manual Journal
+      </button>
+    }
+    @if (canWrite) {
+      <button class="primary-button" type="button" [disabled]="saving || loadingOverview" (click)="createSnapshot()">
+        <i class="bi bi-archive" aria-hidden="true"></i>{{ saving && !drawer ? 'Saving…' : 'Snapshot' }}
+      </button>
+    }
   </header>
 
   <nav class="tabs" aria-label="Finance views">
-    <button type="button" *ngFor="let tab of tabs" [class.active]="activeTab === tab.id" (click)="selectTab(tab.id)">
-      <i class="bi" [ngClass]="tab.icon" aria-hidden="true"></i>{{ tab.label }}
-    </button>
+    @for (tab of tabs; track tab) {
+      <button type="button" [class.active]="activeTab === tab.id" (click)="selectTab(tab.id)">
+        <i class="bi" [ngClass]="tab.icon" aria-hidden="true"></i>{{ tab.label }}
+      </button>
+    }
   </nav>
 
-  <div class="message error" role="alert" *ngIf="errorMessage"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{ errorMessage }}</div>
-  <div class="message warning" role="status" *ngIf="warningMessage"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{ warningMessage }}</div>
-  <div class="message success" role="status" *ngIf="successMessage"><i class="bi bi-check-circle" aria-hidden="true"></i>{{ successMessage }}</div>
+  @if (errorMessage) {
+    <div class="message error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i>{{ errorMessage }}</div>
+  }
+  @if (warningMessage) {
+    <div class="message warning" role="status"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>{{ warningMessage }}</div>
+  }
+  @if (successMessage) {
+    <div class="message success" role="status"><i class="bi bi-check-circle" aria-hidden="true"></i>{{ successMessage }}</div>
+  }
 
-  <ng-container *ngIf="activeTab === 'overview'">
+  @if (activeTab === 'overview') {
     <section class="kpi-grid" aria-label="Balance Sheet totals">
       <article class="kpi-card blue">
         <span class="kpi-icon"><i class="bi bi-cash-stack" aria-hidden="true"></i></span>
-        <div><span>Total Assets</span><strong *ngIf="!loadingOverview; else kpiLoading">{{ money(report?.totals?.assetsPaise) }}</strong></div>
-      </article>
-      <article class="kpi-card amber">
-        <span class="kpi-icon"><i class="bi bi-credit-card" aria-hidden="true"></i></span>
-        <div><span>Total Liabilities</span><strong *ngIf="!loadingOverview; else kpiLoading">{{ money(report?.totals?.liabilitiesPaise) }}</strong></div>
-      </article>
-      <article class="kpi-card violet">
-        <span class="kpi-icon"><i class="bi bi-pie-chart" aria-hidden="true"></i></span>
-        <div><span>Total Equity</span><strong *ngIf="!loadingOverview; else kpiLoading">{{ money(report?.totals?.equityPaise) }}</strong></div>
-      </article>
-      <article class="kpi-card green">
-        <span class="kpi-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
-        <div><span>Working Capital</span><strong *ngIf="!loadingOverview; else kpiLoading">{{ money(workingCapital?.workingCapitalPaise) }}</strong></div>
-      </article>
-      <article class="kpi-card" [class.red]="differencePaise !== 0" [class.green]="differencePaise === 0">
-        <span class="kpi-icon"><i class="bi" [ngClass]="differencePaise === 0 ? 'bi-check2-circle' : 'bi-exclamation-triangle'" aria-hidden="true"></i></span>
-        <div><span>Variance</span><strong *ngIf="!loadingOverview; else kpiLoading">{{ money(differencePaise) }}</strong></div>
-      </article>
-      <ng-template #kpiLoading><span class="skeleton skeleton-value"></span></ng-template>
-    </section>
-
-    <section class="overview-grid">
-      <article class="panel balance-panel">
-        <header class="panel-header">
-          <div><span class="panel-icon"><i class="bi bi-layout-three-columns" aria-hidden="true"></i></span><h2>Balance Sheet</h2></div>
-          <span class="status-chip" [class.good]="report?.balanced" [class.bad]="report && !report.balanced">
-            {{ report?.balanced ? 'Balanced' : report ? 'Variance found' : 'Unavailable' }}
-          </span>
-        </header>
-        <div class="loading-panel" *ngIf="loadingOverview">
-          <span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line wide"></span>
-        </div>
-        <div class="balance-columns" *ngIf="!loadingOverview && report">
-          <section class="account-section">
-            <header><span class="account-icon asset"><i class="bi bi-wallet2" aria-hidden="true"></i></span><h3>Assets</h3><strong>{{ money(report.totals.assetsPaise) }}</strong></header>
-            <button class="account-row" type="button" *ngFor="let row of report.sections.assets; trackBy: trackByCode" (click)="openLedger(row)">
+        <div><span>Total Assets</span>@if (!loadingOverview) {
+        <strong>{{ money(report?.totals?.assetsPaise) }}</strong>
+      } @else {
+        <span class="skeleton skeleton-value"></span>
+      }</div>
+    </article>
+    <article class="kpi-card amber">
+      <span class="kpi-icon"><i class="bi bi-credit-card" aria-hidden="true"></i></span>
+      <div><span>Total Liabilities</span>@if (!loadingOverview) {
+      <strong>{{ money(report?.totals?.liabilitiesPaise) }}</strong>
+    } @else {
+      <span class="skeleton skeleton-value"></span>
+    }</div>
+  </article>
+  <article class="kpi-card violet">
+    <span class="kpi-icon"><i class="bi bi-pie-chart" aria-hidden="true"></i></span>
+    <div><span>Total Equity</span>@if (!loadingOverview) {
+    <strong>{{ money(report?.totals?.equityPaise) }}</strong>
+  } @else {
+    <span class="skeleton skeleton-value"></span>
+  }</div>
+</article>
+<article class="kpi-card green">
+  <span class="kpi-icon"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span>
+  <div><span>Working Capital</span>@if (!loadingOverview) {
+  <strong>{{ money(workingCapital?.workingCapitalPaise) }}</strong>
+} @else {
+  <span class="skeleton skeleton-value"></span>
+}</div>
+</article>
+<article class="kpi-card" [class.red]="differencePaise !== 0" [class.green]="differencePaise === 0">
+  <span class="kpi-icon"><i class="bi" [ngClass]="differencePaise === 0 ? 'bi-check2-circle' : 'bi-exclamation-triangle'" aria-hidden="true"></i></span>
+  <div><span>Variance</span>@if (!loadingOverview) {
+  <strong>{{ money(differencePaise) }}</strong>
+} @else {
+  <span class="skeleton skeleton-value"></span>
+}</div>
+</article>
+</section>
+<section class="overview-grid">
+  <article class="panel balance-panel">
+    <header class="panel-header">
+      <div><span class="panel-icon"><i class="bi bi-layout-three-columns" aria-hidden="true"></i></span><h2>Balance Sheet</h2></div>
+      <span class="status-chip" [class.good]="report?.balanced" [class.bad]="report && !report.balanced">
+        {{ report?.balanced ? 'Balanced' : report ? 'Variance found' : 'Unavailable' }}
+      </span>
+    </header>
+    @if (loadingOverview) {
+      <div class="loading-panel">
+        <span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line wide"></span>
+      </div>
+    }
+    @if (!loadingOverview && report) {
+      <div class="balance-columns">
+        <section class="account-section">
+          <header><span class="account-icon asset"><i class="bi bi-wallet2" aria-hidden="true"></i></span><h3>Assets</h3><strong>{{ money(report.totals.assetsPaise) }}</strong></header>
+          @for (row of report.sections.assets; track trackByCode($index, row)) {
+            <button class="account-row" type="button" (click)="openLedger(row)">
               <span><strong>{{ row.name }}</strong><small>{{ row.code }}</small></span><b>{{ money(row.balancePaise) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
-            <div class="compact-empty" *ngIf="!report.sections.assets.length"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
-          </section>
-          <section class="account-section">
-            <header><span class="account-icon liability"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><h3>Liabilities</h3><strong>{{ money(report.totals.liabilitiesPaise) }}</strong></header>
-            <button class="account-row" type="button" *ngFor="let row of report.sections.liabilities; trackBy: trackByCode" (click)="openLedger(row)">
+          }
+          @if (!report.sections.assets.length) {
+            <div class="compact-empty"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
+          }
+        </section>
+        <section class="account-section">
+          <header><span class="account-icon liability"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><h3>Liabilities</h3><strong>{{ money(report.totals.liabilitiesPaise) }}</strong></header>
+          @for (row of report.sections.liabilities; track trackByCode($index, row)) {
+            <button class="account-row" type="button" (click)="openLedger(row)">
               <span><strong>{{ row.name }}</strong><small>{{ row.code }}</small></span><b>{{ money(row.balancePaise) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
-            <div class="compact-empty" *ngIf="!report.sections.liabilities.length"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
-          </section>
-          <section class="account-section">
-            <header><span class="account-icon equity"><i class="bi bi-pie-chart" aria-hidden="true"></i></span><h3>Equity</h3><strong>{{ money(report.totals.equityPaise) }}</strong></header>
-            <button class="account-row" type="button" *ngFor="let row of report.sections.equity; trackBy: trackByCode" (click)="openLedger(row)">
+          }
+          @if (!report.sections.liabilities.length) {
+            <div class="compact-empty"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
+          }
+        </section>
+        <section class="account-section">
+          <header><span class="account-icon equity"><i class="bi bi-pie-chart" aria-hidden="true"></i></span><h3>Equity</h3><strong>{{ money(report.totals.equityPaise) }}</strong></header>
+          @for (row of report.sections.equity; track trackByCode($index, row)) {
+            <button class="account-row" type="button" (click)="openLedger(row)">
               <span><strong>{{ row.name }}</strong><small>{{ row.code }}</small></span><b>{{ money(row.balancePaise) }}</b><i class="bi bi-chevron-right" aria-hidden="true"></i>
             </button>
-            <div class="compact-empty" *ngIf="!report.sections.equity.length"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
-          </section>
-        </div>
-        <div class="empty-panel" *ngIf="!loadingOverview && !report && !errorMessage"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></div>
-        <footer *ngIf="report"><span>As of {{ date(report.asOfDate) }}</span><span>{{ report.branchId }}</span></footer>
-      </article>
-
-      <aside class="panel controls-panel">
-        <header class="panel-header"><div><span class="panel-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span><h2>Finance Controls</h2></div></header>
-        <div class="loading-panel" *ngIf="loadingOverview">
-          <span class="skeleton skeleton-control"></span><span class="skeleton skeleton-control"></span><span class="skeleton skeleton-control"></span>
-        </div>
-        <ng-container *ngIf="!loadingOverview && hardening">
-          <div class="control-row">
-            <span class="control-icon"><i class="bi bi-lock" aria-hidden="true"></i></span>
-            <div><span>Period status</span><strong>{{ label(periodStatus) }}</strong></div>
-            <span class="status-dot" [class.good]="periodStatus === 'open'"></span>
-          </div>
-          <div class="control-row">
-            <span class="control-icon"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></span>
-            <div><span>Reconciliation</span><strong>{{ hardening.criticalCount }} critical · {{ hardening.warningCount }} warning</strong></div>
-            <span class="status-dot" [class.good]="hardening.criticalCount === 0" [class.bad]="hardening.criticalCount > 0"></span>
-          </div>
-          <div class="control-row">
-            <span class="control-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
-            <div><span>Hardening</span><strong>{{ label(hardening.status) }}</strong></div>
-            <span class="status-dot" [class.good]="hardening.status === 'healthy'" [class.bad]="hardening.status !== 'healthy'"></span>
-          </div>
-          <div class="checks-list" *ngIf="hardening.checks.length">
-            <article *ngFor="let check of hardening.checks">
+          }
+          @if (!report.sections.equity.length) {
+            <div class="compact-empty"><i class="bi bi-inbox" aria-hidden="true"></i><span>No records yet</span></div>
+          }
+        </section>
+      </div>
+    }
+    @if (!loadingOverview && !report && !errorMessage) {
+      <div class="empty-panel"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></div>
+    }
+    @if (report) {
+      <footer><span>As of {{ date(report.asOfDate) }}</span><span>{{ report.branchId | branchName }}</span></footer>
+    }
+  </article>
+  <aside class="panel controls-panel">
+    <header class="panel-header"><div><span class="panel-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span><h2>Finance Controls</h2></div></header>
+    @if (loadingOverview) {
+      <div class="loading-panel">
+        <span class="skeleton skeleton-control"></span><span class="skeleton skeleton-control"></span><span class="skeleton skeleton-control"></span>
+      </div>
+    }
+    @if (!loadingOverview && hardening) {
+      <div class="control-row">
+        <span class="control-icon"><i class="bi bi-lock" aria-hidden="true"></i></span>
+        <div><span>Period status</span><strong>{{ label(periodStatus) }}</strong></div>
+        <span class="status-dot" [class.good]="periodStatus === 'open'"></span>
+      </div>
+      <div class="control-row">
+        <span class="control-icon"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></span>
+        <div><span>Reconciliation</span><strong>{{ hardening.criticalCount }} critical · {{ hardening.warningCount }} warning</strong></div>
+        <span class="status-dot" [class.good]="hardening.criticalCount === 0" [class.bad]="hardening.criticalCount > 0"></span>
+      </div>
+      <div class="control-row">
+        <span class="control-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
+        <div><span>Hardening</span><strong>{{ label(hardening.status) }}</strong></div>
+        <span class="status-dot" [class.good]="hardening.status === 'healthy'" [class.bad]="hardening.status !== 'healthy'"></span>
+      </div>
+      @if (hardening.checks.length) {
+        <div class="checks-list">
+          @for (check of hardening.checks; track check) {
+            <article>
               <span><strong>{{ label(check.key) }}</strong><small>{{ check.detailCount }} details</small></span>
               <b [class.variance]="check.variancePaise !== 0">{{ money(check.variancePaise) }}</b>
             </article>
-          </div>
-        </ng-container>
-        <div class="compact-empty controls-empty" *ngIf="!loadingOverview && !hardening"><i class="bi bi-shield-exclamation" aria-hidden="true"></i><span>No control status</span></div>
-      </aside>
-    </section>
-  </ng-container>
+          }
+        </div>
+      }
+    }
+    @if (!loadingOverview && !hardening) {
+      <div class="compact-empty controls-empty"><i class="bi bi-shield-exclamation" aria-hidden="true"></i><span>No control status</span></div>
+    }
+  </aside>
+</section>
+}
 
-  <section class="panel data-panel comparison-panel" *ngIf="activeTab === 'comparison'">
+@if (activeTab === 'comparison') {
+  <section class="panel data-panel comparison-panel">
     <header class="panel-header data-header">
       <div><span class="panel-icon"><i class="bi bi-bar-chart-line" aria-hidden="true"></i></span><h2>Comparative Balance Sheet</h2></div>
       <div class="panel-actions">
-        <span class="status-chip good" *ngIf="comparisonCurrentReport">{{ comparisonCurrentReport.branchCount }} {{ comparisonCurrentReport.branchCount === 1 ? 'branch' : 'branches' }}</span>
+        @if (comparisonCurrentReport) {
+          <span class="status-chip good">{{ comparisonCurrentReport.branchCount }} {{ comparisonCurrentReport.branchCount === 1 ? 'branch' : 'branches' }}</span>
+        }
         <button class="utility-button" type="button" [disabled]="!comparisonCurrentReport || !comparisonReport" (click)="exportComparisonCsv()"><i class="bi bi-filetype-csv" aria-hidden="true"></i>Audit CSV</button>
         <button class="utility-button" type="button" [disabled]="!comparisonCurrentReport || !comparisonReport" (click)="printComparison()"><i class="bi bi-printer" aria-hidden="true"></i>Print / PDF</button>
       </div>
     </header>
     <div class="filter-bar comparison-filter">
-      <label *ngIf="canViewTenantScope"><span>Scope</span><select [(ngModel)]="comparisonScope" (change)="onComparisonScopeChange()"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select></label>
+      @if (canViewTenantScope) {
+        <label><span>Scope</span><select [(ngModel)]="comparisonScope" (change)="onComparisonScopeChange()"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select></label>
+      }
       <label><span>Compare with</span><as-date-picker [value]="comparisonDate" (valueChange)="onComparisonDateChange($event)" ariaLabel="Balance Sheet comparison date"></as-date-picker></label>
       <button class="primary-button" type="button" [disabled]="loadingTab || !comparisonDate" (click)="loadComparison()"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Run Comparison</button>
     </div>
-    <div class="loading-panel table-loading" *ngIf="loadingTab"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
-    <div class="table-scroll" *ngIf="!loadingTab && comparisonReport">
-      <table class="comparison-table">
-        <thead><tr><th scope="col">Group</th><th scope="col">Account</th><th scope="col" class="amount">{{ date(comparisonDate) }}</th><th scope="col" class="amount">{{ date(asOfDate) }}</th><th scope="col" class="amount">Variance</th></tr></thead>
-        <tbody>
-          <tr class="total-row"><td>Asset</td><td><strong>Total Assets</strong></td><td class="amount">{{ money(comparisonReport.totals.assetsPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.assetsPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise < 0">{{ money((comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise) }}</td></tr>
-          <tr class="total-row"><td>Liability</td><td><strong>Total Liabilities</strong></td><td class="amount">{{ money(comparisonReport.totals.liabilitiesPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.liabilitiesPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise < 0">{{ money((comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise) }}</td></tr>
-          <tr class="total-row"><td>Equity</td><td><strong>Total Equity</strong></td><td class="amount">{{ money(comparisonReport.totals.equityPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.equityPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise < 0">{{ money((comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise) }}</td></tr>
-          <tr class="total-row"><td>Liquidity</td><td><strong>Working Capital</strong></td><td class="amount">{{ money(comparisonWorkingCapital?.workingCapitalPaise) }}</td><td class="amount">{{ money(comparisonCurrentWorkingCapital?.workingCapitalPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0) > 0" [class.negative]="(comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0) < 0">{{ money((comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0)) }}</td></tr>
-          <tr *ngFor="let row of comparisonRows; trackBy: trackByCode"><td>{{ label(row.group) }}</td><td><strong>{{ row.name }}</strong><small>{{ row.code }}</small></td><td class="amount">{{ money(row.comparisonPaise) }}</td><td class="amount">{{ money(row.currentPaise) }}</td><td class="amount" [class.positive]="row.variancePaise > 0" [class.negative]="row.variancePaise < 0"><strong>{{ money(row.variancePaise) }}</strong></td></tr>
-          <tr *ngIf="!comparisonRows.length"><td class="empty-cell" colspan="5"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="compact-empty" *ngIf="!loadingTab && !comparisonReport && !errorMessage"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>No comparison loaded</span></div>
+    @if (loadingTab) {
+      <div class="loading-panel table-loading"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
+    }
+    @if (!loadingTab && comparisonReport) {
+      <div class="table-scroll">
+        <table class="comparison-table">
+          <thead><tr><th scope="col">Group</th><th scope="col">Account</th><th scope="col" class="amount">{{ date(comparisonDate) }}</th><th scope="col" class="amount">{{ date(asOfDate) }}</th><th scope="col" class="amount">Variance</th></tr></thead>
+          <tbody>
+            <tr class="total-row"><td>Asset</td><td><strong>Total Assets</strong></td><td class="amount">{{ money(comparisonReport.totals.assetsPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.assetsPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise < 0">{{ money((comparisonCurrentReport?.totals?.assetsPaise || 0) - comparisonReport.totals.assetsPaise) }}</td></tr>
+            <tr class="total-row"><td>Liability</td><td><strong>Total Liabilities</strong></td><td class="amount">{{ money(comparisonReport.totals.liabilitiesPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.liabilitiesPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise < 0">{{ money((comparisonCurrentReport?.totals?.liabilitiesPaise || 0) - comparisonReport.totals.liabilitiesPaise) }}</td></tr>
+            <tr class="total-row"><td>Equity</td><td><strong>Total Equity</strong></td><td class="amount">{{ money(comparisonReport.totals.equityPaise) }}</td><td class="amount">{{ money(comparisonCurrentReport?.totals?.equityPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise > 0" [class.negative]="(comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise < 0">{{ money((comparisonCurrentReport?.totals?.equityPaise || 0) - comparisonReport.totals.equityPaise) }}</td></tr>
+            <tr class="total-row"><td>Liquidity</td><td><strong>Working Capital</strong></td><td class="amount">{{ money(comparisonWorkingCapital?.workingCapitalPaise) }}</td><td class="amount">{{ money(comparisonCurrentWorkingCapital?.workingCapitalPaise) }}</td><td class="amount" [class.positive]="(comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0) > 0" [class.negative]="(comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0) < 0">{{ money((comparisonCurrentWorkingCapital?.workingCapitalPaise || 0) - (comparisonWorkingCapital?.workingCapitalPaise || 0)) }}</td></tr>
+            @for (row of comparisonRows; track trackByCode($index, row)) {
+              <tr><td>{{ label(row.group) }}</td><td><strong>{{ row.name }}</strong><small>{{ row.code }}</small></td><td class="amount">{{ money(row.comparisonPaise) }}</td><td class="amount">{{ money(row.currentPaise) }}</td><td class="amount" [class.positive]="row.variancePaise > 0" [class.negative]="row.variancePaise < 0"><strong>{{ money(row.variancePaise) }}</strong></td></tr>
+            }
+            @if (!comparisonRows.length) {
+              <tr><td class="empty-cell" colspan="5"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+    @if (!loadingTab && !comparisonReport && !errorMessage) {
+      <div class="compact-empty"><i class="bi bi-bar-chart-line" aria-hidden="true"></i><span>No comparison loaded</span></div>
+    }
   </section>
+}
 
-  <section class="panel data-panel" *ngIf="activeTab === 'ledger'">
+@if (activeTab === 'ledger') {
+  <section class="panel data-panel">
     <header class="panel-header data-header">
       <div><span class="panel-icon"><i class="bi bi-journal-text" aria-hidden="true"></i></span><h2>Account Ledger</h2></div>
-      <div class="panel-actions" *ngIf="canWrite"><button class="utility-button" type="button" (click)="openCostCenter()"><i class="bi bi-diagram-3" aria-hidden="true"></i>New Cost Centre</button></div>
+      @if (canWrite) {
+        <div class="panel-actions"><button class="utility-button" type="button" (click)="openCostCenter()"><i class="bi bi-diagram-3" aria-hidden="true"></i>New Cost Centre</button></div>
+      }
     </header>
     <div class="filter-bar">
-      <label><span>Account</span><select [(ngModel)]="ledgerAccountCode" (change)="loadLedger()"><option value="" disabled>Select account</option><option *ngFor="let account of accounts; trackBy: trackByCode" [value]="account.code">{{ account.code }} — {{ account.name }}</option></select></label>
-      <label><span>From</span><as-date-picker [(value)]="ledgerFromDate" ariaLabel="Ledger from date"></as-date-picker></label>
-      <label><span>To</span><as-date-picker [(value)]="ledgerToDate" ariaLabel="Ledger to date"></as-date-picker></label>
-      <button class="primary-button" type="button" [disabled]="loadingTab || !ledgerAccountCode" (click)="loadLedger()"><i class="bi bi-search" aria-hidden="true"></i>Run</button>
-    </div>
-    <div class="loading-panel table-loading" *ngIf="loadingTab"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line wide"></span></div>
-    <div class="table-scroll" *ngIf="!loadingTab">
+      <label><span>Account</span><select [(ngModel)]="ledgerAccountCode" (change)="loadLedger()"><option value="" disabled>Select account</option>@for (account of accounts; track trackByCode($index, account)) {
+      <option [value]="account.code">{{ account.code }} — {{ account.name }}</option>
+    }</select></label>
+    <label><span>From</span><as-date-picker [(value)]="ledgerFromDate" ariaLabel="Ledger from date"></as-date-picker></label>
+    <label><span>To</span><as-date-picker [(value)]="ledgerToDate" ariaLabel="Ledger to date"></as-date-picker></label>
+    <button class="primary-button" type="button" [disabled]="loadingTab || !ledgerAccountCode" (click)="loadLedger()"><i class="bi bi-search" aria-hidden="true"></i>Run</button>
+  </div>
+  @if (loadingTab) {
+    <div class="loading-panel table-loading"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line wide"></span></div>
+  }
+  @if (!loadingTab) {
+    <div class="table-scroll">
       <table>
         <thead><tr><th scope="col">Date</th><th scope="col">Source</th><th scope="col">Memo</th><th scope="col">Cost centre</th><th scope="col" class="amount">Debit</th><th scope="col" class="amount">Credit</th><th scope="col" class="amount">Balance</th><th scope="col">Actions</th></tr></thead>
         <tbody>
-          <ng-container *ngFor="let row of ledger?.rows; trackBy: trackByJournalLine">
+          @for (row of ledger?.rows; track trackByJournalLine($index, row)) {
             <tr>
               <td>{{ date(row.businessDate) }}</td><td><strong>{{ label(row.sourceType) }}</strong><small>{{ row.sourceId }}</small></td><td>{{ row.memo || '—' }}</td>
-              <td><span class="tag" *ngIf="row.costCenterCode">{{ row.costCenterCode }} · {{ row.costCenterName }}</span><span *ngIf="!row.costCenterCode">—</span></td>
+              <td>@if (row.costCenterCode) {
+                <span class="tag">{{ row.costCenterCode }} · {{ row.costCenterName }}</span>
+                }@if (!row.costCenterCode) {
+                <span>—</span>
+              }</td>
               <td class="amount">{{ row.debitPaise ? money(row.debitPaise) : '—' }}</td><td class="amount">{{ row.creditPaise ? money(row.creditPaise) : '—' }}</td><td class="amount"><strong>{{ money(row.runningBalancePaise) }}</strong></td>
-              <td><div class="inline-actions"><button class="icon-button" type="button" aria-label="View source evidence" title="View source evidence" [attr.aria-expanded]="expandedLedgerLineId === row.journalLineId" (click)="toggleLedgerEvidence(row)"><i class="bi bi-receipt" aria-hidden="true"></i></button><button class="icon-button" type="button" *ngIf="canWrite" aria-label="Assign cost centre" title="Assign cost centre" (click)="openTagCostCenter(row)"><i class="bi bi-tag" aria-hidden="true"></i></button></div></td>
-            </tr>
-            <tr class="evidence-row" *ngIf="expandedLedgerLineId === row.journalLineId"><td colspan="8"><dl><div><dt>Journal entry</dt><dd>{{ row.journalEntryId }}</dd></div><div><dt>Journal line</dt><dd>{{ row.journalLineId }}</dd></div><div><dt>Source type</dt><dd>{{ label(row.sourceType) }}</dd></div><div><dt>Source reference</dt><dd>{{ row.sourceId }}</dd></div></dl></td></tr>
-          </ng-container>
-          <tr *ngIf="!ledger?.rows?.length"><td class="empty-cell" colspan="8"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <footer class="pagination" *ngIf="ledger"><span>{{ ledger.total }} entries</span><div><button type="button" [disabled]="ledgerPage <= 1" (click)="loadLedger(ledgerPage - 1)"><i class="bi bi-chevron-left" aria-hidden="true"></i></button><span>{{ ledgerPage }} / {{ ledgerPages }}</span><button type="button" [disabled]="ledgerPage >= ledgerPages" (click)="loadLedger(ledgerPage + 1)"><i class="bi bi-chevron-right" aria-hidden="true"></i></button></div></footer>
-  </section>
+              <td><div class="inline-actions"><button class="icon-button" type="button" aria-label="View source evidence" title="View source evidence" [attr.aria-expanded]="expandedLedgerLineId === row.journalLineId" (click)="toggleLedgerEvidence(row)"><i class="bi bi-receipt" aria-hidden="true"></i></button>@if (canWrite) {
+              <button class="icon-button" type="button" aria-label="Assign cost centre" title="Assign cost centre" (click)="openTagCostCenter(row)"><i class="bi bi-tag" aria-hidden="true"></i></button>
+            }</div></td>
+          </tr>
+          @if (expandedLedgerLineId === row.journalLineId) {
+            <tr class="evidence-row"><td colspan="8"><dl><div><dt>Journal entry</dt><dd>{{ row.journalEntryId }}</dd></div><div><dt>Journal line</dt><dd>{{ row.journalLineId }}</dd></div><div><dt>Source type</dt><dd>{{ label(row.sourceType) }}</dd></div><div><dt>Source reference</dt><dd>{{ row.sourceId }}</dd></div></dl></td></tr>
+          }
+        }
+        @if (!ledger?.rows?.length) {
+          <tr><td class="empty-cell" colspan="8"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
+@if (ledger) {
+  <footer class="pagination"><span>{{ ledger.total }} entries</span><div><button type="button" [disabled]="ledgerPage <= 1" (click)="loadLedger(ledgerPage - 1)"><i class="bi bi-chevron-left" aria-hidden="true"></i></button><span>{{ ledgerPage }} / {{ ledgerPages }}</span><button type="button" [disabled]="ledgerPage >= ledgerPages" (click)="loadLedger(ledgerPage + 1)"><i class="bi bi-chevron-right" aria-hidden="true"></i></button></div></footer>
+}
+</section>
+}
 
-  <section class="panel data-panel" *ngIf="activeTab === 'fixedAssets'">
-    <header class="panel-header data-header"><div><span class="panel-icon"><i class="bi bi-building" aria-hidden="true"></i></span><h2>Fixed Assets</h2></div><button class="primary-button" type="button" *ngIf="canWrite" (click)="openAsset()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add Asset</button></header>
-    <div class="loading-panel table-loading" *ngIf="loadingTab"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
-    <div class="table-scroll" *ngIf="!loadingTab"><table><thead><tr><th scope="col">Asset</th><th scope="col">Acquired</th><th scope="col" class="amount">Cost</th><th scope="col" class="amount">Accumulated depreciation</th><th scope="col" class="amount">Net book value</th><th scope="col">Status</th><th scope="col" *ngIf="canWrite">Action</th></tr></thead><tbody>
-      <tr *ngFor="let asset of fixedAssets; trackBy: trackById"><td><strong>{{ asset.name }}</strong><small>{{ asset.assetCode }}</small></td><td>{{ date(asset.acquisitionDate) }}</td><td class="amount">{{ money(asset.costPaise) }}</td><td class="amount">{{ money(asset.accumulatedDepreciationPaise) }}</td><td class="amount"><strong>{{ money(asset.netBookValuePaise) }}</strong></td><td><span class="status-chip good">{{ label(asset.status) }}</span></td><td *ngIf="canWrite"><button class="table-action" type="button" [disabled]="asset.netBookValuePaise <= asset.salvagePaise" (click)="openDepreciation(asset)">Depreciate</button></td></tr>
-      <tr *ngIf="!fixedAssets.length"><td class="empty-cell" [attr.colspan]="canWrite ? 7 : 6"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
-    </tbody></table></div>
-  </section>
+@if (activeTab === 'fixedAssets') {
+  <section class="panel data-panel">
+    <header class="panel-header data-header"><div><span class="panel-icon"><i class="bi bi-building" aria-hidden="true"></i></span><h2>Fixed Assets</h2></div>@if (canWrite) {
+    <button class="primary-button" type="button" (click)="openAsset()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add Asset</button>
+  }</header>
+  @if (loadingTab) {
+    <div class="loading-panel table-loading"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
+  }
+  @if (!loadingTab) {
+    <div class="table-scroll"><table><thead><tr><th scope="col">Asset</th><th scope="col">Acquired</th><th scope="col" class="amount">Cost</th><th scope="col" class="amount">Accumulated depreciation</th><th scope="col" class="amount">Net book value</th><th scope="col">Status</th>@if (canWrite) {
+    <th scope="col">Action</th>
+  }</tr></thead><tbody>
+  @for (asset of fixedAssets; track trackById($index, asset)) {
+    <tr><td><strong>{{ asset.name }}</strong><small>{{ asset.assetCode }}</small></td><td>{{ date(asset.acquisitionDate) }}</td><td class="amount">{{ money(asset.costPaise) }}</td><td class="amount">{{ money(asset.accumulatedDepreciationPaise) }}</td><td class="amount"><strong>{{ money(asset.netBookValuePaise) }}</strong></td><td><span class="status-chip good">{{ label(asset.status) }}</span></td>@if (canWrite) {
+    <td><button class="table-action" type="button" [disabled]="asset.netBookValuePaise <= asset.salvagePaise" (click)="openDepreciation(asset)">Depreciate</button></td>
+  }</tr>
+}
+@if (!fixedAssets.length) {
+  <tr><td class="empty-cell" [attr.colspan]="canWrite ? 7 : 6"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
+}
+</tbody></table></div>
+}
+</section>
+}
 
-  <section class="panel data-panel" *ngIf="activeTab === 'deferredRevenue'">
+@if (activeTab === 'deferredRevenue') {
+  <section class="panel data-panel">
     <header class="panel-header data-header"><div><span class="panel-icon"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span><h2>Deferred Revenue</h2></div></header>
-    <div class="loading-panel table-loading" *ngIf="loadingTab"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
-    <div class="table-scroll" *ngIf="!loadingTab"><table><thead><tr><th scope="col">Source</th><th scope="col">Recognition window</th><th scope="col" class="amount">Total</th><th scope="col" class="amount">Recognized</th><th scope="col" class="amount">Remaining</th><th scope="col">Status</th><th scope="col" *ngIf="canWrite">Action</th></tr></thead><tbody>
-      <tr *ngFor="let schedule of deferredSchedules; trackBy: trackById"><td><strong>{{ label(schedule.sourceType) }}</strong><small>{{ schedule.sourceItemId }}</small></td><td>{{ date(schedule.startDate) }} — {{ date(schedule.endDate) }}</td><td class="amount">{{ money(schedule.totalPaise) }}</td><td class="amount">{{ money(schedule.recognizedPaise) }}</td><td class="amount"><strong>{{ money(schedule.remainingPaise) }}</strong></td><td><span class="status-chip" [class.good]="schedule.remainingPaise === 0">{{ label(schedule.status) }}</span></td><td *ngIf="canWrite"><button class="table-action" type="button" [disabled]="schedule.remainingPaise <= 0" (click)="openRecognition(schedule)">Recognize</button></td></tr>
-      <tr *ngIf="!deferredSchedules.length"><td class="empty-cell" [attr.colspan]="canWrite ? 7 : 6"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
-    </tbody></table></div>
-  </section>
+    @if (loadingTab) {
+      <div class="loading-panel table-loading"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
+    }
+    @if (!loadingTab) {
+      <div class="table-scroll"><table><thead><tr><th scope="col">Source</th><th scope="col">Recognition window</th><th scope="col" class="amount">Total</th><th scope="col" class="amount">Recognized</th><th scope="col" class="amount">Remaining</th><th scope="col">Status</th>@if (canWrite) {
+      <th scope="col">Action</th>
+    }</tr></thead><tbody>
+    @for (schedule of deferredSchedules; track trackById($index, schedule)) {
+      <tr><td><strong>{{ label(schedule.sourceType) }}</strong><small>{{ schedule.sourceItemId }}</small></td><td>{{ date(schedule.startDate) }} — {{ date(schedule.endDate) }}</td><td class="amount">{{ money(schedule.totalPaise) }}</td><td class="amount">{{ money(schedule.recognizedPaise) }}</td><td class="amount"><strong>{{ money(schedule.remainingPaise) }}</strong></td><td><span class="status-chip" [class.good]="schedule.remainingPaise === 0">{{ label(schedule.status) }}</span></td>@if (canWrite) {
+      <td><button class="table-action" type="button" [disabled]="schedule.remainingPaise <= 0" (click)="openRecognition(schedule)">Recognize</button></td>
+    }</tr>
+  }
+  @if (!deferredSchedules.length) {
+    <tr><td class="empty-cell" [attr.colspan]="canWrite ? 7 : 6"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
+  }
+</tbody></table></div>
+}
+</section>
+}
 
-  <section class="panel data-panel" *ngIf="activeTab === 'periods'">
-    <header class="panel-header data-header"><div><span class="panel-icon"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span><h2>Accounting Periods</h2></div><button class="primary-button" type="button" *ngIf="canWrite" (click)="openClosePeriod()"><i class="bi bi-lock" aria-hidden="true"></i>Close Period</button></header>
-    <div class="loading-panel table-loading" *ngIf="loadingTab"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
-    <div class="table-scroll" *ngIf="!loadingTab"><table><thead><tr><th scope="col">Period</th><th scope="col">Status</th><th scope="col">Close reason</th><th scope="col">Closed</th><th scope="col">Reopen reason</th><th scope="col" *ngIf="canWrite">Action</th></tr></thead><tbody>
-      <tr *ngFor="let period of periods; trackBy: trackById"><td><strong>{{ date(period.periodMonth) }}</strong></td><td><span class="status-chip" [class.good]="period.status === 'open'" [class.bad]="period.status === 'closed'">{{ label(period.status) }}</span></td><td>{{ period.closeReason || '—' }}</td><td>{{ date(period.closedAt) }}</td><td>{{ period.reopenReason || '—' }}</td><td *ngIf="canWrite"><button class="table-action" type="button" *ngIf="period.status === 'closed'" (click)="openReopenPeriod(period)">Reopen</button><span *ngIf="period.status !== 'closed'">—</span></td></tr>
-      <tr *ngIf="!periods.length"><td class="empty-cell" [attr.colspan]="canWrite ? 6 : 5"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
-    </tbody></table></div>
-  </section>
+@if (activeTab === 'periods') {
+  <section class="panel data-panel">
+    <header class="panel-header data-header"><div><span class="panel-icon"><i class="bi bi-calendar2-check" aria-hidden="true"></i></span><h2>Accounting Periods</h2></div>@if (canWrite) {
+    <button class="primary-button" type="button" (click)="openClosePeriod()"><i class="bi bi-lock" aria-hidden="true"></i>Close Period</button>
+  }</header>
+  @if (loadingTab) {
+    <div class="loading-panel table-loading"><span class="skeleton skeleton-line wide"></span><span class="skeleton skeleton-line"></span></div>
+  }
+  @if (!loadingTab) {
+    <div class="table-scroll"><table><thead><tr><th scope="col">Period</th><th scope="col">Status</th><th scope="col">Close reason</th><th scope="col">Closed</th><th scope="col">Reopen reason</th>@if (canWrite) {
+    <th scope="col">Action</th>
+  }</tr></thead><tbody>
+  @for (period of periods; track trackById($index, period)) {
+    <tr><td><strong>{{ date(period.periodMonth) }}</strong></td><td><span class="status-chip" [class.good]="period.status === 'open'" [class.bad]="period.status === 'closed'">{{ label(period.status) }}</span></td><td>{{ period.closeReason || '—' }}</td><td>{{ date(period.closedAt) }}</td><td>{{ period.reopenReason || '—' }}</td>@if (canWrite) {
+    <td>@if (period.status === 'closed') {
+      <button class="table-action" type="button" (click)="openReopenPeriod(period)">Reopen</button>
+      }@if (period.status !== 'closed') {
+      <span>—</span>
+    }</td>
+  }</tr>
+}
+@if (!periods.length) {
+  <tr><td class="empty-cell" [attr.colspan]="canWrite ? 6 : 5"><i class="bi bi-inbox" aria-hidden="true"></i><strong>No records yet</strong></td></tr>
+}
+</tbody></table></div>
+}
+</section>
+}
 </section>
 
-<div class="drawer-backdrop" *ngIf="drawer" (click)="closeDrawer()"></div>
-<aside class="drawer" *ngIf="drawer" [attr.aria-label]="drawer" (click)="$event.stopPropagation()">
-  <header class="drawer-header">
-    <div>
-      <span class="drawer-icon"><i class="bi" [ngClass]="drawer === 'journal' ? 'bi-journal-plus' : drawer === 'asset' ? 'bi-building-add' : drawer === 'costCenter' || drawer === 'tagCostCenter' ? 'bi-diagram-3' : drawer === 'recognition' ? 'bi-hourglass-split' : 'bi-calendar2-check'" aria-hidden="true"></i></span>
-      <h2>{{ drawer === 'journal' ? 'Manual Journal' : drawer === 'asset' ? 'Add Fixed Asset' : drawer === 'depreciation' ? 'Post Depreciation' : drawer === 'recognition' ? 'Recognize Revenue' : drawer === 'closePeriod' ? 'Close Period' : drawer === 'reopenPeriod' ? 'Reopen Period' : drawer === 'costCenter' ? 'New Cost Centre' : 'Assign Cost Centre' }}</h2>
-    </div>
-    <button class="icon-button" type="button" aria-label="Close" [disabled]="saving" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-  </header>
-
-  <div class="drawer-body" *ngIf="drawer === 'journal'">
-    <label class="field"><span>Business date</span><as-date-picker [(value)]="journalDraft.businessDate" ariaLabel="Journal business date"></as-date-picker></label>
-    <label class="field"><span>Memo</span><input type="text" maxlength="240" [(ngModel)]="journalDraft.memo" /></label>
-    <section class="journal-lines"><header><h3>Journal lines</h3><button type="button" (click)="addJournalLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add line</button></header>
-      <article *ngFor="let line of journalDraft.lines; let index = index">
-        <label class="field full"><span>Account</span><select [(ngModel)]="line.accountCode"><option value="" disabled>Select account</option><option *ngFor="let account of accounts; trackBy: trackByCode" [value]="account.code">{{ account.code }} — {{ account.name }}</option></select></label>
-        <label class="field"><span>Debit (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="line.debitRupees" /></label>
-        <label class="field"><span>Credit (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="line.creditRupees" /></label>
-        <button class="remove-line" type="button" aria-label="Remove line" [disabled]="journalDraft.lines.length <= 2" (click)="removeJournalLine(index)"><i class="bi bi-trash3" aria-hidden="true"></i></button>
-      </article>
+@if (drawer) {
+  <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+}
+@if (drawer) {
+  <aside class="drawer" [attr.aria-label]="drawer" (click)="$event.stopPropagation()">
+    <header class="drawer-header">
+      <div>
+        <span class="drawer-icon"><i class="bi" [ngClass]="drawer === 'journal' ? 'bi-journal-plus' : drawer === 'asset' ? 'bi-building-add' : drawer === 'costCenter' || drawer === 'tagCostCenter' ? 'bi-diagram-3' : drawer === 'recognition' ? 'bi-hourglass-split' : 'bi-calendar2-check'" aria-hidden="true"></i></span>
+        <h2>{{ drawer === 'journal' ? 'Manual Journal' : drawer === 'asset' ? 'Add Fixed Asset' : drawer === 'depreciation' ? 'Post Depreciation' : drawer === 'recognition' ? 'Recognize Revenue' : drawer === 'closePeriod' ? 'Close Period' : drawer === 'reopenPeriod' ? 'Reopen Period' : drawer === 'costCenter' ? 'New Cost Centre' : 'Assign Cost Centre' }}</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="Close" [disabled]="saving" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </header>
+    @if (drawer === 'journal') {
+      <div class="drawer-body">
+        <label class="field"><span>Business date</span><as-date-picker [(value)]="journalDraft.businessDate" ariaLabel="Journal business date"></as-date-picker></label>
+        <label class="field"><span>Memo</span><input type="text" maxlength="240" [(ngModel)]="journalDraft.memo" /></label>
+        <section class="journal-lines"><header><h3>Journal lines</h3><button type="button" (click)="addJournalLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add line</button></header>
+        @for (line of journalDraft.lines; track line; let index = $index) {
+          <article>
+            <label class="field full"><span>Account</span><select [(ngModel)]="line.accountCode"><option value="" disabled>Select account</option>@for (account of accounts; track trackByCode($index, account)) {
+            <option [value]="account.code">{{ account.code }} — {{ account.name }}</option>
+          }</select></label>
+          <label class="field"><span>Debit (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="line.debitRupees" /></label>
+          <label class="field"><span>Credit (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="line.creditRupees" /></label>
+          <button class="remove-line" type="button" aria-label="Remove line" [disabled]="journalDraft.lines.length <= 2" (click)="removeJournalLine(index)"><i class="bi bi-trash3" aria-hidden="true"></i></button>
+        </article>
+      }
     </section>
   </div>
-
-  <div class="drawer-body form-grid" *ngIf="drawer === 'asset'">
+}
+@if (drawer === 'asset') {
+  <div class="drawer-body form-grid">
     <label class="field"><span>Asset code</span><input type="text" maxlength="40" [(ngModel)]="assetDraft.assetCode" /></label>
     <label class="field"><span>Name</span><input type="text" maxlength="160" [(ngModel)]="assetDraft.name" (input)="assetDraft.name = titleCase(assetDraft.name)" /></label>
     <label class="field"><span>Acquisition date</span><as-date-picker [(value)]="assetDraft.acquisitionDate" ariaLabel="Asset acquisition date"></as-date-picker></label>
@@ -248,41 +401,55 @@
     <label class="field"><span>Cost (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="assetDraft.costRupees" /></label>
     <label class="field"><span>Salvage value (₹)</span><input type="number" min="0" step="0.01" placeholder="" [(ngModel)]="assetDraft.salvageRupees" /></label>
     <label class="field"><span>Useful life (months)</span><input type="number" min="1" step="1" placeholder="" [(ngModel)]="assetDraft.usefulLifeMonths" /></label>
-    <label class="field"><span>Purchase offset account</span><select [(ngModel)]="assetDraft.purchaseOffsetAccount"><option value="" disabled>Select account</option><option *ngFor="let account of accounts; trackBy: trackByCode" [value]="account.code">{{ account.code }} — {{ account.name }}</option></select></label>
-  </div>
-
-  <div class="drawer-body" *ngIf="drawer === 'depreciation'">
+    <label class="field"><span>Purchase offset account</span><select [(ngModel)]="assetDraft.purchaseOffsetAccount"><option value="" disabled>Select account</option>@for (account of accounts; track trackByCode($index, account)) {
+    <option [value]="account.code">{{ account.code }} — {{ account.name }}</option>
+  }</select></label>
+</div>
+}
+@if (drawer === 'depreciation') {
+  <div class="drawer-body">
     <div class="summary-card"><span>{{ selectedAsset?.assetCode }}</span><strong>{{ selectedAsset?.name }}</strong><b>{{ money(selectedAsset?.netBookValuePaise) }}</b></div>
     <label class="field"><span>Period month</span><input type="month" [(ngModel)]="depreciationMonth" /></label>
   </div>
-
-  <div class="drawer-body" *ngIf="drawer === 'recognition'">
+}
+@if (drawer === 'recognition') {
+  <div class="drawer-body">
     <div class="summary-card"><span>{{ label(selectedSchedule?.sourceType) }}</span><strong>{{ selectedSchedule?.sourceItemId }}</strong><b>{{ money(selectedSchedule?.remainingPaise) }}</b></div>
     <label class="field"><span>Recognition date</span><as-date-picker [(value)]="recognitionDate" ariaLabel="Revenue recognition date"></as-date-picker></label>
   </div>
-
-  <div class="drawer-body" *ngIf="drawer === 'closePeriod' || drawer === 'reopenPeriod'">
+}
+@if (drawer === 'closePeriod' || drawer === 'reopenPeriod') {
+  <div class="drawer-body">
     <label class="field"><span>Period month</span><input type="month" [disabled]="drawer === 'reopenPeriod'" [(ngModel)]="periodMonth" /></label>
     <label class="field"><span>Reason</span><textarea rows="4" maxlength="240" [(ngModel)]="periodReason"></textarea></label>
   </div>
-
-  <div class="drawer-body form-grid" *ngIf="drawer === 'costCenter'">
+}
+@if (drawer === 'costCenter') {
+  <div class="drawer-body form-grid">
     <label class="field"><span>Code</span><input type="text" maxlength="40" [(ngModel)]="costCenterDraft.code" /></label>
     <label class="field"><span>Name</span><input type="text" maxlength="120" [(ngModel)]="costCenterDraft.name" (input)="costCenterDraft.name = titleCase(costCenterDraft.name)" /></label>
     <label class="field full"><span>Kind</span><input type="text" maxlength="60" [(ngModel)]="costCenterDraft.kind" (input)="costCenterDraft.kind = titleCase(costCenterDraft.kind)" /></label>
   </div>
-
-  <div class="drawer-body" *ngIf="drawer === 'tagCostCenter'">
+}
+@if (drawer === 'tagCostCenter') {
+  <div class="drawer-body">
     <div class="summary-card"><span>{{ date(selectedLedgerRow?.businessDate) }}</span><strong>{{ selectedLedgerRow?.memo || label(selectedLedgerRow?.sourceType) }}</strong><b>{{ money((selectedLedgerRow?.debitPaise || 0) - (selectedLedgerRow?.creditPaise || 0)) }}</b></div>
-    <label class="field"><span>Cost centre</span><select [(ngModel)]="selectedCostCenterId"><option value="" disabled>Select cost centre</option><option *ngFor="let center of costCenters; trackBy: trackById" [value]="center.id">{{ center.code }} — {{ center.name }}</option></select></label>
-    <div class="compact-empty" *ngIf="!costCenters.length"><i class="bi bi-inbox" aria-hidden="true"></i><span>No cost centres yet</span></div>
-  </div>
-
-  <div class="drawer-message error" *ngIf="errorMessage">{{ errorMessage }}</div>
-  <footer class="drawer-footer">
-    <button class="utility-button" type="button" [disabled]="saving" (click)="closeDrawer()">Cancel</button>
-    <button class="primary-button" type="button" [disabled]="saving" (click)="drawer === 'journal' ? saveJournal() : drawer === 'asset' ? saveAsset() : drawer === 'depreciation' ? postDepreciation() : drawer === 'recognition' ? recognizeRevenue() : drawer === 'closePeriod' || drawer === 'reopenPeriod' ? savePeriod() : drawer === 'costCenter' ? saveCostCenter() : tagCostCenter()">
-      <i class="bi bi-check2" aria-hidden="true"></i>{{ saving ? 'Saving…' : drawer === 'journal' ? 'Post Journal' : drawer === 'depreciation' ? 'Post Depreciation' : drawer === 'recognition' ? 'Recognize' : drawer === 'closePeriod' ? 'Close Period' : drawer === 'reopenPeriod' ? 'Reopen Period' : drawer === 'tagCostCenter' ? 'Assign' : 'Save' }}
-    </button>
-  </footer>
+    <label class="field"><span>Cost centre</span><select [(ngModel)]="selectedCostCenterId"><option value="" disabled>Select cost centre</option>@for (center of costCenters; track trackById($index, center)) {
+    <option [value]="center.id">{{ center.code }} — {{ center.name }}</option>
+  }</select></label>
+  @if (!costCenters.length) {
+    <div class="compact-empty"><i class="bi bi-inbox" aria-hidden="true"></i><span>No cost centres yet</span></div>
+  }
+</div>
+}
+@if (errorMessage) {
+  <div class="drawer-message error">{{ errorMessage }}</div>
+}
+<footer class="drawer-footer">
+  <button class="utility-button" type="button" [disabled]="saving" (click)="closeDrawer()">Cancel</button>
+  <button class="primary-button" type="button" [disabled]="saving" (click)="drawer === 'journal' ? saveJournal() : drawer === 'asset' ? saveAsset() : drawer === 'depreciation' ? postDepreciation() : drawer === 'recognition' ? recognizeRevenue() : drawer === 'closePeriod' || drawer === 'reopenPeriod' ? savePeriod() : drawer === 'costCenter' ? saveCostCenter() : tagCostCenter()">
+    <i class="bi bi-check2" aria-hidden="true"></i>{{ saving ? 'Saving…' : drawer === 'journal' ? 'Post Journal' : drawer === 'depreciation' ? 'Post Depreciation' : drawer === 'recognition' ? 'Recognize' : drawer === 'closePeriod' ? 'Close Period' : drawer === 'reopenPeriod' ? 'Reopen Period' : drawer === 'tagCostCenter' ? 'Assign' : 'Save' }}
+  </button>
+</footer>
 </aside>
+}

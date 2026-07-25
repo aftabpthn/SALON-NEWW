@@ -11,49 +11,50 @@
       [readOnly]="rangeMode"
       (input)="!rangeMode && setDraft($any($event.target).value)"
       (blur)="normalizeDraft()"
-    />
+      />
     <button type="button" [attr.aria-label]="'datePicker.openCalendar' | translate" [disabled]="disabled" (click)="toggle()">▦</button>
   </div>
 
-  <section class="calendar-popover" *ngIf="open" role="dialog" aria-modal="false" [attr.aria-label]="'datePicker.calendar' | translate">
-    <div class="shortcut-rail">
-      <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
-      <button type="button" (click)="tomorrow()">{{ 'datePicker.tomorrow' | translate }}</button>
-      <button type="button" (click)="thisWeek()">{{ 'datePicker.thisWeek' | translate }}</button>
-    </div>
-
-    <div class="calendar-main">
-      <header>
-        <button type="button" [attr.aria-label]="'datePicker.previousMonth' | translate" (click)="shiftMonth(-1)">‹</button>
-        <strong>{{ monthLabel }}</strong>
-        <button type="button" [attr.aria-label]="'datePicker.nextMonth' | translate" (click)="shiftMonth(1)">›</button>
-      </header>
-
-      <div class="weekday-row">
-        <span *ngFor="let day of weekDays">{{ day }}</span>
-      </div>
-
-      <div class="day-grid">
-        <button
-          type="button"
-          *ngFor="let day of days()"
-          [class.muted]="!day.inMonth"
-          [class.selected]="day.selected"
-          [class.today]="day.today"
-          [class.in-range]="day.inRange"
-          [attr.aria-pressed]="day.selected"
-          (click)="selectDate(day.iso)"
-        >
-          {{ day.label }}
-        </button>
-      </div>
-
-      <footer>
-        <button type="button" (click)="clear()">{{ 'common.clear' | translate }}</button>
-        <span></span>
+  @if (open) {
+    <section class="calendar-popover" role="dialog" aria-modal="false" [attr.aria-label]="'datePicker.calendar' | translate">
+      <div class="shortcut-rail">
         <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
-        <button class="apply" type="button" (click)="apply()">{{ 'common.apply' | translate }}</button>
-      </footer>
-    </div>
-  </section>
+        <button type="button" (click)="tomorrow()">{{ 'datePicker.tomorrow' | translate }}</button>
+        <button type="button" (click)="thisWeek()">{{ 'datePicker.thisWeek' | translate }}</button>
+      </div>
+      <div class="calendar-main">
+        <header>
+          <button type="button" [attr.aria-label]="'datePicker.previousMonth' | translate" (click)="shiftMonth(-1)">‹</button>
+          <strong>{{ monthLabel }}</strong>
+          <button type="button" [attr.aria-label]="'datePicker.nextMonth' | translate" (click)="shiftMonth(1)">›</button>
+        </header>
+        <div class="weekday-row">
+          @for (day of weekDays; track day) {
+            <span>{{ day }}</span>
+          }
+        </div>
+        <div class="day-grid">
+          @for (day of days(); track day.iso) {
+            <button
+              type="button"
+              [class.muted]="!day.inMonth"
+              [class.selected]="day.selected"
+              [class.today]="day.today"
+              [class.in-range]="day.inRange"
+              [attr.aria-pressed]="day.selected"
+              (click)="selectDate(day.iso)"
+              >
+              {{ day.label }}
+            </button>
+          }
+        </div>
+        <footer>
+          <button type="button" (click)="clear()">{{ 'common.clear' | translate }}</button>
+          <span></span>
+          <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
+          <button class="apply" type="button" (click)="apply()">{{ 'common.apply' | translate }}</button>
+        </footer>
+      </div>
+    </section>
+  }
 </div>

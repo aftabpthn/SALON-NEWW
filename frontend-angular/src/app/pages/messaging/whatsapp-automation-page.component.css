@@ -16,3 +16,16 @@ button { border:1px solid var(--line); background:#fff; color:var(--navy); borde
 :host { font-family:var(--font-sans); }
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
 th.numeric,td.numeric { text-align:right; font-variant-numeric:tabular-nums; }
+
+@media (max-width: 720px) {
+  .command-strip { align-items: flex-start; flex-direction: column; }
+  .command-strip button { width: 100%; }
+  .tabs { overflow-x: auto; }
+  .tabs button { min-height: 44px; white-space: nowrap; }
+  button, input, select { min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .kpis { grid-template-columns: 1fr; }
+  .panel { padding: 12px; }
+}

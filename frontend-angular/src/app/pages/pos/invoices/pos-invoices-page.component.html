@@ -10,8 +10,12 @@
     </nav>
   </header>
 
-  <p class="message" role="status" *ngIf="message">{{ message }}</p>
-  <p class="error" role="alert" *ngIf="error">{{ error }}</p>
+  @if (message) {
+    <p class="message" role="status">{{ message }}</p>
+  }
+  @if (error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
 
   <section class="kpi-grid" aria-label="Invoice KPIs">
     <article class="kpi-card cyan"><span>Invoices</span><strong>{{ totals.totalRows }}</strong></article>
@@ -22,249 +26,491 @@
     <button type="button" class="kpi-card sand filterable" [class.active]="activeKpiFilter === 'wallet'" [attr.aria-pressed]="activeKpiFilter === 'wallet'" (click)="toggleKpiFilter('wallet')"><span>Wallet</span><strong>{{ money(totals.walletPaise) }}</strong></button>
   </section>
 
-  <main class="invoice-workspace">
-    <section class="invoice-register">
-      <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Total</span><span>{{ paidColumnLabel() }}</span><span>Due</span><span>Status</span></div>
-      <button type="button" class="invoice-row" *ngFor="let invoice of visibleInvoices; trackBy: trackByInvoice" [class.selected]="selected?.id === invoice.id" (click)="select(invoice)">
-        <span><strong>{{ invoice.invoiceNumber }}</strong></span>
-        <span>{{ formatDate(invoice.businessDate) }}</span>
-        <span><strong>{{ invoice.clientName }}</strong><small *ngIf="invoice.clientPhone">{{ invoice.clientPhone }}</small></span>
-        <span>{{ invoice.staffName || '-' }}</span>
-        <span><mark>{{ paymentSummary(invoice) }}</mark></span>
+  <main class="invoice-workspace" [class.full-invoice-workspace]="fullView && selected">
+    @if (!fullView) {
+      <section class="invoice-register">
+      <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Payment status</span><span>Total</span><span>{{ paidColumnLabel() }}</span><span>Due</span><span>Invoice status</span></div>
+      @for (invoice of visibleInvoices; track trackByInvoice($index, invoice)) {
+        <div class="invoice-row" [class.selected]="selected?.id === invoice.id">
+          <span><button type="button" class="cell-link" (click)="select(invoice)">{{ invoice.invoiceNumber }}</button></span>
+          <span>{{ formatDate(invoice.businessDate) }}</span>
+          <span>@if (invoice.clientId) {
+            <a class="cell-link client-link" [routerLink]="['/clients', invoice.clientId]"><strong>{{ invoice.clientName }}</strong>@if (invoice.clientPhone) {<small>{{ invoice.clientPhone }}</small>}</a>
+          } @else {
+            <strong>{{ invoice.clientName }}</strong>@if (invoice.clientPhone) {<small>{{ invoice.clientPhone }}</small>}
+          }</span>
+        <span>@if (invoice.staffId && invoice.staffName) {<a class="cell-link" [routerLink]="['/staff', invoice.staffId]">{{ invoice.staffName }}</a>} @else {-}</span>
+        <span><a class="cell-link payment-mode-link" routerLink="/pos/payment-modes"><mark>{{ paymentSummary(invoice) }}</mark></a></span>
+        <span class="payment-status"><em class="status-badge" [ngClass]="statusTone(lifecycleLabel(invoice))">{{ lifecycleLabel(invoice) }}</em></span>
         <span class="amount total">{{ money(invoice.totalPaise) }}</span>
         <span class="amount paid">{{ money(displayedPaidPaise(invoice)) }}</span>
         <span class="amount due">{{ money(invoice.balancePaise) }}</span>
-        <span><em>{{ invoice.status || '-' }}</em></span>
-      </button>
-      <p class="empty" *ngIf="!visibleInvoices.length">{{ activeKpiFilter ? 'No matching invoices' : 'No invoices yet' }}</p>
-    </section>
+        <span class="invoice-status"><em class="status-badge" [ngClass]="statusTone(invoice.status)">{{ invoice.status || '-' }}</em></span>
+      </div>
+    }
+    @if (!visibleInvoices.length) {
+      <p class="empty">{{ activeKpiFilter ? 'No matching invoices' : 'No invoices yet' }}</p>
+    }
+      </section>
+    }
 
-    <aside class="invoice-detail" *ngIf="selected">
+  @if (selected) {
+    <aside class="invoice-detail" [class.full-invoice-detail]="fullView">
       <div class="detail-head">
         <div><span>Invoice</span><strong>{{ selected.invoiceNumber }}</strong></div>
-        <em>{{ selected.status }}</em>
+        <div class="detail-head-actions">
+          <em class="status-badge" [ngClass]="statusTone(lifecycleLabel(selected))">{{ lifecycleLabel(selected) }}</em>
+          @if (!fullView) {
+            <button type="button" (click)="openFullView()">Full view</button>
+          } @else {
+            <button type="button" (click)="exitFullView()">Back to register</button>
+          }
+          <button type="button" class="detail-close" aria-label="Close invoice details" title="Close" (click)="closeDetails()">×</button>
+        </div>
       </div>
+      @if (fullView) {
+        <nav class="invoice-detail-tabs" aria-label="Invoice detail sections">
+          <button type="button" [attr.aria-pressed]="activeDetailTab === 'overview'" [class.active]="activeDetailTab === 'overview'" (click)="activeDetailTab = 'overview'">Overview</button>
+          <button type="button" [attr.aria-pressed]="activeDetailTab === 'items'" [class.active]="activeDetailTab === 'items'" (click)="activeDetailTab = 'items'">Items</button>
+          <button type="button" [attr.aria-pressed]="activeDetailTab === 'payments'" [class.active]="activeDetailTab === 'payments'" (click)="activeDetailTab = 'payments'">Payments</button>
+          <button type="button" [attr.aria-pressed]="activeDetailTab === 'activity'" [class.active]="activeDetailTab === 'activity'" (click)="activeDetailTab = 'activity'">Activity</button>
+        </nav>
+      }
+      @if (selected.receivedDuePaise > 0 || selected.balancePaise > 0) {
+        <section class="lifecycle-strip" [class.recovered]="selected.receivedDuePaise > 0 && selected.balancePaise === 0">
+          <div><span>Status</span><strong>{{ lifecycleLabel(selected) }}</strong></div>
+          <div><span>Original unpaid</span><strong>{{ money(originalUnpaidPaise(selected)) }}</strong></div>
+          <div><span>Unpaid at</span><strong>{{ formatDateTime(unpaidAt(selected)) }}</strong></div>
+          <div><span>Paid at</span><strong>{{ selected.lastPaymentAt && selected.balancePaise === 0 ? formatDateTime(selected.lastPaymentAt) : 'Pending' }}</strong></div>
+          <div><span>Recovery days</span><strong>{{ recoveryDays(selected) ?? '—' }}</strong></div>
+        </section>
+      }
       <div class="detail-total"><span>Total</span><strong>{{ money(selected.totalPaise) }}</strong></div>
-      <section class="invoice-benefits" *ngIf="clientKpi">
-        <div><span>Active membership</span><strong>{{ clientKpi.membershipName || 'No active membership' }}</strong><small *ngIf="clientKpi.membershipExpiresAt">{{ formatDate(clientKpi.membershipExpiresAt) }}</small></div>
+      @if (fullView && invoiceDetail && activeDetailTab === 'overview') {
+        <section class="full-invoice-summary">
+          <h2>Complete invoice view</h2>
+          <dl class="invoice-facts">
+            <div><dt>Client</dt><dd>{{ selected.clientName }}</dd></div>
+            <div><dt>Invoice date</dt><dd>{{ formatDateTime(selected.finalizedAt || selected.createdAt) }}</dd></div>
+            <div><dt>Type</dt><dd>{{ lineTypeLabel(invoiceDetail.invoiceType || 'sale') }}</dd></div>
+            <div><dt>Source</dt><dd>{{ lineTypeLabel(invoiceDetail.source || 'counter') }}</dd></div>
+            <div><dt>Reference</dt><dd>{{ invoiceDetail.referenceId || '—' }}</dd></div>
+            <div><dt>Current status</dt><dd><span class="status-badge" [ngClass]="statusTone(selected.status)">{{ lineTypeLabel(selected.status || 'unknown') }}</span></dd></div>
+          </dl>
+          <div class="payment-state-summary" aria-label="Payment and invoice status">
+            <div><span>Payment mode</span><strong>{{ paymentSummary(selected) }}</strong></div>
+            <div><span>Payment status</span><strong class="status-badge" [ngClass]="statusTone(lifecycleLabel(selected))">{{ lifecycleLabel(selected) }}</strong></div>
+            <div><span>Invoice status</span><strong class="status-badge" [ngClass]="statusTone(selected.status)">{{ lineTypeLabel(selected.status || 'unknown') }}</strong></div>
+            <div><span>Last payment</span><strong>{{ selected.lastPaymentAt ? formatDateTime(selected.lastPaymentAt) : '—' }}</strong></div>
+          </div>
+          <div class="invoice-composition" aria-label="Invoice item composition">
+            <span>Services <strong>{{ lineTypeCount('service') }}</strong></span>
+            <span>Products <strong>{{ lineTypeCount('product') }}</strong></span>
+            <span>Memberships <strong>{{ lineTypeCount('membership') }}</strong></span>
+            <span>Packages <strong>{{ lineTypeCount('package') }}</strong></span>
+            <span>Gift cards <strong>{{ lineTypeCount('gift_card') }}</strong></span>
+            <span>Redemptions <strong>{{ lineTypeCount('package_redeem') + lineTypeCount('membership_redeem') }}</strong></span>
+          </div>
+          <dl class="invoice-money-breakdown">
+            <div><dt>Subtotal</dt><dd>{{ money(invoiceDetail.subtotalPaise) }}</dd></div>
+            <div><dt>Bill discount</dt><dd>−{{ money(invoiceDetail.billDiscountPaise) }}</dd></div>
+            <div><dt>Coupon</dt><dd>{{ invoiceDetail.couponCode || '—' }}</dd></div>
+            <div><dt>Coupon discount</dt><dd>−{{ money(invoiceDetail.couponDiscountPaise) }}</dd></div>
+            <div><dt>Total discount</dt><dd>−{{ money(invoiceDetail.discountPaise) }}</dd></div>
+            <div><dt>Tax</dt><dd>{{ money(invoiceDetail.taxPaise) }}</dd></div>
+            <div><dt>Tip</dt><dd>{{ money(invoiceDetail.tipPaise) }}</dd></div>
+            <div><dt>Round off</dt><dd>{{ money(invoiceDetail.roundOffPaise) }}</dd></div>
+            <div><dt>Paid</dt><dd>{{ money(invoiceDetail.paidPaise) }}</dd></div>
+            <div><dt>Due</dt><dd>{{ money(invoiceDetail.balanceDuePaise) }}</dd></div>
+          </dl>
+        </section>
+      }
+      @if (clientKpi && (!fullView || activeDetailTab === 'overview')) {
+        <section class="invoice-benefits">
+          <div><span>Active membership</span><strong>{{ clientKpi.membershipName || 'No active membership' }}</strong>@if (clientKpi.membershipExpiresAt) {
+          <small>{{ formatDate(clientKpi.membershipExpiresAt) }}</small>
+        }</div>
         <div><span>Membership credits</span><strong>{{ clientKpi.membershipCredits.length }}</strong></div>
         <div><span>Package credits</span><strong>{{ clientKpi.packageCredits.length }}</strong></div>
       </section>
-      <section class="invoice-lines">
-        <h3>Invoice items</h3>
-        <div *ngFor="let line of invoiceLines; trackBy: trackByLine"><span>{{ lineTypeLabel(line.lineType) }}</span><strong>{{ line.itemName }}</strong><small>{{ line.quantity }} × {{ money(line.lineTotalPaise / (line.quantity || 1)) }}</small><b>{{ money(line.lineTotalPaise) }}</b></div>
-        <p class="empty" *ngIf="!detailsLoading && invoiceLines.length === 0">No invoice items</p>
+    }
+    @if (!fullView || activeDetailTab === 'items') {
+    <section class="invoice-lines">
+      <h3>Invoice items</h3>
+      @for (line of invoiceLines; track trackByLine($index, line)) {
+        <div class="invoice-line">
+          <span>{{ lineTypeLabel(line.lineType) }}</span><strong>{{ line.itemName }}</strong><small>{{ line.quantity }} × {{ money(line.unitPricePaise || (line.lineTotalPaise / (line.quantity || 1))) }}</small><b>{{ money(line.lineTotalPaise) }}</b>
+          @if (fullView) {
+            <dl>
+              <div><dt>Gross</dt><dd>{{ money(line.grossPaise || 0) }}</dd></div>
+              <div><dt>Discount</dt><dd>{{ money(line.discountPaise || 0) }}</dd></div>
+              <div><dt>Taxable</dt><dd>{{ money(line.taxablePaise || 0) }}</dd></div>
+              <div><dt>GST {{ line.taxPercent || 0 }}%</dt><dd>{{ money(line.gstPaise || 0) }}</dd></div>
+              <div><dt>CGST / SGST / IGST</dt><dd>{{ money(line.cgstPaise || 0) }} / {{ money(line.sgstPaise || 0) }} / {{ money(line.igstPaise || 0) }}</dd></div>
+              <div><dt>HSN/SAC</dt><dd>{{ line.hsnSacCode || '—' }}</dd></div>
+            </dl>
+          }
+        </div>
+      }
+      @if (!detailsLoading && invoiceLines.length === 0) {
+        <p class="empty">No invoice items</p>
+      }
+    </section>
+    @if (fullView && invoiceDetail?.packageRedemptions?.length) {
+      <section class="redemption-list">
+        <h3>Applied package / membership redemptions</h3>
+        @for (redemption of invoiceDetail?.packageRedemptions; track $index) {
+          <div><strong>{{ redemption.packageName || redemption.membershipName || redemption.serviceName || 'Redemption' }}</strong><span>{{ redemption.quantity || redemption.qty || 1 }} used</span></div>
+        }
       </section>
-      <div class="detail-actions">
-        <button type="button" (click)="print()">Print</button>
-        <button type="button" (click)="download()">Download</button>
-      </div>
-      <button type="button" class="return-items" *ngIf="canReturn(selected)" [disabled]="returnLoading" (click)="openReturnDrawer()">Return items</button>
-      <button type="button" class="void-invoice" *ngIf="canVoid(selected)" [disabled]="voidLoading" (click)="openVoidDrawer()">Void invoice</button>
-      <button type="button" class="delete-request" *ngIf="canRequestDelete(selected)" [disabled]="deleteLoading" (click)="openDeleteDrawer()">Request delete</button>
-      <section class="delete-approval" *ngIf="deleteRequest?.status === 'pending'">
+    }
+    }
+    @if (!fullView || activeDetailTab === 'overview') {
+    <div class="detail-actions">
+      <button type="button" (click)="print()">Print</button>
+      <button type="button" (click)="download()">Download</button>
+    </div>
+    }
+    @if (!fullView || activeDetailTab === 'activity') {
+    @if (canRequestCorrection(selected)) {
+      <button type="button" class="correction-request" [disabled]="correctionLoading || detailsLoading" (click)="openCorrectionDrawer()">Edit invoice</button>
+    }
+    @if (correctionRequest?.status === 'pending') {
+      <section class="correction-approval">
+        <div><span>Correction approval pending</span><strong>{{ correctionRequest?.reason }}</strong><small>{{ correctionRequest?.requestedAt | date:'dd/MM/yyyy, HH:mm' }}</small></div>
+        @if (canDecideCorrectionRequest()) {
+          <label><span>Decision note</span><input [(ngModel)]="correctionDecisionNote" name="correctionDecisionNote" maxlength="500" placeholder="Required when rejecting" /></label>
+          <div class="correction-decision-actions">
+            <button type="button" [disabled]="correctionDecisionLoading" (click)="decideCorrectionRequest('rejected')">Reject</button>
+            <button type="button" class="approve" [disabled]="correctionDecisionLoading" (click)="decideCorrectionRequest('approved')">Approve correction</button>
+          </div>
+        }
+      </section>
+    }
+    @if (canReturn(selected)) {
+      <button type="button" class="return-items" [disabled]="returnLoading" (click)="openReturnDrawer()">Return items</button>
+    }
+    @if (canVoid(selected)) {
+      <button type="button" class="void-invoice" [disabled]="voidLoading" (click)="openVoidDrawer()">Void invoice</button>
+    }
+    @if (canRequestDelete(selected)) {
+      <button type="button" class="delete-request" [disabled]="deleteLoading" (click)="openDeleteDrawer()">Request delete</button>
+    }
+    @if (deleteRequest?.status === 'pending') {
+      <section class="delete-approval">
         <div><span>Delete approval pending</span><strong>{{ deleteRequest?.reason }}</strong><small>{{ deleteRequest?.requestedAt | date:'dd/MM/yyyy, HH:mm' }}</small></div>
-        <ng-container *ngIf="canDecideDeleteRequest()">
+        @if (canDecideDeleteRequest()) {
           <label><span>Decision note</span><input [(ngModel)]="deleteDecisionNote" name="deleteDecisionNote" maxlength="500" placeholder="Required when rejecting" /></label>
           <div class="delete-decision-actions">
             <button type="button" [disabled]="deleteDecisionLoading" (click)="decideDeleteRequest('rejected')">Reject</button>
             <button type="button" class="approve" [disabled]="deleteDecisionLoading" (click)="decideDeleteRequest('approved')">Approve soft-delete</button>
           </div>
-        </ng-container>
+        }
       </section>
-      <button type="button" class="credit-note" *ngIf="canCreditNote(selected)" [disabled]="creditNoteLoading" (click)="openCreditNoteDrawer()">Create credit note</button>
-      <button type="button" class="ledger-check" [disabled]="ledgerLoading" (click)="verifyLedger()">{{ ledgerLoading ? 'Verifying…' : 'Verify ledger' }}</button>
-      <div class="ledger-result" *ngIf="ledgerVerification" [class.invalid]="!ledgerVerification.valid">
+    }
+    @if (canCreditNote(selected)) {
+      <button type="button" class="credit-note" [disabled]="creditNoteLoading" (click)="openCreditNoteDrawer()">Create credit note</button>
+    }
+    <button type="button" class="ledger-check" [disabled]="ledgerLoading" (click)="verifyLedger()">{{ ledgerLoading ? 'Verifying…' : 'Verify ledger' }}</button>
+    @if (ledgerVerification) {
+      <div class="ledger-result" [class.invalid]="!ledgerVerification.valid">
         <strong>{{ ledgerVerification.valid ? 'Ledger verified' : 'Ledger verification failed' }}</strong>
-        <span *ngIf="ledgerVerification.valid">{{ ledgerVerification.events }} events</span>
-        <span *ngIf="!ledgerVerification.valid">Failed at event {{ ledgerVerification.failedAt }}</span>
+        @if (ledgerVerification.valid) {
+          <span>{{ ledgerVerification.events }} events</span>
+        }
+        @if (!ledgerVerification.valid) {
+          <span>Failed at event {{ ledgerVerification.failedAt }}</span>
+        }
       </div>
-      <button type="button" class="receive-payment" *ngIf="canReceivePayment(selected)" [disabled]="receivePaymentLoading || paymentMethodsLoading" (click)="openReceivePaymentDrawer()">Receive payment</button>
-      <button type="button" class="payment-link-create" *ngIf="canCreatePaymentLink(selected)" [disabled]="paymentLinkLoading" (click)="openPaymentLinkDrawer()">Create payment link</button>
-      <section class="payment-links" *ngIf="paymentLinks.length">
+    }
+    }
+    @if (!fullView || activeDetailTab === 'payments') {
+    @if (canReceivePayment(selected)) {
+      <button type="button" class="receive-payment" [disabled]="receivePaymentLoading || paymentMethodsLoading" (click)="openReceivePaymentDrawer()">Receive payment</button>
+    }
+    @if (canCreatePaymentLink(selected)) {
+      <button type="button" class="payment-link-create" [disabled]="paymentLinkLoading" (click)="openPaymentLinkDrawer()">Create payment link</button>
+    }
+    @if (paymentLinks.length) {
+      <section class="payment-links">
         <h3>Payment links</h3>
-        <article *ngFor="let link of paymentLinks">
-          <div><strong>{{ money(link.amountPaise) }}</strong><span>{{ link.provider }} · {{ link.status }}</span></div>
-          <button type="button" *ngIf="link.url" (click)="copyPaymentLink(link)">Copy</button>
-          <a *ngIf="link.url" [href]="link.url" target="_blank" rel="noopener noreferrer">Open</a>
-          <button type="button" [disabled]="!!reconcilingPaymentLinkId" (click)="reconcilePaymentLink(link)">{{ reconcilingPaymentLinkId === link.id ? 'Checking…' : 'Reconcile' }}</button>
-        </article>
+        @for (link of paymentLinks; track link) {
+          <article>
+            <div><strong>{{ money(link.amountPaise) }}</strong><span>{{ link.provider }} · {{ link.status }}</span></div>
+            @if (link.url) {
+              <button type="button" (click)="copyPaymentLink(link)">Copy</button>
+            }
+            @if (link.url) {
+              <a [href]="link.url" target="_blank" rel="noopener noreferrer">Open</a>
+            }
+            <button type="button" [disabled]="!!reconcilingPaymentLinkId" (click)="reconcilePaymentLink(link)">{{ reconcilingPaymentLinkId === link.id ? 'Checking…' : 'Reconcile' }}</button>
+          </article>
+        }
       </section>
-      <div class="reconciliation-result" *ngIf="paymentReconciliation">
+    }
+    @if (paymentReconciliation) {
+      <div class="reconciliation-result">
         <strong>Provider: {{ paymentReconciliation.providerStatus || 'unknown' }}</strong>
         <span>Paid {{ money(paymentReconciliation.providerAmountPaidPaise) }}</span>
-        <span *ngIf="paymentReconciliation.requiresSignedWebhook">Awaiting signed webhook</span>
+        @if (paymentReconciliation.requiresSignedWebhook) {
+          <span>Awaiting signed webhook</span>
+        }
       </div>
-      <section class="payment-compliance" *ngIf="paymentInstruments.length">
+    }
+    @if (paymentInstruments.length) {
+      <section class="payment-compliance">
         <h3>Saved payment instruments</h3>
-        <article *ngFor="let instrument of paymentInstruments">
-          <div>
-            <strong>{{ instrument.brand || lineTypeLabel(instrument.methodType) }}<ng-container *ngIf="instrument.last4"> · •••• {{ instrument.last4 }}</ng-container></strong>
-            <span>{{ instrument.provider }} · {{ instrument.status }}<ng-container *ngIf="instrument.recurringEnabled"> · autopay</ng-container></span>
-          </div>
-          <button type="button" *ngIf="instrument.status !== 'revoked'" [disabled]="!!revokingInstrumentId" (click)="revokePaymentInstrument(instrument)">{{ revokingInstrumentId === instrument.id ? 'Revoking…' : 'Revoke' }}</button>
-        </article>
+        @for (instrument of paymentInstruments; track instrument) {
+          <article>
+            <div>
+              <strong>{{ instrument.brand || lineTypeLabel(instrument.methodType) }}@if (instrument.last4) {
+                · •••• {{ instrument.last4 }}
+              }</strong>
+              <span>{{ instrument.provider }} · {{ instrument.status }}@if (instrument.recurringEnabled) {
+                · autopay
+              }</span>
+            </div>
+            @if (instrument.status !== 'revoked') {
+              <button type="button" [disabled]="!!revokingInstrumentId" (click)="revokePaymentInstrument(instrument)">{{ revokingInstrumentId === instrument.id ? 'Revoking…' : 'Revoke' }}</button>
+            }
+          </article>
+        }
       </section>
-      <section class="payment-compliance disputes" *ngIf="paymentDisputes.length">
+    }
+    @if (paymentDisputes.length) {
+      <section class="payment-compliance disputes">
         <h3>Payment disputes</h3>
-        <article *ngFor="let dispute of paymentDisputes">
-          <div><strong>{{ money(dispute.amountPaise) }} · {{ dispute.status }}</strong><span>{{ dispute.provider }} · {{ dispute.providerDisputeId }}</span><small *ngIf="dispute.reason">{{ dispute.reason }}</small></div>
+        @for (dispute of paymentDisputes; track dispute) {
+          <article>
+            <div><strong>{{ money(dispute.amountPaise) }} · {{ dispute.status }}</strong><span>{{ dispute.provider }} · {{ dispute.providerDisputeId }}</span>@if (dispute.reason) {
+            <small>{{ dispute.reason }}</small>
+          }</div>
           <time>{{ formatDate(dispute.openedAt) }}</time>
         </article>
-      </section>
-      <label><span>Delivery channel</span><select [(ngModel)]="deliveryChannel" name="deliveryChannel"><option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
-      <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" [type]="deliveryChannel === 'email' ? 'email' : 'text'" [placeholder]="deliveryChannel === 'email' ? 'Email address' : 'Mobile number'" /></label>
-      <button type="button" class="resend" (click)="requestResend()">Queue delivery</button>
-      <button type="button" class="resend" [disabled]="reminderLoading" (click)="scheduleDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button>
-      <section class="deliveries">
-        <h3>Delivery outbox</h3>
-        <div *ngFor="let item of deliveries; trackBy: trackByDelivery"><strong>{{ item.channel }} · {{ item.status }}</strong><span>{{ item.recipient }}</span><small>Attempts {{ item.attempts }}<ng-container *ngIf="item.lastError"> · {{ item.lastError }}</ng-container></small></div>
-        <p class="empty" *ngIf="!deliveries.length">No deliveries yet</p>
-      </section>
-      <section class="payment-timeline">
-        <h3>Payment timeline</h3>
-        <div *ngFor="let payment of paymentTimeline; trackBy: trackByPaymentTimeline"><strong>{{ payment.label }}</strong><span>{{ money(payment.amountPaise) }}</span><small *ngIf="payment.reference">{{ payment.reference }}</small><time>{{ payment.paidAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
-        <p class="empty" *ngIf="!detailsLoading && !paymentTimeline.length">No payments yet</p>
-      </section>
-      <section class="history">
-        <h3>Action history</h3>
-        <div *ngFor="let item of history; trackBy: trackByHistory"><strong>{{ item.action }}</strong><span>{{ item.recipient || '-' }}</span><time>{{ item.createdAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
-        <p class="empty" *ngIf="!history.length">No actions yet</p>
-      </section>
-    </aside>
-  </main>
+      }
+    </section>
+  }
+  }
+  @if (!fullView || activeDetailTab === 'activity') {
+  <label><span>Delivery channel</span><select [(ngModel)]="deliveryChannel" name="deliveryChannel"><option value="email">Email</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option></select></label>
+  <label><span>Recipient</span><input [(ngModel)]="recipient" name="recipient" [type]="deliveryChannel === 'email' ? 'email' : 'text'" [placeholder]="deliveryChannel === 'email' ? 'Email address' : 'Mobile number'" /></label>
+  <button type="button" class="resend" (click)="requestResend()">Queue delivery</button>
+  <button type="button" class="resend" [disabled]="reminderLoading" (click)="scheduleDueReminders()">{{ reminderLoading ? 'Queuing…' : 'Queue due reminders' }}</button>
+  <section class="deliveries">
+    <h3>Delivery outbox</h3>
+    @for (item of deliveries; track trackByDelivery($index, item)) {
+      <div><strong>{{ item.channel }} · {{ item.status }}</strong><span>{{ item.recipient }}</span><small>Attempts {{ item.attempts }}@if (item.lastError) {
+      · {{ item.lastError }}
+    }</small></div>
+  }
+  @if (!deliveries.length) {
+    <p class="empty">No deliveries yet</p>
+  }
+</section>
+}
+@if (!fullView || activeDetailTab === 'payments') {
+<section class="payment-timeline">
+  <h3>Payment timeline</h3>
+  @for (payment of paymentTimeline; track trackByPaymentTimeline($index, payment)) {
+    <div><strong>{{ payment.label }}</strong><span>{{ money(payment.amountPaise) }}</span>@if (payment.reference) {
+    <small>{{ payment.reference }}</small>
+    }<time>{{ formatDateTime(payment.paidAt) }}</time></div>
+  }
+  @if (!detailsLoading && !paymentTimeline.length) {
+    <p class="empty">No payments yet</p>
+  }
+</section>
+}
+@if (!fullView || activeDetailTab === 'activity') {
+<section class="history">
+  <h3>Action history</h3>
+  @for (item of history; track trackByHistory($index, item)) {
+    <div><strong>{{ item.action }}</strong><span>{{ item.recipient || '-' }}</span><time>{{ item.createdAt | date:'dd/MM/yyyy, HH:mm' }}</time></div>
+  }
+  @if (!history.length) {
+    <p class="empty">No actions yet</p>
+  }
+</section>
+}
+</aside>
+}
+</main>
 </section>
 
-<div class="return-drawer-backdrop" *ngIf="returnDrawerOpen" (click)="closeReturnDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="return-items-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Invoice return</span><h2 id="return-items-title">{{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close return items" (click)="closeReturnDrawer()">×</button>
-    </header>
-
-    <div class="return-drawer-body">
-      <label class="return-reason"><span>Reason</span><input [(ngModel)]="returnReason" name="returnReason" maxlength="500" placeholder="Reason for return" /></label>
-      <label class="return-reason"><span>MFA code</span><input [(ngModel)]="returnMfaCode" name="returnMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
-
-      <section class="return-lines" aria-label="Invoice items">
-        <article class="return-line" *ngFor="let line of returnLines">
+@if (returnDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeReturnDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="return-items-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Invoice return</span><h2 id="return-items-title">{{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close return items" (click)="closeReturnDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <label class="return-reason"><span>Reason</span><input [(ngModel)]="returnReason" name="returnReason" maxlength="500" placeholder="Reason for return" /></label>
+        <label class="return-reason"><span>MFA code</span><input [(ngModel)]="returnMfaCode" name="returnMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
+        @if (refundMethods.length > 1) {
+          <label class="return-reason"><span>Refund method</span><select [(ngModel)]="refundMethod" name="refundMethod"><option value="" disabled>Select method</option>@for (method of refundMethods; track method) {
+          <option [value]="method">{{ method.replace('_', ' ') }}</option>
+        }</select></label>
+      }
+      @if (refundMethod === 'cash' && refundTills.length) {
+        <label class="return-reason"><span>Cash till</span><select [(ngModel)]="refundTillId" name="refundTillId"><option value="" disabled>Select till</option>@for (till of refundTills; track till) {
+        <option [value]="till.id">{{ till.tillName }} · {{ till.tillCode }}</option>
+      }</select></label>
+    }
+    <section class="return-lines" aria-label="Invoice items">
+      @for (line of returnLines; track line) {
+        <article class="return-line">
           <div class="return-line-copy"><strong>{{ line.itemName || 'Invoice item' }}</strong><span>{{ line.lineType || 'item' }} · Sold {{ line.quantity }}</span></div>
           <div class="return-line-input"><label><span>Return qty</span><input [(ngModel)]="line.returnQuantity" [name]="'returnQty-' + line.id" type="number" inputmode="numeric" min="1" [max]="line.quantity" step="1" placeholder="0" /></label><strong>{{ money(returnLineAmount(line)) }}</strong></div>
         </article>
-        <p class="empty" *ngIf="!returnLines.length">No returnable items on this invoice</p>
-      </section>
-
-      <label class="restock-choice"><input [(ngModel)]="restockProducts" name="restockProducts" type="checkbox" /><span>Restock returned products</span></label>
-    </div>
-
-    <footer class="return-drawer-footer">
-      <div><span>{{ selectedReturnCount() }} item line{{ selectedReturnCount() === 1 ? '' : 's' }}</span><strong>{{ money(selectedReturnAmount()) }}</strong></div>
-      <button type="button" (click)="closeReturnDrawer()">Cancel</button>
-      <button type="button" class="confirm-return" [disabled]="returnLoading || !returnLines.length" (click)="submitReturn()">{{ returnLoading ? 'Recording…' : 'Record return' }}</button>
-    </footer>
-  </aside>
+      }
+      @if (!returnLines.length) {
+        <p class="empty">No returnable items on this invoice</p>
+      }
+    </section>
+    <label class="restock-choice"><input [(ngModel)]="restockProducts" name="restockProducts" type="checkbox" /><span>Restock returned products</span></label>
+  </div>
+  <footer class="return-drawer-footer">
+    <div><span>{{ selectedReturnCount() }} item line{{ selectedReturnCount() === 1 ? '' : 's' }}</span><strong>{{ money(selectedReturnAmount()) }}</strong></div>
+    <button type="button" (click)="closeReturnDrawer()">Cancel</button>
+    <button type="button" class="confirm-return" [disabled]="returnLoading || !returnLines.length" (click)="submitReturn()">{{ returnLoading ? 'Recording…' : 'Record return' }}</button>
+  </footer>
+</aside>
 </div>
+}
 
-<div class="return-drawer-backdrop" *ngIf="deleteDrawerOpen" (click)="closeDeleteDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="delete-request-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Approval required</span><h2 id="delete-request-title">Request delete · {{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close delete request" (click)="closeDeleteDrawer()">×</button>
-    </header>
-    <div class="return-drawer-body">
-      <p class="delete-warning">The invoice will remain unchanged until another manager or owner approves this request.</p>
-      <label class="return-reason"><span>Reason</span><input [(ngModel)]="deleteReason" name="deleteReason" maxlength="500" placeholder="Reason for deletion" /></label>
-    </div>
-    <footer class="return-drawer-footer">
-      <button type="button" (click)="closeDeleteDrawer()">Cancel</button>
-      <button type="button" class="confirm-delete-request" [disabled]="deleteLoading" (click)="submitDeleteRequest()">{{ deleteLoading ? 'Sending…' : 'Send for approval' }}</button>
-    </footer>
-  </aside>
-</div>
+@if (deleteDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeDeleteDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="delete-request-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Approval required</span><h2 id="delete-request-title">Request delete · {{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close delete request" (click)="closeDeleteDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <p class="delete-warning">The invoice will remain unchanged until another manager or owner approves this request.</p>
+        <label class="return-reason"><span>Reason</span><input [(ngModel)]="deleteReason" name="deleteReason" maxlength="500" placeholder="Reason for deletion" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <button type="button" (click)="closeDeleteDrawer()">Cancel</button>
+        <button type="button" class="confirm-delete-request" [disabled]="deleteLoading" (click)="submitDeleteRequest()">{{ deleteLoading ? 'Sending…' : 'Send for approval' }}</button>
+      </footer>
+    </aside>
+  </div>
+}
 
-<div class="return-drawer-backdrop" *ngIf="receivePaymentDrawerOpen" (click)="closeReceivePaymentDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="receive-payment-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Payment collection</span><h2 id="receive-payment-title">{{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close receive payment" (click)="closeReceivePaymentDrawer()">×</button>
-    </header>
+@if (correctionDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeCorrectionDrawer()">
+    <aside class="return-drawer correction-drawer" role="dialog" aria-modal="true" aria-labelledby="correction-request-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Manager approval required</span><h2 id="correction-request-title">Edit invoice · {{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close invoice correction" (click)="closeCorrectionDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <section class="correction-lines" aria-label="Invoice correction lines">
+          @for (line of correctionLines; track trackByLine($index, line)) {
+            <article>
+              <div><strong>{{ line.itemName }}</strong><span>{{ lineTypeLabel(line.lineType) }} · Qty {{ line.quantity }}</span></div>
+              <label><span>Unit price</span><input [(ngModel)]="line.editedUnitPrice" [name]="'correctionPrice-' + line.id" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Price" /></label>
+              <label><span>Discount</span><select [(ngModel)]="line.editedDiscountType" [name]="'correctionDiscountType-' + line.id"><option value="none">None</option><option value="amount">₹</option><option value="percent">%</option></select></label>
+              <label><span>Value</span><input [(ngModel)]="line.editedDiscountValue" [name]="'correctionDiscount-' + line.id" type="number" inputmode="decimal" min="0" [max]="line.editedDiscountType === 'percent' ? 100 : null" step="0.01" [disabled]="line.editedDiscountType === 'none'" placeholder="Discount" /></label>
+            </article>
+          }
+        </section>
+        <label class="return-reason"><span>Correction reason</span><input [(ngModel)]="correctionReason" name="correctionReason" maxlength="500" placeholder="Reason for invoice correction" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <button type="button" (click)="closeCorrectionDrawer()">Cancel</button>
+        <button type="button" class="confirm-correction-request" [disabled]="correctionLoading" (click)="submitCorrectionRequest()">{{ correctionLoading ? 'Sending…' : 'Send for approval' }}</button>
+      </footer>
+    </aside>
+  </div>
+}
 
-    <div class="return-drawer-body">
-      <div class="payment-balance"><span>Balance due</span><strong>{{ money(selected?.balancePaise || 0) }}</strong></div>
-      <section class="receive-payment-modes" aria-label="Payment modes">
-        <article *ngFor="let mode of paymentMethods">
-          <div class="payment-mode-title"><strong>{{ mode.label }}</strong><button type="button" (click)="fillReceivePayment(mode)">Use balance</button></div>
-          <label><span>Amount</span><input [(ngModel)]="receivePaymentInputs[mode.code]" [name]="'paymentAmount-' + mode.code" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Amount" /></label>
-          <label><span>Reference{{ mode.referenceRequired ? '' : ' (optional)' }}</span><input [(ngModel)]="receivePaymentReferences[mode.code]" [name]="'paymentReference-' + mode.code" maxlength="120" [required]="mode.referenceRequired" placeholder="Reference" /></label>
-        </article>
-      </section>
-      <label class="return-reason"><span>Notes (optional)</span><input [(ngModel)]="receivePaymentNotes" name="receivePaymentNotes" maxlength="500" placeholder="Payment notes" /></label>
-    </div>
+@if (receivePaymentDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeReceivePaymentDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="receive-payment-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Payment collection</span><h2 id="receive-payment-title">{{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close receive payment" (click)="closeReceivePaymentDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <div class="payment-balance"><span>Balance due</span><strong>{{ money(selected?.balancePaise || 0) }}</strong></div>
+        <section class="receive-payment-modes" aria-label="Payment modes">
+          @for (mode of paymentMethods; track mode) {
+            <article>
+              <div class="payment-mode-title"><strong>{{ mode.label }}</strong><button type="button" (click)="fillReceivePayment(mode)">Use balance</button></div>
+              <label><span>Amount</span><input [(ngModel)]="receivePaymentInputs[mode.code]" [name]="'paymentAmount-' + mode.code" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="Amount" /></label>
+              <label><span>Reference{{ mode.referenceRequired ? '' : ' (optional)' }}</span><input [(ngModel)]="receivePaymentReferences[mode.code]" [name]="'paymentReference-' + mode.code" maxlength="120" [required]="mode.referenceRequired" placeholder="Reference" /></label>
+            </article>
+          }
+        </section>
+        <label class="return-reason"><span>Notes (optional)</span><input [(ngModel)]="receivePaymentNotes" name="receivePaymentNotes" maxlength="500" placeholder="Payment notes" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <div><span>Collect now</span><strong>{{ money(receivePaymentTotalPaise) }}</strong></div>
+        <button type="button" (click)="closeReceivePaymentDrawer()">Cancel</button>
+        <button type="button" class="confirm-receive-payment" [disabled]="receivePaymentLoading || receivePaymentTotalPaise <= 0" (click)="submitReceivePayment()">{{ receivePaymentLoading ? 'Recording…' : 'Record payment' }}</button>
+      </footer>
+    </aside>
+  </div>
+}
 
-    <footer class="return-drawer-footer">
-      <div><span>Collect now</span><strong>{{ money(receivePaymentTotalPaise) }}</strong></div>
-      <button type="button" (click)="closeReceivePaymentDrawer()">Cancel</button>
-      <button type="button" class="confirm-receive-payment" [disabled]="receivePaymentLoading || receivePaymentTotalPaise <= 0" (click)="submitReceivePayment()">{{ receivePaymentLoading ? 'Recording…' : 'Record payment' }}</button>
-    </footer>
-  </aside>
-</div>
+@if (voidDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeVoidDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="void-invoice-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Invoice action</span><h2 id="void-invoice-title">Void {{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close void invoice" (click)="closeVoidDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <p class="void-warning">This unpaid invoice will be locked and cannot be edited or finalized.</p>
+        <label class="return-reason"><span>Manager approval reason</span><input [(ngModel)]="voidReason" name="voidReason" maxlength="500" placeholder="Reason for void" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <button type="button" (click)="closeVoidDrawer()">Cancel</button>
+        <button type="button" class="confirm-void" [disabled]="voidLoading" (click)="submitVoid()">{{ voidLoading ? 'Voiding…' : 'Void invoice' }}</button>
+      </footer>
+    </aside>
+  </div>
+}
 
-<div class="return-drawer-backdrop" *ngIf="voidDrawerOpen" (click)="closeVoidDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="void-invoice-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Invoice action</span><h2 id="void-invoice-title">Void {{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close void invoice" (click)="closeVoidDrawer()">×</button>
-    </header>
+@if (creditNoteDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closeCreditNoteDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="credit-note-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Accounting action</span><h2 id="credit-note-title">Credit note · {{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close credit note" (click)="closeCreditNoteDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <p class="credit-note-warning">This creates an accounting credit note and updates the invoice status.</p>
+        <label class="return-reason"><span>Amount</span><input [(ngModel)]="creditNoteAmount" name="creditNoteAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
+        <label class="return-reason"><span>Reason</span><input [(ngModel)]="creditNoteReason" name="creditNoteReason" maxlength="500" placeholder="Reason for credit note" /></label>
+        <label class="return-reason"><span>Notes</span><input [(ngModel)]="creditNoteNotes" name="creditNoteNotes" maxlength="500" placeholder="Optional notes" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <button type="button" (click)="closeCreditNoteDrawer()">Cancel</button>
+        <button type="button" class="confirm-credit-note" [disabled]="creditNoteLoading" (click)="submitCreditNote()">{{ creditNoteLoading ? 'Creating…' : 'Create credit note' }}</button>
+      </footer>
+    </aside>
+  </div>
+}
 
-    <div class="return-drawer-body">
-      <p class="void-warning">This unpaid invoice will be locked and cannot be edited or finalized.</p>
-      <label class="return-reason"><span>Manager approval reason</span><input [(ngModel)]="voidReason" name="voidReason" maxlength="500" placeholder="Reason for void" /></label>
-    </div>
-
-    <footer class="return-drawer-footer">
-      <button type="button" (click)="closeVoidDrawer()">Cancel</button>
-      <button type="button" class="confirm-void" [disabled]="voidLoading" (click)="submitVoid()">{{ voidLoading ? 'Voiding…' : 'Void invoice' }}</button>
-    </footer>
-  </aside>
-</div>
-
-<div class="return-drawer-backdrop" *ngIf="creditNoteDrawerOpen" (click)="closeCreditNoteDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="credit-note-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Accounting action</span><h2 id="credit-note-title">Credit note · {{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close credit note" (click)="closeCreditNoteDrawer()">×</button>
-    </header>
-
-    <div class="return-drawer-body">
-      <p class="credit-note-warning">This creates an accounting credit note and updates the invoice status.</p>
-      <label class="return-reason"><span>Amount</span><input [(ngModel)]="creditNoteAmount" name="creditNoteAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
-      <label class="return-reason"><span>Reason</span><input [(ngModel)]="creditNoteReason" name="creditNoteReason" maxlength="500" placeholder="Reason for credit note" /></label>
-      <label class="return-reason"><span>Notes</span><input [(ngModel)]="creditNoteNotes" name="creditNoteNotes" maxlength="500" placeholder="Optional notes" /></label>
-    </div>
-
-    <footer class="return-drawer-footer">
-      <button type="button" (click)="closeCreditNoteDrawer()">Cancel</button>
-      <button type="button" class="confirm-credit-note" [disabled]="creditNoteLoading" (click)="submitCreditNote()">{{ creditNoteLoading ? 'Creating…' : 'Create credit note' }}</button>
-    </footer>
-  </aside>
-</div>
-
-<div class="return-drawer-backdrop" *ngIf="paymentLinkDrawerOpen" (click)="closePaymentLinkDrawer()">
-  <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="payment-link-title" (click)="$event.stopPropagation()">
-    <header class="return-drawer-head">
-      <div><span>Online payment</span><h2 id="payment-link-title">Payment link · {{ selected?.invoiceNumber }}</h2></div>
-      <button type="button" class="drawer-close" aria-label="Close payment link" (click)="closePaymentLinkDrawer()">×</button>
-    </header>
-
-    <div class="return-drawer-body">
-      <p class="credit-note-warning">The provider link will be created for the selected invoice balance.</p>
-      <label class="return-reason"><span>Provider</span><select [(ngModel)]="paymentLinkProvider" name="paymentLinkProvider"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option><option value="phonepe">PhonePe</option></select></label>
-      <label class="return-reason"><span>Amount</span><input [(ngModel)]="paymentLinkAmount" name="paymentLinkAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
-    </div>
-
-    <footer class="return-drawer-footer">
-      <button type="button" (click)="closePaymentLinkDrawer()">Cancel</button>
-      <button type="button" class="confirm-payment-link" [disabled]="paymentLinkLoading" (click)="createPaymentLink()">{{ paymentLinkLoading ? 'Creating…' : 'Create payment link' }}</button>
-    </footer>
-  </aside>
-</div>
+@if (paymentLinkDrawerOpen) {
+  <div class="return-drawer-backdrop" (click)="closePaymentLinkDrawer()">
+    <aside class="return-drawer" role="dialog" aria-modal="true" aria-labelledby="payment-link-title" (click)="$event.stopPropagation()">
+      <header class="return-drawer-head">
+        <div><span>Online payment</span><h2 id="payment-link-title">Payment link · {{ selected?.invoiceNumber }}</h2></div>
+        <button type="button" class="drawer-close" aria-label="Close payment link" (click)="closePaymentLinkDrawer()">×</button>
+      </header>
+      <div class="return-drawer-body">
+        <p class="credit-note-warning">The provider link will be created for the selected invoice balance.</p>
+        <label class="return-reason"><span>Provider</span><select [(ngModel)]="paymentLinkProvider" name="paymentLinkProvider"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option><option value="phonepe">PhonePe</option></select></label>
+        <label class="return-reason"><span>Amount</span><input [(ngModel)]="paymentLinkAmount" name="paymentLinkAmount" type="number" min="0.01" step="0.01" placeholder="Amount" /></label>
+      </div>
+      <footer class="return-drawer-footer">
+        <button type="button" (click)="closePaymentLinkDrawer()">Cancel</button>
+        <button type="button" class="confirm-payment-link" [disabled]="paymentLinkLoading" (click)="createPaymentLink()">{{ paymentLinkLoading ? 'Creating…' : 'Create payment link' }}</button>
+      </footer>
+    </aside>
+  </div>
+}

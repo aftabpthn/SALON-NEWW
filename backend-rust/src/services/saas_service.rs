@@ -1,6 +1,7 @@
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Months, TimeZone, Timelike, Utc, Weekday};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::collections::BTreeSet;
 use uuid::Uuid;
@@ -8,7 +9,10 @@ use uuid::Uuid;
 use crate::{
     models::common::AppError,
     repositories::saas_repository::{self, BillingContext, PlanWrite, SlaWrite},
-    services::security_service,
+    services::{
+        auth_service::{hash_password, password_meets_policy, TENANT_PERMISSION_CATALOG},
+        security_service, staff_service,
+    },
 };
 
 const SEVERITIES: &[&str] = &["low", "medium", "high", "critical"];
@@ -58,6 +62,24 @@ pub struct SubscriptionCreate {
     pub provider_customer_ref: String,
     #[serde(default)]
     pub provider_subscription_ref: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SalonOnboardingInput {
+    pub idempotency_key: String,
+    pub salon_name: String,
+    pub salon_slug: String,
+    pub plan_id: String,
+    pub owner_full_name: String,
+    pub owner_email: String,
+    pub owner_password: String,
+    pub branch_name: String,
+    pub branch_code: String,
+    #[serde(default)]
+    pub branch_address: String,
+    pub trial_ends_at: Option<DateTime<Utc>>,
+    pub domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -313,6 +335,164 @@ pub async fn subscriptions(db: &PgPool, tenant: Option<&str>) -> Result<Vec<Valu
     saas_repository::list_subscriptions(db, tenant)
         .await
         .map_err(|_| AppError::internal("failed to load SaaS subscriptions"))
+}
+
+pub async fn onboard_salon(
+    db: &PgPool,
+    actor: &str,
+    payload: SalonOnboardingInput,
+) -> Result<Value, AppError> {
+    let idempotency_key = payload.idempotency_key.trim();
+    let salon_name = payload.salon_name.trim();
+    let salon_slug = payload.salon_slug.trim().to_ascii_lowercase();
+    let plan_id = payload.plan_id.trim();
+    let owner_full_name = payload.owner_full_name.trim();
+    let owner_email = staff_service::normalize_login_email(&payload.owner_email)?;
+    let branch_name = payload.branch_name.trim();
+    let branch_code = payload.branch_code.trim().to_ascii_uppercase();
+    let branch_address = payload.branch_address.trim();
+    let domain = payload
+        .domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(normalize_domain)
+        .transpose()?;
+
+    if idempotency_key.is_empty()
+        || idempotency_key.len() > 160
+        || !(2..=120).contains(&salon_name.chars().count())
+        || !(2..=80).contains(&salon_slug.len())
+        || salon_slug.starts_with('-')
+        || salon_slug.ends_with('-')
+        || !salon_slug
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        || plan_id.is_empty()
+        || plan_id.len() > 160
+        || !(2..=120).contains(&owner_full_name.chars().count())
+        || !(2..=120).contains(&branch_name.chars().count())
+        || !(2..=40).contains(&branch_code.len())
+        || !branch_code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        || branch_address.chars().count() > 500
+    {
+        return Err(AppError::validation(
+            "salon, owner or first branch details are invalid",
+        ));
+    }
+    if !password_meets_policy(&payload.owner_password) {
+        return Err(AppError::validation(
+            "owner password must contain 12 to 128 characters",
+        ));
+    }
+
+    let request_fingerprint = json!({
+        "salonName": salon_name,
+        "salonSlug": salon_slug,
+        "planId": plan_id,
+        "ownerFullName": owner_full_name,
+        "ownerEmail": owner_email,
+        "branchName": branch_name,
+        "branchCode": branch_code,
+        "branchAddress": branch_address,
+        "trialEndsAt": payload.trial_ends_at,
+        "domain": domain,
+    });
+    let request_fingerprint = format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&request_fingerprint)
+                .map_err(|_| AppError::internal("failed to prepare onboarding request"))?
+        )
+    );
+    let started_at = Utc::now();
+    let trial_ends_at = payload
+        .trial_ends_at
+        .unwrap_or_else(|| started_at + Duration::days(14));
+    let owner_password_hash = hash_password(&payload.owner_password)
+        .map_err(|_| AppError::internal("failed to secure owner password"))?;
+    let owner_permissions = json!(TENANT_PERMISSION_CATALOG
+        .iter()
+        .map(|permission| permission.code)
+        .collect::<Vec<_>>());
+
+    let input = saas_repository::OnboardingWrite {
+        idempotency_key: idempotency_key.to_string(),
+        request_fingerprint,
+        salon_name: salon_name.to_string(),
+        salon_slug,
+        plan_id: plan_id.to_string(),
+        owner_full_name: owner_full_name.to_string(),
+        owner_email,
+        owner_password_hash,
+        owner_permissions,
+        branch_name: branch_name.to_string(),
+        branch_code,
+        branch_address: branch_address.to_string(),
+        domain,
+        started_at,
+        trial_ends_at,
+        actor: actor.to_string(),
+    };
+    let result = saas_repository::onboard_salon(db, &input)
+        .await
+        .map_err(map_onboarding_error)?;
+    Ok(json!(result))
+}
+
+fn normalize_domain(value: &str) -> Result<String, AppError> {
+    let domain = value.trim().trim_end_matches('.').to_ascii_lowercase();
+    let labels = domain.split('.').collect::<Vec<_>>();
+    let valid = (3..=253).contains(&domain.len())
+        && labels.len() >= 2
+        && labels.iter().all(|label| {
+            (1..=63).contains(&label.len())
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+        });
+    if !valid {
+        return Err(AppError::validation(
+            "domain must be a valid hostname without scheme or path",
+        ));
+    }
+    Ok(domain)
+}
+
+fn map_onboarding_error(error: saas_repository::OnboardingError) -> AppError {
+    match error {
+        saas_repository::OnboardingError::IdempotencyConflict => AppError::conflict(
+            "idempotency key was already used for a different onboarding request",
+        ),
+        saas_repository::OnboardingError::PlanUnavailable => {
+            AppError::not_found("active SaaS plan was not found")
+        }
+        saas_repository::OnboardingError::TrialOutsideFirstPeriod => AppError::validation(
+            "trial end must be after onboarding and inside the first billing period",
+        ),
+        saas_repository::OnboardingError::Database(error) => {
+            let constraint = error
+                .as_database_error()
+                .and_then(|database_error| database_error.constraint());
+            let detail = error.to_string();
+            let matches_index = |name: &str| constraint == Some(name) || detail.contains(name);
+            if matches_index("idx_tenants_slug") {
+                AppError::conflict("salon slug is already in use")
+            } else if matches_index("idx_tenant_domain_mappings_domain") {
+                AppError::conflict("domain is already mapped to another salon")
+            } else if matches_index("idx_users_tenant_email")
+                || matches_index("idx_users_tenant_login_id")
+            {
+                AppError::conflict("owner login email is already in use")
+            } else {
+                AppError::internal("failed to onboard salon")
+            }
+        }
+    }
 }
 
 pub async fn create_subscription(

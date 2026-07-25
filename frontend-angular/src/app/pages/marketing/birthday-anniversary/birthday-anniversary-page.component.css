@@ -5,3 +5,10 @@
 .voucher-intelligence{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:0;border-bottom:1px solid var(--line);background:#f8fafc}.voucher-intelligence span{display:grid;gap:3px;padding:10px 14px;border-right:1px solid var(--line)}.voucher-intelligence span:last-child{border-right:0}.voucher-intelligence small{color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase}.voucher-intelligence strong{font-size:17px}@media(max-width:720px){.voucher-intelligence{grid-template-columns:1fr 1fr}.voucher-intelligence span:nth-child(even){border-right:0}}
 
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #93c5fd;outline-offset:2px}
+
+@media (max-width: 720px) {
+  .drawer { width: 100vw; }
+  .drawer button,
+  .drawer input:not([type='checkbox']):not([type='radio']),
+  .drawer select { min-height: 44px; }
+}

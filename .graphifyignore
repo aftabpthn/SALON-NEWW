@@ -1,0 +1,9 @@
+# Local tooling copies and generated review artifacts
+.codex-runtime/
+.codex-review/
+artifacts/
+
+# Nonstandard build/cache directories
+backend-rust/target-*/
+backend-rust/.codex-*-target/
+frontend-angular/node_modules.angular17_backup/

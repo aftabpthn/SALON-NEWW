@@ -395,6 +395,66 @@ pub async fn exact_inventory_item(
         .bind(tenant).bind(branch).bind(supplier_sku).bind(raw_name).fetch_optional(db).await
 }
 
+pub async fn alias_inventory_item(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    supplier: Option<&str>,
+    supplier_sku: &str,
+    raw_name: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(r#"SELECT alias.inventory_item_id
+        FROM purchase_bill_item_aliases alias
+        JOIN inventory_items item ON item.id=alias.inventory_item_id
+          AND item.tenant_id=alias.tenant_id AND item.branch_id=alias.branch_id AND item.active=TRUE
+        WHERE alias.tenant_id=$1 AND alias.branch_id=$2
+          AND (alias.supplier_id IS NULL OR alias.supplier_id=$3::TEXT)
+          AND ((BTRIM($4)<>'' AND alias.supplier_sku_normalized=LOWER(REGEXP_REPLACE(BTRIM($4),'\s+',' ','g')))
+            OR (BTRIM($5)<>'' AND alias.raw_name_normalized=LOWER(REGEXP_REPLACE(BTRIM($5),'\s+',' ','g'))))
+        ORDER BY CASE WHEN alias.supplier_id=$3::TEXT THEN 0 ELSE 1 END,alias.match_count DESC,alias.last_matched_at DESC
+        LIMIT 1"#)
+        .bind(tenant).bind(branch).bind(supplier).bind(supplier_sku).bind(raw_name)
+        .fetch_optional(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn learn_item_alias(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    supplier: Option<&str>,
+    supplier_sku: &str,
+    raw_name: &str,
+    item: &str,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(r#"WITH normalized AS (
+          SELECT LOWER(REGEXP_REPLACE(BTRIM($4),'\s+',' ','g')) sku,
+                 LOWER(REGEXP_REPLACE(BTRIM($5),'\s+',' ','g')) raw_name
+        ), updated AS (
+          UPDATE purchase_bill_item_aliases alias
+          SET inventory_item_id=$6,match_count=alias.match_count+1,last_matched_at=NOW()
+          FROM normalized n
+          WHERE alias.tenant_id=$1 AND alias.branch_id=$2
+            AND COALESCE(alias.supplier_id,'')=COALESCE($3::TEXT,'')
+            AND alias.supplier_sku_normalized=n.sku AND alias.raw_name_normalized=n.raw_name
+          RETURNING alias.id
+        )
+        INSERT INTO purchase_bill_item_aliases(
+          tenant_id,branch_id,supplier_id,supplier_sku_normalized,raw_name_normalized,inventory_item_id,created_by
+        )
+        SELECT $1,$2,s.id,n.sku,n.raw_name,item.id,$7
+        FROM normalized n
+        JOIN inventory_items item ON item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$6 AND item.active=TRUE
+        LEFT JOIN suppliers s ON s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE
+        WHERE NOT EXISTS(SELECT 1 FROM updated) AND (n.sku<>'' OR n.raw_name<>'')
+          AND ($3::TEXT IS NULL OR s.id IS NOT NULL)
+        ON CONFLICT DO NOTHING"#)
+        .bind(tenant).bind(branch).bind(supplier).bind(supplier_sku).bind(raw_name).bind(item).bind(actor)
+        .execute(db).await?;
+    Ok(())
+}
+
 pub async fn candidate_order(
     db: &PgPool,
     tenant: &str,

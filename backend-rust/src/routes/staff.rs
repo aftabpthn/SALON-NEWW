@@ -17,7 +17,7 @@ use crate::{
         staff_configuration_repository::{
             AttendanceRuleInput, CatalogAssignmentInput, CommissionRuleInput, LeavePolicyInput,
             PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput, ShiftTemplateInput,
-            StaffCategoryInput,
+            StaffCategoryInput, StaffPricingLevelInput,
         },
         staff_hr_repository::{
             self, BulkStaffInput, SaveStaffDocument, StaffDocumentRecord, StaffHistoryRecord,
@@ -132,6 +132,7 @@ pub struct StaffResponse {
     pub home_phone: String,
     pub work_phone: String,
     pub job_title: String,
+    pub photo_url: String,
     pub service_ids: Vec<String>,
     pub active: bool,
     pub created_at: DateTime<Utc>,
@@ -143,6 +144,7 @@ pub struct StaffResponse {
 pub struct StaffProfileWriteRequest {
     pub category_id: Option<String>,
     pub shift_template_id: Option<String>,
+    pub pricing_level_id: Option<String>,
     pub designation: Option<String>,
     pub company_name: Option<String>,
     pub mandatory_break_minutes: Option<i32>,
@@ -178,6 +180,7 @@ pub struct StaffProfileResponse {
     pub staff: StaffResponse,
     pub category_id: Option<String>,
     pub shift_template_id: Option<String>,
+    pub pricing_level_id: Option<String>,
     pub designation: String,
     pub company_name: String,
     pub mandatory_break_minutes: Option<i32>,
@@ -270,6 +273,8 @@ pub struct StaffMastersWriteRequest {
     #[serde(default)]
     pub categories: Vec<StaffCategoryRequest>,
     #[serde(default)]
+    pub pricing_levels: Vec<StaffPricingLevelRequest>,
+    #[serde(default)]
     pub shift_templates: Vec<ShiftTemplateRequest>,
     pub attendance_rule: AttendanceRuleRequest,
 }
@@ -281,6 +286,16 @@ pub struct StaffCategoryRequest {
     pub code: String,
     pub name: String,
     pub designation: Option<String>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffPricingLevelRequest {
+    pub id: Option<String>,
+    pub code: String,
+    pub name: String,
+    pub rank: Option<i32>,
     pub active: Option<bool>,
 }
 
@@ -391,6 +406,7 @@ pub struct CatalogAssignmentRequest {
     pub item_type: String,
     pub item_id: String,
     pub commission_percent: Option<i32>,
+    pub pricing_level_price_paise: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -481,6 +497,17 @@ async fn staff_responses_with_service_ids(
     .fetch_all(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to load staff service assignments"))?;
+    let photo_rows = sqlx::query(
+        "SELECT staff_id, photo_url
+         FROM staff_profiles
+         WHERE tenant_id=$1 AND branch_id=$2 AND staff_id = ANY($3::TEXT[])",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&staff_ids)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load staff photos"))?;
 
     let mut service_ids_by_staff: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
@@ -494,6 +521,14 @@ async fn staff_responses_with_service_ids(
                 .push(service_id);
         }
     }
+    let mut photo_url_by_staff = photo_rows
+        .into_iter()
+        .filter_map(|row| {
+            let staff_id = row.try_get::<String, _>("staff_id").ok()?;
+            let photo_url = row.try_get::<String, _>("photo_url").ok()?;
+            (!staff_id.is_empty() && !photo_url.is_empty()).then_some((staff_id, photo_url))
+        })
+        .collect::<std::collections::HashMap<_, _>>();
 
     Ok(rows
         .into_iter()
@@ -502,6 +537,7 @@ async fn staff_responses_with_service_ids(
             response.service_ids = service_ids_by_staff
                 .remove(&response.id)
                 .unwrap_or_default();
+            response.photo_url = photo_url_by_staff.remove(&response.id).unwrap_or_default();
             response
         })
         .collect())
@@ -568,6 +604,7 @@ async fn update_staff_masters(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let category_count = payload.categories.len();
     let shift_count = payload.shift_templates.len();
+    let pricing_level_count = payload.pricing_levels.len();
     let masters = staff_service::save_masters(
         &state.db,
         &tenant_id,
@@ -581,6 +618,17 @@ async fn update_staff_masters(
                     code: item.code.trim().to_lowercase(),
                     name: item.name.trim().to_string(),
                     designation: item.designation.unwrap_or_default().trim().to_string(),
+                    active: item.active.unwrap_or(true),
+                })
+                .collect(),
+            pricing_levels: payload
+                .pricing_levels
+                .into_iter()
+                .map(|item| StaffPricingLevelInput {
+                    id: item.id.unwrap_or_default().trim().to_string(),
+                    code: item.code.trim().to_lowercase(),
+                    name: item.name.trim().to_string(),
+                    rank: item.rank.unwrap_or(0),
                     active: item.active.unwrap_or(true),
                 })
                 .collect(),
@@ -639,7 +687,7 @@ async fn update_staff_masters(
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({ "categories": category_count, "shiftTemplates": shift_count }),
+            details: json!({ "categories": category_count, "pricingLevels": pricing_level_count, "shiftTemplates": shift_count }),
         },
     )
     .await;
@@ -673,10 +721,6 @@ async fn create_staff(
         CreateStaff {
             tenant_id: &tenant_id,
             branch_id: &branch_id,
-            employee_code: payload
-                .employee_code
-                .as_deref()
-                .filter(|value| !value.trim().is_empty()),
             first_name,
             middle_name: payload.middle_name.as_deref().unwrap_or(""),
             last_name: payload.last_name.as_deref().unwrap_or(""),
@@ -806,6 +850,14 @@ async fn update_staff_profile(
         payload.shift_template_id.as_deref(),
     )
     .await?;
+    staff_service::validate_master_assignment(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        "pricingLevel",
+        payload.pricing_level_id.as_deref(),
+    )
+    .await?;
 
     let work_tasks = payload
         .work_tasks
@@ -831,6 +883,11 @@ async fn update_staff_profile(
                 .filter(|value| !value.is_empty()),
             shift_template_id: payload
                 .shift_template_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+            pricing_level_id: payload
+                .pricing_level_id
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty()),
@@ -946,9 +1003,11 @@ async fn upload_staff_file(
         || bytes.is_empty()
         || bytes.len() > 5 * 1024 * 1024
         || !allowed
-        || kind == "photo" && !content_type.starts_with("image/")
     {
         return Err(AppError::validation("invalid staff file"));
+    }
+    if kind == "photo" && !is_supported_staff_photo(file_name, &content_type, &bytes) {
+        return Err(AppError::validation("staff photo must be a valid JPG or PNG image"));
     }
     let row = staff_hr_repository::save_file(
         &state.db,
@@ -1230,6 +1289,7 @@ async fn update_staff_configuration(
                     item_type: item.item_type.trim().to_lowercase(),
                     item_id: item.item_id.trim().to_string(),
                     commission_percent: item.commission_percent,
+                    pricing_level_price_paise: item.pricing_level_price_paise,
                 })
                 .collect(),
             commission_rules: payload
@@ -1625,9 +1685,9 @@ fn validate_hr_profile(payload: &StaffProfileWriteRequest, staff_id: &str) -> Re
         ));
     }
     if let Some(url) = normalized(payload.photo_url.as_deref()) {
-        if url.len() > 2048 || !(url.starts_with("https://") || url.starts_with('/')) {
+        if url.len() > 2048 || !staff_service::is_supported_photo_url(url) {
             return Err(AppError::validation(
-                "photoUrl must be HTTPS or an app-relative URL",
+                "photoUrl must point to a JPG or PNG image",
             ));
         }
     }
@@ -1662,6 +1722,19 @@ fn validate_hr_profile(payload: &StaffProfileWriteRequest, staff_id: &str) -> Re
     Ok(())
 }
 
+fn is_supported_staff_photo(file_name: &str, content_type: &str, bytes: &[u8]) -> bool {
+    let name = file_name.to_ascii_lowercase();
+    match content_type {
+        "image/jpeg" if name.ends_with(".jpg") || name.ends_with(".jpeg") => {
+            bytes.starts_with(&[0xff, 0xd8, 0xff])
+        }
+        "image/png" if name.ends_with(".png") => {
+            bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a])
+        }
+        _ => false,
+    }
+}
+
 fn profile_response(
     staff: StaffRecord,
     profile: Option<StaffProfileRecord>,
@@ -1686,6 +1759,9 @@ fn profile_response(
         shift_template_id: profile
             .as_ref()
             .and_then(|record| record.shift_template_id.clone()),
+        pricing_level_id: profile
+            .as_ref()
+            .and_then(|record| record.pricing_level_id.clone()),
         designation: profile
             .as_ref()
             .map(|record| record.designation.clone())
@@ -1790,6 +1866,7 @@ impl From<StaffRecord> for StaffResponse {
             home_phone: record.home_phone,
             work_phone: record.work_phone,
             job_title: record.job_title,
+            photo_url: String::new(),
             service_ids: Vec::new(),
             active: record.active,
             created_at: record.created_at,
@@ -1800,7 +1877,10 @@ impl From<StaffRecord> for StaffResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_non_negative, staff_sort_column, staff_sort_direction};
+    use super::{
+        ensure_non_negative, is_supported_staff_photo, staff_sort_column, staff_sort_direction,
+    };
+    use crate::services::staff_service;
 
     #[test]
     fn staff_listing_sort_is_allowlisted() {
@@ -1815,5 +1895,31 @@ mod tests {
         assert!(ensure_non_negative(Some(0), "vacationDays").is_ok());
         assert!(ensure_non_negative(None, "vacationDays").is_ok());
         assert!(ensure_non_negative(Some(-1), "vacationDays").is_err());
+    }
+
+    #[test]
+    fn staff_photos_only_allow_jpg_or_png() {
+        assert!(is_supported_staff_photo(
+            "profile.jpg",
+            "image/jpeg",
+            &[0xff, 0xd8, 0xff, 0x00]
+        ));
+        assert!(is_supported_staff_photo(
+            "profile.png",
+            "image/png",
+            &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]
+        ));
+        assert!(!is_supported_staff_photo(
+            "profile.webp",
+            "image/webp",
+            b"RIFF"
+        ));
+        assert!(staff_service::is_supported_photo_url(
+            "https://cdn.example.com/profile.JPG?size=200"
+        ));
+        assert!(staff_service::is_supported_photo_url("/staff/files/file_123"));
+        assert!(!staff_service::is_supported_photo_url(
+            "https://example.com/profile.webp"
+        ));
     }
 }

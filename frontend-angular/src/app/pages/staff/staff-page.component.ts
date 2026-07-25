@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 
 type StaffRecord = {
   id: string;
@@ -28,13 +29,14 @@ type StaffRecord = {
 type StaffListPage = { items: StaffRecord[]; total: number; page: number; pageSize: number; jobs: string[] };
 type StaffForm = Omit<StaffRecord, 'id' | 'branchId'>;
 type StaffColumn = 'employeeCode' | 'firstName' | 'lastName' | 'mobilePhone' | 'jobTitle' | 'active' | 'branchId';
-type StaffTab = 'General' | 'HR Profile' | 'Documents' | 'History' | 'Operations' | 'Employee Roles' | 'Branch Access' | 'Services' | 'Products' | 'Memberships' | 'Packages' | 'Commissions' | 'Payrates' | 'Catalog' | 'Leave Policies';
-type MasterTab = 'Categories' | 'Leave Policies' | 'Attendance Rules' | 'Shift Templates';
+type StaffTab = 'General' | 'HR Profile' | 'Documents' | 'History' | 'Operations' | 'Employee Roles' | 'Branch Access' | 'Pricing & Skills' | 'Services' | 'Products' | 'Memberships' | 'Packages' | 'Commissions' | 'Payrates' | 'Catalog' | 'Leave Policies';
+type MasterTab = 'Categories' | 'Pricing Levels' | 'Leave Policies' | 'Attendance Rules' | 'Shift Templates';
 type OperationView = 'upcoming' | 'meetings' | 'deepCleaning' | 'checklists' | 'history';
 type CatalogType = 'service' | 'product' | 'membership' | 'package';
 type ProfileForm = {
   categoryId: string;
   shiftTemplateId: string;
+  pricingLevelId: string;
   designation: string;
   companyName: string;
   mandatoryBreakMinutes: number | null;
@@ -68,6 +70,7 @@ type StaffProfileResponse = {
   staff: StaffRecord;
   categoryId: string | null;
   shiftTemplateId: string | null;
+  pricingLevelId: string | null;
   designation: string;
   companyName: string;
   mandatoryBreakMinutes: number | null;
@@ -159,7 +162,10 @@ type BulkImportResult = {
 };
 type StaffFileUpload = { fileId: string; fileUrl: string; fileName: string; contentType: string; byteSize: number };
 type RoleOption = { id: string; name: string; assigned: boolean };
-type CatalogOption = { itemType: CatalogType; id: string; name: string; category: string; assigned: boolean; commissionPercent: number | null };
+type CatalogOption = {
+  itemType: CatalogType; id: string; name: string; category: string; assigned: boolean; commissionPercent: number | null;
+  basePricePaise?: number | null; pricingLevelId?: string | null; pricingLevelPricePaise?: number | null; pricingLevelPrice?: string;
+};
 type CommissionRule = { id?: string; name: string; appliesTo: 'all' | CatalogType; ratePercent: number | null; effectiveFrom: string; active: boolean };
 type PayRate = { id?: string; rateType: 'hourly' | 'daily' | 'monthly'; amount: number | null; effectiveFrom: string; active: boolean };
 type LeavePolicy = { id?: string; name: string; leaveType: 'annual' | 'sick' | 'casual' | 'special' | 'unpaid'; annualDays: number | null; active: boolean };
@@ -186,6 +192,7 @@ type StaffBranchAccess = {
 };
 type LoginProvisionForm = { loginId: string; email: string; initialPassword: string; roleId: string };
 type StaffCategory = { id: string; code: string; name: string; designation: string; active: boolean };
+type StaffPricingLevel = { id: string; code: string; name: string; rank: number | null; active: boolean };
 type ShiftTemplate = {
   id: string; code: string; name: string; shift1Start: string; shift1End: string;
   shift2Start: string | null; shift2End: string | null; breakMinutes: number | null;
@@ -200,6 +207,7 @@ type AttendanceRule = {
 type LeavePolicyOverview = LeavePolicy & { id: string; staffId: string; staffName: string; employeeCode: string | null };
 type StaffMasters = {
   categories: StaffCategory[];
+  pricingLevels: StaffPricingLevel[];
   shiftTemplates: ShiftTemplate[];
   attendanceRule: AttendanceRule | null;
   leavePolicies: LeavePolicyOverview[];
@@ -210,7 +218,7 @@ const emptyStaff = (): StaffForm => ({
   mobilePhone: '', homePhone: '', workPhone: '', jobTitle: '', active: true,
 });
 const emptyProfile = (): ProfileForm => ({
-  categoryId: '', shiftTemplateId: '', designation: '', companyName: '', mandatoryBreakMinutes: null, workTasks: '', maxWorkHours: null, targetRevenue: null,
+  categoryId: '', shiftTemplateId: '', pricingLevelId: '', designation: '', companyName: '', mandatoryBreakMinutes: null, workTasks: '', maxWorkHours: null, targetRevenue: null,
   vacationDays: null, specialLeaveDays: null, tenureStartDate: '', bookingIntervalMinutes: null,
   restrictBookingToReturningGuests: false, linkedLogin: false,
   photoUrl: '', dateOfBirth: '', joiningDate: '', gender: '', employmentType: '', department: '',
@@ -232,14 +240,13 @@ const emptyAttendanceRule = (): AttendanceRule => ({
   earlyLeaveGraceMinutes: null, deductBreaks: true, minimumOvertimeMinutes: null,
   overtimeRoundingMinutes: null, maximumOvertimeMinutes: null, active: true,
 });
-const emptyMasters = (): StaffMasters => ({ categories: [], shiftTemplates: [], attendanceRule: null, leavePolicies: [] });
+const emptyMasters = (): StaffMasters => ({ categories: [], pricingLevels: [], shiftTemplates: [], attendanceRule: null, leavePolicies: [] });
 
 @Component({
-  selector: 'page-staff',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
-  templateUrl: './staff-page.component.html',
-  styleUrls: ['./staff-page.component.css'],
+    selector: 'page-staff',
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe, BranchNamePipe],
+    templateUrl: './staff-page.component.html',
+    styleUrls: ['./staff-page.component.css']
 })
 export class StaffPageComponent implements OnInit, OnDestroy {
   private readonly language = inject(LanguageService);
@@ -259,9 +266,9 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   readonly staffTabs: StaffTab[] = [
     'General', 'HR Profile', 'Documents', 'History', 'Operations', 'Employee Roles',
     ...(this.auth.hasRole('owner', 'admin') ? ['Branch Access' as StaffTab] : []),
-    'Services', 'Products', 'Memberships', 'Packages', 'Commissions', 'Payrates', 'Catalog', 'Leave Policies',
+    'Pricing & Skills', 'Services', 'Products', 'Memberships', 'Packages', 'Commissions', 'Payrates', 'Catalog', 'Leave Policies',
   ];
-  readonly masterTabs: MasterTab[] = ['Categories', 'Leave Policies', 'Attendance Rules', 'Shift Templates'];
+  readonly masterTabs: MasterTab[] = ['Categories', 'Pricing Levels', 'Leave Policies', 'Attendance Rules', 'Shift Templates'];
   readonly weekdays = [
     { value: 0, label: 'Sun' }, { value: 1, label: 'Mon' }, { value: 2, label: 'Tue' },
     { value: 3, label: 'Wed' }, { value: 4, label: 'Thu' }, { value: 5, label: 'Fri' },
@@ -358,6 +365,9 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   private photoObjectUrl = '';
 
   get activeCategories() { return this.masters.categories.filter((item) => item.active); }
+  get activePricingLevels() { return this.masters.pricingLevels.filter((item) => item.active); }
+  get activePricingLevelName() { return this.activePricingLevels.find((item) => item.id === this.profileForm.pricingLevelId)?.name || ''; }
+  get serviceCatalog() { return this.catalogFor('service'); }
   get activeShiftTemplates() { return this.masters.shiftTemplates.filter((item) => item.active); }
   get filteredBranchAccess() {
     const search = this.branchAccessSearch.trim().toLowerCase();
@@ -430,7 +440,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   exportVisible() {
     const csv = [[...['code', 'firstName', 'lastName', 'phone', 'job', 'active', 'center'].map((key) => this.language.text(`staff.export.${key}`))], ...this.employees.map((employee) => [
       employee.employeeCode, employee.firstName, employee.lastName, employee.mobilePhone, employee.jobTitle,
-      employee.active ? this.language.text('common.yes') : this.language.text('common.no'), employee.branchId,
+      employee.active ? this.language.text('common.yes') : this.language.text('common.no'), this.auth.branchNameFor(employee.branchId),
     ])].map((row) => row.map((value) => `"${String(value || '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -441,7 +451,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
 
   openCreate() {
     this.editingId = '';
-    this.selectedBranchId = '';
+    this.selectedBranchId = this.auth.branchId || '';
     this.cloneMode = false;
     this.form = emptyStaff();
     this.profileForm = emptyProfile();
@@ -492,6 +502,10 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.masters.categories.push({ id: '', code: '', name: '', designation: '', active: true });
   }
 
+  addPricingLevel() {
+    this.masters.pricingLevels.push({ id: '', code: '', name: '', rank: null, active: true });
+  }
+
   addShiftTemplate() {
     this.masters.shiftTemplates.push({
       id: '', code: '', name: '', shift1Start: '', shift1End: '', shift2Start: null,
@@ -511,6 +525,10 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       this.mastersError = 'Complete every staff category';
       return;
     }
+    if (this.masters.pricingLevels.some((item) => !item.code.trim() || !item.name.trim())) {
+      this.mastersError = 'Complete every pricing level';
+      return;
+    }
     if (this.masters.shiftTemplates.some((item) => !item.code.trim() || !item.name.trim() || !item.shift1Start || !item.shift1End)) {
       this.mastersError = 'Complete every shift template';
       return;
@@ -521,6 +539,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     try {
       const result = await firstValueFrom(this.api.put<ApiEnvelope<StaffMasters>>('/staff/masters', {
         categories: this.masters.categories.map((item) => ({ ...item, code: item.code.trim().toLowerCase(), name: item.name.trim(), designation: item.designation.trim() })),
+        pricingLevels: this.masters.pricingLevels.map((item) => ({ ...item, code: item.code.trim().toLowerCase(), name: item.name.trim(), rank: item.rank ?? 0 })),
         shiftTemplates: this.masters.shiftTemplates.map((item) => ({
           ...item, code: item.code.trim().toLowerCase(), name: item.name.trim(),
           shift2Start: item.shift2Start || null, shift2End: item.shift2End || null,
@@ -580,7 +599,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       if (!configurationResult.success || !configurationResult.data) throw new Error(configurationResult.error?.message || 'Unable to load employee configuration');
       this.applyStaff(result.data.staff);
       this.profileForm = {
-        categoryId: result.data.categoryId || '', shiftTemplateId: result.data.shiftTemplateId || '',
+        categoryId: result.data.categoryId || '', shiftTemplateId: result.data.shiftTemplateId || '', pricingLevelId: result.data.pricingLevelId || '',
         designation: result.data.designation || '', companyName: result.data.companyName || '',
         mandatoryBreakMinutes: result.data.mandatoryBreakMinutes, workTasks: result.data.workTasks.join(', '),
         maxWorkHours: result.data.maxWorkHours, targetRevenue: result.data.targetRevenuePaise === null ? null : result.data.targetRevenuePaise / 100,
@@ -632,8 +651,6 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     const savedTab = this.activeTab;
     this.saveError = '';
     if (!firstName) { this.saveError = 'First name is required'; return; }
-    if (this.cloneMode && !this.form.employeeCode.trim()) { this.saveError = 'Employee code is required when cloning'; return; }
-
     this.saving = true;
     try {
       const payload = this.staffPayload(firstName);
@@ -723,6 +740,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       if (this.branchAccess.linkedLogin) await this.saveBranchAccess();
       else await this.provisionLogin();
     }
+    else if (this.activeTab === 'Pricing & Skills') await this.savePricingAndSkills();
     else if (this.isConfigurationTab()) await this.saveConfiguration();
   }
 
@@ -928,6 +946,13 @@ export class StaffPageComponent implements OnInit, OnDestroy {
 
   catalogFor(type: CatalogType) { return this.configuration.catalog.filter((item) => item.itemType === type); }
   get assignedCatalog() { return this.configuration.catalog.filter((item) => item.assigned); }
+  rupees(pricePaise: number | null | undefined) { return pricePaise === null || pricePaise === undefined ? '-' : `₹${(pricePaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`; }
+
+  private nonNegativeNumber(value: string) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) throw new Error('Enter a valid price');
+    return number;
+  }
 
   addCommissionRule() {
     this.configuration.commissionRules.push({ name: '', appliesTo: 'all', ratePercent: null, effectiveFrom: '', active: true });
@@ -955,6 +980,20 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  async savePricingAndSkills() {
+    if (!this.editingId) return;
+    this.configurationError = '';
+    this.configurationSaving = true;
+    try {
+      await this.saveProfile(this.editingId);
+      await this.saveConfigurationFor(this.editingId);
+    } catch (error) {
+      this.configurationError = error instanceof Error ? error.message : 'Unable to save pricing and skills';
+    } finally {
+      this.configurationSaving = false;
+    }
+  }
+
   private applyStaff(staff: StaffRecord) {
     this.selectedBranchId = staff.branchId;
     this.form = {
@@ -967,7 +1006,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
 
   private staffPayload(firstName: string) {
     return {
-      ...this.form, employeeCode: this.form.employeeCode.trim() || undefined, firstName,
+      ...this.form, employeeCode: this.editingId ? this.form.employeeCode.trim() || undefined : undefined, firstName,
       middleName: this.form.middleName.trim(), lastName: this.form.lastName.trim(),
       appointmentDisplayName: this.form.appointmentDisplayName.trim() || firstName, email: this.form.email.trim(),
       mobilePhone: this.form.mobilePhone.trim(), homePhone: this.form.homePhone.trim(), workPhone: this.form.workPhone.trim(),
@@ -978,7 +1017,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   private async saveProfile(staffId: string) {
     const workTasks = this.profileForm.workTasks.split(',').map((task) => task.trim()).filter(Boolean);
     const result = await firstValueFrom(this.api.patch<ApiEnvelope<StaffProfileResponse>>(`/staff/${staffId}/profile`, {
-      categoryId: this.profileForm.categoryId || null, shiftTemplateId: this.profileForm.shiftTemplateId || null,
+      categoryId: this.profileForm.categoryId || null, shiftTemplateId: this.profileForm.shiftTemplateId || null, pricingLevelId: this.profileForm.pricingLevelId || null,
       designation: this.profileForm.designation.trim(), companyName: this.profileForm.companyName.trim(),
       mandatoryBreakMinutes: this.profileForm.mandatoryBreakMinutes, workTasks, maxWorkHours: this.profileForm.maxWorkHours,
       targetRevenuePaise: this.profileForm.targetRevenue === null ? null : Math.round(this.profileForm.targetRevenue * 100),
@@ -1002,7 +1041,10 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   private applyConfiguration(data: StaffConfigurationResponse) {
     this.configuration = {
       roles: data.roles,
-      catalog: data.catalog,
+      catalog: data.catalog.map((item) => ({
+        ...item,
+        pricingLevelPrice: item.pricingLevelPricePaise === null || item.pricingLevelPricePaise === undefined ? '' : String(item.pricingLevelPricePaise / 100),
+      })),
       commissionRules: data.commissionRules.map((rule) => ({ ...rule, effectiveFrom: rule.effectiveFrom || '' })),
       payRates: data.payRates.map((rate) => ({
         id: rate.id, rateType: rate.rateType, amount: rate.amountPaise / 100,
@@ -1020,6 +1062,9 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       roleIds: this.configuration.roles.filter((role) => role.assigned).map((role) => role.id),
       catalogAssignments: this.configuration.catalog.filter((item) => item.assigned).map((item) => ({
         itemType: item.itemType, itemId: item.id, commissionPercent: item.commissionPercent,
+        pricingLevelPricePaise: item.itemType === 'service' && item.pricingLevelPrice?.trim()
+          ? Math.round(this.nonNegativeNumber(item.pricingLevelPrice) * 100)
+          : null,
       })),
       commissionRules: this.configuration.commissionRules.map((rule) => ({
         name: rule.name.trim(), appliesTo: rule.appliesTo, ratePercent: rule.ratePercent,
@@ -1134,7 +1179,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   private async uploadStaffFile(file: File, kind: 'photo' | 'document') {
     if (!file.size || file.size > 5 * 1024 * 1024) throw new Error('File must be 5 MB or smaller');
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowed.includes(file.type) || kind === 'photo' && !file.type.startsWith('image/')) throw new Error('Unsupported file type');
+    if (!allowed.includes(file.type) || kind === 'photo' && !['image/jpeg', 'image/png'].includes(file.type)) throw new Error('Photo must be JPG or PNG');
     const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffFileUpload>>(
       `/staff/${this.editingId}/files?kind=${kind}&fileName=${encodeURIComponent(file.name)}`,
       file,
@@ -1149,6 +1194,26 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       const blob = await firstValueFrom(this.api.getBlob(url));
       this.setPhotoPreview(URL.createObjectURL(blob), true);
     } catch { this.setPhotoPreview(''); }
+  }
+
+  previewPhotoUrl() {
+    this.profileError = '';
+    const url = this.profileForm.photoUrl.trim();
+    if (!this.isSupportedPhotoUrl(url)) {
+      this.setPhotoPreview('');
+      this.profileError = 'Photo URL must point directly to a JPG or PNG image.';
+      return;
+    }
+    void this.loadPhotoPreview(url);
+  }
+
+  handlePhotoPreviewError() {
+    this.setPhotoPreview('');
+    this.profileError = 'Use a direct JPG or PNG image URL, or upload the photo.';
+  }
+
+  private isSupportedPhotoUrl(url: string) {
+    return !url || url.startsWith('/staff/files/') || /\.(?:jpe?g|png)(?:[?#]|$)/i.test(url);
   }
 
   private setPhotoPreview(url: string, objectUrl = false) {
@@ -1584,6 +1649,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   private applyMasters(data: StaffMasters) {
     this.masters = {
       categories: data.categories || [],
+      pricingLevels: (data.pricingLevels || []).map((item) => ({ ...item, rank: item.rank ?? 0 })),
       shiftTemplates: (data.shiftTemplates || []).map((item) => ({
         ...item,
         shift1Start: item.shift1Start?.slice(0, 5) || '',

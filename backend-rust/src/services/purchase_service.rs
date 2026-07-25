@@ -361,6 +361,7 @@ pub async fn receive(
             &saved.id,
             line.quantity,
             line.unit_cost_paise,
+            line.next_stock,
         )
         .await
         .map_err(|_| AppError::internal("failed to write GRN stock ledger"))?;
@@ -820,6 +821,7 @@ pub async fn create_return(
             &return_line_id,
             quantity,
             line.unit_cost_paise,
+            next_stock,
         )
         .await
         .map_err(|_| AppError::internal("failed to write purchase return stock ledger"))?;

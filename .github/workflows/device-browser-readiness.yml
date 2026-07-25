@@ -1,0 +1,201 @@
+name: Device and browser readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_state_changing:
+        description: Run appointment, paid invoice, and staff branch write tests
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    - cron: '30 20 * * 1-5'
+  workflow_call:
+    inputs:
+      run_state_changing:
+        description: Run appointment, paid invoice, and staff branch write tests
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-browser-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+  E2E_TENANT_CONTEXT: ${{ secrets.E2E_TENANT_CONTEXT }}
+  E2E_LOGIN_ID: ${{ secrets.E2E_LOGIN_ID }}
+  E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+  E2E_MFA_CODE: ${{ secrets.E2E_MFA_CODE }}
+  E2E_BRANCH_NAME: ${{ vars.E2E_BRANCH_NAME }}
+  E2E_SECOND_BRANCH_NAME: ${{ vars.E2E_SECOND_BRANCH_NAME }}
+  E2E_CLIENT_QUERY: ${{ vars.E2E_CLIENT_QUERY }}
+
+jobs:
+  browser-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - android-chrome-4g
+          - android-chrome-slow-4g
+          - iphone-safari-wifi
+          - iphone-safari-slow
+          - tablet-chrome-portrait
+          - tablet-chrome-landscape
+          - tablet-safari-portrait
+          - tablet-safari-landscape
+          - laptop-chrome
+          - laptop-firefox
+    defaults:
+      run:
+        working-directory: frontend-angular
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-angular/package-lock.json
+      - name: Validate staging browser credentials
+        shell: bash
+        run: |
+          test -n "$E2E_BASE_URL" || { echo "E2E_BASE_URL is required"; exit 1; }
+          case "$E2E_BASE_URL" in
+            http://localhost:*|http://127.0.0.1:*|https://*) ;;
+            *) echo "E2E_BASE_URL must use HTTPS outside localhost"; exit 1 ;;
+          esac
+          test -n "$E2E_TENANT_CONTEXT" || { echo "E2E_TENANT_CONTEXT is required"; exit 1; }
+          test -n "$E2E_LOGIN_ID" || { echo "E2E_LOGIN_ID is required"; exit 1; }
+          test -n "$E2E_PASSWORD" || { echo "E2E_PASSWORD is required"; exit 1; }
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npx playwright test --project="${{ matrix.project }}"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.project }}-${{ github.run_attempt }}
+          path: |
+            frontend-angular/playwright-report
+            frontend-angular/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  edge:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend-angular
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-angular/package-lock.json
+      - name: Validate staging browser credentials
+        shell: bash
+        run: |
+          test -n "$E2E_BASE_URL" || { echo "E2E_BASE_URL is required"; exit 1; }
+          case "$E2E_BASE_URL" in
+            http://localhost:*|http://127.0.0.1:*|https://*) ;;
+            *) echo "E2E_BASE_URL must use HTTPS outside localhost"; exit 1 ;;
+          esac
+          test -n "$E2E_TENANT_CONTEXT" || { echo "E2E_TENANT_CONTEXT is required"; exit 1; }
+          test -n "$E2E_LOGIN_ID" || { echo "E2E_LOGIN_ID is required"; exit 1; }
+          test -n "$E2E_PASSWORD" || { echo "E2E_PASSWORD is required"; exit 1; }
+
+      - run: npm ci
+      - run: npx playwright test --project=laptop-edge
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-laptop-edge-${{ github.run_attempt }}
+          path: |
+            frontend-angular/playwright-report
+            frontend-angular/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  pwa-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend-angular
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-angular/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=pwa-chromium
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-pwa-${{ github.run_attempt }}
+          path: |
+            frontend-angular/playwright-report
+            frontend-angular/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  state-changing:
+    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.run_state_changing }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_ALLOW_WRITES: 'true'
+      E2E_SERVICE_QUERY: ${{ vars.E2E_SERVICE_QUERY }}
+      E2E_STAFF_QUERY: ${{ vars.E2E_STAFF_QUERY }}
+      E2E_APPOINTMENT_DATE: ${{ vars.E2E_APPOINTMENT_DATE }}
+      E2E_APPOINTMENT_TIME: ${{ vars.E2E_APPOINTMENT_TIME }}
+      E2E_APPOINTMENT_UPDATE_NOTE: ${{ vars.E2E_APPOINTMENT_UPDATE_NOTE }}
+      E2E_POS_SERVICE: ${{ vars.E2E_POS_SERVICE }}
+      E2E_POS_STAFF: ${{ vars.E2E_POS_STAFF }}
+      E2E_POS_PAYMENT_METHOD: ${{ vars.E2E_POS_PAYMENT_METHOD }}
+    defaults:
+      run:
+        working-directory: frontend-angular
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-angular/package-lock.json
+      - name: Validate staging browser credentials
+        shell: bash
+        run: |
+          test -n "$E2E_BASE_URL" || { echo "E2E_BASE_URL is required"; exit 1; }
+          case "$E2E_BASE_URL" in
+            http://localhost:*|http://127.0.0.1:*|https://*) ;;
+            *) echo "E2E_BASE_URL must use HTTPS outside localhost"; exit 1 ;;
+          esac
+          test -n "$E2E_TENANT_CONTEXT" || { echo "E2E_TENANT_CONTEXT is required"; exit 1; }
+          test -n "$E2E_LOGIN_ID" || { echo "E2E_LOGIN_ID is required"; exit 1; }
+          test -n "$E2E_PASSWORD" || { echo "E2E_PASSWORD is required"; exit 1; }
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=state-changing-chromium
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-state-changing-${{ github.run_attempt }}
+          path: |
+            frontend-angular/playwright-report
+            frontend-angular/test-results
+          if-no-files-found: ignore
+          retention-days: 14

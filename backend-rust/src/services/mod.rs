@@ -13,6 +13,7 @@ pub mod cash_drawer_service;
 pub mod client_service;
 pub mod compliance_provider_service;
 pub mod customer_portal_service;
+pub mod entitlement_service;
 pub mod happy_hours_service;
 pub mod integration_service;
 pub mod inventory_adjustment_service;
@@ -65,3 +66,5 @@ pub mod webauthn_service;
 mod staff_lifecycle_chain_tests;
 
 pub mod inventory_reorder_forecast_service;
+
+pub mod report_export_service;

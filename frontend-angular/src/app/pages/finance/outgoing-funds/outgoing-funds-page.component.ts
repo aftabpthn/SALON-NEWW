@@ -176,11 +176,10 @@ type ReportLine = OutgoingLine & {
 };
 
 @Component({
-  selector: 'page-outgoing-funds',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
-  templateUrl: './outgoing-funds-page.component.html',
-  styleUrls: ['./outgoing-funds-page.component.css'],
+    selector: 'page-outgoing-funds',
+    imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
+    templateUrl: './outgoing-funds-page.component.html',
+    styleUrls: ['./outgoing-funds-page.component.css']
 })
 export class OutgoingFundsPageComponent implements OnInit {
   private readonly api = inject(ApiService);

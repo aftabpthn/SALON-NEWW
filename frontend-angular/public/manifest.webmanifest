@@ -1,0 +1,18 @@
+{
+  "name": "AuraShine CRM",
+  "short_name": "AuraShine",
+  "description": "AuraShine Salon CRM",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#12345b",
+  "icons": [
+    {
+      "src": "icons/aurashine.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

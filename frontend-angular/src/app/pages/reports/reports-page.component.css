@@ -50,3 +50,55 @@ h1,h2,h3,p { margin:0; } h1 { margin:0 0 12px; font-size:19px; } .reports-nav h2
 
 .reports-nav button:focus-visible,.search-box input:focus-visible,.profit-workspace button:focus-visible,.profit-workspace input:focus-visible,.profit-workspace select:focus-visible,.profit-workspace textarea:focus-visible,.action-drawer button:focus-visible,.action-drawer input:focus-visible,.action-drawer select:focus-visible,.action-drawer textarea:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
 @media (max-width:700px) { .action-drawer { width:calc(100vw - 48px); } }
+
+@media (max-width: 700px) {
+  .action-drawer,
+  .drill-drawer {
+    width: 100vw;
+    max-width: none;
+  }
+
+  .reports-catalog > header,
+  .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .catalog-actions,
+  .custom-actions,
+  .profit-filters,
+  .drawer-date-grid {
+    width: 100%;
+  }
+
+  .drawer-date-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-nav button,
+  .catalog-actions button,
+  .custom-actions button,
+  .profit-workspace button,
+  .profit-workspace select,
+  .action-drawer button,
+  .action-drawer select,
+  .action-drawer input {
+    min-height: 44px;
+  }
+
+  .action-drawer header > button {
+    width: 44px;
+  }
+
+  .table-wrap {
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x pan-y;
+  }
+}
+
+@media (max-width: 480px) {
+  .custom-builder,
+  .lineage-grid {
+    grid-template-columns: 1fr;
+  }
+}

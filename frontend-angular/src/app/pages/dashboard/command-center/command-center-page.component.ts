@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'actions' | 'inventory' | 'inventory-controls' | 'security' | 'staff' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
+type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'actions' | 'inventory-command' | 'security' | 'staff' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
 
 type DashboardSnapshot = {
   totalAppointments: number;
@@ -93,33 +93,86 @@ type ProfitAction = {
   status: string;
 };
 
-type ReorderSuggestion = {
-  productId: string;
-  productName: string;
-  currentStock: number;
-  reorderLevel: number;
-  suggestedQuantity: number;
-  priority: string;
-  estimatedValuePaise: number;
-};
-
-type InventoryControlException = {
+type InventoryCommandSignal = {
+  key: string;
+  group: 'stock' | 'flow' | 'governance';
+  label: string;
+  detail: string;
   severity: string;
-  control: string;
-  title: string;
-  valuePaise: number;
-  status: string;
+  metric: 'money' | 'count' | 'percent';
+  metricValue: number;
+  route: string;
+  actionLabel: string;
 };
 
-type InventoryAdvancedControls = {
+type InventoryExceptionRecommendation = {
+  key: string;
+  category: string;
+  evidenceHash: string;
+  severity: string;
+  title: string;
+  explanation: string;
+  recommendedAction: string;
+  confidenceBps: number;
+  evidence: Record<string, unknown>;
+  route: string;
+  approval: { required: boolean; status: string; mode: string; route: string; reviewedBy?: string; reviewedAt?: string; reviewNote: string };
+};
+
+type InventoryTransferOptimization = {
+  sourceBranchId: string;
+  sourceBranchName: string;
+  destinationBranchId: string;
+  destinationBranchName: string;
+  sourceInventoryItemId: string;
+  destinationInventoryItemId: string;
+  productName: string;
+  sku: string;
+  suggestedQuantity: number;
+  sourceStockQuantity: number;
+  sourceSafeQuantity: number;
+  destinationStockQuantity: number;
+  destinationTargetQuantity: number;
+  coverageTargetDays: number;
+  sourceCoverageDaysAfter?: number;
+  destinationCoverageDaysAfter?: number;
+  earliestBatchNumber?: string;
+  earliestExpiryDate?: string;
+  distanceKm?: number;
+  stockTransferCostPaise?: number;
+  transportCostPaise?: number;
+  handlingCostPaise?: number;
+  delayCostPaise?: number;
+  estimatedTransferCostPaise?: number;
+  estimatedPurchaseCostPaise?: number;
+  savingsPaise?: number;
+  costDecision: string;
+  sourceSafe: boolean;
+  ownerApprovalRequired: boolean;
+  approvalReason: string;
+};
+
+type InventoryCommandCenter = {
   summary: {
-    critical: number;
-    warnings: number;
-    pendingApprovals: number;
-    expiryAlerts: number | null;
+    totalStockValuePaise: number;
+    stockoutRisk: number;
+    overstockRisk: number;
+    expiryRisk: number;
     deadStock: number;
+    openPurchaseOrders: number;
+    inTransitStock: number;
+    consumptionVarianceQuantity: number;
+    consumptionVarianceBps: number;
+    auditExceptions: number;
+    glMismatchPaise: number;
+    pendingApprovals: number;
+    supplierRisk: number;
+    transferOpportunities: number;
   };
-  exceptionRows: InventoryControlException[];
+  signals: InventoryCommandSignal[];
+  recommendations: InventoryExceptionRecommendation[];
+  transferOpportunities: InventoryTransferOptimization[];
+  generatedAt: string;
 };
 
 type SecuritySummary = {
@@ -324,11 +377,10 @@ const EMPTY_SNAPSHOT: DashboardSnapshot = {
 };
 
 @Component({
-  selector: 'page-command-center',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
-  templateUrl: './command-center-page.component.html',
-  styleUrls: ['./command-center-page.component.css'],
+    selector: 'page-command-center',
+    imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
+    templateUrl: './command-center-page.component.html',
+    styleUrls: ['./command-center-page.component.css']
 })
 export class CommandCenterPageComponent implements OnInit {
   private readonly api = inject(ApiService);
@@ -339,8 +391,9 @@ export class CommandCenterPageComponent implements OnInit {
   advancedProfit: AdvancedProfit | null = null;
   dues: DueRecovery[] = [];
   actions: ProfitAction[] = [];
-  reorderSuggestions: ReorderSuggestion[] = [];
-  inventoryControls: InventoryAdvancedControls | null = null;
+  inventoryCommand: InventoryCommandCenter | null = null;
+  inventoryRecommendationBusy = '';
+  inventoryRecommendationError = '';
   security: SecuritySummary | null = null;
   staff: StaffCommandCenter | null = null;
   paymentModes: PaymentMode[] = [];
@@ -387,7 +440,7 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get branchLabel(): string {
-    return this.auth.branchName || this.auth.branchId || 'Branch scope';
+    return this.auth.branchName || 'Branch scope';
   }
 
   get workspaceLabel(): string {
@@ -401,6 +454,10 @@ export class CommandCenterPageComponent implements OnInit {
   get canReadInventory(): boolean {
     return this.auth.hasRole('owner', 'admin', 'manager', 'analyst')
       || this.auth.hasPermission('inventory.read', 'inventory.manage', 'tenant.read');
+  }
+
+  get canApproveInventory(): boolean {
+    return this.auth.hasRole('owner', 'admin') || this.auth.hasPermission('inventory.approve');
   }
 
   get canReadPaymentControls(): boolean {
@@ -465,16 +522,57 @@ export class CommandCenterPageComponent implements OnInit {
     return (this.staff?.topStaff ?? []).slice(0, 5);
   }
 
-  get topReorderSuggestions(): ReorderSuggestion[] {
-    return this.reorderSuggestions.slice(0, 5);
+  get inventoryStockSignals(): InventoryCommandSignal[] {
+    return this.inventorySignals('stock');
   }
 
-  get reorderValuePaise(): number {
-    return this.reorderSuggestions.reduce((total, row) => total + Number(row.estimatedValuePaise || 0), 0);
+  get inventoryFlowSignals(): InventoryCommandSignal[] {
+    return this.inventorySignals('flow');
   }
 
-  get topInventoryExceptions(): InventoryControlException[] {
-    return (this.inventoryControls?.exceptionRows ?? []).slice(0, 5);
+  get inventoryGovernanceSignals(): InventoryCommandSignal[] {
+    return this.inventorySignals('governance');
+  }
+
+  get inventoryRecommendations(): InventoryExceptionRecommendation[] {
+    return (this.inventoryCommand?.recommendations ?? []).slice(0, 9);
+  }
+
+  get inventoryTransferOptimizations(): InventoryTransferOptimization[] {
+    return (this.inventoryCommand?.transferOpportunities ?? []).slice(0, 6);
+  }
+
+  inventorySignalValue(signal: InventoryCommandSignal): string {
+    if (signal.metric === 'money') return this.money(signal.metricValue);
+    if (signal.metric === 'percent') return `${(Number(signal.metricValue || 0) / 100).toFixed(1)}%`;
+    return String(signal.metricValue || 0);
+  }
+
+  inventoryConfidence(value: number): string {
+    return `${(Number(value || 0) / 100).toFixed(0)}% confidence`;
+  }
+
+  inventoryCoverage(value?: number): string {
+    return value === undefined || value === null ? 'No usage history' : `${value.toFixed(1)} days`;
+  }
+
+  reviewInventoryRecommendation(recommendation: InventoryExceptionRecommendation, decision: 'approve' | 'reject'): void {
+    if (!this.canApproveInventory || this.inventoryRecommendationBusy) return;
+    const reviewNote = decision === 'reject'
+      ? window.prompt('Rejection reason')?.trim()
+      : '';
+    if (decision === 'reject' && !reviewNote) return;
+    if (!window.confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} this recommendation?`)) return;
+    this.inventoryRecommendationError = '';
+    this.inventoryRecommendationBusy = recommendation.key;
+    this.api.post(`/api/v1/inventory/exception-recommendations/${encodeURIComponent(recommendation.key)}/review`, {
+      evidenceHash: recommendation.evidenceHash,
+      decision,
+      reviewNote: reviewNote || '',
+    }).pipe(finalize(() => (this.inventoryRecommendationBusy = ''))).subscribe({
+      next: () => this.loadControls(),
+      error: (error) => { this.inventoryRecommendationError = this.apiError(error, 'Unable to review recommendation'); },
+    });
   }
 
   get topPaymentModes(): PaymentMode[] {
@@ -784,21 +882,17 @@ export class CommandCenterPageComponent implements OnInit {
     this.controlsLoading = true;
     forkJoin({
       actions: this.optional('actions', this.api.get<ApiEnvelope<ProfitAction[]> | ProfitAction[]>('/api/v1/profit-intelligence/actions?status=active&priority=high&limit=200')),
-      inventory: this.canReadInventory
-        ? this.optional('inventory', this.api.get<ApiEnvelope<ReorderSuggestion[]> | ReorderSuggestion[]>('/api/v1/inventory/reorder-suggestions'))
-        : of(null),
-      inventoryControls: this.canReadInventory
-        ? this.optional('inventory-controls', this.api.get<ApiEnvelope<InventoryAdvancedControls> | InventoryAdvancedControls>('/api/v1/inventory/advanced-controls'))
+      inventoryCommand: this.canReadInventory
+        ? this.optional('inventory-command', this.api.get<ApiEnvelope<InventoryCommandCenter> | InventoryCommandCenter>('/api/v1/inventory/command-center'))
         : of(null),
       security: this.canReadSecurity
         ? this.optional('security', this.api.get<ApiEnvelope<SecuritySummary> | SecuritySummary>('/api/v1/security/summary'))
         : of(null),
-    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventory, inventoryControls, security }) => {
+    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventoryCommand, security }) => {
       this.actions = this.unwrap(actions) ?? [];
-      this.reorderSuggestions = this.unwrap(inventory) ?? [];
-      this.inventoryControls = this.unwrap(inventoryControls) ?? null;
+      this.inventoryCommand = this.unwrap(inventoryCommand) ?? null;
       this.security = this.unwrap(security) ?? null;
-      if (actions || inventory || inventoryControls || security) this.touch();
+      if (actions || inventoryCommand || security) this.touch();
     });
   }
 
@@ -899,6 +993,10 @@ export class CommandCenterPageComponent implements OnInit {
 
   private touch(): void {
     this.updatedAt = new Date();
+  }
+
+  private inventorySignals(group: InventoryCommandSignal['group']): InventoryCommandSignal[] {
+    return (this.inventoryCommand?.signals ?? []).filter((signal) => signal.group === group);
   }
 
   private uniqueLocationValues(

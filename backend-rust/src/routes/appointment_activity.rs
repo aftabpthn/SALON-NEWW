@@ -541,15 +541,38 @@ async fn fetch_activity_rows(
         query.tenant_id.as_deref(),
         query.branch_id.as_deref(),
     );
+    let from = query
+        .from
+        .as_deref()
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&Utc));
+    let to = query
+        .to
+        .as_deref()
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&Utc));
+    let action = query.action.clone().unwrap_or_default();
+    let limit = query
+        .limit
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_ACTIVITY_LIMIT)
+        .min(DEFAULT_ACTIVITY_LIMIT);
     let mut rows = sqlx::query(
         "SELECT aa.id, aa.tenant_id, aa.appointment_id, aa.action, aa.old_status, aa.new_status, aa.reason, aa.created_at
          FROM appointment_activity aa
-         INNER JOIN appointments a ON a.id = aa.appointment_id AND a.tenant_id = aa.tenant_id
-         WHERE aa.tenant_id=$1 AND a.branch_id=$2
-         ORDER BY created_at DESC LIMIT 2000",
+          INNER JOIN appointments a ON a.id = aa.appointment_id AND a.tenant_id = aa.tenant_id
+          WHERE aa.tenant_id=$1 AND a.branch_id=$2
+            AND ($3::timestamptz IS NULL OR aa.created_at >= $3)
+            AND ($4::timestamptz IS NULL OR aa.created_at <= $4)
+            AND ($5 = '' OR aa.action = $5)
+          ORDER BY created_at DESC LIMIT $6",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(from)
+    .bind(to)
+    .bind(&action)
+    .bind(limit)
     .fetch_all(&state.db)
     .await
     .map_err(|_| ApiError::internal("failed to read appointment activity"))?;
@@ -557,25 +580,6 @@ async fn fetch_activity_rows(
     let mut out = Vec::new();
     for row in rows.drain(..) {
         let created: DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
-        if let Some(from) = query.from.as_ref() {
-            if let Ok(from_dt) = DateTime::parse_from_rfc3339(from) {
-                if created < from_dt.with_timezone(&Utc) {
-                    continue;
-                }
-            }
-        }
-        if let Some(to) = query.to.as_ref() {
-            if let Ok(to_dt) = DateTime::parse_from_rfc3339(to) {
-                if created > to_dt.with_timezone(&Utc) {
-                    continue;
-                }
-            }
-        }
-        if let Some(action) = query.action.as_ref() {
-            if row.try_get::<String, _>("action").ok().unwrap_or_default() != *action {
-                continue;
-            }
-        }
         let appointment_id = row
             .try_get::<String, _>("appointment_id")
             .unwrap_or_default();
@@ -589,13 +593,6 @@ async fn fetch_activity_rows(
             reason: row.try_get("reason").unwrap_or_default(),
             created_at: created.to_rfc3339(),
         });
-        if let Some(limit) = query.limit {
-            if out.len() as i64 >= limit.min(DEFAULT_ACTIVITY_LIMIT) {
-                break;
-            }
-        } else if out.len() as i64 >= DEFAULT_ACTIVITY_LIMIT {
-            break;
-        }
     }
     Ok(out)
 }

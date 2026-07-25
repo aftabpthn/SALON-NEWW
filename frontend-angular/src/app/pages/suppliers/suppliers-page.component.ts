@@ -1,5 +1,5 @@
 import { LanguageService } from '../../core/i18n/language.service';
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
@@ -36,11 +36,10 @@ type View = 'register' | 'compliance' | 'price';
 type QuickFilter = 'all' | 'gstin' | 'openPo';
 
 @Component({
-  selector: 'page-suppliers',
-  standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe],
-  templateUrl: './suppliers-page.component.html',
-  styleUrls: ['./suppliers-page.component.css'],
+    selector: 'page-suppliers',
+    imports: [FormsModule, TranslatePipe],
+    templateUrl: './suppliers-page.component.html',
+    styleUrls: ['./suppliers-page.component.css']
 })
 export class SuppliersPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
@@ -105,28 +104,31 @@ export class SuppliersPageComponent implements OnInit {
   async reload() {
     this.loading = true;
     this.error = '';
+    this.ordersLoaded = false;
     try {
-      const suppliers = await this.get<Supplier[]>('/purchases/suppliers');
-      this.suppliers = suppliers;
-      try {
-        [this.orders, this.payables] = await Promise.all([
-          this.get<PurchaseOrder[]>('/purchases/orders'),
-          this.get<Payable[]>('/purchases/payables'),
-        ]);
-        this.ordersLoaded = true;
-      } catch {
-        this.orders = [];
-        this.payables = [];
-        this.ordersLoaded = false;
-      }
+      this.suppliers = await this.get<Supplier[]>('/purchases/suppliers');
+      this.loading = false;
+      void this.loadMetrics();
     } catch (error) {
       this.suppliers = [];
       this.orders = [];
       this.payables = [];
       this.ordersLoaded = false;
       this.error = this.message(error, this.language.text('inventory.message.b4783cda79'));
-    } finally {
       this.loading = false;
+    }
+  }
+
+  private async loadMetrics() {
+    try {
+      [this.orders, this.payables] = await Promise.all([
+        this.get<PurchaseOrder[]>('/purchases/orders?page=1&pageSize=50&withCount=false'),
+        this.get<Payable[]>('/purchases/payables?page=1&pageSize=50&withCount=false'),
+      ]);
+      this.ordersLoaded = true;
+    } catch {
+      this.orders = [];
+      this.payables = [];
     }
   }
 
@@ -258,3 +260,4 @@ export class SuppliersPageComponent implements OnInit {
     };
   }
 }
+

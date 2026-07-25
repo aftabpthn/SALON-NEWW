@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom, Observable } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 
 type WorkspaceTab = 'Timeline' | 'Profile' | 'Insights' | 'Growth' | 'Clinical' | 'Consent' | 'Forms' | 'Communications' | 'Reports' | 'Masters';
 type TimelineType = 'Appointments' | 'Invoices' | 'Services' | 'Payments' | 'Wallet' | 'Loyalty' | 'Memberships' | 'Packages' | 'WhatsApp' | 'Notes' | 'Custom forms' | 'Consent' | 'Reviews' | 'Audit activity';
@@ -35,6 +36,11 @@ type ClientRow = {
   categories: string[];
   center: string;
   notes: string;
+  walletBalancePaise: number;
+  loyaltyPoints: number;
+  lifetimeValuePaise: number;
+  totalVisits: number;
+  tier: string;
   active: boolean;
   duplicateCount: number;
   preferredStaffId: string;
@@ -50,16 +56,16 @@ type ClientRow = {
 type ClientCredit = { id: string; membershipName?: string; packageName?: string; serviceName: string; pendingQty: number; totalQty: number; expiresAt?: string; unitValuePaise?: number };
 type ClientMembership = { id: string; membershipName: string; assignedAt: string; expiresAt?: string; remainingCredits: number; status: string };
 type TimelineStep = { label: string; occurredAt: string; icon: string };
-type TimelineEvent = { id: string; type: TimelineType; title: string; detail: string; occurredAt: string; icon: string; amountPaise?: number; status?: string; groupId?: string; tipPaise?: number; balancePaise?: number; grouped?: boolean; steps?: TimelineStep[]; children?: TimelineEvent[] };
+type TimelineLine = { lineType: 'service' | 'product'; itemName: string; quantity: number; lineTotalPaise: number; staffName: string };
+type TimelineEvent = { id: string; type: TimelineType; title: string; detail: string; occurredAt: string; icon: string; amountPaise?: number; status?: string; groupId?: string; tipPaise?: number; balancePaise?: number; lineItems?: TimelineLine[]; grouped?: boolean; steps?: TimelineStep[]; children?: TimelineEvent[] };
 type RetentionSnapshot = { giftCards: any[]; loyalty: { pointsBalance: number; currentTier: any; nextTier: any; pointsToNextTier: number | null; enabled: boolean }; rewardLedger: any[]; referralCode: any; referrals: any[]; referredBy: any };
 type GiftCardRow = { id: string; code: string; clientId: string; clientName: string; initialAmountPaise: number; balancePaise: number; status: string; expiresAt?: string; sourceSaleId: string; createdAt: string };
 
 @Component({
-  selector: 'page-clients',
-  standalone: true,
-  imports: [CommonModule, FormsModule, DatePickerComponent],
-  templateUrl: './clients-page.component.html',
-  styleUrls: ['./clients-page.component.css'],
+    selector: 'page-clients',
+    imports: [CommonModule, FormsModule, DatePickerComponent, BranchNamePipe],
+    templateUrl: './clients-page.component.html',
+    styleUrls: ['./clients-page.component.css']
 })
 export class ClientsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
@@ -1600,6 +1606,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       groupId: row?.groupId ? String(row.groupId) : undefined,
       tipPaise: tip === null || tip === undefined ? undefined : Number(tip),
       balancePaise: balance === null || balance === undefined ? undefined : Number(balance),
+      lineItems: Array.isArray(row?.lineItems) ? row.lineItems.map((line: any) => ({
+        lineType: line?.lineType === 'product' ? 'product' : 'service', itemName: String(line?.itemName || ''),
+        quantity: Number(line?.quantity) || 0, lineTotalPaise: Number(line?.lineTotalPaise) || 0, staffName: String(line?.staffName || 'Unassigned'),
+      })).filter((line: TimelineLine) => line.itemName) : [],
     };
   }
 
@@ -1640,6 +1650,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       status: appointment.status || invoice?.status,
       tipPaise: tipPaise || undefined,
       balancePaise: balancePaise || undefined,
+      lineItems: invoice?.lineItems,
       grouped: true,
       steps: this.appointmentSteps(rows),
       children: rows.filter((event) => event.type !== 'Appointments'),
@@ -1700,6 +1711,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   private toClientRow(client: any): ClientRow {
     const firstName = String(client?.firstName || '');
     const lastName = String(client?.lastName || '');
+    const lifetimeValuePaise = Number(client?.lifetimeValuePaise ?? client?.totalSpendPaise ?? client?.total_spend_paise ?? (Number(client?.totalSpend ?? 0) * 100)) || 0;
     return {
       id: String(client?.id || ''), code: String(client?.code || ''), firstName, lastName,
       name: `${firstName} ${lastName}`.trim() || String(client?.code || ''), phone: String(client?.phone || ''), email: String(client?.email || ''),
@@ -1707,6 +1719,11 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       lastVisit: String(client?.lastVisitAt || ''), birthday: String(client?.birthday || ''), anniversary: String(client?.anniversary || ''),
       membership: String(client?.membershipLabel || ''), categories: Array.isArray(client?.categories) ? client.categories.map(String) : [],
       center: String(client?.branchId || ''), notes: String(client?.notes || ''), active: client?.active !== false,
+      walletBalancePaise: Number(client?.walletBalancePaise ?? client?.walletPaise ?? client?.wallet_balance_paise ?? 0) || 0,
+      loyaltyPoints: Number(client?.loyaltyPoints ?? client?.rewardPoints ?? client?.rewardPointsBalance ?? 0) || 0,
+      lifetimeValuePaise,
+      totalVisits: Number(client?.totalVisits ?? client?.visitCount ?? client?.visit_count ?? 0) || 0,
+      tier: String(client?.tier || client?.clientTier || client?.loyaltyTier || ''),
       duplicateCount: Number(client?.duplicateCount) || 0, preferredStaffId: String(client?.preferredStaffId || ''), preferredStaffName: String(client?.preferredStaffName || ''),
       preferredCommunicationChannel: String(client?.preferredCommunicationChannel || 'none'), whatsappOptIn: this.nullableBool(client?.whatsappOptIn), smsOptIn: this.nullableBool(client?.smsOptIn), emailOptIn: this.nullableBool(client?.emailOptIn),
       createdAt: String(client?.createdAt || ''), updatedAt: String(client?.updatedAt || ''),

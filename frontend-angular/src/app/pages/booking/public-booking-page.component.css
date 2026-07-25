@@ -774,3 +774,10 @@ small {
   min-height: 65px;
   overflow: hidden;
 }
+
+@media (max-width: 720px) {
+  .reschedule-drawer { width: 100vw; }
+  .reschedule-drawer button,
+  .reschedule-drawer input:not([type='checkbox']):not([type='radio']),
+  .reschedule-drawer select { min-height: 44px; }
+}

@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -17,11 +17,10 @@ interface TipRow {
 }
 
 @Component({
-  selector: 'app-pos-tips-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './pos-tips-page.component.html',
-  styleUrls: ['./pos-tips-page.component.css'],
+    selector: 'app-pos-tips-page',
+    imports: [FormsModule, RouterLink],
+    templateUrl: './pos-tips-page.component.html',
+    styleUrls: ['./pos-tips-page.component.css']
 })
 export class PosTipsPageComponent implements OnInit {
   tips: TipRow[] = [];

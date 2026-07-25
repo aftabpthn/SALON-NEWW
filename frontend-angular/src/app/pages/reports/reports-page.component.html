@@ -1,229 +1,478 @@
 <section class="reports-page" [class.profit-mode]="profitOpen || customOpen || liveOpen">
-  <aside class="reports-nav" aria-label="Report views" *ngIf="!profitOpen && !customOpen && !liveOpen">
-    <h1>Reports</h1>
-    <button type="button" [class.active]="activeView === 'all' && !activeCategory" (click)="activeView = 'all'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5" /></svg>All Reports</button>
-    <button type="button" [class.active]="activeView === 'favourites'" (click)="activeView = 'favourites'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg>Favourite Reports</button>
-    <div class="nav-divider"></div>
-    <h2>Categories</h2>
-    <button type="button" *ngFor="let category of categoryNames" [class.active]="activeCategory === category" (click)="selectCategory(category)"><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category)" /></svg>{{ category }}</button>
-  </aside>
+  @if (!profitOpen && !customOpen && !liveOpen) {
+    <aside class="reports-nav" aria-label="Report views">
+      <h1>Reports</h1>
+      <button type="button" [class.active]="activeView === 'all' && !activeCategory" (click)="activeView = 'all'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5" /></svg>All Reports</button>
+      <button type="button" [class.active]="activeView === 'favourites'" (click)="activeView = 'favourites'; activeCategory = ''"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg>Favourite Reports</button>
+      <div class="nav-divider"></div>
+      <h2>Categories</h2>
+      @for (category of categoryNames; track category) {
+        <button type="button" [class.active]="activeCategory === category" (click)="selectCategory(category)"><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category)" /></svg>{{ category }}</button>
+      }
+    </aside>
+  }
 
   <main class="reports-catalog">
-    <ng-container *ngIf="!profitOpen && !customOpen && !liveOpen; else reportWorkspace">
+    @if (!profitOpen && !customOpen && !liveOpen) {
       <header><h2>{{ activeCategory || (activeView === 'all' ? 'All Reports' : 'Favourite Reports') }}</h2><div class="catalog-actions"><span>{{ reports.length }} reports</span><button type="button" class="primary-button" (click)="openCustomWorkspace()">Custom BI</button></div></header>
       <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg><input type="search" [(ngModel)]="search" placeholder="Search reports" aria-label="Search reports" /></label>
-      <p class="state" *ngIf="loading">Loading reports...</p>
-      <p class="state error" *ngIf="error">{{ error }}</p>
-      <p class="state" *ngIf="!loading && !error && !categories.length">No reports yet</p>
-
-      <section class="report-category" *ngFor="let category of categories">
-        <button class="category-header" type="button" (click)="toggleCategory(category.name)" [attr.aria-expanded]="!isCollapsed(category.name)">
-          <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true" [class.collapsed]="isCollapsed(category.name)"><path d="m7 9 5 5 5-5" /></svg><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category.name)" /></svg>{{ category.name }}<small>{{ category.reports.length }}</small>
-        </button>
-        <div class="report-grid" *ngIf="!isCollapsed(category.name)">
-          <article class="report-card openable" *ngFor="let report of category.reports" (click)="openReport(report)">
-            <div><div class="report-heading"><span class="report-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="reportIcon(report.icon)" /></svg></span><h3>{{ report.title }}</h3></div><p>{{ report.description }}</p></div>
-            <button class="favourite" type="button" (click)="$event.stopPropagation(); toggleFavourite(report.id)" [attr.aria-label]="isFavourite(report.id) ? 'Remove from favourites' : 'Add to favourites'" [class.saved]="isFavourite(report.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg></button>
+      @if (loading) {
+        <p class="state">Loading reports...</p>
+      }
+      @if (error) {
+        <p class="state error">{{ error }}</p>
+      }
+      @if (!loading && !error && !categories.length) {
+        <p class="state">No reports yet</p>
+      }
+      @for (category of categories; track category.name) {
+        <section class="report-category">
+          <button class="category-header" type="button" (click)="toggleCategory(category.name)" [attr.aria-expanded]="!isCollapsed(category.name)">
+            <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true" [class.collapsed]="isCollapsed(category.name)"><path d="m7 9 5 5 5-5" /></svg><svg class="category-glyph" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="categoryIcon(category.name)" /></svg>{{ category.name }}<small>{{ category.reports.length }}</small>
+          </button>
+          @if (!isCollapsed(category.name)) {
+            <div class="report-grid">
+              @for (report of category.reports; track report.id) {
+                <article class="report-card openable" (click)="openReport(report)">
+                  <div><div class="report-heading"><span class="report-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="reportIcon(report.icon)" /></svg></span><h3>{{ report.title }}</h3></div><p>{{ report.description }}</p></div>
+                  <button class="favourite" type="button" (click)="$event.stopPropagation(); toggleFavourite(report.id)" [attr.aria-label]="isFavourite(report.id) ? 'Remove from favourites' : 'Add to favourites'" [class.saved]="isFavourite(report.id)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z" /></svg></button>
+                </article>
+              }
+            </div>
+          }
+        </section>
+      }
+    } @else {
+      @if (liveOpen) {
+        @if (liveState; as live) {
+          <section class="custom-workspace">
+            <header class="profit-command">
+              <div class="profit-title"><button type="button" class="back-button" (click)="closeLiveReport()">Back</button><div><span>LIVE REPORT</span><h1>{{ live.report.title }}</h1></div></div>
+              <div class="custom-actions"><as-date-picker ariaLabel="Live report from date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="Live report to date" [(value)]="toDate"></as-date-picker><button type="button" class="primary-button" (click)="openLiveReport(live.report)" [disabled]="liveLoading">{{ liveLoading ? 'Loading...' : 'Run Report' }}</button></div>
+            </header>
+            @if (liveError) {
+              <p class="inline-error">{{ liveError }}</p>
+            }
+            <article class="profit-panel">
+              <div class="panel-heading"><div><span>REAL DATA</span><h2>{{ live.report.path }}</h2></div><small>{{ live.rows.length }} rows</small></div>
+              @if ((live.summary | keyvalue).length) {
+                <dl class="profit-strip">@for (item of live.summary | keyvalue; track item) {
+                  <div><dt>{{ customLabel(item.key) }}</dt><dd>{{ liveCell(item.value, item.key) }}</dd></div>
+                }</dl>
+              }
+              @if (live.rows.length) {
+                <div class="table-wrap"><table><thead><tr>@for (column of live.columns; track column) {
+                  <th>{{ customLabel(column) }}</th>
+                }</tr></thead><tbody>@for (row of live.rows; track row) {
+                <tr>@for (column of live.columns; track column) {
+                  <td>{{ liveCell(row[column], column) }}</td>
+                }</tr>
+              }</tbody></table></div>
+            } @else {
+              <div class="compact-empty">{{ liveLoading ? 'Loading...' : 'No records yet' }}</div>
+            }
           </article>
-        </div>
-      </section>
-    </ng-container>
-  </main>
-</section>
-
-<ng-template #reportWorkspace>
-  <ng-container *ngIf="liveOpen; else customOrProfitWorkspace">
-    <section class="custom-workspace" *ngIf="liveState as live">
-      <header class="profit-command">
-        <div class="profit-title"><button type="button" class="back-button" (click)="closeLiveReport()">Back</button><div><span>LIVE REPORT</span><h1>{{ live.report.title }}</h1></div></div>
-        <div class="custom-actions"><as-date-picker ariaLabel="Live report from date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="Live report to date" [(value)]="toDate"></as-date-picker><button type="button" class="primary-button" (click)="openLiveReport(live.report)" [disabled]="liveLoading">{{ liveLoading ? 'Loading...' : 'Run Report' }}</button></div>
-      </header>
-      <p class="inline-error" *ngIf="liveError">{{ liveError }}</p>
-      <article class="profit-panel">
-        <div class="panel-heading"><div><span>REAL DATA</span><h2>{{ live.report.path }}</h2></div><small>{{ live.rows.length }} rows</small></div>
-        <dl class="profit-strip" *ngIf="(live.summary | keyvalue).length"><div *ngFor="let item of live.summary | keyvalue"><dt>{{ customLabel(item.key) }}</dt><dd>{{ liveCell(item.value, item.key) }}</dd></div></dl>
-        <div class="table-wrap" *ngIf="live.rows.length; else noLiveRows"><table><thead><tr><th *ngFor="let column of live.columns">{{ customLabel(column) }}</th></tr></thead><tbody><tr *ngFor="let row of live.rows"><td *ngFor="let column of live.columns">{{ liveCell(row[column], column) }}</td></tr></tbody></table></div>
-        <ng-template #noLiveRows><div class="compact-empty">{{ liveLoading ? 'Loading...' : 'No records yet' }}</div></ng-template>
-      </article>
-    </section>
-  </ng-container>
-</ng-template>
-
-<ng-template #customOrProfitWorkspace>
-  <ng-container *ngIf="customOpen; else profitWorkspace">
-    <section class="custom-workspace">
-      <header class="profit-command">
-        <div class="profit-title"><button type="button" class="back-button" (click)="closeCustomWorkspace()">Back</button><div><span>REPORTS</span><h1>Custom BI</h1></div></div>
-        <div class="custom-actions"><button type="button" (click)="previewCustomReport()" [disabled]="customBusy">{{ customBusy ? 'Running...' : 'Run Report' }}</button><button type="button" class="primary-button" *ngIf="canManageProfit" (click)="saveCustomReport()" [disabled]="customBusy || !customDraft.name.trim()">Save Report</button></div>
-      </header>
-
-      <p class="inline-error" *ngIf="customError">{{ customError }}</p>
-      <section class="custom-builder">
-        <label>Report name<input [ngModel]="customDraft.name" (ngModelChange)="customDraft.name = titleCase($event)" maxlength="120" /></label>
-        <label>Dataset<select [(ngModel)]="customDraft.definition.dataset" (change)="customDatasetChanged()"><option *ngFor="let dataset of customOptions.datasets" [value]="dataset.id">{{ dataset.label }}</option></select></label>
-        <label>Rows<select [(ngModel)]="customDraft.definition.rowDimension" (change)="customRowChanged()"><option *ngFor="let dimension of customDataset?.dimensions" [value]="dimension">{{ customLabel(dimension) }}</option></select></label>
-        <label>Columns<select [(ngModel)]="customDraft.definition.columnDimension"><option value="none">None</option><option *ngFor="let dimension of customDataset?.dimensions" [value]="dimension" [disabled]="dimension === customDraft.definition.rowDimension">{{ customLabel(dimension) }}</option></select></label>
-        <label>Metric<select [(ngModel)]="customDraft.definition.metric"><option *ngFor="let metric of customDataset?.metrics" [value]="metric">{{ customLabel(metric) }}</option></select></label>
-        <label>Date range<select [(ngModel)]="customDraft.definition.dateRange"><option *ngFor="let range of customOptions.dateRanges" [value]="range">{{ customLabel(range) }}</option></select></label>
-        <label *ngIf="customDraft.definition.dateRange === 'custom'">From<as-date-picker [value]="customDraft.definition.fromDate ?? ''" (valueChange)="customDraft.definition.fromDate = $event" ariaLabel="Custom report from date" /></label>
-        <label *ngIf="customDraft.definition.dateRange === 'custom'">To<as-date-picker [value]="customDraft.definition.toDate ?? ''" (valueChange)="customDraft.definition.toDate = $event" ariaLabel="Custom report to date" /></label>
+        </section>
+      }
+    } @else {
+      @if (customOpen) {
+        <section class="custom-workspace">
+          <header class="profit-command">
+            <div class="profit-title"><button type="button" class="back-button" (click)="closeCustomWorkspace()">Back</button><div><span>REPORTS</span><h1>Custom BI</h1></div></div>
+            <div class="custom-actions"><button type="button" (click)="previewCustomReport()" [disabled]="customBusy">{{ customBusy ? 'Running...' : 'Run Report' }}</button>@if (canManageProfit) {
+            <button type="button" class="primary-button" (click)="saveCustomReport()" [disabled]="customBusy || !customDraft.name.trim()">Save Report</button>
+          }</div>
+        </header>
+        @if (customError) {
+          <p class="inline-error">{{ customError }}</p>
+        }
+        <section class="custom-builder">
+          <label>Report name<input [ngModel]="customDraft.name" (ngModelChange)="customDraft.name = titleCase($event)" maxlength="120" /></label>
+          <label>Dataset<select [(ngModel)]="customDraft.definition.dataset" (change)="customDatasetChanged()">@for (dataset of customOptions.datasets; track dataset) {
+            <option [value]="dataset.id">{{ dataset.label }}</option>
+          }</select></label>
+          <label>Rows<select [(ngModel)]="customDraft.definition.rowDimension" (change)="customRowChanged()">@for (dimension of customDataset?.dimensions; track dimension) {
+            <option [value]="dimension">{{ customLabel(dimension) }}</option>
+          }</select></label>
+          <label>Columns<select [(ngModel)]="customDraft.definition.columnDimension"><option value="none">None</option>@for (dimension of customDataset?.dimensions; track dimension) {
+          <option [value]="dimension" [disabled]="dimension === customDraft.definition.rowDimension">{{ customLabel(dimension) }}</option>
+        }</select></label>
+        <label>Metric<select [(ngModel)]="customDraft.definition.metric">@for (metric of customDataset?.metrics; track metric) {
+          <option [value]="metric">{{ customLabel(metric) }}</option>
+        }</select></label>
+        <label>Date range<select [(ngModel)]="customDraft.definition.dateRange">@for (range of customOptions.dateRanges; track range) {
+          <option [value]="range">{{ customLabel(range) }}</option>
+        }</select></label>
+        @if (customDraft.definition.dateRange === 'custom') {
+          <label>From<as-date-picker [value]="customDraft.definition.fromDate ?? ''" (valueChange)="customDraft.definition.fromDate = $event" ariaLabel="Custom report from date" /></label>
+        }
+        @if (customDraft.definition.dateRange === 'custom') {
+          <label>To<as-date-picker [value]="customDraft.definition.toDate ?? ''" (valueChange)="customDraft.definition.toDate = $event" ariaLabel="Custom report to date" /></label>
+        }
         <label>Status<input [(ngModel)]="customDraft.definition.status" maxlength="40" /></label>
-        <label>Schedule<select [(ngModel)]="customDraft.scheduleFrequency"><option *ngFor="let schedule of customOptions.schedules" [value]="schedule">{{ customLabel(schedule) }}</option></select></label>
-        <label *ngIf="customDraft.scheduleFrequency === 'weekly'">Day<select [(ngModel)]="customDraft.scheduleDay"><option *ngFor="let day of weekdays" [ngValue]="day.value">{{ day.label }}</option></select></label>
-        <label *ngIf="customDraft.scheduleFrequency === 'monthly'">Day<select [(ngModel)]="customDraft.scheduleDay"><option *ngFor="let day of monthDays" [ngValue]="day">{{ day }}</option></select></label>
-        <label *ngIf="customDraft.scheduleFrequency !== 'none'">Time<input type="time" [(ngModel)]="customDraft.scheduleTime" /></label>
-        <label *ngIf="customDraft.scheduleFrequency !== 'none'">Recipient email<input type="email" [(ngModel)]="customDraft.recipientEmail" /></label>
+        <label>Schedule<select [(ngModel)]="customDraft.scheduleFrequency">@for (schedule of customOptions.schedules; track schedule) {
+          <option [value]="schedule">{{ customLabel(schedule) }}</option>
+        }</select></label>
+        @if (customDraft.scheduleFrequency === 'weekly') {
+          <label>Day<select [(ngModel)]="customDraft.scheduleDay">@for (day of weekdays; track day) {
+            <option [ngValue]="day.value">{{ day.label }}</option>
+          }</select></label>
+        }
+        @if (customDraft.scheduleFrequency === 'monthly') {
+          <label>Day<select [(ngModel)]="customDraft.scheduleDay">@for (day of monthDays; track day) {
+            <option [ngValue]="day">{{ day }}</option>
+          }</select></label>
+        }
+        @if (customDraft.scheduleFrequency !== 'none') {
+          <label>Time<input type="time" [(ngModel)]="customDraft.scheduleTime" /></label>
+        }
+        @if (customDraft.scheduleFrequency !== 'none') {
+          <label>Recipient email<input type="email" [(ngModel)]="customDraft.recipientEmail" /></label>
+        }
       </section>
-
       <section class="custom-grid">
         <article class="profit-panel pivot-panel">
-          <div class="panel-heading"><div><span>PIVOT</span><h2>{{ pivot ? customLabel(pivot.metric) : 'Preview' }}</h2></div><small *ngIf="pivot">{{ pivot.fromDate }} to {{ pivot.toDate }}</small></div>
-          <div class="table-wrap" *ngIf="pivot?.rows?.length; else noPivot"><table><thead><tr><th>{{ customLabel(customDraft.definition.rowDimension) }}</th><th *ngFor="let column of pivot?.columns">{{ column }}</th></tr></thead><tbody><tr *ngFor="let row of pivot?.rows"><td><strong>{{ row }}</strong></td><td *ngFor="let column of pivot?.columns">{{ pivotValue(row, column) }}</td></tr></tbody></table></div>
-          <ng-template #noPivot><div class="compact-empty">No records yet</div></ng-template>
-        </article>
-
-        <article class="profit-panel saved-panel">
-          <div class="panel-heading"><div><span>SAVED</span><h2>Saved Reports</h2></div><small>{{ customReports.length }}</small></div>
-          <div class="saved-list" *ngIf="customReports.length; else noSaved"><button type="button" *ngFor="let report of customReports" (click)="runSavedCustomReport(report)" [disabled]="customBusy"><span><strong>{{ report.name }}</strong><small>{{ customLabel(report.definition.dataset) }} · {{ customLabel(report.scheduleFrequency) }}</small></span><span class="status-pill" [class]="report.lastStatus">{{ customLabel(report.lastStatus) }}</span></button></div>
-          <ng-template #noSaved><div class="compact-empty">No saved reports yet</div></ng-template>
-        </article>
-      </section>
-    </section>
-  </ng-container>
-</ng-template>
-
-<ng-template #profitWorkspace>
+          <div class="panel-heading"><div><span>PIVOT</span><h2>{{ pivot ? customLabel(pivot.metric) : 'Preview' }}</h2></div>@if (pivot) {
+          <small>{{ pivot.fromDate }} to {{ pivot.toDate }}</small>
+        }</div>
+        @if (pivot?.rows?.length) {
+          <div class="table-wrap"><table><thead><tr><th>{{ customLabel(customDraft.definition.rowDimension) }}</th>@for (column of pivot?.columns; track column) {
+          <th>{{ column }}</th>
+        }</tr></thead><tbody>@for (row of pivot?.rows; track row) {
+        <tr><td><strong>{{ row }}</strong></td>@for (column of pivot?.columns; track column) {
+        <td>{{ pivotValue(row, column) }}</td>
+      }</tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No records yet</div>
+  }
+</article>
+<article class="profit-panel saved-panel">
+  <div class="panel-heading"><div><span>SAVED</span><h2>Saved Reports</h2></div><small>{{ customReports.length }}</small></div>
+  @if (customReports.length) {
+    <div class="saved-list">@for (report of customReports; track report) {
+      <button type="button" (click)="runSavedCustomReport(report)" [disabled]="customBusy"><span><strong>{{ report.name }}</strong><small>{{ customLabel(report.definition.dataset) }} · {{ customLabel(report.scheduleFrequency) }}</small></span><span class="status-pill" [class]="report.lastStatus">{{ customLabel(report.lastStatus) }}</span></button>
+    }</div>
+  } @else {
+    <div class="compact-empty">No saved reports yet</div>
+  }
+</article>
+</section>
+</section>
+} @else {
   <section class="profit-workspace">
     <header class="profit-command">
       <div class="profit-title"><button type="button" class="back-button" (click)="closeProfitWorkspace()">Back</button><div><span>REPORTS</span><h1>Profit Intelligence</h1></div></div>
-      <div class="profit-filters"><select *ngIf="canViewTenantProfit" [(ngModel)]="profitScope" aria-label="Profit branch scope"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select><select [(ngModel)]="profitLevel" aria-label="Profit level"><option value="contribution">Contribution</option><option value="fullyLoaded">Fully loaded</option></select><select [(ngModel)]="comparePrevious" aria-label="Period comparison"><option [ngValue]="false">No comparison</option><option [ngValue]="true">Previous period</option></select><as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker><select #savedView aria-label="Saved profit views" (change)="applyProfitView(savedView.value)"><option value="">Saved views</option><option *ngFor="let view of profitSavedViews" [value]="view.id">{{ view.name }}</option></select><button type="button" *ngIf="canManageProfit" (click)="saveProfitView()">Save view</button><button type="button" (click)="exportProfit('csv')">CSV</button><button type="button" (click)="exportProfit('excel')">Excel</button><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ profitLoading ? 'Loading...' : 'Run Report' }}</button></div>
+      <div class="profit-filters">@if (canViewTenantProfit) {
+        <select [(ngModel)]="profitScope" aria-label="Profit branch scope"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select>
+        }<select [(ngModel)]="profitLevel" aria-label="Profit level"><option value="contribution">Contribution</option><option value="fullyLoaded">Fully loaded</option></select><select [(ngModel)]="comparePrevious" aria-label="Period comparison"><option [ngValue]="false">No comparison</option><option [ngValue]="true">Previous period</option></select><as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker><select #savedView aria-label="Saved profit views" (change)="applyProfitView(savedView.value)"><option value="">Saved views</option>@for (view of profitSavedViews; track view) {
+        <option [value]="view.id">{{ view.name }}</option>
+      }</select>@if (canManageProfit) {
+      <button type="button" (click)="saveProfitView()">Save view</button>
+      }<button type="button" (click)="exportProfit('csv')">CSV</button><button type="button" (click)="exportProfit('excel')">Excel</button><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ profitLoading ? 'Loading...' : 'Run Report' }}</button></div>
     </header>
-
     <nav class="profit-tabs" aria-label="Profit Intelligence views">
-      <button type="button" *ngFor="let tab of profitTabs" [class.active]="profitTab === tab.id" (click)="profitTab = tab.id">{{ tab.label }}<span *ngIf="tab.id === 'actions' && actionCounts.active">{{ actionCounts.active }}</span><span *ngIf="tab.id === 'approvals' && governance?.pendingApprovals">{{ governance?.pendingApprovals }}</span></button>
+      @for (tab of profitTabs; track tab) {
+        <button type="button" [class.active]="profitTab === tab.id" (click)="profitTab = tab.id">{{ tab.label }}@if (tab.id === 'actions' && actionCounts.active) {
+          <span>{{ actionCounts.active }}</span>
+          }@if (tab.id === 'approvals' && governance?.pendingApprovals) {
+          <span>{{ governance?.pendingApprovals }}</span>
+        }</button>
+      }
     </nav>
-
-    <div class="quality-badges" *ngIf="reconciliation as quality"><span class="status-pill" [class.completed]="quality.branchPeriodCloseReady" [class.dismissed]="!quality.branchPeriodCloseReady">{{ quality.branchPeriodCloseReady ? 'Close ready' : 'Close blocked' }}</span><span class="status-pill" [class.completed]="quality.costCompletenessBps === 10000" [class.pending]="quality.costCompletenessBps !== 10000">Cost {{ percent(quality.costCompletenessBps) }}</span><span class="status-pill" [class.completed]="quality.missingInvoiceJournalCount === 0" [class.pending]="quality.missingInvoiceJournalCount > 0">{{ quality.missingInvoiceJournalCount }} missing journals</span><span class="status-pill dismissed" *ngIf="advanced?.recommendationsBlocked">Recommendations blocked</span></div>
-
-    <p class="inline-error" *ngIf="profitError">{{ profitError }}</p>
-    <p class="profit-state" *ngIf="profitLoading">Loading Profit Intelligence...</p>
-
-    <ng-container *ngIf="!profitLoading">
-      <section *ngIf="profitTab === 'overview' && advanced as current" class="profit-panel">
+    @if (reconciliation; as quality) {
+      <div class="quality-badges"><span class="status-pill" [class.completed]="quality.branchPeriodCloseReady" [class.dismissed]="!quality.branchPeriodCloseReady">{{ quality.branchPeriodCloseReady ? 'Close ready' : 'Close blocked' }}</span><span class="status-pill" [class.completed]="quality.costCompletenessBps === 10000" [class.pending]="quality.costCompletenessBps !== 10000">Cost {{ percent(quality.costCompletenessBps) }}</span><span class="status-pill" [class.completed]="quality.missingInvoiceJournalCount === 0" [class.pending]="quality.missingInvoiceJournalCount > 0">{{ quality.missingInvoiceJournalCount }} missing journals</span>@if (advanced?.recommendationsBlocked) {
+      <span class="status-pill dismissed">Recommendations blocked</span>
+    }</div>
+  }
+  @if (profitError) {
+    <p class="inline-error">{{ profitError }}</p>
+  }
+  @if (profitLoading) {
+    <p class="profit-state">Loading Profit Intelligence...</p>
+  }
+  @if (!profitLoading) {
+    @if (profitTab === 'overview' && advanced; as current) {
+      <section class="profit-panel">
         <dl class="profit-strip"><div><dt>Micro revenue</dt><dd>{{ money(microOverview.revenue) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</dt><dd>{{ money(microOverview.cost) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</dt><dd [class.negative]="microOverview.profit < 0">{{ money(microOverview.profit) }}</dd></div><div><dt>Margin</dt><dd [class.negative]="microOverview.margin < 0">{{ percent(microOverview.margin) }}</dd></div><div><dt>Previous change</dt><dd [class.negative]="comparePrevious && microOverview.profit - microOverview.previousProfit < 0">{{ comparePrevious ? money(microOverview.profit - microOverview.previousProfit) : '-' }}</dd></div><div><dt>Cost complete</dt><dd>{{ percent(reconciliation?.costCompletenessBps) }}</dd></div></dl>
         <div class="panel-heading"><div><span>MICRO P&amp;L</span><h2>Micro Overview</h2></div><small>{{ current.branchCount }} branch{{ current.branchCount === 1 ? '' : 'es' }} · {{ reportDate(current.fromDate) }} to {{ reportDate(current.toDate) }}</small></div>
-        <div class="table-wrap" *ngIf="current.branchProfit?.length; else noOverview"><table><thead><tr><th>Branch</th><th>Lines</th><th>Revenue</th><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Fees</th><th>Overhead</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Quality</th></tr></thead><tbody><tr class="clickable-row" *ngFor="let row of current.branchProfit" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.lineCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(row.staffTimeCostPaise) }}</td><td>{{ money(row.gatewayFeePaise + row.refundFeePaise) }}</td><td>{{ money(row.overheadCostPaise) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ percent(row.costCompletenessBps) }}</span></td></tr></tbody></table></div>
-        <ng-template #noOverview><div class="compact-empty">No Micro P&amp;L records yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'executive' && advanced as current" class="profit-panel">
-        <dl class="profit-strip"><div><dt>Revenue / staff</dt><dd>{{ money(current.executiveKpis.revenuePerStaffPaise) }}</dd></div><div><dt>Revenue / customer</dt><dd>{{ money(current.executiveKpis.revenuePerCustomerPaise) }}</dd></div><div><dt>Revenue / branch</dt><dd>{{ money(current.executiveKpis.revenuePerBranchPaise) }}</dd></div><div><dt>Next month forecast</dt><dd [class.negative]="current.enterpriseAnalytics.nextMonthForecastProfitPaise < 0">{{ money(current.enterpriseAnalytics.nextMonthForecastProfitPaise) }}</dd></div><div><dt>Expected recovery</dt><dd>{{ money(current.boardReport.expectedRecoveryPaise) }}</dd></div><div><dt>Recommendation state</dt><dd>{{ current.recommendationsBlocked ? 'Blocked' : 'Ready' }}</dd></div></dl>
-        <div class="panel-heading"><div><span>OWNER BOARD</span><h2>Executive profit intelligence</h2></div><small>{{ current.enterpriseAnalytics.forecastBasis }}</small></div>
-        <div class="executive-grid"><article><span>Top service</span><strong>{{ current.executiveKpis.topService?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topService?.profitPaise) }}</small></article><article><span>Top staff</span><strong>{{ current.executiveKpis.topStaff?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topStaff?.profitPaise) }}</small></article><article><span>Top customer</span><strong>{{ current.executiveKpis.topCustomer?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topCustomer?.profitPaise) }}</small></article><article><span>Top branch</span><strong>{{ current.executiveKpis.topBranch?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topBranch?.profitPaise) }}</small></article></div>
-        <div class="board-grid"><article><h3>Top wins</h3><p *ngFor="let item of current.boardReport.topWins">{{ item }}</p><div class="compact-empty" *ngIf="!current.boardReport.topWins.length">No wins yet</div></article><article><h3>Top risks</h3><p *ngFor="let item of current.boardReport.topRisks">{{ item }}</p><div class="compact-empty" *ngIf="!current.boardReport.topRisks.length">No risks detected</div></article><article><h3>Next actions</h3><p *ngFor="let item of current.boardReport.nextActions">{{ item }}</p><div class="compact-empty" *ngIf="!current.boardReport.nextActions.length">{{ current.recommendationsBlocked ? 'Incomplete costs; actions blocked' : 'No actions required' }}</div></article></div>
-        <div class="panel-heading"><div><span>CUSTOMER VALUE</span><h2>Customer profit score</h2></div><small>{{ current.customerProfitScores.length }} customers</small></div>
-        <div class="table-wrap" *ngIf="current.customerProfitScores.length; else noCustomerScores"><table><thead><tr><th>Customer</th><th>Tier</th><th>Score</th><th>Revenue</th><th>Profit</th><th>Discount</th><th>Units</th><th>Margin</th></tr></thead><tbody><tr *ngFor="let row of current.customerProfitScores"><td><strong>{{ row.customerName }}</strong></td><td>{{ row.tier }}</td><td>{{ row.profitScore }}</td><td>{{ money(row.revenuePaise) }}</td><td [class.negative]="row.profitPaise < 0">{{ money(row.profitPaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ row.unitCount }}</td><td>{{ percent(row.marginBps) }}</td></tr></tbody></table></div><ng-template #noCustomerScores><div class="compact-empty">No customer profit records yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'booking'" class="profit-panel">
-        <div class="panel-heading"><div><span>RECORDED DEMAND + MICRO P&amp;L</span><h2>Profit-ranked booking windows</h2></div><small>{{ advanced?.bookingRecommendations?.length || 0 }} services</small></div>
-        <div class="table-wrap" *ngIf="advanced?.bookingRecommendations?.length; else noBookingProfit"><table><thead><tr><th>Service</th><th>Demand hour</th><th>Appointments</th><th>Peak score</th><th>Revenue / unit</th><th>Cost / unit</th><th>Profit / unit</th><th>Margin</th><th>Price review</th><th>Decision</th></tr></thead><tbody><tr *ngFor="let row of advanced?.bookingRecommendations"><td><strong>{{ row.serviceName }}</strong></td><td>{{ bookingHour(row.recommendedHour) }}</td><td>{{ row.appointmentCount }}</td><td>{{ row.peakScore }}</td><td>{{ money(row.expectedRevenuePaise) }}</td><td>{{ money(row.expectedCostPaise) }}</td><td [class.negative]="row.expectedProfitPaise < 0">{{ money(row.expectedProfitPaise) }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ percent(row.suggestedPriceUpliftBps) }}</td><td><span [class.negative]="!!row.restrictionReason">{{ row.restrictionReason || row.recommendation }}</span></td></tr></tbody></table></div><ng-template #noBookingProfit><div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; booking recommendations blocked' : 'No appointment demand history yet' }}</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'liability'" class="profit-panel">
-        <div class="panel-heading"><div><span>DEFERRED REVENUE</span><h2>Membership and package liability risk</h2></div><small>{{ advanced?.liabilityRisks?.length || 0 }} plans</small></div>
-        <div class="table-wrap" *ngIf="advanced?.liabilityRisks?.length; else noLiability"><table><thead><tr><th>Plan</th><th>Type</th><th>Sold</th><th>Recognized</th><th>Remaining liability</th><th>Projected cost</th><th>Future profit</th><th>Risk</th><th>Action</th></tr></thead><tbody><tr *ngFor="let row of advanced?.liabilityRisks"><td><strong>{{ row.planName }}</strong></td><td>{{ titleCase(row.kind) }}</td><td>{{ money(row.soldValuePaise) }}</td><td>{{ money(row.recognizedValuePaise) }}</td><td>{{ money(row.remainingLiabilityPaise) }}</td><td>{{ money(row.projectedCostPaise) }}</td><td [class.negative]="row.expectedFutureProfitPaise < 0">{{ money(row.expectedFutureProfitPaise) }}</td><td><span class="status-pill" [class.dismissed]="row.severity === 'high'" [class.pending]="row.severity === 'medium'" [class.completed]="row.severity === 'low'">{{ titleCase(row.severity) }}</span></td><td>{{ row.recommendation }}</td></tr></tbody></table></div><ng-template #noLiability><div class="compact-empty">No deferred membership or package liability yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'scenario' && advanced?.profitDigitalTwin as twin" class="profit-panel">
-        <dl class="profit-strip"><div><dt>Baseline revenue</dt><dd>{{ money(twin.baselineRevenuePaise) }}</dd></div><div><dt>Baseline profit</dt><dd [class.negative]="twin.baselineProfitPaise < 0">{{ money(twin.baselineProfitPaise) }}</dd></div><div><dt>Custom revenue</dt><dd>{{ money(customScenario?.projectedRevenuePaise) }}</dd></div><div><dt>Custom profit</dt><dd [class.negative]="(customScenario?.projectedProfitPaise || 0) < 0">{{ money(customScenario?.projectedProfitPaise) }}</dd></div><div><dt>Profit change</dt><dd [class.negative]="(customScenario?.profitDeltaPaise || 0) < 0">{{ money(customScenario?.profitDeltaPaise) }}</dd></div><div><dt>Custom margin</dt><dd>{{ percent(customScenario?.projectedMarginBps) }}</dd></div></dl>
-        <div class="panel-heading"><div><span>WHAT-IF</span><h2>Profit Digital Twin</h2></div><small>All changes are percentages</small></div>
-        <div class="scenario-controls"><label>Price change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.priceChangePct" placeholder="%" /></label><label>Volume change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.volumeChangePct" placeholder="%" /></label><label>Staff cost change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.staffCostChangePct" placeholder="%" /></label><label>Wastage reduction<input type="number" min="0" max="100" [(ngModel)]="scenarioDraft.wastageReductionPct" placeholder="%" /></label><label>Overhead change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.overheadChangePct" placeholder="%" /></label></div>
-        <div class="table-wrap" *ngIf="twin.scenarios.length; else noScenarios"><table><thead><tr><th>Baseline scenario</th><th>Revenue</th><th>Profit</th><th>Profit change</th><th>Margin</th></tr></thead><tbody><tr *ngFor="let row of twin.scenarios"><td><strong>{{ row.name }}</strong></td><td>{{ money(row.projectedRevenuePaise) }}</td><td>{{ money(row.projectedProfitPaise) }}</td><td>{{ money(row.profitDeltaPaise) }}</td><td>{{ percent(row.projectedMarginBps) }}</td></tr></tbody></table></div><ng-template #noScenarios><div class="compact-empty">Incomplete costs; scenario recommendations blocked</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'guard'" class="profit-panel">
-        <div class="panel-heading"><div><span>PRE-INVOICE CONTROL</span><h2>POS negative-margin guard</h2></div><small>Recorded or checkout-preview costs only</small></div>
-        <div class="scenario-controls"><label>Gross (paise)<input type="number" min="1" [(ngModel)]="posGuardDraft.grossAmountPaise" /></label><label>Discount (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.discountPaise" /></label><label>Product cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.productCostPaise" /></label><label>Staff cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.staffCostPaise" /></label><label>Redemption (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.membershipRedemptionPaise" /></label><button type="button" class="primary-button" *ngIf="canManageProfit" (click)="runPosMarginCheck()" [disabled]="posGuardBusy">{{ posGuardBusy ? 'Checking...' : 'Check margin' }}</button></div>
-        <ng-container *ngIf="posGuardDecision as result"><dl class="profit-strip"><div><dt>Decision</dt><dd>{{ titleCase(result.decision.decision.replace('_',' ')) }}</dd></div><div><dt>Status</dt><dd>{{ titleCase(result.decision.status.replace('_',' ')) }}</dd></div><div><dt>Estimated profit</dt><dd [class.negative]="result.decision.estimatedProfitPaise < 0">{{ money(result.decision.estimatedProfitPaise) }}</dd></div><div><dt>Margin</dt><dd>{{ percent(result.decision.marginBps) }}</dd></div><div><dt>Discount</dt><dd>{{ percent(result.decision.discountBps) }}</dd></div><div><dt>Approval</dt><dd>{{ result.approval?.status ? titleCase(result.approval?.status || '') : 'Not required' }}</dd></div></dl><div class="guard-result"><strong>{{ result.decision.message }}</strong><span *ngFor="let reason of result.decision.reasonCodes">{{ titleCase(reason.replace('_',' ')) }}</span></div></ng-container>
-      </section>
-
-      <section *ngIf="profitTab === 'reconciliation' && reconciliation as recon" class="profit-panel">
-        <dl class="profit-strip"><div><dt>Cost complete</dt><dd>{{ percent(recon.costCompletenessBps) }}</dd></div><div><dt>Close readiness</dt><dd>{{ recon.branchPeriodCloseReady ? 'Ready' : 'Blocked' }}</dd></div><div><dt>Revenue variance</dt><dd [class.negative]="recon.revenueVariancePaise !== 0">{{ money(recon.revenueVariancePaise) }}</dd></div><div><dt>COGS variance</dt><dd [class.negative]="recon.cogsVariancePaise !== 0">{{ money(recon.cogsVariancePaise) }}</dd></div><div><dt>Payroll variance</dt><dd [class.negative]="recon.payrollVariancePaise !== 0">{{ money(recon.payrollVariancePaise) }}</dd></div><div><dt>Missing journals</dt><dd>{{ recon.missingInvoiceJournalCount }}</dd></div></dl>
-        <div class="panel-heading"><div><span>LEDGER TO MICRO</span><h2>Revenue bridge</h2></div><small>{{ recon.costCompleteLineCount }}/{{ recon.reportableLineCount }} cost-complete lines</small></div>
-        <div class="table-wrap"><table><thead><tr><th>Ledger revenue</th><th>Missing invoice bridge</th><th>Micro revenue</th><th>Unexplained variance</th></tr></thead><tbody><tr><td>{{ money(recon.revenueBridge.ledgerRevenuePaise) }}</td><td>{{ money(recon.revenueBridge.missingInvoiceJournalPaise) }}</td><td>{{ money(recon.revenueBridge.microRevenuePaise) }}</td><td [class.negative]="recon.revenueBridge.unexplainedVariancePaise !== 0">{{ money(recon.revenueBridge.unexplainedVariancePaise) }}</td></tr></tbody></table></div>
-        <div class="panel-heading"><div><span>DATA QUALITY</span><h2>Cost source gaps</h2></div><small>{{ recon.allocationRuleCount }} allocation rule{{ recon.allocationRuleCount === 1 ? '' : 's' }}</small></div>
-        <div class="table-wrap"><table><thead><tr><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Gateway fee</th><th>Refund fee</th><th>Unallocated overhead</th></tr></thead><tbody><tr><td>{{ recon.missingProductCostLineCount }}</td><td>{{ recon.missingStaffCostLineCount }}</td><td>{{ recon.missingStaffTimeCostLineCount }}</td><td>{{ recon.missingGatewayFeeLineCount }}</td><td>{{ recon.missingRefundFeeLineCount }}</td><td [class.negative]="recon.unallocatedOverheadPaise !== 0">{{ money(recon.unallocatedOverheadPaise) }}</td></tr></tbody></table></div>
-        <div class="panel-heading"><div><span>VERSIONED POLICY</span><h2>Overhead allocation rules</h2></div><small>One active account pool per period</small></div>
-        <div class="scenario-controls allocation-controls" *ngIf="canManageProfit">
-          <label>Rule name<input type="text" [(ngModel)]="allocationDraft.name" (input)="allocationDraft.name = titleCase(allocationDraft.name)" maxlength="120" /></label>
-          <label>Driver<select [(ngModel)]="allocationDraft.driver"><option value="service_minutes">Service minutes</option><option value="chair_resource_minutes">Chair/resource minutes</option><option value="revenue_share">Revenue share</option><option value="headcount">Headcount</option><option value="transaction_count">Transaction count</option></select></label>
-          <label>Overhead accounts<select multiple [(ngModel)]="allocationDraft.accountCodes"><option *ngFor="let account of allocationAccounts" [value]="account.code">{{ account.name }}</option></select></label>
-          <label>Effective from<as-date-picker ariaLabel="Allocation effective from" [(value)]="allocationDraft.effectiveFrom"></as-date-picker></label>
-          <label>Effective to<as-date-picker ariaLabel="Allocation effective to" [(value)]="allocationDraft.effectiveTo"></as-date-picker></label>
-          <button type="button" class="primary-button" (click)="createAllocationRule()" [disabled]="allocationBusy || !allocationDraft.name.trim() || !allocationDraft.effectiveFrom || !allocationDraft.accountCodes.length">{{ allocationBusy ? 'Saving...' : 'Create version' }}</button>
-        </div>
-        <div class="table-wrap" *ngIf="allocationRules.length; else noAllocationRules"><table><thead><tr><th>Rule</th><th>Version</th><th>Driver</th><th>Accounts</th><th>Effective from</th><th>Effective to</th></tr></thead><tbody><tr *ngFor="let rule of allocationRules"><td><strong>{{ rule.name }}</strong></td><td>v{{ rule.version }}</td><td>{{ titleCase(rule.driver.split('_').join(' ')) }}</td><td>{{ rule.accountCodes.join(', ') }}</td><td>{{ reportDate(rule.effectiveFrom) }}</td><td>{{ reportDate(rule.effectiveTo) }}</td></tr></tbody></table></div>
-        <ng-template #noAllocationRules><div class="compact-empty">No allocation rules yet</div></ng-template>
-        <div class="panel-heading"><div><span>BACKFILL QUEUE</span><h2>Missing invoice journals</h2></div><button type="button" class="primary-button" *ngIf="canManageProfit && invoiceRepairQueue.length" (click)="repairInvoiceJournals()" [disabled]="repairBusy">{{ repairBusy ? 'Repairing...' : 'Repair open periods' }}</button></div>
-        <div class="table-wrap" *ngIf="invoiceRepairQueue.length; else noInvoiceRepairs"><table><thead><tr><th>Invoice</th><th>Branch</th><th>Business date</th><th>Total</th><th>Period</th></tr></thead><tbody><tr *ngFor="let row of invoiceRepairQueue"><td><strong>{{ row.invoiceNumber }}</strong></td><td>{{ row.branchId }}</td><td>{{ reportDate(row.businessDate) }}</td><td>{{ money(row.totalPaise) }}</td><td><span class="status-pill" [class.completed]="row.periodStatus === 'open'" [class.dismissed]="row.periodStatus === 'closed'">{{ titleCase(row.periodStatus) }}</span></td></tr></tbody></table></div>
-        <ng-template #noInvoiceRepairs><div class="compact-empty">No missing invoice journals</div></ng-template>
-      </section>
-
-      <section *ngIf="isDimensionTab" class="profit-panel">
-        <div class="panel-heading"><div><span>POS COST ATTRIBUTION</span><h2>{{ titleCase(profitTab) }} profit</h2></div><small *ngIf="profitTab !== 'branch'">{{ currentDimensionRows.length }} records</small><small *ngIf="profitTab === 'branch'">{{ advanced?.branchCount || 0 }} branches · {{ money(branchTotalRevenuePaise) }} revenue · {{ money(branchTotalProfitPaise) }} profit</small></div>
-        <div class="table-wrap" *ngIf="currentDimensionRows.length; else noDimension"><table><thead><tr><th>{{ titleCase(profitTab) }}</th><th>Units</th><th>Revenue</th><th>Discount</th><th>Product cost</th><th>Commission</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Margin</th><th *ngIf="comparePrevious">Change</th><th>Data quality</th></tr></thead><tbody><tr class="clickable-row" *ngFor="let row of currentDimensionRows" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.unitCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(rowCost(row)) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="margin-pill" [class.negative]="rowMargin(row) < 0">{{ percent(rowMargin(row)) }}</span></td><td *ngIf="comparePrevious" [class.negative]="rowProfit(row) - comparisonProfit(row) < 0">{{ money(rowProfit(row) - comparisonProfit(row)) }}</td><td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ row.incompleteCostLineCount ? row.incompleteCostLineCount + ' incomplete' : 'Complete' }}</span></td></tr></tbody></table></div>
-        <ng-template #noDimension><div class="compact-empty">No records yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'leaks'" class="profit-panel">
-        <div class="panel-heading"><div><span>RECORDED IMPACT</span><h2>Profit leaks</h2></div><small>{{ advanced?.leaks?.length || 0 }} signals</small></div>
-        <div class="insight-list" *ngIf="advanced?.leaks?.length; else noLeaks"><article *ngFor="let leak of advanced?.leaks" [class]="leak.severity"><div><span>{{ titleCase(leak.kind.replace('_',' ')) }}</span><h3>{{ leak.title }}</h3><p>{{ leak.message }}</p></div><strong>{{ money(leak.impactPaise) }}</strong><button type="button" *ngIf="canManageProfit" (click)="queueLeak(leak)">Add action</button></article></div>
-        <ng-template #noLeaks><div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; recommendations blocked' : 'No profit leaks detected' }}</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'pricing'" class="profit-panel">
-        <div class="panel-heading"><div><span>25% TARGET MARGIN</span><h2>Pricing recommendations</h2></div><small>{{ advanced?.pricing?.length || 0 }} opportunities</small></div>
-        <div class="table-wrap" *ngIf="advanced?.pricing?.length; else noPricing"><table><thead><tr><th>Service</th><th>Current average</th><th>Suggested</th><th>Current margin</th><th>Target</th><th>Expected lift</th><th *ngIf="canManageProfit">Action</th></tr></thead><tbody><tr *ngFor="let row of advanced?.pricing"><td><strong>{{ row.serviceName }}</strong></td><td>{{ money(row.currentAveragePricePaise) }}</td><td>{{ money(row.suggestedPricePaise) }}</td><td>{{ percent(row.currentMarginBps) }}</td><td>{{ percent(row.targetMarginBps) }}</td><td>{{ money(row.expectedProfitLiftPaise) }}</td><td *ngIf="canManageProfit"><button type="button" class="table-action" (click)="queuePricing(row)">Add action</button></td></tr></tbody></table></div>
-        <ng-template #noPricing><div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; recommendations blocked' : 'No pricing actions required' }}</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'recipe'" class="profit-panel">
-        <div class="panel-heading"><div><span>EXPECTED VS ACTUAL COST</span><h2>Recipe variance</h2></div><small>{{ advanced?.recipeVariance?.length || 0 }} services</small></div>
-        <div class="table-wrap" *ngIf="advanced?.recipeVariance?.length; else noRecipe"><table><thead><tr><th>Service</th><th>Sold</th><th>Recipe items</th><th>Expected cost</th><th>Actual cost</th><th>Variance</th><th>Variance %</th></tr></thead><tbody><tr *ngFor="let row of advanced?.recipeVariance"><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.soldQuantity }}</td><td>{{ row.recipeItemCount }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td [class.negative]="row.variancePaise > 0">{{ money(row.variancePaise) }}</td><td>{{ percent(row.varianceBps) }}</td></tr></tbody></table></div>
-        <ng-template #noRecipe><div class="compact-empty">No recipe cost records yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'copilot'" class="profit-panel">
-        <div class="panel-heading"><div><span>{{ advanced?.copilotSource === 'openai_responses' ? 'AI MODEL • RECONCILED FACTS' : 'RULE-BASED • RECONCILED FACTS' }}</span><h2>Profit Copilot</h2></div><small>{{ advanced?.copilotModel || 'local-profit-policy-v1' }} · {{ advanced?.copilot?.length || 0 }} recommendations</small></div>
-        <div class="copilot-list" *ngIf="advanced?.copilot?.length; else noCopilot"><article *ngFor="let insight of advanced?.copilot"><div class="copilot-icon">↗</div><div><span>{{ titleCase(insight.kind.replace('_',' ')) }} · {{ insight.recommendationVersion }} · {{ titleCase(insight.evaluationStatus) }}</span><h3>{{ insight.title }}</h3><p>{{ insight.message }}</p></div><strong>{{ money(insight.impactPaise) }}</strong><div class="queue-actions" *ngIf="canManageProfit"><button type="button" (click)="submitCopilotFeedback(insight,'accepted')" [disabled]="actionBusyId === insight.recommendationVersionId">Useful</button><button type="button" (click)="submitCopilotFeedback(insight,'rejected')" [disabled]="actionBusyId === insight.recommendationVersionId">Not useful</button><button type="button" (click)="queueCopilot(insight)">Add action</button></div></article></div>
-        <ng-template #noCopilot><div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Period is not reconciled; recommendations blocked' : 'No recommendations yet' }}</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'actions'" class="profit-panel">
-        <div class="queue-toolbar"><div><span>WORK QUEUE</span><h2>Profit Action Queue</h2></div><select [(ngModel)]="actionStatus" (change)="loadActions()"><option value="active">Active</option><option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="completed">Completed</option><option value="dismissed">Dismissed</option></select><select [(ngModel)]="actionPriority" (change)="loadActions()"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select><button type="button" class="primary-button" *ngIf="canManageProfit" (click)="openActionDrawer()">New action</button></div>
-        <div class="queue-list" *ngIf="actions.length; else noActions"><article *ngFor="let action of actions" [class.overdue]="isActionOverdue(action)"><span class="priority-dot" [class]="action.priority"></span><div><div class="queue-title"><h3>{{ action.title }}</h3><span class="status-pill" [class]="action.status">{{ titleCase(action.status) }}</span><span class="status-pill" *ngIf="action.generatedBy === 'automated_scan'">Automated #{{ action.occurrenceNumber }}</span><span class="status-pill dismissed" *ngIf="isActionOverdue(action)">SLA overdue</span></div><p>{{ action.message }}</p><div class="queue-meta"><span>{{ titleCase(action.actionType.replace('_',' ')) }}</span><span>{{ actionPeriod(action) }}</span><span>Owner {{ action.ownerName || action.ownerUserId || '-' }}</span><span>SLA {{ slaLabel(action) }} · Due {{ formatDate(action.dueAt) }}</span><span>Observed {{ formatDate(action.lastObservedAt || action.updatedAt) }}</span></div><small *ngIf="action.notes">{{ action.notes }}</small></div><div class="impact-stack"><span>Baseline <strong>{{ money(action.baselineImpactPaise) }}</strong></span><span>Expected <strong>{{ money(action.expectedImpactPaise) }}</strong></span><span>Realized <strong>{{ money(action.realizedImpactPaise) }}</strong></span></div><div class="queue-actions" *ngIf="canManageProfit"><button type="button" *ngIf="action.status === 'pending'" (click)="transitionAction(action,'approve')" [disabled]="actionBusyId === action.id">Approve</button><button type="button" *ngIf="action.status === 'approved'" (click)="transitionAction(action,'complete')" [disabled]="actionBusyId === action.id">Complete</button><button type="button" *ngIf="action.status === 'pending' || action.status === 'approved'" (click)="transitionAction(action,'dismiss')" [disabled]="actionBusyId === action.id">Dismiss</button></div></article></div>
-        <ng-template #noActions><div class="compact-empty">No actions yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'rules'" class="profit-panel">
-        <div class="panel-heading"><div><span>GOVERNANCE</span><h2>Rules</h2></div><small>{{ governance?.enabledRules || 0 }}/{{ governance?.configuredRules || governanceRules.length }} enabled</small></div>
-        <div class="table-wrap" *ngIf="governanceRules.length; else noRules"><table><thead><tr><th>Rule</th><th>Severity</th><th>Minimum margin</th><th>Maximum discount</th><th>Approval</th><th>Audit</th><th>Status</th><th *ngIf="canManageProfit">Action</th></tr></thead><tbody><tr *ngFor="let rule of governanceRules"><td><strong>{{ rule.title }}</strong><small>{{ rule.ruleType }}</small></td><td>{{ titleCase(rule.severity) }}</td><td>{{ percent(rule.minMarginBps) }}</td><td>{{ percent(rule.maxDiscountBps) }}</td><td>{{ rule.approvalRequired ? 'Required' : 'No' }}</td><td>{{ rule.auditRequired ? 'Required' : 'No' }}</td><td><span class="status-pill" [class.completed]="rule.enabled" [class.dismissed]="!rule.enabled">{{ rule.enabled ? 'Enabled' : 'Disabled' }}</span></td><td *ngIf="canManageProfit"><button type="button" class="table-action" (click)="toggleGovernanceRule(rule)" [disabled]="!!governanceBusyId">{{ rule.enabled ? 'Disable' : 'Enable' }}</button></td></tr></tbody></table></div><ng-template #noRules><div class="compact-empty">No governance rules yet</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'approvals'" class="profit-panel">
-        <div class="panel-heading"><div><span>FOUR-EYES CONTROL</span><h2>Approvals</h2></div><small>{{ governance?.pendingApprovals || 0 }} pending</small></div>
-        <div class="table-wrap" *ngIf="governanceApprovals.length; else noApprovals"><table><thead><tr><th>Requested</th><th>Action</th><th>Source</th><th>Decision</th><th>Impact</th><th>Margin</th><th>Status</th><th>Review</th></tr></thead><tbody><tr *ngFor="let approval of governanceApprovals"><td>{{ formatDate(approval.requestedAt) }}</td><td><strong>{{ titleCase(approval.actionType.replace('_',' ')) }}</strong></td><td>{{ approval.sourceType }} · {{ approval.sourceId }}</td><td>{{ approval.message }}</td><td>{{ money(approval.impactPaise) }}</td><td>{{ percent(approval.marginBps) }}</td><td><span class="status-pill" [class]="approval.status">{{ titleCase(approval.status) }}</span></td><td><div class="queue-actions" *ngIf="approval.status === 'pending'"><button type="button" (click)="reviewGovernanceApproval(approval,'approve')" [disabled]="!!governanceBusyId">Approve</button><button type="button" (click)="reviewGovernanceApproval(approval,'reject')" [disabled]="!!governanceBusyId">Reject</button></div></td></tr></tbody></table></div><ng-template #noApprovals><div class="compact-empty">No governance approvals</div></ng-template>
-      </section>
-
-      <section *ngIf="profitTab === 'audit'" class="profit-panel">
-        <div class="panel-heading"><div><span>IMMUTABLE TRAIL</span><h2>Governance audit</h2></div><small>{{ governanceAudit.length }} events</small></div>
-        <div class="table-wrap" *ngIf="governanceAudit.length; else noAudit"><table><thead><tr><th>Time</th><th>Event</th><th>Actor</th><th>Decision</th><th>Rule</th><th>Details</th></tr></thead><tbody><tr *ngFor="let event of governanceAudit"><td>{{ formatDate(event.createdAt) }}</td><td><span class="status-pill">{{ titleCase(event.eventType.replace('_',' ')) }}</span></td><td>{{ event.actorUserId }}</td><td>{{ event.decisionId || '-' }}</td><td>{{ event.ruleId || '-' }}</td><td class="audit-details">{{ auditDetails(event.detailsJson) }}</td></tr></tbody></table></div><ng-template #noAudit><div class="compact-empty">No governance audit events</div></ng-template>
-      </section>
-    </ng-container>
-  </section>
-
-  <aside class="action-drawer" *ngIf="actionDrawerOpen && canManageProfit" aria-label="Create profit action">
+        @if (current.branchProfit?.length) {
+          <div class="table-wrap"><table><thead><tr><th>Branch</th><th>Lines</th><th>Revenue</th><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Fees</th><th>Overhead</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Quality</th></tr></thead><tbody>@for (row of current.branchProfit; track row) {
+          <tr class="clickable-row" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.lineCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(row.staffTimeCostPaise) }}</td><td>{{ money(row.gatewayFeePaise + row.refundFeePaise) }}</td><td>{{ money(row.overheadCostPaise) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ percent(row.costCompletenessBps) }}</span></td></tr>
+        }</tbody></table></div>
+      } @else {
+        <div class="compact-empty">No Micro P&amp;L records yet</div>
+      }
+    </section>
+  }
+  @if (profitTab === 'executive' && advanced; as current) {
+    <section class="profit-panel">
+      <dl class="profit-strip"><div><dt>Revenue / staff</dt><dd>{{ money(current.executiveKpis.revenuePerStaffPaise) }}</dd></div><div><dt>Revenue / customer</dt><dd>{{ money(current.executiveKpis.revenuePerCustomerPaise) }}</dd></div><div><dt>Revenue / branch</dt><dd>{{ money(current.executiveKpis.revenuePerBranchPaise) }}</dd></div><div><dt>Next month forecast</dt><dd [class.negative]="current.enterpriseAnalytics.nextMonthForecastProfitPaise < 0">{{ money(current.enterpriseAnalytics.nextMonthForecastProfitPaise) }}</dd></div><div><dt>Expected recovery</dt><dd>{{ money(current.boardReport.expectedRecoveryPaise) }}</dd></div><div><dt>Recommendation state</dt><dd>{{ current.recommendationsBlocked ? 'Blocked' : 'Ready' }}</dd></div></dl>
+      <div class="panel-heading"><div><span>OWNER BOARD</span><h2>Executive profit intelligence</h2></div><small>{{ current.enterpriseAnalytics.forecastBasis }}</small></div>
+      <div class="executive-grid"><article><span>Top service</span><strong>{{ current.executiveKpis.topService?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topService?.profitPaise) }}</small></article><article><span>Top staff</span><strong>{{ current.executiveKpis.topStaff?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topStaff?.profitPaise) }}</small></article><article><span>Top customer</span><strong>{{ current.executiveKpis.topCustomer?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topCustomer?.profitPaise) }}</small></article><article><span>Top branch</span><strong>{{ current.executiveKpis.topBranch?.label || '-' }}</strong><small>{{ money(current.executiveKpis.topBranch?.profitPaise) }}</small></article></div>
+      <div class="board-grid"><article><h3>Top wins</h3>@for (item of current.boardReport.topWins; track item) {
+      <p>{{ item }}</p>
+      }@if (!current.boardReport.topWins.length) {
+      <div class="compact-empty">No wins yet</div>
+      }</article><article><h3>Top risks</h3>@for (item of current.boardReport.topRisks; track item) {
+      <p>{{ item }}</p>
+      }@if (!current.boardReport.topRisks.length) {
+      <div class="compact-empty">No risks detected</div>
+      }</article><article><h3>Next actions</h3>@for (item of current.boardReport.nextActions; track item) {
+      <p>{{ item }}</p>
+      }@if (!current.boardReport.nextActions.length) {
+      <div class="compact-empty">{{ current.recommendationsBlocked ? 'Incomplete costs; actions blocked' : 'No actions required' }}</div>
+    }</article></div>
+    <div class="panel-heading"><div><span>CUSTOMER VALUE</span><h2>Customer profit score</h2></div><small>{{ current.customerProfitScores.length }} customers</small></div>
+    @if (current.customerProfitScores.length) {
+      <div class="table-wrap"><table><thead><tr><th>Customer</th><th>Tier</th><th>Score</th><th>Revenue</th><th>Profit</th><th>Discount</th><th>Units</th><th>Margin</th></tr></thead><tbody>@for (row of current.customerProfitScores; track row) {
+      <tr><td><strong>{{ row.customerName }}</strong></td><td>{{ row.tier }}</td><td>{{ row.profitScore }}</td><td>{{ money(row.revenuePaise) }}</td><td [class.negative]="row.profitPaise < 0">{{ money(row.profitPaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ row.unitCount }}</td><td>{{ percent(row.marginBps) }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No customer profit records yet</div>
+  }
+</section>
+}
+@if (profitTab === 'booking') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>RECORDED DEMAND + MICRO P&amp;L</span><h2>Profit-ranked booking windows</h2></div><small>{{ advanced?.bookingRecommendations?.length || 0 }} services</small></div>
+    @if (advanced?.bookingRecommendations?.length) {
+      <div class="table-wrap"><table><thead><tr><th>Service</th><th>Demand hour</th><th>Appointments</th><th>Peak score</th><th>Revenue / unit</th><th>Cost / unit</th><th>Profit / unit</th><th>Margin</th><th>Price review</th><th>Decision</th></tr></thead><tbody>@for (row of advanced?.bookingRecommendations; track row) {
+      <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ bookingHour(row.recommendedHour) }}</td><td>{{ row.appointmentCount }}</td><td>{{ row.peakScore }}</td><td>{{ money(row.expectedRevenuePaise) }}</td><td>{{ money(row.expectedCostPaise) }}</td><td [class.negative]="row.expectedProfitPaise < 0">{{ money(row.expectedProfitPaise) }}</td><td>{{ percent(row.marginBps) }}</td><td>{{ percent(row.suggestedPriceUpliftBps) }}</td><td><span [class.negative]="!!row.restrictionReason">{{ row.restrictionReason || row.recommendation }}</span></td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; booking recommendations blocked' : 'No appointment demand history yet' }}</div>
+  }
+</section>
+}
+@if (profitTab === 'liability') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>DEFERRED REVENUE</span><h2>Membership and package liability risk</h2></div><small>{{ advanced?.liabilityRisks?.length || 0 }} plans</small></div>
+    @if (advanced?.liabilityRisks?.length) {
+      <div class="table-wrap"><table><thead><tr><th>Plan</th><th>Type</th><th>Sold</th><th>Recognized</th><th>Remaining liability</th><th>Projected cost</th><th>Future profit</th><th>Risk</th><th>Action</th></tr></thead><tbody>@for (row of advanced?.liabilityRisks; track row) {
+      <tr><td><strong>{{ row.planName }}</strong></td><td>{{ titleCase(row.kind) }}</td><td>{{ money(row.soldValuePaise) }}</td><td>{{ money(row.recognizedValuePaise) }}</td><td>{{ money(row.remainingLiabilityPaise) }}</td><td>{{ money(row.projectedCostPaise) }}</td><td [class.negative]="row.expectedFutureProfitPaise < 0">{{ money(row.expectedFutureProfitPaise) }}</td><td><span class="status-pill" [class.dismissed]="row.severity === 'high'" [class.pending]="row.severity === 'medium'" [class.completed]="row.severity === 'low'">{{ titleCase(row.severity) }}</span></td><td>{{ row.recommendation }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No deferred membership or package liability yet</div>
+  }
+</section>
+}
+@if (profitTab === 'scenario' && advanced?.profitDigitalTwin; as twin) {
+  <section class="profit-panel">
+    <dl class="profit-strip"><div><dt>Baseline revenue</dt><dd>{{ money(twin.baselineRevenuePaise) }}</dd></div><div><dt>Baseline profit</dt><dd [class.negative]="twin.baselineProfitPaise < 0">{{ money(twin.baselineProfitPaise) }}</dd></div><div><dt>Custom revenue</dt><dd>{{ money(customScenario?.projectedRevenuePaise) }}</dd></div><div><dt>Custom profit</dt><dd [class.negative]="(customScenario?.projectedProfitPaise || 0) < 0">{{ money(customScenario?.projectedProfitPaise) }}</dd></div><div><dt>Profit change</dt><dd [class.negative]="(customScenario?.profitDeltaPaise || 0) < 0">{{ money(customScenario?.profitDeltaPaise) }}</dd></div><div><dt>Custom margin</dt><dd>{{ percent(customScenario?.projectedMarginBps) }}</dd></div></dl>
+    <div class="panel-heading"><div><span>WHAT-IF</span><h2>Profit Digital Twin</h2></div><small>All changes are percentages</small></div>
+    <div class="scenario-controls"><label>Price change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.priceChangePct" placeholder="%" /></label><label>Volume change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.volumeChangePct" placeholder="%" /></label><label>Staff cost change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.staffCostChangePct" placeholder="%" /></label><label>Wastage reduction<input type="number" min="0" max="100" [(ngModel)]="scenarioDraft.wastageReductionPct" placeholder="%" /></label><label>Overhead change<input type="number" min="-100" max="100" [(ngModel)]="scenarioDraft.overheadChangePct" placeholder="%" /></label></div>
+    @if (twin.scenarios.length) {
+      <div class="table-wrap"><table><thead><tr><th>Baseline scenario</th><th>Revenue</th><th>Profit</th><th>Profit change</th><th>Margin</th></tr></thead><tbody>@for (row of twin.scenarios; track row) {
+      <tr><td><strong>{{ row.name }}</strong></td><td>{{ money(row.projectedRevenuePaise) }}</td><td>{{ money(row.projectedProfitPaise) }}</td><td>{{ money(row.profitDeltaPaise) }}</td><td>{{ percent(row.projectedMarginBps) }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">Incomplete costs; scenario recommendations blocked</div>
+  }
+</section>
+}
+@if (profitTab === 'guard') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>PRE-INVOICE CONTROL</span><h2>POS negative-margin guard</h2></div><small>Recorded or checkout-preview costs only</small></div>
+    <div class="scenario-controls"><label>Gross (paise)<input type="number" min="1" [(ngModel)]="posGuardDraft.grossAmountPaise" /></label><label>Discount (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.discountPaise" /></label><label>Product cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.productCostPaise" /></label><label>Staff cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.staffCostPaise" /></label><label>Redemption (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.membershipRedemptionPaise" /></label>@if (canManageProfit) {
+    <button type="button" class="primary-button" (click)="runPosMarginCheck()" [disabled]="posGuardBusy">{{ posGuardBusy ? 'Checking...' : 'Check margin' }}</button>
+  }</div>
+  @if (posGuardDecision; as result) {
+    <dl class="profit-strip"><div><dt>Decision</dt><dd>{{ titleCase(result.decision.decision.replace('_',' ')) }}</dd></div><div><dt>Status</dt><dd>{{ titleCase(result.decision.status.replace('_',' ')) }}</dd></div><div><dt>Estimated profit</dt><dd [class.negative]="result.decision.estimatedProfitPaise < 0">{{ money(result.decision.estimatedProfitPaise) }}</dd></div><div><dt>Margin</dt><dd>{{ percent(result.decision.marginBps) }}</dd></div><div><dt>Discount</dt><dd>{{ percent(result.decision.discountBps) }}</dd></div><div><dt>Approval</dt><dd>{{ result.approval?.status ? titleCase(result.approval?.status || '') : 'Not required' }}</dd></div></dl><div class="guard-result"><strong>{{ result.decision.message }}</strong>@for (reason of result.decision.reasonCodes; track reason) {
+    <span>{{ titleCase(reason.replace('_',' ')) }}</span>
+  }</div>
+}
+</section>
+}
+@if (profitTab === 'reconciliation' && reconciliation; as recon) {
+  <section class="profit-panel">
+    <dl class="profit-strip"><div><dt>Cost complete</dt><dd>{{ percent(recon.costCompletenessBps) }}</dd></div><div><dt>Close readiness</dt><dd>{{ recon.branchPeriodCloseReady ? 'Ready' : 'Blocked' }}</dd></div><div><dt>Revenue variance</dt><dd [class.negative]="recon.revenueVariancePaise !== 0">{{ money(recon.revenueVariancePaise) }}</dd></div><div><dt>COGS variance</dt><dd [class.negative]="recon.cogsVariancePaise !== 0">{{ money(recon.cogsVariancePaise) }}</dd></div><div><dt>Payroll variance</dt><dd [class.negative]="recon.payrollVariancePaise !== 0">{{ money(recon.payrollVariancePaise) }}</dd></div><div><dt>Missing journals</dt><dd>{{ recon.missingInvoiceJournalCount }}</dd></div></dl>
+    <div class="panel-heading"><div><span>LEDGER TO MICRO</span><h2>Revenue bridge</h2></div><small>{{ recon.costCompleteLineCount }}/{{ recon.reportableLineCount }} cost-complete lines</small></div>
+    <div class="table-wrap"><table><thead><tr><th>Ledger revenue</th><th>Missing invoice bridge</th><th>Micro revenue</th><th>Unexplained variance</th></tr></thead><tbody><tr><td>{{ money(recon.revenueBridge.ledgerRevenuePaise) }}</td><td>{{ money(recon.revenueBridge.missingInvoiceJournalPaise) }}</td><td>{{ money(recon.revenueBridge.microRevenuePaise) }}</td><td [class.negative]="recon.revenueBridge.unexplainedVariancePaise !== 0">{{ money(recon.revenueBridge.unexplainedVariancePaise) }}</td></tr></tbody></table></div>
+    <div class="panel-heading"><div><span>DATA QUALITY</span><h2>Cost source gaps</h2></div><small>{{ recon.allocationRuleCount }} allocation rule{{ recon.allocationRuleCount === 1 ? '' : 's' }}</small></div>
+    <div class="table-wrap"><table><thead><tr><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Gateway fee</th><th>Refund fee</th><th>Unallocated overhead</th></tr></thead><tbody><tr><td>{{ recon.missingProductCostLineCount }}</td><td>{{ recon.missingStaffCostLineCount }}</td><td>{{ recon.missingStaffTimeCostLineCount }}</td><td>{{ recon.missingGatewayFeeLineCount }}</td><td>{{ recon.missingRefundFeeLineCount }}</td><td [class.negative]="recon.unallocatedOverheadPaise !== 0">{{ money(recon.unallocatedOverheadPaise) }}</td></tr></tbody></table></div>
+    <div class="panel-heading"><div><span>VERSIONED POLICY</span><h2>Overhead allocation rules</h2></div><small>One active account pool per period</small></div>
+    @if (canManageProfit) {
+      <div class="scenario-controls allocation-controls">
+        <label>Rule name<input type="text" [(ngModel)]="allocationDraft.name" (input)="allocationDraft.name = titleCase(allocationDraft.name)" maxlength="120" /></label>
+        <label>Driver<select [(ngModel)]="allocationDraft.driver"><option value="service_minutes">Service minutes</option><option value="chair_resource_minutes">Chair/resource minutes</option><option value="revenue_share">Revenue share</option><option value="headcount">Headcount</option><option value="transaction_count">Transaction count</option></select></label>
+        <label>Overhead accounts<select multiple [(ngModel)]="allocationDraft.accountCodes">@for (account of allocationAccounts; track account) {
+          <option [value]="account.code">{{ account.name }}</option>
+        }</select></label>
+        <label>Effective from<as-date-picker ariaLabel="Allocation effective from" [(value)]="allocationDraft.effectiveFrom"></as-date-picker></label>
+        <label>Effective to<as-date-picker ariaLabel="Allocation effective to" [(value)]="allocationDraft.effectiveTo"></as-date-picker></label>
+        <button type="button" class="primary-button" (click)="createAllocationRule()" [disabled]="allocationBusy || !allocationDraft.name.trim() || !allocationDraft.effectiveFrom || !allocationDraft.accountCodes.length">{{ allocationBusy ? 'Saving...' : 'Create version' }}</button>
+      </div>
+    }
+    @if (allocationRules.length) {
+      <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Version</th><th>Driver</th><th>Accounts</th><th>Effective from</th><th>Effective to</th></tr></thead><tbody>@for (rule of allocationRules; track rule) {
+      <tr><td><strong>{{ rule.name }}</strong></td><td>v{{ rule.version }}</td><td>{{ titleCase(rule.driver.split('_').join(' ')) }}</td><td>{{ rule.accountCodes.join(', ') }}</td><td>{{ reportDate(rule.effectiveFrom) }}</td><td>{{ reportDate(rule.effectiveTo) }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No allocation rules yet</div>
+  }
+  <div class="panel-heading"><div><span>BACKFILL QUEUE</span><h2>Missing invoice journals</h2></div>@if (canManageProfit && invoiceRepairQueue.length) {
+  <button type="button" class="primary-button" (click)="repairInvoiceJournals()" [disabled]="repairBusy">{{ repairBusy ? 'Repairing...' : 'Repair open periods' }}</button>
+}</div>
+@if (invoiceRepairQueue.length) {
+  <div class="table-wrap"><table><thead><tr><th>Invoice</th><th>Branch</th><th>Business date</th><th>Total</th><th>Period</th></tr></thead><tbody>@for (row of invoiceRepairQueue; track row) {
+  <tr><td><strong>{{ row.invoiceNumber }}</strong></td><td>{{ row.branchId | branchName }}</td><td>{{ reportDate(row.businessDate) }}</td><td>{{ money(row.totalPaise) }}</td><td><span class="status-pill" [class.completed]="row.periodStatus === 'open'" [class.dismissed]="row.periodStatus === 'closed'">{{ titleCase(row.periodStatus) }}</span></td></tr>
+}</tbody></table></div>
+} @else {
+  <div class="compact-empty">No missing invoice journals</div>
+}
+</section>
+}
+@if (isDimensionTab) {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>POS COST ATTRIBUTION</span><h2>{{ titleCase(profitTab) }} profit</h2></div>@if (profitTab !== 'branch') {
+    <small>{{ currentDimensionRows.length }} records</small>
+    }@if (profitTab === 'branch') {
+    <small>{{ advanced?.branchCount || 0 }} branches · {{ money(branchTotalRevenuePaise) }} revenue · {{ money(branchTotalProfitPaise) }} profit</small>
+  }</div>
+  @if (currentDimensionRows.length) {
+    <div class="table-wrap"><table><thead><tr><th>{{ titleCase(profitTab) }}</th><th>Units</th><th>Revenue</th><th>Discount</th><th>Product cost</th><th>Commission</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Margin</th>@if (comparePrevious) {
+    <th>Change</th>
+    }<th>Data quality</th></tr></thead><tbody>@for (row of currentDimensionRows; track row) {
+    <tr class="clickable-row" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.unitCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(rowCost(row)) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="margin-pill" [class.negative]="rowMargin(row) < 0">{{ percent(rowMargin(row)) }}</span></td>@if (comparePrevious) {
+    <td [class.negative]="rowProfit(row) - comparisonProfit(row) < 0">{{ money(rowProfit(row) - comparisonProfit(row)) }}</td>
+    }<td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ row.incompleteCostLineCount ? row.incompleteCostLineCount + ' incomplete' : 'Complete' }}</span></td></tr>
+  }</tbody></table></div>
+} @else {
+  <div class="compact-empty">No records yet</div>
+}
+</section>
+}
+@if (profitTab === 'leaks') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>RECORDED IMPACT</span><h2>Profit leaks</h2></div><small>{{ advanced?.leaks?.length || 0 }} signals</small></div>
+    @if (advanced?.leaks?.length) {
+      <div class="insight-list">@for (leak of advanced?.leaks; track leak) {
+        <article [class]="leak.severity"><div><span>{{ titleCase(leak.kind.replace('_',' ')) }}</span><h3>{{ leak.title }}</h3><p>{{ leak.message }}</p></div><strong>{{ money(leak.impactPaise) }}</strong>@if (canManageProfit) {
+        <button type="button" (click)="queueLeak(leak)">Add action</button>
+      }</article>
+    }</div>
+  } @else {
+    <div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; recommendations blocked' : 'No profit leaks detected' }}</div>
+  }
+</section>
+}
+@if (profitTab === 'pricing') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>25% TARGET MARGIN</span><h2>Pricing recommendations</h2></div><small>{{ advanced?.pricing?.length || 0 }} opportunities</small></div>
+    @if (advanced?.pricing?.length) {
+      <div class="table-wrap"><table><thead><tr><th>Service</th><th>Current average</th><th>Suggested</th><th>Current margin</th><th>Target</th><th>Expected lift</th>@if (canManageProfit) {
+      <th>Action</th>
+    }</tr></thead><tbody>@for (row of advanced?.pricing; track row) {
+    <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ money(row.currentAveragePricePaise) }}</td><td>{{ money(row.suggestedPricePaise) }}</td><td>{{ percent(row.currentMarginBps) }}</td><td>{{ percent(row.targetMarginBps) }}</td><td>{{ money(row.expectedProfitLiftPaise) }}</td>@if (canManageProfit) {
+    <td><button type="button" class="table-action" (click)="queuePricing(row)">Add action</button></td>
+  }</tr>
+}</tbody></table></div>
+} @else {
+  <div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Incomplete costs; recommendations blocked' : 'No pricing actions required' }}</div>
+}
+</section>
+}
+@if (profitTab === 'recipe') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>EXPECTED VS ACTUAL COST</span><h2>Recipe variance</h2></div><small>{{ advanced?.recipeVariance?.length || 0 }} services</small></div>
+    @if (advanced?.recipeVariance?.length) {
+      <div class="table-wrap"><table><thead><tr><th>Service</th><th>Sold</th><th>Recipe items</th><th>Expected cost</th><th>Actual cost</th><th>Variance</th><th>Variance %</th></tr></thead><tbody>@for (row of advanced?.recipeVariance; track row) {
+      <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.soldQuantity }}</td><td>{{ row.recipeItemCount }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td [class.negative]="row.variancePaise > 0">{{ money(row.variancePaise) }}</td><td>{{ percent(row.varianceBps) }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No recipe cost records yet</div>
+  }
+</section>
+}
+@if (profitTab === 'copilot') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>{{ advanced?.copilotSource === 'openai_responses' ? 'AI MODEL • RECONCILED FACTS' : 'RULE-BASED • RECONCILED FACTS' }}</span><h2>Profit Copilot</h2></div><small>{{ advanced?.copilotModel || 'local-profit-policy-v1' }} · {{ advanced?.copilot?.length || 0 }} recommendations</small></div>
+    @if (advanced?.copilot?.length) {
+      <div class="copilot-list">@for (insight of advanced?.copilot; track insight) {
+        <article><div class="copilot-icon">↗</div><div><span>{{ titleCase(insight.kind.replace('_',' ')) }} · {{ insight.recommendationVersion }} · {{ titleCase(insight.evaluationStatus) }}</span><h3>{{ insight.title }}</h3><p>{{ insight.message }}</p></div><strong>{{ money(insight.impactPaise) }}</strong>@if (canManageProfit) {
+        <div class="queue-actions"><button type="button" (click)="submitCopilotFeedback(insight,'accepted')" [disabled]="actionBusyId === insight.recommendationVersionId">Useful</button><button type="button" (click)="submitCopilotFeedback(insight,'rejected')" [disabled]="actionBusyId === insight.recommendationVersionId">Not useful</button><button type="button" (click)="queueCopilot(insight)">Add action</button></div>
+      }</article>
+    }</div>
+  } @else {
+    <div class="compact-empty">{{ advanced?.recommendationsBlocked ? 'Period is not reconciled; recommendations blocked' : 'No recommendations yet' }}</div>
+  }
+</section>
+}
+@if (profitTab === 'actions') {
+  <section class="profit-panel">
+    <div class="queue-toolbar"><div><span>WORK QUEUE</span><h2>Profit Action Queue</h2></div><select [(ngModel)]="actionStatus" (change)="loadActions()"><option value="active">Active</option><option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="completed">Completed</option><option value="dismissed">Dismissed</option></select><select [(ngModel)]="actionPriority" (change)="loadActions()"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>@if (canManageProfit) {
+    <button type="button" class="primary-button" (click)="openActionDrawer()">New action</button>
+  }</div>
+  @if (actions.length) {
+    <div class="queue-list">@for (action of actions; track action) {
+      <article [class.overdue]="isActionOverdue(action)"><span class="priority-dot" [class]="action.priority"></span><div><div class="queue-title"><h3>{{ action.title }}</h3><span class="status-pill" [class]="action.status">{{ titleCase(action.status) }}</span>@if (action.generatedBy === 'automated_scan') {
+      <span class="status-pill">Automated #{{ action.occurrenceNumber }}</span>
+      }@if (isActionOverdue(action)) {
+      <span class="status-pill dismissed">SLA overdue</span>
+      }</div><p>{{ action.message }}</p><div class="queue-meta"><span>{{ titleCase(action.actionType.replace('_',' ')) }}</span><span>{{ actionPeriod(action) }}</span><span>Owner {{ action.ownerName || action.ownerUserId || '-' }}</span><span>SLA {{ slaLabel(action) }} · Due {{ formatDate(action.dueAt) }}</span><span>Observed {{ formatDate(action.lastObservedAt || action.updatedAt) }}</span></div>@if (action.notes) {
+      <small>{{ action.notes }}</small>
+      }</div><div class="impact-stack"><span>Baseline <strong>{{ money(action.baselineImpactPaise) }}</strong></span><span>Expected <strong>{{ money(action.expectedImpactPaise) }}</strong></span><span>Realized <strong>{{ money(action.realizedImpactPaise) }}</strong></span></div>@if (canManageProfit) {
+      <div class="queue-actions">@if (action.status === 'pending') {
+        <button type="button" (click)="transitionAction(action,'approve')" [disabled]="actionBusyId === action.id">Approve</button>
+        }@if (action.status === 'approved') {
+        <button type="button" (click)="transitionAction(action,'complete')" [disabled]="actionBusyId === action.id">Complete</button>
+        }@if (action.status === 'pending' || action.status === 'approved') {
+        <button type="button" (click)="transitionAction(action,'dismiss')" [disabled]="actionBusyId === action.id">Dismiss</button>
+      }</div>
+    }</article>
+  }</div>
+} @else {
+  <div class="compact-empty">No actions yet</div>
+}
+</section>
+}
+@if (profitTab === 'rules') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>GOVERNANCE</span><h2>Rules</h2></div><small>{{ governance?.enabledRules || 0 }}/{{ governance?.configuredRules || governanceRules.length }} enabled</small></div>
+    @if (governanceRules.length) {
+      <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Minimum margin</th><th>Maximum discount</th><th>Approval</th><th>Audit</th><th>Status</th>@if (canManageProfit) {
+      <th>Action</th>
+    }</tr></thead><tbody>@for (rule of governanceRules; track rule) {
+    <tr><td><strong>{{ rule.title }}</strong><small>{{ rule.ruleType }}</small></td><td>{{ titleCase(rule.severity) }}</td><td>{{ percent(rule.minMarginBps) }}</td><td>{{ percent(rule.maxDiscountBps) }}</td><td>{{ rule.approvalRequired ? 'Required' : 'No' }}</td><td>{{ rule.auditRequired ? 'Required' : 'No' }}</td><td><span class="status-pill" [class.completed]="rule.enabled" [class.dismissed]="!rule.enabled">{{ rule.enabled ? 'Enabled' : 'Disabled' }}</span></td>@if (canManageProfit) {
+    <td><button type="button" class="table-action" (click)="toggleGovernanceRule(rule)" [disabled]="!!governanceBusyId">{{ rule.enabled ? 'Disable' : 'Enable' }}</button></td>
+  }</tr>
+}</tbody></table></div>
+} @else {
+  <div class="compact-empty">No governance rules yet</div>
+}
+</section>
+}
+@if (profitTab === 'approvals') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>FOUR-EYES CONTROL</span><h2>Approvals</h2></div><small>{{ governance?.pendingApprovals || 0 }} pending</small></div>
+    @if (governanceApprovals.length) {
+      <div class="table-wrap"><table><thead><tr><th>Requested</th><th>Action</th><th>Source</th><th>Decision</th><th>Impact</th><th>Margin</th><th>Status</th><th>Review</th></tr></thead><tbody>@for (approval of governanceApprovals; track approval) {
+      <tr><td>{{ formatDate(approval.requestedAt) }}</td><td><strong>{{ titleCase(approval.actionType.replace('_',' ')) }}</strong></td><td>{{ approval.sourceType }} · {{ approval.sourceId }}</td><td>{{ approval.message }}</td><td>{{ money(approval.impactPaise) }}</td><td>{{ percent(approval.marginBps) }}</td><td><span class="status-pill" [class]="approval.status">{{ titleCase(approval.status) }}</span></td><td>@if (approval.status === 'pending') {
+      <div class="queue-actions"><button type="button" (click)="reviewGovernanceApproval(approval,'approve')" [disabled]="!!governanceBusyId">Approve</button><button type="button" (click)="reviewGovernanceApproval(approval,'reject')" [disabled]="!!governanceBusyId">Reject</button></div>
+    }</td></tr>
+  }</tbody></table></div>
+} @else {
+  <div class="compact-empty">No governance approvals</div>
+}
+</section>
+}
+@if (profitTab === 'audit') {
+  <section class="profit-panel">
+    <div class="panel-heading"><div><span>IMMUTABLE TRAIL</span><h2>Governance audit</h2></div><small>{{ governanceAudit.length }} events</small></div>
+    @if (governanceAudit.length) {
+      <div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>Actor</th><th>Decision</th><th>Rule</th><th>Details</th></tr></thead><tbody>@for (event of governanceAudit; track event) {
+      <tr><td>{{ formatDate(event.createdAt) }}</td><td><span class="status-pill">{{ titleCase(event.eventType.replace('_',' ')) }}</span></td><td>{{ event.actorUserId }}</td><td>{{ event.decisionId || '-' }}</td><td>{{ event.ruleId || '-' }}</td><td class="audit-details">{{ auditDetails(event.detailsJson) }}</td></tr>
+    }</tbody></table></div>
+  } @else {
+    <div class="compact-empty">No governance audit events</div>
+  }
+</section>
+}
+}
+</section>
+@if (actionDrawerOpen && canManageProfit) {
+  <aside class="action-drawer" aria-label="Create profit action">
     <header><div><span>PROFIT ACTION</span><h2>New action</h2></div><button type="button" aria-label="Close" (click)="closeActionDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Action type<select [(ngModel)]="actionDraft.actionType"><option value="manual_profit_action">Manual profit action</option><option value="pricing_recommendation">Pricing recommendation</option><option value="discount_abuse">Discount review</option><option value="high_wastage">High wastage</option><option value="membership_liability_risk">Membership liability</option><option value="low_margin_service">Low-margin service</option><option value="high_expense">High expense</option></select></label>
@@ -239,10 +488,28 @@
     </div>
     <footer><button type="button" (click)="closeActionDrawer()">Cancel</button><button type="button" class="primary-button" (click)="createAction()" [disabled]="actionBusyId === 'create'">{{ actionBusyId === 'create' ? 'Saving...' : 'Create action' }}</button></footer>
   </aside>
-
-  <aside class="action-drawer drill-drawer" *ngIf="selectedDimensionRow as selected" aria-label="Micro P&L drill-down">
+}
+@if (selectedDimensionRow; as selected) {
+  <aside class="action-drawer drill-drawer" aria-label="Micro P&L drill-down">
     <header><div><span>{{ titleCase(selected.dimension) }}</span><h2>{{ selected.entityName }}</h2></div><button type="button" aria-label="Close" (click)="closeProfitDrill()">×</button></header>
-    <div class="drawer-body"><p class="profit-state" *ngIf="drillBusy">Loading drill-down...</p><div class="drill-lines" *ngIf="!drillBusy && drillLines.length; else noDrill"><article *ngFor="let line of drillLines"><div class="lineage-grid"><span>Sale line<strong>{{ line.saleLineId }}</strong></span><span>Invoice<strong>{{ line.invoiceNumber }}</strong></span><span>Appointment<strong>{{ line.appointmentId || 'Direct sale' }}</strong></span><span>Journal<strong>{{ line.journalEntryId || 'Missing' }}</strong></span><span>Inventory<strong>{{ (line.inventoryMovementIds || []).join(', ') || 'None' }}</strong></span><span>Channel<strong>{{ titleCase(line.channel || 'unknown') }}</strong></span></div><div class="drill-money"><span>{{ line.itemName }}</span><strong [class.negative]="(profitLevel === 'fullyLoaded' ? line.fullyLoadedProfitPaise : line.contributionProfitPaise) < 0">{{ money(profitLevel === 'fullyLoaded' ? line.fullyLoadedProfitPaise : line.contributionProfitPaise) }}</strong><span class="status-pill" [class.completed]="line.completenessStatus === 'complete'" [class.pending]="line.completenessStatus !== 'complete'">{{ percent(line.costCompletenessBps) }}</span></div></article></div><ng-template #noDrill><div class="compact-empty" *ngIf="!drillBusy">No sale lines yet</div></ng-template></div>
+    <div class="drawer-body">@if (drillBusy) {
+      <p class="profit-state">Loading drill-down...</p>
+      }@if (!drillBusy && drillLines.length) {
+      <div class="drill-lines">@for (line of drillLines; track line) {
+        <article><div class="lineage-grid"><span>Sale line<strong>{{ line.saleLineId }}</strong></span><span>Invoice<strong>{{ line.invoiceNumber }}</strong></span><span>Appointment<strong>{{ line.appointmentId || 'Direct sale' }}</strong></span><span>Journal<strong>{{ line.journalEntryId || 'Missing' }}</strong></span><span>Inventory<strong>{{ (line.inventoryMovementIds || []).join(', ') || 'None' }}</strong></span><span>Channel<strong>{{ titleCase(line.channel || 'unknown') }}</strong></span></div><div class="drill-money"><span>{{ line.itemName }}</span><strong [class.negative]="(profitLevel === 'fullyLoaded' ? line.fullyLoadedProfitPaise : line.contributionProfitPaise) < 0">{{ money(profitLevel === 'fullyLoaded' ? line.fullyLoadedProfitPaise : line.contributionProfitPaise) }}</strong><span class="status-pill" [class.completed]="line.completenessStatus === 'complete'" [class.pending]="line.completenessStatus !== 'complete'">{{ percent(line.costCompletenessBps) }}</span></div></article>
+      }</div>
+    } @else {
+      @if (!drillBusy) {
+        <div class="compact-empty">No sale lines yet</div>
+      }
+    }</div>
     <footer><small>{{ drillLines.length }}/{{ drillTotal }} lines</small><button type="button" (click)="closeProfitDrill()">Close</button></footer>
   </aside>
-</ng-template>
+}
+}
+}
+}
+</main>
+</section>
+
+

@@ -72,6 +72,9 @@ pub struct ServicePricingSource {
     pub base_price_paise: i64,
     pub base_duration_minutes: i32,
     pub staff_price_paise: Option<i64>,
+    pub pricing_level_id: Option<String>,
+    pub pricing_level_name: Option<String>,
+    pub pricing_level_price_paise: Option<i64>,
     pub variant_id: Option<String>,
     pub variant_price_delta_paise: i64,
     pub variant_duration_delta_minutes: i32,
@@ -384,6 +387,9 @@ pub async fn pricing_source(
                service.price_paise::BIGINT AS base_price_paise,
                service.duration_minutes AS base_duration_minutes,
                staff_price.price_paise::BIGINT AS staff_price_paise,
+               pricing_level.id AS pricing_level_id,
+               pricing_level.name AS pricing_level_name,
+               level_price.price_paise::BIGINT AS pricing_level_price_paise,
                variant.id AS variant_id,
                COALESCE(variant.price_delta_paise,0)::BIGINT AS variant_price_delta_paise,
                COALESCE(variant.duration_delta_minutes,0)::INTEGER AS variant_duration_delta_minutes,
@@ -401,6 +407,27 @@ pub async fn pricing_source(
                AND price.service_id=service.id AND price.staff_id=NULLIF($4,'') AND price.active=TRUE
              LIMIT 1
           ) staff_price ON TRUE
+          LEFT JOIN staff staff_member
+            ON staff_member.tenant_id=service.tenant_id
+           AND staff_member.branch_id=service.branch_id
+           AND staff_member.id=NULLIF($4,'')
+           AND staff_member.active=TRUE
+          LEFT JOIN staff_profiles staff_profile
+            ON staff_profile.tenant_id=service.tenant_id
+           AND staff_profile.branch_id=service.branch_id
+           AND staff_profile.staff_id=staff_member.id
+          LEFT JOIN staff_pricing_levels pricing_level
+            ON pricing_level.tenant_id=service.tenant_id
+           AND pricing_level.branch_id=service.branch_id
+           AND pricing_level.id=staff_profile.pricing_level_id
+           AND pricing_level.active=TRUE
+          LEFT JOIN LATERAL (
+            SELECT price.price_paise
+              FROM service_pricing_level_prices price
+             WHERE price.tenant_id=service.tenant_id AND price.branch_id=service.branch_id
+               AND price.service_id=service.id AND price.pricing_level_id=pricing_level.id AND price.active=TRUE
+             LIMIT 1
+          ) level_price ON TRUE
           LEFT JOIN LATERAL (
             SELECT item.id,item.price_delta_paise,item.duration_delta_minutes
               FROM service_variants item

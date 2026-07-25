@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use std::{
     collections::{BTreeSet, HashSet},
     net::IpAddr,
@@ -345,15 +345,7 @@ pub async fn record_audit(
     action: &str,
     details: Value,
 ) -> Result<(), AppError> {
-    let action = action.trim().to_ascii_lowercase();
-    if !(3..=80).contains(&action.len())
-        || !action
-            .chars()
-            .all(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-'))
-        || !details.is_object()
-    {
-        return Err(AppError::validation("invalid security audit event"));
-    }
+    let action = audit_action(action, &details)?;
     auth_repository::audit(
         db,
         AuthAuditInput {
@@ -371,6 +363,47 @@ pub async fn record_audit(
     )
     .await
     .map_err(|_| AppError::internal("failed to record security audit"))
+}
+
+pub async fn record_audit_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    action: &str,
+    details: Value,
+) -> Result<(), AppError> {
+    let action = audit_action(action, &details)?;
+    auth_repository::audit_tx(
+        tx,
+        AuthAuditInput {
+            tenant_id,
+            user_id: Some(actor_id),
+            session_id: None,
+            branch_id: Some(branch_id),
+            identity: None,
+            event_type: &format!("security.{action}"),
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details,
+        },
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record security audit"))
+}
+
+fn audit_action(action: &str, details: &Value) -> Result<String, AppError> {
+    let action = action.trim().to_ascii_lowercase();
+    if !(3..=80).contains(&action.len())
+        || !action
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-'))
+        || !details.is_object()
+    {
+        return Err(AppError::validation("invalid security audit event"));
+    }
+    Ok(action)
 }
 
 pub async fn list_sessions(

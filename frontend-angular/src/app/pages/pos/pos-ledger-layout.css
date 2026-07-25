@@ -163,7 +163,7 @@
   min-width: 790px;
 }
 
-.held-grid { grid-template-columns: 110px minmax(150px, 1.25fr) 64px 120px 100px 96px 108px; }
+.held-grid { grid-template-columns: 110px minmax(150px, 1.25fr) 64px 120px 100px 96px 200px; }
 .tip-grid { grid-template-columns: 132px minmax(150px, 1.2fr) minmax(130px, 1fr) 112px 118px 112px 94px; }
 
 .held-grid > :nth-child(3),
@@ -259,4 +259,16 @@
 @media (max-width: 420px) {
   .pos-ledger-page { padding: 10px; }
   .ledger-kpis { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 700px) {
+  .ledger-hero a,
+  .ledger-hero button,
+  .ledger-filter-bar button,
+  .ledger-filter-bar input,
+  .ledger-filter-bar select,
+  .resume-button,
+  .detail-resume,
+  .cancel-button,
+  .detail-cancel { min-height: 44px; }
 }

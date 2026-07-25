@@ -8,173 +8,322 @@
   </header>
 
   <nav class="view-tabs" [attr.aria-label]="'staff.ui.c3fd81dd15' | translate">
-    <button *ngFor="let tab of tabs" type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key">
-      <i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}
-    </button>
+    @for (tab of tabs; track tab) {
+      <button type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key">
+        <i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}
+      </button>
+    }
   </nav>
 
   <section class="command-bar" [attr.aria-label]="'staff.ui.f932704215' | translate">
     <label><span>{{ 'staff.ui.f5eda1b11a' | translate }}</span><select [(ngModel)]="cycle" disabled><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option></select></label>
     <label><span>{{ 'staff.ui.1627510b24' | translate }}</span><input [value]="branchLabel" disabled /></label>
-    <label><span>{{ 'staff.ui.082bc378cd' | translate }}</span><select [(ngModel)]="month" (ngModelChange)="changePeriod()"><option *ngFor="let label of months; let index = index" [ngValue]="index + 1">{{ label }}</option></select></label>
-    <label><span>{{ 'staff.ui.879e32326c' | translate }}</span><select [(ngModel)]="year" (ngModelChange)="changePeriod()"><option *ngFor="let option of years" [ngValue]="option">{{ option }}</option></select></label>
-    <label><span>{{ 'staff.ui.a3c686e711' | translate }}</span><select [(ngModel)]="category"><option value="">{{ 'staff.ui.060be00f4f' | translate }}</option><option *ngFor="let option of categoryOptions" [value]="option">{{ option }}</option></select></label>
-    <label class="employee-filter"><span>{{ 'staff.ui.079711ea16' | translate }}</span><select [(ngModel)]="staffId" (ngModelChange)="changePeriod()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option><option *ngFor="let employee of staff" [value]="employee.id">{{ staffLabel(employee) }}</option></select></label>
-    <label><span>{{ 'staff.ui.a7b93d2128' | translate }}</span><select [(ngModel)]="salaryMode" (ngModelChange)="changeMode()"><option value="preview">{{ 'staff.ui.c3f226b359' | translate }}</option><option value="generate">{{ 'staff.ui.b814a72f17' | translate }}</option><option value="history">{{ 'staff.ui.1448a25aed' | translate }}</option></select></label>
-    <div class="command-actions">
-      <button type="button" class="icon-button" [attr.title]="'staff.ui.56e3badc4e' | translate" [attr.aria-label]="'staff.ui.f4c5e6cb83' | translate" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
-      <button type="button" class="primary" [disabled]="loading" (click)="runSelectedMode()"><i class="bi bi-play-fill"></i>{{ action === 'run' ? 'Running...' : salaryMode === 'generate' ? 'Generate salary' : salaryMode === 'history' ? 'Load list' : 'Preview salary' }}</button>
-    </div>
-  </section>
+    <label><span>{{ 'staff.ui.082bc378cd' | translate }}</span><select [(ngModel)]="month" (ngModelChange)="changePeriod()">@for (label of months; track label; let index = $index) {
+    <option [ngValue]="index + 1">{{ label }}</option>
+  }</select></label>
+  <label><span>{{ 'staff.ui.879e32326c' | translate }}</span><select [(ngModel)]="year" (ngModelChange)="changePeriod()">@for (option of years; track option) {
+  <option [ngValue]="option">{{ option }}</option>
+}</select></label>
+<label><span>{{ 'staff.ui.a3c686e711' | translate }}</span><select [(ngModel)]="category"><option value="">{{ 'staff.ui.060be00f4f' | translate }}</option>@for (option of categoryOptions; track option) {
+<option [value]="option">{{ option }}</option>
+}</select></label>
+<label class="employee-filter"><span>{{ 'staff.ui.079711ea16' | translate }}</span><select [(ngModel)]="staffId" (ngModelChange)="changePeriod()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option>@for (employee of staff; track employee) {
+<option [value]="employee.id">{{ staffLabel(employee) }}</option>
+}</select></label>
+<label><span>{{ 'staff.ui.a7b93d2128' | translate }}</span><select [(ngModel)]="salaryMode" (ngModelChange)="changeMode()"><option value="preview">{{ 'staff.ui.c3f226b359' | translate }}</option><option value="generate">{{ 'staff.ui.b814a72f17' | translate }}</option><option value="history">{{ 'staff.ui.1448a25aed' | translate }}</option></select></label>
+<div class="command-actions">
+  <button type="button" class="icon-button" [attr.title]="'staff.ui.56e3badc4e' | translate" [attr.aria-label]="'staff.ui.f4c5e6cb83' | translate" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
+  <button type="button" class="primary" [disabled]="loading" (click)="runSelectedMode()"><i class="bi bi-play-fill"></i>{{ action === 'run' ? 'Running...' : salaryMode === 'generate' ? 'Generate salary' : salaryMode === 'history' ? 'Load list' : 'Preview salary' }}</button>
+</div>
+</section>
 
-  <section class="utility-bar">
-    <button type="button" [disabled]="loading" (click)="checkSourceData(true)"><i class="bi bi-calculator"></i>{{ action === 'commissions' ? 'Calculating...' : 'Calculate commissions' }}</button>
-    <button type="button" [disabled]="items.length === 0" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
-    <button type="button" (click)="holidayOpen = !holidayOpen"><i class="bi bi-calendar-event"></i>{{ 'staff.ui.80729cc5d8' | translate }}</button>
-    <div class="column-control">
-      <button type="button" (click)="columnMenuOpen = !columnMenuOpen"><i class="bi bi-layout-three-columns"></i>{{ 'staff.ui.cf723c59b6' | translate }}</button>
-      <div class="column-menu" *ngIf="columnMenuOpen">
-        <label *ngFor="let column of columns"><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
+<section class="utility-bar">
+  <button type="button" [disabled]="loading" (click)="checkSourceData(true)"><i class="bi bi-calculator"></i>{{ action === 'commissions' ? 'Calculating...' : 'Calculate commissions' }}</button>
+  <button type="button" [disabled]="items.length === 0" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
+  <button type="button" (click)="holidayOpen = !holidayOpen"><i class="bi bi-calendar-event"></i>{{ 'staff.ui.80729cc5d8' | translate }}</button>
+  <div class="column-control">
+    <button type="button" (click)="columnMenuOpen = !columnMenuOpen"><i class="bi bi-layout-three-columns"></i>{{ 'staff.ui.cf723c59b6' | translate }}</button>
+    @if (columnMenuOpen) {
+      <div class="column-menu">
+        @for (column of columns; track column) {
+          <label><input type="checkbox" [checked]="isVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
+        }
       </div>
-    </div>
-  </section>
+    }
+  </div>
+</section>
 
-  <section class="holiday-card" *ngIf="holidayOpen">
+@if (holidayOpen) {
+  <section class="holiday-card">
     <header><h2>{{ 'staff.ui.456bed2652' | translate }}</h2><span>{{ year }}</span></header>
     <div class="holiday-form"><as-date-picker [(value)]="holidayDate" ariaLabel="Holiday date"></as-date-picker><input [ngModel]="holidayName" (ngModelChange)="holidayName = titleCase($event)" maxlength="120" [attr.placeholder]="'staff.ui.ceba885f8e' | translate" /><label><input type="checkbox" [(ngModel)]="holidayPaid" />{{ 'staff.ui.dc9d4584a5' | translate }}</label><button type="button" class="primary" [disabled]="!holidayDate || !holidayName.trim() || action === 'holiday'" (click)="saveHoliday()">{{ 'staff.ui.efc007a393' | translate }}</button></div>
-    <div class="holiday-list"><article *ngFor="let holiday of holidays"><span><strong>{{ holiday.name }}</strong><small>{{ formatDate(holiday.holidayDate) }} · {{ holiday.isPaid ? 'Paid' : 'Unpaid' }}</small></span><button type="button" [attr.aria-label]="'staff.ui.91c3ad9165' | translate" (click)="deleteHoliday(holiday.id)"><i class="bi bi-trash"></i></button></article><p *ngIf="holidays.length === 0">{{ 'staff.ui.e619c5b961' | translate }}</p></div>
+    <div class="holiday-list">@for (holiday of holidays; track holiday) {
+      <article><span><strong>{{ holiday.name }}</strong><small>{{ formatDate(holiday.holidayDate) }} · {{ holiday.isPaid ? 'Paid' : 'Unpaid' }}</small></span><button type="button" [attr.aria-label]="'staff.ui.91c3ad9165' | translate" (click)="deleteHoliday(holiday.id)"><i class="bi bi-trash"></i></button></article>
+      }@if (holidays.length === 0) {
+      <p>{{ 'staff.ui.e619c5b961' | translate }}</p>
+    }</div>
   </section>
+}
 
-  <section class="progress-strip" [attr.aria-label]="'staff.ui.a981654009' | translate">
-    <div [class.complete]="currentStep >= 0" [class.current]="currentStep === 0"><span><i class="bi bi-database-check"></i></span><b>{{ 'staff.ui.158411acfe' | translate }}</b></div>
-    <i class="bi bi-chevron-right connector"></i>
-    <div [class.complete]="currentStep >= 1" [class.current]="currentStep === 1"><span><i class="bi bi-calculator-fill"></i></span><b>{{ 'staff.ui.757d86654e' | translate }}</b></div>
-    <i class="bi bi-chevron-right connector"></i>
-    <div [class.complete]="currentStep >= 2" [class.current]="currentStep === 2"><span><i class="bi bi-shield-check"></i></span><b>{{ 'staff.ui.31ef859337' | translate }}</b></div>
-    <i class="bi bi-chevron-right connector"></i>
-    <div [class.complete]="currentStep >= 3" [class.current]="currentStep >= 3"><span><i class="bi bi-lock-fill"></i></span><b>{{ 'staff.ui.876126b164' | translate }}</b></div>
-  </section>
+<section class="progress-strip" [attr.aria-label]="'staff.ui.a981654009' | translate">
+  <div [class.complete]="currentStep >= 0" [class.current]="currentStep === 0"><span><i class="bi bi-database-check"></i></span><b>{{ 'staff.ui.158411acfe' | translate }}</b></div>
+  <i class="bi bi-chevron-right connector"></i>
+  <div [class.complete]="currentStep >= 1" [class.current]="currentStep === 1"><span><i class="bi bi-calculator-fill"></i></span><b>{{ 'staff.ui.757d86654e' | translate }}</b></div>
+  <i class="bi bi-chevron-right connector"></i>
+  <div [class.complete]="currentStep >= 2" [class.current]="currentStep === 2"><span><i class="bi bi-shield-check"></i></span><b>{{ 'staff.ui.31ef859337' | translate }}</b></div>
+  <i class="bi bi-chevron-right connector"></i>
+  <div [class.complete]="currentStep >= 3" [class.current]="currentStep >= 3"><span><i class="bi bi-lock-fill"></i></span><b>{{ 'staff.ui.876126b164' | translate }}</b></div>
+</section>
 
-  <div class="message error" *ngIf="error"><i class="bi bi-exclamation-circle"></i>{{ error }}</div>
-  <div class="message success" *ngIf="success"><i class="bi bi-check-circle"></i>{{ success }}</div>
+@if (error) {
+  <div class="message error"><i class="bi bi-exclamation-circle"></i>{{ error }}</div>
+}
+@if (success) {
+  <div class="message success"><i class="bi bi-check-circle"></i>{{ success }}</div>
+}
 
-  <section class="validation-bar" [class.has-errors]="invalidCount > 0" *ngIf="activeTab !== 'history'">
+@if (activeTab !== 'history') {
+  <section class="validation-bar" [class.has-errors]="invalidCount > 0">
     <div>
       <i class="bi" [ngClass]="invalidCount ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'"></i>
-      <span *ngIf="items.length === 0">{{ 'staff.ui.7e738e1f5e' | translate }}</span>
-      <span *ngIf="items.length > 0 && invalidCount === 0">{{ 'staff.ui.e41ac5206a' | translate }}<span *ngIf="warningCount"> · {{ warningCount }} warning{{ warningCount === 1 ? '' : 's' }}</span></span>
-      <span *ngIf="invalidCount > 0">{{ invalidCount }} employee{{ invalidCount === 1 ? '' : 's' }} need source-data fixes</span>
+      @if (items.length === 0) {
+        <span>{{ 'staff.ui.7e738e1f5e' | translate }}</span>
+      }
+      @if (items.length > 0 && invalidCount === 0) {
+        <span>{{ 'staff.ui.e41ac5206a' | translate }}@if (warningCount) {
+          <span> · {{ warningCount }} warning{{ warningCount === 1 ? '' : 's' }}</span>
+        }</span>
+      }
+      @if (invalidCount > 0) {
+        <span>{{ invalidCount }} employee{{ invalidCount === 1 ? '' : 's' }} need source-data fixes</span>
+      }
     </div>
     <button type="button" [disabled]="loading" (click)="checkSourceData(false)"><i class="bi bi-search"></i>{{ 'staff.ui.12d7670bf4' | translate }}</button>
   </section>
+}
 
-  <section class="ledger-card" *ngIf="activeTab !== 'history'">
+@if (activeTab !== 'history') {
+  <section class="ledger-card">
     <header class="ledger-heading">
       <div><h2>{{ 'staff.ui.076d805c67' | translate }}</h2><span>{{ months[month - 1] }} {{ year }} · {{ filteredItems.length }} of {{ items.length }} employee{{ items.length === 1 ? '' : 's' }}</span></div>
       <span class="run-status" [class.preview]="!run">{{ run ? statusLabel(run.status) : 'Preview' }}</span>
     </header>
-
-    <div class="table-scroll" *ngIf="items.length > 0">
-      <table>
-        <thead><tr>
-          <th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('attendance')">{{ 'staff.ui.b689313fc1' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('payrate')">{{ 'staff.ui.31e3727328' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('commission')">{{ 'staff.ui.4bfc46bc92' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('adjustments')">{{ 'staff.ui.ce5b2f728b' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('gross')">{{ 'staff.ui.3843ff8c30' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('net')">{{ 'staff.ui.1a67f55419' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('validation')">{{ 'staff.ui.dd74d182c6' | translate }}</th>
-          <th scope="col" *ngIf="isVisible('status')">{{ 'staff.ui.bae7d5be70' | translate }}</th>
-          <th scope="col" *ngIf="canPrintPayslips">{{ 'staff.ui.34465c5215' | translate }}</th>
-        </tr></thead>
-        <tbody><tr *ngFor="let item of filteredItems">
-          <td><button type="button" class="staff-link" (click)="openStaffDetail(item)"><strong>{{ item.staffName }}</strong><small>{{ item.employeeCode || 'No employee code' }}</small></button></td>
-          <td *ngIf="isVisible('attendance')"><strong>{{ days(item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2 + item.holidayDaysX2) }} days</strong><small>{{ item.workedMinutes }} min · OT {{ item.overtimeMinutes }} min · Holiday {{ days(item.holidayDaysX2) }}</small></td>
-          <td *ngIf="isVisible('payrate')"><strong>{{ formatMoney(item.payRatePaise) }}</strong><small>{{ item.payRateType ? statusLabel(item.payRateType) : 'Not configured' }}</small></td>
-          <td *ngIf="isVisible('commission')">{{ formatMoney(item.commissionPaise) }}</td>
-          <td *ngIf="isVisible('adjustments')">
-            <div class="adjustment-cell" *ngIf="activeTab === 'detail' && run?.status === 'calculated'; else adjustmentValue">
-              <label><span>₹</span><input type="number" step="0.01" [(ngModel)]="adjustmentInputs[item.staffId]" [attr.placeholder]="'staff.ui.43dc8532f7' | translate" [attr.aria-label]="'staff.ui.50898c30bc' | translate" /></label>
-              <input type="text" maxlength="500" [(ngModel)]="noteInputs[item.staffId]" [attr.placeholder]="'staff.ui.2c924e3088' | translate" [attr.aria-label]="'staff.ui.a238abfc3a' | translate" />
-            </div>
-            <ng-template #adjustmentValue>{{ formatMoney(item.adjustmentPaise) }}</ng-template>
-          </td>
-          <td *ngIf="isVisible('gross')">{{ formatMoney(item.grossPaise) }}</td>
-          <td *ngIf="isVisible('net')"><strong class="net-pay">{{ formatMoney(item.netPaise) }}</strong><small *ngIf="item.deductionsPaise">− {{ formatMoney(item.deductionsPaise) }}</small></td>
-          <td *ngIf="isVisible('validation')">
-            <span class="validation-pill error" *ngIf="item.validationErrors.length"><i class="bi bi-x-circle-fill"></i>{{ item.validationErrors.length }} error{{ item.validationErrors.length === 1 ? '' : 's' }}</span>
-            <span class="validation-pill warning" *ngIf="!item.validationErrors.length && item.validationWarnings.length"><i class="bi bi-exclamation-circle-fill"></i>{{ item.validationWarnings.length }} warning{{ item.validationWarnings.length === 1 ? '' : 's' }}</span>
-            <span class="validation-pill valid" *ngIf="!item.validationErrors.length && !item.validationWarnings.length"><i class="bi bi-check-circle-fill"></i>{{ 'staff.ui.20c7c5522f' | translate }}</span>
-            <small class="validation-copy" *ngIf="item.validationErrors[0]">{{ item.validationErrors[0] }}</small>
-            <small class="validation-copy" *ngIf="!item.validationErrors.length && item.validationWarnings[0]">{{ item.validationWarnings[0] }}</small>
-          </td>
-          <td *ngIf="isVisible('status')"><span class="status-pill">{{ statusLabel(item.status) }}</span></td>
-          <td *ngIf="canPrintPayslips"><button type="button" (click)="printPayslip(item)"><i class="bi bi-printer"></i>{{ 'staff.ui.5b221e9c2a' | translate }}</button></td>
-        </tr></tbody>
+    @if (items.length > 0) {
+      <div class="table-scroll">
+        <table>
+          <thead><tr>
+            <th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th>
+            @if (isVisible('attendance')) {
+              <th scope="col">{{ 'staff.ui.b689313fc1' | translate }}</th>
+            }
+            @if (isVisible('payrate')) {
+              <th scope="col">{{ 'staff.ui.31e3727328' | translate }}</th>
+            }
+            @if (isVisible('commission')) {
+              <th scope="col">{{ 'staff.ui.4bfc46bc92' | translate }}</th>
+            }
+            @if (isVisible('adjustments')) {
+              <th scope="col">{{ 'staff.ui.ce5b2f728b' | translate }}</th>
+            }
+            @if (isVisible('gross')) {
+              <th scope="col">{{ 'staff.ui.3843ff8c30' | translate }}</th>
+            }
+            @if (isVisible('net')) {
+              <th scope="col">{{ 'staff.ui.1a67f55419' | translate }}</th>
+            }
+            @if (isVisible('validation')) {
+              <th scope="col">{{ 'staff.ui.dd74d182c6' | translate }}</th>
+            }
+            @if (isVisible('status')) {
+              <th scope="col">{{ 'staff.ui.bae7d5be70' | translate }}</th>
+            }
+            @if (canPrintPayslips) {
+              <th scope="col">{{ 'staff.ui.34465c5215' | translate }}</th>
+            }
+          </tr></thead>
+          <tbody>@for (item of filteredItems; track item) {
+            <tr>
+              <td><button type="button" class="staff-link" (click)="openStaffDetail(item)"><strong>{{ item.staffName }}</strong><small>{{ item.employeeCode || 'No employee code' }}</small></button></td>
+              @if (isVisible('attendance')) {
+                <td><strong>{{ days(item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2 + item.holidayDaysX2) }} days</strong><small>{{ item.workedMinutes }} min · OT {{ item.overtimeMinutes }} min · Holiday {{ days(item.holidayDaysX2) }}</small></td>
+              }
+              @if (isVisible('payrate')) {
+                <td><strong>{{ formatMoney(item.payRatePaise) }}</strong><small>{{ item.payRateType ? statusLabel(item.payRateType) : 'Not configured' }}</small></td>
+              }
+              @if (isVisible('commission')) {
+                <td>{{ formatMoney(item.commissionPaise) }}</td>
+              }
+              @if (isVisible('adjustments')) {
+                <td>
+                  @if (activeTab === 'detail' && run?.status === 'calculated') {
+                    <div class="adjustment-cell">
+                      <label><span>₹</span><input type="number" step="0.01" [(ngModel)]="adjustmentInputs[item.staffId]" [attr.placeholder]="'staff.ui.43dc8532f7' | translate" [attr.aria-label]="'staff.ui.50898c30bc' | translate" /></label>
+                      <input type="text" maxlength="500" [(ngModel)]="noteInputs[item.staffId]" [attr.placeholder]="'staff.ui.2c924e3088' | translate" [attr.aria-label]="'staff.ui.a238abfc3a' | translate" />
+                    </div>
+                  } @else {
+                    {{ formatMoney(item.adjustmentPaise) }}
+                  }
+                </td>
+              }
+              @if (isVisible('gross')) {
+                <td>{{ formatMoney(item.grossPaise) }}</td>
+              }
+              @if (isVisible('net')) {
+                <td><strong class="net-pay">{{ formatMoney(item.netPaise) }}</strong>@if (item.deductionsPaise) {
+                <small>− {{ formatMoney(item.deductionsPaise) }}</small>
+              }</td>
+            }
+            @if (isVisible('validation')) {
+              <td>
+                @if (item.validationErrors.length) {
+                  <span class="validation-pill error"><i class="bi bi-x-circle-fill"></i>{{ item.validationErrors.length }} error{{ item.validationErrors.length === 1 ? '' : 's' }}</span>
+                }
+                @if (!item.validationErrors.length && item.validationWarnings.length) {
+                  <span class="validation-pill warning"><i class="bi bi-exclamation-circle-fill"></i>{{ item.validationWarnings.length }} warning{{ item.validationWarnings.length === 1 ? '' : 's' }}</span>
+                }
+                @if (!item.validationErrors.length && !item.validationWarnings.length) {
+                  <span class="validation-pill valid"><i class="bi bi-check-circle-fill"></i>{{ 'staff.ui.20c7c5522f' | translate }}</span>
+                }
+                @if (item.validationErrors[0]) {
+                  <small class="validation-copy">{{ item.validationErrors[0] }}</small>
+                }
+                @if (!item.validationErrors.length && item.validationWarnings[0]) {
+                  <small class="validation-copy">{{ item.validationWarnings[0] }}</small>
+                }
+              </td>
+            }
+            @if (isVisible('status')) {
+              <td><span class="status-pill">{{ statusLabel(item.status) }}</span></td>
+            }
+            @if (canPrintPayslips) {
+              <td><button type="button" (click)="printPayslip(item)"><i class="bi bi-printer"></i>{{ 'staff.ui.5b221e9c2a' | translate }}</button></td>
+            }
+          </tr>
+        }</tbody>
         <tfoot><tr>
           <td><strong>{{ 'staff.ui.a61b0b282b' | translate }}</strong></td>
-          <td *ngIf="isVisible('attendance')"></td><td *ngIf="isVisible('payrate')"></td><td *ngIf="isVisible('commission')"></td><td *ngIf="isVisible('adjustments')"></td>
-          <td *ngIf="isVisible('gross')"><strong>{{ formatMoney(grossTotal) }}</strong></td>
-          <td *ngIf="isVisible('net')"><strong class="net-pay">{{ formatMoney(netTotal) }}</strong><small *ngIf="deductionTotal">Deductions {{ formatMoney(deductionTotal) }}</small></td>
-          <td *ngIf="isVisible('validation')">{{ invalidCount ? invalidCount + ' blocked' : 'Ready' }}</td><td *ngIf="isVisible('status')"></td><td *ngIf="canPrintPayslips"></td>
-        </tr></tfoot>
-      </table>
-    </div>
+          @if (isVisible('attendance')) {
+            <td></td>
+            }@if (isVisible('payrate')) {
+            <td></td>
+            }@if (isVisible('commission')) {
+            <td></td>
+            }@if (isVisible('adjustments')) {
+            <td></td>
+          }
+          @if (isVisible('gross')) {
+            <td><strong>{{ formatMoney(grossTotal) }}</strong></td>
+          }
+          @if (isVisible('net')) {
+            <td><strong class="net-pay">{{ formatMoney(netTotal) }}</strong>@if (deductionTotal) {
+            <small>Deductions {{ formatMoney(deductionTotal) }}</small>
+          }</td>
+        }
+        @if (isVisible('validation')) {
+          <td>{{ invalidCount ? invalidCount + ' blocked' : 'Ready' }}</td>
+          }@if (isVisible('status')) {
+          <td></td>
+          }@if (canPrintPayslips) {
+          <td></td>
+        }
+      </tr></tfoot>
+    </table>
+  </div>
+}
+@if (items.length === 0 && !loading) {
+  <div class="empty-state">
+    <span><i class="bi bi-wallet2"></i></span><h3>{{ 'staff.ui.d970bf9c32' | translate }}</h3><button type="button" (click)="checkSourceData(false)">{{ 'staff.ui.12d7670bf4' | translate }}</button>
+  </div>
+}
+@if (items.length > 0 && filteredItems.length === 0) {
+  <div class="empty-state compact"><span><i class="bi bi-funnel"></i></span><h3>{{ 'staff.ui.bddf1dd1c6' | translate }}</h3></div>
+}
+@if (loading && items.length === 0) {
+  <div class="empty-state"><span class="spinner"><i class="bi bi-arrow-clockwise"></i></span><h3>{{ 'staff.ui.6b0de3d73f' | translate }}</h3></div>
+}
+</section>
+}
 
-    <div class="empty-state" *ngIf="items.length === 0 && !loading">
-      <span><i class="bi bi-wallet2"></i></span><h3>{{ 'staff.ui.d970bf9c32' | translate }}</h3><button type="button" (click)="checkSourceData(false)">{{ 'staff.ui.12d7670bf4' | translate }}</button>
-    </div>
-    <div class="empty-state compact" *ngIf="items.length > 0 && filteredItems.length === 0"><span><i class="bi bi-funnel"></i></span><h3>{{ 'staff.ui.bddf1dd1c6' | translate }}</h3></div>
-    <div class="empty-state" *ngIf="loading && items.length === 0"><span class="spinner"><i class="bi bi-arrow-clockwise"></i></span><h3>{{ 'staff.ui.6b0de3d73f' | translate }}</h3></div>
-  </section>
-
-  <section class="history-card" *ngIf="activeTab === 'history'">
+@if (activeTab === 'history') {
+  <section class="history-card">
     <header><div><h2>{{ 'staff.ui.0bd1502ae9' | translate }}</h2><span>{{ 'staff.ui.da147c12de' | translate }}</span></div><button type="button" class="icon-button" (click)="loadHistory()" [attr.title]="'staff.ui.ebbc55f9ce' | translate"><i class="bi bi-arrow-clockwise"></i></button></header>
-    <button type="button" class="history-row" *ngFor="let savedRun of history" (click)="openHistoryRun(savedRun)">
-      <span><strong>{{ formatDate(savedRun.periodStart) }} – {{ formatDate(savedRun.periodEnd) }}</strong><small>{{ savedRun.staffCount }} employees</small></span>
-      <span><strong>{{ formatMoney(savedRun.netPaise) }}</strong><small>{{ savedRun.invalidCount }} validation errors</small></span>
-      <span class="status-pill">{{ statusLabel(savedRun.status) }}</span><i class="bi bi-chevron-right"></i>
-    </button>
-    <div class="empty-state compact" *ngIf="history.length === 0"><span><i class="bi bi-clock-history"></i></span><h3>{{ 'staff.ui.d8efdd5675' | translate }}</h3></div>
+    @for (savedRun of history; track savedRun) {
+      <button type="button" class="history-row" (click)="openHistoryRun(savedRun)">
+        <span><strong>{{ formatDate(savedRun.periodStart) }} – {{ formatDate(savedRun.periodEnd) }}</strong><small>{{ savedRun.staffCount }} employees</small></span>
+        <span><strong>{{ formatMoney(savedRun.netPaise) }}</strong><small>{{ savedRun.invalidCount }} validation errors</small></span>
+        <span class="status-pill">{{ statusLabel(savedRun.status) }}</span><i class="bi bi-chevron-right"></i>
+      </button>
+    }
+    @if (history.length === 0) {
+      <div class="empty-state compact"><span><i class="bi bi-clock-history"></i></span><h3>{{ 'staff.ui.d8efdd5675' | translate }}</h3></div>
+    }
   </section>
+}
 
-  <section class="calculation-log" *ngIf="run && activeTab !== 'history'">
+@if (run && activeTab !== 'history') {
+  <section class="calculation-log">
     <button type="button" (click)="logOpen = !logOpen"><span><i class="bi bi-journal-text"></i>{{ 'staff.ui.dd5c6766d2' | translate }}</span><i class="bi" [ngClass]="logOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i></button>
-    <div *ngIf="logOpen">
-      <p *ngFor="let event of events"><span>{{ statusLabel(event.eventType.replace('payroll.', '')) }}</span><time>{{ formatDate(event.createdAt) }}</time></p>
-      <p *ngIf="events.length === 0"><span>{{ 'staff.ui.8d8a40a08f' | translate }}</span></p>
-    </div>
+    @if (logOpen) {
+      <div>
+        @for (event of events; track event) {
+          <p><span>{{ statusLabel(event.eventType.replace('payroll.', '')) }}</span><time>{{ formatDate(event.createdAt) }}</time></p>
+        }
+        @if (events.length === 0) {
+          <p><span>{{ 'staff.ui.8d8a40a08f' | translate }}</span></p>
+        }
+      </div>
+    }
   </section>
+}
 
-  <footer class="action-footer" *ngIf="activeTab !== 'history'">
+@if (activeTab !== 'history') {
+  <footer class="action-footer">
     <button type="button" (click)="backToStaff()">{{ 'staff.ui.77dfd2135f' | translate }}</button>
-    <div class="payout-fields" *ngIf="run?.status === 'reviewed' || run?.status === 'finalized'">
-      <label *ngIf="run?.status === 'finalized'">{{ 'staff.ui.88306943fe' | translate }}<select [(ngModel)]="payoutMethod"><option value="">{{ 'staff.ui.8598222918' | translate }}</option><option value="bank">{{ 'staff.ui.9e89988cc3' | translate }}</option><option value="upi">{{ 'staff.ui.f295b2cdff' | translate }}</option><option value="cash">{{ 'staff.ui.758ec54e43' | translate }}</option><option value="other">{{ 'staff.ui.6e6a6f2086' | translate }}</option></select></label>
-      <label *ngIf="run?.status === 'finalized' && payoutMethod !== 'cash' && payoutMethod !== 'bank'">{{ 'staff.ui.db1c784524' | translate }}<input maxlength="160" [(ngModel)]="payoutReference" /></label>
-      <label>{{ 'staff.ui.645f64770a' | translate }}<input type="password" autocomplete="one-time-code" [(ngModel)]="actionMfaCode" [attr.placeholder]="'staff.ui.68ccfb13bc' | translate" /></label>
-    </div>
-    <span *ngIf="run?.status !== 'finalized'"></span>
+    @if (run?.status === 'reviewed' || run?.status === 'finalized') {
+      <div class="payout-fields">
+        @if (run?.status === 'finalized') {
+          <label>{{ 'staff.ui.88306943fe' | translate }}<select [(ngModel)]="payoutMethod"><option value="">{{ 'staff.ui.8598222918' | translate }}</option><option value="bank">{{ 'staff.ui.9e89988cc3' | translate }}</option><option value="upi">{{ 'staff.ui.f295b2cdff' | translate }}</option><option value="cash">{{ 'staff.ui.758ec54e43' | translate }}</option><option value="other">{{ 'staff.ui.6e6a6f2086' | translate }}</option></select></label>
+        }
+        @if (run?.status === 'finalized' && payoutMethod !== 'cash' && payoutMethod !== 'bank') {
+          <label>{{ 'staff.ui.db1c784524' | translate }}<input maxlength="160" [(ngModel)]="payoutReference" /></label>
+        }
+        <label>{{ 'staff.ui.645f64770a' | translate }}<input type="password" autocomplete="one-time-code" [(ngModel)]="actionMfaCode" [attr.placeholder]="'staff.ui.68ccfb13bc' | translate" /></label>
+      </div>
+    }
+    @if (run?.status !== 'finalized') {
+      <span></span>
+    }
     <button type="button" [disabled]="!canSaveDraft" (click)="saveDraft()"><i class="bi bi-save"></i>{{ action === 'save' ? 'Saving...' : 'Save draft' }}</button>
     <button type="button" class="primary" [disabled]="!canAdvance" (click)="advanceWorkflow()"><i class="bi" [ngClass]="workflowIcon"></i>{{ workflowLabel }}</button>
   </footer>
+}
 
-  <aside class="detail-drawer" *ngIf="selectedItem">
+@if (selectedItem) {
+  <aside class="detail-drawer">
     <header>
       <div><span class="eyebrow">{{ 'staff.ui.54708b9277' | translate }}</span><h2>{{ selectedItem.staffName }}</h2><small>{{ selectedItem.employeeCode || 'No employee code' }}</small></div>
       <button type="button" class="icon-button" (click)="closeStaffDetail()" [attr.aria-label]="'staff.ui.d805d47cf4' | translate"><i class="bi bi-x-lg"></i></button>
     </header>
     <section class="drawer-grid">
-      <article *ngFor="let row of detailRows(selectedItem)"><span>{{ row[0] }}</span><strong>{{ row[1] }}</strong></article>
+      @for (row of detailRows(selectedItem); track row) {
+        <article><span>{{ row[0] }}</span><strong>{{ row[1] }}</strong></article>
+      }
     </section>
-    <section class="drawer-card" *ngIf="selectedItem.validationErrors.length || selectedItem.validationWarnings.length">
-      <h3>{{ 'staff.ui.8bdd812aea' | translate }}</h3>
-      <p *ngFor="let message of selectedItem.validationErrors"><i class="bi bi-x-circle-fill"></i>{{ message }}</p>
-      <p *ngFor="let message of selectedItem.validationWarnings"><i class="bi bi-exclamation-circle-fill"></i>{{ message }}</p>
-    </section>
+    @if (selectedItem.validationErrors.length || selectedItem.validationWarnings.length) {
+      <section class="drawer-card">
+        <h3>{{ 'staff.ui.8bdd812aea' | translate }}</h3>
+        @for (message of selectedItem.validationErrors; track message) {
+          <p><i class="bi bi-x-circle-fill"></i>{{ message }}</p>
+        }
+        @for (message of selectedItem.validationWarnings; track message) {
+          <p><i class="bi bi-exclamation-circle-fill"></i>{{ message }}</p>
+        }
+      </section>
+    }
     <section class="drawer-card">
       <h3>{{ 'staff.ui.efddd45b15' | translate }}</h3>
       <pre>{{ displayJson(selectedSalaryRow || selectedItem.calculationJson) }}</pre>
     </section>
   </aside>
+}
 </section>

@@ -76,3 +76,12 @@ tbody tr:hover { background: #f1f6ff; }
 
 @media (max-width: 800px) { .panel-toolbar, .workspace-heading { align-items: flex-start; flex-direction: column; padding-block: 14px; } .panel-controls { width: 100%; flex-wrap: wrap; } .panel-controls input { flex: 1; min-width: 180px; width: auto; } .summary-list, .settings-grid { grid-template-columns: 1fr 1fr; } .service-row { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .workspace-toolbar, .workspace-heading, .desk-tabs { padding-inline: 14px; } .workspace-body { padding: 12px 14px; } .workspace-heading h1 { font-size: 20px; } .summary-list, .settings-grid, .price-summary { grid-template-columns: 1fr; } .package-drawer { width: calc(100vw - 48px); } }
+
+@media (max-width: 560px) {
+  .package-drawer { width: 100vw; }
+  .service-add, .service-row, .validity-control { grid-template-columns: 1fr; }
+  .panel-controls { align-items: stretch; flex-direction: column; }
+  .panel-controls > * { width: 100%; min-width: 0; }
+  .table-wrap { overscroll-behavior-x: contain; }
+  button, input:not([type='checkbox']), select { min-height: 44px; }
+}

@@ -850,7 +850,17 @@ pub async fn roster_coverage(
           (SELECT COUNT(*) FROM staff_schedules WHERE tenant_id=$1 AND branch_id=$2 AND schedule_date BETWEEN $3 AND $4 AND status='working')::BIGINT scheduled_staff_days,
           COALESCE((SELECT SUM(COALESCE(EXTRACT(EPOCH FROM (shift1_end-shift1_start))/60,0)+COALESCE(EXTRACT(EPOCH FROM (shift2_end-shift2_start))/60,0)) FROM staff_schedules WHERE tenant_id=$1 AND branch_id=$2 AND schedule_date BETWEEN $3 AND $4 AND status='working'),0)::BIGINT scheduled_minutes,
           COALESCE((SELECT SUM(GREATEST(0,EXTRACT(EPOCH FROM (end_at-start_at))/60)) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND (start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4 AND LOWER(status) NOT IN ('cancelled','canceled','void','no_show')),0)::BIGINT appointment_minutes,
-          (SELECT COUNT(*) FROM appointments ap WHERE ap.tenant_id=$1 AND ap.branch_id=$2 AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4 AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show') AND (ap.staff_id='' OR NOT EXISTS(SELECT 1 FROM staff_schedules sc WHERE sc.tenant_id=ap.tenant_id AND sc.branch_id=ap.branch_id AND sc.staff_id=ap.staff_id AND sc.schedule_date=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE AND sc.status='working' AND ((sc.shift1_start<=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::TIME AND sc.shift1_end>=(ap.end_at AT TIME ZONE 'Asia/Kolkata')::TIME) OR (sc.shift2_start<=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::TIME AND sc.shift2_end>=(ap.end_at AT TIME ZONE 'Asia/Kolkata')::TIME))))::BIGINT uncovered_appointments"#,
+          (SELECT COUNT(*) FROM appointments ap
+            WHERE ap.tenant_id=$1 AND ap.branch_id=$2
+              AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+              AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show')
+              AND (COALESCE(ap.staff_id,'')='' OR NOT EXISTS(
+                SELECT 1 FROM staff_schedules sc
+                 WHERE sc.tenant_id=ap.tenant_id AND sc.branch_id=ap.branch_id AND sc.staff_id=ap.staff_id
+                   AND sc.schedule_date=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE AND sc.status='working'
+                   AND ((sc.shift1_start<=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::TIME AND sc.shift1_end>=(ap.end_at AT TIME ZONE 'Asia/Kolkata')::TIME)
+                     OR (sc.shift2_start<=(ap.start_at AT TIME ZONE 'Asia/Kolkata')::TIME AND sc.shift2_end>=(ap.end_at AT TIME ZONE 'Asia/Kolkata')::TIME))
+              )))::BIGINT uncovered_appointments"#,
     )
     .bind(tenant)
     .bind(branch)

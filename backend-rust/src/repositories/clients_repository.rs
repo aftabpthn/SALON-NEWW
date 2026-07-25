@@ -49,6 +49,7 @@ pub struct ClientTimelineEventRecord {
     pub group_id: Option<String>,
     pub tip_paise: Option<i64>,
     pub balance_paise: Option<i64>,
+    pub line_items: Value,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1765,7 +1766,40 @@ pub async fn timeline(
            WHERE audit.tenant_id=$1 AND audit.branch_id=$2
              AND audit.client_id IN (SELECT id FROM scoped_clients)
         )
-        SELECT id,event_type,title,detail,occurred_at,amount_paise,status,group_id,tip_paise,balance_paise
+        SELECT id,event_type,title,detail,occurred_at,amount_paise,status,group_id,tip_paise,balance_paise,
+               CASE WHEN event_type='Invoices' THEN COALESCE((
+                 SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+                          'lineType',line.line_type,
+                          'itemName',line.item_name,
+                          'quantity',line.quantity,
+                          'lineTotalPaise',line.line_total_paise,
+                          'staffName',COALESCE(
+                            NULLIF((
+                              SELECT STRING_AGG(COALESCE(
+                                       NULLIF(TRIM(CONCAT_WS(' ',split_staff.first_name,NULLIF(split_staff.middle_name,''),NULLIF(split_staff.last_name,''))),''),
+                                       NULLIF(split.value->>'staffName',''),
+                                       'Unassigned'
+                                     ),', ' ORDER BY split.ordinality)
+                                FROM JSONB_ARRAY_ELEMENTS(COALESCE(line.staff_splits,'[]'::JSONB)) WITH ORDINALITY split(value,ordinality)
+                                LEFT JOIN staff split_staff ON split_staff.tenant_id=line.tenant_id
+                                 AND split_staff.branch_id=line.branch_id AND split_staff.id=split.value->>'staffId'
+                            ),''),
+                            NULLIF(TRIM(CONCAT_WS(' ',line_staff.first_name,NULLIF(line_staff.middle_name,''),NULLIF(line_staff.last_name,''))),''),
+                            NULLIF(TRIM(CONCAT_WS(' ',sale_staff.first_name,NULLIF(sale_staff.middle_name,''),NULLIF(sale_staff.last_name,''))),''),
+                            'Unassigned'
+                          )
+                        ) ORDER BY line.created_at,line.id)
+                   FROM pos_sale_lines line
+                   JOIN pos_sales item_sale ON item_sale.tenant_id=line.tenant_id
+                    AND item_sale.branch_id=line.branch_id AND item_sale.id=line.sale_id
+                   LEFT JOIN staff line_staff ON line_staff.tenant_id=line.tenant_id
+                    AND line_staff.branch_id=line.branch_id AND line_staff.id=NULLIF(line.staff_id,'')
+                   LEFT JOIN staff sale_staff ON sale_staff.tenant_id=item_sale.tenant_id
+                    AND sale_staff.branch_id=item_sale.branch_id AND sale_staff.id=NULLIF(item_sale.staff_id,'')
+                  WHERE line.tenant_id=$1 AND line.branch_id=$2
+                    AND line.sale_id=SUBSTRING(events.id FROM 9)
+                    AND line.line_type IN ('service','product')
+               ),'[]'::JSONB) ELSE '[]'::JSONB END AS line_items
           FROM events
          WHERE $4::TIMESTAMPTZ IS NULL
             OR occurred_at < $4

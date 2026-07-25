@@ -191,7 +191,6 @@ pub async fn summary_rows(
         ) pay ON true
         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.active=true
           AND ($7='' OR s.id=$7)
-          AND (a.staff_id IS NOT NULL OR su.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL OR oa.staff_id IS NOT NULL OR ot.staff_id IS NOT NULL)
         ORDER BY s.first_name,s.last_name,s.id
         "#,
     )

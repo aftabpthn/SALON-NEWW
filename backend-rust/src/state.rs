@@ -1,7 +1,8 @@
 use crate::config::Settings;
 use crate::infrastructure::{cache::RedisClient, db::DbPool};
 use sqlx::PgPool;
-use tokio::sync::broadcast;
+use std::{collections::HashMap, sync::Arc, time::Instant};
+use tokio::sync::{broadcast, RwLock};
 
 #[derive(Clone, serde::Serialize)]
 pub struct AppointmentEvent {
@@ -31,11 +32,31 @@ pub struct TeamChatEvent {
 }
 
 #[derive(Clone)]
+pub struct AppSessionCacheEntry {
+    pub tenant_id: String,
+    pub user_id: String,
+    pub branch_id: Option<String>,
+    pub role_name: String,
+    pub role_id: Option<String>,
+    pub permissions: Vec<String>,
+    pub denied_permissions: Vec<String>,
+    pub masked_fields: Vec<String>,
+    pub max_discount_paise: Option<i64>,
+    pub max_refund_paise: Option<i64>,
+    pub max_cash_movement_paise: Option<i64>,
+    pub permission_version: i64,
+    pub must_change_password: bool,
+    pub last_session_check: Instant,
+    pub expires_at: Instant,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     pub settings: Settings,
     pub db: DbPool,
     #[allow(dead_code)]
     pub redis: RedisClient,
+    pub auth_cache: Arc<RwLock<HashMap<String, AppSessionCacheEntry>>>,
     pub appointment_events: broadcast::Sender<AppointmentEvent>,
     pub pos_events: broadcast::Sender<PosEvent>,
     pub team_chat_events: broadcast::Sender<TeamChatEvent>,
@@ -52,6 +73,7 @@ impl AppState {
             settings,
             db,
             redis,
+            auth_cache: Arc::new(RwLock::new(HashMap::new())),
             appointment_events,
             pos_events,
             team_chat_events,
@@ -75,3 +97,4 @@ impl AppState {
         });
     }
 }
+

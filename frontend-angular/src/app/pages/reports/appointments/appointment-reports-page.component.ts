@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -19,11 +19,10 @@ type ReportRow = {
 type Option = { id: string; name: string };
 
 @Component({
-  selector: 'app-appointment-reports-page',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
-  templateUrl: './appointment-reports-page.component.html',
-  styleUrls: ['./appointment-reports-page.component.css'],
+    selector: 'app-appointment-reports-page',
+    imports: [FormsModule, RouterLink, DatePickerComponent],
+    templateUrl: './appointment-reports-page.component.html',
+    styleUrls: ['./appointment-reports-page.component.css']
 })
 export class AppointmentReportsPageComponent implements OnInit {
   private readonly api = inject(ApiService);

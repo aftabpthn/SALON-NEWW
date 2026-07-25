@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -36,11 +36,10 @@ type AppointmentActivityRow = {
 };
 
 @Component({
-  selector: 'page-appointment-activities',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
-  templateUrl: './appointment-activities-page.component.html',
-  styleUrls: ['./appointment-activities-page.component.css'],
+    selector: 'page-appointment-activities',
+    imports: [FormsModule, RouterLink],
+    templateUrl: './appointment-activities-page.component.html',
+    styleUrls: ['./appointment-activities-page.component.css']
 })
 export class AppointmentActivitiesPageComponent implements OnInit {
   private readonly api = inject(ApiService);

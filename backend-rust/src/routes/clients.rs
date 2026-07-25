@@ -2960,7 +2960,10 @@ mod tests {
             group_id: None,
             tip_paise: None,
             balance_paise: None,
+            line_items: serde_json::json!([]),
         };
+
+        assert!(serde_json::to_value(&event).unwrap()["lineItems"].is_array());
 
         let (parsed_at, parsed_id) = parse_timeline_cursor(&timeline_cursor(&event)).unwrap();
         assert_eq!(parsed_at, Some(occurred_at));

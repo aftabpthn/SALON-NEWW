@@ -15,93 +15,127 @@
     </div>
   </header>
 
-  <div class="message error" *ngIf="error">{{ error }}</div>
-  <div class="message notice" *ngIf="notice">{{ notice }}</div>
+  @if (error) {
+    <div class="message error">{{ error }}</div>
+  }
+  @if (notice) {
+    <div class="message notice">{{ notice }}</div>
+  }
 
   <section class="register-card">
     <header><strong>{{ 'inventory.ui.66706ce36d' | translate }}</strong><span>{{ drafts.length }} drafts</span></header>
-    <div class="loading" *ngIf="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
-    <table *ngIf="!loading && drafts.length">
-      <thead><tr><th>{{ 'inventory.ui.2c3cafa4db' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.3d73461400' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th>{{ 'inventory.ui.82fa7d52c8' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th></th></tr></thead>
-      <tbody><tr *ngFor="let row of drafts">
-        <td><strong>{{ row.sourceFileName }}</strong><small>{{ date(row.createdAt) }}</small></td>
-        <td>{{ row.supplierName || 'Unmatched' }}</td><td>{{ row.billNumber || '—' }}</td>
-        <td>{{ money(row.totalPaise) }}</td><td>{{ confidence(row.confidenceBps) }}</td>
-        <td><span class="status" [class.good]="row.status === 'confirmed'">{{ row.status.replace('_', ' ') }}</span></td>
-        <td><button type="button" (click)="open(row.id)">{{ 'inventory.ui.e29a79fe0c' | translate }}</button></td>
-      </tr></tbody>
-    </table>
-    <div class="empty" *ngIf="!loading && !drafts.length"><i class="bi bi-receipt" aria-hidden="true"></i><strong>{{ 'inventory.ui.3090325e74' | translate }}</strong></div>
+    @if (loading) {
+      <div class="loading">{{ 'inventory.ui.33ce417454' | translate }}</div>
+    }
+    @if (!loading && drafts.length) {
+      <table>
+        <thead><tr><th>{{ 'inventory.ui.2c3cafa4db' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.3d73461400' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th>{{ 'inventory.ui.82fa7d52c8' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th></th></tr></thead>
+        <tbody>@for (row of drafts; track row) {
+          <tr>
+            <td><strong>{{ row.sourceFileName }}</strong><small>{{ date(row.createdAt) }}</small></td>
+            <td>{{ row.supplierName || 'Unmatched' }}</td><td>{{ row.billNumber || '—' }}</td>
+            <td>{{ money(row.totalPaise) }}</td><td>{{ confidence(row.confidenceBps) }}</td>
+            <td><span class="status" [class.good]="row.status === 'confirmed'">{{ row.status.replace('_', ' ') }}</span></td>
+            <td><button type="button" (click)="open(row.id)">{{ 'inventory.ui.e29a79fe0c' | translate }}</button></td>
+          </tr>
+        }</tbody>
+      </table>
+    }
+    @if (!loading && !drafts.length) {
+      <div class="empty"><i class="bi bi-receipt" aria-hidden="true"></i><strong>{{ 'inventory.ui.3090325e74' | translate }}</strong></div>
+    }
   </section>
 </main>
 
-<div class="backdrop" *ngIf="selected" (click)="close()"></div>
-<aside class="review-drawer" *ngIf="selected as detail" [attr.aria-label]="'inventory.ui.0697ebd808' | translate">
-  <header class="drawer-head">
-    <div><h2>{{ detail.draft.sourceFileName }}</h2><span class="status">{{ detail.draft.status.replace('_', ' ') }}</span></div>
-    <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="close()"><i class="bi bi-x-lg"></i></button>
-  </header>
-
-  <div class="drawer-body">
-    <section class="warning-panel" *ngIf="detail.draft.warnings.length">
-      <strong>{{ 'inventory.ui.cbe42e3c92' | translate }}</strong><span *ngFor="let warning of detail.draft.warnings">{{ warning }}</span>
-    </section>
-
+@if (selected) {
+  <div class="backdrop" (click)="close()"></div>
+}
+@if (selected; as detail) {
+  <aside class="review-drawer" [attr.aria-label]="'inventory.ui.0697ebd808' | translate">
+    <header class="drawer-head">
+      <div><h2>{{ detail.draft.sourceFileName }}</h2><span class="status">{{ detail.draft.status.replace('_', ' ') }}</span></div>
+      <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="close()"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <div class="drawer-body">
+      @if (detail.draft.warnings.length) {
+        <section class="warning-panel">
+          <strong>{{ 'inventory.ui.cbe42e3c92' | translate }}</strong>@for (warning of detail.draft.warnings; track warning) {
+          <span>{{ warning }}</span>
+        }
+      </section>
+    }
     <form class="header-form" (ngSubmit)="saveHeader()" id="bill-header-form">
       <h3>{{ 'inventory.ui.ba03aa8b94' | translate }}</h3>
-      <label>{{ 'inventory.ui.55edd46287' | translate }}<select [(ngModel)]="detail.draft.supplierId" (ngModelChange)="supplierChanged()" name="supplier" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.cfce526861' | translate }}</option><option *ngFor="let row of suppliers" [value]="row.id" [disabled]="!row.active">{{ row.name }} · {{ row.gstin || 'No GSTIN' }}</option></select><small>{{ fieldConfidence('supplier_name') }}% confidence</small></label>
-      <label>{{ 'inventory.ui.2035c58a93' | translate }}<select [(ngModel)]="detail.draft.purchaseOrderId" name="order" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.90ee2a672f' | translate }}</option><option *ngFor="let row of orders" [value]="row.id" [disabled]="row.supplierId !== detail.draft.supplierId">{{ row.orderNumber }} · {{ row.status }}</option></select></label>
-      <label>{{ 'inventory.ui.0074f743c7' | translate }}<input maxlength="200" [(ngModel)]="detail.draft.supplierName" name="supplierName" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.da7751f5fa' | translate }}<input maxlength="15" [(ngModel)]="detail.draft.supplierGstin" name="gstin" [disabled]="!canEdit()" /><small>{{ fieldConfidence('supplier_gstin') }}% confidence</small></label>
-      <label>{{ 'inventory.ui.5e3bdfd849' | translate }}<input required maxlength="120" [(ngModel)]="detail.draft.billNumber" name="billNumber" [disabled]="!canEdit()" /><small>{{ fieldConfidence('bill_number') }}% confidence</small></label>
-      <label>{{ 'inventory.ui.7917c7e686' | translate }}<as-date-picker [value]="detail.draft.billDate ?? ''" (valueChange)="detail.draft.billDate = $event" ariaLabel="Bill date" [disabled]="!canEdit()"></as-date-picker><small>{{ fieldConfidence('bill_date') }}% confidence</small></label>
-      <label>{{ 'inventory.ui.94c4610d6d' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.subtotalPaise)" (ngModelChange)="detail.draft.subtotalPaise = paise($event)" name="subtotal" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.a090faa22f' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.discountPaise)" (ngModelChange)="detail.draft.discountPaise = paise($event)" name="discount" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.16274c7886' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.cgstPaise)" (ngModelChange)="detail.draft.cgstPaise = paise($event)" name="cgst" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.0efd5d1325' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.sgstPaise)" (ngModelChange)="detail.draft.sgstPaise = paise($event)" name="sgst" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.e766e67178' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.igstPaise)" (ngModelChange)="detail.draft.igstPaise = paise($event)" name="igst" [disabled]="!canEdit()" /></label>
-      <label>{{ 'inventory.ui.c7fa0883b8' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.totalPaise)" (ngModelChange)="detail.draft.totalPaise = paise($event)" name="total" [disabled]="!canEdit()" /><small>{{ fieldConfidence('total_paise') }}% confidence</small></label>
-      <button type="submit" [disabled]="saving || !canEdit()">{{ 'inventory.ui.2820069788' | translate }}</button>
-    </form>
-
-    <section class="line-section">
-      <header><h3>{{ 'inventory.ui.94cb66d8a9' | translate }}</h3><button type="button" (click)="addLine()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.a147e4e01e' | translate }}</button></header>
-      <article class="line-card" *ngFor="let line of detail.lines">
+      <label>{{ 'inventory.ui.55edd46287' | translate }}<select [(ngModel)]="detail.draft.supplierId" (ngModelChange)="supplierChanged()" name="supplier" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.cfce526861' | translate }}</option>@for (row of suppliers; track row) {
+      <option [value]="row.id" [disabled]="!row.active">{{ row.name }} · {{ row.gstin || 'No GSTIN' }}</option>
+      }</select><small>{{ fieldConfidence('supplier_name') }}% confidence</small></label>
+      <label>{{ 'inventory.ui.2035c58a93' | translate }}<select [(ngModel)]="detail.draft.purchaseOrderId" name="order" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.90ee2a672f' | translate }}</option>@for (row of orders; track row) {
+      <option [value]="row.id" [disabled]="row.supplierId !== detail.draft.supplierId">{{ row.orderNumber }} · {{ row.status }}</option>
+    }</select></label>
+    <label>{{ 'inventory.ui.0074f743c7' | translate }}<input maxlength="200" [(ngModel)]="detail.draft.supplierName" name="supplierName" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.da7751f5fa' | translate }}<input maxlength="15" [(ngModel)]="detail.draft.supplierGstin" name="gstin" [disabled]="!canEdit()" /><small>{{ fieldConfidence('supplier_gstin') }}% confidence</small></label>
+    <label>{{ 'inventory.ui.5e3bdfd849' | translate }}<input required maxlength="120" [(ngModel)]="detail.draft.billNumber" name="billNumber" [disabled]="!canEdit()" /><small>{{ fieldConfidence('bill_number') }}% confidence</small></label>
+    <label>{{ 'inventory.ui.7917c7e686' | translate }}<as-date-picker [value]="detail.draft.billDate ?? ''" (valueChange)="detail.draft.billDate = $event" ariaLabel="Bill date" [disabled]="!canEdit()"></as-date-picker><small>{{ fieldConfidence('bill_date') }}% confidence</small></label>
+    <label>{{ 'inventory.ui.94c4610d6d' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.subtotalPaise)" (ngModelChange)="detail.draft.subtotalPaise = paise($event)" name="subtotal" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.a090faa22f' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.discountPaise)" (ngModelChange)="detail.draft.discountPaise = paise($event)" name="discount" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.16274c7886' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.cgstPaise)" (ngModelChange)="detail.draft.cgstPaise = paise($event)" name="cgst" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.0efd5d1325' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.sgstPaise)" (ngModelChange)="detail.draft.sgstPaise = paise($event)" name="sgst" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.e766e67178' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.igstPaise)" (ngModelChange)="detail.draft.igstPaise = paise($event)" name="igst" [disabled]="!canEdit()" /></label>
+    <label>{{ 'inventory.ui.c7fa0883b8' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.totalPaise)" (ngModelChange)="detail.draft.totalPaise = paise($event)" name="total" [disabled]="!canEdit()" /><small>{{ fieldConfidence('total_paise') }}% confidence</small></label>
+    <button type="submit" [disabled]="saving || !canEdit()">{{ 'inventory.ui.2820069788' | translate }}</button>
+  </form>
+  <section class="line-section">
+    <header><h3>{{ 'inventory.ui.94cb66d8a9' | translate }}</h3><button type="button" (click)="addLine()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.a147e4e01e' | translate }}</button></header>
+    @for (line of detail.lines; track line) {
+      <article class="line-card">
         <header><strong>Line {{ line.lineNumber }} · {{ line.rawName || itemLabel(line.inventoryItemId) }}</strong><span>{{ confidence(line.confidenceBps) }}</span></header>
         <div class="line-grid">
-          <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select [(ngModel)]="line.inventoryItemId" [name]="'item' + line.id" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let row of items" [value]="row.id" [disabled]="!row.active">{{ row.name }} · {{ row.sku }}</option></select></label>
-          <label>{{ 'inventory.ui.d36392a051' | translate }}<input maxlength="240" [(ngModel)]="line.rawName" [name]="'name' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.13c2c0a597' | translate }}<input maxlength="120" [(ngModel)]="line.supplierSku" [name]="'sku' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.e8aa70fbf4' | translate }}<input maxlength="40" [(ngModel)]="line.hsnSac" [name]="'hsn' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.3d405900cd' | translate }}<input type="number" min="1" [(ngModel)]="line.purchaseQuantity" [name]="'purchaseQty' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.87dd2c9768' | translate }}<input type="number" min="1" [(ngModel)]="line.packSize" [name]="'pack' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.9151f8433f' | translate }}<input type="number" min="1" [(ngModel)]="line.conversionFactor" [name]="'conversion' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.915f65fbb6' | translate }}<input type="number" min="1" [(ngModel)]="line.quantity" [name]="'quantity' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.6e51fd9150' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(line.unitCostPaise)" (ngModelChange)="line.unitCostPaise = paise($event)" [name]="'cost' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.0cd95d4129' | translate }}<input type="number" min="0" max="100" step="0.01" [ngModel]="line.discountBps / 100" (ngModelChange)="line.discountBps = $event * 100" [name]="'discount' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="'gst' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.8bf1ef5668' | translate }}<input maxlength="120" [(ngModel)]="line.batchNumber" [name]="'batch' + line.id" [disabled]="!canEdit()" /></label>
-          <label>{{ 'inventory.ui.ba8f571e0f' | translate }}<as-date-picker [value]="line.expiryDate ?? ''" (valueChange)="line.expiryDate = $event" [ariaLabel]="'Expiry line ' + line.lineNumber" [disabled]="!canEdit()"></as-date-picker></label>
-        </div>
-        <div class="line-warnings" *ngIf="line.warnings.length"><span *ngFor="let warning of line.warnings">{{ warning }}</span></div>
-        <footer><button type="button" (click)="removeLine(line)" [disabled]="saving || !canEdit()">{{ 'inventory.ui.e963907dac' | translate }}</button><button class="primary" type="button" (click)="saveLine(line)" [disabled]="saving || !canEdit()">{{ 'inventory.ui.48b133194f' | translate }}</button></footer>
-      </article>
-      <div class="empty compact" *ngIf="!detail.lines.length"><strong>{{ 'inventory.ui.26759113fe' | translate }}</strong></div>
-    </section>
-
-    <section class="match-panel">
-      <header><h3>{{ 'inventory.ui.9e410796de' | translate }}</h3><button type="button" (click)="runMatch()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.806e0c5222' | translate }}</button></header>
-      <p><strong>{{ 'inventory.ui.ec3235e9bc' | translate }}</strong> {{ orderLabel(detail.draft.purchaseOrderId) }}</p>
-      <div *ngFor="let match of detail.matches"><span>{{ match.matchType.replace('_', ' ') }}</span><b>{{ confidence(match.scoreBps) }} · {{ match.status }}</b></div>
-      <div class="empty compact" *ngIf="!detail.matches.length"><strong>{{ 'inventory.ui.bdeb79c56f' | translate }}</strong></div>
-    </section>
-
-    <section class="timeline"><h3>{{ 'inventory.ui.104a5da55c' | translate }}</h3><div *ngFor="let event of detail.events"><i></i><span><strong>{{ event.eventType.replace('_', ' ') }}</strong><small>{{ date(event.createdAt) }} · {{ event.actorUserId }}</small></span></div></section>
-  </div>
-
-  <footer class="drawer-footer">
-    <button type="button" (click)="cancelDraft()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.353b843d87' | translate }}</button>
-    <button type="button" (click)="close()">{{ 'inventory.ui.bbfa773e5a' | translate }}</button>
-    <button class="primary" type="button" (click)="confirmDraft()" [disabled]="saving || !canConfirm()">{{ 'inventory.ui.216a727d60' | translate }}</button>
-  </footer>
+          <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select [(ngModel)]="line.inventoryItemId" [name]="'item' + line.id" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (row of items; track row) {
+          <option [value]="row.id" [disabled]="!row.active">{{ row.name }} · {{ row.sku }}</option>
+        }</select></label>
+        <label>{{ 'inventory.ui.d36392a051' | translate }}<input maxlength="240" [(ngModel)]="line.rawName" [name]="'name' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.13c2c0a597' | translate }}<input maxlength="120" [(ngModel)]="line.supplierSku" [name]="'sku' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.e8aa70fbf4' | translate }}<input maxlength="40" [(ngModel)]="line.hsnSac" [name]="'hsn' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.3d405900cd' | translate }}<input type="number" min="1" [(ngModel)]="line.purchaseQuantity" [name]="'purchaseQty' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.87dd2c9768' | translate }}<input type="number" min="1" [(ngModel)]="line.packSize" [name]="'pack' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.9151f8433f' | translate }}<input type="number" min="1" [(ngModel)]="line.conversionFactor" [name]="'conversion' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.915f65fbb6' | translate }}<input type="number" min="1" [(ngModel)]="line.quantity" [name]="'quantity' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.6e51fd9150' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(line.unitCostPaise)" (ngModelChange)="line.unitCostPaise = paise($event)" [name]="'cost' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.0cd95d4129' | translate }}<input type="number" min="0" max="100" step="0.01" [ngModel]="line.discountBps / 100" (ngModelChange)="line.discountBps = $event * 100" [name]="'discount' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="'gst' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.8bf1ef5668' | translate }}<input maxlength="120" [(ngModel)]="line.batchNumber" [name]="'batch' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.ba8f571e0f' | translate }}<as-date-picker [value]="line.expiryDate ?? ''" (valueChange)="line.expiryDate = $event" [ariaLabel]="'Expiry line ' + line.lineNumber" [disabled]="!canEdit()"></as-date-picker></label>
+      </div>
+      @if (line.warnings.length) {
+        <div class="line-warnings">@for (warning of line.warnings; track warning) {
+          <span>{{ warning }}</span>
+        }</div>
+      }
+      <footer><button type="button" (click)="removeLine(line)" [disabled]="saving || !canEdit()">{{ 'inventory.ui.e963907dac' | translate }}</button><button class="primary" type="button" (click)="saveLine(line)" [disabled]="saving || !canEdit()">{{ 'inventory.ui.48b133194f' | translate }}</button></footer>
+    </article>
+  }
+  @if (!detail.lines.length) {
+    <div class="empty compact"><strong>{{ 'inventory.ui.26759113fe' | translate }}</strong></div>
+  }
+</section>
+<section class="match-panel">
+  <header><h3>{{ 'inventory.ui.9e410796de' | translate }}</h3><button type="button" (click)="runMatch()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.806e0c5222' | translate }}</button></header>
+  <p><strong>{{ 'inventory.ui.ec3235e9bc' | translate }}</strong> {{ orderLabel(detail.draft.purchaseOrderId) }}</p>
+  @for (match of detail.matches; track match) {
+    <div><span>{{ match.matchType.replace('_', ' ') }}</span><b>{{ confidence(match.scoreBps) }} · {{ match.status }}</b></div>
+  }
+  @if (!detail.matches.length) {
+    <div class="empty compact"><strong>{{ 'inventory.ui.bdeb79c56f' | translate }}</strong></div>
+  }
+</section>
+<section class="timeline"><h3>{{ 'inventory.ui.104a5da55c' | translate }}</h3>@for (event of detail.events; track event) {
+<div><i></i><span><strong>{{ event.eventType.replace('_', ' ') }}</strong><small>{{ date(event.createdAt) }} · {{ event.actorUserId }}</small></span></div>
+}</section>
+</div>
+<footer class="drawer-footer">
+  <button type="button" (click)="cancelDraft()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.353b843d87' | translate }}</button>
+  <button type="button" (click)="close()">{{ 'inventory.ui.bbfa773e5a' | translate }}</button>
+  <button class="primary" type="button" (click)="confirmDraft()" [disabled]="saving || !canConfirm()">{{ 'inventory.ui.216a727d60' | translate }}</button>
+</footer>
 </aside>
+}

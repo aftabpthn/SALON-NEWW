@@ -637,16 +637,30 @@ pub async fn match_draft(
     }
     for line in &current.lines {
         if line.inventory_item_id.is_none() {
-            if let Some(item) = repo::exact_inventory_item(
+            let learned = repo::alias_inventory_item(
                 &state.db,
                 tenant,
                 branch,
+                supplier.as_deref(),
                 &line.supplier_sku,
                 &line.raw_name,
             )
             .await
-            .map_err(|_| AppError::internal("failed to match item"))?
-            {
+            .map_err(|_| AppError::internal("failed to match learned item alias"))?;
+            let item_match = match learned {
+                Some(item) => Some((item, "learned supplier alias", 9800)),
+                None => repo::exact_inventory_item(
+                    &state.db,
+                    tenant,
+                    branch,
+                    &line.supplier_sku,
+                    &line.raw_name,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to match item"))?
+                .map(|item| (item, "exact sku, barcode or name", 10000)),
+            };
+            if let Some((item, method, score)) = item_match {
                 repo::set_line_item(&state.db, tenant, branch, &line.id, &item)
                     .await
                     .map_err(|_| AppError::internal("failed to apply item match"))?;
@@ -658,9 +672,9 @@ pub async fn match_draft(
                     Some(&line.id),
                     "inventory_item",
                     &item,
-                    10000,
+                    score,
                     "suggested",
-                    &json!({"method":"exact sku, barcode or name"}),
+                    &json!({"method":method}),
                     actor,
                 )
                 .await
@@ -752,6 +766,20 @@ pub async fn confirm(
                 "matched purchase order is not receivable for this supplier",
             ));
         }
+    }
+    for line in &current.lines {
+        repo::learn_item_alias(
+            &state.db,
+            tenant,
+            branch,
+            Some(&supplier),
+            &line.supplier_sku,
+            &line.raw_name,
+            line.inventory_item_id.as_deref().unwrap_or_default(),
+            actor,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to learn reviewed purchase bill item alias"))?;
     }
     let receipt = purchase_service::receive(
         state,

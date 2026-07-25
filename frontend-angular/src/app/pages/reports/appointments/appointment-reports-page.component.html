@@ -6,15 +6,20 @@
 
   <section class="report-filters" aria-label="Appointment report filters">
     <select [(ngModel)]="status"><option value="">All appointments</option><option value="confirmed">Confirmed</option><option value="arrived">Arrived</option><option value="in-service">In service</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="no-show">No-show</option></select>
-    <select [(ngModel)]="branchId"><option value="">All branches</option><option *ngFor="let branch of branches" [value]="branch.id">{{ branch.name }}</option></select>
-    <as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker>
-    <as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker>
-    <select [(ngModel)]="staffId"><option value="">All staff</option><option *ngFor="let person of staff" [value]="person.id">{{ person.name }}</option></select>
-    <input type="search" [(ngModel)]="search" placeholder="Customer name or contact" />
-    <div class="download-actions"><button type="button" (click)="download('csv')">CSV</button><button type="button" (click)="download('pdf')">PDF</button></div>
-  </section>
+    <select [(ngModel)]="branchId"><option value="">All branches</option>@for (branch of branches; track branch) {
+    <option [value]="branch.id">{{ branch.name }}</option>
+  }</select>
+  <as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker>
+  <as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker>
+  <select [(ngModel)]="staffId"><option value="">All staff</option>@for (person of staff; track person) {
+  <option [value]="person.id">{{ person.name }}</option>
+}</select>
+<input type="search" [(ngModel)]="search" placeholder="Customer name or contact" />
+<div class="download-actions"><button type="button" (click)="download('csv')">CSV</button><button type="button" (click)="download('pdf')">PDF</button></div>
+</section>
 
-  <section class="health-strip" *ngIf="!loading" aria-label="Appointment status summary">
+@if (!loading) {
+  <section class="health-strip" aria-label="Appointment status summary">
     <article class="total"><strong>{{ filteredRows.length }}</strong><span>Total</span></article>
     <article class="confirmed"><strong>{{ confirmedRows.length }}</strong><span>Confirmed</span></article>
     <article class="arrived"><strong>{{ arrivedRows.length }}</strong><span>Arrived</span></article>
@@ -23,34 +28,64 @@
     <article class="cancelled"><strong>{{ cancelledRows.length }}</strong><span>Cancelled</span></article>
     <article class="no-show"><strong>{{ noShowRows.length }}</strong><span>No show</span></article>
   </section>
+}
 
-  <p class="inline-error" *ngIf="error">{{ error }}</p>
-  <div class="empty-state" *ngIf="!loading && !error && !filteredRows.length"><strong>No records yet</strong></div>
+@if (error) {
+  <p class="inline-error">{{ error }}</p>
+}
+@if (!loading && !error && !filteredRows.length) {
+  <div class="empty-state"><strong>No records yet</strong></div>
+}
 
-  <section class="history-panel" *ngIf="!loading && filteredRows.length">
+@if (!loading && filteredRows.length) {
+  <section class="history-panel">
     <div class="history-title"><h2>Appointments</h2><span>{{ filteredRows.length }} records</span></div>
     <div class="table-wrap"><table>
       <thead><tr><th scope="col">Mode</th><th scope="col">Client</th><th scope="col">Contact</th><th scope="col">Staff</th><th scope="col">Services</th><th scope="col">Appointment</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
-      <tbody><tr *ngFor="let row of filteredRows">
-        <td><strong>{{ bookingMode(row) }}</strong></td>
-        <td><strong>{{ row.clientName || '-' }}</strong><small>{{ bookingId(row) }}</small></td>
-        <td>{{ row.clientPhone || '-' }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.serviceNames || '-' }}</td>
-        <td>{{ formatDateTime(row.appointmentStartAt) }}</td>
-        <td><span class="status-pill" [class]="normalizedStatus(row.status)">{{ statusText(row.status) }}</span></td>
-        <td><button class="timeline-button" type="button" (click)="openTimeline(row)">View</button></td>
-      </tr></tbody>
+      <tbody>@for (row of filteredRows; track row) {
+        <tr>
+          <td><strong>{{ bookingMode(row) }}</strong></td>
+          <td><strong>{{ row.clientName || '-' }}</strong><small>{{ bookingId(row) }}</small></td>
+          <td>{{ row.clientPhone || '-' }}</td><td>{{ row.staffName || 'Unassigned' }}</td><td>{{ row.serviceNames || '-' }}</td>
+          <td>{{ formatDateTime(row.appointmentStartAt) }}</td>
+          <td><span class="status-pill" [class]="normalizedStatus(row.status)">{{ statusText(row.status) }}</span></td>
+          <td><button class="timeline-button" type="button" (click)="openTimeline(row)">View</button></td>
+        </tr>
+      }</tbody>
     </table></div>
   </section>
+}
 
-  <section class="insight-grid" *ngIf="!loading && filteredRows.length">
-    <article><h2>Daily appointment trend</h2><div class="trend" *ngIf="trendPoints.length; else noTrend"><div *ngFor="let point of trendPoints" class="trend-column"><strong>{{ point.count }}</strong><span [style.height.%]="point.height"></span><small>{{ point.label }}</small></div></div><ng-template #noTrend><p>No date-based appointments in this view</p></ng-template></article>
-    <article><h2>Top cancellation reasons</h2><div class="reason-list" *ngIf="cancellationReasons.length; else noReasons"><div *ngFor="let item of cancellationReasons"><span>{{ item.reason }}</span><b [style.width.%]="item.percent"></b><strong>{{ item.count }} ({{ item.percent }}%)</strong></div></div><ng-template #noReasons><p>No cancelled appointments in this view</p></ng-template></article>
-  </section>
+@if (!loading && filteredRows.length) {
+  <section class="insight-grid">
+    <article><h2>Daily appointment trend</h2>@if (trendPoints.length) {
+    <div class="trend">@for (point of trendPoints; track point) {
+      <div class="trend-column"><strong>{{ point.count }}</strong><span [style.height.%]="point.height"></span><small>{{ point.label }}</small></div>
+    }</div>
+  } @else {
+    <p>No date-based appointments in this view</p>
+  }</article>
+  <article><h2>Top cancellation reasons</h2>@if (cancellationReasons.length) {
+  <div class="reason-list">@for (item of cancellationReasons; track item) {
+    <div><span>{{ item.reason }}</span><b [style.width.%]="item.percent"></b><strong>{{ item.count }} ({{ item.percent }}%)</strong></div>
+  }</div>
+} @else {
+  <p>No cancelled appointments in this view</p>
+}</article>
+</section>
+}
 
-  <aside class="timeline-drawer" *ngIf="selected as row">
+@if (selected; as row) {
+  <aside class="timeline-drawer">
     <header><div><span>APPOINTMENT TIMELINE</span><h2>{{ row.clientName || 'Appointment' }}</h2><small>{{ row.serviceNames || '-' }} · {{ formatDateTime(row.appointmentStartAt) }}</small></div><button type="button" (click)="closeTimeline()">×</button></header>
     <div class="timeline-meta"><article><span>Status</span><strong>{{ statusText(row.status) }}</strong></article><article><span>Invoice</span><strong>{{ row.invoiceNumber || 'Not billed' }}</strong></article></div>
-    <div class="timeline-list" *ngIf="row.timeline?.length; else noTimeline"><article *ngFor="let event of row.timeline"><i></i><div><strong>{{ statusText(event.action) }}</strong><small>{{ formatDateTime(event.createdAt || event.created_at) }}</small><p>{{ event.reason || 'Appointment updated' }}</p></div></article></div>
-    <ng-template #noTimeline><div class="drawer-empty">No activity yet</div></ng-template>
+    @if (row.timeline?.length) {
+      <div class="timeline-list">@for (event of row.timeline; track event) {
+        <article><i></i><div><strong>{{ statusText(event.action) }}</strong><small>{{ formatDateTime(event.createdAt || event.created_at) }}</small><p>{{ event.reason || 'Appointment updated' }}</p></div></article>
+      }</div>
+    } @else {
+      <div class="drawer-empty">No activity yet</div>
+    }
   </aside>
+}
 </section>

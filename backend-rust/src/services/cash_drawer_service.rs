@@ -3,10 +3,12 @@ use std::collections::HashSet;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::{Postgres, Transaction};
 
 use crate::{
     models::common::AppError,
     repositories::cash_drawer_repository::{self, CashDrawerSession},
+    services::{accounting_service, security_service},
     state::AppState,
 };
 
@@ -116,6 +118,10 @@ pub async fn open(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start cash drawer opening"))?;
+    cash_drawer_repository::lock_business_date(&mut tx, tenant_id, branch_id, business_date)
+        .await
+        .map_err(|_| AppError::internal("failed to lock business date"))?;
+    ensure_business_day_unlocked(&mut tx, tenant_id, branch_id, business_date).await?;
     let session = cash_drawer_repository::open(
         &mut tx,
         tenant_id,
@@ -128,7 +134,9 @@ pub async fn open(
     .await
     .map_err(|_| AppError::internal("failed to open cash drawer"))?
     .ok_or_else(|| {
-        AppError::conflict("an active cash drawer already exists for this business date")
+        AppError::conflict(
+            "a cash drawer already exists for this business date and cannot be reopened",
+        )
     })?;
     if opening_cash_paise > 0 {
         cash_drawer_repository::insert_movement(
@@ -136,12 +144,14 @@ pub async fn open(
             tenant_id,
             branch_id,
             &session.id,
+            None,
             "opening",
             opening_cash_paise,
             "cash_drawer_session",
             &session.id,
             actor_user_id,
             notes,
+            None,
         )
         .await
         .map_err(|_| AppError::internal("failed to record opening cash"))?;
@@ -174,12 +184,34 @@ pub async fn add_movement(
     reference_type: &str,
     reference_id: &str,
     notes: &str,
+    requested_till_id: &str,
+    idempotency_key: &str,
 ) -> Result<CashDrawerSession, AppError> {
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start cash movement"))?;
+    if let Some(session_id) = cash_drawer_repository::movement_session_by_idempotency(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        idempotency_key,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to verify cash movement retry"))?
+    {
+        let session =
+            cash_drawer_repository::by_id_for_update(&mut tx, tenant_id, branch_id, &session_id)
+                .await
+                .map_err(|_| AppError::internal("failed to load retried cash movement"))?
+                .ok_or_else(|| AppError::internal("cash movement drawer was not found"))?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to complete cash movement retry"))?;
+        return Ok(session);
+    }
+    ensure_business_day_unlocked(&mut tx, tenant_id, branch_id, business_date).await?;
     let session =
         cash_drawer_repository::active_for_update(&mut tx, tenant_id, branch_id, business_date)
             .await
@@ -192,26 +224,216 @@ pub async fn add_movement(
             "cash movements are blocked while drawer close is pending approval",
         ));
     }
-    cash_drawer_repository::insert_movement(
+    let cash_drawer_till_id = resolve_open_movement_till_id(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        business_date,
+        &session.id,
+        requested_till_id,
+    )
+    .await?;
+    let inserted = cash_drawer_repository::insert_movement(
         &mut tx,
         tenant_id,
         branch_id,
         &session.id,
+        cash_drawer_till_id.as_deref(),
         movement_type,
         amount_paise,
         reference_type,
         reference_id,
         actor_user_id,
         notes,
+        Some(idempotency_key),
     )
     .await
     .map_err(|_| AppError::internal("failed to record cash movement"))?;
-    cash_drawer_repository::audit(&mut tx, tenant_id, branch_id, &session.id, actor_user_id, "drawer.movement_recorded", json!({ "movementType": movement_type, "amountPaise": amount_paise, "referenceType": reference_type, "referenceId": reference_id }))
-        .await.map_err(|_| AppError::internal("failed to audit cash movement"))?;
+    if inserted {
+        cash_drawer_repository::audit(&mut tx, tenant_id, branch_id, &session.id, actor_user_id, "drawer.movement_recorded", json!({ "movementType": movement_type, "amountPaise": amount_paise, "referenceType": reference_type, "referenceId": reference_id, "cashDrawerTillId": cash_drawer_till_id, "idempotencyKey": idempotency_key }))
+            .await.map_err(|_| AppError::internal("failed to audit cash movement"))?;
+    }
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit cash movement"))?;
     Ok(session)
+}
+
+async fn resolve_open_movement_till_id(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+    drawer_session_id: &str,
+    requested_till_id: &str,
+) -> Result<Option<String>, AppError> {
+    let till_ids = cash_drawer_repository::open_till_ids_for_cash(
+        tx,
+        tenant_id,
+        branch_id,
+        business_date,
+        requested_till_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate cash drawer till"))?;
+    if !requested_till_id.is_empty() && till_ids.is_empty() {
+        return Err(AppError::conflict("selected cash drawer till is not open"));
+    }
+    if requested_till_id.is_empty() && till_ids.len() > 1 {
+        return Err(AppError::validation(
+            "cashDrawerTillId is required when multiple tills are open",
+        ));
+    }
+    if requested_till_id.is_empty() && till_ids.is_empty() {
+        let till_summary =
+            cash_drawer_repository::till_close_summary(tx, tenant_id, branch_id, drawer_session_id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate cash drawer tills"))?;
+        if till_summary.0 > 0 {
+            return Err(AppError::conflict(
+                "an open cash drawer till is required for cash movement",
+            ));
+        }
+    }
+    Ok(till_ids.into_iter().next())
+}
+
+pub async fn record_invoice_cash_refund(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    business_date: NaiveDate,
+    refund_id: &str,
+    amount_paise: i64,
+    requested_till_id: &str,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("cash refund amount is invalid"));
+    }
+    ensure_business_day_unlocked(tx, tenant_id, branch_id, business_date).await?;
+    let session =
+        cash_drawer_repository::active_for_update(tx, tenant_id, branch_id, business_date)
+            .await
+            .map_err(|_| AppError::internal("failed to lock cash drawer for refund"))?
+            .ok_or_else(|| AppError::conflict("an open cash drawer is required for cash refund"))?;
+    if session.status != "open" {
+        return Err(AppError::conflict(
+            "cash drawer is not open for cash refund",
+        ));
+    }
+    let till_id = resolve_open_movement_till_id(
+        tx,
+        tenant_id,
+        branch_id,
+        business_date,
+        &session.id,
+        requested_till_id,
+    )
+    .await?;
+    cash_drawer_repository::insert_movement(
+        tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+        till_id.as_deref(),
+        "refund_cash",
+        -amount_paise,
+        "invoice_refund",
+        refund_id,
+        actor_user_id,
+        "Automatic cash invoice refund",
+        None,
+    )
+    .await
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .and_then(|value| value.constraint())
+            == Some("uq_cash_drawer_invoice_refund_movement")
+        {
+            AppError::conflict("cash refund movement already exists")
+        } else {
+            AppError::internal("failed to record cash refund movement")
+        }
+    })?;
+    cash_drawer_repository::audit(
+        tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+        actor_user_id,
+        "drawer.invoice_refund_recorded",
+        json!({"refundId":refund_id,"amountPaise":amount_paise,"cashDrawerTillId":till_id}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit cash refund movement"))?;
+    Ok(())
+}
+
+pub async fn record_booking_cash_advance(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    business_date: NaiveDate,
+    payment_id: &str,
+    amount_paise: i64,
+    requested_till_id: &str,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("cash advance amount is invalid"));
+    }
+    ensure_business_day_unlocked(tx, tenant_id, branch_id, business_date).await?;
+    let session =
+        cash_drawer_repository::active_for_update(tx, tenant_id, branch_id, business_date)
+            .await
+            .map_err(|_| AppError::internal("failed to lock cash drawer for booking advance"))?
+            .ok_or_else(|| {
+                AppError::conflict("an open cash drawer is required for cash advance")
+            })?;
+    if session.status != "open" {
+        return Err(AppError::conflict(
+            "cash drawer is not open for cash advance",
+        ));
+    }
+    let till_id = resolve_open_movement_till_id(
+        tx,
+        tenant_id,
+        branch_id,
+        business_date,
+        &session.id,
+        requested_till_id,
+    )
+    .await?;
+    cash_drawer_repository::insert_movement(
+        tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+        till_id.as_deref(),
+        "cash_in",
+        amount_paise,
+        "booking_advance",
+        payment_id,
+        actor_user_id,
+        "Appointment booking advance",
+        Some(payment_id),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record cash booking advance"))?;
+    cash_drawer_repository::audit(
+        tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+        actor_user_id,
+        "drawer.booking_advance_recorded",
+        json!({"paymentId":payment_id,"amountPaise":amount_paise,"cashDrawerTillId":till_id}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit cash booking advance"))?;
+    Ok(())
 }
 
 pub async fn close(
@@ -229,6 +451,7 @@ pub async fn close(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start cash drawer close"))?;
+    ensure_business_day_unlocked(&mut tx, tenant_id, branch_id, business_date).await?;
     let session =
         cash_drawer_repository::active_for_update(&mut tx, tenant_id, branch_id, business_date)
             .await
@@ -254,9 +477,22 @@ pub async fn close(
         cash_drawer_repository::totals(&mut tx, tenant_id, branch_id, business_date, &session.id)
             .await
             .map_err(|_| AppError::internal("failed to reconcile cash drawer"))?;
+    let refund_accounting_variance = cash_drawer_repository::invoice_refund_accounting_variance(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reconcile cash refund accounting"))?;
+    if refund_accounting_variance != 0 {
+        return Err(AppError::conflict(
+            "cash refund movements do not reconcile with accounting entries",
+        ));
+    }
     let (counted_cash_paise, denomination_breakdown, opening_cash_paise) = if till_summary.0 > 0 {
         (
-            till_summary.3,
+            till_summary.4,
             json!({ "source": "closed_tills" }),
             till_summary.2,
         )
@@ -266,6 +502,11 @@ pub async fn close(
         (counted, breakdown, session.opening_cash_paise)
     };
     let expected = expected_cash(opening_cash_paise, cash_sales, movement_delta);
+    if till_summary.0 > 0 && till_summary.3 != expected {
+        return Err(AppError::conflict(
+            "closed till totals do not reconcile with the cash drawer; assign every cash payment and movement to a till",
+        ));
+    }
     let variance = counted_cash_paise.saturating_sub(expected);
     let status = close_status(variance);
     let updated = cash_drawer_repository::request_close(
@@ -305,6 +546,7 @@ pub async fn handover(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start cash drawer handover"))?;
+    ensure_business_day_unlocked(&mut tx, tenant_id, branch_id, business_date).await?;
     let session =
         cash_drawer_repository::active_for_update(&mut tx, tenant_id, branch_id, business_date)
             .await
@@ -346,6 +588,23 @@ pub async fn handover(
         .await
         .map_err(|_| AppError::internal("failed to commit cash drawer handover"))?;
     Ok(updated)
+}
+
+async fn ensure_business_day_unlocked(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<(), AppError> {
+    if cash_drawer_repository::is_day_locked(tx, tenant_id, branch_id, business_date)
+        .await
+        .map_err(|_| AppError::internal("failed to validate business day"))?
+    {
+        return Err(AppError::conflict(
+            "cash drawer changes are blocked because this business day is locked",
+        ));
+    }
+    Ok(())
 }
 
 pub async fn create_deposit(
@@ -579,6 +838,27 @@ pub async fn update_deposit_status(
     .await
     .map_err(|_| AppError::internal("failed to update bank deposit"))?
     .ok_or_else(|| AppError::conflict("bank deposit is not pending"))?;
+    if status == "confirmed" {
+        let session = cash_drawer_repository::by_id_for_update(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &deposit.drawer_session_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to load bank deposit business date"))?
+        .ok_or_else(|| AppError::not_found("cash drawer was not found"))?;
+        accounting_service::post_cash_bank_deposit(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &deposit.id,
+            session.business_date,
+            actor_user_id,
+            deposit.amount_paise,
+        )
+        .await?;
+    }
     cash_drawer_repository::audit(
         &mut tx,
         tenant_id,
@@ -663,6 +943,49 @@ pub async fn import_provider_reconciliations(
         .await
         .map_err(|_| AppError::internal("failed to commit provider statement import"))?;
     Ok(imported)
+}
+
+pub async fn review_provider_reconciliation(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    id: &str,
+    review_note: &str,
+) -> Result<cash_drawer_repository::ProviderReconciliationRun, AppError> {
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start reconciliation review"))?;
+    let run = cash_drawer_repository::review_provider_reconciliation(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        actor_user_id,
+        review_note,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to review provider reconciliation"))?
+    .ok_or_else(|| {
+        AppError::conflict(
+            "reconciliation is not awaiting review or must be reviewed by another manager",
+        )
+    })?;
+    security_service::record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        "cash.reconciliation.reviewed",
+        json!({"reconciliationId":run.id,"provider":run.provider,"settlementDate":run.settlement_date,"reviewNote":review_note}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit reconciliation review"))?;
+    Ok(run)
 }
 
 async fn insert_provider_reconciliation(
@@ -792,7 +1115,19 @@ pub async fn close_till(
         cash_drawer_repository::till_cash_sales(&mut tx, tenant_id, branch_id, till_id)
             .await
             .map_err(|_| AppError::internal("failed to calculate till cash"))?;
-    let expected = till.opening_cash_paise.saturating_add(cash_sales);
+    let movement_delta =
+        cash_drawer_repository::till_movement_delta(&mut tx, tenant_id, branch_id, till_id)
+            .await
+            .map_err(|_| AppError::internal("failed to calculate till movements"))?;
+    let outgoing_cash =
+        cash_drawer_repository::till_outgoing_cash(&mut tx, tenant_id, branch_id, till_id)
+            .await
+            .map_err(|_| AppError::internal("failed to calculate till outgoing cash"))?;
+    let expected = expected_cash(
+        till.opening_cash_paise,
+        cash_sales,
+        movement_delta.saturating_sub(outgoing_cash),
+    );
     let variance = counted_cash_paise.saturating_sub(expected);
     let status = close_status(variance);
     let updated = cash_drawer_repository::close_till(
@@ -909,6 +1244,7 @@ mod tests {
     #[test]
     fn cash_reconciliation_requires_approval_only_for_variance() {
         assert_eq!(expected_cash(10_000, 5_000, -1_500), 13_500);
+        assert_eq!(expected_cash(10_000, 5_000, 2_000 - 1_500), 15_500);
         assert_eq!(close_status(0), "closed");
         assert_eq!(close_status(-1), "pending_approval");
     }
@@ -940,3 +1276,7 @@ mod tests {
         assert_eq!(reconciliation_status(0, -1), "review_required");
     }
 }
+
+#[cfg(test)]
+#[path = "cash_drawer_phase6_tests.rs"]
+mod phase6_tests;

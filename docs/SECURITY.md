@@ -256,8 +256,11 @@ flowchart LR
 
 The read-only `backend-rust/scripts/tenant-isolation-readiness.ps1` probe verifies
 the real API rejects forged tenant and branch headers without creating business
-records. Native PostgreSQL RLS remains a separate migration because enabling it
-requires request-scoped transaction context on every pooled query.
+records. Migration `0247_auth_tenant_branch_integrity.sql` audits canonical IDs
+before adding composite tenant/user/branch/role foreign keys; all current
+`user_branch_roles` repository reads and writes are tenant scoped. Native
+PostgreSQL RLS remains a separate migration because enabling it requires
+request-scoped transaction context on every pooled query.
 
 ## 26. Incident-Response Playbooks
 

@@ -233,8 +233,9 @@ pub async fn add_stock_ledger(
     movement_type: &str,
     quantity_delta: i32,
     unit_cost_paise: i64,
+    stock_after_quantity: i32,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, inventory_transfer_id, inventory_transfer_line_id, movement_type, quantity_delta, unit_cost_paise) VALUES ($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8) RETURNING id")
+    sqlx::query_scalar("INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, inventory_transfer_id, inventory_transfer_line_id, movement_type, quantity_delta, unit_cost_paise, stock_after_quantity) VALUES ($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8,$9) RETURNING id")
         .bind(tenant_id)
         .bind(branch_id)
         .bind(inventory_item_id)
@@ -243,6 +244,7 @@ pub async fn add_stock_ledger(
         .bind(movement_type)
         .bind(quantity_delta)
         .bind(unit_cost_paise)
+        .bind(stock_after_quantity)
         .fetch_one(&mut **tx)
         .await
 }

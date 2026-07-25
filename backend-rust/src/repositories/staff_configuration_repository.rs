@@ -19,6 +19,9 @@ pub struct CatalogOptionRecord {
     pub category: String,
     pub assigned: bool,
     pub commission_percent: Option<i32>,
+    pub base_price_paise: Option<i64>,
+    pub pricing_level_id: Option<String>,
+    pub pricing_level_price_paise: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -59,6 +62,16 @@ pub struct StaffCategoryRecord {
     pub code: String,
     pub name: String,
     pub designation: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffPricingLevelRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub rank: i32,
     pub active: bool,
 }
 
@@ -111,6 +124,7 @@ pub struct CatalogAssignmentInput {
     pub item_type: String,
     pub item_id: String,
     pub commission_percent: Option<i32>,
+    pub pricing_level_price_paise: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +162,15 @@ pub struct StaffCategoryInput {
 }
 
 #[derive(Debug, Clone)]
+pub struct StaffPricingLevelInput {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub rank: i32,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct ShiftTemplateInput {
     pub id: String,
     pub code: String,
@@ -177,6 +200,7 @@ pub struct AttendanceRuleInput {
 
 pub struct ReplaceStaffMastersInput {
     pub categories: Vec<StaffCategoryInput>,
+    pub pricing_levels: Vec<StaffPricingLevelInput>,
     pub shift_templates: Vec<ShiftTemplateInput>,
     pub attendance_rule: AttendanceRuleInput,
 }
@@ -217,20 +241,35 @@ pub async fn list_catalog(
 ) -> Result<Vec<CatalogOptionRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
-        WITH catalog AS (
-          SELECT 'service'::TEXT AS item_type, id, name, category FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=true
+        WITH staff_pricing AS (
+          SELECT pricing_level_id
+          FROM staff_profiles
+          WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
+        ),
+        catalog AS (
+          SELECT 'service'::TEXT AS item_type, id, name, category, price_paise::BIGINT AS base_price_paise FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=true
           UNION ALL
-          SELECT 'product', id, name, category FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=true
+          SELECT 'product', id, name, category, NULL::BIGINT FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=true
           UNION ALL
-          SELECT 'membership', id, name, plan_type AS category FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND active=true
+          SELECT 'membership', id, name, plan_type AS category, NULL::BIGINT FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND active=true
           UNION ALL
-          SELECT 'package', id, name, '' AS category FROM packages WHERE tenant_id=$1 AND branch_id=$2 AND active=true
+          SELECT 'package', id, name, '' AS category, NULL::BIGINT FROM packages WHERE tenant_id=$1 AND branch_id=$2 AND active=true
         )
         SELECT c.item_type, c.id, c.name, c.category,
-               (a.item_id IS NOT NULL) AS assigned, a.commission_percent
+               (a.item_id IS NOT NULL) AS assigned, a.commission_percent,
+               c.base_price_paise, staff_pricing.pricing_level_id,
+               level_price.price_paise::BIGINT AS pricing_level_price_paise
         FROM catalog c
+        LEFT JOIN staff_pricing ON TRUE
         LEFT JOIN staff_catalog_assignments a
           ON a.staff_id=$3 AND a.item_type=c.item_type AND a.item_id=c.id
+        LEFT JOIN service_pricing_level_prices level_price
+          ON c.item_type='service'
+         AND level_price.tenant_id=$1
+         AND level_price.branch_id=$2
+         AND level_price.service_id=c.id
+         AND level_price.pricing_level_id=staff_pricing.pricing_level_id
+         AND level_price.active=TRUE
         ORDER BY c.item_type, c.category, c.name
         "#,
     )
@@ -278,6 +317,20 @@ pub async fn list_staff_categories(
 ) -> Result<Vec<StaffCategoryRecord>, sqlx::Error> {
     sqlx::query_as(
         "SELECT id,code,name,designation,active FROM staff_categories WHERE tenant_id=$1 AND branch_id=$2 ORDER BY active DESC,name,id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn list_staff_pricing_levels(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<StaffPricingLevelRecord>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id,code,name,rank,active FROM staff_pricing_levels WHERE tenant_id=$1 AND branch_id=$2 ORDER BY active DESC,rank,name,id",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -345,6 +398,7 @@ pub async fn master_id_belongs_to_scope(
     let table = match table {
         "category" => "staff_categories",
         "shift" => "staff_shift_templates",
+        "pricingLevel" => "staff_pricing_levels",
         _ => return Ok(false),
     };
     let sql = format!(
@@ -390,6 +444,34 @@ pub async fn save_staff_masters(
             )
             .bind(tenant_id).bind(branch_id).bind(category.id).bind(category.code)
             .bind(category.name).bind(category.designation).bind(category.active)
+            .execute(&mut *tx).await?;
+        }
+    }
+    for level in input.pricing_levels {
+        if level.id.is_empty() {
+            sqlx::query(
+                r#"
+                INSERT INTO staff_pricing_levels(tenant_id,branch_id,code,name,rank,active)
+                VALUES($1,$2,$3,$4,$5,$6)
+                ON CONFLICT (tenant_id,branch_id,code)
+                DO UPDATE SET name=EXCLUDED.name,rank=EXCLUDED.rank,
+                              active=EXCLUDED.active,updated_at=NOW()
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(level.code)
+            .bind(level.name)
+            .bind(level.rank)
+            .bind(level.active)
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query(
+                "UPDATE staff_pricing_levels SET code=$4,name=$5,rank=$6,active=$7,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+            )
+            .bind(tenant_id).bind(branch_id).bind(level.id).bind(level.code)
+            .bind(level.name).bind(level.rank).bind(level.active)
             .execute(&mut *tx).await?;
         }
     }
@@ -558,7 +640,37 @@ pub async fn replace_configuration(
     for role_id in input.role_ids {
         sqlx::query("INSERT INTO staff_role_assignments(tenant_id,branch_id,staff_id,role_id) VALUES($1,$2,$3,$4)").bind(tenant_id).bind(branch_id).bind(staff_id).bind(role_id).execute(&mut *tx).await?;
     }
+    let pricing_level_id = sqlx::query_scalar::<_, String>(
+        "SELECT pricing_level_id FROM staff_profiles WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND pricing_level_id IS NOT NULL",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .fetch_optional(&mut *tx)
+    .await?;
     for item in input.catalog_assignments {
+        if item.item_type == "service" {
+            if let (Some(level_id), Some(price_paise)) =
+                (pricing_level_id.as_deref(), item.pricing_level_price_paise)
+            {
+                sqlx::query(
+                    r#"
+                    INSERT INTO service_pricing_level_prices(
+                      tenant_id,branch_id,service_id,pricing_level_id,price_paise,active
+                    ) VALUES($1,$2,$3,$4,$5,TRUE)
+                    ON CONFLICT (tenant_id,branch_id,service_id,pricing_level_id)
+                    DO UPDATE SET price_paise=EXCLUDED.price_paise,active=TRUE,updated_at=NOW()
+                    "#,
+                )
+                .bind(tenant_id)
+                .bind(branch_id)
+                .bind(&item.item_id)
+                .bind(level_id)
+                .bind(price_paise)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
         sqlx::query("INSERT INTO staff_catalog_assignments(tenant_id,branch_id,staff_id,item_type,item_id,commission_percent) VALUES($1,$2,$3,$4,$5,$6)").bind(tenant_id).bind(branch_id).bind(staff_id).bind(item.item_type).bind(item.item_id).bind(item.commission_percent).execute(&mut *tx).await?;
     }
     for rule in input.commission_rules {

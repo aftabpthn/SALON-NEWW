@@ -29,6 +29,9 @@ artifacts/
 tmp_zip_extract/
 *.log
 *.err
+frontend-angular/playwright/.auth/
+frontend-angular/playwright-report/
+frontend-angular/test-results/
 
 # Generated graph caches and snapshots
 graphify-out/cache/

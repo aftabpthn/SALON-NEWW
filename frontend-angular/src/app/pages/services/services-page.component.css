@@ -500,6 +500,25 @@ td {
   .pricing-row {
     grid-template-columns: 1fr;
   }
+
+  .service-flyout {
+    width: 100vw;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .table-wrap,
+  .consumption-scroll {
+    overscroll-behavior-x: contain;
+  }
+
+  button,
+  input:not([type="checkbox"]),
+  select {
+    min-height: 44px;
+  }
 }
 .form-error {
   margin: 0;

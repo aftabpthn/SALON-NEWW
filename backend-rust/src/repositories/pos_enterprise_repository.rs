@@ -452,7 +452,7 @@ pub async fn complete_print_job(
 }
 
 pub async fn day_lock(
-    db: &PgPool,
+    tx: &mut Transaction<'_, Postgres>,
     tenant: &str,
     branch: &str,
     actor: &str,
@@ -461,7 +461,7 @@ pub async fn day_lock(
     status: &str,
 ) -> Result<DayLock, sqlx::Error> {
     sqlx::query_as("INSERT INTO pos_day_locks (tenant_id,branch_id,business_date,status,reason,actor_user_id,reopened_at) VALUES ($1,$2,$3,$4,$5,$6,CASE WHEN $4='reopened' THEN NOW() ELSE NULL END) ON CONFLICT (tenant_id,branch_id,business_date) DO UPDATE SET status=EXCLUDED.status,reason=EXCLUDED.reason,actor_user_id=EXCLUDED.actor_user_id,reopened_at=CASE WHEN EXCLUDED.status='reopened' THEN NOW() ELSE pos_day_locks.reopened_at END,locked_at=CASE WHEN EXCLUDED.status='locked' THEN NOW() ELSE pos_day_locks.locked_at END,updated_at=NOW() RETURNING id,business_date,status,reason,actor_user_id,locked_at,reopened_at")
-        .bind(tenant).bind(branch).bind(date).bind(status).bind(reason).bind(actor).fetch_one(db).await
+        .bind(tenant).bind(branch).bind(date).bind(status).bind(reason).bind(actor).fetch_one(&mut **tx).await
 }
 
 pub async fn get_day_lock(

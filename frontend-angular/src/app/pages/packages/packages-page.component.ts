@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
@@ -35,11 +35,10 @@ type PackageSettings = {
 };
 
 @Component({
-  selector: 'page-packages',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive],
-  templateUrl: './packages-page.component.html',
-  styleUrls: ['./packages-page.component.css'],
+    selector: 'page-packages',
+    imports: [FormsModule, RouterLink, RouterLinkActive],
+    templateUrl: './packages-page.component.html',
+    styleUrls: ['./packages-page.component.css']
 })
 export class PackagesPageComponent implements OnInit {
   private readonly api = inject(ApiService);

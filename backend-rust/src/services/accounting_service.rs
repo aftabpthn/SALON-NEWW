@@ -1,5 +1,6 @@
 use chrono::{NaiveDate, Utc};
 use sqlx::{Postgres, Transaction};
+use std::collections::BTreeMap;
 
 use crate::models::common::AppError;
 
@@ -15,6 +16,116 @@ pub struct ManualJournalLine {
     pub account_code: String,
     pub debit_paise: i64,
     pub credit_paise: i64,
+}
+
+pub struct RefundSettlement {
+    pub method: String,
+    pub amount_paise: i64,
+}
+
+#[derive(Clone, Copy)]
+pub struct InvoiceAccountingTotals {
+    pub total_paise: i64,
+    pub tax_paise: i64,
+    pub cgst_paise: i64,
+    pub sgst_paise: i64,
+    pub igst_paise: i64,
+    pub tip_paise: i64,
+    pub round_off_paise: i64,
+}
+
+pub async fn post_invoice_correction(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    correction_request_id: &str,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+    old: InvoiceAccountingTotals,
+    new: InvoiceAccountingTotals,
+) -> Result<(), AppError> {
+    let lines = invoice_correction_lines(old, new)?;
+    if lines.is_empty() {
+        return Ok(());
+    }
+    post_control_journal(
+        tx,
+        tenant_id,
+        branch_id,
+        "invoice_correction",
+        correction_request_id,
+        business_date,
+        "Approved POS invoice correction",
+        actor_user_id,
+        &lines,
+    )
+    .await
+    .map(|_| ())
+}
+
+fn invoice_correction_lines(
+    old: InvoiceAccountingTotals,
+    new: InvoiceAccountingTotals,
+) -> Result<Vec<ManualJournalLine>, AppError> {
+    let old = invoice_account_balances(old)?;
+    let new = invoice_account_balances(new)?;
+    let mut accounts = old.keys().chain(new.keys()).collect::<Vec<_>>();
+    accounts.sort_unstable();
+    accounts.dedup();
+    Ok(accounts
+        .into_iter()
+        .filter_map(|account| {
+            let delta =
+                new.get(account).copied().unwrap_or(0) - old.get(account).copied().unwrap_or(0);
+            (delta != 0).then(|| ManualJournalLine {
+                account_code: account.clone(),
+                debit_paise: delta.max(0),
+                credit_paise: (-delta).max(0),
+            })
+        })
+        .collect())
+}
+
+fn invoice_account_balances(
+    totals: InvoiceAccountingTotals,
+) -> Result<BTreeMap<String, i64>, AppError> {
+    let revenue = totals
+        .total_paise
+        .saturating_sub(totals.tax_paise)
+        .saturating_sub(totals.tip_paise)
+        .saturating_sub(totals.round_off_paise);
+    if totals.total_paise < 0 || revenue < 0 {
+        return Err(AppError::validation(
+            "invoice correction totals are invalid",
+        ));
+    }
+    let mut balances = BTreeMap::from([
+        ("ACCOUNTS_RECEIVABLE".to_string(), totals.total_paise),
+        ("SALES_REVENUE".to_string(), -revenue),
+    ]);
+    let split_tax = totals.cgst_paise + totals.sgst_paise + totals.igst_paise;
+    if split_tax != 0 && split_tax != totals.tax_paise {
+        return Err(AppError::validation(
+            "invoice correction GST split is invalid",
+        ));
+    }
+    if split_tax == 0 {
+        balances.insert("GST_PAYABLE".to_string(), -totals.tax_paise);
+    } else {
+        balances.insert("CGST_PAYABLE".to_string(), -totals.cgst_paise);
+        balances.insert("SGST_PAYABLE".to_string(), -totals.sgst_paise);
+        balances.insert("IGST_PAYABLE".to_string(), -totals.igst_paise);
+    }
+    balances.insert("TIPS_PAYABLE".to_string(), -totals.tip_paise);
+    balances.insert(
+        "ROUNDING_INCOME".to_string(),
+        -totals.round_off_paise.max(0),
+    );
+    balances.insert(
+        "ROUNDING_EXPENSE".to_string(),
+        (-totals.round_off_paise).max(0),
+    );
+    Ok(balances)
 }
 
 pub async fn post_invoice(
@@ -305,8 +416,17 @@ pub async fn post_refund(
     tenant_id: &str,
     branch_id: &str,
     refund_id: &str,
-    amount_paise: i64,
+    settlements: &[RefundSettlement],
 ) -> Result<(), AppError> {
+    let lines = refund_journal_lines(settlements)?;
+    let lines = lines
+        .iter()
+        .map(|line| JournalLine {
+            account_code: &line.account_code,
+            debit_paise: line.debit_paise,
+            credit_paise: line.credit_paise,
+        })
+        .collect();
     post_entry(
         tx,
         tenant_id,
@@ -314,14 +434,74 @@ pub async fn post_refund(
         "refund",
         refund_id,
         "POS refund",
+        lines,
+    )
+    .await
+}
+
+fn refund_journal_lines(
+    settlements: &[RefundSettlement],
+) -> Result<Vec<ManualJournalLine>, AppError> {
+    let mut credits = BTreeMap::<String, i64>::new();
+    let total = settlements.iter().try_fold(0i64, |total, settlement| {
+        if settlement.amount_paise <= 0 {
+            return Err(AppError::validation("refund settlement amount is invalid"));
+        }
+        credits
+            .entry(payment_account(&settlement.method).to_string())
+            .and_modify(|amount| *amount = amount.saturating_add(settlement.amount_paise))
+            .or_insert(settlement.amount_paise);
+        Ok(total.saturating_add(settlement.amount_paise))
+    })?;
+    if total <= 0 {
+        return Err(AppError::validation("refund settlement is required"));
+    }
+    let mut lines = vec![ManualJournalLine {
+        account_code: "SALES_RETURNS".to_string(),
+        debit_paise: total,
+        credit_paise: 0,
+    }];
+    lines.extend(
+        credits
+            .into_iter()
+            .map(|(account_code, amount_paise)| ManualJournalLine {
+                account_code,
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            }),
+    );
+    Ok(lines)
+}
+
+pub async fn post_cash_bank_deposit(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    deposit_id: &str,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+    amount_paise: i64,
+) -> Result<Option<String>, AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("bank deposit amount is invalid"));
+    }
+    write_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "cash_drawer_bank_deposit",
+        deposit_id,
+        "Cash drawer bank deposit",
+        Some(business_date),
+        Some(actor_user_id),
         vec![
             JournalLine {
-                account_code: "SALES_RETURNS",
+                account_code: "BANK_CLEARING",
                 debit_paise: amount_paise,
                 credit_paise: 0,
             },
             JournalLine {
-                account_code: "REFUND_CLEARING",
+                account_code: "CASH_ON_HAND",
                 debit_paise: 0,
                 credit_paise: amount_paise,
             },
@@ -1064,16 +1244,21 @@ fn customer_credit_lines<'a>(
 }
 
 fn payment_account(method: &str) -> &'static str {
-    match method {
+    match method.trim().to_ascii_lowercase().as_str() {
         "cash" => "CASH_ON_HAND",
-        "wallet" | "store_credit" | "gift_card" => "CUSTOMER_CREDIT_LIABILITY",
+        "wallet" | "store_credit" | "gift_card" | "booking_advance" => {
+            "CUSTOMER_CREDIT_LIABILITY"
+        }
         _ => "BANK_CLEARING",
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{customer_credit_lines, is_balanced, reverse_lines, JournalLine};
+    use super::{
+        customer_credit_lines, invoice_correction_lines, is_balanced, refund_journal_lines,
+        reverse_lines, InvoiceAccountingTotals, JournalLine, RefundSettlement,
+    };
 
     #[test]
     fn journal_requires_equal_debits_and_credits() {
@@ -1123,6 +1308,30 @@ mod tests {
     }
 
     #[test]
+    fn refund_journal_credits_the_actual_settlement_accounts() {
+        let lines = refund_journal_lines(&[
+            RefundSettlement {
+                method: "cash".into(),
+                amount_paise: 1_000,
+            },
+            RefundSettlement {
+                method: "card".into(),
+                amount_paise: 500,
+            },
+        ])
+        .unwrap();
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "SALES_RETURNS" && line.debit_paise == 1_500 }));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "CASH_ON_HAND" && line.credit_paise == 1_000 }));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "BANK_CLEARING" && line.credit_paise == 500 }));
+    }
+
+    #[test]
     fn rollback_reversal_swaps_balanced_journal_sides() {
         let reversed = reverse_lines(vec![("AR".into(), 11800, 0), ("REVENUE".into(), 0, 11800)]);
         assert_eq!(
@@ -1133,5 +1342,27 @@ mod tests {
             (reversed[1].debit_paise, reversed[1].credit_paise),
             (11800, 0)
         );
+    }
+
+    #[test]
+    fn invoice_correction_posts_only_a_balanced_delta() {
+        let totals = |total_paise, tax_paise| InvoiceAccountingTotals {
+            total_paise,
+            tax_paise,
+            cgst_paise: tax_paise / 2,
+            sgst_paise: tax_paise / 2,
+            igst_paise: 0,
+            tip_paise: 0,
+            round_off_paise: 0,
+        };
+        let lines = invoice_correction_lines(totals(11_800, 1_800), totals(9_440, 1_440))
+            .expect("correction delta");
+        assert_eq!(
+            lines.iter().map(|line| line.debit_paise).sum::<i64>(),
+            lines.iter().map(|line| line.credit_paise).sum::<i64>()
+        );
+        assert!(lines.iter().any(|line| {
+            line.account_code == "ACCOUNTS_RECEIVABLE" && line.credit_paise == 2_360
+        }));
     }
 }

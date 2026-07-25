@@ -2,6 +2,8 @@ use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
 use std::path::Path;
 
+pub const PAYMENT_PROVIDERS: &[&str] = &["razorpay", "cashfree", "phonepe"];
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct Settings {

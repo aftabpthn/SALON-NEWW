@@ -1980,6 +1980,7 @@ async fn appointment_deposits_multi_service_bookings(
             recurrence_count: Some(1),
             recurrence_interval_days: None,
             lines,
+            advance_payment: None,
         }),
     )
     .await?
