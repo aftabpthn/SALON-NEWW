@@ -364,8 +364,9 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
         if (!ctx.openAttendance && (ctx.shiftCompleted || !!ctx.today?.activeBreak)) {
           return { ...entry.item, label: "Attendance", kind: undefined, route: "/staff/attendance", status: quickActionStatus(entry.item.id, ctx) };
         }
-        return { ...entry.item, label: ctx.openAttendance ? "Clock out" : "Clock in", kind: "clock", status: quickActionStatus(entry.item.id, ctx) };
+        return { ...entry.item, label: ctx.openAttendance ? "Clock out" : "Clock in", kind: "clock" as DashboardActionKind, status: quickActionStatus(entry.item.id, ctx) };
       }
+      return { ...entry.item, status: quickActionStatus(entry.item.id, ctx) };
     })
     .filter((action) => !heroModel.actions.some((heroAction) => heroAction.primary && sameAction(action, heroAction)));
   const overview: DashboardMetric[] = [
