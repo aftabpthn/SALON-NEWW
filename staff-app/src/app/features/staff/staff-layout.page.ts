@@ -434,12 +434,44 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   onTouchEnd(event: TouchEvent) {
     const touch = event.changedTouches[0];
     const endX = touch?.clientX || 0;
+    const endY = touch?.clientY || 0;
     const deltaX = endX - this.touchStartX;
+    const deltaY = endY - this.touchStartY;
+
     const target = event.target as HTMLElement | null;
-    if (target?.closest("input,textarea,button,a,[role=dialog]")) return;
-    const wasMenuOpen = this.menuOpen();
-    if (this.touchStartX < 24 && deltaX > 70) this.openMenu();
-    if (wasMenuOpen && deltaX < -70) { this.closeMenu(); return; }
+    if (target?.closest("input,textarea,select,button,a,[role=dialog],.chat-message-viewport")) return;
+    if (this.menuOpen() || this.notificationsOpen() || this.commandOpen()) {
+      if (this.menuOpen() && deltaX < -70) this.closeMenu();
+      return;
+    }
+
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaY) > 50 || Math.abs(deltaX) < Math.abs(deltaY) * 1.8) return;
+
+    if (this.touchStartX < 28 && deltaX > 70) {
+      this.openMenu();
+      return;
+    }
+
+    const paths: string[] = [];
+    if (this.staff.hasPermission("read:appointments")) {
+      paths.push("/staff/dashboard", "/staff/appointments", "/staff/business");
+    }
+    if (this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"])) {
+      paths.push("/staff/attendance");
+    }
+    if (this.staff.hasPermission("read:staff")) {
+      paths.push("/staff/tasks");
+    }
+
+    const currentPath = this.router.url.split("?")[0];
+    const currentIndex = paths.indexOf(currentPath);
+    if (currentIndex === -1) return;
+
+    if (deltaX < -80 && currentIndex < paths.length - 1) {
+      void this.router.navigateByUrl(paths[currentIndex + 1]);
+    } else if (deltaX > 80 && currentIndex > 0) {
+      void this.router.navigateByUrl(paths[currentIndex - 1]);
+    }
   }
 
   private touchStartX = 0;
