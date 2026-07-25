@@ -276,7 +276,7 @@ export class YourSalonsListComponent {
   }
 
   isPrimary(salon: CustomerSalonRelationship): boolean {
-    const primary = this.primarySalon();
+    const primary = this.primarySalon;
     return !!primary && primary.tenantId === salon.tenantId && primary.branchId === salon.branchId;
   }
 

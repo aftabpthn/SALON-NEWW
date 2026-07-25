@@ -19,6 +19,7 @@ export const customerSalonRouter = Router();
 customerSalonRouter.use("/customer/salons", authenticateJwt());
 
 // ─── Get all salons this customer has visited ─────────────────────
+// Intentionally cross-tenant: marketplace view shows all customer relationships
 customerSalonRouter.get("/customer/salons", asyncHandler((req, res) => {
   const customerId = req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
@@ -43,6 +44,11 @@ customerSalonRouter.post("/customer/salons/:tenantId/primary", asyncHandler((req
   const { tenantId } = req.params;
   const { branchId, businessId, businessName, reason } = req.body || {};
 
+  // Validate tenant matches request context
+  if (req.access?.tenantId && req.access.tenantId !== tenantId) {
+    return res.status(403).json({ error: "Tenant mismatch" });
+  }
+
   const result = setPrimarySalon({
     customerId,
     tenantId,
@@ -60,7 +66,8 @@ customerSalonRouter.delete("/customer/salons/primary", asyncHandler((req, res) =
   const customerId = req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
-  const result = removePrimarySalon(customerId);
+  const tenantId = req.access?.tenantId || null;
+  const result = removePrimarySalon(customerId, tenantId);
   res.json(result);
 }));
 
@@ -80,6 +87,11 @@ customerSalonRouter.post("/customer/salons/:tenantId/visit", asyncHandler((req, 
 
   const { tenantId } = req.params;
   const { branchId, businessId, businessName } = req.body || {};
+
+  // Validate tenant matches request context
+  if (req.access?.tenantId && req.access.tenantId !== tenantId) {
+    return res.status(403).json({ error: "Tenant mismatch" });
+  }
 
   // Upsert relationship
   getOrCreateRelationship({

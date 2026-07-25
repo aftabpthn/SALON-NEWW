@@ -27,8 +27,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
             <span>Rewards</span>
             <span>Fast OTP</span>
           </div>
-          <a class="staff-switch" [href]="staffAppUrl">Staff? Open staff login</a>
-
           @if (notice) {
             <p class="notice-text">{{ notice }}</p>
           }
@@ -351,21 +349,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       background: rgba(244, 213, 141, 0.16);
       font-size: 0.76rem;
       font-weight: 950;
-    }
-
-    .staff-switch {
-      justify-self: center;
-      display: inline-grid;
-      place-items: center;
-      min-height: 38px;
-      padding: 0 16px;
-      border: 1px solid rgba(214, 169, 74, 0.32);
-      border-radius: 999px;
-      color: #6E4810;
-      background: rgba(255, 255, 255, 0.66);
-      font-size: 0.84rem;
-      font-weight: 950;
-      text-decoration: none;
     }
 
     .subtitle,
@@ -822,11 +805,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.16);
       }
 
-      .staff-switch {
-        min-height: 40px;
-        background: rgba(255,255,255,0.8);
-        box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
-      }
+
 
       .choice-email-form,
       .auth-form,
@@ -930,7 +909,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
   `]
 })
 export class LoginPage implements OnInit, OnDestroy {
-  readonly staffAppUrl = environment.staffAppUrl;
   readonly appleLoginEnabled = APPLE_LOGIN_ENABLED;
   readonly countryOptions = [
     { code: "+91", label: "India +91" }

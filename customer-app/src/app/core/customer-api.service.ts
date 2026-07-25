@@ -36,6 +36,7 @@ import {
   LiveConsultationRequest,
   LiveConsultationResponse,
   OtpRequestResponse,
+  PublicOffersResponse,
   PurchaseGiftCardPayload,
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
@@ -99,6 +100,14 @@ export class CustomerApiService {
   searchPublicBusinesses(params: SearchBusinessesParams = {}): Observable<Business[]> {
     return this.http.get<ApiResponse<Business[] | ApiList<Business>>>(`${this.baseUrl}/public/search`, { params: this.toParams(params) }).pipe(
       map((response) => this.unwrapList<Business>(response))
+    );
+  }
+
+  getPublicOffers(tenantId: string, branchId: string): Observable<PublicOffersResponse> {
+    return this.http.get<ApiResponse<PublicOffersResponse>>(`${this.baseUrl}/happy-hours-offers`, {
+      params: this.toParams({ tenantId, branchId }),
+    }).pipe(
+      map((response) => this.unwrap<PublicOffersResponse>(response))
     );
   }
 

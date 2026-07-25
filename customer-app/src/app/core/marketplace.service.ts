@@ -20,6 +20,7 @@ import {
   CustomerSalonsResponse,
   CustomerWaitlistEntry,
   JoinWaitlistPayload,
+  PublicOffersResponse,
   PurchaseGiftCardPayload,
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
@@ -50,6 +51,7 @@ export class MarketplaceService {
   readonly primarySalon = signal<CustomerPrimarySalon | null>(null);
   readonly shouldPromptPrimary = signal(false);
   readonly suggestedSalon = signal<CustomerSalonRelationship | null>(null);
+  readonly salonOffers = signal<PublicOffersResponse | null>(null);
   private favoritesLoaded = false;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {}
@@ -320,6 +322,14 @@ export class MarketplaceService {
         this.shouldPromptPrimary.set(true);
         this.suggestedSalon.set(response.suggestedSalon as CustomerSalonRelationship | null);
       }
+    });
+  }
+
+  async loadSalonOffers(tenantId: string, branchId: string): Promise<PublicOffersResponse | null> {
+    return this.run("Unable to load salon offers", async () => {
+      const response = await firstValueFrom(this.api.getPublicOffers(tenantId, branchId));
+      this.salonOffers.set(response);
+      return response;
     });
   }
 

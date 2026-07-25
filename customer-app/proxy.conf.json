@@ -1,7 +1,7 @@
 {
   "/api": {
-    "target": "http://127.0.0.1:4000",
-    "secure": false,
+    "target": "https://greenyellow-louse-758785.hostingersite.com",
+    "secure": true,
     "changeOrigin": true,
     "ws": true,
     "logLevel": "debug"

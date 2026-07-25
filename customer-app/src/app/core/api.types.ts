@@ -616,3 +616,58 @@ export type CustomerAccountModule =
   | CustomerPayment[]
   | CustomerNotification[];
 
+// ─── Public Offers (from happy-hours control tower) ──────────────
+
+export interface PublicOfferDiscountRule {
+  type: "discount_rule";
+  id: string;
+  title: string;
+  description: string;
+  discountSummary: string;
+  applyTo: string;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface PublicOfferCoupon {
+  type: "coupon";
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  discountSummary: string;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface PublicOfferCalendar {
+  type: "calendar_promotion";
+  id: string;
+  title: string;
+  description: string;
+  promoType: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+export type PublicOfferItem = PublicOfferDiscountRule | PublicOfferCoupon | PublicOfferCalendar;
+
+export interface PublicOffersResponse {
+  tenantId: string;
+  branchId: string;
+  safeForPublicSurfaces: boolean;
+  eligibility: {
+    currentDate: string;
+    serviceId: string;
+    serviceCategory: string;
+    staffId: string;
+    clientSegment: string;
+    cartTotalPaise: number;
+  };
+  labels: Record<string, string>;
+  offers: PublicOfferItem[];
+  generatedAt: string;
+}
+

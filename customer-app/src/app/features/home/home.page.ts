@@ -4,7 +4,6 @@ import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
-import { environment } from "../../../environments/environment";
 import {
   calendarOutline,
   cameraOutline,
@@ -21,7 +20,8 @@ import {
   searchOutline,
   sparklesOutline,
   swapVerticalOutline,
-  timeOutline
+  timeOutline,
+  walletOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MySalonCardComponent } from "../../shared/my-salon-card.component";
@@ -63,9 +63,6 @@ interface ConsultationChatMessage {
             </div>
           </div>
           <div class="toolbar-actions">
-            @if (!mobileHome()) {
-              <ion-button fill="clear" shape="round" class="staff-toolbar-button" [href]="staffAppUrl">Staff?</ion-button>
-            }
             <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
               <ion-icon name="notifications-outline"></ion-icon>
             </ion-button>
@@ -264,12 +261,23 @@ interface ConsultationChatMessage {
             </aura-my-salon-card>
           }
 
-          <nav class="customer-quick-actions" aria-label="Customer quick actions">
-            <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
-            <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>My bookings</span><small>Reschedule or cancel</small></a>
-            <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Deals and rewards</small></a>
-            <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
-          </nav>
+          <!-- Primary Salon User: loyalty-focused quick actions -->
+          @if (hasPrimarySalon()) {
+            <nav class="customer-quick-actions primary-salon-actions" aria-label="Your salon quick actions">
+              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>Book again</span><small>Schedule a visit</small></a>
+              <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet</span><small>Credits and balance</small></a>
+              <a routerLink="/tabs/memberships"><ion-icon name="ribbon-outline"></ion-icon><span>Membership</span><small>Plans and perks</small></a>
+              <a routerLink="/tabs/rewards"><ion-icon name="pricetag-outline"></ion-icon><span>Rewards</span><small>Points and gifts</small></a>
+            </nav>
+          } @else {
+            <!-- New / browsing user: discovery-focused quick actions -->
+            <nav class="customer-quick-actions" aria-label="Customer quick actions">
+              <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
+              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>My bookings</span><small>Reschedule or cancel</small></a>
+              <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Deals and rewards</small></a>
+              <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
+            </nav>
+          }
 
           <div class="customer-metrics">
             @for (metric of customerMetrics(); track metric.label) {
@@ -283,11 +291,12 @@ interface ConsultationChatMessage {
           </div>
         </section>
 
+        <!-- Book Again faster (shown when authenticated with visit history) -->
         @if (!searchActive() && recentlyVisited().length) {
           <section class="mobile-secondary-section">
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Book again faster</h2>
+              <h2 class="section-title">{{ hasPrimarySalon() ? 'Book at ' + (marketplace.primarySalon()?.businessName || 'your salon') : 'Book again faster' }}</h2>
             </div>
           </div>
           <div class="visited-rail">
@@ -326,7 +335,7 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Recommendations</h2>
+              <h2 class="section-title">{{ hasPrimarySalon() ? 'Explore nearby salons' : 'Recommendations' }}</h2>
             </div>
             <a routerLink="/tabs/search">Explore all</a>
           </div>
@@ -370,7 +379,7 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">Recommended businesses</h2>
+            <h2 class="section-title">{{ hasPrimarySalon() ? 'More salons near you' : 'Recommended businesses' }}</h2>
           </div>
           <a routerLink="/tabs/search">See all</a>
         </div>
@@ -388,7 +397,7 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">Nearby businesses</h2>
+            <h2 class="section-title">{{ hasPrimarySalon() ? 'Discover new salons' : 'Nearby businesses' }}</h2>
           </div>
           <a routerLink="/tabs/search">View map</a>
         </div>
@@ -491,18 +500,6 @@ interface ConsultationChatMessage {
 
     .near-you-button:disabled {
       opacity: 0.7;
-    }
-
-    .staff-toolbar-button {
-      --color: #6E4810;
-      --background: rgba(255, 249, 236, 0.96);
-      --border-color: rgba(214, 169, 74, 0.34);
-      --border-style: solid;
-      --border-width: 1px;
-      --box-shadow: 0 8px 18px rgba(92, 65, 28, 0.08);
-      min-width: 78px;
-      font-weight: 950;
-      text-transform: none;
     }
 
     .hero {
@@ -1074,6 +1071,15 @@ interface ConsultationChatMessage {
       line-height: 1.2;
     }
 
+    .customer-quick-actions.primary-salon-actions a {
+      border-color: rgba(15, 118, 110, 0.2);
+      background: linear-gradient(145deg, #ffffff, rgba(15, 118, 110, 0.06));
+    }
+
+    .customer-quick-actions.primary-salon-actions ion-icon {
+      color: #0F766E;
+    }
+
     .customer-metrics {
       display: grid;
       gap: 12px;
@@ -1390,7 +1396,6 @@ interface ConsultationChatMessage {
       }
 
       .location-copy > span,
-      .staff-toolbar-button,
       .toolbar-actions ion-button:last-child,
       .near-you-button,
       .page-title,
@@ -1635,7 +1640,6 @@ interface ConsultationChatMessage {
   `]
 })
 export class HomePage implements OnInit {
-  readonly staffAppUrl = environment.staffAppUrl;
   readonly query = signal("");
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");
@@ -1658,6 +1662,7 @@ export class HomePage implements OnInit {
   consultationText = "";
   readonly consultationGoals = ["Hair", "Skin", "Nails", "Spa", "Bridal", "Barber", "Budget", "Near me"];
   readonly skeletons = [1, 2, 3, 4, 5, 6];
+  readonly hasPrimarySalon = computed(() => !!this.marketplace.primarySalon());
   readonly searchActive = computed(() => !!this.activeQuery().trim());
   readonly homeResults = computed(() => this.filterBusinesses(this.marketplace.businesses()));
   readonly recommendations = computed(() => this.recommendedBusinesses().slice(0, 4));
@@ -1727,7 +1732,8 @@ export class HomePage implements OnInit {
       searchOutline,
       sparklesOutline,
       swapVerticalOutline,
-      timeOutline
+      timeOutline,
+      walletOutline
     });
   }
 

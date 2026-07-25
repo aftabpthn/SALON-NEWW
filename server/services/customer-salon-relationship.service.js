@@ -63,6 +63,11 @@ export function incrementVisitCount({ customerId, tenantId, branchId }) {
   `).get({ customerId, tenantId, branchId });
 }
 
+/**
+ * Get all salons a customer has visited across all tenants.
+ * Marketplace view: customer sees all their salon relationships.
+ * Intentionally cross-tenant — the customer IS the entity spanning tenants.
+ */
 export function getAllRelationships(customerId) {
   return db.prepare(`
     SELECT * FROM customerSalonRelationships
@@ -71,30 +76,62 @@ export function getAllRelationships(customerId) {
   `).all({ customerId });
 }
 
+/**
+ * Get a customer's relationships within a specific tenant only.
+ * Use when tenant-scoped data is required (e.g., admin/ops views).
+ */
+export function getRelationshipsByTenant(customerId, tenantId) {
+  return db.prepare(`
+    SELECT * FROM customerSalonRelationships
+    WHERE customerId = @customerId AND tenantId = @tenantId
+    ORDER BY visitCount DESC, lastVisitAt DESC
+  `).all({ customerId, tenantId });
+}
+
 // ─── Primary Salon ───────────────────────────────────────────────────
 
+/**
+ * Get customer's primary salon across all tenants.
+ * Design: one primary salon per customer (marketplace-wide).
+ * Intentionally cross-tenant.
+ */
 export function getPrimarySalon(customerId) {
   return db.prepare(`
     SELECT * FROM customerPrimarySalons WHERE customerId = @customerId
   `).get({ customerId });
 }
 
+/**
+ * Get customer's primary salon within a specific tenant.
+ */
+export function getPrimarySalonByTenant(customerId, tenantId) {
+  return db.prepare(`
+    SELECT * FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId
+  `).get({ customerId, tenantId });
+}
+
 export function setPrimarySalon({ customerId, tenantId, branchId, businessId, businessName, reason }) {
   const id = `cps_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
 
-  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId`).get({ customerId });
+  // Delete existing primary for THIS TENANT ONLY (scoped delete)
+  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).get({ customerId, tenantId });
 
   db.prepare(`
     INSERT INTO customerPrimarySalons (id, customerId, tenantId, branchId, businessId, businessName, reason, setAt)
     VALUES (@id, @customerId, @tenantId, @branchId, @businessId, @businessName, @reason, @now)
-  `).get({ id, customerId, tenantId, branchId, businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now });
+  `).get({ id, customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now });
 
   return db.prepare(`SELECT * FROM customerPrimarySalons WHERE id = @id`).get({ id });
 }
 
-export function removePrimarySalon(customerId) {
-  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId`).get({ customerId });
+export function removePrimarySalon(customerId, tenantId) {
+  if (tenantId) {
+    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).get({ customerId, tenantId });
+  } else {
+    // Fallback: remove all primary salons for this customer (profile-level action)
+    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId`).get({ customerId });
+  }
   return { ok: true };
 }
 
@@ -109,3 +146,27 @@ export function shouldPromptPrimarySalon(customerId) {
   const top = eligible.sort((a, b) => b.visitCount - a.visitCount)[0];
   return { prompt: true, reason: '3+_visits', suggestedSalon: top };
 }
+
+// ─── Combined: record visit (upsert relationship + increment) ──────
+
+export function recordVisit({ customerId, tenantId, branchId, businessId, businessName }) {
+  if (!customerId || !tenantId) return null;
+  getOrCreateRelationship({ customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '' });
+  return incrementVisitCount({ customerId, tenantId, branchId: branchId || '' });
+}
+
+// ─── Service object for structured imports ───────────────────────
+
+export const customerSalonRelationshipService = {
+  ensureCustomerSalonRelationshipSchema,
+  getOrCreateRelationship,
+  incrementVisitCount,
+  getAllRelationships,
+  getRelationshipsByTenant,
+  getPrimarySalon,
+  getPrimarySalonByTenant,
+  setPrimarySalon,
+  removePrimarySalon,
+  shouldPromptPrimarySalon,
+  recordVisit
+};
