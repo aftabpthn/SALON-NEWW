@@ -74,12 +74,12 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
 
        <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
           @if (staff.hasPermission('read:appointments')) {
-            <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
-            <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a>
-            <a routerLink="/staff/business" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
+            <a routerLink="/staff/dashboard" [class.active]="isRouteActive('/staff/dashboard')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
+            <a routerLink="/staff/appointments" [class.active]="isRouteActive('/staff/appointments')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a>
+            <a routerLink="/staff/business" [class.active]="isRouteActive('/staff/business')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
           }
-          @if (staff.hasAnyPermission(['allow:staff-checkin-checkout', 'read:staff', 'write:staff'])) { <a routerLink="/staff/attendance" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a> }
-          @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
+          @if (staff.hasAnyPermission(['allow:staff-checkin-checkout', 'read:staff', 'write:staff'])) { <a routerLink="/staff/attendance" [class.active]="isRouteActive('/staff/attendance')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a> }
+          @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/tasks" [class.active]="isRouteActive('/staff/tasks')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
        </nav>
 
       @if (commandOpen()) {
@@ -358,6 +358,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       .slice(0, 12);
   });
 
+  readonly currentUrl = signal(this.router.url);
+
   constructor(readonly staff: StaffAppService, readonly push: StaffPushService, private readonly router: Router) {}
 
   ngOnInit() {
@@ -368,6 +370,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     void this.push.refreshStatus();
     this.routerSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
+        this.currentUrl.set(event.urlAfterRedirects || event.url);
         this.showStaffHintOnce(event.urlAfterRedirects);
         if (this.mainShell) this.mainShell.nativeElement.scrollTop = 0;
       }
@@ -376,6 +379,12 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.pollTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && !this.realtimeConnected()) void this.loadShellData();
     }, 60000);
+  }
+
+  isRouteActive(path: string): boolean {
+    const current = this.currentUrl().split("?")[0];
+    if (path === "/staff/dashboard") return current === "/staff/dashboard";
+    return current.startsWith(path);
   }
 
   ngOnDestroy() {
