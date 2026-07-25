@@ -179,6 +179,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       } else {
         await this.runMutation("clock-in", () => this.staff.clockIn(), "Clocked in.");
       }
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
       return;
     }
     if (action.kind === "end-break") { await this.runMutation("end-break", () => this.staff.endBreak(), "Break ended."); return; }
