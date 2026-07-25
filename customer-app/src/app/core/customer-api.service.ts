@@ -25,8 +25,10 @@ import {
   CustomerPackage,
   CustomerPayment,
   CustomerPaymentLink,
+  CustomerPrimarySalon,
   CustomerProfile,
   CustomerRewardSummary,
+  CustomerSalonsResponse,
   CustomerWallet,
   CustomerWaitlistEntry,
   FirebaseAuthPayload,
@@ -343,6 +345,37 @@ export class CustomerApiService {
   listNotifications(): Observable<CustomerNotification[]> {
     return this.http.get<ApiResponse<CustomerNotification[] | ApiList<CustomerNotification>>>(`${this.baseUrl}/customer/notifications`).pipe(
       map((response) => this.unwrapList<CustomerNotification>(response))
+    );
+  }
+
+  // ─── Customer-Salon Relationships ────────────────────────────────
+  getMySalons(): Observable<CustomerSalonsResponse> {
+    return this.http.get<ApiResponse<CustomerSalonsResponse>>(`${this.baseUrl}/customer/salons`).pipe(
+      map((response) => this.unwrap<CustomerSalonsResponse>(response))
+    );
+  }
+
+  setPrimarySalon(tenantId: string, payload: { branchId: string; businessId: string; businessName: string; reason: string }): Observable<{ primarySalon: CustomerPrimarySalon }> {
+    return this.http.post<ApiResponse<{ primarySalon: CustomerPrimarySalon }>>(`${this.baseUrl}/customer/salons/${encodeURIComponent(tenantId)}/primary`, payload).pipe(
+      map((response) => this.unwrap<{ primarySalon: CustomerPrimarySalon }>(response))
+    );
+  }
+
+  removePrimarySalon(): Observable<{ ok: boolean }> {
+    return this.http.delete<ApiResponse<{ ok: boolean }>>(`${this.baseUrl}/customer/salons/primary`).pipe(
+      map((response) => this.unwrap<{ ok: boolean }>(response))
+    );
+  }
+
+  checkPrimarySalonPrompt(): Observable<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }> {
+    return this.http.get<ApiResponse<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }>>(`${this.baseUrl}/customer/salons/primary/prompt`).pipe(
+      map((response) => this.unwrap<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }>(response))
+    );
+  }
+
+  recordSalonVisit(tenantId: string, payload: { branchId: string; businessId: string; businessName: string }): Observable<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }> {
+    return this.http.post<ApiResponse<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>>(`${this.baseUrl}/customer/salons/${encodeURIComponent(tenantId)}/visit`, payload).pipe(
+      map((response) => this.unwrap<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>(response))
     );
   }
 

@@ -14,7 +14,10 @@ import {
   CustomerMembership,
   CustomerMembershipPlan,
   CustomerPaymentLink,
+  CustomerPrimarySalon,
   CustomerProfile,
+  CustomerSalonRelationship,
+  CustomerSalonsResponse,
   CustomerWaitlistEntry,
   JoinWaitlistPayload,
   PurchaseGiftCardPayload,
@@ -43,6 +46,10 @@ export class MarketplaceService {
   readonly membershipPlans = signal<CustomerMembershipPlan[]>([]);
   readonly customer = computed(() => this.auth.customer());
   readonly isAuthenticated = computed(() => this.auth.isAuthenticated());
+  readonly mySalons = signal<CustomerSalonRelationship[]>([]);
+  readonly primarySalon = signal<CustomerPrimarySalon | null>(null);
+  readonly shouldPromptPrimary = signal(false);
+  readonly suggestedSalon = signal<CustomerSalonRelationship | null>(null);
   private favoritesLoaded = false;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {}
@@ -275,6 +282,49 @@ export class MarketplaceService {
       this.mergeAccountList("memberships", result.membership);
       return result.membership;
     });
+  }
+
+  // ─── Customer-Salon Relationships ────────────────────────────────
+  async loadMySalons(): Promise<CustomerSalonsResponse> {
+    return this.run("Unable to load your salons", async () => {
+      const response = await firstValueFrom(this.api.getMySalons());
+      this.mySalons.set(response.salons || []);
+      this.primarySalon.set(response.primarySalon);
+      this.shouldPromptPrimary.set(response.shouldPromptPrimary);
+      this.suggestedSalon.set(response.suggestedSalon);
+      return response;
+    });
+  }
+
+  async setPrimarySalon(tenantId: string, branchId: string, businessId: string, businessName: string): Promise<CustomerPrimarySalon> {
+    return this.run("Unable to set primary salon", async () => {
+      const { primarySalon } = await firstValueFrom(this.api.setPrimarySalon(tenantId, { branchId, businessId, businessName, reason: "manual" }));
+      this.primarySalon.set(primarySalon);
+      this.shouldPromptPrimary.set(false);
+      this.suggestedSalon.set(null);
+      return primarySalon;
+    });
+  }
+
+  async removePrimarySalon(): Promise<void> {
+    return this.run("Unable to remove primary salon", async () => {
+      await firstValueFrom(this.api.removePrimarySalon());
+      this.primarySalon.set(null);
+    });
+  }
+
+  async recordSalonVisit(tenantId: string, branchId: string, businessId: string, businessName: string): Promise<void> {
+    return this.run("Unable to record salon visit", async () => {
+      const response = await firstValueFrom(this.api.recordSalonVisit(tenantId, { branchId, businessId, businessName }));
+      if (response.shouldPromptPrimary) {
+        this.shouldPromptPrimary.set(true);
+        this.suggestedSalon.set(response.suggestedSalon as CustomerSalonRelationship | null);
+      }
+    });
+  }
+
+  hasPrimarySalon(): boolean {
+    return this.primarySalon() !== null;
   }
 
   async purchaseGiftCard(payload: PurchaseGiftCardPayload): Promise<CustomerGiftCard> {

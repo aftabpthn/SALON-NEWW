@@ -573,6 +573,39 @@ export interface CustomerNotification {
   createdAt: string;
 }
 
+export interface CustomerSalonRelationship {
+  id: string;
+  customerId: string;
+  tenantId: string;
+  branchId: string;
+  businessId: string;
+  businessName: string;
+  relationshipType: string;
+  visitCount: number;
+  lastVisitAt: string;
+  isFavorite: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPrimarySalon {
+  id: string;
+  customerId: string;
+  tenantId: string;
+  branchId: string;
+  businessId: string;
+  businessName: string;
+  reason: string;
+  setAt: string;
+}
+
+export interface CustomerSalonsResponse {
+  salons: CustomerSalonRelationship[];
+  primarySalon: CustomerPrimarySalon | null;
+  shouldPromptPrimary: boolean;
+  suggestedSalon: CustomerSalonRelationship | null;
+}
+
 export type CustomerAccountModule =
   | CustomerRewardSummary
   | CustomerWallet

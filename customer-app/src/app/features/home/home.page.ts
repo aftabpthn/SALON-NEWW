@@ -24,9 +24,10 @@ import {
   timeOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
+import { MySalonCardComponent } from "../../shared/my-salon-card.component";
 import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { Booking, Business, LiveConsultationBusinessContext, LiveConsultationPhoto, LiveConsultationResponse } from "../../core/api.types";
+import { Booking, Business, CustomerSalonRelationship, LiveConsultationBusinessContext, LiveConsultationPhoto, LiveConsultationResponse } from "../../core/api.types";
 
 interface HomeSearchSuggestion {
   key: string;
@@ -43,7 +44,7 @@ interface ConsultationChatMessage {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent],
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent, MySalonCardComponent],
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
@@ -252,6 +253,16 @@ interface ConsultationChatMessage {
               </ion-button>
             </div>
           </article>
+
+          @if (marketplace.isAuthenticated()) {
+            <aura-my-salon-card
+              [primarySalon]="marketplace.primarySalon()"
+              [suggestedSalon]="marketplace.suggestedSalon()"
+              (openSalonPicker)="openSalonPicker()"
+              (dismissPrompt)="dismissPrimaryPrompt()"
+              (setPrimary)="onSetPrimarySalon($event)">
+            </aura-my-salon-card>
+          }
 
           <nav class="customer-quick-actions" aria-label="Customer quick actions">
             <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
@@ -1730,8 +1741,26 @@ export class HomePage implements OnInit {
       this.marketplace.loadPublicBusinesses(),
       this.marketplace.loadCategories(),
       this.marketplace.isAuthenticated() ? this.marketplace.loadCustomer() : Promise.resolve(null),
-      this.marketplace.isAuthenticated() ? this.marketplace.loadBookings() : Promise.resolve([])
+      this.marketplace.isAuthenticated() ? this.marketplace.loadBookings() : Promise.resolve([]),
+      this.marketplace.isAuthenticated() ? this.marketplace.loadMySalons().catch(() => null) : Promise.resolve(null)
     ]).catch(() => undefined);
+  }
+
+  openSalonPicker() {
+    void this.router.navigate(["/tabs/profile"]);
+  }
+
+  dismissPrimaryPrompt() {
+    this.marketplace.shouldPromptPrimary.set(false);
+    this.marketplace.suggestedSalon.set(null);
+  }
+
+  async onSetPrimarySalon(salon: CustomerSalonRelationship) {
+    try {
+      await this.marketplace.setPrimarySalon(salon.tenantId, salon.branchId, salon.businessId, salon.businessName);
+    } catch {
+      // error is handled by marketplace service
+    }
   }
 
   money(pricePaise: number): string {
