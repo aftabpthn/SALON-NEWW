@@ -196,6 +196,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
       }
       this.message.set(completedMessage);
       await this.load();
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     } catch {
       this.localError.set(this.staff.error() || `Unable to ${action.replace(/-/g, " ")}.`);
     } finally {
