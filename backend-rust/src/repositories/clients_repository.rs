@@ -2267,11 +2267,11 @@ pub async fn update_treatment_photo(
     branch_id: &str,
     client_id: &str,
     photo_id: &str,
-    caption: &str,
-    photo_type: &str,
+    caption: Option<&str>,
+    photo_type: Option<&str>,
 ) -> Result<Option<ClientTreatmentPhotoRecord>, sqlx::Error> {
     sqlx::query_as(
-        r#"UPDATE client_treatment_photos SET caption=$5,photo_type=$6
+        r#"UPDATE client_treatment_photos SET caption=COALESCE($5,caption),photo_type=COALESCE($6,photo_type)
            WHERE tenant_id=$1 AND branch_id=$2 AND id=$4
              AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))
            RETURNING id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at"#,
@@ -2286,15 +2286,31 @@ pub async fn delete_treatment_photo(
     branch_id: &str,
     client_id: &str,
     photo_id: &str,
+    actor: &str,
 ) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
+    let mut tx = db.begin().await?;
+    let deleted: Option<(String, String, String)> = sqlx::query_as(
         r#"DELETE FROM client_treatment_photos
            WHERE tenant_id=$1 AND branch_id=$2 AND id=$4
-             AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))"#,
+             AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))
+           RETURNING file_name,photo_type,caption"#,
     )
     .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id)
-    .execute(db).await?;
-    Ok(result.rows_affected() > 0)
+    .fetch_optional(&mut *tx).await?;
+    if let Some((file_name, photo_type, caption)) = &deleted {
+        record_audit_tx(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            client_id,
+            "client.photo.deleted",
+            actor,
+            serde_json::json!({"photoId": photo_id, "fileName": file_name, "photoType": photo_type, "caption": caption}),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(deleted.is_some())
 }
 
 pub async fn list_duplicates(
@@ -3050,6 +3066,7 @@ mod tests {
         for statement in [
             "CREATE TABLE clients (id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,merged_into_client_id TEXT)",
             "CREATE TABLE appointments (id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL)",
+            "CREATE TABLE client_audit_events(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,event_type TEXT NOT NULL,actor_user_id TEXT NOT NULL,details_json JSONB NOT NULL)",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
@@ -3174,8 +3191,8 @@ mod tests {
             "branch-2",
             "client-1",
             &photo.id,
-            "Should not apply",
-            "after",
+            Some("Should not apply"),
+            Some("after"),
         )
         .await
         .unwrap()
@@ -3186,8 +3203,8 @@ mod tests {
             "branch-1",
             "client-1",
             &photo.id,
-            "After service",
-            "after",
+            Some("After service"),
+            Some("after"),
         )
         .await
         .unwrap()
@@ -3195,17 +3212,62 @@ mod tests {
         assert_eq!(updated.caption, "After service");
         assert_eq!(updated.photo_type, "after");
 
-        assert!(!delete_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id)
-            .await
-            .unwrap());
-        assert!(delete_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
-            .await
-            .unwrap());
+        // Partial update omitting photoType must preserve the existing value, not reset it.
+        let caption_only = update_treatment_photo(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            &photo.id,
+            Some("After service, redone"),
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(caption_only.caption, "After service, redone");
+        assert_eq!(caption_only.photo_type, "after");
+
+        // Partial update omitting caption must preserve the existing value, not blank it.
+        let type_only = update_treatment_photo(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            &photo.id,
+            None,
+            Some("other"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(type_only.caption, "After service, redone");
+        assert_eq!(type_only.photo_type, "other");
+
+        assert!(
+            !delete_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id, "owner-1")
+                .await
+                .unwrap()
+        );
+        assert!(
+            delete_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id, "owner-1")
+                .await
+                .unwrap()
+        );
         assert!(
             get_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
                 .await
                 .unwrap()
                 .is_none()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM client_audit_events WHERE event_type='client.photo.deleted' AND client_id='client-1'"
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+            1
         );
     }
 }

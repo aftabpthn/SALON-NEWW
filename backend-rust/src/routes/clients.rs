@@ -1924,9 +1924,11 @@ async fn update_treatment_photo(
     Json(payload): Json<TreatmentPhotoUpdateRequest>,
 ) -> ApiResult<ClientTreatmentPhotoRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let caption = payload.caption.as_deref().unwrap_or("").trim();
-    let photo_type = payload.photo_type.as_deref().unwrap_or("other").trim();
-    if caption.chars().count() > 500 || !matches!(photo_type, "before" | "after" | "other") {
+    let caption = payload.caption.as_deref().map(str::trim);
+    let photo_type = payload.photo_type.as_deref().map(str::trim);
+    if caption.is_some_and(|value| value.chars().count() > 500)
+        || photo_type.is_some_and(|value| !matches!(value, "before" | "after" | "other"))
+    {
         return Err(AppError::validation("invalid treatment photo update"));
     }
     let row = clients_repository::update_treatment_photo(
@@ -1955,6 +1957,7 @@ async fn update_treatment_photo(
 
 async fn delete_treatment_photo(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path((id, photo_id)): Path<(String, String)>,
 ) -> ApiResult<()> {
@@ -1965,6 +1968,7 @@ async fn delete_treatment_photo(
         &branch_id,
         &id,
         &photo_id,
+        &claims.sub,
     )
     .await
     .map_err(|_| AppError::internal("failed to delete treatment photo"))?;

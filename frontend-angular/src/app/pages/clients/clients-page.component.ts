@@ -78,6 +78,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   private timelineLoadVersion = 0;
   private liveSocket: WebSocket | null = null;
   private liveReconnectTimer?: ReturnType<typeof setTimeout>;
+  private photoDetailRequestSeq = 0;
 
   readonly tabs: WorkspaceTab[] = ['Timeline', 'Profile', 'Insights', 'Growth', 'Clinical', 'Consent', 'Forms', 'Communications', 'Reports', 'Masters'];
   readonly clientMasterTypes = [
@@ -873,6 +874,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   closeDrawer() {
     this.drawerMode = null;
     this.clientError = '';
+    this.photoDetailRequestSeq++;
     this.revokePhotoDetailPreview();
     this.selectedPhotoDetail = null;
   }
@@ -1148,6 +1150,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
 
   async openTreatmentPhotoDetail(photo: TreatmentPhoto) {
     if (!this.selectedClient) return;
+    const requestId = ++this.photoDetailRequestSeq;
     this.revokePhotoDetailPreview();
     this.selectedPhotoDetail = photo;
     this.photoEditCaption = photo.caption;
@@ -1158,11 +1161,18 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.photoDetailLoading = true;
     try {
       const blob = await firstValueFrom(this.api.getBlob(`/clients/${this.selectedClient.id}/treatment-photos/${photo.id}/content`));
-      this.photoDetailPreviewUrl = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
+      if (requestId !== this.photoDetailRequestSeq) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      this.photoDetailPreviewUrl = url;
     } catch (error) {
-      this.workspaceError = this.errorMessage(error, 'Treatment photo could not be loaded');
+      if (requestId === this.photoDetailRequestSeq) {
+        this.workspaceError = this.errorMessage(error, 'Treatment photo could not be loaded');
+      }
     } finally {
-      this.photoDetailLoading = false;
+      if (requestId === this.photoDetailRequestSeq) this.photoDetailLoading = false;
     }
   }
 
