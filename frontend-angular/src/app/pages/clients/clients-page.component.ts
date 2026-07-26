@@ -9,7 +9,7 @@ import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 
 type WorkspaceTab = 'Timeline' | 'Profile' | 'Insights' | 'Growth' | 'Clinical' | 'Consent' | 'Forms' | 'Communications' | 'Reports' | 'Masters';
 type TimelineType = 'Appointments' | 'Invoices' | 'Services' | 'Payments' | 'Wallet' | 'Loyalty' | 'Memberships' | 'Packages' | 'WhatsApp' | 'Notes' | 'Custom forms' | 'Consent' | 'Reviews' | 'Audit activity';
-type DrawerMode = 'client' | 'note' | 'clinical' | 'family' | 'soap' | 'contact-preferences' | 'form-definition' | 'form-submission' | 'photo' | 'review' | 'merge' | 'retention' | 'gift-register' | 'master' | 'discount-rule' | 'discount' | 'win-back' | null;
+type DrawerMode = 'client' | 'note' | 'clinical' | 'family' | 'soap' | 'contact-preferences' | 'form-definition' | 'form-submission' | 'photo' | 'photo-detail' | 'review' | 'merge' | 'retention' | 'gift-register' | 'master' | 'discount-rule' | 'discount' | 'win-back' | null;
 type RetentionAction = 'wallet-credit' | 'wallet-debit' | 'loyalty-adjust' | 'gift-detail' | 'gift-void' | 'gift-reissue' | 'referral-link' | null;
 type FormField = {
   key: string;
@@ -60,6 +60,8 @@ type TimelineLine = { lineType: 'service' | 'product'; itemName: string; quantit
 type TimelineEvent = { id: string; type: TimelineType; title: string; detail: string; occurredAt: string; icon: string; amountPaise?: number; status?: string; groupId?: string; tipPaise?: number; balancePaise?: number; lineItems?: TimelineLine[]; grouped?: boolean; steps?: TimelineStep[]; children?: TimelineEvent[] };
 type RetentionSnapshot = { giftCards: any[]; loyalty: { pointsBalance: number; currentTier: any; nextTier: any; pointsToNextTier: number | null; enabled: boolean }; rewardLedger: any[]; referralCode: any; referrals: any[]; referredBy: any };
 type GiftCardRow = { id: string; code: string; clientId: string; clientName: string; initialAmountPaise: number; balancePaise: number; status: string; expiresAt?: string; sourceSaleId: string; createdAt: string };
+type TreatmentPhotoType = 'before' | 'after' | 'other';
+type TreatmentPhoto = { id: string; appointmentId?: string; caption: string; fileName: string; contentType: string; byteSize: number; sha256: string; photoType: TreatmentPhotoType; createdAt: string };
 
 @Component({
     selector: 'page-clients',
@@ -76,6 +78,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   private timelineLoadVersion = 0;
   private liveSocket: WebSocket | null = null;
   private liveReconnectTimer?: ReturnType<typeof setTimeout>;
+  private photoDetailRequestSeq = 0;
 
   readonly tabs: WorkspaceTab[] = ['Timeline', 'Profile', 'Insights', 'Growth', 'Clinical', 'Consent', 'Forms', 'Communications', 'Reports', 'Masters'];
   readonly clientMasterTypes = [
@@ -146,7 +149,14 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   soapNotes: any[] = [];
   formDefinitions: any[] = [];
   formSubmissions: any[] = [];
-  treatmentPhotos: any[] = [];
+  treatmentPhotos: TreatmentPhoto[] = [];
+  photoTypeFilter: 'all' | TreatmentPhotoType = 'all';
+  photoSortNewestFirst = true;
+  selectedPhotoDetail: TreatmentPhoto | null = null;
+  photoDetailPreviewUrl: string | null = null;
+  photoDetailLoading = false;
+  photoEditCaption = '';
+  photoEditType: TreatmentPhotoType = 'other';
   duplicates: any[] = [];
   consentHistory: any[] = [];
   communications: any[] = [];
@@ -229,6 +239,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.disconnectLiveClient();
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.revokePhotoDetailPreview();
   }
 
   get searchResults() {
@@ -863,6 +874,9 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   closeDrawer() {
     this.drawerMode = null;
     this.clientError = '';
+    this.photoDetailRequestSeq++;
+    this.revokePhotoDetailPreview();
+    this.selectedPhotoDetail = null;
   }
 
   async saveClient() {
@@ -1104,7 +1118,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     );
   }
 
-  async viewTreatmentPhoto(photo: any) {
+  async viewTreatmentPhoto(photo: TreatmentPhoto) {
     if (!this.selectedClient) return;
     this.workspaceError = '';
     try {
@@ -1115,6 +1129,80 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     } catch (error) {
       this.workspaceError = this.errorMessage(error, 'Treatment photo could not be loaded');
     }
+  }
+
+  get filteredTreatmentPhotos(): TreatmentPhoto[] {
+    const filtered = this.photoTypeFilter === 'all'
+      ? this.treatmentPhotos
+      : this.treatmentPhotos.filter((photo) => photo.photoType === this.photoTypeFilter);
+    return [...filtered].sort((a, b) => {
+      const delta = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return this.photoSortNewestFirst ? -delta : delta;
+    });
+  }
+
+  formatBytes(value: number) {
+    const size = Number(value) || 0;
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async openTreatmentPhotoDetail(photo: TreatmentPhoto) {
+    if (!this.selectedClient) return;
+    const requestId = ++this.photoDetailRequestSeq;
+    this.revokePhotoDetailPreview();
+    this.selectedPhotoDetail = photo;
+    this.photoEditCaption = photo.caption;
+    this.photoEditType = photo.photoType;
+    this.clientError = '';
+    this.workspaceError = '';
+    this.drawerMode = 'photo-detail';
+    this.photoDetailLoading = true;
+    try {
+      const blob = await firstValueFrom(this.api.getBlob(`/clients/${this.selectedClient.id}/treatment-photos/${photo.id}/content`));
+      const url = URL.createObjectURL(blob);
+      if (requestId !== this.photoDetailRequestSeq) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      this.photoDetailPreviewUrl = url;
+    } catch (error) {
+      if (requestId === this.photoDetailRequestSeq) {
+        this.workspaceError = this.errorMessage(error, 'Treatment photo could not be loaded');
+      }
+    } finally {
+      if (requestId === this.photoDetailRequestSeq) this.photoDetailLoading = false;
+    }
+  }
+
+  private revokePhotoDetailPreview() {
+    if (this.photoDetailPreviewUrl) {
+      URL.revokeObjectURL(this.photoDetailPreviewUrl);
+      this.photoDetailPreviewUrl = null;
+    }
+  }
+
+  async saveTreatmentPhotoDetail() {
+    if (!this.selectedClient || !this.selectedPhotoDetail) return;
+    await this.saveWorkspace(
+      this.api.patch<ApiEnvelope<any>>(
+        `/clients/${this.selectedClient.id}/treatment-photos/${this.selectedPhotoDetail.id}`,
+        { caption: this.photoEditCaption.trim(), photoType: this.photoEditType },
+      ),
+      'Treatment photo update failed',
+    );
+    if (this.drawerMode !== 'photo-detail') this.closeDrawer();
+  }
+
+  async deleteTreatmentPhotoDetail() {
+    if (!this.selectedClient || !this.selectedPhotoDetail) return;
+    if (!window.confirm('Delete this photo?')) return;
+    await this.saveWorkspace(
+      this.api.delete<ApiEnvelope<any>>(`/clients/${this.selectedClient.id}/treatment-photos/${this.selectedPhotoDetail.id}`),
+      'Treatment photo could not be deleted',
+    );
+    if (this.drawerMode !== 'photo-detail') this.closeDrawer();
   }
 
   async loadClientReport() {

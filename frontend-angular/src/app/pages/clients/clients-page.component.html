@@ -383,9 +383,12 @@
 } @else {
   <div class="small-empty">No records yet</div>
 }</article>
-<article><header><strong>Before / after photos</strong></header>@if (treatmentPhotos.length) {
-<div class="record-list">@for (photo of treatmentPhotos; track photo) {
-  <div><span><b>{{ photo.caption || photo.fileName }}</b><small>{{ photo.photoType }} · {{ formatDateTime(photo.createdAt) }}</small></span><button type="button" (click)="viewTreatmentPhoto(photo)">Download</button></div>
+<article class="wide-card"><header><strong>Before / after photos</strong><div class="photo-filter-bar"><select [(ngModel)]="photoTypeFilter"><option value="all">All types</option><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select><select [(ngModel)]="photoSortNewestFirst"><option [ngValue]="true">Newest first</option><option [ngValue]="false">Oldest first</option></select></div></header>
+@if (loadingWorkspace) {
+  <div class="small-empty">Loading photos…</div>
+} @else if (filteredTreatmentPhotos.length) {
+<div class="record-list">@for (photo of filteredTreatmentPhotos; track photo.id) {
+  <div><span><b>{{ photo.caption || photo.fileName }}</b><small>{{ photo.photoType }} · {{ formatBytes(photo.byteSize) }} · {{ formatDateTime(photo.createdAt) }}</small></span><button type="button" (click)="openTreatmentPhotoDetail(photo)">View</button></div>
 }</div>
 } @else {
   <div class="small-empty">No records yet</div>
@@ -900,6 +903,40 @@
   }</div>
   <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveTreatmentPhoto()">{{ savingWorkspace ? 'Uploading...' : 'Upload' }}</button></footer>
 </aside>
+}
+
+@if (drawerMode === 'photo-detail' && selectedPhotoDetail) {
+  <aside class="client-drawer note-drawer" aria-label="Treatment photo detail">
+    <header><strong>Photo detail</strong><button type="button" aria-label="Close treatment photo detail" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      @if (photoDetailLoading) {
+        <div class="small-empty">Loading photo…</div>
+      } @else if (photoDetailPreviewUrl) {
+        <img class="photo-detail-preview" [src]="photoDetailPreviewUrl" [alt]="selectedPhotoDetail.caption || selectedPhotoDetail.fileName" />
+      } @else {
+        <div class="small-empty">Preview unavailable</div>
+      }
+      <div class="form-card-body">
+        <span><small>File name</small><b>{{ selectedPhotoDetail.fileName }}</b></span>
+        <span><small>Uploaded</small><b>{{ formatDateTime(selectedPhotoDetail.createdAt) }}</b></span>
+        <span><small>Size</small><b>{{ formatBytes(selectedPhotoDetail.byteSize) }}</b></span>
+        <span><small>Type</small><b>{{ selectedPhotoDetail.contentType }}</b></span>
+      </div>
+      <label>Photo type<select [(ngModel)]="photoEditType"><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select></label>
+      <label class="full-field">Caption<textarea rows="5" [(ngModel)]="photoEditCaption"></textarea></label>
+      @if (clientError) {
+        <p class="form-error">{{ clientError }}</p>
+      }
+      @if (workspaceError) {
+        <p class="form-error">{{ workspaceError }}</p>
+      }
+    </div>
+    <footer>
+      <button type="button" [disabled]="savingWorkspace" (click)="deleteTreatmentPhotoDetail()"><i class="bi bi-trash"></i>Delete</button>
+      <button type="button" (click)="viewTreatmentPhoto(selectedPhotoDetail)">Download</button>
+      <button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveTreatmentPhotoDetail()">{{ savingWorkspace ? 'Saving...' : 'Save' }}</button>
+    </footer>
+  </aside>
 }
 
 @if (kioskMode && selectedKioskForm) {

@@ -143,6 +143,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::post(upload_treatment_photo),
         )
         .route(
+            "/clients/:id/treatment-photos/:photo_id",
+            axum::routing::patch(update_treatment_photo).delete(delete_treatment_photo),
+        )
+        .route(
             "/clients/:id/treatment-photos/:photo_id/content",
             get(get_treatment_photo),
         )
@@ -410,6 +414,13 @@ struct TreatmentPhotoQuery {
     file_name: String,
     caption: Option<String>,
     appointment_id: Option<String>,
+    photo_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TreatmentPhotoUpdateRequest {
+    caption: Option<String>,
     photo_type: Option<String>,
 }
 
@@ -1904,6 +1915,76 @@ async fn upload_treatment_photo(
         "photo.uploaded",
     );
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_treatment_photo(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((id, photo_id)): Path<(String, String)>,
+    Json(payload): Json<TreatmentPhotoUpdateRequest>,
+) -> ApiResult<ClientTreatmentPhotoRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let caption = payload.caption.as_deref().map(str::trim);
+    let photo_type = payload.photo_type.as_deref().map(str::trim);
+    if caption.is_some_and(|value| value.chars().count() > 500)
+        || photo_type.is_some_and(|value| !matches!(value, "before" | "after" | "other"))
+    {
+        return Err(AppError::validation("invalid treatment photo update"));
+    }
+    let row = clients_repository::update_treatment_photo(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &photo_id,
+        caption,
+        photo_type,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to update treatment photo"))?
+    .ok_or_else(|| AppError::not_found("treatment photo was not found"))?;
+    publish_client_timeline(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        "photo",
+        &row.id,
+        "photo.updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn delete_treatment_photo(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((id, photo_id)): Path<(String, String)>,
+) -> ApiResult<()> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let deleted = clients_repository::delete_treatment_photo(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &photo_id,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to delete treatment photo"))?;
+    if !deleted {
+        return Err(AppError::not_found("treatment photo was not found"));
+    }
+    publish_client_timeline(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        "photo",
+        &photo_id,
+        "photo.deleted",
+    );
+    Ok(Json(ApiResponse::ok(())))
 }
 
 async fn get_treatment_photo(
