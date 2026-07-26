@@ -926,6 +926,71 @@ pub async fn post_staff_advance_waiver(
     .await
 }
 
+/// Posts a payroll correction against an already-paid run. The original payroll entries are
+/// never edited — a correction is always a fresh, separate journal entry (a genuine reversal for
+/// recoveries, an incremental expense for arrears), never a mutation of what was already posted.
+///
+/// - `arrear` (money owed to staff beyond what was already paid): debit `PAYROLL_EXPENSE`,
+///   credit the payment account actually used to pay it out.
+/// - `recovery` (money that should not have been paid): debit `ACCOUNTS_RECEIVABLE` (what the
+///   staff member now owes back) and credit `PAYROLL_EXPENSE` (reversing the over-stated
+///   expense) — a real reversal entry, not a cash movement, since recovery of the receivable is
+///   a separate future event.
+pub async fn post_payroll_correction(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    correction_id: &str,
+    correction_type: &str,
+    payment_method: Option<&str>,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("correction amount is invalid"));
+    }
+    let lines = match correction_type {
+        "arrear" => {
+            let method = payment_method
+                .ok_or_else(|| AppError::validation("payment method is required for an arrear"))?;
+            vec![
+                JournalLine {
+                    account_code: "PAYROLL_EXPENSE",
+                    debit_paise: amount_paise,
+                    credit_paise: 0,
+                },
+                JournalLine {
+                    account_code: payment_account(method),
+                    debit_paise: 0,
+                    credit_paise: amount_paise,
+                },
+            ]
+        }
+        "recovery" => vec![
+            JournalLine {
+                account_code: "ACCOUNTS_RECEIVABLE",
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: "PAYROLL_EXPENSE",
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
+        _ => return Err(AppError::validation("correction type is invalid")),
+    };
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "payroll_correction",
+        correction_id,
+        "Staff payroll correction",
+        lines,
+    )
+    .await
+}
+
 pub async fn post_cogs(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,

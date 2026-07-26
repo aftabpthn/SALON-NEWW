@@ -61,6 +61,23 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff-payroll/history", get(payroll_history))
         .route("/staff-payroll/history/export", get(export_history))
+        .route(
+            "/staff-payroll/runs/:run_id/corrections",
+            get(list_corrections).post(request_correction),
+        )
+        .route("/staff-payroll/corrections/:id", get(get_correction))
+        .route(
+            "/staff-payroll/corrections/:id/decision",
+            post(decide_correction),
+        )
+        .route(
+            "/staff-payroll/corrections/:id/cancel",
+            post(cancel_correction),
+        )
+        .route(
+            "/staff-payroll/corrections/:id/post",
+            post(post_correction),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -290,6 +307,119 @@ async fn mark_paid(
         staff_payroll_service::mark_paid(&state.db, &tenant_id, &branch_id, &run_id, &claims.sub)
             .await?;
     Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_corrections(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows =
+        staff_payroll_service::list_corrections(&state.db, &tenant_id, &branch_id, &run_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn request_correction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollCorrectionRequestInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::request_correction(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &run_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn get_correction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<staff_payroll_service::PayrollCorrectionDetail> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let result =
+        staff_payroll_service::correction_detail(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn decide_correction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollCorrectionDecisionInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::decide_correction(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn cancel_correction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollCorrectionCancelInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::cancel_correction(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn post_correction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollCorrectionPostInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.correction_post",
+    )
+    .await?;
+    let row = staff_payroll_service::post_correction(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &id,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 async fn record_payout(

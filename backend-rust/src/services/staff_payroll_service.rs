@@ -1220,10 +1220,16 @@ fn mask_sensitive_id(value: &str) -> String {
     )
 }
 
-/// A deterministic content hash over the authoritative fields of one payroll item, distinct
-/// from `attendance_source_hash` (which detects attendance drift) — this is a "this payslip
-/// corresponds to exactly this calculation" version marker a staff member or auditor can quote.
-fn payslip_version_hash(run_id: &str, item: &repository::PayrollItemRecord) -> String {
+/// A deterministic content hash over the authoritative fields of one payroll item plus every
+/// posted correction against it, distinct from `attendance_source_hash` (which detects
+/// attendance drift on the original, still-uncorrected item). This is the "version" a staff
+/// member or auditor can quote — it changes exactly when a new correction is posted, and never
+/// otherwise, since the original item it's computed from is immutable once paid.
+fn payslip_version_hash(
+    run_id: &str,
+    item: &repository::PayrollItemRecord,
+    corrections: &[repository::PayrollCorrectionRecord],
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(run_id);
     hasher.update([0]);
@@ -1233,6 +1239,12 @@ fn payslip_version_hash(run_id: &str, item: &repository::PayrollItemRecord) -> S
     hasher.update(item.deductions_paise.to_le_bytes());
     hasher.update(item.net_paise.to_le_bytes());
     hasher.update(item.attendance_source_hash.as_bytes());
+    for correction in corrections {
+        hasher.update([b';']);
+        hasher.update(&correction.id);
+        hasher.update(correction.amount_paise.to_le_bytes());
+        hasher.update(&correction.correction_type);
+    }
     hasher
         .finalize()
         .iter()
@@ -1405,6 +1417,43 @@ pub async fn payslip_pdf(
     ));
     lines.push(format!("Net pay: INR {}", paise_text(item.net_paise)));
     lines.push(String::new());
+
+    let corrections = repository::list_corrections_for_run(db, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll corrections"))?
+        .into_iter()
+        .filter(|correction| correction.staff_id == staff_id && correction.status == "posted")
+        .collect::<Vec<_>>();
+    if !corrections.is_empty() {
+        lines.push("Corrections (this payslip is unchanged; these are separate, approved adjustments):".to_string());
+        let mut corrected_net_paise = item.net_paise;
+        for correction in &corrections {
+            let sign = if correction.correction_type == "arrear" {
+                corrected_net_paise += correction.amount_paise;
+                "+"
+            } else {
+                corrected_net_paise -= correction.amount_paise;
+                "-"
+            };
+            lines.push(format!(
+                "  {} {}INR {} — {} (posted {})",
+                correction.correction_type,
+                sign,
+                paise_text(correction.amount_paise),
+                correction.reason,
+                correction
+                    .posted_at
+                    .map(|at| at.to_rfc3339())
+                    .unwrap_or_default()
+            ));
+        }
+        lines.push(format!(
+            "Corrected net pay: INR {}",
+            paise_text(corrected_net_paise)
+        ));
+        lines.push(String::new());
+    }
+
     match payout {
         Some(payout) => {
             lines.push(format!(
@@ -1425,7 +1474,7 @@ pub async fn payslip_pdf(
     }
     lines.push(format!(
         "Payslip version hash: {}",
-        payslip_version_hash(run_id, item)
+        payslip_version_hash(run_id, item, &corrections)
     ));
     lines.push(format!(
         "Finalized at: {}",
@@ -1707,6 +1756,299 @@ pub async fn record_payout(
     let result = detail(db, tenant_id, branch_id, run_id).await?;
     queue_paid_notifications(db, tenant_id, branch_id, actor_user_id, &result, &method).await;
     Ok(result)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionRequestInput {
+    pub staff_id: String,
+    pub correction_type: String,
+    pub amount_paise: i64,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionDecisionInput {
+    pub version: i32,
+    pub decision: String,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionCancelInput {
+    pub version: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionPostInput {
+    pub version: i32,
+    pub payment_method: Option<String>,
+    pub reference: Option<String>,
+    pub idempotency_key: String,
+    pub mfa_code: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionDetail {
+    pub correction: repository::PayrollCorrectionRecord,
+    pub events: Vec<repository::PayrollCorrectionEventRecord>,
+}
+
+/// A paid payroll run can never be edited (the run and every item on it stay exactly as
+/// finalized/paid — nothing in this module writes to them again). A correction is always a
+/// brand-new, separately-approved record referencing the original run by id; it never mutates
+/// the original run, its items, or the payslip already generated from them.
+pub async fn request_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    original_run_id: &str,
+    actor_user_id: &str,
+    input: PayrollCorrectionRequestInput,
+) -> Result<repository::PayrollCorrectionRecord, AppError> {
+    if !repository::run_is_paid(db, tenant_id, branch_id, original_run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to check payroll run status"))?
+    {
+        return Err(AppError::conflict(
+            "corrections can only be requested against a paid payroll run",
+        ));
+    }
+    let staff_id = input.staff_id.trim().to_string();
+    if !repository::staff_has_item_in_run(db, tenant_id, branch_id, original_run_id, &staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to check payroll run staff"))?
+    {
+        return Err(AppError::validation(
+            "staff member was not part of the original payroll run",
+        ));
+    }
+    let correction_type = input.correction_type.trim().to_ascii_lowercase();
+    if !matches!(correction_type.as_str(), "arrear" | "recovery") {
+        return Err(AppError::validation(
+            "correction type must be arrear or recovery",
+        ));
+    }
+    if input.amount_paise <= 0 {
+        return Err(AppError::validation("correction amount must be positive"));
+    }
+    let reason = input.reason.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "a correction reason of 1 to 500 characters is required",
+        ));
+    }
+    repository::create_correction(
+        db,
+        tenant_id,
+        branch_id,
+        original_run_id,
+        &staff_id,
+        actor_user_id,
+        &correction_type,
+        input.amount_paise,
+        reason,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to request payroll correction"))
+}
+
+pub async fn list_corrections(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    original_run_id: &str,
+) -> Result<Vec<repository::PayrollCorrectionRecord>, AppError> {
+    repository::list_corrections_for_run(db, tenant_id, branch_id, original_run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll corrections"))
+}
+
+pub async fn correction_detail(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<PayrollCorrectionDetail, AppError> {
+    let correction = repository::get_correction(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll correction"))?
+        .ok_or_else(|| AppError::not_found("payroll correction not found"))?;
+    let events = repository::correction_events(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll correction history"))?;
+    Ok(PayrollCorrectionDetail { correction, events })
+}
+
+pub async fn decide_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor_user_id: &str,
+    input: PayrollCorrectionDecisionInput,
+) -> Result<repository::PayrollCorrectionRecord, AppError> {
+    let decision = input.decision.trim().to_ascii_lowercase();
+    if !matches!(decision.as_str(), "approved" | "rejected") {
+        return Err(AppError::validation("decision must be approved or rejected"));
+    }
+    let note = input.note.unwrap_or_default().trim().to_string();
+    if note.chars().count() > 500 {
+        return Err(AppError::validation("decision note is too long"));
+    }
+    repository::decide_correction(
+        db,
+        tenant_id,
+        branch_id,
+        id,
+        input.version,
+        actor_user_id,
+        &decision,
+        &note,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to decide payroll correction"))?
+    .ok_or_else(|| {
+        AppError::conflict("payroll correction is not pending or was updated by another request")
+    })
+}
+
+pub async fn cancel_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor_user_id: &str,
+    input: PayrollCorrectionCancelInput,
+) -> Result<repository::PayrollCorrectionRecord, AppError> {
+    repository::cancel_correction(db, tenant_id, branch_id, id, input.version, actor_user_id)
+        .await
+        .map_err(|_| AppError::internal("failed to cancel payroll correction"))?
+        .ok_or_else(|| {
+            AppError::conflict(
+                "payroll correction can only be cancelled while pending or approved, and not stale",
+            )
+        })
+}
+
+/// Posts an approved correction: books the accounting reversal/expense entry and marks the
+/// correction immutable — this never touches the original payroll run/items. Requires MFA, same
+/// as finalizing or marking the original payroll paid, since it moves real money or books a real
+/// receivable. Idempotent on `idempotency_key` so a retried request can't post twice.
+pub async fn post_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    id: &str,
+    input: PayrollCorrectionPostInput,
+) -> Result<repository::PayrollCorrectionRecord, AppError> {
+    let idempotency_key = input.idempotency_key.trim().to_string();
+    if idempotency_key.is_empty() || idempotency_key.chars().count() > 160 {
+        return Err(AppError::validation("idempotency key is invalid"));
+    }
+    let method = input
+        .payment_method
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase());
+    if let Some(method) = &method {
+        if !matches!(method.as_str(), "cash" | "bank" | "upi" | "other") {
+            return Err(AppError::validation("paymentMethod is invalid"));
+        }
+    }
+    let reference = input.reference.unwrap_or_default().trim().to_string();
+
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start payroll correction posting"))?;
+    let correction = repository::lock_correction_for_posting(&mut tx, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll correction"))?
+        .ok_or_else(|| AppError::not_found("payroll correction not found"))?;
+
+    if correction.status != "approved" {
+        let replay = repository::correction_posting_replay_exists(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            &idempotency_key,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to check correction posting retry"))?;
+        tx.rollback()
+            .await
+            .map_err(|_| AppError::internal("failed to finish correction posting retry"))?;
+        if replay {
+            return correction_detail(db, tenant_id, branch_id, id)
+                .await
+                .map(|detail| detail.correction);
+        }
+        return Err(AppError::conflict(
+            "payroll correction must be approved before posting",
+        ));
+    }
+    if correction.correction_type == "arrear" && method.is_none() {
+        return Err(AppError::validation(
+            "payment method is required to post an arrear",
+        ));
+    }
+
+    accounting_service::post_payroll_correction(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        &correction.correction_type,
+        method.as_deref(),
+        correction.amount_paise,
+    )
+    .await?;
+
+    let updated = repository::complete_correction_posting(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        input.version,
+        actor_user_id,
+        method.as_deref(),
+        &reference,
+        &idempotency_key,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to complete payroll correction posting"))?
+    .ok_or_else(|| AppError::conflict("payroll correction status changed; reload and try again"))?;
+
+    repository::insert_correction_event(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        "correction.posted",
+        actor_user_id,
+        &json!({
+            "paymentMethod": method,
+            "reference": reference,
+            "amountPaise": correction.amount_paise,
+        }),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record payroll correction posting"))?;
+
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payroll correction posting"))?;
+    Ok(updated)
 }
 
 fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String), AppError> {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
 #[derive(Debug, FromRow)]
@@ -1524,4 +1524,327 @@ pub async fn reopen_payroll_period(
     .bind(actor_user_id)
     .fetch_optional(&mut **tx)
     .await
+}
+
+const CORRECTION_COLUMNS: &str = "id,original_run_id,staff_id,correction_type,amount_paise,reason,status,\
+requested_by,decided_by,decided_at,decision_note,payment_method,payment_reference,posted_by,posted_at,\
+version,created_at,updated_at";
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionRecord {
+    pub id: String,
+    pub original_run_id: String,
+    pub staff_id: String,
+    pub correction_type: String,
+    pub amount_paise: i64,
+    pub reason: String,
+    pub status: String,
+    pub requested_by: String,
+    pub decided_by: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub decision_note: String,
+    pub payment_method: Option<String>,
+    pub payment_reference: String,
+    pub posted_by: Option<String>,
+    pub posted_at: Option<DateTime<Utc>>,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollCorrectionEventRecord {
+    pub id: String,
+    pub event_type: String,
+    pub actor_user_id: String,
+    pub payload_json: Value,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A run is only correctable once it's fully paid — a finalized-but-unpaid run should still go
+/// through the normal recalculate/finalize/pay flow, not the correction mechanism.
+pub async fn run_is_paid(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='paid')",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn staff_has_item_in_run(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn create_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    original_run_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    correction_type: &str,
+    amount_paise: i64,
+    reason: &str,
+) -> Result<PayrollCorrectionRecord, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let record: PayrollCorrectionRecord = sqlx::query_as(&format!(
+        r#"
+        INSERT INTO staff_payroll_corrections(
+          tenant_id,branch_id,original_run_id,staff_id,correction_type,amount_paise,reason,requested_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+        RETURNING {CORRECTION_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(original_run_id)
+    .bind(staff_id)
+    .bind(correction_type)
+    .bind(amount_paise)
+    .bind(reason)
+    .bind(actor_user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    insert_correction_event(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &record.id,
+        "correction.requested",
+        actor_user_id,
+        &json!({"correctionType": correction_type, "amountPaise": amount_paise, "reason": reason}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(record)
+}
+
+pub async fn get_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<PayrollCorrectionRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {CORRECTION_COLUMNS} FROM staff_payroll_corrections WHERE tenant_id=$1 AND branch_id=$2 AND id=$3"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn list_corrections_for_run(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    original_run_id: &str,
+) -> Result<Vec<PayrollCorrectionRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {CORRECTION_COLUMNS} FROM staff_payroll_corrections WHERE tenant_id=$1 AND branch_id=$2 AND original_run_id=$3 ORDER BY created_at DESC"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(original_run_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn decide_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    version: i32,
+    actor_user_id: &str,
+    decision: &str,
+    note: &str,
+) -> Result<Option<PayrollCorrectionRecord>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let record: Option<PayrollCorrectionRecord> = sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_corrections SET
+          status=$5,decided_by=$6,decided_at=NOW(),decision_note=$7,version=version+1,updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='pending'
+        RETURNING {CORRECTION_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(version)
+    .bind(decision)
+    .bind(actor_user_id)
+    .bind(note)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(record) = &record {
+        insert_correction_event(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &record.id,
+            &format!("correction.{decision}"),
+            actor_user_id,
+            &json!({"note": note}),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(record)
+}
+
+pub async fn cancel_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    version: i32,
+    actor_user_id: &str,
+) -> Result<Option<PayrollCorrectionRecord>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let record: Option<PayrollCorrectionRecord> = sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_corrections SET status='cancelled',version=version+1,updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status IN ('pending','approved')
+        RETURNING {CORRECTION_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(version)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(record) = &record {
+        insert_correction_event(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &record.id,
+            "correction.cancelled",
+            actor_user_id,
+            &json!({}),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(record)
+}
+
+pub async fn lock_correction_for_posting(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<PayrollCorrectionRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {CORRECTION_COLUMNS} FROM staff_payroll_corrections WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn correction_posting_replay_exists(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    idempotency_key: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM staff_payroll_corrections WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 \
+         AND posting_idempotency_key=$4 AND status='posted')",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(idempotency_key)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn complete_correction_posting(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    version: i32,
+    actor_user_id: &str,
+    payment_method: Option<&str>,
+    payment_reference: &str,
+    idempotency_key: &str,
+) -> Result<Option<PayrollCorrectionRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_corrections SET
+          status='posted',payment_method=$6,payment_reference=$7,posting_idempotency_key=$8,
+          posted_by=$5,posted_at=NOW(),version=version+1,updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='approved'
+        RETURNING {CORRECTION_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(version)
+    .bind(actor_user_id)
+    .bind(payment_method)
+    .bind(payment_reference)
+    .bind(idempotency_key)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+pub async fn insert_correction_event(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    correction_id: &str,
+    event_type: &str,
+    actor_user_id: &str,
+    payload: &Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO staff_payroll_correction_events(tenant_id,branch_id,correction_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,$6)")
+        .bind(tenant_id).bind(branch_id).bind(correction_id).bind(event_type).bind(actor_user_id).bind(payload)
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn correction_events(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    correction_id: &str,
+) -> Result<Vec<PayrollCorrectionEventRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,event_type,actor_user_id,payload_json,created_at FROM staff_payroll_correction_events WHERE tenant_id=$1 AND branch_id=$2 AND correction_id=$3 ORDER BY created_at ASC")
+        .bind(tenant_id).bind(branch_id).bind(correction_id).fetch_all(db).await
 }
