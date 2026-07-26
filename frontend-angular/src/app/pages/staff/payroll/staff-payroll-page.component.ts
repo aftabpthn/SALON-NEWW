@@ -432,6 +432,7 @@ export class StaffPayrollPageComponent implements OnInit {
   titleCase(value: string) { return value.toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase()); }
   displayJson(value: unknown) { return JSON.stringify(value || {}, null, 2); }
   backToStaff() { void this.router.navigate([this.isStaffOsSalaryGenerate ? '/staff-os/salary-history' : '/staff']); }
+  goToPayrollSetup() { void this.router.navigate(['/staff/payroll/setup']); }
   openStaffDetail(item: PayrollItem) { this.selectedItem = item; }
   closeStaffDetail() { this.selectedItem = null; }
   salaryRow(item: PayrollItem) {

@@ -11,6 +11,7 @@ h1,h2,h3,p { margin:0; } h1 { margin-top:3px; color:#10254a; font-size:24px; lin
 .page-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; }
 .eyebrow { color:#60708a; font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; }
 .back-button { color:#40516b; }
+.header-actions { display:flex; gap:8px; }
 .view-tabs { display:flex; gap:4px; margin-bottom:10px; border-bottom:1px solid #d7e1ed; }
 .view-tabs button { min-height:34px; border-color:transparent; border-radius:8px 8px 0 0; background:transparent; color:#60708a; font-size:12px; }
 .view-tabs button:hover,.view-tabs button:focus-visible { box-shadow:none; }
