@@ -70,6 +70,7 @@ export const routes: Routes = [
   { path: 'staff/attendance-summary', loadComponent: () => import('./pages/staff/attendance-summary/staff-attendance-summary-page.component').then((m) => m.StaffAttendanceSummaryPageComponent), canActivate: [authGuard] },
   { path: 'staff/leave-management', loadComponent: () => import('./pages/staff/leave-management/staff-leave-management-page.component').then((m) => m.StaffLeaveManagementPageComponent), canActivate: [authGuard] },
     { path: 'staff/payroll', loadComponent: () => import('./pages/staff/payroll/staff-payroll-page.component').then((m) => m.StaffPayrollPageComponent), canActivate: [authGuard] },
+    { path: 'staff/payroll/setup', loadComponent: () => import('./pages/staff/payroll-setup/staff-payroll-setup-page.component').then((m) => m.StaffPayrollSetupPageComponent), canActivate: [authGuard] },
     { path: 'staff/control-center', loadComponent: () => import('./pages/staff/control-center/staff-control-center-page.component').then((m) => m.StaffControlCenterPageComponent), canActivate: [authGuard] },
     { path: 'staff-os', loadChildren: () => import('./features/staff-os/staff-os.routes').then((m) => m.STAFF_OS_ROUTES), canActivate: [authGuard] },
     { path: 'staff/:id', loadComponent: () => import('./pages/staff/staff-page.component').then((m) => m.StaffPageComponent), canActivate: [authGuard] },

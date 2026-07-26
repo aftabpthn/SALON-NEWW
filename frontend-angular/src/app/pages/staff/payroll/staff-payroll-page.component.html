@@ -4,7 +4,10 @@
       <span class="eyebrow">{{ 'staff.ui.d45987441a' | translate }}</span>
       <h1>{{ pageTitle }}</h1>
     </div>
-    <button type="button" class="back-button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>{{ backLabel }}</button>
+    <div class="header-actions">
+      <button type="button" class="back-button" (click)="goToPayrollSetup()"><i class="bi bi-gear"></i>Payroll Setup</button>
+      <button type="button" class="back-button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>{{ backLabel }}</button>
+    </div>
   </header>
 
   <nav class="view-tabs" [attr.aria-label]="'staff.ui.c3fd81dd15' | translate">
