@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -527,6 +529,67 @@ pub async fn replace_calculated_run(
     Ok(run)
 }
 
+#[derive(Debug, FromRow)]
+struct SelectedItemSnapshot {
+    staff_id: String,
+    attendance_days_x2: i32,
+    paid_leave_days_x2: i32,
+    weekly_off_days_x2: i32,
+    holiday_days_x2: i32,
+    worked_minutes: i32,
+    overtime_minutes: i32,
+    overtime_paise: i64,
+    commission_paise: i64,
+    adjustment_paise: i64,
+    gross_paise: i64,
+    deductions_paise: i64,
+    net_paise: i64,
+    calculation_json: Value,
+}
+
+fn snapshot_tips_paise(calculation_json: &Value) -> i64 {
+    calculation_json
+        .get("tipsPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+}
+
+fn snapshot_json(snapshot: &SelectedItemSnapshot) -> Value {
+    serde_json::json!({
+        "attendanceDaysX2": snapshot.attendance_days_x2,
+        "paidLeaveDaysX2": snapshot.paid_leave_days_x2,
+        "weeklyOffDaysX2": snapshot.weekly_off_days_x2,
+        "holidayDaysX2": snapshot.holiday_days_x2,
+        "workedMinutes": snapshot.worked_minutes,
+        "overtimeMinutes": snapshot.overtime_minutes,
+        "overtimePaise": snapshot.overtime_paise,
+        "commissionPaise": snapshot.commission_paise,
+        "tipsPaise": snapshot_tips_paise(&snapshot.calculation_json),
+        "adjustmentPaise": snapshot.adjustment_paise,
+        "grossPaise": snapshot.gross_paise,
+        "deductionsPaise": snapshot.deductions_paise,
+        "netPaise": snapshot.net_paise,
+    })
+}
+
+fn draft_snapshot_json(item: &PayrollItemDraft) -> Value {
+    serde_json::json!({
+        "attendanceDaysX2": item.attendance_days_x2,
+        "paidLeaveDaysX2": item.paid_leave_days_x2,
+        "weeklyOffDaysX2": item.weekly_off_days_x2,
+        "holidayDaysX2": item.holiday_days_x2,
+        "workedMinutes": item.worked_minutes,
+        "overtimeMinutes": item.overtime_minutes,
+        "overtimePaise": item.overtime_paise,
+        "commissionPaise": item.commission_paise,
+        "tipsPaise": snapshot_tips_paise(&item.calculation_json),
+        "adjustmentPaise": item.adjustment_paise,
+        "grossPaise": item.gross_paise,
+        "deductionsPaise": item.deductions_paise,
+        "netPaise": item.net_paise,
+    })
+}
+
 pub async fn replace_selected_calculated_items(
     db: &PgPool,
     tenant_id: &str,
@@ -535,6 +598,7 @@ pub async fn replace_selected_calculated_items(
     period_end: NaiveDate,
     actor_user_id: &str,
     items: &[PayrollItemDraft],
+    reason: &str,
 ) -> Result<PayrollRunRecord, sqlx::Error> {
     let gross_paise = items.iter().map(|item| item.gross_paise).sum::<i64>();
     let deductions_paise = items.iter().map(|item| item.deductions_paise).sum::<i64>();
@@ -564,6 +628,15 @@ pub async fn replace_selected_calculated_items(
     .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end)
     .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
     .fetch_one(&mut *tx).await?;
+    let before_snapshots: Vec<SelectedItemSnapshot> = sqlx::query_as(
+        "SELECT staff_id,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,overtime_paise,commission_paise,adjustment_paise,gross_paise,deductions_paise,net_paise,calculation_json FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&run.id)
+    .bind(&staff_ids)
+    .fetch_all(&mut *tx)
+    .await?;
     sqlx::query(
         "DELETE FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
     )
@@ -605,9 +678,31 @@ pub async fn replace_selected_calculated_items(
     .bind(&run.id)
     .fetch_one(&mut *tx)
     .await?;
+    let mut before_by_staff: HashMap<String, &SelectedItemSnapshot> = HashMap::new();
+    for snapshot in &before_snapshots {
+        before_by_staff.insert(snapshot.staff_id.clone(), snapshot);
+    }
+    let changes: Vec<Value> = items
+        .iter()
+        .map(|item| {
+            let after = draft_snapshot_json(item);
+            match before_by_staff.get(&item.staff_id) {
+                Some(before) => serde_json::json!({
+                    "staffId": item.staff_id,
+                    "before": snapshot_json(before),
+                    "after": after,
+                }),
+                None => serde_json::json!({
+                    "staffId": item.staff_id,
+                    "before": Value::Null,
+                    "after": after,
+                }),
+            }
+        })
+        .collect();
     sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.selected_staff_regenerated',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
-        .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
+        .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count,"reason":reason,"changes":changes})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
 }

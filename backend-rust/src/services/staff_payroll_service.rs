@@ -592,6 +592,7 @@ pub async fn run_payroll(
     year: i32,
     month: u32,
     staff_id: &str,
+    reason: &str,
 ) -> Result<PayrollRunDetail, AppError> {
     let result = preview(db, tenant_id, branch_id, year, month, staff_id).await?;
     if result.items.is_empty() {
@@ -641,6 +642,7 @@ pub async fn run_payroll(
             result.period_end,
             actor_user_id,
             &drafts,
+            reason,
         )
         .await
         .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?

@@ -61,6 +61,7 @@ struct RunPayrollRequest {
     year: i32,
     month: u32,
     staff_id: Option<String>,
+    reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,6 +152,13 @@ async fn run_payroll(
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
     let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
     validate_cycle(payload.cycle.as_deref())?;
+    let staff_id = payload.staff_id.as_deref().unwrap_or("").trim();
+    let reason = payload.reason.as_deref().unwrap_or("").trim();
+    if !staff_id.is_empty() && reason.is_empty() {
+        return Err(AppError::validation(
+            "a regeneration reason is required when regenerating selected staff",
+        ));
+    }
     let result = staff_payroll_service::run_payroll(
         &state.db,
         &tenant_id,
@@ -158,7 +166,8 @@ async fn run_payroll(
         &claims.sub,
         payload.year,
         payload.month,
-        payload.staff_id.as_deref().unwrap_or("").trim(),
+        staff_id,
+        reason,
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))

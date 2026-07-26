@@ -33,6 +33,9 @@
 <label><span>{{ 'staff.ui.a7b93d2128' | translate }}</span><select [(ngModel)]="salaryMode" (ngModelChange)="changeMode()"><option value="preview">{{ 'staff.ui.c3f226b359' | translate }}</option><option value="generate">{{ 'staff.ui.b814a72f17' | translate }}</option><option value="history">{{ 'staff.ui.1448a25aed' | translate }}</option></select></label>
 <div class="command-actions">
   <button type="button" class="icon-button" [attr.title]="'staff.ui.56e3badc4e' | translate" [attr.aria-label]="'staff.ui.f4c5e6cb83' | translate" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
+  @if (staffId && salaryMode !== 'history') {
+    <button type="button" [disabled]="!canRegenerateSelected" (click)="openRegenerateDialog()"><i class="bi bi-arrow-repeat"></i>{{ action === 'regenerate-preview' ? 'Loading...' : 'Regenerate selected staff' }}</button>
+  }
   <button type="button" class="primary" [disabled]="loading" (click)="runSelectedMode()"><i class="bi bi-play-fill"></i>{{ action === 'run' ? 'Running...' : salaryMode === 'generate' ? 'Generate salary' : salaryMode === 'history' ? 'Load list' : 'Preview salary' }}</button>
 </div>
 </section>
@@ -296,6 +299,36 @@
     <button type="button" [disabled]="!canSaveDraft" (click)="saveDraft()"><i class="bi bi-save"></i>{{ action === 'save' ? 'Saving...' : 'Save draft' }}</button>
     <button type="button" class="primary" [disabled]="!canAdvance" (click)="advanceWorkflow()"><i class="bi" [ngClass]="workflowIcon"></i>{{ workflowLabel }}</button>
   </footer>
+}
+
+@if (regenerateDialogOpen) {
+  <aside class="detail-drawer">
+    <header>
+      <div><span class="eyebrow">Confirm regeneration</span><h2>{{ regenerateAfter?.staffName }}</h2><small>{{ regenerateAfter?.employeeCode || 'No employee code' }} · {{ months[month - 1] }} {{ year }}</small></div>
+      <button type="button" class="icon-button" (click)="closeRegenerateDialog()" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <section class="drawer-card">
+      <h3>What will change</h3>
+      <div class="table-scroll">
+        <table class="diff-table">
+          <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">New</th><th scope="col">Difference</th></tr></thead>
+          <tbody>
+            @for (row of regenerateRows; track row) {
+              <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="drawer-card">
+      <h3>Regeneration reason</h3>
+      <textarea rows="3" maxlength="500" [(ngModel)]="regenerateReason" placeholder="Explain why this employee's payroll is being regenerated" aria-label="Regeneration reason"></textarea>
+      <div class="regenerate-actions">
+        <button type="button" (click)="closeRegenerateDialog()">Cancel</button>
+        <button type="button" class="primary" [disabled]="!canConfirmRegenerate" (click)="confirmRegenerateSelected()"><i class="bi bi-arrow-repeat"></i>{{ action === 'regenerate' ? 'Regenerating...' : 'Confirm regeneration' }}</button>
+      </div>
+    </section>
+  </aside>
 }
 
 @if (selectedItem) {

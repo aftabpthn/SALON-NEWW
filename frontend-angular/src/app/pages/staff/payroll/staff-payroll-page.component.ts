@@ -144,6 +144,12 @@ export class StaffPayrollPageComponent implements OnInit {
   holidayName = '';
   holidayPaid = true;
 
+  regenerateDialogOpen = false;
+  regenerateReason = '';
+  regenerateBefore: PayrollItem | null = null;
+  regenerateAfter: PayrollItem | null = null;
+  private regenerateAfterSalaryRows: Record<string, unknown>[] = [];
+
   constructor() {
     const currentYear = new Date().getFullYear();
     this.years = Array.from({ length: 7 }, (_, index) => currentYear - 3 + index);
@@ -187,6 +193,29 @@ export class StaffPayrollPageComponent implements OnInit {
   }
   get selectedSalaryRow() { return this.selectedItem ? this.salaryRow(this.selectedItem) : null; }
   get canSaveDraft() { return this.run?.status === 'calculated' && !this.loading; }
+  get canRegenerateSelected() {
+    return Boolean(this.staffId) && !this.loading && (!this.run || !['finalized', 'paid'].includes(this.run.status));
+  }
+  get canConfirmRegenerate() { return Boolean(this.regenerateReason.trim()) && !this.loading; }
+  get regenerateRows() {
+    if (!this.regenerateBefore || !this.regenerateAfter) return [];
+    const before = this.regenerateBefore;
+    const after = this.regenerateAfter;
+    const beforeTips = this.tipsPaiseOf(before, this.salaryRows);
+    const afterTips = this.tipsPaiseOf(after, this.regenerateAfterSalaryRows);
+    return [
+      this.diffRow('Attendance + leave days', before.attendanceDaysX2 + before.paidLeaveDaysX2 + before.weeklyOffDaysX2 + before.holidayDaysX2, after.attendanceDaysX2 + after.paidLeaveDaysX2 + after.weeklyOffDaysX2 + after.holidayDaysX2, 'days'),
+      this.diffRow('Paid leave days', before.paidLeaveDaysX2, after.paidLeaveDaysX2, 'days'),
+      this.diffRow('Worked minutes', before.workedMinutes, after.workedMinutes, 'minutes'),
+      this.diffRow('Overtime minutes', before.overtimeMinutes, after.overtimeMinutes, 'minutes'),
+      this.diffRow('Commission', before.commissionPaise, after.commissionPaise, 'money'),
+      this.diffRow('Tips', beforeTips, afterTips, 'money'),
+      this.diffRow('Adjustment', before.adjustmentPaise, after.adjustmentPaise, 'money'),
+      this.diffRow('Gross pay', before.grossPaise, after.grossPaise, 'money'),
+      this.diffRow('Deductions', before.deductionsPaise, after.deductionsPaise, 'money'),
+      this.diffRow('Net pay', before.netPaise, after.netPaise, 'money'),
+    ];
+  }
   get canAdvance() {
     if (!this.run || this.invalidCount > 0 || !['calculated', 'reviewed', 'finalized'].includes(this.run.status) || this.loading) return false;
     if (this.run.status === 'calculated') return true;
@@ -244,8 +273,65 @@ export class StaffPayrollPageComponent implements OnInit {
 
   async runSelectedMode() {
     if (this.salaryMode === 'history') { this.activeTab = 'history'; await this.loadHistory(); return; }
-    if (this.salaryMode === 'generate') { await this.runPayroll(); return; }
+    if (this.salaryMode === 'generate') {
+      if (this.staffId) { await this.openRegenerateDialog(); return; }
+      await this.runPayroll();
+      return;
+    }
     await this.checkSourceData(false);
+  }
+
+  async openRegenerateDialog() {
+    if (!this.canRegenerateSelected) return;
+    this.regenerateReason = '';
+    await this.perform('regenerate-preview', async () => {
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollPreview>>(`/staff-payroll/preview?${this.periodParams()}`));
+      const preview = this.unwrap(result, 'Unable to load regeneration preview');
+      const after = preview.items.find((item) => item.staffId === this.staffId) || null;
+      if (!after) { this.error = 'No source data found for the selected employee'; return; }
+      this.regenerateAfter = after;
+      this.regenerateAfterSalaryRows = preview.salaryRows || [];
+      this.regenerateBefore = this.items.find((item) => item.staffId === this.staffId) || after;
+      this.regenerateDialogOpen = true;
+    });
+  }
+
+  closeRegenerateDialog() {
+    this.regenerateDialogOpen = false;
+    this.regenerateReason = '';
+    this.regenerateBefore = null;
+    this.regenerateAfter = null;
+    this.regenerateAfterSalaryRows = [];
+  }
+
+  async confirmRegenerateSelected() {
+    if (!this.canConfirmRegenerate) return;
+    await this.perform('regenerate', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollRunDetail>>('/staff-payroll/runs', {
+        cycle: this.cycle, year: this.year, month: this.month, staffId: this.staffId, reason: this.regenerateReason.trim(),
+      }));
+      this.applyDetail(this.unwrap(result, 'Unable to regenerate selected staff'));
+      await this.loadHistory();
+      this.success = 'Selected staff payroll regenerated';
+      this.closeRegenerateDialog();
+    });
+  }
+
+  private tipsPaiseOf(item: PayrollItem, rows: Record<string, unknown>[]) {
+    const row = rows.find((candidate) => candidate['staffId'] === item.staffId)
+      || (item.calculationJson?.['salaryRow'] as Record<string, unknown> | undefined)
+      || {};
+    return Number(row['tipsPaise'] || 0);
+  }
+
+  private diffRow(label: string, before: number, after: number, kind: 'money' | 'minutes' | 'days'): [string, string, string, string] {
+    const format = (value: number) => kind === 'money' ? this.formatMoney(value) : kind === 'days' ? this.days(value) : String(value);
+    const rawDelta = kind === 'days' ? (after - before) / 2 : after - before;
+    const sign = rawDelta > 0 ? '+' : '';
+    const deltaText = kind === 'money'
+      ? `${sign}${this.formatMoney(after - before)}`
+      : `${sign}${kind === 'days' ? rawDelta.toFixed(1).replace(/\.0$/, '') : rawDelta}`;
+    return [label, format(before), format(after), deltaText];
   }
 
   async saveDraft() {
