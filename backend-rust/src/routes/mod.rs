@@ -57,6 +57,7 @@ pub mod scim;
 pub mod security;
 pub mod services;
 pub mod staff;
+pub mod staff_advance;
 pub mod staff_advanced;
 pub mod staff_attendance;
 pub mod staff_enterprise;
@@ -100,6 +101,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(birthday_anniversary::router())
         .merge(clients::router())
         .merge(staff::router())
+        .merge(staff_advance::router())
         .merge(staff_advanced::router())
         .merge(staff_enterprise::router())
         .merge(staff_attendance::router())

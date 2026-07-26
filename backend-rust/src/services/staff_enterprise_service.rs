@@ -640,11 +640,16 @@ pub async fn calculate_statutory(
     actor: &str,
     r: StatutoryCalculationRequest,
 ) -> Result<StatutoryCalculationRecord, AppError> {
-    let (item, from, to, gross) =
+    let (item, from, to, gross, run_status) =
         repository::payroll_item(db, t, b, &r.payroll_run_id, &r.staff_id)
             .await
             .map_err(internal("load payroll item"))?
             .ok_or_else(|| AppError::not_found("payroll item not found"))?;
+    if matches!(run_status.as_str(), "finalized" | "paid") {
+        return Err(AppError::conflict(
+            "finalized payroll statutory snapshot cannot be recalculated",
+        ));
+    }
     let rules = repository::effective_rules(db, t, b, to)
         .await
         .map_err(internal("load effective statutory rules"))?;
@@ -2038,7 +2043,7 @@ fn validate_rule(v: &Value) -> Result<(), AppError> {
     }
     Ok(())
 }
-fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), AppError> {
+pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), AppError> {
     validate_rule(v)?;
     let cap = v
         .get("wageCapPaise")

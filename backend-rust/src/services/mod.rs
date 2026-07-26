@@ -48,6 +48,7 @@ pub mod service_pricing_service;
 pub mod service_settings_service;
 pub mod sms_center_service;
 pub mod sso_service;
+pub mod staff_advance_service;
 pub mod staff_advanced_service;
 pub mod staff_app_service;
 pub mod staff_attendance_service;
@@ -64,6 +65,9 @@ pub mod webauthn_service;
 
 #[cfg(test)]
 mod staff_lifecycle_chain_tests;
+
+#[cfg(test)]
+mod staff_payroll_regeneration_tests;
 
 pub mod inventory_reorder_forecast_service;
 

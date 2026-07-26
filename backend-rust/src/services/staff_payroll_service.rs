@@ -8,11 +8,205 @@ use sqlx::PgPool;
 use crate::{
     config::Settings,
     models::common::AppError,
-    repositories::staff_payroll_repository::{
-        self as repository, AdjustmentInput, PayrollItemDraft,
+    repositories::{
+        staff_enterprise_repository::{self as enterprise_repository, StatutoryRuleRecord},
+        staff_payroll_repository::{
+            self as repository, ActiveAdvanceSource, AdjustmentInput, AdvanceRecoveryContribution,
+            PayrollItemDraft, StatutoryContribution, StatutoryProfileSource,
+        },
     },
-    services::accounting_service,
+    services::{accounting_service, staff_enterprise_service},
 };
+
+/// The statutory rule types wired into automatic payroll calculation. `gratuity` and `bonus`
+/// rows in `staff_payroll_statutory_rules` are intentionally excluded here — they stay
+/// available only through the manual `/staff/payroll-compliance/calculate` endpoint.
+const AUTO_STATUTORY_TYPES: [(&str, &str); 4] = [
+    ("provident_fund", "providentFund"),
+    ("esic", "esic"),
+    ("professional_tax", "professionalTax"),
+    ("tds", "tds"),
+];
+
+#[derive(Debug, Default)]
+struct StatutoryAllocation {
+    employee_paise: i64,
+    employer_paise: i64,
+    accrual_paise: i64,
+    breakdown: serde_json::Map<String, Value>,
+    errors: Vec<String>,
+}
+
+fn best_statutory_rules(
+    rules: &[StatutoryRuleRecord],
+) -> HashMap<(String, String), &StatutoryRuleRecord> {
+    let mut map: HashMap<(String, String), &StatutoryRuleRecord> = HashMap::new();
+    for rule in rules {
+        let key = (rule.rule_type.clone(), rule.state_code.clone());
+        map.entry(key)
+            .and_modify(|existing| {
+                if rule.effective_from > existing.effective_from {
+                    *existing = rule;
+                }
+            })
+            .or_insert(rule);
+    }
+    map
+}
+
+fn resolve_statutory_rule<'a>(
+    rule_map: &'a HashMap<(String, String), &'a StatutoryRuleRecord>,
+    rule_type: &str,
+    state_code: &str,
+) -> Option<&'a StatutoryRuleRecord> {
+    if !state_code.is_empty() {
+        if let Some(rule) = rule_map.get(&(rule_type.to_string(), state_code.to_string())) {
+            return Some(*rule);
+        }
+    }
+    rule_map
+        .get(&(rule_type.to_string(), String::new()))
+        .copied()
+}
+
+/// Computes automatic PF/ESIC/PT/TDS for one staff member as of the payroll period, using only
+/// the effective-dated rules already configured in `staff_payroll_statutory_rules` (no hardcoded
+/// rates). Requires a `staff_statutory_profiles` row whenever any of the four rule types is
+/// active for the period; missing profile or missing required identifiers (UAN/ESIC
+/// number/PAN/PT state) surface as validation errors instead of silently defaulting.
+fn compute_statutory(
+    gross_paise: i64,
+    rule_map: &HashMap<(String, String), &StatutoryRuleRecord>,
+    has_any_active_rule: bool,
+    profile: Option<&StatutoryProfileSource>,
+) -> StatutoryAllocation {
+    let mut result = StatutoryAllocation::default();
+    if !has_any_active_rule {
+        return result;
+    }
+    let Some(profile) = profile else {
+        result.errors.push(
+            "Statutory profile is missing; PF/ESIC/PT/TDS cannot be calculated".to_string(),
+        );
+        return result;
+    };
+    let has_pt_rule = rule_map.keys().any(|(t, _)| t == "professional_tax");
+    for (rule_type, key) in AUTO_STATUTORY_TYPES {
+        let Some(rule) = resolve_statutory_rule(rule_map, rule_type, &profile.pt_state_code)
+        else {
+            if rule_type == "professional_tax" && has_pt_rule {
+                result.errors.push(
+                    "Professional tax state is required to select the applicable rule"
+                        .to_string(),
+                );
+            }
+            continue;
+        };
+        if rule_type == "provident_fund" && !profile.pf_opt_in {
+            continue;
+        }
+        if rule_type == "esic" && !profile.esic_opt_in {
+            continue;
+        }
+        let (employee, employer, accrual) =
+            match staff_enterprise_service::calculate_rule(gross_paise, &rule.rule_json) {
+                Ok(v) => v,
+                Err(_) => {
+                    result
+                        .errors
+                        .push(format!("Statutory rule for {rule_type} is invalid"));
+                    continue;
+                }
+            };
+        if employee == 0 && employer == 0 && accrual == 0 {
+            continue;
+        }
+        match rule_type {
+            "provident_fund" if profile.uan.trim().is_empty() => result
+                .errors
+                .push("UAN is required for provident fund deduction".to_string()),
+            "esic" if profile.esic_number.trim().is_empty() => result
+                .errors
+                .push("ESIC number is required for ESIC deduction".to_string()),
+            "tds" if profile.pan_number.trim().is_empty() => result
+                .errors
+                .push("PAN is required for TDS deduction".to_string()),
+            _ => {}
+        }
+        result.employee_paise += employee;
+        result.employer_paise += employer;
+        result.accrual_paise += accrual;
+        result.breakdown.insert(
+            key.to_string(),
+            json!({
+                "ruleId": rule.id,
+                "stateCode": rule.state_code,
+                "employeePaise": employee,
+                "employerPaise": employer,
+                "accrualPaise": accrual,
+            }),
+        );
+    }
+    result
+}
+
+#[derive(Debug, Default)]
+struct AdvanceRecoveryAllocation {
+    total_recovered_paise: i64,
+    items: Vec<AdvanceRecoveryContribution>,
+}
+
+/// Schedules this period's salary-advance recovery across a staff member's active advances
+/// (oldest first), capping the total at `available_capacity_paise` — net pay after every other
+/// deduction already applied — so recovery can never push net pay below zero. Any shortfall
+/// against what was scheduled carries forward onto the advance's `pending_carry_forward_paise`
+/// for the next period; nothing here mutates the ledger balance itself, that only happens once
+/// the run is finalized (see `transition_run`).
+fn compute_advance_recovery(
+    available_capacity_paise: i64,
+    advances: &[ActiveAdvanceSource],
+) -> AdvanceRecoveryAllocation {
+    let mut result = AdvanceRecoveryAllocation::default();
+    let mut remaining_capacity = available_capacity_paise.max(0);
+    for advance in advances {
+        let scheduled = (advance.installment_amount_paise + advance.pending_carry_forward_paise)
+            .min(advance.outstanding_paise)
+            .max(0);
+        if scheduled == 0 {
+            continue;
+        }
+        let recovered = scheduled.min(remaining_capacity);
+        let carried_forward = scheduled - recovered;
+        remaining_capacity -= recovered;
+        result.total_recovered_paise += recovered;
+        result.items.push(AdvanceRecoveryContribution {
+            staff_id: String::new(),
+            advance_id: advance.id.clone(),
+            scheduled_paise: scheduled,
+            recovered_paise: recovered,
+            carried_forward_paise: carried_forward,
+            outstanding_after_paise: advance.outstanding_paise - recovered,
+        });
+    }
+    result
+}
+
+/// Detects manual `staff_payroll_adjustment_rules` entries whose name reads as a PF/ESIC/PT/TDS
+/// line item (e.g. an admin's earlier manual workaround) so they can be excluded from
+/// `auto_deduction_paise` — otherwise the same statutory amount would be withheld twice, once
+/// manually and once automatically.
+fn is_statutory_named(name: &str) -> bool {
+    let tokens: std::collections::HashSet<String> = name
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect();
+    const KEYWORDS: [&str; 8] = [
+        "pf", "provident", "esic", "esi", "tds", "professional", "pt", "vpf",
+    ];
+    KEYWORDS.iter().any(|k| tokens.contains(*k))
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +235,14 @@ pub struct PayrollPreviewItem {
     pub calculation_json: Value,
     pub notes: String,
     pub status: String,
+    #[serde(skip)]
+    pub statutory_employer_paise: i64,
+    #[serde(skip)]
+    pub statutory_accrual_paise: i64,
+    #[serde(skip)]
+    pub statutory_breakdown: Value,
+    #[serde(skip)]
+    pub advance_recovery_items: Vec<repository::AdvanceRecoveryContribution>,
 }
 
 #[derive(Debug, Serialize)]
@@ -110,6 +312,7 @@ struct AdjustmentBreakdown {
     deduction_paise: i64,
     fine_paise: i64,
     rows: Vec<Value>,
+    skipped_statutory_names: Vec<String>,
 }
 
 pub async fn preview(
@@ -140,6 +343,9 @@ pub async fn preview(
         tips,
         adjustment_rules,
         holidays,
+        statutory_rules,
+        statutory_profiles,
+        active_advances,
     ) = tokio::try_join!(
         repository::commission_rules(db, tenant_id, branch_id, &staff_ids, period_end),
         repository::catalog_commissions(db, tenant_id, branch_id, &staff_ids),
@@ -179,8 +385,27 @@ pub async fn preview(
         ),
         repository::payroll_adjustment_rules(db, tenant_id, branch_id),
         repository::list_holidays(db, tenant_id, branch_id, period_start, period_end),
+        enterprise_repository::effective_rules_all(db, tenant_id, branch_id, period_end),
+        repository::statutory_profiles(db, tenant_id, branch_id, &staff_ids),
+        repository::active_advances(db, tenant_id, branch_id, &staff_ids, period_end),
     )
     .map_err(|_| AppError::internal("failed to load payroll sources"))?;
+
+    let statutory_rule_map = best_statutory_rules(&statutory_rules);
+    let has_active_statutory_rule = statutory_rule_map
+        .keys()
+        .any(|(rule_type, _)| AUTO_STATUTORY_TYPES.iter().any(|(t, _)| t == rule_type));
+    let statutory_profile_by_staff = statutory_profiles
+        .into_iter()
+        .map(|profile| (profile.staff_id.clone(), profile))
+        .collect::<HashMap<_, _>>();
+    let mut advances_by_staff: HashMap<String, Vec<ActiveAdvanceSource>> = HashMap::new();
+    for advance in active_advances {
+        advances_by_staff
+            .entry(advance.staff_id.clone())
+            .or_default()
+            .push(advance);
+    }
 
     let mut rules_by_staff: HashMap<String, Vec<(String, i32)>> = HashMap::new();
     for rule in rules {
@@ -466,14 +691,38 @@ pub async fn preview(
                 open_clock_ins as i64,
                 i64::from(unpaid_leave_days_x2 / 2),
             );
-            let advance_recovery_paise = 0_i64;
-            let auto_deduction_paise = rule_adjustments.deduction_paise
-                + rule_adjustments.fine_paise
-                + advance_recovery_paise;
+            let auto_deduction_paise = rule_adjustments.deduction_paise + rule_adjustments.fine_paise;
             let generated_positive_paise = tip_paise + rule_adjustments.allowance_paise;
             let gross_paise =
                 earned_salary_paise + overtime_paise + commission_paise + generated_positive_paise;
-            let deductions_paise = penalty_paise + auto_deduction_paise;
+            let statutory = compute_statutory(
+                gross_paise,
+                &statutory_rule_map,
+                has_active_statutory_rule,
+                statutory_profile_by_staff.get(&staff_id),
+            );
+            for name in &rule_adjustments.skipped_statutory_names {
+                validation_warnings.push(format!(
+                    "Manual rule '{name}' skipped: overlaps with automatic statutory deduction"
+                ));
+            }
+            validation_errors.extend(statutory.errors.iter().cloned());
+            // Available capacity for advance recovery is whatever net pay would be left after
+            // every other deduction already applied — recovery is capped here so it can never
+            // push net pay below zero.
+            let available_before_advance_paise =
+                (gross_paise - penalty_paise - auto_deduction_paise - statutory.employee_paise)
+                    .max(0);
+            let mut advance_recovery = compute_advance_recovery(
+                available_before_advance_paise,
+                advances_by_staff.get(&staff_id).map(Vec::as_slice).unwrap_or(&[]),
+            );
+            for item in &mut advance_recovery.items {
+                item.staff_id = staff_id.clone();
+            }
+            let advance_recovery_paise = advance_recovery.total_recovered_paise;
+            let deductions_paise =
+                penalty_paise + auto_deduction_paise + statutory.employee_paise + advance_recovery_paise;
             let net_paise = (gross_paise - deductions_paise).max(0);
             let salary_row = json!({
                 "staffId": staff_id,
@@ -517,16 +766,33 @@ pub async fn preview(
                 "ruleFinePaise": rule_adjustments.fine_paise,
                 "ruleDeductionPaise": rule_adjustments.deduction_paise,
                 "advanceRecoveryPaise": advance_recovery_paise,
-                "advanceSource": "not_configured",
+                "advanceSource": if advance_recovery.items.is_empty() { "none" } else { "salary_advance_ledger" },
                 "grossPaise": gross_paise,
                 "deductionsPaise": deductions_paise,
                 "netPaise": net_paise,
                 "autoAdjustmentRules": rule_adjustments.rows,
+                "statutoryEmployeePaise": statutory.employee_paise,
+                "statutoryEmployerPaise": statutory.employer_paise,
+                "statutoryAccrualPaise": statutory.accrual_paise,
                 "sourceCounts": {
                     "attendance": attendance_rows.len(),
                     "schedule": schedule_rows.len()
                 }
             });
+            let statutory_breakdown = Value::Object(statutory.breakdown);
+            let advance_recovery_json: Vec<Value> = advance_recovery
+                .items
+                .iter()
+                .map(|item| {
+                    json!({
+                        "advanceId": item.advance_id,
+                        "scheduledPaise": item.scheduled_paise,
+                        "recoveredPaise": item.recovered_paise,
+                        "carriedForwardPaise": item.carried_forward_paise,
+                        "outstandingAfterPaise": item.outstanding_after_paise,
+                    })
+                })
+                .collect();
 
             PayrollPreviewItem {
                 calculation_json: json!({
@@ -537,8 +803,24 @@ pub async fn preview(
                     "holidayDaysX2": holiday_days_x2,
                     "generatedPositiveAdjustmentPaise": generated_positive_paise,
                     "generatedAutoDeductionPaise": auto_deduction_paise,
+                    "generatedStatutoryDeductionPaise": statutory.employee_paise,
+                    "generatedAdvanceRecoveryPaise": advance_recovery_paise,
                     "salaryRow": salary_row,
+                    "statutory": {
+                        "employeePaise": statutory.employee_paise,
+                        "employerPaise": statutory.employer_paise,
+                        "accrualPaise": statutory.accrual_paise,
+                        "breakdown": statutory_breakdown,
+                    },
+                    "advanceRecovery": {
+                        "totalRecoveredPaise": advance_recovery_paise,
+                        "items": advance_recovery_json,
+                    },
                 }),
+                statutory_employer_paise: statutory.employer_paise,
+                statutory_accrual_paise: statutory.accrual_paise,
+                statutory_breakdown,
+                advance_recovery_items: advance_recovery.items,
                 staff_id,
                 staff_name: staff_row.staff_name,
                 employee_code: staff_row.employee_code,
@@ -592,6 +874,7 @@ pub async fn run_payroll(
     year: i32,
     month: u32,
     staff_id: &str,
+    reason: &str,
 ) -> Result<PayrollRunDetail, AppError> {
     let result = preview(db, tenant_id, branch_id, year, month, staff_id).await?;
     if result.items.is_empty() {
@@ -615,6 +898,32 @@ pub async fn run_payroll(
             ));
         }
     }
+    let statutory = result
+        .items
+        .iter()
+        .filter(|item| {
+            item.statutory_breakdown
+                .as_object()
+                .is_some_and(|breakdown| !breakdown.is_empty())
+        })
+        .map(|item| StatutoryContribution {
+            staff_id: item.staff_id.clone(),
+            employee_paise: item
+                .calculation_json
+                .get("statutory")
+                .and_then(|s| s.get("employeePaise"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+            employer_paise: item.statutory_employer_paise,
+            accrual_paise: item.statutory_accrual_paise,
+            breakdown: item.statutory_breakdown.clone(),
+        })
+        .collect::<Vec<_>>();
+    let advance_recoveries = result
+        .items
+        .iter()
+        .flat_map(|item| item.advance_recovery_items.iter().cloned())
+        .collect::<Vec<_>>();
     let drafts = result
         .items
         .into_iter()
@@ -629,6 +938,8 @@ pub async fn run_payroll(
             result.period_end,
             actor_user_id,
             &drafts,
+            &statutory,
+            &advance_recoveries,
         )
         .await
         .map_err(|_| AppError::internal("failed to save payroll run"))?
@@ -641,6 +952,9 @@ pub async fn run_payroll(
             result.period_end,
             actor_user_id,
             &drafts,
+            reason,
+            &statutory,
+            &advance_recoveries,
         )
         .await
         .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?
@@ -700,30 +1014,90 @@ pub async fn payslip_pdf(
         .iter()
         .find(|item| item.staff_id == staff_id)
         .ok_or_else(|| AppError::not_found("payroll employee not found"))?;
+    let mut lines = vec![
+        format!("Employee: {}", item.staff_name),
+        format!(
+            "Employee code: {}",
+            item.employee_code.as_deref().unwrap_or("-")
+        ),
+        format!(
+            "Period: {} to {}",
+            detail.run.period_start, detail.run.period_end
+        ),
+        format!("Status: {}", detail.run.status),
+        format!(
+            "Earned salary: INR {}",
+            paise_text(item.earned_salary_paise)
+        ),
+        format!("Overtime: INR {}", paise_text(item.overtime_paise)),
+        format!("Commission: INR {}", paise_text(item.commission_paise)),
+        format!("Adjustment: INR {}", paise_text(item.adjustment_paise)),
+        format!("Deductions: INR {}", paise_text(item.deductions_paise)),
+    ];
+    lines.extend(statutory_payslip_lines(&item.calculation_json));
+    lines.extend(advance_recovery_payslip_lines(&item.calculation_json));
+    lines.push(format!("Net pay: INR {}", paise_text(item.net_paise)));
     Ok(crate::services::invoice_pdf::render_text_report(
         "STAFF PAYSLIP",
-        &[
-            format!("Employee: {}", item.staff_name),
-            format!(
-                "Employee code: {}",
-                item.employee_code.as_deref().unwrap_or("-")
-            ),
-            format!(
-                "Period: {} to {}",
-                detail.run.period_start, detail.run.period_end
-            ),
-            format!("Status: {}", detail.run.status),
-            format!(
-                "Earned salary: INR {}",
-                paise_text(item.earned_salary_paise)
-            ),
-            format!("Overtime: INR {}", paise_text(item.overtime_paise)),
-            format!("Commission: INR {}", paise_text(item.commission_paise)),
-            format!("Adjustment: INR {}", paise_text(item.adjustment_paise)),
-            format!("Deductions: INR {}", paise_text(item.deductions_paise)),
-            format!("Net pay: INR {}", paise_text(item.net_paise)),
-        ],
+        &lines,
     ))
+}
+
+fn statutory_payslip_lines(calculation_json: &Value) -> Vec<String> {
+    const LABELS: [(&str, &str); 4] = [
+        ("providentFund", "Provident Fund (PF)"),
+        ("esic", "ESIC"),
+        ("professionalTax", "Professional Tax"),
+        ("tds", "TDS"),
+    ];
+    let Some(statutory) = calculation_json.get("statutory") else {
+        return vec![];
+    };
+    let breakdown = statutory.get("breakdown").and_then(Value::as_object);
+    let has_any = breakdown.is_some_and(|b| !b.is_empty());
+    if !has_any {
+        return vec![];
+    }
+    let breakdown = breakdown.unwrap();
+    let mut lines = vec!["Statutory deductions (PF/ESIC/PT/TDS):".to_string()];
+    for (key, label) in LABELS {
+        if let Some(entry) = breakdown.get(key) {
+            let employee_paise = entry.get("employeePaise").and_then(Value::as_i64).unwrap_or(0);
+            lines.push(format!("  {label}: INR {}", paise_text(employee_paise)));
+        }
+    }
+    let employer_paise = statutory
+        .get("employerPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let accrual_paise = statutory
+        .get("accrualPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if employer_paise > 0 || accrual_paise > 0 {
+        lines.push(format!(
+            "  Employer contribution (informational, not deducted): INR {}",
+            paise_text(employer_paise + accrual_paise)
+        ));
+    }
+    lines
+}
+
+fn advance_recovery_payslip_lines(calculation_json: &Value) -> Vec<String> {
+    let Some(advance_recovery) = calculation_json.get("advanceRecovery") else {
+        return vec![];
+    };
+    let total_paise = advance_recovery
+        .get("totalRecoveredPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if total_paise <= 0 {
+        return vec![];
+    }
+    vec![format!(
+        "Salary advance recovery: INR {}",
+        paise_text(total_paise)
+    )]
 }
 
 pub async fn save_adjustments(
@@ -1236,6 +1610,10 @@ fn auto_adjustments(
             continue;
         }
         let amount_paise = rule.amount_paise.saturating_mul(occurrences);
+        if matches!(rule.kind.as_str(), "fine" | "deduction") && is_statutory_named(&rule.name) {
+            result.skipped_statutory_names.push(rule.name.clone());
+            continue;
+        }
         match rule.kind.as_str() {
             "allowance" => result.allowance_paise += amount_paise,
             "fine" => result.fine_paise += amount_paise,
@@ -1334,14 +1712,74 @@ pub(crate) fn paise_text(value: i64) -> String {
     format!("{}.{:02}", value / 100, value.unsigned_abs() % 100)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct StatutoryProfileInput {
+    pub uan: Option<String>,
+    pub esic_number: Option<String>,
+    pub pan_number: Option<String>,
+    pub pt_state_code: Option<String>,
+    pub pf_opt_in: Option<bool>,
+    pub esic_opt_in: Option<bool>,
+}
+
+pub async fn list_statutory_profiles(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<repository::StatutoryProfileRecord>, AppError> {
+    repository::list_statutory_profiles(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load statutory profiles"))
+}
+
+pub async fn save_statutory_profile(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    input: StatutoryProfileInput,
+) -> Result<repository::StatutoryProfileRecord, AppError> {
+    let field = |v: Option<String>, label: &str| -> Result<String, AppError> {
+        let v = v.unwrap_or_default().trim().to_string();
+        if v.chars().count() > 32 {
+            return Err(AppError::validation(format!("{label} is too long")));
+        }
+        Ok(v)
+    };
+    let uan = field(input.uan, "UAN")?;
+    let esic_number = field(input.esic_number, "ESIC number")?;
+    let pan_number = field(input.pan_number, "PAN")?;
+    let pt_state_code = field(input.pt_state_code, "PT state code")?;
+    repository::upsert_statutory_profile(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        actor_user_id,
+        &uan,
+        &esic_number,
+        &pan_number,
+        &pt_state_code,
+        input.pf_opt_in.unwrap_or(true),
+        input.esic_opt_in.unwrap_or(true),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save statutory profile"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        line_attributions, multiply_divide, paid_holiday_days_x2, period,
-        settled_provider_reference, validate_payout, PayrollPayoutInput,
+        best_statutory_rules, compute_statutory, is_statutory_named, line_attributions,
+        multiply_divide, paid_holiday_days_x2, period, resolve_statutory_rule,
+        settled_provider_reference, validate_payout, PayrollPayoutInput, StatutoryProfileSource,
+        StatutoryRuleRecord,
     };
     use chrono::Datelike;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use std::collections::HashSet;
 
     #[test]
@@ -1380,5 +1818,119 @@ mod tests {
                 .as_deref(),
             Some("UTR-1")
         );
+    }
+
+    fn rule(rule_type: &str, state_code: &str, effective_from: &str, json: Value) -> StatutoryRuleRecord {
+        StatutoryRuleRecord {
+            id: format!("{rule_type}-{state_code}-{effective_from}"),
+            rule_type: rule_type.to_string(),
+            state_code: state_code.to_string(),
+            rule_json: json,
+            effective_from: chrono::NaiveDate::parse_from_str(effective_from, "%Y-%m-%d").unwrap(),
+            effective_to: None,
+            active: true,
+            version: 1,
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+        }
+    }
+
+    fn profile(pt_state_code: &str, pf_opt_in: bool, esic_opt_in: bool) -> StatutoryProfileSource {
+        StatutoryProfileSource {
+            staff_id: "staff-1".to_string(),
+            uan: String::new(),
+            esic_number: String::new(),
+            pan_number: String::new(),
+            pt_state_code: pt_state_code.to_string(),
+            pf_opt_in,
+            esic_opt_in,
+        }
+    }
+
+    #[test]
+    fn statutory_named_rules_are_detected_case_and_punctuation_insensitively() {
+        assert!(is_statutory_named("PF Deduction"));
+        assert!(is_statutory_named("esic-contribution"));
+        assert!(is_statutory_named("Professional Tax"));
+        assert!(is_statutory_named("TDS"));
+        assert!(!is_statutory_named("Late attendance fine"));
+    }
+
+    #[test]
+    fn resolve_statutory_rule_prefers_staff_state_then_falls_back_to_blank() {
+        let rules = vec![
+            rule(
+                "professional_tax",
+                "",
+                "2024-01-01",
+                json!({"employeeFixedPaise": 20000}),
+            ),
+            rule(
+                "professional_tax",
+                "MH",
+                "2024-01-01",
+                json!({"employeeFixedPaise": 30000}),
+            ),
+        ];
+        let map = best_statutory_rules(&rules);
+        assert_eq!(
+            resolve_statutory_rule(&map, "professional_tax", "MH")
+                .unwrap()
+                .state_code,
+            "MH"
+        );
+        assert_eq!(
+            resolve_statutory_rule(&map, "professional_tax", "KA")
+                .unwrap()
+                .state_code,
+            ""
+        );
+    }
+
+    #[test]
+    fn compute_statutory_requires_profile_when_rules_are_active() {
+        let rules = vec![rule(
+            "provident_fund",
+            "",
+            "2024-01-01",
+            json!({"employeeBasisPoints": 1200, "employerBasisPoints": 1200}),
+        )];
+        let map = best_statutory_rules(&rules);
+        let result = compute_statutory(1_000_000, &map, true, None);
+        assert_eq!(result.employee_paise, 0);
+        assert!(result.errors.iter().any(|e| e.contains("profile is missing")));
+    }
+
+    #[test]
+    fn compute_statutory_skips_opted_out_and_flags_missing_identifiers() {
+        let rules = vec![
+            rule(
+                "provident_fund",
+                "",
+                "2024-01-01",
+                json!({"employeeBasisPoints": 1200, "employerBasisPoints": 1200}),
+            ),
+            rule(
+                "esic",
+                "",
+                "2024-01-01",
+                json!({"employeeBasisPoints": 75, "employerBasisPoints": 325}),
+            ),
+        ];
+        let map = best_statutory_rules(&rules);
+        let opted_out_pf = profile("", false, true);
+        let result = compute_statutory(1_000_000, &map, true, Some(&opted_out_pf));
+        assert_eq!(result.employee_paise, 12_500); // only ESIC (0.75%) applied, PF skipped
+        assert!(result.errors.iter().any(|e| e.contains("ESIC number")));
+        assert!(!result.errors.iter().any(|e| e.contains("UAN")));
+    }
+
+    #[test]
+    fn compute_statutory_is_a_no_op_without_active_rules() {
+        let map = best_statutory_rules(&[]);
+        let result = compute_statutory(1_000_000, &map, false, None);
+        assert_eq!(result.employee_paise, 0);
+        assert_eq!(result.employer_paise, 0);
+        assert!(result.errors.is_empty());
     }
 }

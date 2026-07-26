@@ -787,6 +787,24 @@ pub async fn post_payroll_payout(
             "payroll statutory liability is invalid",
         ));
     }
+    // Advance recovery is a repayment of an existing asset (money already disbursed to the
+    // staff member), not a new liability — it must reduce STAFF_ADVANCE_ASSET directly rather
+    // than fold into PAYROLL_DEDUCTIONS_PAYABLE like statutory/manual withholding does.
+    let advance_recovery_paise = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(recovered_paise),0)::BIGINT FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to calculate payroll advance recovery"))?;
+    if advance_recovery_paise < 0 || advance_recovery_paise > withheld_paise {
+        return Err(AppError::validation(
+            "payroll advance recovery amount is invalid",
+        ));
+    }
+    let payable_withheld_paise = withheld_paise - advance_recovery_paise;
     let mut lines = vec![
         JournalLine {
             account_code: "PAYROLL_EXPENSE",
@@ -799,11 +817,18 @@ pub async fn post_payroll_payout(
             credit_paise: net_paise,
         },
     ];
-    if withheld_paise > 0 {
+    if payable_withheld_paise > 0 {
         lines.push(JournalLine {
             account_code: "PAYROLL_DEDUCTIONS_PAYABLE",
             debit_paise: 0,
-            credit_paise: withheld_paise,
+            credit_paise: payable_withheld_paise,
+        });
+    }
+    if advance_recovery_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "STAFF_ADVANCE_ASSET",
+            debit_paise: 0,
+            credit_paise: advance_recovery_paise,
         });
     }
     if statutory_paise > 0 {
@@ -826,6 +851,77 @@ pub async fn post_payroll_payout(
         run_id,
         "Staff payroll payout",
         lines,
+    )
+    .await
+}
+
+/// Disbursing a salary advance is never a salary expense — it moves cash into a receivable
+/// (`STAFF_ADVANCE_ASSET`) that payroll recovery later credits back down.
+pub async fn post_staff_advance_disbursement(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    advance_id: &str,
+    method: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("advance disbursement amount is invalid"));
+    }
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "staff_advance_disbursement",
+        advance_id,
+        "Staff salary advance disbursement",
+        vec![
+            JournalLine {
+                account_code: "STAFF_ADVANCE_ASSET",
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: payment_account(method),
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
+    )
+    .await
+}
+
+/// Waiving/writing off the remaining outstanding balance of an advance removes it from the
+/// books as a loss rather than salary expense.
+pub async fn post_staff_advance_waiver(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    advance_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("advance waiver amount is invalid"));
+    }
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "staff_advance_waiver",
+        advance_id,
+        "Staff salary advance waiver/write-off",
+        vec![
+            JournalLine {
+                account_code: "STAFF_ADVANCE_WRITEOFF_EXPENSE",
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: "STAFF_ADVANCE_ASSET",
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
     )
     .await
 }

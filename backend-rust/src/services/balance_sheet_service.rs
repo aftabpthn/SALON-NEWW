@@ -88,6 +88,12 @@ const ACCOUNTS: &[AccountMeta] = &[
         current: true,
     },
     AccountMeta {
+        code: "STAFF_ADVANCE_ASSET",
+        name: "Staff Advance",
+        group: AccountGroup::Asset,
+        current: true,
+    },
+    AccountMeta {
         code: "FIXED_ASSETS",
         name: "Fixed Assets",
         group: AccountGroup::Asset,
@@ -222,6 +228,12 @@ const ACCOUNTS: &[AccountMeta] = &[
     AccountMeta {
         code: "PAYROLL_STATUTORY_EXPENSE",
         name: "Payroll Statutory Expense",
+        group: AccountGroup::Expense,
+        current: false,
+    },
+    AccountMeta {
+        code: "STAFF_ADVANCE_WRITEOFF_EXPENSE",
+        name: "Staff Advance Write-off",
         group: AccountGroup::Expense,
         current: false,
     },

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
@@ -188,6 +190,70 @@ pub struct AdjustmentInput {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct StatutoryProfileSource {
+    pub staff_id: String,
+    pub uan: String,
+    pub esic_number: String,
+    pub pan_number: String,
+    pub pt_state_code: String,
+    pub pf_opt_in: bool,
+    pub esic_opt_in: bool,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StatutoryProfileRecord {
+    pub id: String,
+    pub staff_id: String,
+    pub uan: String,
+    pub esic_number: String,
+    pub pan_number: String,
+    pub pt_state_code: String,
+    pub pf_opt_in: bool,
+    pub esic_opt_in: bool,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Per-staff PF/ESIC/PT/TDS contribution computed for one payroll item, threaded from the
+/// service layer into the repository so it can be persisted into
+/// `staff_payroll_statutory_calculations` in the same transaction as the payroll item.
+#[derive(Debug, Clone)]
+pub struct StatutoryContribution {
+    pub staff_id: String,
+    pub employee_paise: i64,
+    pub employer_paise: i64,
+    pub accrual_paise: i64,
+    pub breakdown: Value,
+}
+
+/// A staff member's active salary advance as seen from the payroll engine — just enough to
+/// schedule this period's recovery against the run-time capacity cap.
+#[derive(Debug, Clone, FromRow)]
+pub struct ActiveAdvanceSource {
+    pub id: String,
+    pub staff_id: String,
+    pub outstanding_paise: i64,
+    pub installment_amount_paise: i64,
+    pub pending_carry_forward_paise: i64,
+}
+
+/// Per-staff advance recovery computed for one payroll item, threaded from the service layer
+/// into the repository so it can be persisted into `staff_advance_recoveries` in the same
+/// transaction as the payroll item. The ledger balance itself is only decremented later, when
+/// the run is finalized (see `transition_run`) — recalculating a draft never mutates it.
+#[derive(Debug, Clone)]
+pub struct AdvanceRecoveryContribution {
+    pub staff_id: String,
+    pub advance_id: String,
+    pub scheduled_paise: i64,
+    pub recovered_paise: i64,
+    pub carried_forward_paise: i64,
+    pub outstanding_after_paise: i64,
+}
+
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct StaffHolidayRecord {
@@ -233,6 +299,80 @@ pub async fn staff_sources(
     .bind(period_end)
     .fetch_all(db)
     .await
+}
+
+pub async fn statutory_profiles(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_ids: &[String],
+) -> Result<Vec<StatutoryProfileSource>, sqlx::Error> {
+    if staff_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_as("SELECT staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3)")
+        .bind(tenant_id).bind(branch_id).bind(staff_ids).fetch_all(db).await
+}
+
+pub async fn list_statutory_profiles(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<StatutoryProfileRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 ORDER BY staff_id")
+        .bind(tenant_id).bind(branch_id).fetch_all(db).await
+}
+
+pub async fn upsert_statutory_profile(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    uan: &str,
+    esic_number: &str,
+    pan_number: &str,
+    pt_state_code: &str,
+    pf_opt_in: bool,
+    esic_opt_in: bool,
+) -> Result<StatutoryProfileRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        INSERT INTO staff_statutory_profiles(tenant_id,branch_id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,created_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT(tenant_id,branch_id,staff_id) DO UPDATE SET
+          uan=EXCLUDED.uan,esic_number=EXCLUDED.esic_number,pan_number=EXCLUDED.pan_number,
+          pt_state_code=EXCLUDED.pt_state_code,pf_opt_in=EXCLUDED.pf_opt_in,esic_opt_in=EXCLUDED.esic_opt_in,
+          version=staff_statutory_profiles.version+1,updated_at=NOW()
+        RETURNING id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(staff_id).bind(uan).bind(esic_number).bind(pan_number)
+    .bind(pt_state_code).bind(pf_opt_in).bind(esic_opt_in).bind(actor_user_id)
+    .fetch_one(db).await
+}
+
+pub async fn active_advances(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_ids: &[String],
+    as_of: NaiveDate,
+) -> Result<Vec<ActiveAdvanceSource>, sqlx::Error> {
+    if staff_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    sqlx::query_as(
+        r#"
+        SELECT id,staff_id,outstanding_paise,installment_amount_paise,pending_carry_forward_paise
+          FROM staff_salary_advances
+         WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3)
+           AND status IN ('disbursed','recovering') AND outstanding_paise>0
+           AND recovery_start_period<=$4
+         ORDER BY created_at ASC
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(staff_ids).bind(as_of).fetch_all(db).await
 }
 
 pub async fn commission_rules(
@@ -482,6 +622,8 @@ pub async fn replace_calculated_run(
     period_end: NaiveDate,
     actor_user_id: &str,
     items: &[PayrollItemDraft],
+    statutory: &[StatutoryContribution],
+    advance_recoveries: &[AdvanceRecoveryContribution],
 ) -> Result<PayrollRunRecord, sqlx::Error> {
     let gross_paise = items.iter().map(|item| item.gross_paise).sum::<i64>();
     let deductions_paise = items.iter().map(|item| item.deductions_paise).sum::<i64>();
@@ -518,13 +660,109 @@ pub async fn replace_calculated_run(
     .execute(&mut *tx)
     .await?;
     for item in items {
-        insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
+        let item_id = insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
+        if let Some(contribution) = statutory.iter().find(|c| c.staff_id == item.staff_id) {
+            upsert_statutory_calculation(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &run.id,
+                &item_id,
+                period_start,
+                period_end,
+                item.gross_paise,
+                actor_user_id,
+                contribution,
+            )
+            .await?;
+        }
+        for contribution in advance_recoveries
+            .iter()
+            .filter(|c| c.staff_id == item.staff_id)
+        {
+            upsert_advance_recovery(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &run.id,
+                &item_id,
+                period_start,
+                period_end,
+                actor_user_id,
+                contribution,
+            )
+            .await?;
+        }
     }
     sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.calculated',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
         .bind(serde_json::json!({"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
+}
+
+#[derive(Debug, FromRow)]
+struct SelectedItemSnapshot {
+    staff_id: String,
+    attendance_days_x2: i32,
+    paid_leave_days_x2: i32,
+    weekly_off_days_x2: i32,
+    holiday_days_x2: i32,
+    worked_minutes: i32,
+    overtime_minutes: i32,
+    earned_salary_paise: i64,
+    overtime_paise: i64,
+    commission_paise: i64,
+    adjustment_paise: i64,
+    gross_paise: i64,
+    deductions_paise: i64,
+    net_paise: i64,
+    calculation_json: Value,
+}
+
+fn snapshot_tips_paise(calculation_json: &Value) -> i64 {
+    calculation_json
+        .get("tipsPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+}
+
+fn snapshot_json(snapshot: &SelectedItemSnapshot) -> Value {
+    serde_json::json!({
+        "attendanceDaysX2": snapshot.attendance_days_x2,
+        "paidLeaveDaysX2": snapshot.paid_leave_days_x2,
+        "weeklyOffDaysX2": snapshot.weekly_off_days_x2,
+        "holidayDaysX2": snapshot.holiday_days_x2,
+        "workedMinutes": snapshot.worked_minutes,
+        "overtimeMinutes": snapshot.overtime_minutes,
+        "earnedSalaryPaise": snapshot.earned_salary_paise,
+        "overtimePaise": snapshot.overtime_paise,
+        "commissionPaise": snapshot.commission_paise,
+        "tipsPaise": snapshot_tips_paise(&snapshot.calculation_json),
+        "adjustmentPaise": snapshot.adjustment_paise,
+        "grossPaise": snapshot.gross_paise,
+        "deductionsPaise": snapshot.deductions_paise,
+        "netPaise": snapshot.net_paise,
+    })
+}
+
+fn draft_snapshot_json(item: &PayrollItemDraft) -> Value {
+    serde_json::json!({
+        "attendanceDaysX2": item.attendance_days_x2,
+        "paidLeaveDaysX2": item.paid_leave_days_x2,
+        "weeklyOffDaysX2": item.weekly_off_days_x2,
+        "holidayDaysX2": item.holiday_days_x2,
+        "workedMinutes": item.worked_minutes,
+        "overtimeMinutes": item.overtime_minutes,
+        "earnedSalaryPaise": item.earned_salary_paise,
+        "overtimePaise": item.overtime_paise,
+        "commissionPaise": item.commission_paise,
+        "tipsPaise": snapshot_tips_paise(&item.calculation_json),
+        "adjustmentPaise": item.adjustment_paise,
+        "grossPaise": item.gross_paise,
+        "deductionsPaise": item.deductions_paise,
+        "netPaise": item.net_paise,
+    })
 }
 
 pub async fn replace_selected_calculated_items(
@@ -535,6 +773,9 @@ pub async fn replace_selected_calculated_items(
     period_end: NaiveDate,
     actor_user_id: &str,
     items: &[PayrollItemDraft],
+    reason: &str,
+    statutory: &[StatutoryContribution],
+    advance_recoveries: &[AdvanceRecoveryContribution],
 ) -> Result<PayrollRunRecord, sqlx::Error> {
     let gross_paise = items.iter().map(|item| item.gross_paise).sum::<i64>();
     let deductions_paise = items.iter().map(|item| item.deductions_paise).sum::<i64>();
@@ -564,6 +805,15 @@ pub async fn replace_selected_calculated_items(
     .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end)
     .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
     .fetch_one(&mut *tx).await?;
+    let before_snapshots: Vec<SelectedItemSnapshot> = sqlx::query_as(
+        "SELECT staff_id,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,gross_paise,deductions_paise,net_paise,calculation_json FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&run.id)
+    .bind(&staff_ids)
+    .fetch_all(&mut *tx)
+    .await?;
     sqlx::query(
         "DELETE FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
     )
@@ -574,7 +824,39 @@ pub async fn replace_selected_calculated_items(
     .execute(&mut *tx)
     .await?;
     for item in items {
-        insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
+        let item_id = insert_payroll_item(&mut tx, tenant_id, branch_id, &run.id, item).await?;
+        if let Some(contribution) = statutory.iter().find(|c| c.staff_id == item.staff_id) {
+            upsert_statutory_calculation(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &run.id,
+                &item_id,
+                period_start,
+                period_end,
+                item.gross_paise,
+                actor_user_id,
+                contribution,
+            )
+            .await?;
+        }
+        for contribution in advance_recoveries
+            .iter()
+            .filter(|c| c.staff_id == item.staff_id)
+        {
+            upsert_advance_recovery(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &run.id,
+                &item_id,
+                period_start,
+                period_end,
+                actor_user_id,
+                contribution,
+            )
+            .await?;
+        }
     }
     let run: PayrollRunRecord = sqlx::query_as(
         r#"
@@ -605,9 +887,31 @@ pub async fn replace_selected_calculated_items(
     .bind(&run.id)
     .fetch_one(&mut *tx)
     .await?;
+    let mut before_by_staff: HashMap<String, &SelectedItemSnapshot> = HashMap::new();
+    for snapshot in &before_snapshots {
+        before_by_staff.insert(snapshot.staff_id.clone(), snapshot);
+    }
+    let changes: Vec<Value> = items
+        .iter()
+        .map(|item| {
+            let after = draft_snapshot_json(item);
+            match before_by_staff.get(&item.staff_id) {
+                Some(before) => serde_json::json!({
+                    "staffId": item.staff_id,
+                    "before": snapshot_json(before),
+                    "after": after,
+                }),
+                None => serde_json::json!({
+                    "staffId": item.staff_id,
+                    "before": Value::Null,
+                    "after": after,
+                }),
+            }
+        })
+        .collect();
     sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.selected_staff_regenerated',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
-        .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count})).execute(&mut *tx).await?;
+        .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count,"reason":reason,"changes":changes})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
 }
@@ -618,8 +922,8 @@ async fn insert_payroll_item(
     branch_id: &str,
     run_id: &str,
     item: &PayrollItemDraft,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
         r#"
         INSERT INTO staff_payroll_items(
           tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,
@@ -627,6 +931,7 @@ async fn insert_payroll_item(
           earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,
           deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status
         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated')
+        RETURNING id
         "#,
     )
     .bind(tenant_id).bind(branch_id).bind(run_id).bind(&item.staff_id).bind(&item.staff_name)
@@ -636,6 +941,70 @@ async fn insert_payroll_item(
     .bind(item.overtime_paise).bind(item.commission_paise).bind(item.adjustment_paise)
     .bind(item.penalty_paise).bind(item.gross_paise).bind(item.deductions_paise).bind(item.net_paise)
     .bind(&item.validation_errors).bind(&item.validation_warnings).bind(&item.calculation_json).bind(&item.notes)
+    .fetch_one(&mut **tx).await
+}
+
+async fn upsert_statutory_calculation(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    item_id: &str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    gross_paise: i64,
+    actor_user_id: &str,
+    contribution: &StatutoryContribution,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO staff_payroll_statutory_calculations(
+          tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,period_start,period_end,gross_paise,
+          employee_deduction_paise,employer_contribution_paise,accrual_paise,breakdown_json,calculated_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        ON CONFLICT(tenant_id,branch_id,payroll_item_id) DO UPDATE SET
+          employee_deduction_paise=EXCLUDED.employee_deduction_paise,
+          employer_contribution_paise=EXCLUDED.employer_contribution_paise,
+          accrual_paise=EXCLUDED.accrual_paise,breakdown_json=EXCLUDED.breakdown_json,
+          calculated_by=EXCLUDED.calculated_by,calculated_at=NOW()
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(run_id).bind(item_id).bind(&contribution.staff_id)
+    .bind(period_start).bind(period_end).bind(gross_paise)
+    .bind(contribution.employee_paise).bind(contribution.employer_paise).bind(contribution.accrual_paise)
+    .bind(&contribution.breakdown).bind(actor_user_id)
+    .execute(&mut **tx).await?;
+    Ok(())
+}
+
+async fn upsert_advance_recovery(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    item_id: &str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    actor_user_id: &str,
+    contribution: &AdvanceRecoveryContribution,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO staff_advance_recoveries(
+          tenant_id,branch_id,advance_id,payroll_run_id,payroll_item_id,staff_id,period_start,period_end,
+          scheduled_paise,recovered_paise,carried_forward_paise,outstanding_after_paise,recorded_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        ON CONFLICT(tenant_id,branch_id,payroll_item_id,advance_id) DO UPDATE SET
+          scheduled_paise=EXCLUDED.scheduled_paise,recovered_paise=EXCLUDED.recovered_paise,
+          carried_forward_paise=EXCLUDED.carried_forward_paise,outstanding_after_paise=EXCLUDED.outstanding_after_paise,
+          recorded_by=EXCLUDED.recorded_by,recorded_at=NOW(),applied=FALSE
+        "#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(&contribution.advance_id).bind(run_id).bind(item_id)
+    .bind(&contribution.staff_id).bind(period_start).bind(period_end)
+    .bind(contribution.scheduled_paise).bind(contribution.recovered_paise)
+    .bind(contribution.carried_forward_paise).bind(contribution.outstanding_after_paise)
+    .bind(actor_user_id)
     .execute(&mut **tx).await?;
     Ok(())
 }
@@ -688,8 +1057,8 @@ pub async fn update_adjustments(
             r#"
             UPDATE staff_payroll_items SET adjustment_paise=COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4,notes=$5,
               gross_paise=earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+GREATEST($4,0),
-              deductions_paise=penalty_paise+COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)+GREATEST(-$4,0),
-              net_paise=GREATEST(earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4-penalty_paise-COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0),0),
+              deductions_paise=penalty_paise+COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)+COALESCE((calculation_json->>'generatedStatutoryDeductionPaise')::BIGINT,0)+COALESCE((calculation_json->>'generatedAdvanceRecoveryPaise')::BIGINT,0)+GREATEST(-$4,0),
+              net_paise=GREATEST(earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4-penalty_paise-COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)-COALESCE((calculation_json->>'generatedStatutoryDeductionPaise')::BIGINT,0)-COALESCE((calculation_json->>'generatedAdvanceRecoveryPaise')::BIGINT,0),0),
               updated_at=NOW()
             WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$6
             "#,
@@ -738,6 +1107,28 @@ pub async fn transition_run(
         sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,$6)")
             .bind(tenant_id).bind(branch_id).bind(run_id).bind(format!("payroll.{status}")).bind(actor_user_id)
             .bind(serde_json::json!({"status":status,"action":"status_transition"})).execute(&mut *tx).await?;
+        if status == "finalized" {
+            // Apply the recovery snapshots frozen at calculate-time to the advance ledger exactly
+            // once, atomically with the finalize transition itself (finalize cannot run twice, so
+            // this cannot double-apply). Recomputing the run before finalize never touches this —
+            // only unapplied rows for this run are ever affected.
+            sqlx::query(
+                r#"
+                UPDATE staff_salary_advances a SET
+                  outstanding_paise = a.outstanding_paise - r.recovered_paise,
+                  pending_carry_forward_paise = r.carried_forward_paise,
+                  status = CASE WHEN a.outstanding_paise - r.recovered_paise <= 0 THEN 'closed' ELSE 'recovering' END,
+                  closed_at = CASE WHEN a.outstanding_paise - r.recovered_paise <= 0 THEN NOW() ELSE a.closed_at END,
+                  updated_at = NOW()
+                FROM staff_advance_recoveries r
+                WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.payroll_run_id=$3 AND r.applied=FALSE AND r.recovered_paise>0
+                  AND a.tenant_id=r.tenant_id AND a.branch_id=r.branch_id AND a.id=r.advance_id
+                "#,
+            )
+            .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
+            sqlx::query("UPDATE staff_advance_recoveries SET applied=TRUE WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND applied=FALSE")
+                .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
+        }
     }
     tx.commit().await?;
     Ok(run)

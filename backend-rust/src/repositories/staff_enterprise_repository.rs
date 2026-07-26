@@ -701,8 +701,8 @@ pub async fn payroll_item(
     branch: &str,
     run: &str,
     staff: &str,
-) -> Result<Option<(String, NaiveDate, NaiveDate, i64)>, sqlx::Error> {
-    sqlx::query_as("SELECT item.id,run.period_start,run.period_end,item.gross_paise FROM staff_payroll_items item JOIN staff_payroll_runs run ON run.id=item.payroll_run_id AND run.tenant_id=item.tenant_id AND run.branch_id=item.branch_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3 AND item.staff_id=$4")
+) -> Result<Option<(String, NaiveDate, NaiveDate, i64, String)>, sqlx::Error> {
+    sqlx::query_as("SELECT item.id,run.period_start,run.period_end,item.gross_paise,run.status FROM staff_payroll_items item JOIN staff_payroll_runs run ON run.id=item.payroll_run_id AND run.tenant_id=item.tenant_id AND run.branch_id=item.branch_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3 AND item.staff_id=$4")
       .bind(tenant).bind(branch).bind(run).bind(staff).fetch_optional(db).await
 }
 
@@ -713,6 +713,19 @@ pub async fn effective_rules(
     date: NaiveDate,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
     sqlx::query_as("SELECT DISTINCT ON(rule_type) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,effective_from DESC")
+      .bind(tenant).bind(branch).bind(date).fetch_all(db).await
+}
+
+/// All active statutory rules effective on `date`, one row per (rule_type, state_code) —
+/// unlike `effective_rules`, this does not collapse multiple state-scoped rules of the
+/// same `rule_type` (e.g. professional_tax) into a single arbitrary row.
+pub async fn effective_rules_all(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT DISTINCT ON(rule_type,state_code) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,state_code,effective_from DESC")
       .bind(tenant).bind(branch).bind(date).fetch_all(db).await
 }
 
