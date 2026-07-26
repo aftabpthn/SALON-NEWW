@@ -926,6 +926,92 @@ pub async fn post_staff_advance_waiver(
     .await
 }
 
+/// Posts one staff member's individual payout within a partial-payout run — the same shape as
+/// `post_payroll_payout` (gross expense, net cash out, withheld payable, advance-asset credit,
+/// statutory expense/payable) but scoped to a single payroll item instead of the whole run, so a
+/// held/failed/retried staff member's payout can be posted independently of everyone else's.
+/// Uses `source_type="payroll_item_payout"` (distinct from the run-level `"payroll_payout"`) so
+/// the two posting paths never collide.
+#[allow(clippy::too_many_arguments)]
+pub async fn post_staff_payout_item(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    item_id: &str,
+    method: &str,
+    gross_paise: i64,
+    net_paise: i64,
+    statutory_employer_paise: i64,
+    advance_recovery_paise: i64,
+) -> Result<(), AppError> {
+    if gross_paise == 0 {
+        return Ok(());
+    }
+    if gross_paise < 0 || net_paise < 0 || net_paise > gross_paise {
+        return Err(AppError::validation("payroll item payout amount is invalid"));
+    }
+    let withheld_paise = gross_paise - net_paise;
+    if !(0..=withheld_paise).contains(&advance_recovery_paise) {
+        return Err(AppError::validation(
+            "payroll item advance recovery amount is invalid",
+        ));
+    }
+    if statutory_employer_paise < 0 {
+        return Err(AppError::validation(
+            "payroll item statutory liability is invalid",
+        ));
+    }
+    let payable_withheld_paise = withheld_paise - advance_recovery_paise;
+    let mut lines = vec![
+        JournalLine {
+            account_code: "PAYROLL_EXPENSE",
+            debit_paise: gross_paise,
+            credit_paise: 0,
+        },
+        JournalLine {
+            account_code: payment_account(method),
+            debit_paise: 0,
+            credit_paise: net_paise,
+        },
+    ];
+    if payable_withheld_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "PAYROLL_DEDUCTIONS_PAYABLE",
+            debit_paise: 0,
+            credit_paise: payable_withheld_paise,
+        });
+    }
+    if advance_recovery_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "STAFF_ADVANCE_ASSET",
+            debit_paise: 0,
+            credit_paise: advance_recovery_paise,
+        });
+    }
+    if statutory_employer_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "PAYROLL_STATUTORY_EXPENSE",
+            debit_paise: statutory_employer_paise,
+            credit_paise: 0,
+        });
+        lines.push(JournalLine {
+            account_code: "PAYROLL_STATUTORY_PAYABLE",
+            debit_paise: 0,
+            credit_paise: statutory_employer_paise,
+        });
+    }
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "payroll_item_payout",
+        item_id,
+        "Staff payroll item payout",
+        lines,
+    )
+    .await
+}
+
 /// Posts a payroll correction against an already-paid run. The original payroll entries are
 /// never edited — a correction is always a fresh, separate journal entry (a genuine reversal for
 /// recoveries, an incremental expense for arrears), never a mutation of what was already posted.

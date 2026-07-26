@@ -169,6 +169,10 @@ pub struct PayrollItemRecord {
     pub notes: String,
     pub status: String,
     pub attendance_source_hash: String,
+    pub payout_status: String,
+    pub payout_hold_reason: String,
+    pub held_by: Option<String>,
+    pub held_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -696,8 +700,331 @@ pub async fn get_items(
     branch_id: &str,
     run_id: &str,
 ) -> Result<Vec<PayrollItemRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status,attendance_source_hash FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
+    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status,attendance_source_hash,payout_status,payout_hold_reason,held_by,held_at FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
         .bind(tenant_id).bind(branch_id).bind(run_id).fetch_all(db).await
+}
+
+const PAYOUT_ITEM_COLUMNS: &str = "id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,\
+attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,\
+earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,\
+net_paise,validation_errors,validation_warnings,calculation_json,notes,status,attendance_source_hash,\
+payout_status,payout_hold_reason,held_by,held_at";
+
+pub async fn hold_staff_payout(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    reason: &str,
+) -> Result<Option<PayrollItemRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_items SET
+          payout_status='held',payout_hold_reason=$5,held_by=$6,held_at=NOW(),updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4
+          AND payout_status IN ('pending','failed')
+        RETURNING {PAYOUT_ITEM_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .bind(reason)
+    .bind(actor_user_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn release_staff_payout_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Option<PayrollItemRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_items SET
+          payout_status='pending',payout_hold_reason='',held_by=NULL,held_at=NULL,updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4 AND payout_status='held'
+        RETURNING {PAYOUT_ITEM_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn lock_item_for_payout(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Option<PayrollItemRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {PAYOUT_ITEM_COLUMNS} FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4 FOR UPDATE"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+/// Idempotent-retry check for a single staff payout attempt: has this exact idempotency key
+/// already been attempted for this staff on this run? Mirrors the run-level
+/// `payout_replay_exists` used by the original bulk payout, scoped to one staff so retrying one
+/// held/failed staff member's payout never re-attempts anyone else.
+pub async fn payout_attempt_replay(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    idempotency_key: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM staff_payroll_payout_attempts WHERE tenant_id=$1 AND branch_id=$2 \
+         AND payroll_run_id=$3 AND staff_id=$4 AND idempotency_key=$5)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .bind(idempotency_key)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn insert_payout_attempt(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    item_id: &str,
+    staff_id: &str,
+    payment_method: &str,
+    reference: &str,
+    idempotency_key: &str,
+    status: &str,
+    failure_reason: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    let attempt_no: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(attempt_no),0)+1 FROM staff_payroll_payout_attempts WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO staff_payroll_payout_attempts(
+          tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,attempt_no,payment_method,
+          reference,idempotency_key,status,failure_reason,attempted_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(item_id)
+    .bind(staff_id)
+    .bind(attempt_no)
+    .bind(payment_method)
+    .bind(reference)
+    .bind(idempotency_key)
+    .bind(status)
+    .bind(failure_reason)
+    .bind(actor_user_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+pub async fn payout_attempts_for_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Vec<PayoutAttemptDetailRecord>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT attempt_no,payment_method,reference,status,failure_reason,attempted_by,attempted_at \
+         FROM staff_payroll_payout_attempts WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4 \
+         ORDER BY attempt_no DESC",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .fetch_all(db)
+    .await
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PayoutAttemptDetailRecord {
+    pub attempt_no: i32,
+    pub payment_method: String,
+    pub reference: String,
+    pub status: String,
+    pub failure_reason: String,
+    pub attempted_by: String,
+    pub attempted_at: DateTime<Utc>,
+}
+
+/// Records the outcome of one staff payout attempt (this codebase has no live bank-API
+/// integration anywhere — actual disbursement happens externally and the outcome is reported
+/// back, exactly like `record_notification_delivery` does for notifications). On success, also
+/// upserts the durable `staff_payroll_payouts` row so the payslip's payment-reference line and
+/// existing reconciliation queries keep working unchanged.
+#[allow(clippy::too_many_arguments)]
+pub async fn complete_staff_payout(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    item_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    status: &str,
+    payment_method: &str,
+    reference: &str,
+    idempotency_key: &str,
+    base_pay_paise: i64,
+    commission_paise: i64,
+    adjustment_paise: i64,
+    deductions_paise: i64,
+    net_paise: i64,
+) -> Result<Option<PayrollItemRecord>, sqlx::Error> {
+    let updated: Option<PayrollItemRecord> = sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_items SET payout_status=$5,updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4
+        RETURNING {PAYOUT_ITEM_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .bind(status)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if status == "succeeded" {
+        sqlx::query(
+            r#"
+            INSERT INTO staff_payroll_payouts(
+              tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,base_pay_paise,commission_paise,
+              adjustment_paise,deductions_paise,net_paise,payment_method,reference,idempotency_key,status,
+              failure_reason,paid_by
+            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'succeeded','',$14)
+            ON CONFLICT(payroll_run_id,staff_id) DO UPDATE SET
+              payment_method=EXCLUDED.payment_method,reference=EXCLUDED.reference,
+              idempotency_key=EXCLUDED.idempotency_key,status='succeeded',failure_reason='',
+              paid_by=EXCLUDED.paid_by,paid_at=NOW()
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(run_id)
+        .bind(item_id)
+        .bind(staff_id)
+        .bind(base_pay_paise)
+        .bind(commission_paise)
+        .bind(adjustment_paise)
+        .bind(deductions_paise)
+        .bind(net_paise)
+        .bind(payment_method)
+        .bind(reference)
+        .bind(idempotency_key)
+        .bind(actor_user_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(updated)
+}
+
+/// Recomputes the run's aggregate status from its items' payout_status: `paid` once every item
+/// has succeeded, `partially_paid` once at least one has succeeded but not all, otherwise
+/// unchanged (still `finalized`) — this is derived, never set directly by an API call.
+pub async fn refresh_run_payout_status(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE staff_payroll_runs r SET
+          status = CASE
+            WHEN x.total > 0 AND x.succeeded = x.total THEN 'paid'
+            WHEN x.succeeded > 0 THEN 'partially_paid'
+            ELSE r.status
+          END,
+          paid_by = CASE WHEN x.total > 0 AND x.succeeded = x.total THEN $4 ELSE r.paid_by END,
+          paid_at = CASE WHEN x.total > 0 AND x.succeeded = x.total AND r.paid_at IS NULL THEN NOW() ELSE r.paid_at END,
+          updated_at = NOW()
+        FROM (
+          SELECT COUNT(*)::INTEGER AS total,
+                 COUNT(*) FILTER (WHERE payout_status='succeeded')::INTEGER AS succeeded
+          FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3
+        ) x
+        WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.id=$3 AND r.status IN ('finalized','partially_paid','paid')
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(actor_user_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayoutReconciliationRow {
+    pub payout_status: String,
+    pub count: i64,
+    pub net_paise: i64,
+}
+
+pub async fn payout_reconciliation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<Vec<PayoutReconciliationRow>, sqlx::Error> {
+    let rows: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT payout_status,COUNT(*)::BIGINT,COALESCE(SUM(net_paise),0)::BIGINT FROM staff_payroll_items \
+         WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 GROUP BY payout_status ORDER BY payout_status",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(payout_status, count, net_paise)| PayoutReconciliationRow {
+            payout_status,
+            count,
+            net_paise,
+        })
+        .collect())
 }
 
 /// Attendance-source hash recorded the last time each of these staff members' payroll items

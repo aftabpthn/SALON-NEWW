@@ -1662,6 +1662,258 @@ pub async fn mark_paid(
     .await
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollStaffHoldInput {
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollStaffPayoutInput {
+    pub payment_method: String,
+    pub reference: Option<String>,
+    pub idempotency_key: String,
+    /// Outcome as reported by whoever actually processed the disbursement — this codebase has
+    /// no live bank-API integration (same as every other external channel here), so success or
+    /// failure is reported back after the fact, exactly like notification delivery results are.
+    pub status: String,
+    pub failure_reason: Option<String>,
+    pub mfa_code: Option<String>,
+}
+
+/// Puts one staff member's payout on hold — they're excluded from payout entirely until
+/// released, without affecting anyone else in the run.
+pub async fn hold_staff_payout(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    input: PayrollStaffHoldInput,
+) -> Result<repository::PayrollItemRecord, AppError> {
+    let reason = input.reason.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "a hold reason of 1 to 500 characters is required",
+        ));
+    }
+    repository::hold_staff_payout(db, tenant_id, branch_id, run_id, staff_id, actor_user_id, reason)
+        .await
+        .map_err(|_| AppError::internal("failed to hold staff payout"))?
+        .ok_or_else(|| {
+            AppError::conflict("staff payout can only be held while pending or failed")
+        })
+}
+
+pub async fn release_staff_payout_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<repository::PayrollItemRecord, AppError> {
+    repository::release_staff_payout_hold(db, tenant_id, branch_id, run_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to release staff payout hold"))?
+        .ok_or_else(|| AppError::conflict("staff payout is not on hold"))
+}
+
+/// Pays (or records the failure of paying) exactly one staff member within a run, independent of
+/// everyone else — this is what makes partial payout possible: some staff can succeed, some can
+/// be retried after a failure, and others can stay held, all within the same run. Idempotent on
+/// `idempotency_key`: replaying the exact same request after a prior success returns the
+/// already-recorded result rather than posting a second accounting entry (the underlying
+/// journal write is itself idempotent on `(source_type, source_id)`, so this is defense in depth,
+/// not the only guard).
+pub async fn pay_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    input: PayrollStaffPayoutInput,
+) -> Result<repository::PayrollItemRecord, AppError> {
+    let method = input.payment_method.trim().to_ascii_lowercase();
+    if !matches!(method.as_str(), "cash" | "bank" | "upi" | "other") {
+        return Err(AppError::validation("paymentMethod is invalid"));
+    }
+    let reference = input.reference.unwrap_or_default().trim().to_string();
+    if matches!(method.as_str(), "upi" | "other") && reference.is_empty() {
+        return Err(AppError::validation(
+            "reference is required for UPI or other payout",
+        ));
+    }
+    let idempotency_key = input.idempotency_key.trim().to_string();
+    if idempotency_key.is_empty() || idempotency_key.chars().count() > 160 {
+        return Err(AppError::validation("idempotency key is invalid"));
+    }
+    let status = input.status.trim().to_ascii_lowercase();
+    if !matches!(status.as_str(), "succeeded" | "failed") {
+        return Err(AppError::validation("status must be succeeded or failed"));
+    }
+    let failure_reason = input.failure_reason.unwrap_or_default().trim().to_string();
+    if status == "failed" && failure_reason.is_empty() {
+        return Err(AppError::validation(
+            "a failure reason is required when reporting a failed payout",
+        ));
+    }
+
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start staff payout"))?;
+    let run = repository::lock_run_for_payout(&mut tx, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll run"))?
+        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
+    if !matches!(run.status.as_str(), "finalized" | "partially_paid" | "paid") {
+        return Err(AppError::conflict(
+            "payroll must be finalized before any staff can be paid",
+        ));
+    }
+    let item = repository::lock_item_for_payout(&mut tx, tenant_id, branch_id, run_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll item"))?
+        .ok_or_else(|| AppError::not_found("payroll employee not found in this run"))?;
+
+    if item.payout_status == "held" {
+        return Err(AppError::conflict(
+            "staff payout is on hold; release the hold before paying",
+        ));
+    }
+    if item.payout_status == "succeeded" {
+        let replay = repository::payout_attempt_replay(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            run_id,
+            staff_id,
+            &idempotency_key,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to check staff payout retry"))?;
+        tx.rollback()
+            .await
+            .map_err(|_| AppError::internal("failed to finish staff payout retry"))?;
+        if replay {
+            return Ok(item);
+        }
+        return Err(AppError::conflict("staff has already been paid for this run"));
+    }
+
+    if status == "succeeded" {
+        let statutory_employer_paise = statutory_employer_total(&item.calculation_json);
+        let advance_recovery_paise = advance_recovery_total(&item.calculation_json);
+        accounting_service::post_staff_payout_item(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            &method,
+            item.gross_paise,
+            item.net_paise,
+            statutory_employer_paise,
+            advance_recovery_paise,
+        )
+        .await?;
+    }
+
+    repository::insert_payout_attempt(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        run_id,
+        &item.id,
+        staff_id,
+        &method,
+        &reference,
+        &idempotency_key,
+        &status,
+        &failure_reason,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record staff payout attempt"))?;
+
+    let updated = repository::complete_staff_payout(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        run_id,
+        &item.id,
+        staff_id,
+        actor_user_id,
+        &status,
+        &method,
+        &reference,
+        &idempotency_key,
+        item.earned_salary_paise + item.overtime_paise,
+        item.commission_paise,
+        item.adjustment_paise,
+        item.deductions_paise,
+        item.net_paise,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to complete staff payout"))?
+    .ok_or_else(|| AppError::conflict("payroll item status changed; reload and try again"))?;
+
+    repository::refresh_run_payout_status(&mut tx, tenant_id, branch_id, run_id, actor_user_id)
+        .await
+        .map_err(|_| AppError::internal("failed to refresh payroll run payout status"))?;
+
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit staff payout"))?;
+
+    if status == "succeeded" {
+        let run_record = detail(db, tenant_id, branch_id, run_id).await;
+        if let Ok(run_record) = run_record {
+            queue_paid_notifications_for_staff(
+                db,
+                tenant_id,
+                branch_id,
+                actor_user_id,
+                &run_record.run,
+                &updated,
+                &method,
+            )
+            .await;
+        }
+    }
+    Ok(updated)
+}
+
+pub async fn payout_attempts_for_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Vec<repository::PayoutAttemptDetailRecord>, AppError> {
+    repository::payout_attempts_for_staff(db, tenant_id, branch_id, run_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff payout attempts"))
+}
+
+/// Run-level reconciliation: a per-payout-status breakdown (pending/held/succeeded/failed) with
+/// counts and net-pay totals, so an admin can see at a glance whether a run is fully settled,
+/// and if not, exactly what's outstanding and why.
+pub async fn payout_reconciliation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<Vec<repository::PayoutReconciliationRow>, AppError> {
+    repository::payout_reconciliation(db, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll payout reconciliation"))
+}
+
 pub async fn record_payout(
     settings: &Settings,
     db: &PgPool,
@@ -2979,25 +3231,49 @@ async fn queue_paid_notifications(
     payment_method: &str,
 ) {
     for item in &detail.items {
-        let mut vars = payroll_notification_period_var(&detail.run);
-        vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
-        vars.insert(
-            "payroll.paymentMethod".to_string(),
-            payment_method.to_string(),
-        );
-        queue_payroll_notification(
+        queue_paid_notifications_for_staff(
             db,
             tenant_id,
             branch_id,
             actor_user_id,
-            &item.staff_id,
-            "payroll_paid",
-            &format!("payroll_paid:{}:{}", detail.run.id, item.staff_id),
-            vars,
-            true,
+            &detail.run,
+            item,
+            payment_method,
         )
         .await;
     }
+}
+
+/// Queues `payroll_paid` for exactly one staff member — used both by the bulk pay-everyone-at-once
+/// flow (looped by `queue_paid_notifications`) and by the individual per-staff payout added for
+/// partial payout, where only one staff member's payout succeeds at a time.
+async fn queue_paid_notifications_for_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    run: &repository::PayrollRunRecord,
+    item: &repository::PayrollItemRecord,
+    payment_method: &str,
+) {
+    let mut vars = payroll_notification_period_var(run);
+    vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
+    vars.insert(
+        "payroll.paymentMethod".to_string(),
+        payment_method.to_string(),
+    );
+    queue_payroll_notification(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        &item.staff_id,
+        "payroll_paid",
+        &format!("payroll_paid:{}:{}", run.id, item.staff_id),
+        vars,
+        true,
+    )
+    .await;
 }
 
 /// Queues `payroll_corrected` for a staff member whose payroll item was just regenerated.

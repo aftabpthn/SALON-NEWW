@@ -78,6 +78,22 @@ pub fn router() -> Router<AppState> {
             "/staff-payroll/corrections/:id/post",
             post(post_correction),
         )
+        .route(
+            "/staff-payroll/runs/:run_id/staff/:staff_id/hold",
+            post(hold_staff_payout).delete(release_staff_payout_hold),
+        )
+        .route(
+            "/staff-payroll/runs/:run_id/staff/:staff_id/payout",
+            post(pay_staff),
+        )
+        .route(
+            "/staff-payroll/runs/:run_id/staff/:staff_id/payout-attempts",
+            get(payout_attempts),
+        )
+        .route(
+            "/staff-payroll/runs/:run_id/reconciliation",
+            get(payout_reconciliation),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -420,6 +436,106 @@ async fn post_correction(
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn hold_staff_payout(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((run_id, staff_id)): Path<(String, String)>,
+    Json(payload): Json<staff_payroll_service::PayrollStaffHoldInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::hold_staff_payout(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &run_id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn release_staff_payout_hold(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((run_id, staff_id)): Path<(String, String)>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::release_staff_payout_hold(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &run_id,
+        &staff_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn pay_staff(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((run_id, staff_id)): Path<(String, String)>,
+    Json(payload): Json<staff_payroll_service::PayrollStaffPayoutInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.staff_payout",
+    )
+    .await?;
+    let row = staff_payroll_service::pay_staff(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &run_id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn payout_attempts(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((run_id, staff_id)): Path<(String, String)>,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayoutAttemptDetailRecord>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows = staff_payroll_service::payout_attempts_for_staff(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &run_id,
+        &staff_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn payout_reconciliation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayoutReconciliationRow>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows =
+        staff_payroll_service::payout_reconciliation(&state.db, &tenant_id, &branch_id, &run_id)
+            .await?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn record_payout(
