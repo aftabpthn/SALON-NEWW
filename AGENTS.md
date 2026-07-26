@@ -5,6 +5,12 @@
 - The only writable AuraShine CRM Rust workspace is `C:\Users\Aftab Ahamad\AuraShine CRM Rust`.
 - Every new task and every resumed older task must make all reads, edits, builds, tests, and Git operations in that canonical workspace.
 
+## Canonical GitHub Repository Rule
+
+- The only default writable and publish target is `https://github.com/aftabahamad260-code/AuraShine-CRM-Rust.git` and it must be configured as `origin`.
+- `https://github.com/Aurashine-Infitech/AuraShine-CRM-Rust.git` is the fetch-only `upstream`; agents must not push or open pull requests there unless the user explicitly changes the target.
+- Before every push or pull request, verify that the target repository is `aftabahamad260-code/AuraShine-CRM-Rust`.
+
 
 ## Core Rules
 
