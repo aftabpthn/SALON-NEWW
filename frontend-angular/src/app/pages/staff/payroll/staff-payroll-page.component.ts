@@ -204,15 +204,19 @@ export class StaffPayrollPageComponent implements OnInit {
     const beforeTips = this.tipsPaiseOf(before, this.salaryRows);
     const afterTips = this.tipsPaiseOf(after, this.regenerateAfterSalaryRows);
     return [
-      this.diffRow('Attendance + leave days', before.attendanceDaysX2 + before.paidLeaveDaysX2 + before.weeklyOffDaysX2 + before.holidayDaysX2, after.attendanceDaysX2 + after.paidLeaveDaysX2 + after.weeklyOffDaysX2 + after.holidayDaysX2, 'days'),
+      this.diffRow('Attendance days', before.attendanceDaysX2, after.attendanceDaysX2, 'days'),
       this.diffRow('Paid leave days', before.paidLeaveDaysX2, after.paidLeaveDaysX2, 'days'),
+      this.diffRow('Weekly off days', before.weeklyOffDaysX2, after.weeklyOffDaysX2, 'days'),
+      this.diffRow('Holiday days', before.holidayDaysX2, after.holidayDaysX2, 'days'),
       this.diffRow('Worked minutes', before.workedMinutes, after.workedMinutes, 'minutes'),
       this.diffRow('Overtime minutes', before.overtimeMinutes, after.overtimeMinutes, 'minutes'),
+      this.diffRow('Earned salary', before.earnedSalaryPaise, after.earnedSalaryPaise, 'money'),
+      this.diffRow('Overtime pay', before.overtimePaise, after.overtimePaise, 'money'),
       this.diffRow('Commission', before.commissionPaise, after.commissionPaise, 'money'),
       this.diffRow('Tips', beforeTips, afterTips, 'money'),
       this.diffRow('Adjustment', before.adjustmentPaise, after.adjustmentPaise, 'money'),
-      this.diffRow('Gross pay', before.grossPaise, after.grossPaise, 'money'),
       this.diffRow('Deductions', before.deductionsPaise, after.deductionsPaise, 'money'),
+      this.diffRow('Gross pay', before.grossPaise, after.grossPaise, 'money'),
       this.diffRow('Net pay', before.netPaise, after.netPaise, 'money'),
     ];
   }

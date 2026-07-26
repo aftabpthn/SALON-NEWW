@@ -538,6 +538,7 @@ struct SelectedItemSnapshot {
     holiday_days_x2: i32,
     worked_minutes: i32,
     overtime_minutes: i32,
+    earned_salary_paise: i64,
     overtime_paise: i64,
     commission_paise: i64,
     adjustment_paise: i64,
@@ -562,6 +563,7 @@ fn snapshot_json(snapshot: &SelectedItemSnapshot) -> Value {
         "holidayDaysX2": snapshot.holiday_days_x2,
         "workedMinutes": snapshot.worked_minutes,
         "overtimeMinutes": snapshot.overtime_minutes,
+        "earnedSalaryPaise": snapshot.earned_salary_paise,
         "overtimePaise": snapshot.overtime_paise,
         "commissionPaise": snapshot.commission_paise,
         "tipsPaise": snapshot_tips_paise(&snapshot.calculation_json),
@@ -580,6 +582,7 @@ fn draft_snapshot_json(item: &PayrollItemDraft) -> Value {
         "holidayDaysX2": item.holiday_days_x2,
         "workedMinutes": item.worked_minutes,
         "overtimeMinutes": item.overtime_minutes,
+        "earnedSalaryPaise": item.earned_salary_paise,
         "overtimePaise": item.overtime_paise,
         "commissionPaise": item.commission_paise,
         "tipsPaise": snapshot_tips_paise(&item.calculation_json),
@@ -629,7 +632,7 @@ pub async fn replace_selected_calculated_items(
     .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
     .fetch_one(&mut *tx).await?;
     let before_snapshots: Vec<SelectedItemSnapshot> = sqlx::query_as(
-        "SELECT staff_id,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,overtime_paise,commission_paise,adjustment_paise,gross_paise,deductions_paise,net_paise,calculation_json FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
+        "SELECT staff_id,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,gross_paise,deductions_paise,net_paise,calculation_json FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
     )
     .bind(tenant_id)
     .bind(branch_id)

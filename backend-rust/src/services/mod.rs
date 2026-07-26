@@ -65,6 +65,9 @@ pub mod webauthn_service;
 #[cfg(test)]
 mod staff_lifecycle_chain_tests;
 
+#[cfg(test)]
+mod staff_payroll_regeneration_tests;
+
 pub mod inventory_reorder_forecast_service;
 
 pub mod report_export_service;
