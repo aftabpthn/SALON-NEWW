@@ -2261,6 +2261,42 @@ pub async fn get_treatment_photo(
         .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id).fetch_optional(db).await
 }
 
+pub async fn update_treatment_photo(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    photo_id: &str,
+    caption: &str,
+    photo_type: &str,
+) -> Result<Option<ClientTreatmentPhotoRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE client_treatment_photos SET caption=$5,photo_type=$6
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$4
+             AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))
+           RETURNING id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id).bind(caption).bind(photo_type)
+    .fetch_optional(db).await
+}
+
+pub async fn delete_treatment_photo(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    photo_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query(
+        r#"DELETE FROM client_treatment_photos
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$4
+             AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id)
+    .execute(db).await?;
+    Ok(result.rows_affected() > 0)
+}
+
 pub async fn list_duplicates(
     db: &PgPool,
     tenant_id: &str,
@@ -2769,9 +2805,10 @@ fn select_sql(where_clause: &str) -> String {
 mod tests {
     use super::{
         automation_candidates, branch_return_tracker, bulk_import, create_form_definition,
-        create_form_submission, create_note, get_clinical_profile, get_treatment_photo,
-        list_communications, list_form_definitions, list_notes, memory_relationships,
-        save_clinical_profile, save_treatment_photo,
+        create_form_submission, create_note, delete_treatment_photo, get_clinical_profile,
+        get_treatment_photo, list_communications, list_form_definitions, list_notes,
+        memory_relationships, save_clinical_profile, save_treatment_photo,
+        update_treatment_photo,
     };
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -3126,6 +3163,46 @@ mod tests {
         .unwrap();
         assert!(
             get_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        assert!(update_treatment_photo(
+            &pool,
+            "tenant-1",
+            "branch-2",
+            "client-1",
+            &photo.id,
+            "Should not apply",
+            "after",
+        )
+        .await
+        .unwrap()
+        .is_none());
+        let updated = update_treatment_photo(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            &photo.id,
+            "After service",
+            "after",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(updated.caption, "After service");
+        assert_eq!(updated.photo_type, "after");
+
+        assert!(!delete_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id)
+            .await
+            .unwrap());
+        assert!(delete_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
+            .await
+            .unwrap());
+        assert!(
+            get_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
                 .await
                 .unwrap()
                 .is_none()
