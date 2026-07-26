@@ -128,7 +128,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   }
 
   async decideApproval(row: Row, decision: 'approved' | 'rejected') {
-    await this.action(`/staff/approvals/${row['id']}/decision`, { decision, version: row['version'], notes: '' });
+    await this.action(`/staff/approvals/${row['id']}/decision`, { decision, version: row['version'], comments: '' });
   }
 
   async createShiftSwap(row?: Row) {
