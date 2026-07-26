@@ -128,6 +128,7 @@ pub struct PayrollRunRecord {
     pub period_end: NaiveDate,
     pub status: String,
     pub gross_paise: i64,
+    pub deductions_paise: i64,
     pub net_paise: i64,
     pub staff_count: i32,
     pub invalid_count: i32,
@@ -586,6 +587,97 @@ pub async fn list_runs(
 ) -> Result<Vec<PayrollRunRecord>, sqlx::Error> {
     sqlx::query_as("SELECT id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 ORDER BY period_start DESC,created_at DESC LIMIT 120")
         .bind(tenant_id).bind(branch_id).fetch_all(db).await
+}
+
+/// Filters for the payroll history search/export endpoints. Every string field is treated as
+/// "no filter" when empty, matching the `($n='' OR ...)` idiom already used elsewhere in this
+/// repository (e.g. `staff_sources`).
+pub struct PayrollHistoryFilters<'a> {
+    pub tenant_id: &'a str,
+    pub branch_ids: &'a [String],
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub status: &'a str,
+    pub validation_state: &'a str,
+    pub payment_method: &'a str,
+    pub staff_id: &'a str,
+    pub category: &'a str,
+    pub search: &'a str,
+}
+
+const PAYROLL_HISTORY_WHERE: &str = r#"
+    r.tenant_id=$1 AND r.branch_id=ANY($2)
+    AND ($3::date IS NULL OR r.period_end>=$3)
+    AND ($4::date IS NULL OR r.period_start<=$4)
+    AND ($5='' OR r.status=$5)
+    AND ($6='' OR ($6='valid' AND r.invalid_count=0) OR ($6='invalid' AND r.invalid_count>0))
+    AND ($7='' OR EXISTS(
+      SELECT 1 FROM staff_payroll_payouts p
+      WHERE p.tenant_id=r.tenant_id AND p.branch_id=r.branch_id AND p.payroll_run_id=r.id AND p.payment_method=$7
+    ))
+    AND ($8='' OR EXISTS(
+      SELECT 1 FROM staff_payroll_items i
+      WHERE i.tenant_id=r.tenant_id AND i.branch_id=r.branch_id AND i.payroll_run_id=r.id AND i.staff_id=$8
+    ))
+    AND ($9='' OR EXISTS(
+      SELECT 1 FROM staff_payroll_items i JOIN staff s
+        ON s.tenant_id=i.tenant_id AND s.branch_id=i.branch_id AND s.id=i.staff_id
+      WHERE i.tenant_id=r.tenant_id AND i.branch_id=r.branch_id AND i.payroll_run_id=r.id AND s.job_title=$9
+    ))
+    AND ($10='' OR EXISTS(
+      SELECT 1 FROM staff_payroll_items i
+      WHERE i.tenant_id=r.tenant_id AND i.branch_id=r.branch_id AND i.payroll_run_id=r.id
+        AND (i.staff_name ILIKE '%'||$10||'%' OR i.employee_code ILIKE '%'||$10||'%')
+    ))
+"#;
+
+pub async fn list_runs_filtered(
+    db: &PgPool,
+    filters: &PayrollHistoryFilters<'_>,
+    page: i64,
+    page_size: i64,
+) -> Result<Vec<PayrollRunRecord>, sqlx::Error> {
+    let sql = format!(
+        "SELECT r.id,r.cycle,r.period_start,r.period_end,r.status,r.gross_paise,r.deductions_paise,r.net_paise,\
+         r.staff_count,r.invalid_count,r.created_by,r.reviewed_at,r.finalized_at,r.paid_at,r.created_at,r.updated_at \
+         FROM staff_payroll_runs r WHERE {PAYROLL_HISTORY_WHERE} \
+         ORDER BY r.period_start DESC,r.created_at DESC LIMIT $11 OFFSET $12"
+    );
+    sqlx::query_as(&sql)
+        .bind(filters.tenant_id)
+        .bind(filters.branch_ids)
+        .bind(filters.from)
+        .bind(filters.to)
+        .bind(filters.status)
+        .bind(filters.validation_state)
+        .bind(filters.payment_method)
+        .bind(filters.staff_id)
+        .bind(filters.category)
+        .bind(filters.search)
+        .bind(page_size)
+        .bind((page - 1) * page_size)
+        .fetch_all(db)
+        .await
+}
+
+pub async fn count_runs_filtered(
+    db: &PgPool,
+    filters: &PayrollHistoryFilters<'_>,
+) -> Result<i64, sqlx::Error> {
+    let sql = format!("SELECT COUNT(*) FROM staff_payroll_runs r WHERE {PAYROLL_HISTORY_WHERE}");
+    sqlx::query_scalar(&sql)
+        .bind(filters.tenant_id)
+        .bind(filters.branch_ids)
+        .bind(filters.from)
+        .bind(filters.to)
+        .bind(filters.status)
+        .bind(filters.validation_state)
+        .bind(filters.payment_method)
+        .bind(filters.staff_id)
+        .bind(filters.category)
+        .bind(filters.search)
+        .fetch_one(db)
+        .await
 }
 
 pub async fn get_run(
@@ -1200,6 +1292,36 @@ pub async fn payout_replay_exists(
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM staff_payroll_payouts WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND idempotency_key=$4)")
         .bind(tenant_id).bind(branch_id).bind(run_id).bind(idempotency_key).fetch_one(&mut **tx).await
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct PayoutReference {
+    pub payment_method: String,
+    pub reference: String,
+    pub paid_at: DateTime<Utc>,
+}
+
+pub async fn payout_for_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+) -> Result<Option<PayoutReference>, sqlx::Error> {
+    sqlx::query_as("SELECT payment_method,reference,paid_at FROM staff_payroll_payouts WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(staff_id).fetch_optional(db).await
+}
+
+pub async fn branch_name(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT name FROM branches WHERE tenant_id=$1 AND id=$2")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .fetch_optional(db)
+        .await
 }
 
 #[allow(clippy::too_many_arguments)]

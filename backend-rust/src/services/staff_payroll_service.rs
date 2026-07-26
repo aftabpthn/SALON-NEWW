@@ -1061,6 +1061,106 @@ pub async fn list_runs(
         .map_err(|_| AppError::internal("failed to load payroll history"))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollHistoryQuery {
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub year: Option<i32>,
+    pub month: Option<u32>,
+    pub status: Option<String>,
+    pub validation_state: Option<String>,
+    pub payment_method: Option<String>,
+    pub staff_id: Option<String>,
+    pub category: Option<String>,
+    pub search: Option<String>,
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollHistoryPage {
+    pub items: Vec<repository::PayrollRunRecord>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+}
+
+fn history_filter_bounds(
+    query: &PayrollHistoryQuery,
+) -> Result<(Option<NaiveDate>, Option<NaiveDate>), AppError> {
+    if let (Some(year), Some(month)) = (query.year, query.month) {
+        let (start, end) = period(year, month)?;
+        return Ok((Some(start), Some(end)));
+    }
+    if query.year.is_some() || query.month.is_some() {
+        return Err(AppError::validation(
+            "both year and month are required to filter by month",
+        ));
+    }
+    if let (Some(from), Some(to)) = (query.from, query.to) {
+        if to < from {
+            return Err(AppError::validation("date range is invalid"));
+        }
+    }
+    Ok((query.from, query.to))
+}
+
+fn history_validation_state(value: Option<&str>) -> Result<String, AppError> {
+    let value = value.unwrap_or("").trim().to_string();
+    if !value.is_empty() && !matches!(value.as_str(), "valid" | "invalid") {
+        return Err(AppError::validation("validationState must be valid or invalid"));
+    }
+    Ok(value)
+}
+
+fn history_status(value: Option<&str>) -> Result<String, AppError> {
+    let value = value.unwrap_or("").trim().to_string();
+    if !value.is_empty()
+        && !matches!(value.as_str(), "calculated" | "reviewed" | "finalized" | "paid")
+    {
+        return Err(AppError::validation("status is invalid"));
+    }
+    Ok(value)
+}
+
+pub async fn history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    query: PayrollHistoryQuery,
+) -> Result<PayrollHistoryPage, AppError> {
+    let (from, to) = history_filter_bounds(&query)?;
+    let status = history_status(query.status.as_deref())?;
+    let validation_state = history_validation_state(query.validation_state.as_deref())?;
+    let filters = repository::PayrollHistoryFilters {
+        tenant_id,
+        branch_ids,
+        from,
+        to,
+        status: &status,
+        validation_state: &validation_state,
+        payment_method: query.payment_method.as_deref().unwrap_or("").trim(),
+        staff_id: query.staff_id.as_deref().unwrap_or("").trim(),
+        category: query.category.as_deref().unwrap_or("").trim(),
+        search: query.search.as_deref().unwrap_or("").trim(),
+    };
+    let page = query.page.unwrap_or(1).max(1);
+    let page_size = query.page_size.unwrap_or(25).clamp(1, 100);
+    let (items, total) = tokio::try_join!(
+        repository::list_runs_filtered(db, &filters, page, page_size),
+        repository::count_runs_filtered(db, &filters),
+    )
+    .map_err(|_| AppError::internal("failed to load payroll history"))?;
+    Ok(PayrollHistoryPage {
+        items,
+        total,
+        page,
+        page_size,
+    })
+}
+
 pub async fn detail(
     db: &PgPool,
     tenant_id: &str,
@@ -1085,6 +1185,84 @@ pub async fn detail(
     })
 }
 
+/// Masks all but the last 4 characters of a sensitive identifier (PAN, and in future
+/// Aadhaar/bank account numbers, once those are stored anywhere) — used wherever such fields
+/// are surfaced in reports, exports, or payslips. The underlying admin CRUD for the statutory
+/// profile itself still returns the real value (it has to, to be editable); masking applies
+/// only to the read-only, potentially-shared/downloadable surfaces this phase adds.
+fn mask_sensitive_id(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return String::new();
+    }
+    let chars: Vec<char> = value.chars().collect();
+    let visible = 4.min(chars.len());
+    let masked_len = chars.len() - visible;
+    format!(
+        "{}{}",
+        "X".repeat(masked_len),
+        chars[masked_len..].iter().collect::<String>()
+    )
+}
+
+/// A deterministic content hash over the authoritative fields of one payroll item, distinct
+/// from `attendance_source_hash` (which detects attendance drift) — this is a "this payslip
+/// corresponds to exactly this calculation" version marker a staff member or auditor can quote.
+fn payslip_version_hash(run_id: &str, item: &repository::PayrollItemRecord) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(run_id);
+    hasher.update([0]);
+    hasher.update(&item.id);
+    hasher.update([0]);
+    hasher.update(item.gross_paise.to_le_bytes());
+    hasher.update(item.deductions_paise.to_le_bytes());
+    hasher.update(item.net_paise.to_le_bytes());
+    hasher.update(item.attendance_source_hash.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn salary_row_i64(salary_row: &Value, key: &str) -> i64 {
+    salary_row.get(key).and_then(Value::as_i64).unwrap_or(0)
+}
+
+/// Employee-side amount for one statutory rule type (`providentFund`/`esic`/`professionalTax`/
+/// `tds`), read from a payroll item's `calculation_json`. Exposed for the payroll history/item
+/// CSV export, which mirrors the same breakdown shown on the payslip.
+pub(crate) fn statutory_employee_amount(calculation_json: &Value, key: &str) -> i64 {
+    calculation_json
+        .get("statutory")
+        .and_then(|s| s.get("breakdown"))
+        .and_then(|b| b.get(key))
+        .and_then(|entry| entry.get("employeePaise"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+}
+
+pub(crate) fn statutory_employer_total(calculation_json: &Value) -> i64 {
+    calculation_json
+        .get("statutory")
+        .and_then(|s| s.get("employerPaise"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        + calculation_json
+            .get("statutory")
+            .and_then(|s| s.get("accrualPaise"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+}
+
+pub(crate) fn advance_recovery_total(calculation_json: &Value) -> i64 {
+    calculation_json
+        .get("advanceRecovery")
+        .and_then(|a| a.get("totalRecoveredPaise"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+}
+
 pub async fn payslip_pdf(
     db: &PgPool,
     tenant_id: &str,
@@ -1103,7 +1281,26 @@ pub async fn payslip_pdf(
         .iter()
         .find(|item| item.staff_id == staff_id)
         .ok_or_else(|| AppError::not_found("payroll employee not found"))?;
+    let staff_ids = vec![staff_id.to_string()];
+    let (branch, payout, profiles) = tokio::try_join!(
+        repository::branch_name(db, tenant_id, branch_id),
+        repository::payout_for_staff(db, tenant_id, branch_id, run_id, staff_id),
+        repository::statutory_profiles(db, tenant_id, branch_id, &staff_ids),
+    )
+    .map_err(|_| AppError::internal("failed to load payslip details"))?;
+    let pan = profiles
+        .first()
+        .map(|profile| profile.pan_number.as_str())
+        .unwrap_or("");
+
+    let salary_row = item
+        .calculation_json
+        .get("salaryRow")
+        .cloned()
+        .unwrap_or(Value::Null);
+
     let mut lines = vec![
+        format!("Branch: {}", branch.as_deref().unwrap_or("-")),
         format!("Employee: {}", item.staff_name),
         format!(
             "Employee code: {}",
@@ -1114,18 +1311,123 @@ pub async fn payslip_pdf(
             detail.run.period_start, detail.run.period_end
         ),
         format!("Status: {}", detail.run.status),
+        String::new(),
+        "Attendance summary:".to_string(),
+        format!(
+            "  Attendance days: {:.1}",
+            f64::from(item.attendance_days_x2) / 2.0
+        ),
+        format!(
+            "  Paid leave days: {:.1}",
+            f64::from(item.paid_leave_days_x2) / 2.0
+        ),
+        format!(
+            "  Weekly off days: {:.1}",
+            f64::from(item.weekly_off_days_x2) / 2.0
+        ),
+        format!(
+            "  Holiday days: {:.1}",
+            f64::from(item.holiday_days_x2) / 2.0
+        ),
+        format!("  Worked minutes: {}", item.worked_minutes),
+        format!("  Overtime minutes (approved): {}", item.overtime_minutes),
+        String::new(),
         format!(
             "Earned salary: INR {}",
             paise_text(item.earned_salary_paise)
         ),
-        format!("Overtime: INR {}", paise_text(item.overtime_paise)),
-        format!("Commission: INR {}", paise_text(item.commission_paise)),
-        format!("Adjustment: INR {}", paise_text(item.adjustment_paise)),
-        format!("Deductions: INR {}", paise_text(item.deductions_paise)),
+        format!("Overtime pay: INR {}", paise_text(item.overtime_paise)),
+        String::new(),
+        "Commission breakup:".to_string(),
+        format!(
+            "  Service: INR {}",
+            paise_text(salary_row_i64(&salary_row, "serviceCommissionPaise"))
+        ),
+        format!(
+            "  Product: INR {}",
+            paise_text(salary_row_i64(&salary_row, "productCommissionPaise"))
+        ),
+        format!(
+            "  Membership: INR {}",
+            paise_text(salary_row_i64(&salary_row, "membershipCommissionPaise"))
+        ),
+        format!(
+            "  Package: INR {}",
+            paise_text(salary_row_i64(&salary_row, "packageCommissionPaise"))
+        ),
+        format!("  Total commission: INR {}", paise_text(item.commission_paise)),
+        String::new(),
+        format!(
+            "Tips: INR {}",
+            paise_text(salary_row_i64(&salary_row, "tipsPaise"))
+        ),
+        format!(
+            "Allowances: INR {}",
+            paise_text(salary_row_i64(&salary_row, "allowancePaise"))
+        ),
+        String::new(),
+        "Fines and deductions:".to_string(),
+        format!(
+            "  Attendance penalty: INR {}",
+            paise_text(salary_row_i64(&salary_row, "attendancePenaltyPaise"))
+        ),
+        format!(
+            "  Rule fines: INR {}",
+            paise_text(salary_row_i64(&salary_row, "ruleFinePaise"))
+        ),
+        format!(
+            "  Rule deductions: INR {}",
+            paise_text(salary_row_i64(&salary_row, "ruleDeductionPaise"))
+        ),
     ];
     lines.extend(statutory_payslip_lines(&item.calculation_json));
     lines.extend(advance_recovery_payslip_lines(&item.calculation_json));
+    lines.push(String::new());
+    lines.push(format!("Gross pay: INR {}", paise_text(item.gross_paise)));
+    lines.push(format!(
+        "Total deductions: INR {}",
+        paise_text(item.deductions_paise)
+    ));
     lines.push(format!("Net pay: INR {}", paise_text(item.net_paise)));
+    lines.push(String::new());
+    match payout {
+        Some(payout) => {
+            lines.push(format!(
+                "Payment reference: {} ({}, paid at {})",
+                if payout.reference.trim().is_empty() {
+                    "-"
+                } else {
+                    payout.reference.trim()
+                },
+                payout.payment_method,
+                payout.paid_at.to_rfc3339()
+            ));
+        }
+        None => lines.push("Payment reference: not yet paid".to_string()),
+    }
+    if !pan.trim().is_empty() {
+        lines.push(format!("PAN: {}", mask_sensitive_id(pan)));
+    }
+    lines.push(format!(
+        "Payslip version hash: {}",
+        payslip_version_hash(run_id, item)
+    ));
+    lines.push(format!(
+        "Finalized at: {}",
+        detail
+            .run
+            .finalized_at
+            .map(|at| at.to_rfc3339())
+            .unwrap_or_else(|| "-".to_string())
+    ));
+    lines.push(format!(
+        "Paid at: {}",
+        detail
+            .run
+            .paid_at
+            .map(|at| at.to_rfc3339())
+            .unwrap_or_else(|| "-".to_string())
+    ));
     Ok(crate::services::invoice_pdf::render_text_report(
         "STAFF PAYSLIP",
         &lines,
