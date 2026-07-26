@@ -3,6 +3,8 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
+use super::business_code_repository::{next_branch_code, BusinessCodeKind};
+
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientRecord {
@@ -480,7 +482,6 @@ pub struct ClientReportFilters<'a> {
 pub struct CreateClient<'a> {
     pub tenant_id: &'a str,
     pub branch_id: &'a str,
-    pub code: Option<&'a str>,
     pub first_name: &'a str,
     pub last_name: &'a str,
     pub phone: &'a str,
@@ -2556,7 +2557,15 @@ async fn record_audit_tx(
 }
 
 pub async fn create(db: &PgPool, input: CreateClient<'_>) -> Result<ClientRecord, sqlx::Error> {
-    sqlx::query_as::<_, ClientRecord>(
+    let mut tx = db.begin().await?;
+    let code = next_branch_code(
+        &mut tx,
+        input.tenant_id,
+        input.branch_id,
+        BusinessCodeKind::Client,
+    )
+    .await?;
+    let row = sqlx::query_as::<_, ClientRecord>(
         r#"
         INSERT INTO clients (
           tenant_id, branch_id, code, first_name, last_name, phone, normalized_phone, email,
@@ -2595,7 +2604,7 @@ pub async fn create(db: &PgPool, input: CreateClient<'_>) -> Result<ClientRecord
     )
     .bind(input.tenant_id)
     .bind(input.branch_id)
-    .bind(input.code)
+    .bind(code)
     .bind(input.first_name)
     .bind(input.last_name)
     .bind(input.phone)
@@ -2606,8 +2615,10 @@ pub async fn create(db: &PgPool, input: CreateClient<'_>) -> Result<ClientRecord
     .bind(input.birthday)
     .bind(input.anniversary)
     .bind(input.notes)
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn update(

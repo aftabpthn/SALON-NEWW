@@ -1,6 +1,8 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
+use super::business_code_repository::{next_branch_code, BusinessCodeKind};
+
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseReceipt {
@@ -341,8 +343,12 @@ pub async fn save_supplier(
         return sqlx::query_as("UPDATE suppliers SET code=$4,name=$5,gstin=$6,contact_name=$7,phone=$8,email=$9,address=$10,payment_terms_days=$11,active=$12,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,code,name,gstin,contact_name,phone,email,address,payment_terms_days,active,created_at,updated_at")
             .bind(tenant_id).bind(branch_id).bind(id).bind(code).bind(name).bind(gstin).bind(contact_name).bind(phone).bind(email).bind(address).bind(payment_terms_days).bind(active).fetch_optional(db).await;
     }
-    sqlx::query_as("INSERT INTO suppliers(tenant_id,branch_id,code,name,gstin,contact_name,phone,email,address,payment_terms_days,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,code,name,gstin,contact_name,phone,email,address,payment_terms_days,active,created_at,updated_at")
-        .bind(tenant_id).bind(branch_id).bind(code).bind(name).bind(gstin).bind(contact_name).bind(phone).bind(email).bind(address).bind(payment_terms_days).bind(active).fetch_optional(db).await
+    let mut tx = db.begin().await?;
+    let code = next_branch_code(&mut tx, tenant_id, branch_id, BusinessCodeKind::Supplier).await?;
+    let row = sqlx::query_as("INSERT INTO suppliers(tenant_id,branch_id,code,name,gstin,contact_name,phone,email,address,payment_terms_days,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,code,name,gstin,contact_name,phone,email,address,payment_terms_days,active,created_at,updated_at")
+        .bind(tenant_id).bind(branch_id).bind(code).bind(name).bind(gstin).bind(contact_name).bind(phone).bind(email).bind(address).bind(payment_terms_days).bind(active).fetch_optional(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn get_supplier(

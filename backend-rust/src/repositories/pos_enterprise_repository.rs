@@ -3,6 +3,8 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
+use super::business_code_repository::{next_branch_code, BusinessCodeKind};
+
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct PosTerminal {
@@ -271,13 +273,16 @@ pub async fn create_terminal(
     tenant: &str,
     branch: &str,
     actor: &str,
-    code: &str,
     name: &str,
     fingerprint: &str,
     counter: &str,
 ) -> Result<PosTerminal, sqlx::Error> {
-    sqlx::query_as("INSERT INTO pos_terminals (tenant_id,branch_id,terminal_code,terminal_name,device_fingerprint,assigned_counter,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,terminal_code,terminal_name,device_fingerprint,assigned_counter,status,last_seen_at,NULL::TEXT active_session_id,created_at")
-        .bind(tenant).bind(branch).bind(code).bind(name).bind(fingerprint).bind(counter).bind(actor).fetch_one(db).await
+    let mut tx = db.begin().await?;
+    let code = next_branch_code(&mut tx, tenant, branch, BusinessCodeKind::PosTerminal).await?;
+    let row = sqlx::query_as("INSERT INTO pos_terminals (tenant_id,branch_id,terminal_code,terminal_name,device_fingerprint,assigned_counter,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,terminal_code,terminal_name,device_fingerprint,assigned_counter,status,last_seen_at,NULL::TEXT active_session_id,created_at")
+        .bind(tenant).bind(branch).bind(code).bind(name).bind(fingerprint).bind(counter).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn set_terminal_status(
@@ -605,7 +610,6 @@ pub async fn create_corporate_account(
     tenant: &str,
     branch: &str,
     actor: &str,
-    code: &str,
     name: &str,
     email: &str,
     phone: &str,
@@ -613,8 +617,12 @@ pub async fn create_corporate_account(
     limit: i64,
     terms: i32,
 ) -> Result<CorporateAccount, sqlx::Error> {
-    sqlx::query_as("INSERT INTO corporate_billing_accounts (tenant_id,branch_id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,payment_terms_days,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,0::BIGINT outstanding_paise,payment_terms_days,status,created_at")
-        .bind(tenant).bind(branch).bind(code).bind(name).bind(email).bind(phone).bind(gstin).bind(limit).bind(terms).bind(actor).fetch_one(db).await
+    let mut tx = db.begin().await?;
+    let code = next_branch_code(&mut tx, tenant, branch, BusinessCodeKind::CorporateAccount).await?;
+    let row = sqlx::query_as("INSERT INTO corporate_billing_accounts (tenant_id,branch_id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,payment_terms_days,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,0::BIGINT outstanding_paise,payment_terms_days,status,created_at")
+        .bind(tenant).bind(branch).bind(code).bind(name).bind(email).bind(phone).bind(gstin).bind(limit).bind(terms).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn assign_corporate_sale(

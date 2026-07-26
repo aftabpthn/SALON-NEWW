@@ -157,7 +157,7 @@
         <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.897ce497e6' | translate" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
       </header>
       <div class="drawer-body">
-        <label>{{ 'inventory.ui.011ace7964' | translate }}<input maxlength="80" autocomplete="off" [ngModel]="draft.code" (ngModelChange)="draft.code = $event.toUpperCase()" /></label>
+        <label>{{ 'inventory.ui.011ace7964' | translate }}<input maxlength="80" autocomplete="off" [ngModel]="draft.code" (ngModelChange)="draft.code = $event.toUpperCase()" [readonly]="!editingSupplierId" [placeholder]="editingSupplierId ? '' : 'Generated on save'" /></label>
         <label>{{ 'inventory.ui.1b6428e32f' | translate }}<input maxlength="160" autocomplete="organization" [ngModel]="draft.name" (ngModelChange)="draft.name = titleCase($event)" /></label>
         <label>{{ 'inventory.ui.da7751f5fa' | translate }}<input maxlength="15" autocomplete="off" [ngModel]="draft.gstin" (ngModelChange)="draft.gstin = $event.toUpperCase()" /></label>
         <label>{{ 'inventory.ui.565e288e2a' | translate }}<input maxlength="160" autocomplete="name" [ngModel]="draft.contactName" (ngModelChange)="draft.contactName = titleCase($event)" /></label>

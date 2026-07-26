@@ -394,7 +394,7 @@
 }
 @if (drawer === 'asset') {
   <div class="drawer-body form-grid">
-    <label class="field"><span>Asset code</span><input type="text" maxlength="40" [(ngModel)]="assetDraft.assetCode" /></label>
+    <label class="field"><span>Asset code</span><input type="text" maxlength="40" [(ngModel)]="assetDraft.assetCode" readonly placeholder="Generated on save" /></label>
     <label class="field"><span>Name</span><input type="text" maxlength="160" [(ngModel)]="assetDraft.name" (input)="assetDraft.name = titleCase(assetDraft.name)" /></label>
     <label class="field"><span>Acquisition date</span><as-date-picker [(value)]="assetDraft.acquisitionDate" ariaLabel="Asset acquisition date"></as-date-picker></label>
     <label class="field"><span>Depreciation start</span><as-date-picker [(value)]="assetDraft.depreciationStartDate" ariaLabel="Depreciation start date"></as-date-picker></label>
@@ -426,7 +426,7 @@
 }
 @if (drawer === 'costCenter') {
   <div class="drawer-body form-grid">
-    <label class="field"><span>Code</span><input type="text" maxlength="40" [(ngModel)]="costCenterDraft.code" /></label>
+    <label class="field"><span>Code</span><input type="text" maxlength="40" [(ngModel)]="costCenterDraft.code" readonly placeholder="Generated on save" /></label>
     <label class="field"><span>Name</span><input type="text" maxlength="120" [(ngModel)]="costCenterDraft.name" (input)="costCenterDraft.name = titleCase(costCenterDraft.name)" /></label>
     <label class="field full"><span>Kind</span><input type="text" maxlength="60" [(ngModel)]="costCenterDraft.kind" (input)="costCenterDraft.kind = titleCase(costCenterDraft.kind)" /></label>
   </div>

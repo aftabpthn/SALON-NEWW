@@ -282,7 +282,6 @@ pub async fn create_cost_center(
     created_by_user_id: &str,
     payload: CostCenterCreateRequest,
 ) -> Result<CostCenterResponse, AppError> {
-    let code = normalize_cost_center_code(&payload.code)?;
     let name = payload.name.trim();
     if name.is_empty() || name.len() > 100 {
         return Err(AppError::validation(
@@ -294,7 +293,6 @@ pub async fn create_cost_center(
         db,
         tenant_id,
         branch_id,
-        &code,
         name,
         kind,
         created_by_user_id,
@@ -647,7 +645,6 @@ pub async fn create_fixed_asset(
     created_by_user_id: &str,
     payload: FixedAssetCreateRequest,
 ) -> Result<FixedAssetResponse, AppError> {
-    let asset_code = normalize_asset_code(&payload.asset_code)?;
     let name = payload.name.trim();
     if name.is_empty() || name.len() > 120 {
         return Err(AppError::validation(
@@ -710,8 +707,7 @@ pub async fn create_fixed_asset(
     .await
     .map_err(|_| AppError::internal("failed to verify fixed asset idempotency"))?
     {
-        if existing.asset_code != asset_code
-            || existing.name != name
+        if existing.name != name
             || existing.acquisition_date != acquisition_date
             || existing.depreciation_start_date != depreciation_start_date
             || existing.cost_paise != payload.cost_paise
@@ -730,7 +726,6 @@ pub async fn create_fixed_asset(
         &mut tx,
         tenant_id,
         branch_id,
-        &asset_code,
         name,
         acquisition_date,
         depreciation_start_date,
@@ -1415,19 +1410,6 @@ fn normalize_account_code(value: &str) -> Result<String, AppError> {
     Ok(code)
 }
 
-fn normalize_cost_center_code(value: &str) -> Result<String, AppError> {
-    let code = value.trim().to_ascii_uppercase();
-    if code.is_empty()
-        || code.len() > 32
-        || !code
-            .bytes()
-            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        return Err(AppError::validation("cost center code is invalid"));
-    }
-    Ok(code)
-}
-
 fn normalize_cost_center_kind(value: Option<&str>) -> Result<&str, AppError> {
     let kind = value.unwrap_or("custom").trim().to_ascii_lowercase();
     match kind.as_str() {
@@ -1581,19 +1563,6 @@ fn reconciliation_check(
         variance_paise,
         detail_count,
     })
-}
-
-fn normalize_asset_code(value: &str) -> Result<String, AppError> {
-    let code = value.trim().to_ascii_uppercase();
-    if code.is_empty()
-        || code.len() > 32
-        || !code
-            .bytes()
-            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        return Err(AppError::validation("assetCode is invalid"));
-    }
-    Ok(code)
 }
 
 fn parse_month(value: &str) -> Result<NaiveDate, AppError> {

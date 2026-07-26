@@ -8,6 +8,7 @@ pub mod birthday_anniversary_repository;
 pub mod booking_intelligence_repository;
 pub mod booking_repository;
 pub mod branch_repository;
+pub mod business_code_repository;
 pub mod cash_drawer_repository;
 pub mod clients_repository;
 pub mod compliance_repository;

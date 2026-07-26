@@ -141,7 +141,6 @@ async fn create_membership(
             tenant_id: &tenant_id,
             branch_id: &branch_id,
             name,
-            code: payload.code.as_deref().unwrap_or("").trim(),
             plan_type: payload.plan_type.as_deref().unwrap_or("discount").trim(),
             price_paise: non_negative_i64(payload.price_paise, "pricePaise")?,
             points_required,

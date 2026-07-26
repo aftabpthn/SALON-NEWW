@@ -2038,7 +2038,6 @@ async fn create_client(
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::validation("firstName is required"))?;
     let categories_json = categories_json(payload.categories.as_ref())?;
-    let code = payload.code.as_deref().map(str::trim);
     let last_name = payload.last_name.as_deref().unwrap_or("").trim();
     let phone = payload.phone.as_deref().unwrap_or("").trim();
     let normalized_phone = client_service::normalize_phone(phone)?;
@@ -2051,7 +2050,6 @@ async fn create_client(
         CreateClient {
             tenant_id: &tenant_id,
             branch_id: &branch_id,
-            code,
             first_name,
             last_name,
             phone,

@@ -90,7 +90,8 @@ pub fn public_router() -> Router<AppState> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TerminalRequest {
-    terminal_code: String,
+    #[serde(default, rename = "terminalCode")]
+    _terminal_code: String,
     terminal_name: String,
     device_fingerprint: Option<String>,
     assigned_counter: Option<String>,
@@ -193,7 +194,8 @@ struct VerifyProviderRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CorporateAccountRequest {
-    account_code: String,
+    #[serde(default, rename = "accountCode")]
+    _account_code: String,
     account_name: String,
     billing_email: Option<String>,
     phone: Option<String>,
@@ -225,10 +227,8 @@ async fn create_terminal(
     Json(p): Json<TerminalRequest>,
 ) -> ApiResult<pos_enterprise_repository::PosTerminal> {
     require_manager(&claims)?;
-    if p.terminal_code.trim().is_empty() || p.terminal_name.trim().is_empty() {
-        return Err(AppError::validation(
-            "terminalCode and terminalName are required",
-        ));
+    if p.terminal_name.trim().is_empty() {
+        return Err(AppError::validation("terminalName is required"));
     }
     let (tenant, branch) = tenant_branch(&headers)?;
     let row = pos_enterprise_repository::create_terminal(
@@ -236,7 +236,6 @@ async fn create_terminal(
         &tenant,
         &branch,
         &claims.sub,
-        p.terminal_code.trim(),
         p.terminal_name.trim(),
         p.device_fingerprint.as_deref().unwrap_or_default(),
         p.assigned_counter.as_deref().unwrap_or_default(),
@@ -977,13 +976,12 @@ async fn create_corporate_account(
     Json(p): Json<CorporateAccountRequest>,
 ) -> ApiResult<pos_enterprise_repository::CorporateAccount> {
     require_manager(&claims)?;
-    if p.account_code.trim().is_empty()
-        || p.account_name.trim().is_empty()
+    if p.account_name.trim().is_empty()
         || p.credit_limit_paise < 0
         || !(0..=365).contains(&p.payment_terms_days)
     {
         return Err(AppError::validation(
-            "valid accountCode, accountName, creditLimitPaise, and paymentTermsDays are required",
+            "valid accountName, creditLimitPaise, and paymentTermsDays are required",
         ));
     }
     let (t, b) = tenant_branch(&headers)?;
@@ -992,7 +990,6 @@ async fn create_corporate_account(
         &t,
         &b,
         &claims.sub,
-        p.account_code.trim(),
         p.account_name.trim(),
         p.billing_email.as_deref().unwrap_or_default().trim(),
         p.phone.as_deref().unwrap_or_default().trim(),

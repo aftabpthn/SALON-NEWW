@@ -654,7 +654,7 @@
   <aside class="client-drawer" aria-label="Client form">
     <header><strong>{{ editingClientId ? 'Edit client' : 'Add client' }}</strong><button type="button" aria-label="Close client form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
     <form class="drawer-body" id="client-form" (ngSubmit)="saveClient()">
-      <label>Code<input [(ngModel)]="createGuest.code" name="code" /></label>
+      <label>Code<input [(ngModel)]="createGuest.code" name="code" [readonly]="!editingClientId" [placeholder]="editingClientId ? '' : 'Generated on save'" /></label>
       <label>First name<input [ngModel]="createGuest.firstName" name="firstName" (ngModelChange)="createGuest.firstName = titleCase($event)" /></label>
       <label>Last name<input [ngModel]="createGuest.lastName" name="lastName" (ngModelChange)="createGuest.lastName = titleCase($event)" /></label>
       <label>Phone<input type="tel" [(ngModel)]="createGuest.phone" name="phone" /></label>

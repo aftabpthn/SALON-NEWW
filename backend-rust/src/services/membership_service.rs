@@ -646,7 +646,6 @@ pub async fn create_plan(
             tenant_id,
             branch_id,
             name,
-            code: input.code.as_deref().unwrap_or("").trim(),
             plan_type,
             price_paise: price_paise(input.price, input.price_paise)?,
             points_required: non_negative_i32(input.points_required, "pointsRequired")?,
