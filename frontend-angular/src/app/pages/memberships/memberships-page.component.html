@@ -335,7 +335,7 @@
         <option [value]="item.value">{{ item.label }}</option>
       }</select></label>
       <label>Membership name<input [ngModel]="form.name" (ngModelChange)="form.name = titleCase($event)" name="name" autocomplete="off" /></label>
-      <label>Membership code<input [(ngModel)]="form.code" name="code" autocomplete="off" /></label>
+      <label>Membership code<input [(ngModel)]="form.code" name="code" autocomplete="off" [readonly]="!editingId" [placeholder]="editingId ? '' : 'Generated on save'" /></label>
       <label>Membership description<textarea [(ngModel)]="form.notes" name="notes" placeholder="Enter description"></textarea></label>
       <div class="field-row"><label>Sale price<input type="number" min="0" step="0.01" [(ngModel)]="form.specialOfferPrice" name="specialOfferPrice" placeholder="₹" /></label><label>Actual price<input type="number" min="0" step="0.01" [(ngModel)]="form.actualPrice" name="actualPrice" placeholder="₹" /></label></div>
       <div class="field-row"><label>Validity days<input type="number" min="0" [(ngModel)]="form.validityDays" name="validityDays" /></label><label>GST percentage<input type="number" min="0" max="100" [(ngModel)]="form.gstPercent" name="gstPercent" /></label></div>

@@ -71,6 +71,7 @@ pub fn router() -> Router<AppState> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SupplierRequest {
+    #[serde(default)]
     code: String,
     name: String,
     gstin: Option<String>,
@@ -200,7 +201,11 @@ async fn save_supplier(
     payload: SupplierRequest,
 ) -> ApiResult<purchase_repository::SupplierRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let code = required(&payload.code, "code is required", 80)?;
+    let code = if id.is_some() {
+        required(&payload.code, "code is required", 80)?
+    } else {
+        String::new()
+    };
     let name = required(&payload.name, "name is required", 160)?;
     let gstin = payload
         .gstin

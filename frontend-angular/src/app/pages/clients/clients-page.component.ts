@@ -890,7 +890,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.savingClient = true;
     try {
       const payload = {
-        code: this.createGuest.code.trim() || undefined,
+        code: this.editingClientId ? this.createGuest.code.trim() || undefined : undefined,
         firstName,
         lastName: this.createGuest.lastName.trim(),
         phone: this.createGuest.phone.trim(),

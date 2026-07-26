@@ -369,13 +369,13 @@ export class BalanceSheetPageComponent implements OnInit {
     const costPaise = this.rupeesToPaise(this.assetDraft.costRupees);
     const salvagePaise = this.rupeesToPaise(this.assetDraft.salvageRupees);
     const life = Number(this.assetDraft.usefulLifeMonths);
-    if (!this.assetDraft.assetCode.trim() || !this.assetDraft.name.trim() || !this.assetDraft.acquisitionDate || !this.assetDraft.purchaseOffsetAccount || costPaise <= 0 || !Number.isInteger(life) || life <= 0 || salvagePaise < 0 || salvagePaise >= costPaise) {
+    if (!this.assetDraft.name.trim() || !this.assetDraft.acquisitionDate || !this.assetDraft.purchaseOffsetAccount || costPaise <= 0 || !Number.isInteger(life) || life <= 0 || salvagePaise < 0 || salvagePaise >= costPaise) {
       this.errorMessage = 'Complete the asset details with a positive cost, useful life, and salvage value below cost.';
       return;
     }
     await this.runAction(
       this.api.post('/balance-sheet/fixed-assets', {
-        assetCode: this.assetDraft.assetCode.trim().toUpperCase(),
+        assetCode: '',
         name: this.assetDraft.name.trim(),
         acquisitionDate: this.assetDraft.acquisitionDate,
         depreciationStartDate: this.assetDraft.depreciationStartDate || null,
@@ -460,8 +460,8 @@ export class BalanceSheetPageComponent implements OnInit {
   }
 
   async saveCostCenter(): Promise<void> {
-    if (!this.costCenterDraft.code.trim() || !this.costCenterDraft.name.trim()) {
-      this.errorMessage = 'Cost centre code and name are required.';
+    if (!this.costCenterDraft.name.trim()) {
+      this.errorMessage = 'Cost centre name is required.';
       return;
     }
     await this.runAction(

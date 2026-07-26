@@ -99,8 +99,8 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   }
 
   createTerminal(): void {
-    if (!this.terminalCode.trim() || !this.terminalName.trim()) return this.fail('Terminal code and name are required');
-    this.run(this.api.post('/api/v1/pos/terminals', { terminalCode: this.terminalCode.trim(), terminalName: this.terminalName.trim(), assignedCounter: this.terminalCounter.trim() }), 'Terminal registered', () => { this.terminalCode = ''; this.terminalName = ''; this.terminalCounter = ''; });
+    if (!this.terminalName.trim()) return this.fail('Terminal name is required');
+    this.run(this.api.post('/api/v1/pos/terminals', { terminalCode: '', terminalName: this.terminalName.trim(), assignedCounter: this.terminalCounter.trim() }), 'Terminal registered', () => { this.terminalCode = ''; this.terminalName = ''; this.terminalCounter = ''; });
   }
   terminalAction(row: Terminal, action: 'session' | 'heartbeat' | 'status'): void {
     let request: Observable<any>;
@@ -135,8 +135,8 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   resolveRisk(row: RiskCase, status: 'resolved' | 'dismissed'): void { const note = (this.riskNotes[row.id] ?? '').trim(); if (!note) return this.fail('Resolution note is required'); this.run(this.api.post(`/api/v1/pos/risk-cases/${row.id}/resolve`, { status, resolutionNote: note }), 'Risk case updated', () => delete this.riskNotes[row.id]); }
 
   createAccount(): void {
-    if (!this.accountCode.trim() || !this.accountName.trim() || this.accountCredit === '') return this.fail('Code, name and credit limit are required');
-    this.run(this.api.post('/api/v1/pos/corporate-accounts', { accountCode: this.accountCode.trim(), accountName: this.accountName.trim(), billingEmail: this.accountEmail.trim(), phone: this.accountPhone.trim(), gstin: this.accountGstin.trim(), creditLimitPaise: this.toPaise(this.accountCredit), paymentTermsDays: Number(this.accountTerms || 0) }), 'Corporate account created', () => { this.accountCode = ''; this.accountName = ''; this.accountEmail = ''; this.accountPhone = ''; this.accountGstin = ''; this.accountCredit = ''; this.accountTerms = ''; });
+    if (!this.accountName.trim() || this.accountCredit === '') return this.fail('Name and credit limit are required');
+    this.run(this.api.post('/api/v1/pos/corporate-accounts', { accountCode: '', accountName: this.accountName.trim(), billingEmail: this.accountEmail.trim(), phone: this.accountPhone.trim(), gstin: this.accountGstin.trim(), creditLimitPaise: this.toPaise(this.accountCredit), paymentTermsDays: Number(this.accountTerms || 0) }), 'Corporate account created', () => { this.accountCode = ''; this.accountName = ''; this.accountEmail = ''; this.accountPhone = ''; this.accountGstin = ''; this.accountCredit = ''; this.accountTerms = ''; });
   }
   assignCorporateInvoice(): void { if (!this.corporateSaleId.trim() || !this.corporateAccountId || !this.corporateReference.trim()) return this.fail('Invoice, account and corporate reference are required'); this.run(this.api.post(`/api/v1/pos/invoices/${this.corporateSaleId.trim()}/corporate-credit`, { accountId: this.corporateAccountId, reference: this.corporateReference.trim() }), 'Invoice converted to corporate credit', () => { this.corporateSaleId = ''; this.corporateReference = ''; }); }
   selectCorporateAccount(accountId: string): void { this.corporateAccountId = accountId; this.corporateMembers = []; this.corporateStatement = []; if (!accountId) return; this.read<CorporateMember[]>(`/api/v1/pos/corporate-accounts/${accountId}/members`, (rows) => this.corporateMembers = rows, () => {}); this.read<any>(`/api/v1/pos/corporate-accounts/${accountId}/statement`, (row) => this.corporateStatement = Array.isArray(row?.invoices) ? row.invoices : [], () => {}); }

@@ -434,7 +434,7 @@
         }
         @if (drawer === 'supplier') {
           <form class="form-grid" (ngSubmit)="saveSupplier()" id="supplier-form">
-            <label>{{ 'inventory.ui.adac69379a' | translate }}<input required maxlength="80" [(ngModel)]="supplierDraft.code" name="code" /></label>
+            <label>{{ 'inventory.ui.adac69379a' | translate }}<input maxlength="80" [(ngModel)]="supplierDraft.code" name="code" [readonly]="!supplierId" [placeholder]="supplierId ? '' : 'Generated on save'" /></label>
             <label>{{ 'inventory.ui.1b6428e32f' | translate }}<input required maxlength="160" [ngModel]="supplierDraft.name" (ngModelChange)="supplierDraft.name = titleCase($event)" name="name" /></label>
             <label>{{ 'inventory.ui.da7751f5fa' | translate }}<input maxlength="15" [(ngModel)]="supplierDraft.gstin" name="gstin" /></label>
             <label>{{ 'inventory.ui.565e288e2a' | translate }}<input maxlength="160" [ngModel]="supplierDraft.contactName" (ngModelChange)="supplierDraft.contactName = titleCase($event)" name="contactName" /></label>

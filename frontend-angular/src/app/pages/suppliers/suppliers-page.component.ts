@@ -180,7 +180,7 @@ export class SuppliersPageComponent implements OnInit {
     const gstin = this.draft.gstin.trim().toUpperCase();
     const paymentTermsDays = Number(this.draft.paymentTermsDays || 0);
 
-    if (!code || !name) {
+    if ((!code && this.editingSupplierId) || !name) {
       this.error = this.language.text('inventory.message.95cc5800c3');
       return;
     }

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
+use super::business_code_repository::{next_branch_code, BusinessCodeKind};
 use crate::models::balance_sheet::BalanceSheetReport;
 
 #[derive(Debug, Clone, FromRow)]
@@ -254,12 +255,14 @@ pub async fn create_cost_center(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    code: &str,
     name: &str,
     kind: &str,
     created_by_user_id: &str,
 ) -> Result<CostCenterRecord, sqlx::Error> {
-    sqlx::query_as(
+    let mut tx = db.begin().await?;
+    let code =
+        next_branch_code(&mut tx, tenant_id, branch_id, BusinessCodeKind::CostCenter).await?;
+    let row = sqlx::query_as(
         r#"
         INSERT INTO accounting_cost_centers (
           tenant_id,branch_id,code,name,kind,created_by_user_id
@@ -273,8 +276,10 @@ pub async fn create_cost_center(
     .bind(name)
     .bind(kind)
     .bind(created_by_user_id)
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn tag_journal_line(
@@ -429,7 +434,6 @@ pub async fn create_fixed_asset(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
-    asset_code: &str,
     name: &str,
     acquisition_date: NaiveDate,
     depreciation_start_date: NaiveDate,
@@ -440,6 +444,7 @@ pub async fn create_fixed_asset(
     idempotency_key: &str,
     created_by_user_id: &str,
 ) -> Result<FixedAssetRecord, sqlx::Error> {
+    let asset_code = next_branch_code(tx, tenant_id, branch_id, BusinessCodeKind::FixedAsset).await?;
     sqlx::query_as(
         r#"
         INSERT INTO accounting_fixed_assets (

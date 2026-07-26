@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgPool};
 
+use super::business_code_repository::{next_branch_code, BusinessCodeKind};
+
 #[derive(Debug, Clone, FromRow)]
 pub struct MembershipRecord {
     pub id: String,
@@ -25,7 +27,6 @@ pub struct CreateMembership<'a> {
     pub tenant_id: &'a str,
     pub branch_id: &'a str,
     pub name: &'a str,
-    pub code: &'a str,
     pub plan_type: &'a str,
     pub price_paise: i64,
     pub points_required: i32,
@@ -97,14 +98,24 @@ pub async fn create(
     db: &PgPool,
     input: CreateMembership<'_>,
 ) -> Result<MembershipRecord, sqlx::Error> {
-    sqlx::query_as::<_, MembershipRecord>(r#"
+    let mut tx = db.begin().await?;
+    let code = next_branch_code(
+        &mut tx,
+        input.tenant_id,
+        input.branch_id,
+        BusinessCodeKind::Membership,
+    )
+    .await?;
+    let row = sqlx::query_as::<_, MembershipRecord>(r#"
         INSERT INTO memberships (tenant_id, branch_id, name, code, plan_type, price_paise, points_required, discount_percent, validity_days, notes, service_ids_json, benefit_rules)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb)
         RETURNING id, tenant_id, branch_id, name, code, plan_type, price_paise::BIGINT AS price_paise, points_required, discount_percent, validity_days, notes, service_ids_json::TEXT AS service_ids_json, benefit_rules::TEXT AS benefit_rules_json, active, created_at, updated_at
     "#)
-    .bind(input.tenant_id).bind(input.branch_id).bind(input.name).bind(input.code).bind(input.plan_type).bind(input.price_paise)
+    .bind(input.tenant_id).bind(input.branch_id).bind(input.name).bind(code).bind(input.plan_type).bind(input.price_paise)
     .bind(input.points_required).bind(input.discount_percent).bind(input.validity_days).bind(input.notes).bind(input.service_ids_json).bind(input.benefit_rules_json)
-    .fetch_one(db).await
+    .fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn update(

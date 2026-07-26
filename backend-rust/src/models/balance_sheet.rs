@@ -157,7 +157,8 @@ pub struct ManualJournalResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CostCenterCreateRequest {
-    pub code: String,
+    #[serde(default, rename = "code")]
+    pub _code: String,
     pub name: String,
     pub kind: Option<String>,
 }
@@ -211,7 +212,8 @@ pub struct SnapshotResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FixedAssetCreateRequest {
-    pub asset_code: String,
+    #[serde(default, rename = "assetCode")]
+    pub _asset_code: String,
     pub name: String,
     pub acquisition_date: String,
     pub depreciation_start_date: Option<String>,
