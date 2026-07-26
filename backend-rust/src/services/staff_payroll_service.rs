@@ -732,6 +732,8 @@ pub async fn preview(
                 .cloned()
                 .unwrap_or_default();
             let tip_paise = tips_by_staff.get(&staff_id).copied().unwrap_or(0);
+            let weekend_sandwich =
+                compute_weekend_sandwich(schedule_rows, attendance_rows, &paid_holidays);
             let rule_adjustments = auto_adjustments(
                 &adjustment_rules,
                 late_count,
@@ -740,6 +742,7 @@ pub async fn preview(
                 short_hours,
                 open_clock_ins as i64,
                 i64::from(unpaid_leave_days_x2 / 2),
+                &weekend_sandwich,
             );
             let auto_deduction_paise = rule_adjustments.deduction_paise + rule_adjustments.fine_paise;
             let generated_positive_paise = tip_paise + rule_adjustments.allowance_paise;
@@ -823,6 +826,10 @@ pub async fn preview(
                 "deductionsPaise": deductions_paise,
                 "netPaise": net_paise,
                 "autoAdjustmentRules": rule_adjustments.rows,
+                "weekendPenaltyOccurrences": weekend_sandwich.weekend_penalty_count,
+                "sandwichPenaltyOccurrences": weekend_sandwich.sandwich_penalty_count,
+                "weeklyOffWorkedOccurrences": weekend_sandwich.weekly_off_worked_count,
+                "weekendSandwichBreakdown": weekend_sandwich.breakdown.clone(),
                 "statutoryEmployeePaise": statutory.employee_paise,
                 "statutoryEmployerPaise": statutory.employer_paise,
                 "statutoryAccrualPaise": statutory.accrual_paise,
@@ -1666,6 +1673,94 @@ fn salary_row_from_json(calculation_json: &Value) -> Option<Value> {
     calculation_json.get("salaryRow").cloned()
 }
 
+#[derive(Debug, Default, Clone)]
+struct WeekendSandwichMetrics {
+    weekend_penalty_count: i64,
+    sandwich_penalty_count: i64,
+    weekly_off_worked_count: i64,
+    breakdown: Vec<Value>,
+}
+
+/// Computes weekend/sandwich penalty and weekly-off-worked occurrences for one staff member,
+/// purely from attendance/schedule/holiday data already loaded for payroll — no client input,
+/// no hardcoded amounts (the amounts themselves come from the admin-configured
+/// `staff_payroll_adjustment_rules` via `auto_adjustments`, same as every other auto-adjustment).
+///
+/// - `weekend_penalty`: exactly one of the day before/after a weekly-off or paid holiday is an
+///   unexcused absence.
+/// - `sandwich_penalty`: both the day before AND after are unexcused absences (takes priority
+///   over weekend_penalty for that off-day — it isn't double-counted as both).
+/// - `weekly_off_worked`: staff actually attended a day scheduled as their weekly off.
+///
+/// An absence only counts if unexcused: a paid holiday or a day covered by an approved-leave
+/// schedule entry is exempt entirely, regardless of what the raw attendance status says.
+fn compute_weekend_sandwich(
+    schedule_rows: &[repository::ScheduleSourceRecord],
+    attendance_rows: &[repository::AttendanceSourceRecord],
+    paid_holidays: &HashSet<NaiveDate>,
+) -> WeekendSandwichMetrics {
+    let attendance_status: HashMap<NaiveDate, &str> = attendance_rows
+        .iter()
+        .map(|row| (row.business_date, row.status.as_str()))
+        .collect();
+    let schedule_leave_dates: HashSet<NaiveDate> = schedule_rows
+        .iter()
+        .filter(|row| schedule_leave_type(&row.status).is_some())
+        .map(|row| row.schedule_date)
+        .collect();
+    let is_unexcused_absence = |date: NaiveDate| -> bool {
+        attendance_status.get(&date) == Some(&"absent")
+            && !paid_holidays.contains(&date)
+            && !schedule_leave_dates.contains(&date)
+    };
+
+    let mut off_days: Vec<NaiveDate> = schedule_rows
+        .iter()
+        .filter(|row| row.status == "weekly_off")
+        .map(|row| row.schedule_date)
+        .collect();
+    off_days.extend(paid_holidays.iter().copied());
+    off_days.sort();
+    off_days.dedup();
+
+    let mut result = WeekendSandwichMetrics::default();
+    for off_date in off_days {
+        let before = off_date - Duration::days(1);
+        let after = off_date + Duration::days(1);
+        let before_absent = is_unexcused_absence(before);
+        let after_absent = is_unexcused_absence(after);
+        if before_absent && after_absent {
+            result.sandwich_penalty_count += 1;
+            result.breakdown.push(json!({
+                "date": off_date,
+                "rule": "sandwich_penalty",
+                "beforeDate": before,
+                "afterDate": after,
+            }));
+        } else if before_absent || after_absent {
+            result.weekend_penalty_count += 1;
+            result.breakdown.push(json!({
+                "date": off_date,
+                "rule": "weekend_penalty",
+                "triggeringDate": if before_absent { before } else { after },
+            }));
+        }
+    }
+    for row in schedule_rows.iter().filter(|row| row.status == "weekly_off") {
+        if matches!(
+            attendance_status.get(&row.schedule_date),
+            Some(&"clocked_out") | Some(&"present") | Some(&"half_day")
+        ) {
+            result.weekly_off_worked_count += 1;
+            result.breakdown.push(json!({
+                "date": row.schedule_date,
+                "rule": "weekly_off_worked",
+            }));
+        }
+    }
+    result
+}
+
 #[allow(clippy::too_many_arguments)]
 fn auto_adjustments(
     rules: &[repository::PayrollAdjustmentRuleSource],
@@ -1675,6 +1770,7 @@ fn auto_adjustments(
     short_hours: i64,
     no_clock_out_count: i64,
     unpaid_week_off_days: i64,
+    weekend_sandwich: &WeekendSandwichMetrics,
 ) -> AdjustmentBreakdown {
     let mut result = AdjustmentBreakdown::default();
     for rule in rules {
@@ -1685,6 +1781,9 @@ fn auto_adjustments(
             "short_hours" => short_hours,
             "no_clock_out" => no_clock_out_count,
             "unpaid_week_off" => unpaid_week_off_days,
+            "weekend_penalty" => weekend_sandwich.weekend_penalty_count,
+            "sandwich_penalty" => weekend_sandwich.sandwich_penalty_count,
+            "weekly_off_worked" => weekend_sandwich.weekly_off_worked_count,
             "fixed" => 1,
             _ => 0,
         };
@@ -2015,10 +2114,13 @@ pub async fn reopen_payroll_period(
 #[cfg(test)]
 mod tests {
     use super::{
-        best_statutory_rules, compute_statutory, is_statutory_named, line_attributions,
-        multiply_divide, paid_holiday_days_x2, period, resolve_statutory_rule,
+        best_statutory_rules, compute_statutory, compute_weekend_sandwich, is_statutory_named,
+        line_attributions, multiply_divide, paid_holiday_days_x2, period, resolve_statutory_rule,
         settled_provider_reference, validate_payout, PayrollPayoutInput, StatutoryProfileSource,
         StatutoryRuleRecord,
+    };
+    use crate::repositories::staff_payroll_repository::{
+        AttendanceSourceRecord, ScheduleSourceRecord,
     };
     use chrono::Datelike;
     use serde_json::{json, Value};
@@ -2174,5 +2276,82 @@ mod tests {
         assert_eq!(result.employee_paise, 0);
         assert_eq!(result.employer_paise, 0);
         assert!(result.errors.is_empty());
+    }
+
+    fn attendance(date: &str, status: &str) -> AttendanceSourceRecord {
+        AttendanceSourceRecord {
+            staff_id: "staff-1".to_string(),
+            business_date: chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap(),
+            status: status.to_string(),
+            worked_minutes: 0,
+            overtime_minutes: 0,
+            late_minutes: 0,
+            early_leave_minutes: 0,
+            break_minutes: 0,
+            penalty_paise: 0,
+            ot_approval_status: "pending".to_string(),
+            approved_overtime_minutes: 0,
+        }
+    }
+
+    fn schedule(date: &str, status: &str) -> ScheduleSourceRecord {
+        ScheduleSourceRecord {
+            staff_id: "staff-1".to_string(),
+            schedule_date: chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap(),
+            status: status.to_string(),
+            scheduled_minutes: 0,
+        }
+    }
+
+    #[test]
+    fn weekend_penalty_triggers_on_one_sided_unexcused_absence() {
+        // Sunday 2026-07-12 is weekly off; staff absent only the day before (Saturday).
+        let schedules = vec![schedule("2026-07-12", "weekly_off")];
+        let attendance_rows = vec![
+            attendance("2026-07-11", "absent"),
+            attendance("2026-07-13", "present"),
+        ];
+        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        assert_eq!(result.weekend_penalty_count, 1);
+        assert_eq!(result.sandwich_penalty_count, 0);
+    }
+
+    #[test]
+    fn sandwich_penalty_triggers_only_when_both_sides_are_unexcused_absences() {
+        let schedules = vec![schedule("2026-07-12", "weekly_off")];
+        let attendance_rows = vec![
+            attendance("2026-07-11", "absent"),
+            attendance("2026-07-13", "absent"),
+        ];
+        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        assert_eq!(result.sandwich_penalty_count, 1);
+        assert_eq!(result.weekend_penalty_count, 0);
+    }
+
+    #[test]
+    fn approved_leave_and_holiday_exempt_the_adjacent_absence() {
+        // Same shape as the sandwich case, but the day after is an approved leave and the
+        // weekly-off itself is also a paid holiday — neither should trigger any penalty.
+        let schedules = vec![
+            schedule("2026-07-12", "weekly_off"),
+            schedule("2026-07-13", "annual_leave"),
+        ];
+        let attendance_rows = vec![
+            attendance("2026-07-11", "absent"),
+            attendance("2026-07-13", "absent"),
+        ];
+        let holidays = HashSet::from([chrono::NaiveDate::parse_from_str("2026-07-11", "%Y-%m-%d").unwrap()]);
+        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &holidays);
+        assert_eq!(result.weekend_penalty_count, 0);
+        assert_eq!(result.sandwich_penalty_count, 0);
+    }
+
+    #[test]
+    fn weekly_off_worked_triggers_when_staff_attends_their_off_day() {
+        let schedules = vec![schedule("2026-07-12", "weekly_off")];
+        let attendance_rows = vec![attendance("2026-07-12", "present")];
+        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        assert_eq!(result.weekly_off_worked_count, 1);
+        assert_eq!(result.weekend_penalty_count, 0);
     }
 }
