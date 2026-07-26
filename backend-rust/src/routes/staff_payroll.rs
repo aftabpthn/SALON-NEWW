@@ -49,6 +49,15 @@ pub fn router() -> Router<AppState> {
             "/staff-payroll/statutory-profiles/:staff_id",
             get(get_statutory_profile).put(save_statutory_profile),
         )
+        .route(
+            "/staff-payroll/periods",
+            get(list_payroll_periods).put(set_payroll_period_schedule),
+        )
+        .route("/staff-payroll/periods/lock", post(lock_payroll_period))
+        .route(
+            "/staff-payroll/periods/:period_month/reopen",
+            post(reopen_payroll_period),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -491,6 +500,68 @@ async fn save_statutory_profile(
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn list_payroll_periods(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayrollPeriodRecord>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows =
+        staff_payroll_service::list_payroll_periods(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn set_payroll_period_schedule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_payroll_service::PayrollPeriodScheduleInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollPeriodRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row =
+        staff_payroll_service::set_payroll_period_schedule(&state.db, &tenant_id, &branch_id, payload)
+            .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn lock_payroll_period(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_payroll_service::PayrollPeriodLockInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollPeriodRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::lock_payroll_period(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn reopen_payroll_period(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(period_month): Path<NaiveDate>,
+    Json(payload): Json<staff_payroll_service::PayrollPeriodReopenInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollPeriodRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let row = staff_payroll_service::reopen_payroll_period(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        period_month,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 fn csv_cell(value: &str) -> String {

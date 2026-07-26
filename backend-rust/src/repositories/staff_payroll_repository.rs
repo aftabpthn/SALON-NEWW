@@ -47,6 +47,8 @@ pub struct AttendanceSourceRecord {
     pub early_leave_minutes: i32,
     pub break_minutes: i32,
     pub penalty_paise: i64,
+    pub ot_approval_status: String,
+    pub approved_overtime_minutes: i32,
 }
 
 #[derive(Debug, FromRow)]
@@ -114,6 +116,7 @@ pub struct PayrollItemDraft {
     pub validation_warnings: Value,
     pub calculation_json: Value,
     pub notes: String,
+    pub attendance_source_hash: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -164,6 +167,7 @@ pub struct PayrollItemRecord {
     pub calculation_json: Value,
     pub notes: String,
     pub status: String,
+    pub attendance_source_hash: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -426,7 +430,7 @@ pub async fn attendance_sources(
     if staff_ids.is_empty() {
         return Ok(vec![]);
     }
-    sqlx::query_as("SELECT staff_id,business_date,status,worked_minutes,overtime_minutes,late_minutes,early_leave_minutes,break_minutes,penalty_paise FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
+    sqlx::query_as("SELECT staff_id,business_date,status,worked_minutes,overtime_minutes,late_minutes,early_leave_minutes,break_minutes,penalty_paise,ot_approval_status,approved_overtime_minutes FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3) AND business_date BETWEEN $4 AND $5")
         .bind(tenant_id).bind(branch_id).bind(staff_ids).bind(period_start).bind(period_end).fetch_all(db).await
 }
 
@@ -600,8 +604,33 @@ pub async fn get_items(
     branch_id: &str,
     run_id: &str,
 ) -> Result<Vec<PayrollItemRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
+    sqlx::query_as("SELECT id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status,attendance_source_hash FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 ORDER BY staff_name,staff_id")
         .bind(tenant_id).bind(branch_id).bind(run_id).fetch_all(db).await
+}
+
+/// Attendance-source hash recorded the last time each of these staff members' payroll items
+/// was calculated for this run (empty string if the staff has no prior item, e.g. first
+/// calculation) — used to detect and warn when attendance changed since then.
+pub async fn existing_attendance_hashes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_ids: &[String],
+) -> Result<HashMap<String, String>, sqlx::Error> {
+    if staff_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT staff_id,attendance_source_hash FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_ids)
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 pub async fn get_events(
@@ -929,8 +958,9 @@ async fn insert_payroll_item(
           tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,pay_rate_type,pay_rate_paise,
           attendance_days_x2,paid_leave_days_x2,weekly_off_days_x2,holiday_days_x2,worked_minutes,overtime_minutes,
           earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,
-          deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status
-        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated')
+          deductions_paise,net_paise,validation_errors,validation_warnings,calculation_json,notes,status,
+          attendance_source_hash
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,'calculated',$27)
         RETURNING id
         "#,
     )
@@ -941,6 +971,7 @@ async fn insert_payroll_item(
     .bind(item.overtime_paise).bind(item.commission_paise).bind(item.adjustment_paise)
     .bind(item.penalty_paise).bind(item.gross_paise).bind(item.deductions_paise).bind(item.net_paise)
     .bind(&item.validation_errors).bind(&item.validation_warnings).bind(&item.calculation_json).bind(&item.notes)
+    .bind(&item.attendance_source_hash)
     .fetch_one(&mut **tx).await
 }
 
@@ -1128,6 +1159,22 @@ pub async fn transition_run(
             .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
             sqlx::query("UPDATE staff_advance_recoveries SET applied=TRUE WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND applied=FALSE")
                 .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
+            // Finalizing a run locks its attendance period automatically — attendance can no
+            // longer be corrected for this month without an explicit, reasoned reopen. This is
+            // in addition to (not instead of) any earlier manual lock.
+            let period_start = run.as_ref().map(|r: &PayrollRunRecord| r.period_start);
+            if let Some(period_start) = period_start {
+                lock_payroll_period_advisory(&mut tx, tenant_id, branch_id, period_start).await?;
+                lock_payroll_period(
+                    &mut tx,
+                    tenant_id,
+                    branch_id,
+                    period_start,
+                    "Payroll finalized",
+                    actor_user_id,
+                )
+                .await?;
+            }
         }
     }
     tx.commit().await?;
@@ -1190,4 +1237,150 @@ pub async fn complete_payout(
         .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
         .bind(serde_json::json!({"paymentMethod":payment_method,"reference":reference})).execute(&mut **tx).await?;
     Ok(true)
+}
+
+const PAYROLL_PERIOD_COLUMNS: &str = "id,period_month,cutoff_date,correction_deadline,status,lock_reason,\
+locked_by,locked_at,reopen_reason,reopened_by,reopened_at,updated_at";
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPeriodRecord {
+    pub id: String,
+    pub period_month: NaiveDate,
+    pub cutoff_date: Option<NaiveDate>,
+    pub correction_deadline: Option<NaiveDate>,
+    pub status: String,
+    pub lock_reason: String,
+    pub locked_by: Option<String>,
+    pub locked_at: Option<DateTime<Utc>>,
+    pub reopen_reason: String,
+    pub reopened_by: Option<String>,
+    pub reopened_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
+}
+
+pub async fn list_payroll_periods(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<PayrollPeriodRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {PAYROLL_PERIOD_COLUMNS} FROM staff_payroll_periods WHERE tenant_id=$1 AND branch_id=$2 ORDER BY period_month DESC"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+/// Serializes concurrent lock/reopen/schedule changes for the same period, mirroring
+/// `balance_sheet_repository::lock_accounting_period`.
+pub async fn lock_payroll_period_advisory(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    period_month: NaiveDate,
+) -> Result<(), sqlx::Error> {
+    use chrono::Datelike;
+    let period_key = period_month.year() * 100 + period_month.month() as i32;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1 || ':' || $2 || ':payroll'),$3)")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(period_key)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+pub async fn payroll_period_for_month(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    period_month: NaiveDate,
+) -> Result<Option<PayrollPeriodRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        "SELECT {PAYROLL_PERIOD_COLUMNS} FROM staff_payroll_periods WHERE tenant_id=$1 AND branch_id=$2 AND period_month=$3"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(period_month)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn set_payroll_period_schedule(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    period_month: NaiveDate,
+    cutoff_date: Option<NaiveDate>,
+    correction_deadline: Option<NaiveDate>,
+) -> Result<PayrollPeriodRecord, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        INSERT INTO staff_payroll_periods(tenant_id,branch_id,period_month,cutoff_date,correction_deadline)
+        VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT(tenant_id,branch_id,period_month) DO UPDATE SET
+          cutoff_date=EXCLUDED.cutoff_date,correction_deadline=EXCLUDED.correction_deadline,updated_at=NOW()
+        RETURNING {PAYROLL_PERIOD_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(period_month)
+    .bind(cutoff_date)
+    .bind(correction_deadline)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn lock_payroll_period(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    period_month: NaiveDate,
+    reason: &str,
+    actor_user_id: &str,
+) -> Result<PayrollPeriodRecord, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        INSERT INTO staff_payroll_periods(tenant_id,branch_id,period_month,status,lock_reason,locked_by,locked_at)
+        VALUES($1,$2,$3,'locked',$4,$5,NOW())
+        ON CONFLICT(tenant_id,branch_id,period_month) DO UPDATE SET
+          status='locked',lock_reason=EXCLUDED.lock_reason,locked_by=EXCLUDED.locked_by,locked_at=NOW(),updated_at=NOW()
+        RETURNING {PAYROLL_PERIOD_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(period_month)
+    .bind(reason)
+    .bind(actor_user_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn reopen_payroll_period(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    period_month: NaiveDate,
+    reason: &str,
+    actor_user_id: &str,
+) -> Result<Option<PayrollPeriodRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_payroll_periods SET
+          status='open',reopen_reason=$4,reopened_by=$5,reopened_at=NOW(),updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND period_month=$3 AND status='locked'
+        RETURNING {PAYROLL_PERIOD_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(period_month)
+    .bind(reason)
+    .bind(actor_user_id)
+    .fetch_optional(&mut **tx)
+    .await
 }

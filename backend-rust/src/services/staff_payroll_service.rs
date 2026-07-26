@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 use crate::{
@@ -150,6 +151,37 @@ fn compute_statutory(
     result
 }
 
+/// Content hash of one staff member's attendance rows for the period, used to detect whether
+/// the underlying attendance source changed since payroll was last calculated for them (see
+/// `run_payroll`'s regeneration source-change warning). Order-independent: rows are sorted by
+/// business date before hashing so fetch order never affects the digest.
+fn attendance_source_hash(rows: &[repository::AttendanceSourceRecord]) -> String {
+    let mut sorted: Vec<&repository::AttendanceSourceRecord> = rows.iter().collect();
+    sorted.sort_by_key(|row| row.business_date);
+    let mut hasher = Sha256::new();
+    for row in sorted {
+        hasher.update(row.business_date.to_string());
+        hasher.update([0]);
+        hasher.update(&row.status);
+        hasher.update([0]);
+        hasher.update(row.worked_minutes.to_le_bytes());
+        hasher.update(row.overtime_minutes.to_le_bytes());
+        hasher.update(row.late_minutes.to_le_bytes());
+        hasher.update(row.early_leave_minutes.to_le_bytes());
+        hasher.update(row.break_minutes.to_le_bytes());
+        hasher.update(row.penalty_paise.to_le_bytes());
+        hasher.update(&row.ot_approval_status);
+        hasher.update([0]);
+        hasher.update(row.approved_overtime_minutes.to_le_bytes());
+        hasher.update([b';']);
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 #[derive(Debug, Default)]
 struct AdvanceRecoveryAllocation {
     total_recovered_paise: i64,
@@ -243,6 +275,7 @@ pub struct PayrollPreviewItem {
     pub statutory_breakdown: Value,
     #[serde(skip)]
     pub advance_recovery_items: Vec<repository::AdvanceRecoveryContribution>,
+    pub attendance_source_hash: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -570,6 +603,18 @@ pub async fn preview(
                 .iter()
                 .map(|row| row.overtime_minutes)
                 .sum::<i32>();
+            // Only OT explicitly approved counts toward pay — pending/rejected overtime is
+            // tracked for visibility but never enters the salary calculation.
+            let approved_overtime_minutes = attendance_rows
+                .iter()
+                .filter(|row| row.ot_approval_status == "approved")
+                .map(|row| row.approved_overtime_minutes)
+                .sum::<i32>();
+            let pending_overtime_minutes = attendance_rows
+                .iter()
+                .filter(|row| row.ot_approval_status == "pending" && row.overtime_minutes > 0)
+                .map(|row| row.overtime_minutes)
+                .sum::<i32>();
             let penalty_paise = attendance_rows
                 .iter()
                 .map(|row| row.penalty_paise)
@@ -649,6 +694,11 @@ pub async fn preview(
             if !rules_by_staff.contains_key(&staff_id) && !catalog_staff.contains(&staff_id) {
                 validation_warnings.push("Commission rule is not configured".to_string());
             }
+            if pending_overtime_minutes > 0 {
+                validation_warnings.push(format!(
+                    "{pending_overtime_minutes} overtime minute(s) are pending approval and excluded from pay"
+                ));
+            }
 
             let rate = staff_row.pay_rate_paise.unwrap_or(0);
             let paid_weekly_off_x2 = if staff_row.pay_rate_type.as_deref() == Some("monthly") {
@@ -669,11 +719,11 @@ pub async fn preview(
             let overtime_paise = match staff_row.pay_rate_type.as_deref() {
                 Some("monthly") => multiply_divide(
                     rate,
-                    i64::from(overtime_minutes),
+                    i64::from(approved_overtime_minutes),
                     scheduled_minutes.max(days_in_month * 480),
                 ),
-                Some("daily") => multiply_divide(rate, i64::from(overtime_minutes), 480),
-                Some("hourly") => multiply_divide(rate, i64::from(overtime_minutes), 60),
+                Some("daily") => multiply_divide(rate, i64::from(approved_overtime_minutes), 480),
+                Some("hourly") => multiply_divide(rate, i64::from(approved_overtime_minutes), 60),
                 _ => 0,
             };
             let commission_paise = commission_by_staff.get(&staff_id).copied().unwrap_or(0);
@@ -743,6 +793,8 @@ pub async fn preview(
                 "scheduledMinutes": scheduled_minutes,
                 "shortMinutes": short_minutes,
                 "overtimeMinutes": overtime_minutes,
+                "approvedOvertimeMinutes": approved_overtime_minutes,
+                "pendingOvertimeMinutes": pending_overtime_minutes,
                 "lateMinutes": late_minutes,
                 "earlyLeaveMinutes": early_leave_minutes,
                 "breakMinutes": break_minutes,
@@ -821,6 +873,7 @@ pub async fn preview(
                 statutory_accrual_paise: statutory.accrual_paise,
                 statutory_breakdown,
                 advance_recovery_items: advance_recovery.items,
+                attendance_source_hash: attendance_source_hash(attendance_rows),
                 staff_id,
                 staff_name: staff_row.staff_name,
                 employee_code: staff_row.employee_code,
@@ -876,13 +929,13 @@ pub async fn run_payroll(
     staff_id: &str,
     reason: &str,
 ) -> Result<PayrollRunDetail, AppError> {
-    let result = preview(db, tenant_id, branch_id, year, month, staff_id).await?;
+    let mut result = preview(db, tenant_id, branch_id, year, month, staff_id).await?;
     if result.items.is_empty() {
         return Err(AppError::validation(
             "no active employees found for this payroll period",
         ));
     }
-    if let Some(existing) = repository::run_for_period(
+    let existing_run = repository::run_for_period(
         db,
         tenant_id,
         branch_id,
@@ -890,12 +943,41 @@ pub async fn run_payroll(
         result.period_end,
     )
     .await
-    .map_err(|_| AppError::internal("failed to check payroll run"))?
-    {
+    .map_err(|_| AppError::internal("failed to check payroll run"))?;
+    if let Some(existing) = &existing_run {
         if matches!(existing.status.as_str(), "finalized" | "paid") {
             return Err(AppError::conflict(
                 "finalized or paid payroll cannot be recalculated",
             ));
+        }
+    }
+    if let Some(existing) = &existing_run {
+        // Warn (non-blocking) when attendance changed since this staff's last calculation —
+        // the regenerated numbers are still correct (always freshly computed), this just flags
+        // that they differ from what was calculated before, for reviewer awareness.
+        let staff_ids = result
+            .items
+            .iter()
+            .map(|item| item.staff_id.clone())
+            .collect::<Vec<_>>();
+        let previous_hashes = repository::existing_attendance_hashes(
+            db,
+            tenant_id,
+            branch_id,
+            &existing.id,
+            &staff_ids,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to check attendance source changes"))?;
+        for item in &mut result.items {
+            if let Some(previous_hash) = previous_hashes.get(&item.staff_id) {
+                if !previous_hash.is_empty() && previous_hash != &item.attendance_source_hash {
+                    item.validation_warnings.push(
+                        "Attendance source changed since this staff was last calculated"
+                            .to_string(),
+                    );
+                }
+            }
         }
     }
     let statutory = result
@@ -1532,6 +1614,7 @@ fn preview_item_to_draft(item: PayrollPreviewItem) -> PayrollItemDraft {
         validation_warnings: json!(item.validation_warnings),
         calculation_json: item.calculation_json,
         notes: item.notes,
+        attendance_source_hash: item.attendance_source_hash,
     }
 }
 
@@ -1768,6 +1851,165 @@ pub async fn save_statutory_profile(
     )
     .await
     .map_err(|_| AppError::internal("failed to save statutory profile"))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPeriodScheduleInput {
+    pub period_month: NaiveDate,
+    pub cutoff_date: Option<NaiveDate>,
+    pub correction_deadline: Option<NaiveDate>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPeriodLockInput {
+    pub period_month: NaiveDate,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPeriodReopenInput {
+    pub reason: String,
+}
+
+fn validate_period_reason(value: &str) -> Result<String, AppError> {
+    let reason = value.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "reason must contain 1 to 500 characters",
+        ));
+    }
+    Ok(reason.to_string())
+}
+
+fn as_period_month(date: NaiveDate) -> Result<NaiveDate, AppError> {
+    date.with_day(1)
+        .ok_or_else(|| AppError::validation("period month is invalid"))
+}
+
+pub async fn list_payroll_periods(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<repository::PayrollPeriodRecord>, AppError> {
+    repository::list_payroll_periods(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll periods"))
+}
+
+pub async fn set_payroll_period_schedule(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    input: PayrollPeriodScheduleInput,
+) -> Result<repository::PayrollPeriodRecord, AppError> {
+    let period_month = as_period_month(input.period_month)?;
+    if let Some(cutoff) = input.cutoff_date {
+        if cutoff < period_month {
+            return Err(AppError::validation(
+                "cutoff date cannot be before the payroll period",
+            ));
+        }
+    }
+    if let Some(deadline) = input.correction_deadline {
+        if deadline < period_month {
+            return Err(AppError::validation(
+                "correction deadline cannot be before the payroll period",
+            ));
+        }
+    }
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start payroll period update"))?;
+    repository::lock_payroll_period_advisory(&mut tx, tenant_id, branch_id, period_month)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll period"))?;
+    let record = repository::set_payroll_period_schedule(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        period_month,
+        input.cutoff_date,
+        input.correction_deadline,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save payroll period schedule"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payroll period schedule"))?;
+    Ok(record)
+}
+
+pub async fn lock_payroll_period(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    input: PayrollPeriodLockInput,
+) -> Result<repository::PayrollPeriodRecord, AppError> {
+    let period_month = as_period_month(input.period_month)?;
+    let reason = validate_period_reason(&input.reason)?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start payroll period lock"))?;
+    repository::lock_payroll_period_advisory(&mut tx, tenant_id, branch_id, period_month)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll period"))?;
+    let record = repository::lock_payroll_period(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        period_month,
+        &reason,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to lock payroll period"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payroll period lock"))?;
+    Ok(record)
+}
+
+pub async fn reopen_payroll_period(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    period_month: NaiveDate,
+    input: PayrollPeriodReopenInput,
+) -> Result<repository::PayrollPeriodRecord, AppError> {
+    let period_month = as_period_month(period_month)?;
+    let reason = validate_period_reason(&input.reason)?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start payroll period reopen"))?;
+    repository::lock_payroll_period_advisory(&mut tx, tenant_id, branch_id, period_month)
+        .await
+        .map_err(|_| AppError::internal("failed to lock payroll period"))?;
+    let record = repository::reopen_payroll_period(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        period_month,
+        &reason,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reopen payroll period"))?
+    .ok_or_else(|| AppError::conflict("payroll period is not locked"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payroll period reopen"))?;
+    Ok(record)
 }
 
 #[cfg(test)]
