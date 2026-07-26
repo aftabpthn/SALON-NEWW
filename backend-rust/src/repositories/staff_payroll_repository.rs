@@ -249,7 +249,7 @@ pub struct ActiveAdvanceSource {
 /// into the repository so it can be persisted into `staff_advance_recoveries` in the same
 /// transaction as the payroll item. The ledger balance itself is only decremented later, when
 /// the run is finalized (see `transition_run`) — recalculating a draft never mutates it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, FromRow)]
 pub struct AdvanceRecoveryContribution {
     pub staff_id: String,
     pub advance_id: String,
@@ -723,6 +723,25 @@ pub async fn existing_attendance_hashes(
     .fetch_all(db)
     .await?;
     Ok(rows.into_iter().collect())
+}
+
+/// Advance recoveries actually applied for a finalized run — used to notify affected staff
+/// once the recovery is real (matches the same `applied=TRUE` rows `transition_run` just set).
+pub async fn applied_advance_recoveries_for_run(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<Vec<AdvanceRecoveryContribution>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT staff_id,advance_id,scheduled_paise,recovered_paise,carried_forward_paise,outstanding_after_paise \
+         FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND recovered_paise>0",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .fetch_all(db)
+    .await
 }
 
 pub async fn get_events(

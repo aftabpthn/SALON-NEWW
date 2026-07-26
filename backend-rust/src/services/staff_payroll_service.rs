@@ -1048,7 +1048,22 @@ pub async fn run_payroll(
         .await
         .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?
     };
-    detail(db, tenant_id, branch_id, &run.id).await
+    let result = detail(db, tenant_id, branch_id, &run.id).await?;
+    if !staff_id.trim().is_empty() {
+        if let Some(item) = result.items.iter().find(|item| item.staff_id == staff_id) {
+            queue_corrected_notification(
+                db,
+                tenant_id,
+                branch_id,
+                actor_user_id,
+                &result.run,
+                item,
+                reason,
+            )
+            .await;
+        }
+    }
+    Ok(result)
 }
 
 pub async fn list_runs(
@@ -1565,7 +1580,7 @@ pub async fn finalize(
     run_id: &str,
     actor_user_id: &str,
 ) -> Result<PayrollRunDetail, AppError> {
-    transition(
+    let detail = transition(
         db,
         tenant_id,
         branch_id,
@@ -1574,7 +1589,9 @@ pub async fn finalize(
         "reviewed",
         "finalized",
     )
-    .await
+    .await?;
+    queue_finalize_notifications(db, tenant_id, branch_id, actor_user_id, &detail).await;
+    Ok(detail)
 }
 
 pub async fn mark_paid(
@@ -1687,7 +1704,9 @@ pub async fn record_payout(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit payroll payout"))?;
-    detail(db, tenant_id, branch_id, run_id).await
+    let result = detail(db, tenant_id, branch_id, run_id).await?;
+    queue_paid_notifications(db, tenant_id, branch_id, actor_user_id, &result, &method).await;
+    Ok(result)
 }
 
 fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String), AppError> {
@@ -2411,6 +2430,265 @@ pub async fn reopen_payroll_period(
         .await
         .map_err(|_| AppError::internal("failed to commit payroll period reopen"))?;
     Ok(record)
+}
+
+/// Best-effort payroll notification queueing. Looks up the active template for
+/// `notification_type` — payroll must never fail because a template hasn't been configured yet,
+/// so a missing template is silently skipped, not an error. Applies the same
+/// `metadata->>'idempotencyKey'` pattern already used elsewhere in this codebase
+/// (`staff_operations_repository::queue_staff_operation_notification`) so retries/recomputation
+/// never send the same message twice. Prefers WhatsApp when the staff member has opted in,
+/// falling back to in-app otherwise — WhatsApp opt-in, the separate `allow_payroll_amounts`
+/// consent for messages that carry real numbers, and quiet-hours rescheduling are all enforced
+/// by the shared `queue_notification` pipeline this reuses rather than reimplements. Never
+/// propagates a failure into the caller: a notification problem must not block or roll back an
+/// actual payroll operation (finalize, payout, correction).
+#[allow(clippy::too_many_arguments)]
+async fn queue_payroll_notification(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    staff_id: &str,
+    notification_type: &str,
+    idempotency_key: &str,
+    variables: HashMap<String, String>,
+    contains_payroll_amounts: bool,
+) {
+    match enterprise_repository::notification_already_queued(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        notification_type,
+        idempotency_key,
+    )
+    .await
+    {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(error) => {
+            tracing::warn!(?error, notification_type, staff_id, "failed to check payroll notification idempotency");
+            return;
+        }
+    }
+    let template = match enterprise_repository::active_notification_template_by_type(
+        db,
+        tenant_id,
+        branch_id,
+        notification_type,
+        "en-IN",
+    )
+    .await
+    {
+        Ok(Some(template)) => template,
+        Ok(None) => return,
+        Err(error) => {
+            tracing::warn!(?error, notification_type, "failed to load payroll notification template");
+            return;
+        }
+    };
+    let context =
+        match enterprise_repository::notification_context(db, tenant_id, branch_id, staff_id).await {
+            Ok(Some(context)) => context,
+            Ok(None) => return,
+            Err(error) => {
+                tracing::warn!(?error, notification_type, staff_id, "failed to load payroll notification context");
+                return;
+            }
+        };
+    let channel = if context.whatsapp_opt_in == Some(true) {
+        "whatsapp"
+    } else {
+        "in_app"
+    };
+    let request = staff_enterprise_service::QueueNotificationRequest {
+        staff_id: staff_id.to_string(),
+        template_id: template.id,
+        channel: channel.to_string(),
+        variables: Some(variables),
+        contains_payroll_amounts: Some(contains_payroll_amounts),
+        scheduled_at: None,
+        metadata: Some(json!({ "idempotencyKey": idempotency_key })),
+    };
+    if let Err(error) =
+        staff_enterprise_service::queue_notification(db, tenant_id, branch_id, actor_user_id, request)
+            .await
+    {
+        tracing::warn!(?error, notification_type, staff_id, "failed to queue payroll notification");
+    }
+}
+
+fn payroll_notification_period_var(run: &repository::PayrollRunRecord) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+    vars.insert(
+        "payroll.period".to_string(),
+        format!("{} to {}", run.period_start, run.period_end),
+    );
+    vars
+}
+
+/// Queues `payroll_finalized`, `payroll_payslip_available`, and (for staff with a nonzero fine)
+/// `payroll_fine_applied` for every staff member in a just-finalized run, plus
+/// `payroll_advance_recovered` for every advance actually recovered by it.
+async fn queue_finalize_notifications(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    detail: &PayrollRunDetail,
+) {
+    let recoveries = repository::applied_advance_recoveries_for_run(
+        db,
+        tenant_id,
+        branch_id,
+        &detail.run.id,
+    )
+    .await
+    .unwrap_or_default();
+    for item in &detail.items {
+        let mut vars = payroll_notification_period_var(&detail.run);
+        vars.insert(
+            "payroll.netPay".to_string(),
+            paise_text(item.net_paise),
+        );
+        vars.insert(
+            "payroll.grossPay".to_string(),
+            paise_text(item.gross_paise),
+        );
+        queue_payroll_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &item.staff_id,
+            "payroll_finalized",
+            &format!("payroll_finalized:{}:{}", detail.run.id, item.staff_id),
+            vars.clone(),
+            true,
+        )
+        .await;
+        queue_payroll_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &item.staff_id,
+            "payroll_payslip_available",
+            &format!("payroll_payslip_available:{}:{}", detail.run.id, item.staff_id),
+            payroll_notification_period_var(&detail.run),
+            false,
+        )
+        .await;
+        let fine_paise = item
+            .calculation_json
+            .get("salaryRow")
+            .map(|row| salary_row_i64(row, "ruleFinePaise"))
+            .unwrap_or(0);
+        if fine_paise > 0 {
+            let mut fine_vars = payroll_notification_period_var(&detail.run);
+            fine_vars.insert("payroll.fineAmount".to_string(), paise_text(fine_paise));
+            queue_payroll_notification(
+                db,
+                tenant_id,
+                branch_id,
+                actor_user_id,
+                &item.staff_id,
+                "payroll_fine_applied",
+                &format!("payroll_fine_applied:{}:{}", detail.run.id, item.staff_id),
+                fine_vars,
+                true,
+            )
+            .await;
+        }
+    }
+    for recovery in recoveries {
+        let mut vars = payroll_notification_period_var(&detail.run);
+        vars.insert(
+            "payroll.recoveredAmount".to_string(),
+            paise_text(recovery.recovered_paise),
+        );
+        vars.insert(
+            "payroll.outstandingBalance".to_string(),
+            paise_text(recovery.outstanding_after_paise),
+        );
+        queue_payroll_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &recovery.staff_id,
+            "payroll_advance_recovered",
+            &format!("payroll_advance_recovered:{}:{}", recovery.advance_id, detail.run.id),
+            vars,
+            true,
+        )
+        .await;
+    }
+}
+
+/// Queues `payroll_paid` for every staff member in a run that was just marked paid.
+async fn queue_paid_notifications(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    detail: &PayrollRunDetail,
+    payment_method: &str,
+) {
+    for item in &detail.items {
+        let mut vars = payroll_notification_period_var(&detail.run);
+        vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
+        vars.insert(
+            "payroll.paymentMethod".to_string(),
+            payment_method.to_string(),
+        );
+        queue_payroll_notification(
+            db,
+            tenant_id,
+            branch_id,
+            actor_user_id,
+            &item.staff_id,
+            "payroll_paid",
+            &format!("payroll_paid:{}:{}", detail.run.id, item.staff_id),
+            vars,
+            true,
+        )
+        .await;
+    }
+}
+
+/// Queues `payroll_corrected` for a staff member whose payroll item was just regenerated.
+/// Keyed by the item's fresh `attendance_source_hash` rather than a timestamp, so a harmless
+/// retry that reproduces the exact same numbers doesn't re-notify, but a genuinely different
+/// recalculation does.
+async fn queue_corrected_notification(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    run: &repository::PayrollRunRecord,
+    item: &repository::PayrollItemRecord,
+    reason: &str,
+) {
+    let mut vars = payroll_notification_period_var(run);
+    vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
+    vars.insert("payroll.reason".to_string(), reason.to_string());
+    queue_payroll_notification(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        &item.staff_id,
+        "payroll_corrected",
+        &format!(
+            "payroll_corrected:{}:{}:{}",
+            run.id, item.staff_id, item.attendance_source_hash
+        ),
+        vars,
+        true,
+    )
+    .await;
 }
 
 #[cfg(test)]
