@@ -11,8 +11,8 @@ use crate::{
     repositories::{
         staff_enterprise_repository::{self as enterprise_repository, StatutoryRuleRecord},
         staff_payroll_repository::{
-            self as repository, AdjustmentInput, PayrollItemDraft, StatutoryContribution,
-            StatutoryProfileSource,
+            self as repository, ActiveAdvanceSource, AdjustmentInput, AdvanceRecoveryContribution,
+            PayrollItemDraft, StatutoryContribution, StatutoryProfileSource,
         },
     },
     services::{accounting_service, staff_enterprise_service},
@@ -150,6 +150,47 @@ fn compute_statutory(
     result
 }
 
+#[derive(Debug, Default)]
+struct AdvanceRecoveryAllocation {
+    total_recovered_paise: i64,
+    items: Vec<AdvanceRecoveryContribution>,
+}
+
+/// Schedules this period's salary-advance recovery across a staff member's active advances
+/// (oldest first), capping the total at `available_capacity_paise` — net pay after every other
+/// deduction already applied — so recovery can never push net pay below zero. Any shortfall
+/// against what was scheduled carries forward onto the advance's `pending_carry_forward_paise`
+/// for the next period; nothing here mutates the ledger balance itself, that only happens once
+/// the run is finalized (see `transition_run`).
+fn compute_advance_recovery(
+    available_capacity_paise: i64,
+    advances: &[ActiveAdvanceSource],
+) -> AdvanceRecoveryAllocation {
+    let mut result = AdvanceRecoveryAllocation::default();
+    let mut remaining_capacity = available_capacity_paise.max(0);
+    for advance in advances {
+        let scheduled = (advance.installment_amount_paise + advance.pending_carry_forward_paise)
+            .min(advance.outstanding_paise)
+            .max(0);
+        if scheduled == 0 {
+            continue;
+        }
+        let recovered = scheduled.min(remaining_capacity);
+        let carried_forward = scheduled - recovered;
+        remaining_capacity -= recovered;
+        result.total_recovered_paise += recovered;
+        result.items.push(AdvanceRecoveryContribution {
+            staff_id: String::new(),
+            advance_id: advance.id.clone(),
+            scheduled_paise: scheduled,
+            recovered_paise: recovered,
+            carried_forward_paise: carried_forward,
+            outstanding_after_paise: advance.outstanding_paise - recovered,
+        });
+    }
+    result
+}
+
 /// Detects manual `staff_payroll_adjustment_rules` entries whose name reads as a PF/ESIC/PT/TDS
 /// line item (e.g. an admin's earlier manual workaround) so they can be excluded from
 /// `auto_deduction_paise` — otherwise the same statutory amount would be withheld twice, once
@@ -200,6 +241,8 @@ pub struct PayrollPreviewItem {
     pub statutory_accrual_paise: i64,
     #[serde(skip)]
     pub statutory_breakdown: Value,
+    #[serde(skip)]
+    pub advance_recovery_items: Vec<repository::AdvanceRecoveryContribution>,
 }
 
 #[derive(Debug, Serialize)]
@@ -302,6 +345,7 @@ pub async fn preview(
         holidays,
         statutory_rules,
         statutory_profiles,
+        active_advances,
     ) = tokio::try_join!(
         repository::commission_rules(db, tenant_id, branch_id, &staff_ids, period_end),
         repository::catalog_commissions(db, tenant_id, branch_id, &staff_ids),
@@ -343,6 +387,7 @@ pub async fn preview(
         repository::list_holidays(db, tenant_id, branch_id, period_start, period_end),
         enterprise_repository::effective_rules_all(db, tenant_id, branch_id, period_end),
         repository::statutory_profiles(db, tenant_id, branch_id, &staff_ids),
+        repository::active_advances(db, tenant_id, branch_id, &staff_ids, period_end),
     )
     .map_err(|_| AppError::internal("failed to load payroll sources"))?;
 
@@ -354,6 +399,13 @@ pub async fn preview(
         .into_iter()
         .map(|profile| (profile.staff_id.clone(), profile))
         .collect::<HashMap<_, _>>();
+    let mut advances_by_staff: HashMap<String, Vec<ActiveAdvanceSource>> = HashMap::new();
+    for advance in active_advances {
+        advances_by_staff
+            .entry(advance.staff_id.clone())
+            .or_default()
+            .push(advance);
+    }
 
     let mut rules_by_staff: HashMap<String, Vec<(String, i32)>> = HashMap::new();
     for rule in rules {
@@ -639,10 +691,7 @@ pub async fn preview(
                 open_clock_ins as i64,
                 i64::from(unpaid_leave_days_x2 / 2),
             );
-            let advance_recovery_paise = 0_i64;
-            let auto_deduction_paise = rule_adjustments.deduction_paise
-                + rule_adjustments.fine_paise
-                + advance_recovery_paise;
+            let auto_deduction_paise = rule_adjustments.deduction_paise + rule_adjustments.fine_paise;
             let generated_positive_paise = tip_paise + rule_adjustments.allowance_paise;
             let gross_paise =
                 earned_salary_paise + overtime_paise + commission_paise + generated_positive_paise;
@@ -658,7 +707,22 @@ pub async fn preview(
                 ));
             }
             validation_errors.extend(statutory.errors.iter().cloned());
-            let deductions_paise = penalty_paise + auto_deduction_paise + statutory.employee_paise;
+            // Available capacity for advance recovery is whatever net pay would be left after
+            // every other deduction already applied — recovery is capped here so it can never
+            // push net pay below zero.
+            let available_before_advance_paise =
+                (gross_paise - penalty_paise - auto_deduction_paise - statutory.employee_paise)
+                    .max(0);
+            let mut advance_recovery = compute_advance_recovery(
+                available_before_advance_paise,
+                advances_by_staff.get(&staff_id).map(Vec::as_slice).unwrap_or(&[]),
+            );
+            for item in &mut advance_recovery.items {
+                item.staff_id = staff_id.clone();
+            }
+            let advance_recovery_paise = advance_recovery.total_recovered_paise;
+            let deductions_paise =
+                penalty_paise + auto_deduction_paise + statutory.employee_paise + advance_recovery_paise;
             let net_paise = (gross_paise - deductions_paise).max(0);
             let salary_row = json!({
                 "staffId": staff_id,
@@ -702,7 +766,7 @@ pub async fn preview(
                 "ruleFinePaise": rule_adjustments.fine_paise,
                 "ruleDeductionPaise": rule_adjustments.deduction_paise,
                 "advanceRecoveryPaise": advance_recovery_paise,
-                "advanceSource": "not_configured",
+                "advanceSource": if advance_recovery.items.is_empty() { "none" } else { "salary_advance_ledger" },
                 "grossPaise": gross_paise,
                 "deductionsPaise": deductions_paise,
                 "netPaise": net_paise,
@@ -716,6 +780,19 @@ pub async fn preview(
                 }
             });
             let statutory_breakdown = Value::Object(statutory.breakdown);
+            let advance_recovery_json: Vec<Value> = advance_recovery
+                .items
+                .iter()
+                .map(|item| {
+                    json!({
+                        "advanceId": item.advance_id,
+                        "scheduledPaise": item.scheduled_paise,
+                        "recoveredPaise": item.recovered_paise,
+                        "carriedForwardPaise": item.carried_forward_paise,
+                        "outstandingAfterPaise": item.outstanding_after_paise,
+                    })
+                })
+                .collect();
 
             PayrollPreviewItem {
                 calculation_json: json!({
@@ -727,6 +804,7 @@ pub async fn preview(
                     "generatedPositiveAdjustmentPaise": generated_positive_paise,
                     "generatedAutoDeductionPaise": auto_deduction_paise,
                     "generatedStatutoryDeductionPaise": statutory.employee_paise,
+                    "generatedAdvanceRecoveryPaise": advance_recovery_paise,
                     "salaryRow": salary_row,
                     "statutory": {
                         "employeePaise": statutory.employee_paise,
@@ -734,10 +812,15 @@ pub async fn preview(
                         "accrualPaise": statutory.accrual_paise,
                         "breakdown": statutory_breakdown,
                     },
+                    "advanceRecovery": {
+                        "totalRecoveredPaise": advance_recovery_paise,
+                        "items": advance_recovery_json,
+                    },
                 }),
                 statutory_employer_paise: statutory.employer_paise,
                 statutory_accrual_paise: statutory.accrual_paise,
                 statutory_breakdown,
+                advance_recovery_items: advance_recovery.items,
                 staff_id,
                 staff_name: staff_row.staff_name,
                 employee_code: staff_row.employee_code,
@@ -836,6 +919,11 @@ pub async fn run_payroll(
             breakdown: item.statutory_breakdown.clone(),
         })
         .collect::<Vec<_>>();
+    let advance_recoveries = result
+        .items
+        .iter()
+        .flat_map(|item| item.advance_recovery_items.iter().cloned())
+        .collect::<Vec<_>>();
     let drafts = result
         .items
         .into_iter()
@@ -851,6 +939,7 @@ pub async fn run_payroll(
             actor_user_id,
             &drafts,
             &statutory,
+            &advance_recoveries,
         )
         .await
         .map_err(|_| AppError::internal("failed to save payroll run"))?
@@ -865,6 +954,7 @@ pub async fn run_payroll(
             &drafts,
             reason,
             &statutory,
+            &advance_recoveries,
         )
         .await
         .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?
@@ -945,6 +1035,7 @@ pub async fn payslip_pdf(
         format!("Deductions: INR {}", paise_text(item.deductions_paise)),
     ];
     lines.extend(statutory_payslip_lines(&item.calculation_json));
+    lines.extend(advance_recovery_payslip_lines(&item.calculation_json));
     lines.push(format!("Net pay: INR {}", paise_text(item.net_paise)));
     Ok(crate::services::invoice_pdf::render_text_report(
         "STAFF PAYSLIP",
@@ -990,6 +1081,23 @@ fn statutory_payslip_lines(calculation_json: &Value) -> Vec<String> {
         ));
     }
     lines
+}
+
+fn advance_recovery_payslip_lines(calculation_json: &Value) -> Vec<String> {
+    let Some(advance_recovery) = calculation_json.get("advanceRecovery") else {
+        return vec![];
+    };
+    let total_paise = advance_recovery
+        .get("totalRecoveredPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if total_paise <= 0 {
+        return vec![];
+    }
+    vec![format!(
+        "Salary advance recovery: INR {}",
+        paise_text(total_paise)
+    )]
 }
 
 pub async fn save_adjustments(
