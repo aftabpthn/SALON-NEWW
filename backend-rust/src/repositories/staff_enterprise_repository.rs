@@ -1281,6 +1281,47 @@ pub async fn notification_template(
         .bind(tenant).bind(branch).bind(id).fetch_optional(db).await
 }
 
+/// Looks up the active template configured for a notification type (e.g. by domain code that
+/// needs to queue a notification but only knows the event type, not a template id — payroll
+/// events use this instead of requiring every call-site to know a template UUID).
+pub async fn active_notification_template_by_type(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    notification_type: &str,
+    language_code: &str,
+) -> Result<Option<StaffNotificationTemplateRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,notification_type,language_code,title,body_template,sensitive,active,version,created_at,updated_at FROM staff_notification_templates WHERE tenant_id=$1 AND branch_id=$2 AND notification_type=$3 AND language_code=$4 AND active=TRUE")
+        .bind(tenant).bind(branch).bind(notification_type).bind(language_code).fetch_optional(db).await
+}
+
+/// Idempotency check for the payroll notification call-sites: has a notification with this
+/// exact idempotency key already been queued for this staff/notification_type? Mirrors the
+/// `metadata->>'idempotencyKey'` pattern already used by `staff_operations_repository`'s
+/// `queue_staff_operation_notification`, since `staff_notification_queue` has no DB-level unique
+/// constraint for this — the check is app-level, done before calling the shared
+/// `queue_notification` service function so its existing behavior for other callers is untouched.
+pub async fn notification_already_queued(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff_id: &str,
+    notification_type: &str,
+    idempotency_key: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM staff_notification_queue WHERE tenant_id=$1 AND branch_id=$2 \
+         AND staff_id=$3 AND notification_type=$4 AND metadata_json->>'idempotencyKey'=$5)",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(staff_id)
+    .bind(notification_type)
+    .bind(idempotency_key)
+    .fetch_one(db)
+    .await
+}
+
 pub async fn create_notification_queue(
     db: &PgPool,
     tenant: &str,

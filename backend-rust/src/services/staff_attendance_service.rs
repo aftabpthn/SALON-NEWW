@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -7,10 +7,18 @@ use crate::{
     repositories::{
         staff_attendance_repository::{
             self, AttendanceAdjustmentInput, AttendanceCorrectionInput, AttendanceSummaryBaseRecord,
+            OvertimeApprovalRecord,
         },
+        staff_payroll_repository,
         staff_repository,
     },
 };
+
+fn today_ist() -> NaiveDate {
+    Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("IST offset is valid"))
+        .date_naive()
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -239,6 +247,7 @@ pub async fn correct_attendance(
 ) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
     validate_correction(&input)?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     staff_attendance_repository::save_correction(
         db,
         tenant_id,
@@ -258,6 +267,39 @@ pub async fn correct_attendance(
             AppError::internal("failed to correct attendance")
         }
     })
+}
+
+/// Blocks attendance edits once the payroll period covering `business_date` is locked, or once
+/// its configured correction deadline has passed — whichever applies. Both checks are advisory
+/// unless explicitly configured (no period row / no deadline set = no restriction), so this
+/// never breaks attendance editing for branches that haven't set up period locking yet.
+async fn ensure_attendance_editable(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<(), AppError> {
+    let period_month = business_date
+        .with_day(1)
+        .ok_or_else(|| AppError::internal("invalid business date"))?;
+    let period = staff_payroll_repository::payroll_period_for_month(db, tenant_id, branch_id, period_month)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll period status"))?;
+    if let Some(period) = period {
+        if period.status == "locked" {
+            return Err(AppError::conflict(
+                "this payroll period is locked; an authorized reopen is required before attendance can be corrected",
+            ));
+        }
+        if let Some(deadline) = period.correction_deadline {
+            if today_ist() > deadline {
+                return Err(AppError::conflict(
+                    "the attendance correction deadline for this period has passed",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_correction(input: &AttendanceCorrectionInput) -> Result<(), AppError> {
@@ -388,6 +430,65 @@ async fn staff_ids_belong_to_scope(
     .await
     .map_err(|_| AppError::internal("failed to validate attendance staff"))?;
     Ok(count == staff_ids.len() as i64)
+}
+
+pub async fn list_overtime(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<OvertimeApprovalRecord>, AppError> {
+    if !status.is_empty() && !matches!(status, "pending" | "approved" | "rejected") {
+        return Err(AppError::validation("overtime status is invalid"));
+    }
+    if to < from {
+        return Err(AppError::validation("date range is invalid"));
+    }
+    staff_attendance_repository::list_overtime(db, tenant_id, branch_id, staff_id, status, from, to)
+        .await
+        .map_err(|_| AppError::internal("failed to load overtime approvals"))
+}
+
+pub async fn decide_overtime(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    attendance_id: &str,
+    decision: &str,
+    approved_overtime_minutes: Option<i32>,
+) -> Result<OvertimeApprovalRecord, AppError> {
+    let decision = decision.trim().to_ascii_lowercase();
+    if !matches!(decision.as_str(), "approved" | "rejected") {
+        return Err(AppError::validation("decision must be approved or rejected"));
+    }
+    let approved_minutes = if decision == "approved" {
+        let minutes = approved_overtime_minutes.unwrap_or(i32::MAX);
+        if minutes < 0 {
+            return Err(AppError::validation("approved overtime minutes is invalid"));
+        }
+        minutes
+    } else {
+        0
+    };
+    // `approved_minutes` may exceed the actual overtime_minutes when the caller didn't specify a
+    // partial amount (defaults to "approve in full") — the repository's LEAST(...) clamp ensures
+    // approval can never authorize more than what was actually worked.
+    staff_attendance_repository::decide_overtime(
+        db,
+        tenant_id,
+        branch_id,
+        attendance_id,
+        actor_user_id,
+        &decision,
+        approved_minutes,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to decide overtime approval"))?
+    .ok_or_else(|| AppError::not_found("attendance record with overtime not found"))
 }
 
 #[cfg(test)]

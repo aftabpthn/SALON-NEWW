@@ -1272,6 +1272,12 @@ pub async fn create_notification_template(
             "task",
             "training",
             "payroll",
+            "payroll_finalized",
+            "payroll_paid",
+            "payroll_payslip_available",
+            "payroll_fine_applied",
+            "payroll_advance_recovered",
+            "payroll_corrected",
             "compliance",
             "announcement",
         ],
@@ -1285,7 +1291,8 @@ pub async fn create_notification_template(
     let title = required(&request.title, 160, "template title")?;
     let body = required(&request.body_template, 3000, "template body")?;
     let sensitive = request.sensitive.unwrap_or(false)
-        || matches!(notification_type.as_str(), "payroll" | "compliance");
+        || notification_type.starts_with("payroll")
+        || notification_type == "compliance";
     repository::create_notification_template(
         db,
         t,
@@ -1353,10 +1360,8 @@ pub async fn queue_notification(
     let body = render_template(&template.body_template, &variables)?;
     let sensitive = template.sensitive
         || contains_payroll_amounts
-        || matches!(
-            template.notification_type.as_str(),
-            "payroll" | "compliance"
-        );
+        || template.notification_type.starts_with("payroll")
+        || template.notification_type == "compliance";
     let now = Utc::now();
     let mut scheduled_at = request.scheduled_at.unwrap_or(now).max(now);
     if channel == "whatsapp" {

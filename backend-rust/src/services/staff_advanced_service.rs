@@ -42,6 +42,7 @@ const TRIGGER_TYPES: &[&str] = &[
     "sandwich_penalty",
     "unpaid_week_off",
     "fixed",
+    "weekly_off_worked",
 ];
 const APPLICATION_MODES: &[&str] = &["per_occurrence", "fixed"];
 const TASK_TYPES: &[&str] = &[

@@ -39,6 +39,11 @@ pub fn router() -> Router<AppState> {
             "/staff-attendance/:staff_id/:business_date/correction",
             axum::routing::patch(correct_attendance),
         )
+        .route("/staff-attendance/overtime", get(list_overtime))
+        .route(
+            "/staff-attendance/overtime/:attendance_id/decision",
+            post(decide_overtime),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -369,6 +374,94 @@ async fn correct_attendance(
             ip_address: None,
             user_agent: None,
             details: serde_json::json!({ "staffId": staff_id, "businessDate": business_date }),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OvertimeQuery {
+    staff_id: Option<String>,
+    status: Option<String>,
+    from: NaiveDate,
+    to: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+struct OvertimeDecisionRequest {
+    decision: String,
+    approved_overtime_minutes: Option<i32>,
+}
+
+fn ensure_overtime_access(claims: &AuthClaims) -> Result<(), AppError> {
+    const ALLOWED_ROLES: &[&str] = &["owner", "admin", "accountant", "manager"];
+    if ALLOWED_ROLES
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("overtime approval access is restricted"))
+    }
+}
+
+async fn list_overtime(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<OvertimeQuery>,
+) -> ApiResult<Vec<crate::repositories::staff_attendance_repository::OvertimeApprovalRecord>> {
+    ensure_overtime_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_attendance_service::list_overtime(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.staff_id.as_deref().unwrap_or("").trim(),
+        query.status.as_deref().unwrap_or("").trim(),
+        query.from,
+        query.to,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn decide_overtime(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(attendance_id): Path<String>,
+    Json(payload): Json<OvertimeDecisionRequest>,
+) -> ApiResult<crate::repositories::staff_attendance_repository::OvertimeApprovalRecord> {
+    ensure_overtime_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_attendance_service::decide_overtime(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &attendance_id,
+        &payload.decision,
+        payload.approved_overtime_minutes,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.attendance.overtime_decided",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: serde_json::json!({ "attendanceId": attendance_id, "decision": row.ot_approval_status }),
         },
     )
     .await;

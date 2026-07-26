@@ -391,7 +391,7 @@ pub async fn clock_out(
     if updated.rows_affected() == 0 {
         return Ok(None);
     }
-    recalculate(db, tenant_id, branch_id, staff_id, business_date)
+    recalculate_with_ot_reset(db, tenant_id, branch_id, staff_id, business_date)
         .await
         .map(Some)
 }
@@ -410,6 +410,41 @@ async fn recalculate(
         .bind(business_date)
         .fetch_one(db)
         .await
+}
+
+/// Recomputes attendance and, if the recomputation changed `overtime_minutes`, resets any
+/// existing OT approval decision back to pending — an approval must always match the overtime
+/// figure it was actually granted against, never a stale one from before a correction/clock edit.
+async fn recalculate_with_ot_reset(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<AttendanceRecord, sqlx::Error> {
+    let before_overtime: Option<i32> = sqlx::query_scalar(
+        "SELECT overtime_minutes FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(business_date)
+    .fetch_optional(db)
+    .await?;
+    let updated = recalculate(db, tenant_id, branch_id, staff_id, business_date).await?;
+    if before_overtime != Some(updated.overtime_minutes) {
+        sqlx::query(
+            "UPDATE staff_attendance_records SET ot_approval_status='pending',approved_overtime_minutes=0,ot_approved_by=NULL,ot_approved_at=NULL,updated_at=NOW() \
+             WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .bind(business_date)
+        .execute(db)
+        .await?;
+    }
+    Ok(updated)
 }
 
 pub async fn start_break(
@@ -471,7 +506,7 @@ pub async fn end_break(
     if updated.is_none() {
         return Ok(None);
     }
-    recalculate(db, tenant_id, branch_id, staff_id, business_date)
+    recalculate_with_ot_reset(db, tenant_id, branch_id, staff_id, business_date)
         .await
         .map(Some)
 }
@@ -518,13 +553,97 @@ pub async fn save_correction(
             .bind(item.started_at).bind(item.ended_at).bind(item.comments).bind(&input.corrected_by)
             .execute(&mut *tx).await?;
     }
-    let row = sqlx::query_as(RECALCULATE_ATTENDANCE_SQL)
+    let before_overtime: Option<i32> =
+        sqlx::query_scalar("SELECT overtime_minutes FROM staff_attendance_records WHERE id=$1")
+            .bind(&attendance_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let row: AttendanceRecord = sqlx::query_as(RECALCULATE_ATTENDANCE_SQL)
         .bind(tenant_id)
         .bind(branch_id)
         .bind(staff_id)
         .bind(business_date)
         .fetch_one(&mut *tx)
         .await?;
+    if before_overtime != Some(row.overtime_minutes) {
+        // The correction changed overtime — any prior OT approval no longer matches reality.
+        sqlx::query(
+            "UPDATE staff_attendance_records SET ot_approval_status='pending',approved_overtime_minutes=0,ot_approved_by=NULL,ot_approved_at=NULL,updated_at=NOW() WHERE id=$1",
+        )
+        .bind(&attendance_id)
+        .execute(&mut *tx)
+        .await?;
+    }
     tx.commit().await?;
     Ok(row)
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct OvertimeApprovalRecord {
+    pub id: String,
+    pub staff_id: String,
+    pub business_date: NaiveDate,
+    pub overtime_minutes: i32,
+    pub ot_approval_status: String,
+    pub approved_overtime_minutes: i32,
+    pub ot_approved_by: Option<String>,
+    pub ot_approved_at: Option<DateTime<Utc>>,
+}
+
+const OVERTIME_APPROVAL_COLUMNS: &str = "id,staff_id,business_date,overtime_minutes,ot_approval_status,\
+approved_overtime_minutes,ot_approved_by,ot_approved_at";
+
+pub async fn list_overtime(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<OvertimeApprovalRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        SELECT {OVERTIME_APPROVAL_COLUMNS} FROM staff_attendance_records
+         WHERE tenant_id=$1 AND branch_id=$2 AND ($3='' OR staff_id=$3) AND ($4='' OR ot_approval_status=$4)
+           AND overtime_minutes>0 AND business_date BETWEEN $5 AND $6
+         ORDER BY business_date DESC,staff_id
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(status)
+    .bind(from)
+    .bind(to)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn decide_overtime(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    attendance_id: &str,
+    actor_user_id: &str,
+    decision: &str,
+    approved_overtime_minutes: i32,
+) -> Result<Option<OvertimeApprovalRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"
+        UPDATE staff_attendance_records SET
+          ot_approval_status=$5,approved_overtime_minutes=LEAST($6,overtime_minutes),ot_approved_by=$4,ot_approved_at=NOW(),updated_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND overtime_minutes>0
+        RETURNING {OVERTIME_APPROVAL_COLUMNS}
+        "#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(attendance_id)
+    .bind(actor_user_id)
+    .bind(decision)
+    .bind(approved_overtime_minutes)
+    .fetch_optional(db)
+    .await
 }
