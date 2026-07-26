@@ -1,0 +1,42 @@
+diff --git a/frontend-angular/src/app/pages/inventory/inventory-page.component.ts b/frontend-angular/src/app/pages/inventory/inventory-page.component.ts
+index 1111111..2222222 100644
+--- a/frontend-angular/src/app/pages/inventory/inventory-page.component.ts
++++ b/frontend-angular/src/app/pages/inventory/inventory-page.component.ts
+@@ -107,6 +107,30 @@
+   private readonly referenceCacheMs = 30_000;
+   private readonly referenceCache = new Map<string, { data: unknown; loadedAt: number }>();
+   private readonly referenceRequests = new Map<string, Promise<unknown>>();
+   private readonly tabLoading = new Set<Tab>(['products']);
+   private reloadDebounceTimer: ReturnType<typeof setTimeout> | null = null;
++  private readonly itemById = new Map<string, Item>();
++  private readonly batchTrackedInventoryItemIds = new Set<string>();
++  private readonly supplierScorecardById = new Map<string, SupplierGovernance['scorecards'][number]>();
++  private readonly supplierTermsById = new Map<string, SupplierGovernance['terms'][]>();
++  private readonly supplierPriceListsById = new Map<string, SupplierGovernance['priceLists'][]>();
++  private readonly supplierQualityById = new Map<string, SupplierGovernance['qualityEvents'][number]>();
++  private readonly supplierExpiryRiskById = new Map<string, SupplierGovernance['expiryRisk'][number]>();
++  private readonly supplierReplacementsById = new Map<string, SupplierGovernance['replacementOptions'][]>();
++  private readonly orderStatusCounts = new Map<string, number>();
++  private productCategoriesCache: string[] = [];
++  private filteredItemsCache: Item[] = [];
++  private lowStockItemsCache: Item[] = [];
++  private outOfStockItemsCache: Item[] = [];
++  private inventoryValueCache = 0;
++  private filteredReorderRowsCache: ReorderRow[] = [];
++  private reorderValueCache = 0;
++  private valuationValueCache = 0;
++  private valuationUnitsCache = 0;
++  private valuationLowStockValueCache = 0;
++  private valuationExceptionsCache = 0;
++  private ledgerStockInCache = 0;
++  private ledgerStockOutCache = 0;
++  private ledgerAdjustmentsCache = 0;
++  private filteredReceiptsCache: Receipt[] = [];
++  private receiptSuppliersCache: string[] = [];
++  private receiptTaxableCache = 0;
++  private receiptTotalCache = 0;
++  private receiptGstCache = 0;
++  private receiptPayableTotalCache = 0;
++  private filteredOrdersCache: Order[] = [];
++  private orderStatusesCache: string[] = [];
++  private orderOpenValueCache = 0;

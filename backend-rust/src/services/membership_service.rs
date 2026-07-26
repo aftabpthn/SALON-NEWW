@@ -78,6 +78,30 @@ pub async fn cancel_membership(
         .map_err(|_| AppError::internal("failed to cancel membership"))
 }
 
+pub async fn freeze_membership(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    days: i32,
+    reason: &str,
+) -> Result<bool, AppError> {
+    membership_lifecycle_repository::freeze(db, tenant_id, branch_id, id, days, reason)
+        .await
+        .map_err(|_| AppError::internal("failed to freeze membership"))
+}
+
+pub async fn resume_membership(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<bool, AppError> {
+    membership_lifecycle_repository::resume(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to resume membership"))
+}
+
 pub async fn lifecycle_ledger(
     db: &PgPool,
     tenant_id: &str,

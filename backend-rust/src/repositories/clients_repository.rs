@@ -2261,6 +2261,52 @@ pub async fn get_treatment_photo(
         .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id).fetch_optional(db).await
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn update_treatment_photo(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    photo_id: &str,
+    caption: &str,
+    photo_type: &str,
+) -> Result<Option<ClientTreatmentPhotoRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE client_treatment_photos
+              SET caption=$5,photo_type=$6
+            WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) AND id=$4
+           RETURNING id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(photo_id)
+    .bind(caption)
+    .bind(photo_type)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn delete_treatment_photo(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    photo_id: &str,
+) -> Result<bool, sqlx::Error> {
+    let deleted = sqlx::query(
+        "DELETE FROM client_treatment_photos WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) AND id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(photo_id)
+    .execute(db)
+    .await?
+    .rows_affected();
+    Ok(deleted > 0)
+}
+
 pub async fn list_duplicates(
     db: &PgPool,
     tenant_id: &str,
@@ -3124,6 +3170,42 @@ mod tests {
         .await
         .unwrap()
         .unwrap();
+        let updated = update_treatment_photo(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            "client-1",
+            &photo.id,
+            "Updated caption",
+            "after",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(updated.caption, "Updated caption");
+        assert_eq!(updated.photo_type, "after");
+        assert!(
+            update_treatment_photo(
+                &pool,
+                "tenant-1",
+                "branch-2",
+                "client-1",
+                &photo.id,
+                "Wrong branch",
+                "before",
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+        assert!(
+            !delete_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id)
+                .await
+                .unwrap()
+        );
+        assert!(delete_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
+            .await
+            .unwrap());
         assert!(
             get_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id)
                 .await

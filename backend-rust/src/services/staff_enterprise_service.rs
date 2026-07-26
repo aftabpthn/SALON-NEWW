@@ -51,6 +51,7 @@ pub struct ApprovalRequestInput {
 pub struct DecisionRequest {
     pub decision: String,
     pub version: i32,
+    #[serde(alias = "notes")]
     pub comments: Option<String>,
 }
 

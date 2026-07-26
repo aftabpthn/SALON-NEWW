@@ -1,0 +1,49 @@
+*** Begin Patch
+*** Update File: frontend-angular/src/app/pages/reports/invoices/invoice-reports-page.component.ts
+@@
+-type SourceReportTab = 'detailed-invoice' | 'invoices' | 'invoice-activity' | 'due-recovery' | 'recovery-history' | 'wallet-ledger' | 'payment-collection' | 'staff-service-discount' | 'service-trends' | 'service-clients' | 'product-sales' | 'product-movements' | 'balance-sheet' | 'working-capital';
++type SourceReportTab = 'detailed-invoice' | 'invoice-activity' | 'due-recovery' | 'recovery-history' | 'wallet-ledger' | 'payment-collection' | 'staff-service-discount' | 'service-trends' | 'service-clients' | 'product-sales' | 'product-movements' | 'balance-sheet' | 'working-capital';
+ interface FilterOption { id: string; name: string; }
+ interface PaymentMode { code: string; name: string; }
+-interface InvoiceReportRow { id: string; invoiceNumber: string; branchId: string; clientName: string; staffName: string; businessDate: string; status: string; totalPaise: number; paidPaise: number; balancePaise: number; ageingDays: number; followUpRequired: boolean; }
+ interface InvoiceActivityRow { invoiceId: string; invoiceNumber: string; activityType: string; channel: string; recipient: string; status: string; createdAt: string; }
+@@
+   activeTab: ReportTab = 'invoice-360';
+   detailedRows: DetailedInvoiceRow[] = [];
+   detailedSummary: DetailedInvoiceSummary | null = null;
+   expandedInvoiceId = '';
+-  rows: InvoiceReportRow[] = [];
+   activityRows: InvoiceActivityRow[] = [];
+@@
+   private pathFor(tab: SourceReportTab): string {
+     if (tab === 'detailed-invoice') return '/api/v1/reports/invoices/detailed';
+-    if (tab === 'invoices') return '/api/reports/invoices';
+     if (tab === 'invoice-activity') return '/api/v1/reports/invoice-activity';
+@@
+-      if (key === 'staffId' && !['detailed-invoice', 'invoices', 'due-recovery', 'recovery-history', 'staff-service-discount', 'service-trends', 'service-clients'].includes(tab)) continue;
+-      if (key === 'status' && !['detailed-invoice', 'invoices'].includes(tab)) continue;
+-      if (key === 'recovery' && tab !== 'invoices') continue;
+-      if (key === 'ageingDays' && tab !== 'invoices') continue;
+-      if (key === 'paymentMethod' && !['detailed-invoice', 'invoices', 'recovery-history', 'payment-collection'].includes(tab)) continue;
++      if (key === 'staffId' && !['detailed-invoice', 'due-recovery', 'recovery-history', 'staff-service-discount', 'service-trends', 'service-clients'].includes(tab)) continue;
++      if (key === 'status' && !['detailed-invoice'].includes(tab)) continue;
++      if (key === 'recovery' || key === 'ageingDays') continue;
++      if (key === 'paymentMethod' && !['detailed-invoice', 'recovery-history', 'payment-collection'].includes(tab)) continue;
+@@
+     if (tab === 'detailed-invoice') {
+       const data = this.data(response);
+       this.detailedSummary = data.summary ?? null;
+       this.detailedRows = Array.isArray(data.rows) ? data.rows : [];
+     }
+-    if (tab === 'invoices') this.rows = this.list(response).map((row) => this.normalizeInvoice(row));
+     if (tab === 'invoice-activity') this.activityRows = this.list(response);
+@@
+     this.detailedRows = [];
+     this.detailedSummary = null;
+-    this.rows = [];
+     this.activityRows = [];
+@@
+-  private normalizeInvoice(row: any): InvoiceReportRow { return { id: String(row.id), invoiceNumber: String(row.invoiceNumber ?? row.invoice_number), branchId: String(row.branchId ?? row.branch_id), clientName: String(row.clientName ?? row.client_name ?? 'Walk-in client'), staffName: String(row.staffName ?? row.staff_name ?? '-'), businessDate: String(row.businessDate ?? row.business_date ?? ''), status: String(row.status), totalPaise: Number(row.totalPaise ?? row.total_paise ?? 0), paidPaise: Number(row.paidPaise ?? row.paid_paise ?? 0), balancePaise: Number(row.balancePaise ?? row.balance_paise ?? 0), ageingDays: Number(row.ageingDays ?? row.ageing_days ?? 0), followUpRequired: Boolean(row.followUpRequired ?? row.follow_up_required) }; }
+   private name(item: any): string { return String(item.name ?? item.fullName ?? [item.firstName ?? item.first_name, item.lastName ?? item.last_name].filter(Boolean).join(' ') ?? item.id); }
+ }
+*** End Patch

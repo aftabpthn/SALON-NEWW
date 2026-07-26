@@ -383,9 +383,9 @@
 } @else {
   <div class="small-empty">No records yet</div>
 }</article>
-<article><header><strong>Before / after photos</strong></header>@if (treatmentPhotos.length) {
-<div class="record-list">@for (photo of treatmentPhotos; track photo) {
-  <div><span><b>{{ photo.caption || photo.fileName }}</b><small>{{ photo.photoType }} · {{ formatDateTime(photo.createdAt) }}</small></span><button type="button" (click)="viewTreatmentPhoto(photo)">Download</button></div>
+<article class="wide-card photo-card"><header class="photo-header"><strong>Before / after photos</strong><div class="photo-toolbar"><select [(ngModel)]="photoTypeFilter" aria-label="Filter treatment photos"><option value="all">All types</option><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select><select [(ngModel)]="photoSortOrder" aria-label="Sort treatment photos"><option value="newest">Newest</option><option value="oldest">Oldest</option></select><button type="button" [disabled]="!selectedClient" (click)="showPhotoUpload()">Upload photo</button></div></header>@if (filteredTreatmentPhotos.length) {
+<div class="record-list">@for (photo of filteredTreatmentPhotos; track photo) {
+  <div><span><b>{{ photo.caption || photo.fileName }}</b><small>{{ photo.photoType }} · {{ formatDateTime(photo.createdAt) }} · {{ photo.byteSize | number }} bytes</small></span><span class="row-actions"><button type="button" (click)="openTreatmentPhoto(photo)">View</button><button type="button" (click)="viewTreatmentPhoto(photo)">Download</button></span></div>
 }</div>
 } @else {
   <div class="small-empty">No records yet</div>
@@ -892,7 +892,7 @@
 </aside>
 }
 
-@if (drawerMode === 'photo') {
+@if (drawerMode === 'photo-upload') {
   <aside class="client-drawer note-drawer" aria-label="Treatment photo upload">
     <header><strong>Upload treatment photo</strong><button type="button" aria-label="Close treatment photo upload" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
     <div class="drawer-body"><label>Photo<input type="file" accept="image/jpeg,image/png,image/webp" (change)="onPhotoSelected($event)" /></label><label>Photo type<select [(ngModel)]="photoType"><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select></label><label class="full-field">Caption<textarea rows="5" [(ngModel)]="photoCaption"></textarea></label>@if (clientError) {
@@ -900,6 +900,36 @@
   }</div>
   <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="button" [disabled]="savingWorkspace" (click)="saveTreatmentPhoto()">{{ savingWorkspace ? 'Uploading...' : 'Upload' }}</button></footer>
 </aside>
+}
+
+@if (drawerMode === 'photo-detail' && selectedTreatmentPhoto) {
+  <aside class="client-drawer note-drawer photo-drawer" aria-label="Treatment photo details">
+    <header><strong>{{ selectedTreatmentPhoto.caption || selectedTreatmentPhoto.fileName }}</strong><button type="button" aria-label="Close treatment photo details" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body photo-drawer-body">
+      <div class="photo-preview full-field">
+        @if (treatmentPhotoPreviewLoading) {
+          <div class="photo-preview-state"><i class="bi bi-arrow-repeat"></i><span>Loading...</span></div>
+        } @else if (treatmentPhotoPreviewUrl) {
+          <img [src]="treatmentPhotoPreviewUrl" [alt]="selectedTreatmentPhoto.caption || selectedTreatmentPhoto.fileName" />
+        } @else {
+          <div class="photo-preview-state"><i class="bi bi-image"></i><span>Preview unavailable</span></div>
+        }
+      </div>
+      <div class="photo-meta-grid full-field">
+        <span><small>File name</small><b>{{ selectedTreatmentPhoto.fileName }}</b></span>
+        <span><small>Uploaded</small><b>{{ formatDateTime(selectedTreatmentPhoto.createdAt) }}</b></span>
+        <span><small>Type</small><b>{{ selectedTreatmentPhoto.contentType }}</b></span>
+        <span><small>Size</small><b>{{ selectedTreatmentPhoto.byteSize | number }} bytes</b></span>
+        <span class="full-field"><small>SHA-256</small><b>{{ selectedTreatmentPhoto.sha256 }}</b></span>
+      </div>
+      <label class="full-field">Caption<textarea rows="4" [(ngModel)]="treatmentPhotoCaptionDraft"></textarea></label>
+      <label>Photo type<select [(ngModel)]="treatmentPhotoTypeDraft"><option value="before">Before</option><option value="after">After</option><option value="other">Other</option></select></label>
+      @if (treatmentPhotoDetailError) {
+        <p class="form-error full-field">{{ treatmentPhotoDetailError }}</p>
+      }
+    </div>
+    <footer><button type="button" [disabled]="savingPhoto" (click)="deleteTreatmentPhoto()">Delete</button><button type="button" (click)="closeDrawer()">Close</button><button class="primary-button" type="button" [disabled]="savingPhoto" (click)="saveTreatmentPhotoDetails()">{{ savingPhoto ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
 }
 
 @if (kioskMode && selectedKioskForm) {
