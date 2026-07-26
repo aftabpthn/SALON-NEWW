@@ -41,6 +41,14 @@ pub fn router() -> Router<AppState> {
             "/staff-payroll/runs/:run_id/payslips/:staff_id",
             get(download_payslip),
         )
+        .route(
+            "/staff-payroll/statutory-profiles",
+            get(list_statutory_profiles),
+        )
+        .route(
+            "/staff-payroll/statutory-profiles/:staff_id",
+            get(get_statutory_profile).put(save_statutory_profile),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -438,6 +446,51 @@ async fn download_payslip(
         )
         .body(Body::from(pdf))
         .map_err(|_| AppError::internal("failed to build payslip"))
+}
+
+async fn list_statutory_profiles(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::StatutoryProfileRecord>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows =
+        staff_payroll_service::list_statutory_profiles(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn get_statutory_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(staff_id): Path<String>,
+) -> ApiResult<Option<crate::repositories::staff_payroll_repository::StatutoryProfileRecord>> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let rows =
+        staff_payroll_service::list_statutory_profiles(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(
+        rows.into_iter().find(|row| row.staff_id == staff_id),
+    )))
+}
+
+async fn save_statutory_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(staff_id): Path<String>,
+    Json(payload): Json<staff_payroll_service::StatutoryProfileInput>,
+) -> ApiResult<crate::repositories::staff_payroll_repository::StatutoryProfileRecord> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    let result = staff_payroll_service::save_statutory_profile(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 fn csv_cell(value: &str) -> String {
