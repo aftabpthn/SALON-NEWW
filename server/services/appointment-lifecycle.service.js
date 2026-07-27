@@ -7,7 +7,7 @@ import { salonOperationsService } from "./salon-operations.service.js";
 import { tenantService } from "./tenant.service.js";
 import { waitlistService } from "./waitlist.service.js";
 import { warrantyService } from "./warranty.service.js";
-import db from "../db.js";
+import { db } from "../db.js";
 
 function scope(access, branchId = "") {
   const scoped = tenantService.accessScope(access || {}, "appointments");
