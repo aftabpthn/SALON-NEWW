@@ -159,6 +159,24 @@ pub async fn weekday_demand(
         .await
 }
 
+/// The staff record belonging to a signed-in user, so a floor staff member can
+/// be shown their own performance and nobody else's.
+pub async fn staff_id_for_user(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND user_id=$3 AND active=TRUE LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+}
+
 /// The branch's display name, so an answer states which branch it describes.
 ///
 /// `branches.id` and `branches.tenant_id` are UUID columns while the rest of the

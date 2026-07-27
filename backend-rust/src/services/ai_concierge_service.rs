@@ -154,17 +154,61 @@ impl CopilotOutcome {
 }
 
 /// Detects the intent, checks the role, and runs the one matching read tool.
+#[allow(clippy::too_many_arguments)]
 async fn run_copilot_tool(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    user_id: &str,
     role: &str,
+    session_id: &str,
     message: &str,
 ) -> CopilotOutcome {
-    let Some(matched) = ai_copilot_tools::detect(message) else {
-        return CopilotOutcome::NotApplicable;
+    // A bare "why?" continues the previous answer instead of matching nothing.
+    let matched = match ai_copilot_tools::detect(message) {
+        Some(matched) => matched,
+        None if ai_copilot_tools::is_follow_up(message) => {
+            match previous_tool(db, tenant_id, branch_id, session_id).await {
+                Some((tool, subject)) => ai_copilot_tools::continue_tool(tool, subject),
+                None => return CopilotOutcome::NotApplicable,
+            }
+        }
+        None => return CopilotOutcome::NotApplicable,
     };
-    match ai_copilot_tools::run(db, tenant_id, branch_id, role, &matched).await {
+    let actor = ai_copilot_tools::ToolActor::new(user_id, role);
+    let started = std::time::Instant::now();
+    let outcome = ai_copilot_tools::run(db, tenant_id, branch_id, &actor, &matched).await;
+    let elapsed_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+
+    // Every tool call is audited, allowed or not. The question is stored with
+    // contact details stripped so the audit trail does not become a second
+    // store of client PII.
+    let (audit_outcome, row_count) = match &outcome {
+        Ok(answer) => ("allowed", answer.data_row_count()),
+        Err(ai_copilot_tools::ToolRefusal::Forbidden(_)) => ("forbidden", 0),
+        Err(ai_copilot_tools::ToolRefusal::NoMatch) => ("failed", 0),
+    };
+    if let Err(error) = repository::record_tool_audit(
+        db,
+        tenant_id,
+        branch_id,
+        user_id,
+        role,
+        session_id,
+        matched.tool.name(),
+        audit_outcome,
+        &redact(message),
+        row_count,
+        elapsed_ms,
+    )
+    .await
+    {
+        // An audit failure must be visible, but must not deny the user an answer
+        // they are entitled to.
+        tracing::error!(%error, tool = matched.tool.name(), "failed to write copilot tool audit");
+    }
+
+    match outcome {
         Ok(answer) => CopilotOutcome::Answered(Box::new(answer)),
         Err(ai_copilot_tools::ToolRefusal::Forbidden(tool)) => {
             tracing::info!(
@@ -176,6 +220,33 @@ async fn run_copilot_tool(
         }
         Err(ai_copilot_tools::ToolRefusal::NoMatch) => CopilotOutcome::NotApplicable,
     }
+}
+
+/// Finds the tool that produced the most recent answer in this session, and the
+/// subject the question before it was about, so a follow-up stays on topic.
+async fn previous_tool(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+) -> Option<(ai_copilot_tools::CopilotTool, Vec<String>)> {
+    let history = repository::messages(db, tenant_id, branch_id, session_id, 20)
+        .await
+        .ok()?;
+    // Walk backwards to the last answer a CRM tool produced.
+    let position = history.iter().rposition(|message| {
+        message.role == "assistant" && message.model_name.starts_with("crm-tool:")
+    })?;
+    let tool = ai_copilot_tools::tool_from_model_name(&history[position].model_name)?;
+    // The user turn before it carries the subject, e.g. which client was named.
+    let subject = history[..position]
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .and_then(|message| ai_copilot_tools::detect(&message.body))
+        .map(|matched| matched.subject_candidates)
+        .unwrap_or_default();
+    Some((tool, subject))
 }
 
 pub fn default_governance() -> AiGovernanceRecord {
@@ -419,7 +490,18 @@ async fn process_message(
     // CRM tools only run for signed-in web users, because every tool is
     // permission-checked against the caller's role.
     let copilot = match web_role {
-        Some(role) => run_copilot_tool(db, tenant_id, branch_id, role, &raw_body).await,
+        Some(role) => {
+            run_copilot_tool(
+                db,
+                tenant_id,
+                branch_id,
+                session.user_id.as_deref().unwrap_or_default(),
+                role,
+                &session.id,
+                &raw_body,
+            )
+            .await
+        }
         None => CopilotOutcome::NotApplicable,
     };
     // A refusal is a final answer: sending it to the provider would invite a
@@ -1333,4 +1415,58 @@ mod tests {
         assert!(reply.reply_text.contains("₹1250.50"));
         assert!(reply.reply_text.contains("Open sales: 1"));
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackRequest {
+    pub message_id: String,
+    pub helpful: bool,
+    pub note: Option<String>,
+    pub tool: Option<String>,
+}
+
+/// Records whether an answer was useful.
+///
+/// The message is verified to belong to this tenant, branch and session before
+/// anything is stored, so feedback cannot be attached to another tenant's
+/// conversation by guessing an id. Any free-text note is redacted first.
+pub async fn record_feedback(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    user_id: &str,
+    request: FeedbackRequest,
+) -> Result<(), AppError> {
+    let message_id = limited(&request.message_id, 80, "message id")?;
+    if !repository::message_belongs_to_session(db, tenant_id, branch_id, session_id, &message_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate AI message"))?
+    {
+        return Err(AppError::not_found("AI message was not found"));
+    }
+    let note = request.note.unwrap_or_default();
+    let note = redact(note.trim());
+    if note.chars().count() > 1_000 {
+        return Err(AppError::validation("feedback note is too long"));
+    }
+    let tool = request.tool.unwrap_or_default();
+    let tool = tool.trim();
+    if tool.chars().count() > 80 {
+        return Err(AppError::validation("feedback tool is invalid"));
+    }
+    repository::save_feedback(
+        db,
+        tenant_id,
+        branch_id,
+        session_id,
+        &message_id,
+        user_id,
+        request.helpful,
+        &note,
+        tool,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to store AI feedback"))
 }

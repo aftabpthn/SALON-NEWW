@@ -3,7 +3,7 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Outpu
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
-import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiCopilotProposal, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiCopilotProposal, AiMessage, AiSession, AiSuggestedQuestion } from '../core/services/ai-concierge.service';
 import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
@@ -55,6 +55,12 @@ export class AppHeaderComponent implements OnInit {
   assistantRestrictedTool = '';
   /** Proposal awaiting the user's explicit go-ahead; nothing runs until they confirm. */
   assistantPendingProposal: AiCopilotProposal | null = null;
+  /** Starter chips, already filtered to what this role may ask. */
+  assistantSuggestions: AiSuggestedQuestion[] = [];
+  /** Assistant message the last answer came from, so feedback can attach to it. */
+  assistantLastMessageId = '';
+  /** The user's verdict on the last answer, once they give one. */
+  assistantFeedback: 'helpful' | 'not_helpful' | '' = '';
   private assistantRetry: (() => Promise<void>) | null = null;
 
   get branchName(): string {
@@ -157,8 +163,12 @@ export class AppHeaderComponent implements OnInit {
     this.clearCopilotResult();
     this.clearAssistantError();
     try {
-      this.assistantSession ??= await this.concierge.open();
+      this.assistantSession ??= await this.concierge.open(this.language.locale());
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
+      // Chips are advisory: failing to load them must not break the drawer.
+      this.assistantSuggestions = await this.concierge
+        .suggestions(this.language.locale())
+        .catch(() => []);
       this.assistantConnection = 'ready';
     } catch (error) {
       this.assistantConnection = 'error';
@@ -179,6 +189,7 @@ export class AppHeaderComponent implements OnInit {
       this.assistantProviderStatus = response.providerStatus || '';
       this.assistantCopilot = response.copilot ?? null;
       this.assistantRestrictedTool = response.restrictedTool ?? '';
+      this.assistantLastMessageId = response.assistantMessage?.id ?? '';
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
       this.assistantConnection = 'ready';
       this.assistantAction = response.actionType ? { type: response.actionType, serviceId: response.actionPayload?.serviceId || '' } : null;
@@ -270,10 +281,37 @@ export class AppHeaderComponent implements OnInit {
     return flattened;
   }
 
+  /** Sends a chip as if the user typed it. */
+  async askSuggestion(suggestion: AiSuggestedQuestion): Promise<void> {
+    if (this.assistantBusy) return;
+    this.assistantDraft = suggestion.question;
+    await this.sendAssistantMessage();
+  }
+
+  /** Records whether the last answer helped. Failing to record is not fatal. */
+  async rateAnswer(helpful: boolean): Promise<void> {
+    if (!this.assistantSession || !this.assistantLastMessageId) return;
+    const previous = this.assistantFeedback;
+    this.assistantFeedback = helpful ? 'helpful' : 'not_helpful';
+    try {
+      await this.concierge.sendFeedback(
+        this.assistantSession.id,
+        this.assistantLastMessageId,
+        helpful,
+        this.assistantCopilot?.tool ?? '',
+      );
+    } catch {
+      // Put the button back the way it was rather than claim a vote was stored.
+      this.assistantFeedback = previous;
+    }
+  }
+
   private clearCopilotResult(): void {
     this.assistantCopilot = null;
     this.assistantRestrictedTool = '';
     this.assistantPendingProposal = null;
+    this.assistantLastMessageId = '';
+    this.assistantFeedback = '';
   }
 
   private clearAssistantError(): void {

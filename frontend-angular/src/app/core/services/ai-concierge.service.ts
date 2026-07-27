@@ -5,6 +5,13 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 
 export type AiSession = { id: string; channel: string; status: string; locale: string };
 export type AiMessage = { id: string; role: string; body: string; provider: string; modelName: string; promptVersion: string; intent: string; safetyFlags: string[]; createdAt: string };
+/** A starter question the drawer offers as a chip. */
+export type AiSuggestedQuestion = {
+  question: string;
+  /** Tool it routes to, so chips can be grouped or filtered. */
+  tool: string;
+};
+
 /** One quantity as current vs previous, with the change between them. */
 export type AiCopilotMetric = {
   label: string;
@@ -82,7 +89,7 @@ export type AiReply = {
 };
 
 /** Which concierge call failed, so the drawer can retry exactly that step. */
-export type AiConciergeStep = 'open' | 'transcript' | 'send';
+export type AiConciergeStep = 'open' | 'transcript' | 'send' | 'suggestions' | 'feedback';
 
 export type AiConciergeFailure = {
   step: AiConciergeStep;
@@ -112,8 +119,9 @@ const RETRYABLE_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 export class AiConciergeService {
   private readonly api = inject(ApiService);
 
-  async open(): Promise<AiSession> {
-    return this.call('open', () => this.api.post<ApiEnvelope<AiSession>>('/ai/concierge/sessions', { locale: 'en-IN' }));
+  /** Opens a session in the user's language, so answers come back in it. */
+  async open(locale: string): Promise<AiSession> {
+    return this.call('open', () => this.api.post<ApiEnvelope<AiSession>>('/ai/concierge/sessions', { locale }));
   }
 
   async transcript(sessionId: string): Promise<AiMessage[]> {
@@ -122,6 +130,18 @@ export class AiConciergeService {
 
   async send(sessionId: string, body: string): Promise<AiReply> {
     return this.call('send', () => this.api.post<ApiEnvelope<AiReply>>(`/ai/concierge/sessions/${encodeURIComponent(sessionId)}/messages`, { body }));
+  }
+
+  /** Starter questions this role may actually have answered, in their language. */
+  async suggestions(locale: string): Promise<AiSuggestedQuestion[]> {
+    return this.call('suggestions', () =>
+      this.api.get<ApiEnvelope<AiSuggestedQuestion[]>>(`/ai/concierge/suggestions?locale=${encodeURIComponent(locale)}`));
+  }
+
+  /** Records whether an answer was useful. Voting again replaces the first vote. */
+  async sendFeedback(sessionId: string, messageId: string, helpful: boolean, tool: string): Promise<void> {
+    await this.call('feedback', () =>
+      this.api.post<ApiEnvelope<unknown>>(`/ai/concierge/sessions/${encodeURIComponent(sessionId)}/feedback`, { messageId, helpful, tool }));
   }
 
   private async call<T>(step: AiConciergeStep, request: () => Observable<ApiEnvelope<T>>): Promise<T> {

@@ -154,6 +154,85 @@ impl CopilotMetric {
     }
 }
 
+/// Who is asking. Tools need the identity, not just the role, because some
+/// answers are scoped to the caller themselves.
+#[derive(Debug, Clone)]
+pub struct ToolActor {
+    pub user_id: String,
+    pub role: String,
+}
+
+impl ToolActor {
+    pub fn new(user_id: impl Into<String>, role: impl Into<String>) -> Self {
+        Self {
+            user_id: user_id.into(),
+            role: role.into(),
+        }
+    }
+
+    fn is(&self, role: &str) -> bool {
+        self.role.eq_ignore_ascii_case(role)
+    }
+
+    /// A floor staff member sees only their own numbers, never a colleague's.
+    fn restricted_to_self(&self) -> bool {
+        self.is("staff")
+    }
+}
+
+/// Masks contact fields anywhere in a payload the copilot is about to return.
+///
+/// Reused CRM reports carry raw client contact details. The copilot's output is
+/// stored in the conversation transcript and fed to the AI provider, so it is
+/// masked here unconditionally rather than relying on per-role response masking.
+fn mask_contact_fields(value: &mut Value) {
+    const CONTACT_KEYS: &[&str] = &[
+        "phone",
+        "normalizedPhone",
+        "mobilePhone",
+        "homePhone",
+        "workPhone",
+        "email",
+    ];
+    match value {
+        Value::Array(values) => values.iter_mut().for_each(mask_contact_fields),
+        Value::Object(fields) => {
+            for (key, field) in fields.iter_mut() {
+                if CONTACT_KEYS.contains(&key.as_str()) {
+                    if let Some(text) = field.as_str() {
+                        *field = Value::String(if key == "email" {
+                            "[masked]".into()
+                        } else {
+                            mask_phone(text)
+                        });
+                    }
+                } else {
+                    mask_contact_fields(field);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Shows enough of a phone number to recognise a client, never enough to dial.
+///
+/// The copilot's replies are stored in the conversation transcript, so an
+/// unmasked number here would persist as a second copy of client contact data
+/// outside the client record.
+pub fn mask_phone(phone: &str) -> String {
+    let digits = phone
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    match digits.len() {
+        0 => String::new(),
+        // Too short to mask meaningfully; withhold it entirely.
+        1..=4 => "••••".into(),
+        _ => format!("••••••{}", &digits[digits.len() - 4..]),
+    }
+}
+
 /// Something the user can do next. The copilot only ever proposes: a proposal
 /// carries a CRM route and a prefilled payload, never a completed change.
 ///
@@ -442,6 +521,22 @@ impl CopilotAnswer {
         reply
     }
 
+    /// How many rows the tool actually read, for the audit trail. Unusual volume
+    /// is a signal worth having.
+    pub fn data_row_count(&self) -> i32 {
+        self.data
+            .as_object()
+            .map(|fields| {
+                fields
+                    .values()
+                    .filter_map(|value| value.as_array())
+                    .map(|rows| rows.len())
+                    .sum::<usize>()
+            })
+            .unwrap_or_default()
+            .min(i32::MAX as usize) as i32
+    }
+
     /// Period label with the concrete dates appended.
     fn period_line(&self) -> String {
         if self.period.start.is_empty() {
@@ -525,23 +620,29 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
 
     // Most specific intents first: an offer question about a client is not a
     // service question, and a billing how-to is not a sales report.
-    if has_any(
+    // Billing guidance is a how-to question about a bill, not a count of bills.
+    // Matching on the pattern rather than a fixed phrase list keeps it working
+    // for the many ways this gets typed in English and Hinglish.
+    let about_billing = has_any(text, &["bill", "invoice", "बिल"]);
+    let asks_how = has_any(
         text,
         &[
-            "bill kaise",
-            "bill kese",
-            "invoice kaise",
-            "billing kaise",
-            "how to bill",
-            "how do i bill",
-            "how to create an invoice",
-            "how to make a bill",
-            "billing steps",
-            "bill banega",
-            "bill banane",
-            "बिल कैसे",
+            "how do",
+            "how to",
+            "how can",
+            "kaise",
+            "kese",
+            "banega",
+            "banane",
+            "banaye",
+            "banau",
+            "steps",
+            "process",
+            "कैसे",
         ],
-    ) {
+    );
+    let asks_how_many = has_any(text, &["how many", "how much", "kitne", "kitna", "total"]);
+    if about_billing && asks_how && !asks_how_many {
         return Some(CopilotTool::BillingHowTo);
     }
     if has_any(
@@ -608,8 +709,25 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
     ) {
         return Some(CopilotTool::ClientFavouriteService);
     }
-    if has_any(text, &["staff", "stylist", "therapist", "employee", "स्टाफ"]) && declining
-    {
+    // Floor staff ask about themselves ("meri performance"), managers ask about
+    // the team ("kaunse staff"). Both route here; run() decides the scope.
+    let about_staff = has_any(text, &["staff", "stylist", "therapist", "employee", "स्टाफ"]);
+    let about_self = has_any(
+        text,
+        &["meri ", "mera ", "my performance", "how am i", "मेरी", "मेरा"],
+    );
+    // "how am i doing" is itself the performance question, so it counts as one.
+    let about_performance = has_any(
+        text,
+        &[
+            "performance",
+            "kaam kaisa",
+            "kaisa kar",
+            "how am i",
+            "doing",
+        ],
+    );
+    if (about_staff || about_self) && (declining || about_performance) {
         return Some(CopilotTool::StaffPerformanceDecline);
     }
     if about_service && declining {
@@ -782,21 +900,148 @@ fn has_any(text: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| text.contains(needle))
 }
 
+/// Whether a message is a follow-up on the previous answer rather than a new
+/// question. "Why?" on its own only means something in context.
+pub fn is_follow_up(message: &str) -> bool {
+    let text = message.trim().to_ascii_lowercase();
+    // A long message is a new question even if it opens with "why".
+    if text.split_whitespace().count() > 8 {
+        return false;
+    }
+    has_any(
+        &text,
+        &[
+            "why",
+            "kyun",
+            "kyu",
+            "aur batao",
+            "aur bata",
+            "tell me more",
+            "more detail",
+            "explain",
+            "samjhao",
+            "elaborate",
+            "aur",
+            "iske baare",
+            "kaise",
+            "क्यों",
+            "और बताओ",
+        ],
+    )
+}
+
+/// Recovers the tool behind an earlier answer from the model name it was stored
+/// under (`crm-tool:<tool>`), so a follow-up can continue the same subject.
+pub fn tool_from_model_name(model_name: &str) -> Option<CopilotTool> {
+    let name = model_name.strip_prefix("crm-tool:")?;
+    [
+        CopilotTool::StaffPerformanceDecline,
+        CopilotTool::BillingHowTo,
+        CopilotTool::MembershipStatus,
+        CopilotTool::ServiceDecline,
+        CopilotTool::ServiceOffer,
+        CopilotTool::LapsedClients,
+        CopilotTool::ClientReturnForecast,
+        CopilotTool::ClientFavouriteService,
+        CopilotTool::ClientOffer,
+    ]
+    .into_iter()
+    .find(|tool| tool.name() == name)
+}
+
+/// Builds a match that continues a previous tool with the same subject.
+pub fn continue_tool(tool: CopilotTool, subject_candidates: Vec<String>) -> ToolMatch {
+    ToolMatch {
+        tool,
+        subject_candidates,
+    }
+}
+
+/// A starter question the drawer offers as a chip.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestedQuestion {
+    /// The question text, in the requested language.
+    pub question: String,
+    /// The tool it will route to, so the drawer can group chips.
+    pub tool: String,
+}
+
+/// Starter questions the caller is actually allowed to have answered.
+///
+/// A chip that leads to a refusal is worse than no chip, so the same role check
+/// the tools use decides what appears here.
+pub fn suggested_questions(actor: &ToolActor, locale: &str) -> Vec<SuggestedQuestion> {
+    let hindi = is_hindi(locale);
+    // (tool, English question, Hindi question)
+    const CATALOG: &[(CopilotTool, &str, &str)] = &[
+        (
+            CopilotTool::StaffPerformanceDecline,
+            "Which staff performance is dropping?",
+            "Kaunse staff ki performance kam ho rahi hai?",
+        ),
+        (
+            CopilotTool::ServiceDecline,
+            "Which service is declining?",
+            "Kaunsi service kam ho rahi hai?",
+        ),
+        (
+            CopilotTool::ServiceOffer,
+            "Which service should get an offer?",
+            "Kis service par offer dena chahiye?",
+        ),
+        (
+            CopilotTool::LapsedClients,
+            "Which clients have not returned?",
+            "Kaunse clients nahi aaye?",
+        ),
+        (
+            CopilotTool::BillingHowTo,
+            "How do I create a bill?",
+            "Bill kaise banega?",
+        ),
+    ];
+
+    CATALOG
+        .iter()
+        .filter(|(tool, _, _)| {
+            // Floor staff get the staff question because it is scoped to them.
+            (*tool == CopilotTool::StaffPerformanceDecline && actor.restricted_to_self())
+                || tool.permitted_for(&actor.role)
+        })
+        .map(|(tool, english, hinglish)| SuggestedQuestion {
+            question: if hindi { *hinglish } else { *english }.to_string(),
+            tool: tool.name().to_string(),
+        })
+        .collect()
+}
+
+/// Whether to answer in Hindi. Locales arrive as tags such as `hi-IN`.
+pub fn is_hindi(locale: &str) -> bool {
+    locale.to_ascii_lowercase().starts_with("hi")
+}
+
 /// Runs a matched tool after checking the caller's role.
 pub async fn run(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    role: &str,
+    actor: &ToolActor,
     matched: &ToolMatch,
 ) -> Result<CopilotAnswer, ToolRefusal> {
-    if !matched.tool.permitted_for(role) {
+    let role = actor.role.as_str();
+    // Floor staff may see their own performance, so that one tool is allowed
+    // for them and then scoped to their own record below.
+    let self_scoped_staff =
+        matched.tool == CopilotTool::StaffPerformanceDecline && actor.restricted_to_self();
+    if !self_scoped_staff && !matched.tool.permitted_for(role) {
         return Err(ToolRefusal::Forbidden(matched.tool));
     }
     let subject = matched.subject_candidates.as_slice();
     let answer = match matched.tool {
         CopilotTool::StaffPerformanceDecline => {
-            staff_performance_decline(db, tenant_id, branch_id).await
+            staff_performance_decline(db, tenant_id, branch_id, self_scoped_staff.then_some(actor))
+                .await
         }
         CopilotTool::BillingHowTo => Ok(billing_how_to()),
         CopilotTool::ServiceDecline => service_decline(db, tenant_id, branch_id).await,
@@ -868,6 +1113,9 @@ pub async fn run(
     answer.proposals.retain(|proposal| {
         proposal_kind(&proposal.kind).is_some_and(|kind| kind.permitted_for(role))
     });
+    // Mask contact details centrally, so a tool that reuses an existing CRM
+    // report cannot leak a phone number it did not know it was carrying.
+    mask_contact_fields(&mut answer.data);
     Ok(answer)
 }
 
@@ -894,8 +1142,10 @@ async fn staff_performance_decline(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    // Some when the caller is floor staff: the answer is narrowed to them alone.
+    self_only: Option<&ToolActor>,
 ) -> Result<CopilotAnswer, AppError> {
-    let rows = copilot_repository::staff_performance_trend(
+    let mut rows = copilot_repository::staff_performance_trend(
         db,
         tenant_id,
         branch_id,
@@ -905,6 +1155,35 @@ async fn staff_performance_decline(
     )
     .await
     .map_err(|_| AppError::internal("failed to load staff performance trend"))?;
+
+    if let Some(actor) = self_only {
+        // Resolve the caller's own staff record and drop every other row before
+        // anything is read from them, so a colleague's numbers never reach the
+        // answer, the evidence, the payload or the provider prompt.
+        let own_staff_id =
+            copilot_repository::staff_id_for_user(db, tenant_id, branch_id, &actor.user_id)
+                .await
+                .map_err(|_| AppError::internal("failed to resolve staff record"))?;
+        let Some(own_staff_id) = own_staff_id else {
+            return Ok(CopilotAnswer::new(
+                CopilotTool::StaffPerformanceDecline,
+                "Your login is not linked to a staff record, so there is no performance to show.",
+            )
+            .trend_period()
+            .action("Ask a manager to link your staff profile.", "/staff")
+            .confidence("high"));
+        };
+        rows.retain(|row| row.staff_id == own_staff_id);
+        if rows.is_empty() {
+            return Ok(CopilotAnswer::new(
+                CopilotTool::StaffPerformanceDecline,
+                "You have no completed visits or service revenue in either period.",
+            )
+            .trend_period()
+            .action("Nothing to review yet.", "/staff")
+            .confidence("high"));
+        }
+    }
 
     let declining = rows
         .iter()
@@ -1680,7 +1959,7 @@ where
         _ => {
             let names = resolved
                 .iter()
-                .map(|client| format!("{} ({})", client.client_name, client.phone))
+                .map(|client| format!("{} ({})", client.client_name, mask_phone(&client.phone)))
                 .collect::<Vec<_>>()
                 .join(", ");
             Ok(CopilotAnswer::new(
@@ -1690,7 +1969,13 @@ where
             .evidence(names)
             .action("Ask again with the full name or phone number.", "/clients")
             .confidence("low")
-            .data(json!({ "candidates": resolved })))
+            .data(json!({
+                "candidates": resolved.iter().map(|client| json!({
+                    "clientId": client.client_id,
+                    "clientName": client.client_name,
+                    "phone": mask_phone(&client.phone),
+                })).collect::<Vec<_>>()
+            })))
         }
     }
 }
@@ -2478,6 +2763,79 @@ mod tests {
     }
 
     #[test]
+    fn both_team_and_self_performance_questions_reach_the_staff_tool() {
+        for question in [
+            "Kaunse staff ki performance kam ho rahi hai?",
+            "which stylist is declining",
+            "Meri performance kam ho rahi hai kya?",
+            "my performance this month",
+            "how am i doing",
+        ] {
+            assert_eq!(
+                detect(question).map(|matched| matched.tool),
+                Some(CopilotTool::StaffPerformanceDecline),
+                "{question:?} is a staff performance question"
+            );
+        }
+    }
+
+    #[test]
+    fn short_follow_ups_continue_the_previous_answer_but_new_questions_do_not() {
+        for follow_up in ["Why?", "kyun?", "aur batao", "tell me more", "explain"] {
+            assert!(
+                is_follow_up(follow_up),
+                "{follow_up:?} continues the answer"
+            );
+        }
+        // A full question stands on its own even if it contains a follow-up word.
+        assert!(
+            !is_follow_up("why is the Hair Spa service declining across the branch this month"),
+            "a long question is a new question"
+        );
+        assert!(!is_follow_up("Kaunse clients nahi aaye?"));
+    }
+
+    #[test]
+    fn a_tool_can_be_recovered_from_the_model_name_it_was_stored_under() {
+        assert_eq!(
+            tool_from_model_name("crm-tool:service_decline"),
+            Some(CopilotTool::ServiceDecline)
+        );
+        assert_eq!(
+            tool_from_model_name("crm-tool:client_offer"),
+            Some(CopilotTool::ClientOffer)
+        );
+        // Answers that did not come from a tool must not be resumed.
+        assert_eq!(tool_from_model_name("local-operations-policy-v2"), None);
+        assert_eq!(tool_from_model_name("crm-tool:no_such_tool"), None);
+    }
+
+    #[test]
+    fn billing_guidance_matches_how_it_is_actually_typed() {
+        for question in [
+            "Bill kaise banega?",
+            "How do I create a bill?",
+            "how to make a bill",
+            "invoice banane ka process kya hai",
+            "what are the billing steps",
+        ] {
+            assert_eq!(
+                detect(question).map(|matched| matched.tool),
+                Some(CopilotTool::BillingHowTo),
+                "{question:?} should ask for billing guidance"
+            );
+        }
+        // Counting bills is a different question and must not match.
+        for question in ["how many bills did we make today", "kitne bill bane"] {
+            assert_ne!(
+                detect(question).map(|matched| matched.tool),
+                Some(CopilotTool::BillingHowTo),
+                "{question:?} asks for a count, not guidance"
+            );
+        }
+    }
+
+    #[test]
     fn unrelated_questions_match_no_tool() {
         assert!(detect("what is the weather today").is_none());
         assert!(detect("hello").is_none());
@@ -2771,6 +3129,133 @@ mod tests {
     }
 
     #[test]
+    fn a_phone_number_is_never_returned_in_a_dialable_form() {
+        assert_eq!(mask_phone("9876543210"), "••••••3210");
+        assert_eq!(mask_phone("+91 98765 43210"), "••••••3210");
+        // Too short to partially mask: withhold it entirely.
+        assert_eq!(mask_phone("1234"), "••••");
+        assert_eq!(mask_phone(""), "");
+        // Whatever the input, no full number survives.
+        for phone in ["9876543210", "+91 98765 43210", "022-1234-5678"] {
+            assert!(
+                !mask_phone(phone).contains("98765"),
+                "{phone} must not survive masking"
+            );
+        }
+    }
+
+    #[test]
+    fn contact_details_are_masked_anywhere_in_a_payload() {
+        let mut payload = json!({
+            "clients": [
+                { "clientName": "Anita", "phone": "9876543210", "email": "a@example.com" },
+                { "clientName": "Bina", "phone": "9811111111" }
+            ],
+            "nested": { "deeper": [{ "mobilePhone": "9822222222" }] },
+            "revenuePaise": 100000
+        });
+        mask_contact_fields(&mut payload);
+
+        let serialized = payload.to_string();
+        for leaked in ["9876543210", "9811111111", "9822222222", "a@example.com"] {
+            assert!(
+                !serialized.contains(leaked),
+                "{leaked} leaked through masking: {serialized}"
+            );
+        }
+        // Masking must not damage the figures the answer depends on.
+        assert_eq!(payload["revenuePaise"], 100_000);
+        assert_eq!(payload["clients"][0]["clientName"], "Anita");
+        assert_eq!(payload["clients"][0]["phone"], "••••••3210");
+        assert_eq!(payload["nested"]["deeper"][0]["mobilePhone"], "••••••2222");
+    }
+
+    #[test]
+    fn floor_staff_may_ask_about_themselves_but_not_about_colleagues() {
+        let staff = ToolActor::new("user1", "staff");
+        assert!(staff.restricted_to_self());
+        // The tool stays closed to them by role; run() opens it self-scoped only.
+        assert!(!CopilotTool::StaffPerformanceDecline.permitted_for("staff"));
+
+        for role in ["owner", "admin", "manager", "analyst"] {
+            assert!(
+                !ToolActor::new("user1", role).restricted_to_self(),
+                "{role} sees the whole branch"
+            );
+            assert!(CopilotTool::StaffPerformanceDecline.permitted_for(role));
+        }
+        // A receptionist gets neither the branch view nor a self view.
+        let receptionist = ToolActor::new("user1", "receptionist");
+        assert!(!receptionist.restricted_to_self());
+        assert!(!CopilotTool::StaffPerformanceDecline.permitted_for("receptionist"));
+    }
+
+    #[test]
+    fn suggested_chips_only_offer_questions_the_role_can_have_answered() {
+        let receptionist = suggested_questions(&ToolActor::new("u", "receptionist"), "en-IN");
+        let tools = receptionist
+            .iter()
+            .map(|item| item.tool.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            !tools.contains(&"service_offer"),
+            "a receptionist cannot set discounts: {tools:?}"
+        );
+        assert!(
+            !tools.contains(&"staff_performance_decline"),
+            "a receptionist cannot see staff comparisons: {tools:?}"
+        );
+        assert!(
+            tools.contains(&"lapsed_clients"),
+            "client follow-up is their job"
+        );
+        assert!(tools.contains(&"billing_how_to"));
+
+        // Floor staff get the staff question, because it is scoped to them.
+        let staff = suggested_questions(&ToolActor::new("u", "staff"), "en-IN");
+        assert!(staff
+            .iter()
+            .any(|item| item.tool == "staff_performance_decline"));
+
+        // An owner sees the full set.
+        let owner = suggested_questions(&ToolActor::new("u", "owner"), "en-IN");
+        assert_eq!(owner.len(), 5);
+
+        // Every chip must round-trip through detection to the tool it claims.
+        for chip in &owner {
+            let matched = detect(&chip.question)
+                .unwrap_or_else(|| panic!("chip {:?} matches no tool", chip.question));
+            assert_eq!(
+                matched.tool.name(),
+                chip.tool,
+                "chip {:?} routes to the wrong tool",
+                chip.question
+            );
+        }
+    }
+
+    #[test]
+    fn hindi_chips_are_offered_for_a_hindi_locale_and_still_route_correctly() {
+        assert!(is_hindi("hi-IN"));
+        assert!(is_hindi("hi"));
+        assert!(!is_hindi("en-IN"));
+
+        let hindi = suggested_questions(&ToolActor::new("u", "owner"), "hi-IN");
+        let english = suggested_questions(&ToolActor::new("u", "owner"), "en-IN");
+        assert_eq!(hindi.len(), english.len());
+        assert_ne!(
+            hindi[0].question, english[0].question,
+            "the Hindi chip text differs from the English one"
+        );
+        // Hindi phrasing must reach the same tool, or the chip is a dead end.
+        for chip in &hindi {
+            let matched = detect(&chip.question)
+                .unwrap_or_else(|| panic!("Hindi chip {:?} matches no tool", chip.question));
+            assert_eq!(matched.tool.name(), chip.tool, "chip {:?}", chip.question);
+        }
+    }
+
+    #[test]
     fn a_reply_states_branch_period_change_reason_action_and_confidence() {
         let answer = CopilotAnswer::new(CopilotTool::ServiceDecline, "Hair Spa fell most.")
             .trend_period()
@@ -2915,9 +3400,15 @@ mod reply_shape_tests {
         ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("current line");
 
         let matched = detect("Kaunsi service kam ho rahi hai?").expect("tool matches");
-        let answer = run(&db, &tenant, branch, "owner", &matched)
-            .await
-            .expect("tool runs for an owner");
+        let answer = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new("user1", "owner"),
+            &matched,
+        )
+        .await
+        .expect("tool runs for an owner");
 
         assert_eq!(answer.tool, "service_decline");
         assert!(
@@ -2964,7 +3455,14 @@ mod reply_shape_tests {
         // A receptionist must not receive the same revenue comparison.
         assert!(
             matches!(
-                run(&db, &tenant, branch, "receptionist", &matched).await,
+                run(
+                    &db,
+                    &tenant,
+                    branch,
+                    &ToolActor::new("user1", "receptionist"),
+                    &matched
+                )
+                .await,
                 Err(ToolRefusal::Forbidden(_))
             ),
             "service revenue stays closed to non-finance roles"
@@ -2998,9 +3496,15 @@ mod reply_shape_tests {
         let matched = detect("Anita Sharma ko kya offer dein?").expect("tool matches");
 
         // A manager may discount, so the offer draft is offered — but flagged.
-        let for_manager = run(&db, &tenant, branch, "manager", &matched)
-            .await
-            .expect("manager may run the client offer tool");
+        let for_manager = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new("user1", "manager"),
+            &matched,
+        )
+        .await
+        .expect("manager may run the client offer tool");
         let offer_draft = for_manager
             .proposals
             .iter()
@@ -3049,6 +3553,146 @@ mod reply_shape_tests {
     }
 
     #[tokio::test]
+    async fn floor_staff_see_only_their_own_numbers_never_a_colleagues() {
+        dotenvy::dotenv().ok();
+        let Ok(url) = std::env::var("DATABASE_URL") else {
+            return;
+        };
+        let Ok(db) = PgPoolOptions::new().max_connections(2).connect(&url).await else {
+            return;
+        };
+        // users.tenant_uuid is generated from tenant_id, so a real tenant needs a
+        // UUID tenant id. Every other table accepts it as ordinary text.
+        let tenant = Uuid::new_v4().to_string();
+        let branch = "branch1";
+
+        sqlx::query(
+            "INSERT INTO tenants(id,name,status) VALUES ($1::UUID,'Aura Salon Group','active')",
+        )
+        .bind(&tenant)
+        .execute(&db)
+        .await
+        .expect("tenant seeded");
+        // staff.user_id is a real foreign key, so the users must exist first.
+        sqlx::query(
+            "INSERT INTO users(id,tenant_id,role_name,email,password_hash,full_name,active)
+             VALUES ($2||'user',$1,'staff',$2||'asha@example.com','x','Asha Rao',TRUE),
+                    ($2||'other',$1,'staff',$2||'bina@example.com','x','Bina Sen',TRUE)",
+        )
+        .bind(&tenant)
+        .bind(&tenant)
+        .execute(&db)
+        .await
+        .expect("users seeded");
+
+        // Two stylists; only the first is linked to the signed-in user.
+        sqlx::query(
+            "INSERT INTO staff(id,tenant_id,branch_id,user_id,first_name,middle_name,last_name,appointment_display_name,email,mobile_phone,home_phone,work_phone,job_title,active)
+             VALUES ($3||'mine',$1,$2,$3||'user',    'Asha','','Rao','Asha','a@example.com','1','','','Stylist',TRUE),
+                    ($3||'theirs',$1,$2,$3||'other','Bina','','Sen','Bina','b@example.com','2','','','Stylist',TRUE)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("staff seeded");
+
+        for (staff, previous, current) in [("mine", 6, 2), ("theirs", 9, 3)] {
+            sqlx::query(
+                "INSERT INTO appointments(id,tenant_id,branch_id,client_id,staff_id,start_at,end_at,status)
+                 SELECT $3||$4||'p'||g,$1,$2,$3||'c'||g,$3||$4,(CURRENT_DATE-45+g)::timestamptz,(CURRENT_DATE-45+g)::timestamptz+INTERVAL '60 min','completed'
+                 FROM generate_series(1,$5) g",
+            ).bind(&tenant).bind(branch).bind(&tenant).bind(staff).bind(previous)
+             .execute(&db).await.expect("previous visits seeded");
+            sqlx::query(
+                "INSERT INTO appointments(id,tenant_id,branch_id,client_id,staff_id,start_at,end_at,status)
+                 SELECT $3||$4||'c'||g,$1,$2,$3||'c'||g,$3||$4,(CURRENT_DATE-15+g)::timestamptz,(CURRENT_DATE-15+g)::timestamptz+INTERVAL '60 min','completed'
+                 FROM generate_series(1,$5) g",
+            ).bind(&tenant).bind(branch).bind(&tenant).bind(staff).bind(current)
+             .execute(&db).await.expect("current visits seeded");
+        }
+
+        let matched = detect("Meri performance kam ho rahi hai kya?").expect("staff tool matches");
+
+        // The signed-in stylist sees exactly one staff member: themselves.
+        let mine = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new(format!("{tenant}user"), "staff"),
+            &matched,
+        )
+        .await
+        .expect("floor staff may see their own performance");
+        let serialized = serde_json::to_string(&mine).expect("answer serializes");
+        assert!(
+            !serialized.contains("Bina"),
+            "a colleague's numbers must never appear: {serialized}"
+        );
+        assert!(
+            mine.data["staff"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 1),
+            "exactly one staff row is returned"
+        );
+
+        // A manager sees the whole branch, including both stylists.
+        let branch_view = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new("manager-user", "manager"),
+            &matched,
+        )
+        .await
+        .expect("a manager sees the branch");
+        assert!(
+            branch_view.data["staff"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 2),
+            "a manager sees both stylists"
+        );
+
+        // A staff login with no linked staff record gets nothing, not everything.
+        let unlinked = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new("no-such-user", "staff"),
+            &matched,
+        )
+        .await
+        .expect("an unlinked staff login is handled");
+        assert!(
+            unlinked.data.get("staff").is_none(),
+            "an unlinked login must not fall back to the branch view: {:?}",
+            unlinked.data
+        );
+
+        // Another tenant asking the same question sees nothing of this one.
+        let other_tenant = run(
+            &db,
+            &Uuid::new_v4().to_string(),
+            branch,
+            &ToolActor::new("manager-user", "manager"),
+            &matched,
+        )
+        .await
+        .expect("a foreign tenant is handled");
+        let foreign = serde_json::to_string(&other_tenant).expect("answer serializes");
+        assert!(
+            !foreign.contains("Asha") && !foreign.contains("Bina"),
+            "tenant isolation leaked: {foreign}"
+        );
+
+        for table in ["appointments", "staff", "users"] {
+            let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
+                .bind(&tenant)
+                .execute(&db)
+                .await;
+        }
+        let _ = sqlx::query("DELETE FROM tenants WHERE id::TEXT=$1")
+            .bind(&tenant)
+            .execute(&db)
+            .await;
+    }
+
+    #[tokio::test]
     async fn a_role_without_discount_rights_is_never_offered_an_offer_draft() {
         dotenvy::dotenv().ok();
         let Ok(url) = std::env::var("DATABASE_URL") else {
@@ -3079,9 +3723,15 @@ mod reply_shape_tests {
         // A receptionist may look a client up, so the tool itself is allowed.
         let matched =
             detect("Anita Sharma regular kaunsi service leti hai?").expect("tool matches");
-        let answer = run(&db, &tenant, branch, "receptionist", &matched)
-            .await
-            .expect("a receptionist may read client history");
+        let answer = run(
+            &db,
+            &tenant,
+            branch,
+            &ToolActor::new("user1", "receptionist"),
+            &matched,
+        )
+        .await
+        .expect("a receptionist may read client history");
         assert!(
             answer
                 .proposals
