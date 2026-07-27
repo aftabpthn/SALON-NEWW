@@ -152,35 +152,35 @@ pub const PERMISSION_REGISTRY: &[PermissionSpec] = &[
         sensitive: false, feature: "packages", routes: [("POST", "/packages")]),
     // Staff
     spec!("staff.read", "View staff", "Staff", Read, Branch,
-        sensitive: false, feature: "staff", routes: [("GET", "/staff")]),
+        sensitive: false, feature: "staff.basic", routes: [("GET", "/staff")]),
     spec!("staff.manage", "Manage staff", "Staff", Write, Branch,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff")]),
     spec!("staff.attendance.read", "View staff attendance", "Staff", Read, Branch,
-        sensitive: false, feature: "staff", routes: [("GET", "/staff-attendance")]),
+        sensitive: false, feature: "staff.basic", routes: [("GET", "/staff-attendance")]),
     spec!("staff.attendance.manage", "Manage staff attendance", "Staff", Write, Branch,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff-attendance/records")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff-attendance/records")]),
     spec!("staff.leave.read", "View staff leave", "Staff", Read, Branch,
-        sensitive: false, feature: "staff", routes: [("GET", "/staff-leave")]),
+        sensitive: false, feature: "staff.basic", routes: [("GET", "/staff-leave")]),
     spec!("staff.leave.manage", "Manage staff leave", "Staff", Write, Branch,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff-leave/approvals")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff-leave/approvals")]),
     spec!("staff.schedule.read", "View staff schedules", "Staff", Read, Branch,
-        sensitive: false, feature: "staff", routes: [("GET", "/staff-schedule")]),
+        sensitive: false, feature: "staff.basic", routes: [("GET", "/staff-schedule")]),
     spec!("staff.schedule.manage", "Manage staff schedules", "Staff", Write, Branch,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff-schedule")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff-schedule")]),
     spec!("staff.payroll.read", "View staff payroll", "Staff", Read, Tenant,
-        sensitive: false, feature: "payroll", routes: [("GET", "/staff-payroll/runs")]),
+        sensitive: false, feature: "staff.payroll", routes: [("GET", "/staff-payroll/runs")]),
     spec!("staff.payroll.manage", "Manage staff payroll", "Staff", Write, Tenant,
-        sensitive: true, feature: "payroll",
+        sensitive: true, feature: "staff.payroll",
         routes: [("POST", "/staff-payroll/runs"), ("POST", "/staff/salary-revisions"), ("POST", "/staff/payroll-compliance/filings")]),
     spec!("staff.analytics.read", "View staff analytics", "Staff", Read, Branch,
-        sensitive: false, feature: "staff", routes: [("GET", "/staff/performance")]),
+        sensitive: false, feature: "staff.advanced", routes: [("GET", "/staff/performance")]),
     spec!("staff.self_manage", "Use staff self-service", "Staff", Write, SelfOnly,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff-attendance/clock-in"), ("POST", "/staff/self/profile")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff-attendance/clock-in"), ("POST", "/staff/self/profile")]),
     // Finance & reports
     spec!("reports.read", "View reports", "Finance & reports", Read, Tenant,
         sensitive: false, feature: "reports", routes: [("GET", "/reports/sales")]),
     spec!("reports.export", "Export reports", "Finance & reports", Export, Tenant,
-        sensitive: true, feature: "reports", routes: [("GET", "/reports/sales/export")]),
+        sensitive: true, feature: "reports.export", routes: [("GET", "/reports/sales/export")]),
     spec!("finance.read", "View financial data", "Finance & reports", Read, Tenant,
         sensitive: false, feature: "finance", routes: [("GET", "/balance-sheet/live"), ("GET", "/finance/outgoing-funds")]),
     spec!("finance.write", "Manage finance and wallets", "Finance & reports", Write, Tenant,
@@ -207,9 +207,9 @@ pub const PERMISSION_REGISTRY: &[PermissionSpec] = &[
         sensitive: false, feature: "marketing", routes: [("GET", "/marketing/analytics")]),
     // AI
     spec!("ai.read", "View AI insights", "AI", Read, Branch,
-        sensitive: false, feature: "ai", routes: [("GET", "/ai/insights")]),
+        sensitive: false, feature: "staff.ai", routes: [("GET", "/ai/insights")]),
     spec!("ai.manage", "Manage AI workflows", "AI", Write, Tenant,
-        sensitive: false, feature: "ai", routes: [("POST", "/ai/concierge/sessions")]),
+        sensitive: false, feature: "staff.ai", routes: [("POST", "/ai/concierge/sessions")]),
     // Settings
     spec!("settings.read", "View operational settings", "Settings", Read, Tenant,
         sensitive: false, feature: "settings", routes: [("GET", "/settings/general")]),
@@ -237,8 +237,66 @@ pub const PERMISSION_REGISTRY: &[PermissionSpec] = &[
     spec!("inventory.write", "Legacy inventory write access", "Compatibility", Write, Branch,
         sensitive: false, feature: "inventory", routes: [("POST", "/inventory/products")]),
     spec!("staff_self.write", "Legacy staff self-service access", "Compatibility", Write, SelfOnly,
-        sensitive: false, feature: "staff", routes: [("POST", "/staff/self/profile")]),
+        sensitive: false, feature: "staff.basic", routes: [("POST", "/staff/self/profile")]),
 ];
+
+/// Every subscription feature key a plan may grant. Plans store granted
+/// features in `saas_plans.features_json`; the entitlement engine matches
+/// route requirements against them. `staff.biometric` and `staff.api` are
+/// gated through `ROUTE_FEATURE_OVERRIDES` until they get dedicated
+/// permission keys.
+pub const ENTITLEMENT_FEATURE_KEYS: &[&str] = &[
+    "staff.basic",
+    "staff.advanced",
+    "staff.payroll",
+    "staff.biometric",
+    "staff.ai",
+    "staff.api",
+    "reports.export",
+    "appointments",
+    "bookings",
+    "clients",
+    "pos",
+    "services",
+    "inventory",
+    "purchases",
+    "memberships",
+    "packages",
+    "reports",
+    "finance",
+    "notifications",
+    "marketing",
+    "settings",
+    "data_migration",
+    "security",
+    "core",
+];
+
+/// Route prefixes whose subscription feature differs from (or refines) the
+/// feature keys of the permissions guarding them. Longest prefix wins.
+pub const ROUTE_FEATURE_OVERRIDES: &[(&str, &str)] = &[
+    ("/staff/biometric", "staff.biometric"),
+    ("/settings/integrations/api-keys", "staff.api"),
+    ("/integrations", "staff.api"),
+    ("/staff-enterprise", "staff.advanced"),
+    ("/staff-os", "staff.advanced"),
+    ("/staff/performance", "staff.advanced"),
+    ("/staff/intelligence", "staff.advanced"),
+    ("/staff/coach", "staff.advanced"),
+];
+
+/// The subscription feature required for a normalized route path, when route
+/// metadata refines the permission-derived feature keys.
+pub fn route_feature_override(path: &str) -> Option<&'static str> {
+    ROUTE_FEATURE_OVERRIDES
+        .iter()
+        .filter(|(prefix, _)| {
+            path == *prefix
+                || (path.starts_with(prefix) && path.as_bytes().get(prefix.len()) == Some(&b'/'))
+        })
+        .max_by_key(|(prefix, _)| prefix.len())
+        .map(|(_, feature)| *feature)
+}
 
 pub fn find(key: &str) -> Option<&'static PermissionSpec> {
     PERMISSION_REGISTRY.iter().find(|spec| spec.key == key)
@@ -684,6 +742,33 @@ mod tests {
             sensitive_subset(&["pos.refund".to_string(), "clients.read".to_string()]),
             vec!["pos.refund".to_string()]
         );
+    }
+
+    #[test]
+    fn registry_feature_keys_belong_to_the_entitlement_catalog() {
+        for spec in PERMISSION_REGISTRY {
+            assert!(
+                ENTITLEMENT_FEATURE_KEYS.contains(&spec.feature_key),
+                "permission {} uses unknown feature key {}",
+                spec.key,
+                spec.feature_key
+            );
+        }
+        for (prefix, feature) in ROUTE_FEATURE_OVERRIDES {
+            assert!(
+                ENTITLEMENT_FEATURE_KEYS.contains(feature),
+                "route override {prefix} uses unknown feature key {feature}"
+            );
+        }
+        assert_eq!(
+            route_feature_override("/staff/biometric/devices"),
+            Some("staff.biometric")
+        );
+        assert_eq!(
+            route_feature_override("/settings/integrations/api-keys/1/rotate"),
+            Some("staff.api")
+        );
+        assert_eq!(route_feature_override("/appointments"), None);
     }
 
     #[test]

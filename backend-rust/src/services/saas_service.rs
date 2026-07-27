@@ -11,7 +11,7 @@ use crate::{
     repositories::saas_repository::{self, BillingContext, PlanWrite, SlaWrite},
     services::{
         auth_service::{hash_password, password_meets_policy, TENANT_PERMISSION_CATALOG},
-        security_service, staff_service,
+        entitlement_service, permission_registry, security_service, staff_service,
     },
 };
 
@@ -90,6 +90,14 @@ pub struct SubscriptionUpdate {
     pub status: String,
     #[serde(default)]
     pub cancel_at_period_end: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubscriptionOverrideInput {
+    pub override_status: String,
+    pub reason: String,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,11 +288,22 @@ fn validate_plan(payload: PlanInput) -> Result<PlanWrite, AppError> {
     }
     let mut features = BTreeSet::new();
     for value in payload.features {
-        let feature = value.trim();
+        let feature = value.trim().to_ascii_lowercase();
         if feature.is_empty() || feature.chars().count() > 100 {
             return Err(AppError::validation("SaaS plan feature is invalid"));
         }
-        features.insert(feature.to_string());
+        // Plans may grant "all", a whole feature family (e.g. "staff"), or a
+        // specific key from the entitlement catalog.
+        let known = feature == "all"
+            || permission_registry::ENTITLEMENT_FEATURE_KEYS
+                .iter()
+                .any(|known| *known == feature || known.starts_with(&format!("{feature}.")));
+        if !known {
+            return Err(AppError::validation(format!(
+                "unknown SaaS plan feature key: {feature}"
+            )));
+        }
+        features.insert(feature);
     }
     if features.len() > 100 {
         return Err(AppError::validation(
@@ -583,7 +602,14 @@ pub async fn update_subscription(
     let status = payload.status.trim().to_ascii_lowercase();
     if !matches!(
         status.as_str(),
-        "trialing" | "active" | "past_due" | "paused" | "cancelled"
+        "trialing"
+            | "active"
+            | "past_due"
+            | "grace"
+            | "paused"
+            | "suspended"
+            | "cancelled"
+            | "expired"
     ) {
         return Err(AppError::validation("subscription status is invalid"));
     }
@@ -859,9 +885,100 @@ pub async fn tenant_context(db: &PgPool, tenant: &str) -> Result<Value, AppError
     let invoices = invoices(db, Some(tenant)).await?;
     let tickets = tickets(db, Some(tenant)).await?;
     let plans = plans(db, false).await?;
-    Ok(
-        json!({"subscription":subscription,"usage":usage,"invoices":invoices,"tickets":tickets,"plans":plans}),
+    // Owner UI reads effective entitlements from this response; frontend
+    // hiding is convenience only — the backend gate stays mandatory.
+    let entitlements = entitlement_service::entitlement_summary(db, tenant).await?;
+    Ok(json!({
+        "subscription": subscription,
+        "usage": usage,
+        "invoices": invoices,
+        "tickets": tickets,
+        "plans": plans,
+        "entitlements": entitlements,
+    }))
+}
+
+pub async fn create_subscription_override(
+    db: &PgPool,
+    actor: &str,
+    subscription_id: &str,
+    payload: SubscriptionOverrideInput,
+) -> Result<Value, AppError> {
+    let status = payload.override_status.trim().to_ascii_lowercase();
+    if !matches!(
+        status.as_str(),
+        "trialing" | "active" | "past_due" | "grace" | "suspended" | "cancelled" | "expired"
+    ) {
+        return Err(AppError::validation("overrideStatus is invalid"));
+    }
+    let reason = payload.reason.trim();
+    if !(5..=240).contains(&reason.chars().count()) {
+        return Err(AppError::validation(
+            "reason must be between 5 and 240 characters",
+        ));
+    }
+    let now = Utc::now();
+    if payload.expires_at <= now || payload.expires_at > now + Duration::days(365) {
+        return Err(AppError::validation(
+            "expiresAt must be in the future and within one year",
+        ));
+    }
+    let created = saas_repository::create_subscription_override(
+        db,
+        subscription_id,
+        &status,
+        reason,
+        payload.expires_at,
+        actor,
     )
+    .await
+    .map_err(|_| AppError::internal("failed to create subscription override"))?
+    .ok_or_else(|| AppError::not_found("subscription was not found"))?;
+    platform_audit(
+        db,
+        actor,
+        "saas.subscription.override.created",
+        json!({
+            "subscriptionId": subscription_id,
+            "overrideStatus": status,
+            "reason": reason,
+            "expiresAt": payload.expires_at,
+        }),
+    )
+    .await;
+    Ok(created)
+}
+
+pub async fn list_subscription_overrides(
+    db: &PgPool,
+    subscription_id: &str,
+) -> Result<Vec<Value>, AppError> {
+    saas_repository::list_subscription_overrides(db, subscription_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load subscription overrides"))
+}
+
+pub async fn revoke_subscription_override(
+    db: &PgPool,
+    actor: &str,
+    override_id: &str,
+) -> Result<(), AppError> {
+    if !saas_repository::revoke_subscription_override(db, override_id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to revoke subscription override"))?
+    {
+        return Err(AppError::not_found(
+            "subscription override was not found or is already revoked",
+        ));
+    }
+    platform_audit(
+        db,
+        actor,
+        "saas.subscription.override.revoked",
+        json!({ "overrideId": override_id }),
+    )
+    .await;
+    Ok(())
 }
 
 pub async fn tickets(db: &PgPool, tenant: Option<&str>) -> Result<Vec<Value>, AppError> {

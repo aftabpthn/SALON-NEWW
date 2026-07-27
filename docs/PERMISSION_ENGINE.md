@@ -113,6 +113,69 @@ Rules, and where they are enforced:
   branch only through an active `user_branch_roles` row (permanent or
   time-boxed deputation), selected at login; there is no implicit fallback.
 
+## Subscription and feature entitlements
+
+Entitlements are feature-key based, never URL-regex based. The engine lives in
+`backend-rust/src/services/entitlement_service.rs` and is invoked centrally
+from the auth middleware for every mutating request; login gates reuse the
+same state machine.
+
+### Feature keys
+
+Plans (`saas_plans.features_json`) grant keys from
+`permission_registry::ENTITLEMENT_FEATURE_KEYS`:
+
+`staff.basic`, `staff.advanced`, `staff.payroll`, `staff.biometric`,
+`staff.ai`, `staff.api`, `reports.export`, plus module keys (`appointments`,
+`pos`, `inventory`, ...). Matching is hierarchical: granting `staff` covers
+every `staff.*` key; `all` covers everything. A plan with no feature list is
+legacy and allows all features. Unknown keys are rejected when a plan is
+saved.
+
+A route's required features come from route metadata: the feature keys of the
+permissions guarding it in the registry, refined by
+`ROUTE_FEATURE_OVERRIDES` (e.g. `/staff/biometric/*` -> `staff.biometric`,
+`/settings/integrations/api-keys` and `/integrations/*` -> `staff.api`,
+`/staff-enterprise` -> `staff.advanced`).
+
+### Lifecycle states
+
+`effective_state` resolves the stored subscription status plus per-plan
+policies (`grace_period_days`, `suspension_policy`, `retention_window_days`
+on `saas_plans`) and any active override:
+
+| State | Behaviour |
+| --- | --- |
+| `trialing` | Trial plan entitlements |
+| `active` | Plan entitlements |
+| `past_due` | Full access during the configurable grace window |
+| `grace` | Reads allowed; sensitive writes (registry `sensitive` flag) blocked |
+| `suspended` | Read-only, or login blocked when the plan policy is `blocked` (`paused` maps here) |
+| `cancelled` | Read-only retention/export window (`retention_window_days`), then expired |
+| `expired` | Only login recovery and billing; no tenant reads or writes |
+
+Tenant data — including employee wage and payroll records — is **never
+deleted** by any lifecycle transition; cancellation and expiry only gate
+access. There is no code path that destroys payroll rows on subscription
+change, and none may be added.
+
+### Overrides, API exposure, idempotency
+
+- Platform admins can force an effective status via
+  `POST /platform/saas/subscriptions/:id/overrides` with a mandatory reason
+  (5-240 chars) and expiry (max one year); the actor, reason, and expiry are
+  stored in `saas_subscription_overrides` and audited
+  (`saas.subscription.override.created` / `.revoked`). Overrides are revoked,
+  never deleted.
+- The owner UI reads entitlements from `GET /api/v1/saas/context`
+  (`entitlements` block: effective state, granted features, read-only and
+  sensitive-write flags). Frontend hiding is a convenience — the backend
+  middleware block is mandatory and always applies.
+- Billing ingestion is idempotent end to end: gateway webhooks dedupe on a
+  SHA-256 event hash (`pos_payment_events` unique insert), usage events carry
+  a per-tenant idempotency key, and onboarding replays by idempotency key +
+  request fingerprint.
+
 ## Adding a permission
 
 1. Add a `PermissionSpec` to `PERMISSION_REGISTRY` with at least one sample
