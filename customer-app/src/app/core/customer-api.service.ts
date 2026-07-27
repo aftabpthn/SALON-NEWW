@@ -26,6 +26,7 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPrimarySalon,
+  MySalonDashboard,
   CustomerProfile,
   CustomerRewardSummary,
   CustomerSalonsResponse,
@@ -391,6 +392,31 @@ export class CustomerApiService {
   recordSalonVisit(tenantId: string, payload: { branchId: string; businessId: string; businessName: string }): Observable<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }> {
     return this.http.post<ApiResponse<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>>(`${this.baseUrl}/customer/salons/${encodeURIComponent(tenantId)}/visit`, payload).pipe(
       map((response) => this.unwrap<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>(response))
+    );
+  }
+
+  // ─── My Salon Dashboard ──────────────────────────────────────
+  getMySalonDashboard(): Observable<MySalonDashboard> {
+    return this.http.get<ApiResponse<MySalonDashboard>>(`${this.baseUrl}/customer/my-salon/dashboard`).pipe(
+      map((response) => this.unwrap<MySalonDashboard>(response))
+    );
+  }
+
+  getMySalonServices(): Observable<MySalonDashboard["services"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["services"]>>(`${this.baseUrl}/customer/my-salon/services`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["services"]>(response))
+    );
+  }
+
+  getMySalonStaff(): Observable<MySalonDashboard["staff"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["staff"]>>(`${this.baseUrl}/customer/my-salon/staff`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["staff"]>(response))
+    );
+  }
+
+  getMySalonOffers(): Observable<MySalonDashboard["offers"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["offers"]>>(`${this.baseUrl}/customer/my-salon/offers`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["offers"]>(response))
     );
   }
 

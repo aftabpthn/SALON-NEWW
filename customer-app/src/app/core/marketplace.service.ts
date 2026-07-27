@@ -20,6 +20,7 @@ import {
   CustomerSalonsResponse,
   CustomerWaitlistEntry,
   JoinWaitlistPayload,
+  MySalonDashboard,
   PublicOffersResponse,
   PurchaseGiftCardPayload,
   RedeemGiftCardPayload,
@@ -52,6 +53,7 @@ export class MarketplaceService {
   readonly shouldPromptPrimary = signal(false);
   readonly suggestedSalon = signal<CustomerSalonRelationship | null>(null);
   readonly salonOffers = signal<PublicOffersResponse | null>(null);
+  readonly mySalonDashboard = signal<MySalonDashboard | null>(null);
   private favoritesLoaded = false;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {}
@@ -335,6 +337,14 @@ export class MarketplaceService {
 
   hasPrimarySalon(): boolean {
     return this.primarySalon() !== null;
+  }
+
+  async loadMySalonDashboard(): Promise<MySalonDashboard | null> {
+    return this.run("Unable to load salon dashboard", async () => {
+      const dashboard = await firstValueFrom(this.api.getMySalonDashboard());
+      this.mySalonDashboard.set(dashboard);
+      return dashboard;
+    });
   }
 
   async purchaseGiftCard(payload: PurchaseGiftCardPayload): Promise<CustomerGiftCard> {

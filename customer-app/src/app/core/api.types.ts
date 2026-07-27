@@ -671,3 +671,99 @@ export interface PublicOffersResponse {
   generatedAt: string;
 }
 
+// ─── My Salon Dashboard (aggregated) ────────────────────────────
+
+export interface MySalonDashboardService {
+  id: string;
+  name: string;
+  category: string;
+  durationMinutes: number;
+  pricePaise: number;
+}
+
+export interface MySalonDashboardStaff {
+  id: string;
+  name: string;
+  title: string;
+  specialty: string;
+}
+
+export interface MySalonDashboardBooking {
+  id: string;
+  serviceName: string;
+  staffName: string;
+  startAt: string;
+  status: string;
+  totalPricePaise: number;
+}
+
+export interface MySalonDashboardOffer {
+  id: string;
+  title: string;
+  description: string;
+  discountType: string;
+  discountValue: number;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface MySalonDashboardWallet {
+  balancePaise: number;
+  transactions: Array<{
+    id: string;
+    type: string;
+    amountPaise: number;
+    description: string;
+    createdAt: string;
+  }>;
+}
+
+export interface MySalonDashboardLoyalty {
+  points: number;
+  tier: string;
+  lifetimePoints: number;
+}
+
+export interface MySalonDashboardMembership {
+  planName: string;
+  status: string;
+  creditsRemaining: number;
+  validityDate: string;
+}
+
+export interface MySalonDashboardPackage {
+  id: string;
+  name: string;
+  pricePaise: number;
+  sessionsTotal: number;
+  sessionsUsed: number;
+}
+
+export interface MySalonDashboard {
+  hasPrimarySalon: boolean;
+  salon: {
+    name: string;
+    address: string;
+    city: string;
+    phone: string;
+    slug: string;
+    isOpen: boolean;
+    hoursLabel: string;
+    ratingAverage: number;
+    ratingCount: number;
+  } | null;
+  wallet: MySalonDashboardWallet | null;
+  loyalty: MySalonDashboardLoyalty | null;
+  membership: MySalonDashboardMembership | null;
+  packages: MySalonDashboardPackage[];
+  recentBookings: MySalonDashboardBooking[];
+  services: MySalonDashboardService[];
+  staff: MySalonDashboardStaff[];
+  offers: MySalonDashboardOffer[];
+  relationship: {
+    visitCount: number;
+    type: string;
+    lastVisitAt: string;
+  } | null;
+}
+
