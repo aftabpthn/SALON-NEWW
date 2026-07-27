@@ -121,6 +121,7 @@ import { customerCareAiRouter } from "./routes/customer-care-ai.routes.js";
 import { customerMarketplaceRouter } from "./routes/customer-marketplace.routes.js";
 import { customerSalonRouter } from "./routes/customer-salon.routes.js";
 import { customerIdentityRouter } from "./routes/customer-identity.routes.js";
+import { customerMySalonRouter } from "./routes/customer-my-salon.routes.js";
 import { clientReportsRouter } from "./routes/client-reports.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { ownerDashboardRouter } from "./routes/owner-dashboard.routes.js";
@@ -440,6 +441,7 @@ export function createApp() {
   app.use("/api/v1", customerMarketplaceRouter);
   app.use("/api/v1", customerSalonRouter);
   app.use("/api/v1", customerIdentityRouter);
+  app.use("/api/v1", customerMySalonRouter);
   app.use("/api/v1", liveConsultationRouter);
   app.use("/api/v1", bookingPaymentsPublicRouter);
   app.use("/api/v1", paymentPublicRouter);
@@ -653,6 +655,7 @@ export function createApp() {
   app.use("/api", customerMarketplaceRouter);
   app.use("/api", customerSalonRouter);
   app.use("/api", customerIdentityRouter);
+  app.use("/api", customerMySalonRouter);
   app.use("/api", liveConsultationRouter);
   app.use("/api", reputationPublicRouter);
   app.use("/api", billingHealthRouter);

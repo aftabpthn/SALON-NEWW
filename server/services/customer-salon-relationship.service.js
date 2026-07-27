@@ -115,22 +115,22 @@ export function setPrimarySalon({ customerId, tenantId, branchId, businessId, bu
   const now = new Date().toISOString();
 
   // Delete existing primary for THIS TENANT ONLY (scoped delete)
-  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).get({ customerId, tenantId });
+  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).run({ customerId, tenantId });
 
   db.prepare(`
     INSERT INTO customerPrimarySalons (id, customerId, tenantId, branchId, businessId, businessName, reason, setAt)
     VALUES (@id, @customerId, @tenantId, @branchId, @businessId, @businessName, @reason, @now)
-  `).get({ id, customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now });
+  `).run({ id, customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now });
 
   return db.prepare(`SELECT * FROM customerPrimarySalons WHERE id = @id`).get({ id });
 }
 
 export function removePrimarySalon(customerId, tenantId) {
   if (tenantId) {
-    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).get({ customerId, tenantId });
+    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).run({ customerId, tenantId });
   } else {
     // Fallback: remove all primary salons for this customer (profile-level action)
-    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId`).get({ customerId });
+    db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId`).run({ customerId });
   }
   return { ok: true };
 }
