@@ -635,7 +635,11 @@ pub async fn load_branch_access(
         email: login.as_ref().map(|item| item.email.clone()),
         must_change_password: login.as_ref().is_some_and(|item| item.must_change_password),
         branches,
-        roles,
+        // Owner/admin/platform roles are never offered for employee logins.
+        roles: roles
+            .into_iter()
+            .filter(|role| !permission_registry::is_privileged_role_name(&role.name))
+            .collect(),
     })
 }
 
@@ -668,6 +672,15 @@ pub async fn provision_login(
     let role_id = input.role_id.trim();
     if role_id.is_empty() {
         return Err(AppError::validation("roleId is required"));
+    }
+    let role = staff_repository::get_auth_role(db, tenant_id, role_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate employee role"))?
+        .ok_or_else(|| AppError::validation("roleId is invalid"))?;
+    if permission_registry::is_privileged_role_name(&role.name) {
+        return Err(AppError::forbidden(
+            "owner, admin, and platform roles cannot be assigned to employee logins",
+        ));
     }
     if !auth_service::password_meets_policy(&input.initial_password) {
         return Err(AppError::validation(
@@ -775,6 +788,22 @@ pub async fn save_branch_access(
         .iter()
         .map(|branch| branch.branch_id.as_str())
         .collect::<HashSet<_>>();
+    let privileged_role_ids = roles
+        .iter()
+        .filter(|role| permission_registry::is_privileged_role_name(&role.name))
+        .map(|role| role.id.as_str())
+        .collect::<HashSet<_>>();
+    if assignments.iter().any(|assignment| {
+        assignment
+            .role_id
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|role_id| privileged_role_ids.contains(role_id))
+    }) {
+        return Err(AppError::forbidden(
+            "owner, admin, and platform roles cannot be assigned as employee branch roles",
+        ));
+    }
     let role_ids = roles
         .iter()
         .map(|role| role.id.as_str())

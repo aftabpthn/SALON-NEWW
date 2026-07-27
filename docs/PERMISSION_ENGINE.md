@@ -71,6 +71,48 @@ and audit administration), `finance.write`, `settings.manage`, and
 `data_migration.*` — verified by
 `manager_defaults_exclude_payroll_security_and_statutory_rights`.
 
+## Staff identity and assignment
+
+A staff record and a login account are separate concepts, explicitly linked:
+
+```
+staff_profile (staff)
+  -> staff_user_link (staff.user_id, provisioned atomically)
+  -> user (users)
+  -> role_assignment (users.role_id / user_branch_roles.role_id)
+  -> branch_assignment (user_branch_roles: permanent or deputation, one default)
+```
+
+Rules, and where they are enforced:
+
+- **One active login per staff profile.** `staff.user_id` is a single column;
+  provisioning locks the row (`FOR UPDATE`) and refuses staff that already
+  have a linked login (`staff_repository::provision_staff_login`).
+- **`admin`, `owner`, `super_admin` are never employee roles.**
+  `permission_registry::is_privileged_role_name` (driven by the
+  `staff_app_selectable` flag on `SYSTEM_ROLE_TEMPLATES`) is enforced in
+  `provision_login`, in `save_branch_access`, and the role picker options
+  returned by `load_branch_access` exclude those roles.
+- **Staff identity is never accepted from the request body.**
+  `services/staff_identity_service.rs` resolves the acting `staff_id` from
+  the session-linked profile (`staff.user_id = claims.sub`) in the token's
+  tenant and branch. A body/query `staffId` is honoured only for callers who
+  can manage other staff (management roles or an explicit domain manage
+  permission); for everyone else it is ignored, not validated.
+- **Staff see only their own records.** Attendance summary/details, leave
+  requests/balances, and schedule reads go through
+  `resolve_read_filter`, which forces self-scoped actors onto their own
+  profile. `/staff/self/*` and `/staff/mobile/*` (payroll, targets, profile)
+  already derive identity from the JWT. Named reporting and front-desk roles
+  (analyst, accountant, receptionist, cashier, ...) and roles holding the
+  relevant view permissions keep team visibility for rosters and reporting.
+- **Managers manage staff of their assigned branches only.** Sessions are
+  branch-scoped: the auth middleware re-validates branch access on every
+  request and rejects `x-branch-id` values that do not match the token.
+- **Cross-branch access is an explicit assignment.** A user reaches another
+  branch only through an active `user_branch_roles` row (permanent or
+  time-boxed deputation), selected at login; there is no implicit fallback.
+
 ## Adding a permission
 
 1. Add a `PermissionSpec` to `PERMISSION_REGISTRY` with at least one sample

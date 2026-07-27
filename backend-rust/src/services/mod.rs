@@ -54,6 +54,7 @@ pub mod staff_advanced_service;
 pub mod staff_app_service;
 pub mod staff_attendance_service;
 pub mod staff_enterprise_service;
+pub mod staff_identity_service;
 pub mod staff_leave_service;
 pub mod staff_operations_service;
 pub mod staff_payroll_service;

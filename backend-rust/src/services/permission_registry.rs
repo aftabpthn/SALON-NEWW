@@ -396,6 +396,24 @@ pub fn role_template(role_key: &str) -> Option<&'static SystemRoleTemplate> {
         .find(|template| template.role_key == role_key)
 }
 
+fn normalize_role_name(name: &str) -> String {
+    name.chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// Roles that must never be assigned as a Staff App employee login:
+/// `super_admin`, `owner`, and `admin` (matched by normalized name, so
+/// "Super Admin", "super-admin", and "superadmin" are all covered).
+pub fn is_privileged_role_name(name: &str) -> bool {
+    let normalized = normalize_role_name(name);
+    SYSTEM_ROLE_TEMPLATES
+        .iter()
+        .filter(|template| !template.staff_app_selectable)
+        .any(|template| normalize_role_name(template.name) == normalized)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -666,6 +684,25 @@ mod tests {
             sensitive_subset(&["pos.refund".to_string(), "clients.read".to_string()]),
             vec!["pos.refund".to_string()]
         );
+    }
+
+    #[test]
+    fn privileged_roles_are_blocked_for_employee_logins() {
+        for name in [
+            "owner", "Owner", "OWNER", "admin", "Admin", "super_admin", "Super Admin",
+            "super-admin", "superadmin",
+        ] {
+            assert!(
+                is_privileged_role_name(name),
+                "{name} must be blocked for Staff App employee logins"
+            );
+        }
+        for name in ["manager", "Front Desk", "cashier", "staff", "accountant", "Senior Stylist"] {
+            assert!(
+                !is_privileged_role_name(name),
+                "{name} must stay assignable to employee logins"
+            );
+        }
     }
 
     #[test]
