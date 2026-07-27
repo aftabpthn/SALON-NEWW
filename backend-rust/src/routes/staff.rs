@@ -25,7 +25,7 @@ use crate::{
         staff_repository::{self, CreateStaff, StaffProfileRecord, StaffRecord, UpdateStaff},
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_service},
+    services::{auth_service::AuthClaims, permission_registry, staff_service},
     state::AppState,
 };
 
@@ -398,6 +398,8 @@ pub struct AuthRoleWriteRequest {
     pub max_discount_paise: Option<i64>,
     pub max_refund_paise: Option<i64>,
     pub max_cash_movement_paise: Option<i64>,
+    /// Required whenever the role grants sensitive permissions.
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1452,6 +1454,8 @@ async fn create_auth_role(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let role_name = payload.name.clone();
+    let sensitive_grants = permission_registry::sensitive_subset(&payload.permissions);
+    let reason = payload.reason.clone();
     let roles = staff_service::create_auth_role(
         &state.db,
         &tenant_id,
@@ -1464,10 +1468,19 @@ async fn create_auth_role(
             max_refund_paise: payload.max_refund_paise,
             max_cash_movement_paise: payload.max_cash_movement_paise,
         },
+        payload.reason,
     )
     .await?;
     audit_auth_role_change(
-        &state, &claims, &tenant_id, &branch_id, "created", None, role_name,
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        "created",
+        None,
+        role_name,
+        sensitive_grants,
+        reason,
     )
     .await;
     Ok(Json(ApiResponse::ok(roles)))
@@ -1483,6 +1496,8 @@ async fn update_auth_role(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let role_name = payload.name.clone();
+    let sensitive_grants = permission_registry::sensitive_subset(&payload.permissions);
+    let reason = payload.reason.clone();
     let roles = staff_service::update_auth_role(
         &state.db,
         &tenant_id,
@@ -1496,6 +1511,7 @@ async fn update_auth_role(
             max_refund_paise: payload.max_refund_paise,
             max_cash_movement_paise: payload.max_cash_movement_paise,
         },
+        payload.reason,
     )
     .await?;
     audit_auth_role_change(
@@ -1506,11 +1522,14 @@ async fn update_auth_role(
         "updated",
         Some(role_id),
         role_name,
+        sensitive_grants,
+        reason,
     )
     .await;
     Ok(Json(ApiResponse::ok(roles)))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn audit_auth_role_change(
     state: &AppState,
     claims: &AuthClaims,
@@ -1519,6 +1538,8 @@ async fn audit_auth_role_change(
     action: &str,
     role_id: Option<String>,
     role_name: String,
+    sensitive_grants: Vec<String>,
+    reason: Option<String>,
 ) {
     let _ = auth_repository::audit(
         &state.db,
@@ -1532,7 +1553,13 @@ async fn audit_auth_role_change(
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({ "action": action, "roleId": role_id, "roleName": role_name }),
+            details: json!({
+                "action": action,
+                "roleId": role_id,
+                "roleName": role_name,
+                "sensitivePermissions": sensitive_grants,
+                "reason": reason,
+            }),
         },
     )
     .await;

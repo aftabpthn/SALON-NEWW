@@ -131,9 +131,21 @@ const REPORT_PREFIXES: &[&str] = &[
 const PLATFORM_PREFIXES: &[&str] = &["/platform", "/super-admin", "/saas/onboarding"];
 
 #[derive(Clone, Copy)]
-struct RouteAccess {
+pub(crate) struct RouteAccess {
     roles: &'static [&'static str],
     permissions: &'static [&'static str],
+}
+
+impl RouteAccess {
+    #[allow(dead_code)]
+    pub(crate) fn role_keys(&self) -> &'static [&'static str] {
+        self.roles
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn permission_keys(&self) -> &'static [&'static str] {
+        self.permissions
+    }
 }
 
 const PLATFORM_METHODS: &[Method] = &[
@@ -315,7 +327,7 @@ fn is_mutation_method(method: &str) -> bool {
     matches!(method, "POST" | "PUT" | "PATCH" | "DELETE")
 }
 
-fn normalize_route_path(path: &str) -> &str {
+pub(crate) fn normalize_route_path(path: &str) -> &str {
     if let Some(rest) = path.strip_prefix("/api/v1") {
         return rest;
     }
@@ -347,7 +359,7 @@ fn matches_route_prefix(path: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|prefix| path_starts_with(path, prefix))
 }
 
-fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
+pub(crate) fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     if path_starts_with(path, "/finance/outgoing-funds") {
         return Some(if path == "/finance/outgoing-funds/export" {
             access(FINANCE_WRITE_ROLES, &["reports.export", "finance.write"])
@@ -970,7 +982,7 @@ async fn require_role_or_permission(
     Ok(next.run(req).await)
 }
 
-fn role_or_permissions_allowed(
+pub(crate) fn role_or_permissions_allowed(
     claims: &AuthClaims,
     allowed_roles: &[&str],
     permissions: &[&str],

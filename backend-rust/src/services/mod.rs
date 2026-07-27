@@ -36,6 +36,7 @@ pub mod migration_service;
 pub mod outgoing_funds_service;
 pub mod package_service;
 pub mod payment_gateway_service;
+pub mod permission_registry;
 pub mod pos_enterprise_service;
 pub mod profit_governance_service;
 pub mod purchase_bill_drafts_service;

@@ -2226,10 +2226,11 @@ fn reconciliation_status(difference_paise: i64, missing_cost_products: i64) -> &
 #[cfg(test)]
 mod tests {
     use super::{
-        build_reorder_suggestions, command_center_signals, cost_decision, coverage_days,
-        exception_recommendations, inactive_days, reconciliation_status, ExpiryControlRow,
-        InventoryCommandCenterSummary,
+        budget_allows, build_reorder_suggestions, command_center_signals, cost_decision,
+        coverage_days, exception_recommendations, inactive_days, reconciliation_status,
+        spendable_budget, ExpiryControlRow, InventoryCommandCenterSummary,
     };
+    use crate::repositories::inventory_repository;
     use crate::repositories::inventory_repository::{
         InventoryControlItem, InventoryExceptionEvidence,
     };

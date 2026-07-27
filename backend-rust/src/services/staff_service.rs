@@ -20,6 +20,7 @@ use crate::{
         },
     },
     services::auth_service::{self, TENANT_PERMISSION_CATALOG},
+    services::permission_registry,
 };
 
 pub(crate) fn is_supported_photo_url(url: &str) -> bool {
@@ -70,6 +71,10 @@ pub struct AuthPermissionOption {
     pub code: &'static str,
     pub label: &'static str,
     pub group: &'static str,
+    pub action: &'static str,
+    pub scope: &'static str,
+    pub sensitive: bool,
+    pub feature_key: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -146,12 +151,15 @@ pub async fn load_auth_roles(
         .collect();
     Ok(AuthRoleManagementData {
         roles,
-        permission_options: TENANT_PERMISSION_CATALOG
-            .iter()
-            .map(|permission| AuthPermissionOption {
-                code: permission.code,
-                label: permission.label,
-                group: permission.group,
+        permission_options: permission_registry::tenant_assignable()
+            .map(|spec| AuthPermissionOption {
+                code: spec.key,
+                label: spec.label,
+                group: spec.module,
+                action: spec.action.as_str(),
+                scope: spec.scope.as_str(),
+                sensitive: spec.sensitive,
+                feature_key: spec.feature_key,
             })
             .collect(),
         mask_options: AUTH_MASK_OPTIONS
@@ -167,8 +175,10 @@ pub async fn create_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
+    reason: Option<String>,
 ) -> Result<AuthRoleManagementData, AppError> {
-    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
+    let (name, permissions, security) =
+        validate_auth_role(name, permissions, security, reason.as_deref())?;
     staff_repository::create_auth_role(
         db,
         tenant_id,
@@ -192,6 +202,7 @@ pub async fn update_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
+    reason: Option<String>,
 ) -> Result<AuthRoleManagementData, AppError> {
     let role = staff_repository::get_auth_role(db, tenant_id, role_id)
         .await
@@ -200,7 +211,8 @@ pub async fn update_auth_role(
     if role.is_system {
         return Err(AppError::forbidden("system roles cannot be edited"));
     }
-    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
+    let (name, permissions, security) =
+        validate_auth_role(name, permissions, security, reason.as_deref())?;
     staff_repository::update_auth_role(
         db,
         tenant_id,
@@ -216,6 +228,12 @@ pub async fn update_auth_role(
     .await
     .map_err(role_write_error)?
     .ok_or_else(|| AppError::not_found("authentication role was not found"))?;
+    // A permission change invalidates existing sessions for everyone holding
+    // this role: their permission_version no longer matches and the auth
+    // middleware forces a fresh sign-in.
+    staff_repository::bump_permission_version_for_role(db, tenant_id, role_id)
+        .await
+        .map_err(|_| AppError::internal("failed to refresh sessions for updated role"))?;
     load_auth_roles(db, tenant_id).await
 }
 
@@ -223,6 +241,7 @@ fn validate_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
+    reason: Option<&str>,
 ) -> Result<(String, Vec<String>, AuthRoleSecurityInput), AppError> {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if !(2..=60).contains(&name.chars().count())
@@ -255,6 +274,16 @@ fn validate_auth_role(
         .filter(|permission| requested.contains(permission.code))
         .map(|permission| permission.code.to_string())
         .collect::<Vec<_>>();
+    let sensitive_grants = permission_registry::sensitive_subset(&permissions);
+    if !sensitive_grants.is_empty() {
+        let reason = reason.unwrap_or_default().trim();
+        if !(5..=240).contains(&reason.chars().count()) {
+            return Err(AppError::validation(format!(
+                "a reason of 5 to 240 characters is required when granting sensitive permissions: {}",
+                sensitive_grants.join(", ")
+            )));
+        }
+    }
     let denied = security
         .denied_permissions
         .iter()
@@ -1356,19 +1385,22 @@ mod tests {
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["unknown".into()],
-            AuthRoleSecurityInput::default()
+            AuthRoleSecurityInput::default(),
+            None
         )
         .is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["tenant.read".into(), "tenant.read".into()],
-            AuthRoleSecurityInput::default()
+            AuthRoleSecurityInput::default(),
+            None
         )
         .is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["appointments.read".into(), "clients.manage".into()],
-            AuthRoleSecurityInput::default()
+            AuthRoleSecurityInput::default(),
+            None
         )
         .is_ok());
         assert!(validate_auth_role(
@@ -1381,7 +1413,42 @@ mod tests {
                 "clients.reviews.link".into(),
                 "purchases.approve".into(),
             ],
-            AuthRoleSecurityInput::default()
+            AuthRoleSecurityInput::default(),
+            Some("compliance role for the client data team")
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn sensitive_permission_grants_require_a_reason() {
+        let sensitive = vec!["pos.read".into(), "pos.refund".into()];
+        assert!(validate_auth_role(
+            "Refund Desk".into(),
+            sensitive.clone(),
+            AuthRoleSecurityInput::default(),
+            None
+        )
+        .is_err());
+        assert!(validate_auth_role(
+            "Refund Desk".into(),
+            sensitive.clone(),
+            AuthRoleSecurityInput::default(),
+            Some("  x  ")
+        )
+        .is_err());
+        assert!(validate_auth_role(
+            "Refund Desk".into(),
+            sensitive,
+            AuthRoleSecurityInput::default(),
+            Some("front desk refund handling approved by owner")
+        )
+        .is_ok());
+        // Non-sensitive grants stay reason-free.
+        assert!(validate_auth_role(
+            "Viewer".into(),
+            vec!["appointments.read".into()],
+            AuthRoleSecurityInput::default(),
+            None
         )
         .is_ok());
     }
@@ -1396,6 +1463,7 @@ mod tests {
                 designation: String::new(),
                 active: true,
             }],
+            pricing_levels: Vec::new(),
             shift_templates: vec![ShiftTemplateInput {
                 id: String::new(),
                 code: "regular".into(),
