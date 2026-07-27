@@ -1384,6 +1384,10 @@ fn default_membership_settings() -> Value {
         "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
         "rewards":{"allowNonMembers":false,"enableForProducts":false,"enableForPackages":false,"enableForMemberships":false,"enableForServices":false,"rewardValuePaise":10000,"rewardPoints":5,"minimumRedemptionPoints":100,"bonusRules":[{"minBillPaise":0,"rewardType":"percentage","rewardValue":0}]},
+        // `eligibleLineTypes` is a boolean map rather than a string array
+        // because merge_known_settings keeps only object elements inside
+        // arrays; a string array would be silently emptied on every save.
+        "stampCards":[{"code":"","name":"","active":false,"stampsRequired":10,"rewardPointsOnCompletion":0,"earnRule":{"minimumBillPaise":0,"eligibleLineTypes":{"service":true,"product":false,"package":false,"membership":false}},"scope":"branch"}],
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })
 }
@@ -1598,6 +1602,76 @@ mod tests {
         // Turning it back off is persisted too.
         let disabled = merge_known_settings(&enabled, &json!({ "rewards": { "allowNonMembers": false } }));
         assert_eq!(disabled.pointer("/rewards/allowNonMembers"), Some(&json!(false)));
+    }
+
+    /// Phase 1B: `stampCards` programs must survive a settings save.
+    /// `merge_known_settings` uses the first default array element as the
+    /// shape template and keeps only object elements, so the template must
+    /// cover every field an owner can configure.
+    #[test]
+    fn stamp_card_programs_round_trip_through_settings() {
+        let defaults = default_membership_settings();
+        let template = defaults
+            .pointer("/stampCards/0")
+            .expect("stampCards template must exist in defaults");
+        assert_eq!(template.pointer("/active"), Some(&json!(false)));
+        assert_eq!(template.pointer("/code"), Some(&json!("")));
+
+        let saved = merge_known_settings(
+            &defaults,
+            &json!({ "stampCards": [{
+                "code": "coffee",
+                "name": "Coffee card",
+                "active": true,
+                "stampsRequired": 6,
+                "rewardPointsOnCompletion": 40,
+                "earnRule": {
+                    "minimumBillPaise": 50_000,
+                    "eligibleLineTypes": { "service": true, "product": true }
+                },
+                "scope": "tenant"
+            }] }),
+        );
+        assert_eq!(saved.pointer("/stampCards/0/code"), Some(&json!("coffee")));
+        assert_eq!(saved.pointer("/stampCards/0/active"), Some(&json!(true)));
+        assert_eq!(saved.pointer("/stampCards/0/stampsRequired"), Some(&json!(6)));
+        assert_eq!(
+            saved.pointer("/stampCards/0/rewardPointsOnCompletion"),
+            Some(&json!(40))
+        );
+        assert_eq!(
+            saved.pointer("/stampCards/0/earnRule/minimumBillPaise"),
+            Some(&json!(50_000))
+        );
+        assert_eq!(saved.pointer("/stampCards/0/scope"), Some(&json!("tenant")));
+        // The boolean line-type map survives; a string array would be dropped
+        // by the object-only array filter in merge_known_settings.
+        assert_eq!(
+            saved.pointer("/stampCards/0/earnRule/eligibleLineTypes/service"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            saved.pointer("/stampCards/0/earnRule/eligibleLineTypes/product"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            saved.pointer("/stampCards/0/earnRule/eligibleLineTypes/package"),
+            Some(&json!(false))
+        );
+
+        // Phase 1A reward settings are untouched by the new block.
+        assert_eq!(
+            saved.pointer("/rewards/allowNonMembers"),
+            defaults.pointer("/rewards/allowNonMembers")
+        );
+        assert_eq!(
+            saved.pointer("/redemptionRules"),
+            defaults.pointer("/redemptionRules")
+        );
+
+        // A tenant that never configures a card keeps the inactive template.
+        let untouched = merge_known_settings(&defaults, &json!({ "rewards": { "allowNonMembers": true } }));
+        assert_eq!(untouched.pointer("/stampCards/0/active"), Some(&json!(false)));
     }
 
     #[test]

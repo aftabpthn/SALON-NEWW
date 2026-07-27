@@ -35,6 +35,7 @@ use crate::{
     services::payment_gateway_service,
     services::razorpay_payment_service,
     services::security_service,
+    services::stamp_card_service,
     services::wallet_service,
     state::{AppState, AppointmentEvent},
 };
@@ -12058,6 +12059,18 @@ async fn refund_pos_invoice(
         sale.total_paise,
     )
     .await?;
+    reverse_stamp_cards_for_refund(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        &sale.client_id,
+        &sale.staff_id,
+        &id,
+        &refund_id,
+        next_refunded,
+        sale.total_paise,
+    )
+    .await?;
     let settlements = payment_allocations
         .iter()
         .map(|allocation| accounting_service::RefundSettlement {
@@ -13787,6 +13800,13 @@ async fn post_membership_rewards(
         .and_then(Value::as_i64)
         .unwrap_or(0)
         .clamp(0, i64::from(i32::MAX));
+    // Stamp cards are a separate loyalty currency and are not membership
+    // gated, so they are posted before the membership eligibility checks
+    // below. Same transaction, same call sites, same idempotency guarantees.
+    post_stamp_cards(
+        tx, tenant_id, branch_id, client_id, staff_id, sale_id, total_paise, &settings,
+    )
+    .await?;
     let rewards_config = settings.get("rewards").cloned().unwrap_or_else(|| serde_json::json!({}));
     let reward_line_types: Vec<String> = [
         ("service", "enableForServices"),
@@ -13941,6 +13961,231 @@ async fn post_membership_rewards(
         sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'earned',$5,$6,$7,'POS sale reward') ON CONFLICT DO NOTHING")
             .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned.min(i64::from(i32::MAX)) as i32).bind(target_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post earned rewards"))?;
+    }
+    Ok(())
+}
+
+/// Posts stamp card events for a paid invoice: at most one stamp per active
+/// program, and a completion event plus configured reward points once the card
+/// is full. The database unique indexes are the duplicate guard — this hook
+/// can run several times for one sale.
+#[allow(clippy::too_many_arguments)]
+async fn post_stamp_cards(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    sale_id: &str,
+    total_paise: i64,
+    settings: &Value,
+) -> Result<(), AppError> {
+    let programs = stamp_card_service::active_programs(settings);
+    if programs.is_empty() || client_id.trim().is_empty() || sale_id.trim().is_empty() {
+        return Ok(());
+    }
+    let line_types = stamp_card_service::sale_line_types(tx, tenant_id, branch_id, sale_id).await?;
+
+    for program in programs {
+        if !stamp_card_service::invoice_earns_stamp(&program, total_paise, &line_types) {
+            continue;
+        }
+        let balance = stamp_card_service::current_balance(
+            tx, tenant_id, branch_id, client_id, &program.code,
+        )
+        .await?;
+        let earned_balance = balance.saturating_add(1);
+        let posted = stamp_card_service::insert_event(
+            tx,
+            tenant_id,
+            branch_id,
+            client_id,
+            &program.code,
+            stamp_card_service::StampEvent {
+                source_sale_id: sale_id,
+                source_refund_id: "",
+                event_type: "earned",
+                stamps: 1,
+                balance_after: earned_balance,
+                staff_id,
+                note: "POS sale stamp",
+                idempotency_key: "",
+            },
+        )
+        .await?;
+        if !posted {
+            // Replayed hook: the stamp already exists, nothing further to do.
+            continue;
+        }
+        security_service::record_audit_tx(
+            tx,
+            tenant_id,
+            branch_id,
+            staff_id,
+            "loyalty.stamp.earned",
+            serde_json::json!({
+                "programCode": program.code,
+                "clientId": client_id,
+                "saleId": sale_id,
+                "balanceAfter": earned_balance,
+            }),
+        )
+        .await?;
+
+        if !stamp_card_service::completion_follows_new_stamp(
+            posted,
+            earned_balance,
+            program.stamps_required,
+        ) {
+            continue;
+        }
+        let completion_balance = earned_balance - program.stamps_required;
+        let completion_key =
+            stamp_card_service::completion_idempotency_key(sale_id, &program.code);
+        stamp_card_service::insert_event(
+            tx,
+            tenant_id,
+            branch_id,
+            client_id,
+            &program.code,
+            stamp_card_service::StampEvent {
+                source_sale_id: "",
+                source_refund_id: "",
+                event_type: "redeemed",
+                stamps: program.stamps_required,
+                balance_after: completion_balance,
+                staff_id,
+                note: "Stamp card completed",
+                idempotency_key: &completion_key,
+            },
+        )
+        .await?;
+
+        if program.reward_points_on_completion > 0 {
+            // Issued with an empty source_sale_id so it cannot collide with
+            // the invoice's own 'earned' row, which is keyed by sale in
+            // idx_membership_reward_ledger_sale_type. The completion key
+            // guards replays instead.
+            let points_balance = sqlx::query_scalar::<_, i32>(
+                "SELECT balance_after FROM membership_reward_ledger \
+                 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
+                 ORDER BY created_at DESC, id DESC LIMIT 1",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(client_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to load reward balance"))?
+            .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO membership_reward_ledger \
+                 (tenant_id,branch_id,client_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) \
+                 VALUES ($1,$2,$3,'earned',$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(client_id)
+            .bind(program.reward_points_on_completion)
+            .bind(points_balance.saturating_add(program.reward_points_on_completion))
+            .bind(staff_id)
+            .bind(format!("Stamp card reward: {}", program.name))
+            .bind(&completion_key)
+            .execute(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to post stamp card reward points"))?;
+        }
+
+        security_service::record_audit_tx(
+            tx,
+            tenant_id,
+            branch_id,
+            staff_id,
+            "loyalty.stamp.completed",
+            serde_json::json!({
+                "programCode": program.code,
+                "clientId": client_id,
+                "saleId": sale_id,
+                "stampsRedeemed": program.stamps_required,
+                "rewardPoints": program.reward_points_on_completion,
+                "balanceAfter": completion_balance,
+            }),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// Reverses stamps earned on a fully refunded invoice. A partial refund keeps
+/// the stamp in Phase 1B.
+pub(crate) async fn reverse_stamp_cards_for_refund(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    sale_id: &str,
+    refund_id: &str,
+    refunded_paise: i64,
+    sale_total_paise: i64,
+) -> Result<(), AppError> {
+    if !stamp_card_service::refund_reverses_stamp(refunded_paise, sale_total_paise) {
+        return Ok(());
+    }
+    let earned = sqlx::query_as::<_, (String, i32)>(
+        "SELECT program_code, stamps FROM stamp_card_events \
+         WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 \
+           AND event_type='earned'",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .bind(sale_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load stamps for refund"))?;
+
+    for (program_code, stamps) in earned {
+        let balance =
+            stamp_card_service::current_balance(tx, tenant_id, branch_id, client_id, &program_code)
+                .await?;
+        let reversed = stamp_card_service::reversed_balance(balance, stamps);
+        let posted = stamp_card_service::insert_event(
+            tx,
+            tenant_id,
+            branch_id,
+            client_id,
+            &program_code,
+            stamp_card_service::StampEvent {
+                source_sale_id: "",
+                source_refund_id: refund_id,
+                event_type: "reversed",
+                stamps,
+                balance_after: reversed,
+                staff_id,
+                note: "POS refund stamp reversal",
+                idempotency_key: &format!("stamp-reversal:{refund_id}:{program_code}"),
+            },
+        )
+        .await?;
+        if posted {
+            security_service::record_audit_tx(
+                tx,
+                tenant_id,
+                branch_id,
+                staff_id,
+                "loyalty.stamp.reversed",
+                serde_json::json!({
+                    "programCode": program_code,
+                    "clientId": client_id,
+                    "saleId": sale_id,
+                    "refundId": refund_id,
+                    "stamps": stamps,
+                    "balanceAfter": reversed,
+                }),
+            )
+            .await?;
+        }
     }
     Ok(())
 }

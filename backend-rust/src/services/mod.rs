@@ -51,6 +51,7 @@ pub mod service_pricing_service;
 pub mod service_settings_service;
 pub mod sms_center_service;
 pub mod sso_service;
+pub mod stamp_card_service;
 pub mod staff_advance_service;
 pub mod staff_advanced_service;
 pub mod staff_app_service;

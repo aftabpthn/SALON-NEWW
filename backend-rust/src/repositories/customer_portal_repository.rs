@@ -612,7 +612,30 @@ pub async fn account_rewards(db: &PgPool, account_id: &str) -> Result<Value, sql
     } else {
         "Bronze"
     };
-    Ok(json!({"loyaltyPoints":loyalty_points,"tier":tier,"history":history}))
+    // Stamp card progress, scoped through the account's linked clients so a
+    // customer only ever sees their own tenant/branch cards. Programs the
+    // customer has no events for simply do not appear.
+    let stamp_cards: Vec<Value> = sqlx::query_scalar(
+        "SELECT jsonb_build_object(\
+           'programCode',x.program_code,'branchId',x.branch_id,\
+           'stamps',x.balance_after,'updatedAt',x.created_at) \
+         FROM (SELECT DISTINCT ON (s.tenant_id,s.branch_id,s.client_id,s.program_code) \
+                 s.tenant_id,s.branch_id,s.client_id,s.program_code,s.balance_after,s.created_at \
+                 FROM stamp_card_events s \
+                 JOIN customer_account_clients l ON l.account_id=$1 \
+                   AND l.tenant_id=s.tenant_id AND l.branch_id=s.branch_id AND l.client_id=s.client_id \
+                ORDER BY s.tenant_id,s.branch_id,s.client_id,s.program_code,s.created_at DESC,s.id DESC) x \
+         ORDER BY x.created_at DESC",
+    )
+    .bind(account_id)
+    .fetch_all(db)
+    .await?;
+    Ok(json!({
+        "loyaltyPoints": loyalty_points,
+        "tier": tier,
+        "history": history,
+        "stampCards": stamp_cards
+    }))
 }
 
 pub async fn account_wallet(db: &PgPool, account_id: &str) -> Result<Value, sqlx::Error> {
