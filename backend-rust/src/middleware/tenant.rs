@@ -90,6 +90,7 @@ const APPOINTMENT_PREFIXES: &[&str] = &[
     "/appointment-activity",
     "/appointment-history",
     "/appointment-lifecycle",
+    "/appointment-reschedule-requests",
     "/appointment-resources",
     "/appointments",
     "/audit/appointments",
@@ -103,13 +104,14 @@ const BOOKING_PREFIXES: &[&str] = &[
     "/calendar",
     "/smart-booking",
 ];
-const CLIENT_PREFIXES: &[&str] = &["/clients", "/customers"];
+const CLIENT_PREFIXES: &[&str] = &["/client-masters", "/clients", "/customers"];
 const POS_PREFIXES: &[&str] = &[
     "/appointment-deposits",
     "/appointment-sms",
     "/billing",
     "/booking-payments",
     "/invoice-notifications",
+    "/invoices",
     "/pos",
     "/sales",
 ];
@@ -357,6 +359,18 @@ fn is_read_method(method: &Method) -> bool {
 
 fn matches_route_prefix(path: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|prefix| path_starts_with(path, prefix))
+}
+
+/// Whether a request path is covered by one of the three protection branches
+/// used by `require_route_role`: platform-admin gating, authenticated-user
+/// gating for `/auth`, or an explicit permission mapping. Anything else falls
+/// through to the default deny and is unreachable in production.
+#[allow(dead_code)]
+pub(crate) fn route_protection_resolved(path: &str, method: &Method) -> bool {
+    let path = normalize_route_path(path);
+    requires_platform_access(path, method)
+        || path_starts_with(path, "/auth")
+        || route_access(path, method).is_some()
 }
 
 pub(crate) fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
@@ -688,6 +702,53 @@ pub(crate) fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             MANAGEMENT_ROLES,
             &["settings.read", "settings.manage", "tenant.read"],
             &["settings.manage", "management.write"],
+        ));
+    }
+    // Outcall and marketplace operations: branch teams read, management
+    // approves listings, moderates reviews, and dispatches jobs.
+    if path_starts_with(path, "/operations/outcall")
+        || path_starts_with(path, "/operations/marketplace")
+    {
+        return Some(domain_access(
+            method,
+            TENANT_ROLES,
+            MANAGEMENT_ROLES,
+            &["settings.read", "bookings.read", "tenant.read"],
+            &["settings.manage", "bookings.manage", "management.write"],
+        ));
+    }
+    // Campaign planning and message templates are marketing surfaces; the
+    // hyphenated prefixes do not match "/whatsapp" or "/notifications".
+    if path_starts_with(path, "/whatsapp-campaign-planner") {
+        return Some(if is_read_method(method) {
+            access(
+                TENANT_ROLES,
+                &["marketing.read", "analytics.read", "tenant.read"],
+            )
+        } else if path.ends_with("/approve") {
+            access(
+                MANAGEMENT_ROLES,
+                &["marketing.approve", "marketing.manage", "management.write"],
+            )
+        } else {
+            access(
+                MANAGEMENT_ROLES,
+                &["marketing.send", "marketing.manage", "management.write"],
+            )
+        });
+    }
+    if path_starts_with(path, "/message-templates") {
+        return Some(domain_access(
+            method,
+            TENANT_ROLES,
+            FRONT_DESK_WRITE_ROLES,
+            &[
+                "notifications.read",
+                "marketing.read",
+                "templates.manage",
+                "tenant.read",
+            ],
+            &["templates.manage", "notifications.manage", "marketing.manage"],
         ));
     }
     if path_starts_with(path, "/notifications") || path_starts_with(path, "/whatsapp") {
@@ -1054,6 +1115,7 @@ mod tests {
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
+
 
     #[test]
     fn salon_onboarding_requires_platform_admin() {

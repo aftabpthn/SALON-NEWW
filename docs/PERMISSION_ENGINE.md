@@ -176,6 +176,40 @@ change, and none may be added.
   a per-tenant idempotency key, and onboarding replays by idempotency key +
   request fingerprint.
 
+## Route coverage audit
+
+`require_route_role` protects a request through exactly one of three branches:
+
+1. `requires_platform_access` — platform-admin only (`/platform`, `/super-admin`,
+   `/saas/onboarding`);
+2. `/auth/*` — any authenticated user (MFA and passkey self-service);
+3. `route_access` — an explicit role/permission mapping.
+
+Anything matching none of them hits the default deny and returns *"no
+permission mapping for this endpoint"* to every caller — a silent outage.
+
+`services::route_coverage_audit` holds a checked-in inventory of all 925
+protected `(method, path)` pairs and asserts each resolves to one of the three
+branches. The Phase 1 audit used it to find **20 dead routes**: the salary
+advance ledger (`/staff-advances/*`), appointment reschedule requests, client
+masters, outcall and marketplace operations, the `/invoices/:id/payments` POS
+alias, message templates, and the WhatsApp campaign planner. Most were
+hyphenated siblings of a mapped prefix (`/staff-advances` vs `/staff`,
+`/whatsapp-campaign-planner` vs `/whatsapp`) — `path_starts_with` requires the
+next character to be `/`, so the family prefix never matched.
+
+Regenerating the inventory after adding routes:
+
+```bash
+# from backend-rust/src/routes — extract (module, method, path) from each
+# protected router() / protected_router() body, replace :params with a
+# concrete segment, dedupe, and rewrite the PROTECTED_ROUTES array in
+# src/services/route_coverage_audit.rs
+```
+
+Then run `cargo test route_coverage_audit`. If a newly added route is not
+mapped, the test names it.
+
 ## Adding a permission
 
 1. Add a `PermissionSpec` to `PERMISSION_REGISTRY` with at least one sample

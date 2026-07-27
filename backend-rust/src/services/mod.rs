@@ -43,6 +43,7 @@ pub mod purchase_bill_drafts_service;
 pub mod purchase_service;
 pub mod razorpay_payment_service;
 pub mod retention_service;
+pub mod route_coverage_audit;
 pub mod saas_service;
 pub mod security_service;
 pub mod service_pricing_service;
