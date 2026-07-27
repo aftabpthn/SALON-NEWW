@@ -15,6 +15,17 @@ use crate::{
 
 const CHANNELS: &[&str] = &["web", "whatsapp", "voice"];
 
+/// The AI provider answered.
+const PROVIDER_LIVE: &str = "live";
+/// No AI service URL/token is configured, so the CRM fallback answered.
+const PROVIDER_NOT_CONFIGURED: &str = "not_configured";
+/// The AI service could not be reached (DNS, connection refused, timeout).
+const PROVIDER_UNREACHABLE: &str = "unreachable";
+/// The AI service replied with a non-success status.
+const PROVIDER_HTTP_ERROR: &str = "http_error";
+/// The AI service replied with a body this service could not use.
+const PROVIDER_INVALID_RESPONSE: &str = "invalid_response";
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GovernanceRequest {
@@ -48,6 +59,9 @@ pub struct ConciergeResponse {
     pub assistant_message: AiMessageRecord,
     pub action_type: String,
     pub action_payload: Value,
+    /// Which engine produced the reply: `live` when the AI provider answered,
+    /// otherwise the reason the deterministic CRM fallback was used.
+    pub provider_status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -351,7 +365,7 @@ async fn process_message(
     } else {
         None
     };
-    let provider = call_provider(
+    let (provider, provider_status) = call_provider(
         settings,
         tenant_id,
         branch_id,
@@ -434,6 +448,7 @@ async fn process_message(
         assistant_message,
         action_type: action_type.into(),
         action_payload,
+        provider_status: provider_status.into(),
     })
 }
 
@@ -593,7 +608,7 @@ async fn call_provider(
     operational_context: Option<&AiOperationalContext>,
     web_role: Option<&str>,
     governance: &AiGovernanceRecord,
-) -> ProviderResponse {
+) -> (ProviderResponse, &'static str) {
     let financials_visible = web_role.is_some_and(can_view_financials);
     let fallback = local_response(
         message,
@@ -606,7 +621,13 @@ async fn call_provider(
         settings.ai_service_url.as_deref(),
         settings.ai_service_token.as_deref(),
     ) else {
-        return fallback;
+        tracing::info!(
+            tenant_id,
+            branch_id,
+            channel = %session.channel,
+            "AI service is not configured; answering from CRM data"
+        );
+        return (fallback, PROVIDER_NOT_CONFIGURED);
     };
     let payload = json!({
         "tenant_id":tenant_id,"branch_id":branch_id,"channel":session.channel,"locale":session.locale,"message":message,
@@ -628,31 +649,75 @@ async fn call_provider(
         })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });
-    let Ok(client) = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(14))
         .build()
-    else {
-        return fallback;
+    {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(%error, tenant_id, branch_id, "AI provider client could not be built");
+            return (fallback, PROVIDER_UNREACHABLE);
+        }
     };
-    let Ok(response) = client
+    let response = match client
         .post(format!("{url}/api/v1/concierge/respond"))
         .bearer_auth(token)
         .json(&payload)
         .send()
         .await
-    else {
-        return fallback;
+    {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                tenant_id,
+                branch_id,
+                channel = %session.channel,
+                "AI provider is unreachable; answering from CRM data"
+            );
+            return (fallback, PROVIDER_UNREACHABLE);
+        }
     };
-    if !response.status().is_success() {
-        return fallback;
+    let status = response.status();
+    if !status.is_success() {
+        tracing::warn!(
+            status = status.as_u16(),
+            tenant_id,
+            branch_id,
+            channel = %session.channel,
+            "AI provider returned an error status; answering from CRM data"
+        );
+        return (fallback, PROVIDER_HTTP_ERROR);
     }
-    response
+    match response
         .json::<ProviderEnvelope<ProviderResponse>>()
         .await
-        .ok()
-        .filter(|value| value.success)
-        .and_then(|value| value.data)
-        .unwrap_or(fallback)
+        .map(provider_payload)
+    {
+        Ok(Some(data)) => (data, PROVIDER_LIVE),
+        Ok(None) => {
+            tracing::warn!(
+                tenant_id,
+                branch_id,
+                "AI provider reported failure or sent no payload; answering from CRM data"
+            );
+            (fallback, PROVIDER_INVALID_RESPONSE)
+        }
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                tenant_id,
+                branch_id,
+                "AI provider response could not be parsed; answering from CRM data"
+            );
+            (fallback, PROVIDER_INVALID_RESPONSE)
+        }
+    }
+}
+
+/// A provider payload is only usable when the envelope reports success and carries data.
+fn provider_payload(envelope: ProviderEnvelope<ProviderResponse>) -> Option<ProviderResponse> {
+    envelope.success.then_some(envelope.data).flatten()
 }
 
 fn local_response(
@@ -1027,8 +1092,44 @@ fn call_report_insights(
 
 #[cfg(test)]
 mod tests {
-    use super::{default_governance, local_response, redact};
+    use super::{
+        default_governance, local_response, provider_payload, redact, ProviderEnvelope,
+        ProviderResponse,
+    };
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
+
+    fn provider_reply() -> ProviderResponse {
+        ProviderResponse {
+            source: "ai_service".into(),
+            model: "test-model".into(),
+            prompt_version: "receptionist-v1".into(),
+            reply_text: "hello".into(),
+            intent: "general".into(),
+            service_id: String::new(),
+            handoff_required: false,
+            safety_flags: vec![],
+        }
+    }
+
+    #[test]
+    fn provider_payload_is_used_only_when_the_envelope_succeeds() {
+        assert!(provider_payload(ProviderEnvelope {
+            success: true,
+            data: Some(provider_reply()),
+        })
+        .is_some());
+        // A failed envelope must fall back to CRM data even when it carries a reply.
+        assert!(provider_payload(ProviderEnvelope {
+            success: false,
+            data: Some(provider_reply()),
+        })
+        .is_none());
+        assert!(provider_payload(ProviderEnvelope::<ProviderResponse> {
+            success: true,
+            data: None,
+        })
+        .is_none());
+    }
 
     #[test]
     fn local_receptionist_never_confirms_a_booking() {

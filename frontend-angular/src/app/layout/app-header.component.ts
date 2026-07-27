@@ -3,7 +3,7 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Outpu
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
-import { AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
 import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
@@ -44,6 +44,12 @@ export class AppHeaderComponent implements OnInit {
   assistantSession: AiSession | null = null;
   assistantMessages: AiMessage[] = [];
   assistantAction: { type: string; serviceId: string } | null = null;
+  /** Exact failure behind `assistantError`, so the drawer can show code + request id. */
+  assistantFailure: AiConciergeFailure | null = null;
+  assistantConnection: 'idle' | 'connecting' | 'ready' | 'error' = 'idle';
+  /** `live` when the AI provider answered, otherwise why the CRM fallback replied. */
+  assistantProviderStatus = '';
+  private assistantRetry: (() => Promise<void>) | null = null;
 
   get branchName(): string {
     return this.currentBranch?.branchName
@@ -133,27 +139,92 @@ export class AppHeaderComponent implements OnInit {
   async toggleAssistant(): Promise<void> {
     this.assistantOpen = !this.assistantOpen;
     if (!this.assistantOpen || this.assistantSession) return;
+    await this.connectAssistant();
+  }
+
+  /** Opens the session and loads its transcript, keeping itself as the retry action. */
+  async connectAssistant(): Promise<void> {
+    if (this.assistantBusy) return;
     this.assistantBusy = true;
-    this.assistantError = '';
+    this.assistantConnection = 'connecting';
+    this.assistantProviderStatus = '';
+    this.clearAssistantError();
     try {
-      this.assistantSession = await this.concierge.open();
+      this.assistantSession ??= await this.concierge.open();
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
-    } catch (error) { this.assistantError = this.message(error, 'error.unableToLoad'); }
-    finally { this.assistantBusy = false; }
+      this.assistantConnection = 'ready';
+    } catch (error) {
+      this.assistantConnection = 'error';
+      this.captureAssistantError(error, 'error.unableToLoad', () => this.connectAssistant());
+    } finally { this.assistantBusy = false; }
   }
 
   async sendAssistantMessage(): Promise<void> {
     const body = this.assistantDraft.trim();
     if (!body || !this.assistantSession || this.assistantBusy) return;
     this.assistantBusy = true;
-    this.assistantError = '';
+    this.assistantProviderStatus = '';
+    this.clearAssistantError();
     try {
       const response = await this.concierge.send(this.assistantSession.id, body);
       this.assistantDraft = '';
+      this.assistantProviderStatus = response.providerStatus || '';
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
+      this.assistantConnection = 'ready';
       this.assistantAction = response.actionType ? { type: response.actionType, serviceId: response.actionPayload?.serviceId || '' } : null;
-    } catch (error) { this.assistantError = this.message(error, 'common.error'); }
-    finally { this.assistantBusy = false; }
+    } catch (error) {
+      // Keep the text in the box so a retry does not lose what the user typed.
+      this.assistantDraft = body;
+      this.captureAssistantError(error, 'common.error', () => this.sendAssistantMessage());
+    } finally { this.assistantBusy = false; }
+  }
+
+  async retryAssistant(): Promise<void> {
+    const retry = this.assistantRetry;
+    if (!retry || this.assistantBusy) return;
+    await retry();
+  }
+
+  get assistantCanRetry(): boolean {
+    return !!this.assistantRetry && !this.assistantBusy;
+  }
+
+  /** Non-empty only when the deterministic CRM fallback answered instead of the AI provider. */
+  get assistantFallbackReasonKey(): string {
+    return ({
+      not_configured: 'header.aiProviderNotConfigured',
+      unreachable: 'header.aiProviderUnreachable',
+      http_error: 'header.aiProviderErrored',
+      invalid_response: 'header.aiProviderErrored',
+    } as Record<string, string>)[this.assistantProviderStatus] ?? '';
+  }
+
+  get assistantConnectionKey(): string {
+    return ({
+      idle: 'header.aiNotConnected',
+      connecting: 'header.connecting',
+      ready: 'header.aiConnected',
+      error: 'header.aiConnectionFailed',
+    } as Record<string, string>)[this.assistantConnection];
+  }
+
+  private clearAssistantError(): void {
+    this.assistantError = '';
+    this.assistantFailure = null;
+    this.assistantRetry = null;
+  }
+
+  private captureAssistantError(error: unknown, fallbackKey: string, retry: () => Promise<void>): void {
+    if (error instanceof AiConciergeError) {
+      this.assistantFailure = error.failure;
+      this.assistantError = this.language.errorCodeText(error.failure.code, fallbackKey);
+    } else {
+      this.assistantFailure = null;
+      this.assistantError = this.message(error, fallbackKey);
+    }
+    this.assistantRetry = retry;
+    // Status 0 means the API was never reached, so the drawer is genuinely disconnected.
+    if (this.assistantFailure?.status === 0) this.assistantConnection = 'error';
   }
 
   async continueBooking(): Promise<void> {

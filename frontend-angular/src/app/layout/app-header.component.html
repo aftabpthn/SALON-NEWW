@@ -125,9 +125,31 @@
 
   @if (assistantOpen) {
     <aside class="assistant-drawer" [attr.aria-label]="'header.aiAssistant' | translate">
-      <header><div><strong>{{ 'header.aiReceptionist' | translate }}</strong><small>{{ assistantSession?.status || ('header.connecting' | translate) }}</small></div><button type="button" [attr.aria-label]="'header.closeAiAssistant' | translate" (click)="assistantOpen = false">×</button></header>
+      <header><div><strong>{{ 'header.aiReceptionist' | translate }}</strong><small class="assistant-connection" [attr.data-state]="assistantConnection">{{ assistantConnectionKey | translate }}{{ assistantSession?.status ? ' · ' + assistantSession?.status : '' }}</small></div><button type="button" [attr.aria-label]="'header.closeAiAssistant' | translate" (click)="assistantOpen = false">×</button></header>
       @if (assistantError) {
-        <div class="assistant-error">{{ assistantError }}</div>
+        <div class="assistant-error" role="alert">
+          <p class="assistant-error-headline">{{ assistantError }}</p>
+          @if (assistantFailure; as failure) {
+            @if (failure.detail) {
+              <p class="assistant-error-detail">{{ failure.detail }}</p>
+            }
+            <p class="assistant-error-meta">
+              <span>{{ failure.code }}</span>
+              @if (failure.status) {
+                <span>· HTTP {{ failure.status }}</span>
+              }
+              @if (failure.requestId) {
+                <span>· {{ 'header.aiRequestId' | translate }}: <code>{{ failure.requestId }}</code></span>
+              }
+            </p>
+          }
+          @if (assistantCanRetry) {
+            <button class="assistant-retry" type="button" (click)="retryAssistant()">{{ 'common.retry' | translate }}</button>
+          }
+        </div>
+      }
+      @if (assistantFallbackReasonKey) {
+        <div class="assistant-notice">{{ 'header.aiFallbackAnswer' | translate }} {{ assistantFallbackReasonKey | translate }}</div>
       }
       <div class="assistant-transcript">
         @for (message of assistantMessages; track message) {
