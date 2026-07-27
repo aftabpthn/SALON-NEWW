@@ -223,7 +223,11 @@ export class OwnerContextService {
     const remember = this.settings().branchBehavior.rememberLastBranch;
     const stored = remember ? this.readStorage(this.storageKey("branch", user)) : "";
     const recent = this.readStorage(this.storageKey("recentBranch", user));
-    const selected = stored && validIds.has(stored) ? stored : this.settings().branchBehavior.requireBranchSelection ? branches[0]?.id || "" : "";
+    const selected = branches.length === 1
+      ? branches[0].id
+      : stored && validIds.has(stored)
+        ? stored
+        : this.settings().branchBehavior.requireBranchSelection ? branches[0]?.id || "" : "";
     this.selectedBranchId.set(selected);
     this.recentBranchId.set(recent && validIds.has(recent) ? recent : "");
     if (stored && !validIds.has(stored)) this.writeStorage(this.storageKey("branch", user), "");

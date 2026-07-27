@@ -73,7 +73,8 @@ function setCustomerAccess(req, payload, tenant) {
     requestedBranchId,
     deviceId: payload.deviceId || "",
     jti: payload.jti || "",
-    iat: payload.iat || 0
+    iat: payload.iat || 0,
+    globalAccountId: payload.globalAccountId || ""
   };
 }
 

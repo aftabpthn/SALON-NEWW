@@ -413,6 +413,22 @@ export class AuthService {
     }
   }
 
+  async demoLogin(): Promise<AuthSession> {
+    this.loading.set(true);
+    this.error.set("");
+    try {
+      const response = await firstValueFrom(this.api.demoLogin(this.deviceInfo()));
+      this.saveSession(response);
+      const profile = await this.loadMe();
+      return { ...response, customer: profile };
+    } catch (error) {
+      this.error.set(this.message(error, "Unable to log in with demo account"));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   getAccessToken(): string | null {
     return this.readToken(ACCESS_TOKEN_KEY) || this.accessToken();
   }

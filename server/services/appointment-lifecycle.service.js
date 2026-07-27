@@ -1,11 +1,13 @@
 import { repositories } from "../repositories/repository-registry.js";
 import { badRequest, conflict, notFound } from "../utils/app-error.js";
 import { appointmentActivityService, APPOINTMENT_ACTIVITY_ACTIONS } from "./appointment-activity.service.js";
+import { customerSalonRelationshipService } from "./customer-salon-relationship.service.js";
 import { resourceService } from "./resource.service.js";
 import { salonOperationsService } from "./salon-operations.service.js";
 import { tenantService } from "./tenant.service.js";
 import { waitlistService } from "./waitlist.service.js";
 import { warrantyService } from "./warranty.service.js";
+import { db } from "../db.js";
 
 function scope(access, branchId = "") {
   const scoped = tenantService.accessScope(access || {}, "appointments");
@@ -167,6 +169,28 @@ export const appointmentLifecycleService = {
       source: "service-complete",
       access
     });
+
+    // Track customer-salon relationship on completion
+    try {
+      const appt = result.appointment;
+      if (appt && appt.clientId && appt.tenantId) {
+        let branchName = "";
+        try {
+          const branch = db.prepare("SELECT name FROM branches WHERE id = @branchId AND tenantId = @tenantId").get({ branchId: appt.branchId, tenantId: appt.tenantId });
+          branchName = branch?.name || "";
+        } catch (_) { /* branch lookup non-critical */ }
+        customerSalonRelationshipService.recordVisit({
+          customerId: appt.clientId,
+          tenantId: appt.tenantId,
+          branchId: appt.branchId || "",
+          businessId: appt.branchId || "",
+          businessName: branchName
+        });
+      }
+    } catch (_) {
+      // Non-critical: don't fail booking completion if relationship tracking fails
+    }
+
     return { ...result, warranty };
   },
 

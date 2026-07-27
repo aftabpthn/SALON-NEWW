@@ -1,25 +1,36 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence, useMotionValueEvent, useScroll } from "motion/react";
-import { Menu, X, ChevronRight } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { motion, useReducedMotion } from "motion/react";
+import { Menu, X, ArrowUpRight, Languages } from "lucide-react";
 import { NAV_LINKS, CTA_LINKS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { MobileMenu } from "./MobileMenu";
+import { useLanguage } from "@/components/providers/LanguageProvider";
+
+function isRouteActive(pathname: string, href: string) {
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+}
+
+function navKey(href: string) {
+  return `nav.${href === "/features" ? "features" : href.slice(1)}`;
+}
 
 export function Navbar() {
+  const { language, setLanguage, t } = useLanguage();
+  const pathname = usePathname();
+  const reducedMotion = useReducedMotion();
   const [scrolled, setScrolled] = useState(false);
-  const [hidden, setHidden] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const lastY = useRef(0);
-  const { scrollY } = useScroll();
 
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    setScrolled(latest > 20);
-    setHidden(latest > lastY.current && latest > 100);
-    lastY.current = latest;
-  });
+  useEffect(() => {
+    const updateSurface = () => setScrolled(window.scrollY > 12);
+    updateSurface();
+    window.addEventListener("scroll", updateSurface, { passive: true });
+    return () => window.removeEventListener("scroll", updateSurface);
+  }, []);
 
   useEffect(() => {
     if (mobileOpen) {
@@ -30,90 +41,114 @@ export function Navbar() {
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
 
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const closeAtDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) setMobileOpen(false);
+    };
+    desktop.addEventListener("change", closeAtDesktop);
+    return () => desktop.removeEventListener("change", closeAtDesktop);
+  }, []);
+
   return (
     <>
-      <motion.header
-        initial={{ y: -100 }}
-        animate={{ y: hidden ? -100 : 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      <header
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
-          scrolled
-            ? "bg-white/70 backdrop-blur-2xl border-b border-aura-border/60 shadow-[0_1px_20px_rgba(0,0,0,0.04)]"
-            : "bg-transparent"
+          "fixed inset-x-0 top-0 z-[9997] border-b pt-[env(safe-area-inset-top)] transition-[background-color,border-color,box-shadow] duration-300",
+          scrolled || mobileOpen
+            ? "border-aura-border/80 bg-aura-surface/95 shadow-[0_10px_35px_rgba(49,28,33,0.07)] backdrop-blur-xl"
+            : "border-transparent bg-aura-bg/75 backdrop-blur-md"
         )}
       >
-        <nav className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
+        <nav className="mx-auto max-w-[90rem] px-3 sm:px-6 xl:px-8 2xl:px-10" aria-label={t("nav.primary")}>
+          <div className="flex h-16 items-center justify-between gap-3 sm:h-[4.5rem]">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-neon-violet to-aura-rose text-white font-bold text-sm tracking-tight shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-300">
-                A
-              </div>
-              <span className="text-lg font-bold text-aura-text tracking-tight">
-                Aura
+            <Link href="/" className="group flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl" aria-label={t("nav.home")}>
+              <span className="grid h-10 w-10 place-items-center rounded-[.85rem] bg-aura-burgundy font-display text-xl italic text-white shadow-[0_6px_18px_rgba(69,18,37,.2)] transition-transform duration-300 group-hover:scale-[1.03]" aria-hidden="true">A</span>
+              <span className="leading-none">
+                <span className="block font-display text-[1.35rem] tracking-[-.035em] text-aura-text">Aura</span>
+                <span className="mt-1 hidden text-[8px] font-bold uppercase tracking-[.2em] text-aura-text-muted md:block">Salon OS</span>
               </span>
             </Link>
 
             {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-0.5">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="relative px-4 py-2 text-sm font-medium text-aura-text-secondary hover:text-aura-text transition-colors rounded-lg hover:bg-black/[0.03]"
-                >
-                  {link.label}
-                </Link>
-              ))}
+            <div className="hidden items-center gap-0.5 rounded-full border border-aura-border/75 bg-white/55 p-1 shadow-sm xl:flex">
+              {NAV_LINKS.map((link) => {
+                const active = isRouteActive(pathname, link.href);
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "relative flex min-h-11 items-center rounded-full px-3.5 text-[13px] font-semibold transition-colors",
+                      active ? "text-aura-burgundy" : "text-aura-text-secondary hover:bg-aura-bg-warm/70 hover:text-aura-text"
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="desktop-nav-active"
+                        className="absolute inset-0 rounded-full border border-aura-border bg-aura-surface shadow-sm"
+                        transition={reducedMotion ? { duration: 0 } : { duration: 0.35, ease: "easeOut" }}
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span className="relative z-10 whitespace-nowrap">{t(navKey(link.href))}</span>
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Desktop CTA */}
-            <div className="hidden md:flex items-center gap-3">
-              <a
+            <div className="hidden shrink-0 items-center gap-2 xl:flex">
+              <div className="flex items-center rounded-full border border-aura-border/80 bg-white/55 p-1" role="group" aria-label={t("nav.language")}>
+                <Languages className="ml-2 mr-1 h-4 w-4 text-aura-text-muted" aria-hidden="true" />
+                {(["en", "hi"] as const).map((option) => (
+                  <button key={option} type="button" onClick={() => setLanguage(option)} aria-pressed={language === option} className={cn("grid h-11 min-w-11 place-items-center rounded-full px-2 text-xs font-bold transition-colors", language === option ? "bg-aura-burgundy text-white shadow-sm" : "text-aura-text-muted hover:bg-aura-bg-warm hover:text-aura-text")}>
+                    {option === "en" ? "EN" : "हिं"}
+                  </button>
+                ))}
+              </div>
+              <Link
                 href={CTA_LINKS.login}
-                className="px-4 py-2 text-sm font-medium text-aura-text-secondary hover:text-aura-text transition-colors rounded-lg"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold text-aura-text-secondary transition-colors hover:bg-white/60 hover:text-aura-text"
               >
-                Log in
-              </a>
-              <a
+                {t("nav.login")}
+              </Link>
+              <Link
                 href={CTA_LINKS.trial}
-                className="group relative inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl bg-gradient-to-r from-neon-violet via-aura-rose to-aura-amber shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.03] overflow-hidden"
+                className="group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full bg-aura-burgundy px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(69,18,37,.2)] transition-[background-color,box-shadow] duration-300 hover:bg-aura-burgundy-strong hover:shadow-[0_10px_25px_rgba(69,18,37,.25)]"
               >
-                {/* Shimmer */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700" />
-                <span className="relative z-10">Start Free Trial</span>
-                <ChevronRight className="w-3.5 h-3.5 relative z-10 transition-transform group-hover:translate-x-0.5" />
-              </a>
+                {t("nav.trial")}
+                <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
+              </Link>
             </div>
 
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="md:hidden relative z-50 p-2 -mr-2 text-aura-text"
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            >
-              <AnimatePresence mode="wait">
-                {mobileOpen ? (
-                  <motion.div key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
-                    <X className="w-5 h-5" />
-                  </motion.div>
-                ) : (
-                  <motion.div key="menu" initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.2 }}>
-                    <Menu className="w-5 h-5" />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-2 xl:hidden">
+              <Link href={CTA_LINKS.trial} className="hidden min-h-11 items-center whitespace-nowrap rounded-full bg-aura-burgundy px-4 text-sm font-semibold text-white shadow-sm sm:inline-flex">
+                {t("nav.trial")}
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileOpen((open) => !open)}
+                className={cn("relative z-50 grid h-11 w-11 place-items-center rounded-[.85rem] border text-aura-text transition-colors", mobileOpen ? "border-aura-burgundy bg-aura-burgundy text-white" : "border-aura-border bg-white/75 hover:bg-white")}
+                aria-label={mobileOpen ? t("nav.close") : t("nav.open")}
+                aria-expanded={mobileOpen}
+                aria-controls="mobile-navigation"
+              >
+                {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+              </button>
+            </div>
           </div>
         </nav>
-      </motion.header>
+      </header>
 
       <MobileMenu
         open={mobileOpen}
         onClose={() => setMobileOpen(false)}
         links={NAV_LINKS}
         ctaLinks={CTA_LINKS}
+        pathname={pathname}
       />
     </>
   );

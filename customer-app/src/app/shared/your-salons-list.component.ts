@@ -1,0 +1,304 @@
+import { Component, EventEmitter, Input, Output } from "@angular/core";
+import { RouterLink } from "@angular/router";
+import { IonButton, IonIcon } from "@ionic/angular/standalone";
+import { addIcons } from "ionicons";
+import { checkmarkOutline, starOutline, swapHorizontalOutline, timeOutline } from "ionicons/icons";
+import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.types";
+
+@Component({
+  selector: "aura-your-salons-list",
+  standalone: true,
+  imports: [RouterLink, IonButton, IonIcon],
+  template: `
+    <section class="salons-section" aria-label="Your salons">
+      <div class="salons-header">
+        <h3>Your salons</h3>
+        @if (salons.length > 0) {
+          <span class="count">{{ salons.length }} visited</span>
+        }
+      </div>
+
+      @if (salons.length === 0) {
+        <div class="empty-state">
+          <p>You haven't visited any salons yet. Start exploring!</p>
+          <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+        </div>
+      } @else {
+        <ul class="salon-list" role="list">
+          @for (salon of salons; track salon.id) {
+            <li
+              class="salon-row"
+              [class.is-primary]="primarySalon?.tenantId === salon.tenantId && primarySalon?.branchId === salon.branchId"
+              role="listitem">
+              <div class="salon-initials" [class.primary-badge]="isPrimary(salon)">
+                {{ salonInitials(salon.businessName) }}
+              </div>
+              <div class="salon-details">
+                <div class="salon-name-row">
+                  <span class="salon-name">{{ salon.businessName }}</span>
+                  @if (isPrimary(salon)) {
+                    <span class="primary-tag">Primary</span>
+                  }
+                </div>
+                <div class="salon-meta">
+                  <span class="meta-pill">
+                    <ion-icon name="time-outline"></ion-icon>
+                    {{ salon.visitCount }} visit{{ salon.visitCount !== 1 ? 's' : '' }}
+                  </span>
+                  <span class="meta-pill relationship" [attr.data-type]="salon.relationshipType">
+                    {{ formatRelationshipType(salon.relationshipType) }}
+                  </span>
+                  @if (salon.lastVisitAt) {
+                    <span class="meta-pill">Last: {{ formatTimeAgo(salon.lastVisitAt) }}</span>
+                  }
+                </div>
+              </div>
+              <div class="salon-actions">
+                @if (!isPrimary(salon)) {
+                  <button
+                    type="button"
+                    class="set-primary-btn"
+                    [attr.aria-label]="'Set ' + salon.businessName + ' as primary salon'"
+                    (click)="setAsPrimary.emit(salon)">
+                    <ion-icon name="star-outline"></ion-icon>
+                  </button>
+                }
+                @if (isPrimary(salon)) {
+                  <button
+                    type="button"
+                    class="remove-primary-btn"
+                    [attr.aria-label]="'Remove ' + salon.businessName + ' as primary salon'"
+                    (click)="removePrimary.emit()">
+                    <ion-icon name="swap-horizontal-outline"></ion-icon>
+                  </button>
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  `,
+  styles: [`
+    .salons-section {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96));
+    }
+
+    .salons-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .salons-header h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 950;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .empty-state {
+      display: grid;
+      gap: 12px;
+      padding: 18px 0;
+      text-align: center;
+    }
+
+    .empty-state p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .salon-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .salon-row {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 8px;
+      border-radius: 14px;
+      transition: background 160ms ease;
+    }
+
+    .salon-row.is-primary {
+      background: rgba(214, 169, 74, 0.08);
+      border: 1px solid rgba(214, 169, 74, 0.18);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .salon-row:hover {
+        background: rgba(214, 169, 74, 0.06);
+      }
+    }
+
+    .salon-initials {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #120D05;
+      background: linear-gradient(135deg, #f0f4f8, #dde6ee);
+      font-size: 0.82rem;
+      font-weight: 1000;
+    }
+
+    .salon-initials.primary-badge {
+      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+    }
+
+    .salon-details {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .salon-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .salon-name {
+      min-width: 0;
+      color: var(--text);
+      font-weight: 900;
+      font-size: 0.92rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .primary-tag {
+      flex-shrink: 0;
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: #120D05;
+      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      font-size: 0.64rem;
+      font-weight: 1000;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .salon-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(214, 169, 74, 0.08);
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .meta-pill ion-icon {
+      width: 11px;
+      height: 11px;
+    }
+
+    .meta-pill.relationship[data-type="loyal"] {
+      color: #0F766E;
+      background: rgba(15, 118, 110, 0.1);
+    }
+
+    .meta-pill.relationship[data-type="regular"] {
+      color: #8B5CF6;
+      background: rgba(139, 92, 246, 0.1);
+    }
+
+    .salon-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .set-primary-btn,
+    .remove-primary-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 1px solid rgba(214, 169, 74, 0.2);
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: transform 140ms ease;
+    }
+
+    .remove-primary-btn {
+      color: #D6A94A;
+      border-color: rgba(214, 169, 74, 0.34);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .set-primary-btn:hover,
+      .remove-primary-btn:hover {
+        transform: scale(1.08);
+      }
+    }
+  `]
+})
+export class YourSalonsListComponent {
+  @Input() salons: CustomerSalonRelationship[] = [];
+  @Input() primarySalon: CustomerPrimarySalon | null = null;
+  @Output() setAsPrimary = new EventEmitter<CustomerSalonRelationship>();
+  @Output() removePrimary = new EventEmitter<void>();
+
+  constructor() {
+    addIcons({ checkmarkOutline, starOutline, swapHorizontalOutline, timeOutline });
+  }
+
+  isPrimary(salon: CustomerSalonRelationship): boolean {
+    const primary = this.primarySalon;
+    return !!primary && primary.tenantId === salon.tenantId && primary.branchId === salon.branchId;
+  }
+
+  salonInitials(name: string): string {
+    if (!name) return "S";
+    const words = name.trim().split(/\s+/);
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  formatRelationshipType(type: string): string {
+    const map: Record<string, string> = { guest: "New", returning: "Returning", regular: "Regular", loyal: "Loyal" };
+    return map[type] || type;
+  }
+
+  formatTimeAgo(iso: string): string {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days === 0) return "today";
+    if (days === 1) return "yesterday";
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  }
+}

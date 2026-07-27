@@ -24,38 +24,37 @@ export async function POST(request: NextRequest) {
 
     const { name, email, phone, salonName, message } = parsed.data;
 
-    // If RESEND_API_KEY is set, send email
     const apiKey = process.env.RESEND_API_KEY;
-    if (apiKey) {
-      const resend = new Resend(apiKey);
-      await resend.emails.send({
-        from: "Aura Contact <onboarding@resend.dev>",
-        to: process.env.CONTACT_EMAIL || "hello@aurasalon.in",
-        replyTo: email,
-        subject: `[Aura Contact] ${name} — ${salonName || "Independent"}`,
-        text: [
-          `Name: ${name}`,
-          `Email: ${email}`,
-          `Phone: ${phone || "Not provided"}`,
-          `Salon: ${salonName || "Not provided"}`,
-          "",
-          "Message:",
-          message,
-        ].join("\n"),
-      });
+    const contactEmail = process.env.CONTACT_EMAIL;
+    if (!apiKey || !contactEmail) {
+      return NextResponse.json(
+        { error: "Contact delivery is not configured", code: "DELIVERY_NOT_CONFIGURED" },
+        { status: 503 }
+      );
     }
 
-    // Always log to console (fallback when no email service configured)
-    console.log("[Contact Form]", {
-      name,
-      email,
-      phone: phone || "N/A",
-      salonName: salonName || "N/A",
-      message,
-      timestamp: new Date().toISOString(),
+    const resend = new Resend(apiKey);
+    const result = await resend.emails.send({
+      from: process.env.RESEND_FROM || "Aura Contact <onboarding@resend.dev>",
+      to: contactEmail,
+      replyTo: email,
+      subject: `[Aura Contact] ${name} — ${salonName || "Independent"}`,
+      text: [
+        `Name: ${name}`,
+        `Email: ${email}`,
+        `Phone: ${phone || "Not provided"}`,
+        `Salon: ${salonName || "Not provided"}`,
+        "",
+        "Message:",
+        message,
+      ].join("\n"),
     });
+    if (result.error) {
+      console.error("[Contact Delivery Error]", result.error);
+      return NextResponse.json({ error: "Contact delivery failed", code: "DELIVERY_FAILED" }, { status: 502 });
+    }
 
-    return NextResponse.json({ success: true, message: "Message sent successfully" });
+    return NextResponse.json({ success: true, message: "Message sent successfully", delivery: "email" });
   } catch (error) {
     console.error("[Contact Form Error]", error);
     return NextResponse.json(

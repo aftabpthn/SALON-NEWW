@@ -26,6 +26,65 @@
       <section class="partial-warning" role="status"><strong>Some data sources are unavailable.</strong><span>Available business data remains visible.</span><details><summary>Review affected sources</summary><ul>@for (warning of dashboard.sources.warnings; track warning.source + warning.code) { <li>{{ warning.message }}</li> }</ul></details></section>
     }
 
+    <section class="dashboard-section executive-targets-section" aria-labelledby="exec-targets-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Goal & Capacity Intelligence</p>
+
+          <h2 id="exec-targets-title">Daily Performance Progress & Revenue Breakdown</h2>
+        </div>
+        <span class="target-badge">🎯 {{ revenueTargetPercent() }}% Target Achieved</span>
+      </div>
+
+      <div class="targets-grid">
+        <article class="target-card">
+          <div class="target-card-head">
+            <div>
+              <span>Daily Revenue Target</span>
+              <strong>{{ (data()?.kpis?.netRevenuePaise?.current || 0) | paiseInr }} / ₹35,000</strong>
+            </div>
+            <span class="percent-tag" [class.success]="revenueTargetPercent() >= 80">{{ revenueTargetPercent() }}%</span>
+          </div>
+          <div class="progress-track" aria-label="Daily Revenue Progress">
+            <div class="progress-fill" [style.width.%]="revenueTargetPercent()"></div>
+          </div>
+          <small>Branch Goal Target</small>
+        </article>
+
+        <article class="target-card">
+          <div class="target-card-head">
+            <div>
+              <span>Appointment Capacity Occupancy</span>
+              <strong>{{ data()?.kpis?.completedAppointments?.current || 0 }} completed of {{ data()?.kpis?.appointments?.current || 0 }} total</strong>
+            </div>
+            <span class="percent-tag" [class.success]="occupancyPercent() >= 70">{{ occupancyPercent() }}%</span>
+          </div>
+          <div class="progress-track" aria-label="Appointment Occupancy Progress">
+            <div class="progress-fill occupancy" [style.width.%]="occupancyPercent()"></div>
+          </div>
+          <small>Chair utilization rate</small>
+        </article>
+
+        <article class="target-card full-width-target">
+          <div class="target-card-head">
+            <div>
+              <span>Revenue Source Split</span>
+              <strong>Service ({{ serviceRevenuePercent() }}%) vs Product ({{ productRevenuePercent() }}%)</strong>
+            </div>
+          </div>
+          <div class="multi-progress-track" aria-label="Revenue Source Split">
+            <div class="segment service" [style.width.%]="serviceRevenuePercent()" title="Service Revenue"></div>
+            <div class="segment product" [style.width.%]="productRevenuePercent()" title="Product Revenue"></div>
+          </div>
+          <div class="split-legend">
+            <span><i class="dot service"></i> Service: {{ (data()?.revenue?.aggregates?.serviceRevenuePaise?.current || 0) | paiseInr }}</span>
+            <span><i class="dot product"></i> Product: {{ (data()?.revenue?.aggregates?.productRevenuePaise?.current || 0) | paiseInr }}</span>
+            <span><i class="dot discounts"></i> Discounts: {{ (data()?.revenue?.aggregates?.discountsPaise?.current || 0) | paiseInr }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="dashboard-section kpi-section" aria-labelledby="dashboard-kpis-title">
       <div class="section-heading"><div><p class="eyebrow">Selected period</p><h2 id="dashboard-kpis-title">Performance at a glance</h2></div><span>Compared with {{ formatDate(dashboard.context.previousRange.from) }} – {{ formatDate(dashboard.context.previousRange.to) }}</span></div>
       <div class="kpi-grid" [class.show-all]="showAllMetrics()">

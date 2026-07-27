@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useInView } from "motion/react";
 import { cn } from "@/lib/utils";
 
@@ -23,33 +23,34 @@ export function AnimatedCounter({
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-50px" });
   const hasAnimated = useRef(false);
+  const rafId = useRef<number>(0);
 
-  useEffect(() => {
-    if (!inView || hasAnimated.current) return;
-    hasAnimated.current = true;
-
-    const startTime = performance.now();
-    const animate = (currentTime: number) => {
+  const animate = useCallback(
+    (startTime: number, currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       setCount(Math.round(eased * value));
 
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        rafId.current = requestAnimationFrame((t) => animate(startTime, t));
       }
-    };
+    },
+    [value, duration],
+  );
 
-    requestAnimationFrame(animate);
-  }, [inView, value, duration]);
+  useEffect(() => {
+    if (!inView || hasAnimated.current) return;
+    hasAnimated.current = true;
+    const startTime = performance.now();
+    rafId.current = requestAnimationFrame((t) => animate(startTime, t));
+    return () => cancelAnimationFrame(rafId.current);
+  }, [inView, animate]);
 
-  const displayValue = value >= 1000 && !suffix.includes("Cr") && !suffix.includes("L")
-    ? count.toLocaleString("en-IN")
-    : count % 1 !== 0
-    ? count.toFixed(1)
-    : count.toString();
+  const displayValue =
+    value >= 1000 && !suffix.includes("Cr") && !suffix.includes("L")
+      ? count.toLocaleString("en-IN")
+      : count.toString();
 
   return (
     <span ref={ref} className={cn("tabular-nums", className)}>

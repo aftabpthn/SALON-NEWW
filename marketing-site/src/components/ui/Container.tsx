@@ -12,9 +12,9 @@ export function Container({ children, className, size = "default" }: ContainerPr
   return (
     <div
       className={cn(
-        "mx-auto w-full px-6 lg:px-8",
+        "mx-auto w-full px-4 sm:px-6 lg:px-10",
         size === "narrow" && "max-w-4xl",
-        size === "default" && "max-w-7xl",
+        size === "default" && "max-w-[82rem]",
         size === "wide" && "max-w-[90rem]",
         className
       )}

@@ -222,6 +222,7 @@ export class AuthService {
       staffId: user.staffId || "",
       branchId,
       branchIds: user.branchIds || [],
+      globalAccountId: user.globalAccountId || "",
       pc: permissions.length,
       pv: Number(user.permissionVersion || 1),
       deviceId,

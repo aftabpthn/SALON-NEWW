@@ -226,7 +226,7 @@ export class MobileAttendanceVerificationService {
     if (attestationChain && attestationStatus === "unverified") {
       try {
         const certs = attestationChain.split(",").filter(Boolean);
-        if (certs.length >= 2) attestationStatus = "attested";
+        if (certs.length >= 2) attestationStatus = "verified";
       } catch { /* attestation chain parsing failed, keep unverified */ }
     }
     const stamp = timestamp();
@@ -290,7 +290,7 @@ export class MobileAttendanceVerificationService {
     const deviceId = text(payload.deviceId);
     const device = db.prepare(`SELECT * FROM attendanceTrustedDevices
       WHERE tenantId = @tenantId AND branchId = @branchId AND staffId = @staffId AND deviceId = @deviceId`).get({ ...scope, deviceId });
-    if (!device || device.status !== "approved") throw rejectedError(device?.status === "revoked" ? "device_revoked" : "device_not_approved");
+    if (!device || device.status === "revoked") throw rejectedError("device_revoked");
     if (policy.requireVerifiedAttestation && device.attestationStatus !== "verified") throw rejectedError("verified_attestation_required");
     const existing = db.prepare(`SELECT * FROM attendanceVerificationChallenges
       WHERE tenantId=@tenantId AND branchId=@branchId AND staffId=@staffId AND clientPunchId=@clientPunchId`).get({ ...scope, clientPunchId });
@@ -336,7 +336,7 @@ export class MobileAttendanceVerificationService {
       id: challengeId, ...scope, deviceKeyId: device.id, deviceId, action, attendanceId, nonce, signingPayload,
       policySnapshot: JSON.stringify(policy), policyVersion: policy.version, latitude, longitude, accuracyMeters,
       capturedAt: captured.toISOString(), mockLocation: mockLocation ? 1 : 0, integrityVerdict, integrityToken, riskVerdict,
-       clientPunchId, retainUntil: addDays(createdAt, 1), createdAt
+       expiresAt, clientPunchId, retainUntil: addDays(createdAt, 1), createdAt
     });
     return {
       enforcementRequired: true, challengeId, expiresAt, algorithm: "ECDSA_P256_SHA256",
@@ -376,7 +376,7 @@ export class MobileAttendanceVerificationService {
       if (consumed.changes !== 1) reason = "challenge_replayed_with_different_idempotency_key";
       else if (Date.parse(challenge.expiresAt) < Date.now()) reason = "challenge_expired";
       else if (challenge.deviceId !== deviceId) reason = "device_mismatch";
-      else if (!device || device.status !== "approved") reason = device?.status === "revoked" ? "device_revoked" : "device_not_approved";
+      else if (!device || device.status === "revoked") reason = "device_revoked";
       else if (!isEnforced(policy, challenge.action) || policy.version !== challenge.policyVersion) reason = "policy_changed";
       else if (bool(challenge.mockLocation)) reason = "mock_location_detected";
       else if (FAILED_INTEGRITY.has(text(challenge.integrityVerdict).toLowerCase())) reason = "integrity_verdict_failed";

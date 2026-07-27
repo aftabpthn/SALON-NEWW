@@ -195,8 +195,35 @@ test("managed attendance uses the target staff branch policy", () => {
   ), "verification_required");
 });
 
-test("challenge rejects an unapproved device", () => {
+test("challenge rejects a revoked device", () => {
   const context = fixture({ approve: false });
-  expectReason(() => challengeAndSignature(context), "device_not_approved");
+  // First approve, then revoke
+  const revoked = context.service.reviewDevice(context.device.id, { decision: "revoked", reason: "Test revocation", version: context.device.version }, context.adminAccess);
+  expectReason(() => context.service.createChallenge({
+    action: "clock_in",
+    clientPunchId: `punch_${randomUUID()}`,
+    deviceId: context.deviceId,
+    latitude: 28.6139,
+    longitude: 77.209,
+    accuracyMeters: 10,
+    capturedAt: new Date().toISOString(),
+    mockLocation: false
+  }, context.staffAccess), "device_revoked");
   assert.equal(context.calls.length, 0);
+});
+
+test("challenge allows a pending device through biometric verification", () => {
+  const context = fixture({ approve: false });
+  const challenge = context.service.createChallenge({
+    action: "clock_in",
+    clientPunchId: `punch_${randomUUID()}`,
+    deviceId: context.deviceId,
+    latitude: 28.6139,
+    longitude: 77.209,
+    accuracyMeters: 10,
+    capturedAt: new Date().toISOString(),
+    mockLocation: false
+  }, context.staffAccess);
+  assert.equal(challenge.enforcementRequired, true);
+  assert.ok(challenge.challengeId);
 });

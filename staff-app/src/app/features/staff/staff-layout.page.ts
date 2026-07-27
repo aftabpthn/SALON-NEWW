@@ -26,7 +26,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
         </div>
         <a class="user-card" routerLink="/staff/profile" (click)="closeMenu()" aria-label="Open my profile">
           <b>{{ initials() }}</b>
-          <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div>
+          <div><strong>{{ firstName() }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div>
         </a>
         <button type="button" class="theme-button" [attr.aria-label]="theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" [attr.aria-pressed]="theme() === 'dark'" (click)="toggleTheme()">
           @if (theme() === 'dark') { <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2h1v2h-1zm0 18v-2h1v2h-1zM4 13H2v-1h2v1zm18 0h-2v-1h2v1zM5.6 6.3 4.2 4.9l.7-.7 1.4 1.4-.7.7zm13.5 13.5-1.4-1.4.7-.7 1.4 1.4-.7.7zm0-14.2-.7.7-1.4-1.4.7-.7 1.4 1.4-.7.7zM6.3 18.4l-1.4 1.4-.7-.7 1.4-1.4.7.7zM12.5 7a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"></path></svg><span>Light mode</span> }
@@ -52,7 +52,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
        <div class="staff-main-shell" #mainShell [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null" [auraPullRefresh]="refreshChildPage.bind(this)">
         <header class="staff-topbar">
            <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
-           <a class="staff-identity" routerLink="/staff/profile" [attr.aria-label]="'Open my profile — ' + identitySubtitle()"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div></a>
+           <a class="staff-identity" routerLink="/staff/profile" [attr.aria-label]="'Open my profile — ' + identitySubtitle()"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ firstName() }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div></a>
           <div class="topbar-actions">
              @if (visibleNav().length) { <button type="button" class="search-button" (click)="openCommand()" aria-label="Search permitted staff tools" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button> }
              @if (staff.hasPermission('read:staff')) { <a class="chat-button" routerLink="/staff/chat" routerLinkActive="active" aria-label="Open chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v10h2v1.8L8.3 16H20V6H4zm3 3h10v2H7V9zm0 4h7v2H7v-2z"></path></svg></a> }
@@ -74,12 +74,12 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
 
        <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
           @if (staff.hasPermission('read:appointments')) {
-            <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
-            <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a>
-            <a routerLink="/staff/business" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
+            <a routerLink="/staff/dashboard" [class.active]="isRouteActive('/staff/dashboard')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
+            <a routerLink="/staff/appointments" [class.active]="isRouteActive('/staff/appointments')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a>
+            <a routerLink="/staff/business" [class.active]="isRouteActive('/staff/business')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Business')"></path></svg><span>Business</span></a>
           }
-          @if (staff.hasAnyPermission(['allow:staff-checkin-checkout', 'read:staff', 'write:staff'])) { <a routerLink="/staff/attendance" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a> }
-          @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
+          @if (staff.hasAnyPermission(['allow:staff-checkin-checkout', 'read:staff', 'write:staff'])) { <a routerLink="/staff/attendance" [class.active]="isRouteActive('/staff/attendance')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a> }
+          @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/tasks" [class.active]="isRouteActive('/staff/tasks')"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
        </nav>
 
       @if (commandOpen()) {
@@ -87,6 +87,12 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
           <div class="command-palette" role="dialog" aria-modal="true" aria-labelledby="staff-command-title" tabindex="-1" #commandDialog (keydown)="trapFocus($event, commandDialog)" (click)="$event.stopPropagation()">
             <div class="command-head"><strong id="staff-command-title">Command palette</strong><button type="button" (click)="closeCommand()">Close</button></div>
             <input [ngModel]="query()" (ngModelChange)="query.set($event)" (keydown)="onCommandKeydown($event)" aria-label="Search staff pages and business" placeholder="Search staff pages and business..." #commandInput autofocus />
+            <div class="command-suggestions">
+              <small>Suggestions:</small>
+              @for (chip of quickSuggestions(); track chip) {
+                <button type="button" class="suggestion-chip" (click)="applyCommandSuggestion(chip)">{{ chip }}</button>
+              }
+            </div>
             @if (query().trim()) { <small class="search-hint">{{ commandResults().length }} matches · Press Enter to open the first result</small> }
             <div class="command-list">
               @for (item of commandResults(); track $index) {
@@ -262,7 +268,7 @@ const STAFF_HINT_SESSION_KEY = "auraStaffHintSeen";
         .mobile-bottom-nav a:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 2px; border-radius: 14px; }
       .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: rgba(31,41,55,.28); backdrop-filter: blur(2px); transition: opacity .18s ease; }
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
-      .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 72vw; min-width: 0; max-width: 360px; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0 22px 22px 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 40px rgba(31, 41, 55, .14); }
+      .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 50vw; min-width: 170px; max-width: 260px; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0 22px 22px 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 40px rgba(31, 41, 55, .14); }
       .staff-sidebar.open { transform: translateX(0); }
       .drawer-close { position: sticky; top: 0; z-index: 3; display: block; width: 100%; min-height: 48px; margin-bottom: 10px; padding: 9px 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); color: var(--staff-text); font-weight: 750; text-align: left; box-shadow: 0 6px 16px rgba(31, 41, 55, .08); }
       .brand-card { display: block; }
@@ -358,6 +364,13 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       .slice(0, 12);
   });
 
+  readonly currentUrl = signal(this.router.url);
+  readonly quickSuggestions = signal(["Appointments", "Business", "Attendance", "Tasks", "Profile", "Chat"]);
+
+  applyCommandSuggestion(text: string) {
+    this.query.set(text);
+  }
+
   constructor(readonly staff: StaffAppService, readonly push: StaffPushService, private readonly router: Router) {}
 
   ngOnInit() {
@@ -368,6 +381,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     void this.push.refreshStatus();
     this.routerSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
+        this.currentUrl.set(event.urlAfterRedirects || event.url);
         this.showStaffHintOnce(event.urlAfterRedirects);
         if (this.mainShell) this.mainShell.nativeElement.scrollTop = 0;
       }
@@ -376,6 +390,12 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.pollTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && !this.realtimeConnected()) void this.loadShellData();
     }, 60000);
+  }
+
+  isRouteActive(path: string): boolean {
+    const current = this.currentUrl().split("?")[0];
+    if (path === "/staff/dashboard") return current === "/staff/dashboard";
+    return current.startsWith(path);
   }
 
   ngOnDestroy() {
@@ -414,26 +434,48 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   onTouchEnd(event: TouchEvent) {
     const touch = event.changedTouches[0];
     const endX = touch?.clientX || 0;
+    const endY = touch?.clientY || 0;
     const deltaX = endX - this.touchStartX;
-    const deltaY = Math.abs((touch?.clientY || 0) - this.touchStartY);
+    const deltaY = endY - this.touchStartY;
+
     const target = event.target as HTMLElement | null;
-    if (target?.closest("input,textarea,button,a,[role=dialog]")) return;
-    const wasMenuOpen = this.menuOpen();
-    if (this.touchStartX < 24 && deltaX > 70) this.openMenu();
-    if (wasMenuOpen && deltaX < -70) { this.closeMenu(); return; }
-    if (window.matchMedia("(max-width: 900px)").matches && !this.menuOpen() && !this.notificationsOpen() && Math.abs(deltaX) > 70 && Math.abs(deltaX) > deltaY) this.navigateMobileSwipe(deltaX < 0 ? 1 : -1);
+    if (target?.closest("input,textarea,select,button,a,[role=dialog],.chat-message-viewport")) return;
+    if (this.menuOpen() || this.notificationsOpen() || this.commandOpen()) {
+      if (this.menuOpen() && deltaX < -70) this.closeMenu();
+      return;
+    }
+
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaY) > 50 || Math.abs(deltaX) < Math.abs(deltaY) * 1.8) return;
+
+    if (this.touchStartX < 28 && deltaX > 70) {
+      this.openMenu();
+      return;
+    }
+
+    const paths: string[] = [];
+    if (this.staff.hasPermission("read:appointments")) {
+      paths.push("/staff/dashboard", "/staff/appointments", "/staff/business");
+    }
+    if (this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"])) {
+      paths.push("/staff/attendance");
+    }
+    if (this.staff.hasPermission("read:staff")) {
+      paths.push("/staff/tasks");
+    }
+
+    const currentPath = this.router.url.split("?")[0];
+    const currentIndex = paths.indexOf(currentPath);
+    if (currentIndex === -1) return;
+
+    if (deltaX < -80 && currentIndex < paths.length - 1) {
+      void this.router.navigateByUrl(paths[currentIndex + 1]);
+    } else if (deltaX > 80 && currentIndex > 0) {
+      void this.router.navigateByUrl(paths[currentIndex - 1]);
+    }
   }
 
   private touchStartX = 0;
   private touchStartY = 0;
-  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/appointments", "/staff/business", "/staff/attendance", "/staff/tasks"];
-
-  private navigateMobileSwipe(direction: number) {
-    const current = this.router.url.split("?")[0];
-    const index = this.mobileSwipeRoutes.indexOf(current);
-    const next = this.mobileSwipeRoutes[index + direction];
-    if (index >= 0 && next) void this.router.navigateByUrl(next);
-  }
   visibleNav(): StaffNavItem[] {
     return this.nav.filter((item) => (!item.permission || this.staff.hasPermission(item.permission)) && (!item.anyPermissions?.length || this.staff.hasAnyPermission([...item.anyPermissions])));
   }
@@ -448,6 +490,10 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   initials(): string {
     return String(this.staff.user()?.name || "Staff").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "S";
+  }
+
+  firstName(): string {
+    return String(this.staff.user()?.name || "Aura Staff").trim().split(/\s+/)[0] || "Aura Staff";
   }
 
   greetingLabel(): string {

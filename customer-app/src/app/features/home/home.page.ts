@@ -4,12 +4,12 @@ import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
-import { environment } from "../../../environments/environment";
 import {
   calendarOutline,
   cameraOutline,
   chatbubblesOutline,
   chevronForwardOutline,
+  compassOutline,
   locationOutline,
   mapOutline,
   navigateOutline,
@@ -21,12 +21,14 @@ import {
   searchOutline,
   sparklesOutline,
   swapVerticalOutline,
-  timeOutline
+  timeOutline,
+  walletOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
+import { MySalonCardComponent } from "../../shared/my-salon-card.component";
 import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { Booking, Business, LiveConsultationBusinessContext, LiveConsultationPhoto, LiveConsultationResponse } from "../../core/api.types";
+import { Booking, Business, CustomerSalonRelationship, LiveConsultationBusinessContext, LiveConsultationPhoto, LiveConsultationResponse, MySalonDashboard } from "../../core/api.types";
 
 interface HomeSearchSuggestion {
   key: string;
@@ -43,41 +45,213 @@ interface ConsultationChatMessage {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent],
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent, MySalonCardComponent],
   template: `
-    <ion-header class="ion-no-border">
-      <ion-toolbar>
-        <div class="home-toolbar app-container">
-          <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
-          <div class="location-copy">
-            <span>Near you</span>
-            <div class="location-row">
-              <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
-              @if (!mobileHome()) {
-              <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
-                <ion-icon name="navigate-outline"></ion-icon>
-                {{ locating() ? "Detecting" : "Use current location" }}
-              </button>
-              }
+    <ion-content>
+      <ion-header class="ion-no-border">
+        <ion-toolbar>
+          <div class="home-toolbar app-container">
+            <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
+            <div class="location-copy">
+              <span>Near you</span>
+              <div class="location-row">
+                <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
+                @if (!mobileHome()) {
+                <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
+                  <ion-icon name="navigate-outline"></ion-icon>
+                  {{ locating() ? "Detecting" : "Use current location" }}
+                </button>
+                }
+              </div>
+            </div>
+            <div class="toolbar-actions">
+              <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
+                <ion-icon name="notifications-outline"></ion-icon>
+              </ion-button>
+              <ion-button fill="clear" shape="round" routerLink="/tabs/profile" aria-label="Open profile">
+                <ion-icon name="person-circle-outline"></ion-icon>
+              </ion-button>
             </div>
           </div>
-          <div class="toolbar-actions">
-            @if (!mobileHome()) {
-              <ion-button fill="clear" shape="round" class="staff-toolbar-button" [href]="staffAppUrl">Staff?</ion-button>
-            }
-            <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
-              <ion-icon name="notifications-outline"></ion-icon>
-            </ion-button>
-            <ion-button fill="clear" shape="round" routerLink="/tabs/profile" aria-label="Open profile">
-              <ion-icon name="person-circle-outline"></ion-icon>
-            </ion-button>
-          </div>
-        </div>
-      </ion-toolbar>
-    </ion-header>
+        </ion-toolbar>
+      </ion-header>
 
-    <ion-content>
       <main class="page home-page">
+        @if (showMySalonView(); as dashboard) {
+        <!-- ═══ MY SALON DASHBOARD ═══ -->
+        <section class="my-salon-dashboard">
+          <div class="salon-hero">
+            <div class="salon-hero-top">
+              <div>
+                <h1 class="salon-name">{{ mySalonDashboard()!.salon?.name }}</h1>
+                <p class="salon-address">{{ mySalonDashboard()!.salon?.address }}{{ mySalonDashboard()!.salon?.city ? ', ' + mySalonDashboard()!.salon!.city : '' }}</p>
+              </div>
+              <span class="salon-status" [class.open]="mySalonDashboard()!.salon?.isOpen">{{ mySalonDashboard()!.salon?.isOpen ? 'Open' : 'Closed' }}</span>
+            </div>
+            <p class="salon-hours">{{ mySalonDashboard()!.salon?.hoursLabel }}</p>
+            @if (mySalonDashboard()!.salon?.ratingAverage) {
+            <div class="salon-rating">
+              <ion-icon name="star-outline"></ion-icon>
+              <strong>{{ mySalonDashboard()!.salon!.ratingAverage.toFixed(1) }}</strong>
+              <span>({{ mySalonDashboard()!.salon!.ratingCount }} reviews)</span>
+            </div>
+            }
+            <div class="salon-hero-actions">
+              <a [routerLink]="['/business', mySalonDashboard()!.salon?.slug || '']" class="msd-button primary">
+                <ion-icon name="calendar-outline"></ion-icon>
+                Book now
+              </a>
+              <button type="button" class="msd-button secondary" (click)="openSalonPicker()">
+                <ion-icon name="compass-outline"></ion-icon>
+                Change salon
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Stats Row -->
+          <div class="salon-stats-row">
+            @if (mySalonDashboard()!.wallet) {
+            <a routerLink="/tabs/profile" class="stat-card">
+              <ion-icon name="wallet-outline"></ion-icon>
+              <span class="stat-value">{{ money(mySalonDashboard()!.wallet!.balancePaise) }}</span>
+              <span class="stat-label">Wallet balance</span>
+            </a>
+            }
+            @if (mySalonDashboard()!.loyalty) {
+            <a routerLink="/tabs/profile" class="stat-card">
+              <ion-icon name="ribbon-outline"></ion-icon>
+              <span class="stat-value">{{ mySalonDashboard()!.loyalty!.points }} pts</span>
+              <span class="stat-label">{{ mySalonDashboard()!.loyalty!.tier || 'Member' }}</span>
+            </a>
+            }
+            @if (mySalonDashboard()!.relationship) {
+            <div class="stat-card">
+              <ion-icon name="time-outline"></ion-icon>
+              <span class="stat-value">{{ mySalonDashboard()!.relationship!.visitCount }}</span>
+              <span class="stat-label">Visits</span>
+            </div>
+            }
+          </div>
+
+          <!-- Membership Card -->
+          @if (mySalonDashboard()!.membership) {
+          <div class="membership-card">
+            <div class="membership-badge">
+              <ion-icon name="sparkles-outline"></ion-icon>
+              <span>{{ mySalonDashboard()!.membership!.planName }}</span>
+            </div>
+            <div class="membership-detail">
+              <strong>{{ mySalonDashboard()!.membership!.creditsRemaining }} credits remaining</strong>
+              <span>Valid until {{ mySalonDashboard()!.membership!.validityDate }}</span>
+            </div>
+          </div>
+          }
+
+          <!-- Recent Bookings -->
+          @if (mySalonDashboard()!.recentBookings.length) {
+          <section class="dashboard-section">
+            <div class="section-heading">
+              <h2>Recent bookings</h2>
+              <a routerLink="/tabs/bookings">View all</a>
+            </div>
+            <div class="booking-list">
+              @for (booking of mySalonDashboard()!.recentBookings.slice(0, 3); track booking.id) {
+              <div class="booking-row">
+                <div class="booking-info">
+                  <strong>{{ booking.serviceName }}</strong>
+                  <span>{{ booking.staffName }} · {{ formatBookingDate(booking.startAt) }}</span>
+                </div>
+                <span class="booking-status" [attr.data-status]="booking.status">{{ booking.status }}</span>
+              </div>
+              }
+            </div>
+          </section>
+          }
+
+          <!-- Services -->
+          @if (mySalonDashboard()!.services.length) {
+          <section class="dashboard-section">
+            <div class="section-heading">
+              <h2>Services</h2>
+            </div>
+            <div class="service-list">
+              @for (service of mySalonDashboard()!.services.slice(0, 6); track service.id) {
+              <div class="service-row">
+                <div class="service-info">
+                  <strong>{{ service.name }}</strong>
+                  <span>{{ service.category }} · {{ service.durationMinutes }} min</span>
+                </div>
+                <span class="service-price">{{ money(service.pricePaise) }}</span>
+              </div>
+              }
+            </div>
+          </section>
+          }
+
+          <!-- Staff -->
+          @if (mySalonDashboard()!.staff.length) {
+          <section class="dashboard-section">
+            <div class="section-heading">
+              <h2>Staff</h2>
+            </div>
+            <div class="staff-rail">
+              @for (member of mySalonDashboard()!.staff.slice(0, 6); track member.id) {
+              <div class="staff-card">
+                <div class="staff-avatar">{{ member.name.charAt(0) }}</div>
+                <strong>{{ member.name }}</strong>
+                <span>{{ member.specialty || member.title }}</span>
+              </div>
+              }
+            </div>
+          </section>
+          }
+
+          <!-- Active Offers -->
+          @if (mySalonDashboard()!.offers.length) {
+          <section class="dashboard-section">
+            <div class="section-heading">
+              <h2>Active offers</h2>
+            </div>
+            <div class="offer-list">
+              @for (offer of mySalonDashboard()!.offers.slice(0, 3); track offer.id) {
+              <div class="offer-card">
+                <strong>{{ offer.title }}</strong>
+                <span>{{ offer.description }}</span>
+                <small>{{ offer.discountType }}: {{ offer.discountValue }}{{ offer.discountType === 'percentage' ? '%' : '' }}</small>
+              </div>
+              }
+            </div>
+          </section>
+          }
+
+          <!-- Packages -->
+          @if (mySalonDashboard()!.packages.length) {
+          <section class="dashboard-section">
+            <div class="section-heading">
+              <h2>Packages</h2>
+            </div>
+            <div class="package-list">
+              @for (pkg of mySalonDashboard()!.packages; track pkg.id) {
+              <div class="package-card">
+                <strong>{{ pkg.name }}</strong>
+                <span>{{ pkg.sessionsUsed }}/{{ pkg.sessionsTotal }} sessions used</span>
+                <small>{{ money(pkg.pricePaise) }}</small>
+              </div>
+              }
+            </div>
+          </section>
+          }
+
+          <!-- Explore More -->
+          <section class="dashboard-explore">
+            <a routerLink="/tabs/search" class="explore-button">
+              <ion-icon name="compass-outline"></ion-icon>
+              Explore more salons
+            </a>
+          </section>
+        </section>
+        } @else {
+        <!-- ═══ EXISTING HOME CONTENT (for guests / no primary salon) ═══ -->
         <section class="hero">
           <div class="hero-copy">
             @if (!mobileHome()) {
@@ -253,12 +427,33 @@ interface ConsultationChatMessage {
             </div>
           </article>
 
-          <nav class="customer-quick-actions" aria-label="Customer quick actions">
-            <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
-            <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>My bookings</span><small>Reschedule or cancel</small></a>
-            <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Deals and rewards</small></a>
-            <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
-          </nav>
+          @if (marketplace.isAuthenticated()) {
+            <aura-my-salon-card
+              [primarySalon]="marketplace.primarySalon()"
+              [suggestedSalon]="marketplace.suggestedSalon()"
+              (openSalonPicker)="openSalonPicker()"
+              (dismissPrompt)="dismissPrimaryPrompt()"
+              (setPrimary)="onSetPrimarySalon($event)">
+            </aura-my-salon-card>
+          }
+
+          <!-- Primary Salon User: loyalty-focused quick actions -->
+          @if (hasPrimarySalon()) {
+            <nav class="customer-quick-actions primary-salon-actions" aria-label="Your salon quick actions">
+              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>Book again</span><small>Schedule a visit</small></a>
+              <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet</span><small>Credits and balance</small></a>
+              <a routerLink="/tabs/memberships"><ion-icon name="ribbon-outline"></ion-icon><span>Membership</span><small>Plans and perks</small></a>
+              <a routerLink="/tabs/rewards"><ion-icon name="pricetag-outline"></ion-icon><span>Rewards</span><small>Points and gifts</small></a>
+            </nav>
+          } @else {
+            <!-- New / browsing user: discovery-focused quick actions -->
+            <nav class="customer-quick-actions" aria-label="Customer quick actions">
+              <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
+              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>My bookings</span><small>Reschedule or cancel</small></a>
+              <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Deals and rewards</small></a>
+              <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
+            </nav>
+          }
 
           <div class="customer-metrics">
             @for (metric of customerMetrics(); track metric.label) {
@@ -272,11 +467,12 @@ interface ConsultationChatMessage {
           </div>
         </section>
 
+        <!-- Book Again faster (shown when authenticated with visit history) -->
         @if (!searchActive() && recentlyVisited().length) {
           <section class="mobile-secondary-section">
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Book again faster</h2>
+              <h2 class="section-title">{{ hasPrimarySalon() ? 'Book at ' + (marketplace.primarySalon()?.businessName || 'your salon') : 'Book again faster' }}</h2>
             </div>
           </div>
           <div class="visited-rail">
@@ -315,7 +511,7 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Recommendations</h2>
+              <h2 class="section-title">{{ hasPrimarySalon() ? 'Explore nearby salons' : 'Recommendations' }}</h2>
             </div>
             <a routerLink="/tabs/search">Explore all</a>
           </div>
@@ -359,7 +555,7 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">Recommended businesses</h2>
+            <h2 class="section-title">{{ hasPrimarySalon() ? 'More salons near you' : 'Recommended businesses' }}</h2>
           </div>
           <a routerLink="/tabs/search">See all</a>
         </div>
@@ -377,7 +573,7 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">Nearby businesses</h2>
+            <h2 class="section-title">{{ hasPrimarySalon() ? 'Discover new salons' : 'Nearby businesses' }}</h2>
           </div>
           <a routerLink="/tabs/search">View map</a>
         </div>
@@ -411,10 +607,402 @@ interface ConsultationChatMessage {
         </div>
         </section>
         }
+        }
       </main>
     </ion-content>
   `,
   styles: [`
+    /* ═══ My Salon Dashboard ═══ */
+    .my-salon-dashboard {
+      display: grid;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .salon-hero {
+      display: grid;
+      gap: 12px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(145deg, rgba(255, 251, 241, 0.98), rgba(246, 228, 193, 0.9));
+      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12);
+    }
+
+    .salon-hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .salon-hero-top h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.5rem;
+      letter-spacing: -0.04em;
+      line-height: 1.2;
+    }
+
+    .salon-address {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .salon-status {
+      flex-shrink: 0;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: rgba(239, 68, 68, 0.1);
+      color: #dc2626;
+    }
+
+    .salon-status.open {
+      background: rgba(34, 197, 94, 0.1);
+      color: #16a34a;
+    }
+
+    .salon-hours {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .salon-rating {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text);
+      font-size: 0.84rem;
+    }
+
+    .salon-rating ion-icon {
+      color: #f59e0b;
+    }
+
+    .salon-rating strong {
+      font-weight: 950;
+    }
+
+    .salon-rating span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .salon-hero-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .msd-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 18px;
+      border-radius: 14px;
+      font-size: 0.84rem;
+      font-weight: 900;
+      text-decoration: none;
+      border: 0;
+      cursor: pointer;
+      transition: transform 160ms ease;
+    }
+
+    .msd-button.primary {
+      color: #ffffff;
+      background: linear-gradient(135deg, #D6A94A, #9B6B22);
+      box-shadow: 0 12px 24px rgba(92, 65, 28, 0.2);
+    }
+
+    .msd-button.secondary {
+      color: #6e4810;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(214, 169, 74, 0.24);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .msd-button:hover {
+        transform: translateY(-1px);
+      }
+    }
+
+    .salon-stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .stat-card {
+      display: grid;
+      gap: 2px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .stat-card ion-icon {
+      color: #8a5a16;
+      font-size: 1.2rem;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 950;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .membership-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 16px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #F7D982, #D9A943, #B87D1E);
+      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.18);
+    }
+
+    .membership-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 950;
+      font-size: 0.9rem;
+    }
+
+    .membership-detail {
+      display: grid;
+      gap: 2px;
+      text-align: right;
+    }
+
+    .membership-detail strong {
+      font-size: 0.84rem;
+    }
+
+    .membership-detail span {
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.72rem;
+    }
+
+    .dashboard-section {
+      display: grid;
+      gap: 10px;
+    }
+
+    .section-heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .section-heading h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 950;
+      letter-spacing: -0.03em;
+    }
+
+    .section-heading a {
+      color: #8a5a16;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .booking-list, .service-list, .offer-list, .package-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .booking-row, .service-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .booking-info, .service-info {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .booking-info strong, .service-info strong {
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 950;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .booking-info span, .service-info span {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 800;
+    }
+
+    .booking-status {
+      flex-shrink: 0;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(59, 130, 246, 0.1);
+      color: #2563eb;
+    }
+
+    .booking-status[data-status="completed"] {
+      background: rgba(34, 197, 94, 0.1);
+      color: #16a34a;
+    }
+
+    .booking-status[data-status="cancelled"] {
+      background: rgba(239, 68, 68, 0.1);
+      color: #dc2626;
+    }
+
+    .service-price {
+      flex-shrink: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 950;
+    }
+
+    .staff-rail {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 10px;
+    }
+
+    .staff-card {
+      display: grid;
+      gap: 4px;
+      padding: 14px 8px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+      text-align: center;
+      align-items: center;
+    }
+
+    .staff-avatar {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #120D05;
+      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      font-weight: 1000;
+      font-size: 1rem;
+      margin: 0 auto;
+    }
+
+    .staff-card strong {
+      color: var(--text);
+      font-size: 0.78rem;
+      font-weight: 950;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .staff-card span {
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .offer-card, .package-card {
+      display: grid;
+      gap: 4px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .offer-card strong, .package-card strong {
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 950;
+    }
+
+    .offer-card span, .package-card span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .offer-card small, .package-card small {
+      color: #8a5a16;
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .dashboard-explore {
+      padding-top: 8px;
+    }
+
+    .explore-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px;
+      border: 1px dashed rgba(214, 169, 74, 0.34);
+      border-radius: 16px;
+      color: #6e4810;
+      background: rgba(255, 255, 255, 0.6);
+      font-size: 0.88rem;
+      font-weight: 900;
+      text-decoration: none;
+      transition: border-color 160ms ease;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .explore-button:hover {
+        border-color: rgba(214, 169, 74, 0.6);
+      }
+    }
+
+    @media (min-width: 768px) {
+      .my-salon-dashboard {
+        padding: 24px;
+        max-width: 720px;
+        margin: 0 auto;
+      }
+    }
+
     .home-toolbar {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -480,18 +1068,6 @@ interface ConsultationChatMessage {
 
     .near-you-button:disabled {
       opacity: 0.7;
-    }
-
-    .staff-toolbar-button {
-      --color: #6E4810;
-      --background: rgba(255, 249, 236, 0.96);
-      --border-color: rgba(214, 169, 74, 0.34);
-      --border-style: solid;
-      --border-width: 1px;
-      --box-shadow: 0 8px 18px rgba(92, 65, 28, 0.08);
-      min-width: 78px;
-      font-weight: 950;
-      text-transform: none;
     }
 
     .hero {
@@ -1063,6 +1639,15 @@ interface ConsultationChatMessage {
       line-height: 1.2;
     }
 
+    .customer-quick-actions.primary-salon-actions a {
+      border-color: rgba(15, 118, 110, 0.2);
+      background: linear-gradient(145deg, #ffffff, rgba(15, 118, 110, 0.06));
+    }
+
+    .customer-quick-actions.primary-salon-actions ion-icon {
+      color: #0F766E;
+    }
+
     .customer-metrics {
       display: grid;
       gap: 12px;
@@ -1379,7 +1964,6 @@ interface ConsultationChatMessage {
       }
 
       .location-copy > span,
-      .staff-toolbar-button,
       .toolbar-actions ion-button:last-child,
       .near-you-button,
       .page-title,
@@ -1522,7 +2106,7 @@ interface ConsultationChatMessage {
       .home-page .hero { margin-top: 0; }
       .home-page .search-panel {
         position: sticky !important;
-        top: calc(44px + var(--safe-top)) !important;
+        top: 0 !important;
         z-index: 30 !important;
         display: block !important;
         margin-inline: 0;
@@ -1624,7 +2208,6 @@ interface ConsultationChatMessage {
   `]
 })
 export class HomePage implements OnInit {
-  readonly staffAppUrl = environment.staffAppUrl;
   readonly query = signal("");
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");
@@ -1647,6 +2230,9 @@ export class HomePage implements OnInit {
   consultationText = "";
   readonly consultationGoals = ["Hair", "Skin", "Nails", "Spa", "Bridal", "Barber", "Budget", "Near me"];
   readonly skeletons = [1, 2, 3, 4, 5, 6];
+  readonly hasPrimarySalon = computed(() => !!this.marketplace.primarySalon());
+  readonly mySalonDashboard = computed(() => this.marketplace.mySalonDashboard());
+  readonly showMySalonView = computed(() => this.marketplace.isAuthenticated() && this.hasPrimarySalon() && !!this.mySalonDashboard());
   readonly searchActive = computed(() => !!this.activeQuery().trim());
   readonly homeResults = computed(() => this.filterBusinesses(this.marketplace.businesses()));
   readonly recommendations = computed(() => this.recommendedBusinesses().slice(0, 4));
@@ -1705,6 +2291,7 @@ export class HomePage implements OnInit {
       cameraOutline,
       chatbubblesOutline,
       chevronForwardOutline,
+      compassOutline,
       locationOutline,
       mapOutline,
       navigateOutline,
@@ -1716,7 +2303,8 @@ export class HomePage implements OnInit {
       searchOutline,
       sparklesOutline,
       swapVerticalOutline,
-      timeOutline
+      timeOutline,
+      walletOutline
     });
   }
 
@@ -1730,12 +2318,46 @@ export class HomePage implements OnInit {
       this.marketplace.loadPublicBusinesses(),
       this.marketplace.loadCategories(),
       this.marketplace.isAuthenticated() ? this.marketplace.loadCustomer() : Promise.resolve(null),
-      this.marketplace.isAuthenticated() ? this.marketplace.loadBookings() : Promise.resolve([])
-    ]).catch(() => undefined);
+      this.marketplace.isAuthenticated() ? this.marketplace.loadBookings() : Promise.resolve([]),
+      this.marketplace.isAuthenticated() ? this.marketplace.loadMySalons().catch(() => null) : Promise.resolve(null)
+    ]).then(() => {
+      if (this.marketplace.isAuthenticated() && this.marketplace.primarySalon()) {
+        void this.marketplace.loadMySalonDashboard().catch(() => null);
+      }
+    }).catch(() => undefined);
+  }
+
+  openSalonPicker() {
+    void this.router.navigate(["/tabs/profile"]);
+  }
+
+  dismissPrimaryPrompt() {
+    this.marketplace.shouldPromptPrimary.set(false);
+    this.marketplace.suggestedSalon.set(null);
+  }
+
+  async onSetPrimarySalon(salon: CustomerSalonRelationship) {
+    try {
+      await this.marketplace.setPrimarySalon(salon.tenantId, salon.branchId, salon.businessId, salon.businessName);
+    } catch {
+      // error is handled by marketplace service
+    }
   }
 
   money(pricePaise: number): string {
     return this.marketplace.formatMoney(pricePaise);
+  }
+
+  formatBookingDate(iso: string): string {
+    if (!iso) return "";
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
   }
 
   reload() {

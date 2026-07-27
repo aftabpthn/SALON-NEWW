@@ -41,6 +41,7 @@ export interface BlogPost {
 }
 
 export interface FeaturePageData {
+  translationKey: string;
   title: string;
   subtitle: string;
   icon: string;
