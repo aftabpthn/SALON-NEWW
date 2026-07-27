@@ -206,10 +206,32 @@
           @if (copilot.recommendedAction) {
             <p class="assistant-evidence-action">{{ copilot.recommendedAction }}</p>
           }
-          @if (copilot.deepLink) {
+          @if (copilot.proposals.length) {
+            <p class="assistant-proposals-note">{{ 'header.aiProposalsNote' | translate }}</p>
+            <div class="assistant-proposals">
+              @for (proposal of copilot.proposals; track proposal.kind) {
+                <button type="button" [attr.data-approval]="proposal.requiresApproval" (click)="selectProposal(proposal)">
+                  {{ proposal.label }}
+                  @if (proposal.requiresApproval) {
+                    <span class="assistant-proposal-flag">{{ 'header.aiNeedsApproval' | translate }}</span>
+                  }
+                </button>
+              }
+            </div>
+          } @else if (copilot.deepLink) {
             <button type="button" (click)="openCopilotLink()">{{ 'header.aiOpenScreen' | translate }}</button>
           }
         </section>
+        @if (assistantPendingProposal; as pending) {
+          <div class="assistant-approval" role="alertdialog" [attr.aria-label]="'header.aiApprovalNeeded' | translate">
+            <strong>{{ 'header.aiApprovalNeeded' | translate }}</strong>
+            <p>{{ pending.approvalPrompt }}</p>
+            <div class="assistant-approval-buttons">
+              <button type="button" class="assistant-approve" (click)="confirmProposal()">{{ pending.label }}</button>
+              <button type="button" (click)="cancelProposal()">{{ 'common.cancel' | translate }}</button>
+            </div>
+          </div>
+        }
       }
       <div class="assistant-transcript">
         @for (message of assistantMessages; track message) {

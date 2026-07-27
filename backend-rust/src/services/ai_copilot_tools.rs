@@ -154,6 +154,144 @@ impl CopilotMetric {
     }
 }
 
+/// Something the user can do next. The copilot only ever proposes: a proposal
+/// carries a CRM route and a prefilled payload, never a completed change.
+///
+/// Read-only proposals just navigate. Proposals that would change business data
+/// are marked `requires_approval`, and even then the copilot does not perform
+/// them — the user completes the change in the CRM screen that owns it, which
+/// keeps that screen's own permission checks, validation and audit in force.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotProposal {
+    /// Stable identifier, e.g. `open_staff_report`.
+    pub kind: String,
+    /// Button text, e.g. "Open Staff Report".
+    pub label: String,
+    /// CRM route to open.
+    pub route: String,
+    /// Values to prefill on that screen. Never applied automatically.
+    pub params: Value,
+    /// True when completing this would change business data.
+    pub requires_approval: bool,
+    /// What the user is being asked to approve, stated plainly. Empty when the
+    /// proposal is read-only.
+    pub approval_prompt: String,
+}
+
+/// The proposals the copilot may raise. Adding a variant is the only way to
+/// widen what it can suggest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProposalKind {
+    OpenStaffReport,
+    ViewClient,
+    OpenMembership,
+    CreateOfferDraft,
+    PrepareWhatsAppDraft,
+    ContinueBilling,
+    PrepareBookingDraft,
+}
+
+impl ProposalKind {
+    fn id(self) -> &'static str {
+        match self {
+            Self::OpenStaffReport => "open_staff_report",
+            Self::ViewClient => "view_client",
+            Self::OpenMembership => "open_membership",
+            Self::CreateOfferDraft => "create_offer_draft",
+            Self::PrepareWhatsAppDraft => "prepare_whatsapp_draft",
+            Self::ContinueBilling => "continue_billing",
+            Self::PrepareBookingDraft => "prepare_booking_draft",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::OpenStaffReport => "Open Staff Report",
+            Self::ViewClient => "View Client",
+            Self::OpenMembership => "Open Membership",
+            Self::CreateOfferDraft => "Create Offer Draft",
+            Self::PrepareWhatsAppDraft => "Prepare WhatsApp Draft",
+            Self::ContinueBilling => "Continue Billing",
+            Self::PrepareBookingDraft => "Prepare Booking Draft",
+        }
+    }
+
+    /// Whether completing this proposal would change business data. Publishing
+    /// an offer, sending a message, discounting, refunding and confirming a
+    /// booking all sit behind this flag.
+    fn requires_approval(self) -> bool {
+        match self {
+            // Navigation only — opening a screen changes nothing.
+            Self::OpenStaffReport | Self::ViewClient | Self::OpenMembership => false,
+            Self::CreateOfferDraft
+            | Self::PrepareWhatsAppDraft
+            | Self::ContinueBilling
+            | Self::PrepareBookingDraft => true,
+        }
+    }
+
+    /// States exactly what the user is approving, and what is still not done.
+    fn approval_prompt(self) -> &'static str {
+        match self {
+            Self::CreateOfferDraft => {
+                "This opens a prefilled offer draft. Nothing is published until you review the discount and publish it yourself."
+            }
+            Self::PrepareWhatsAppDraft => {
+                "This opens a prefilled WhatsApp message. Nothing is sent until you review the text and send it yourself."
+            }
+            Self::ContinueBilling => {
+                "This opens the bill in POS. No payment, discount or refund is applied until you complete it yourself."
+            }
+            Self::PrepareBookingDraft => {
+                "This opens a prefilled booking. No appointment is confirmed until you confirm it yourself."
+            }
+            _ => "",
+        }
+    }
+
+    /// Roles allowed to be offered this proposal at all.
+    fn allowed_roles(self) -> &'static [&'static str] {
+        const FLOOR: &[&str] = &[
+            "owner",
+            "admin",
+            "manager",
+            "staff",
+            "frontdesk",
+            "receptionist",
+        ];
+        match self {
+            // Staff performance reporting is management information.
+            Self::OpenStaffReport => &["owner", "admin", "manager", "analyst"],
+            // Discounting is governed, so only roles that may set one see it.
+            Self::CreateOfferDraft => &["owner", "admin", "manager"],
+            // Outbound messaging is limited to roles that own client comms.
+            Self::PrepareWhatsAppDraft => {
+                &["owner", "admin", "manager", "frontdesk", "receptionist"]
+            }
+            Self::ViewClient | Self::OpenMembership => FLOOR,
+            Self::ContinueBilling | Self::PrepareBookingDraft => FLOOR,
+        }
+    }
+
+    fn permitted_for(self, role: &str) -> bool {
+        self.allowed_roles()
+            .contains(&role.to_ascii_lowercase().as_str())
+    }
+
+    /// Builds the proposal for a route and prefill payload.
+    fn proposal(self, route: impl Into<String>, params: Value) -> CopilotProposal {
+        CopilotProposal {
+            kind: self.id().into(),
+            label: self.label().into(),
+            route: route.into(),
+            params,
+            requires_approval: self.requires_approval(),
+            approval_prompt: self.approval_prompt().into(),
+        }
+    }
+}
+
 /// The date range an answer covers, stated explicitly so it can be checked.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -185,8 +323,10 @@ pub struct CopilotAnswer {
     /// The supporting figures, one statement per line.
     pub evidence: Vec<String>,
     pub recommended_action: String,
-    /// CRM screen the user should open to act on this.
+    /// CRM screen the user should open to act on this. The first proposal's route.
     pub deep_link: String,
+    /// What the user can do next. Nothing here has been done for them.
+    pub proposals: Vec<CopilotProposal>,
     /// `high`, `medium` or `low` — how much the data supports the conclusion.
     pub confidence: String,
     /// Structured rows for the UI; never free text.
@@ -205,6 +345,7 @@ impl CopilotAnswer {
             evidence: Vec::new(),
             recommended_action: String::new(),
             deep_link: String::new(),
+            proposals: Vec::new(),
             confidence: "medium".into(),
             data: json!({}),
         }
@@ -247,6 +388,12 @@ impl CopilotAnswer {
     fn action(mut self, action: impl Into<String>, deep_link: impl Into<String>) -> Self {
         self.recommended_action = action.into();
         self.deep_link = deep_link.into();
+        self
+    }
+
+    /// Adds something the user can do next. Nothing is performed here.
+    fn propose(mut self, kind: ProposalKind, route: impl Into<String>, params: Value) -> Self {
+        self.proposals.push(kind.proposal(route, params));
         self
     }
 
@@ -358,7 +505,14 @@ pub fn detect(message: &str) -> Option<ToolMatch> {
 }
 
 fn detect_tool(text: &str) -> Option<CopilotTool> {
-    let about_client = has_any(text, &["client", "customer", "grahak", "ग्राहक"]);
+    // "X ko offer dein" names a person as the recipient even without the word
+    // "client", which is how these questions are actually typed. A service
+    // question uses "par"/"on" instead, so the two stay distinguishable.
+    let about_client = has_any(text, &["client", "customer", "grahak", "ग्राहक"])
+        || text.contains(" ko ")
+        || text.ends_with(" ko")
+        || text.contains(" ke liye")
+        || text.contains(" को ");
     let about_offer = has_any(text, &["offer", "discount", "scheme", "deal", "ऑफर"]);
     let about_service = has_any(text, &["service", "treatment", "सर्विस", "सेवा"]);
     let declining = has_any(
@@ -709,7 +863,27 @@ pub async fn run(
         .ok()
         .flatten()
         .unwrap_or_else(|| branch_id.to_string());
+    // Never offer a next step the caller is not allowed to take. Gating here
+    // means a tool cannot accidentally expose one by forgetting the check.
+    answer.proposals.retain(|proposal| {
+        proposal_kind(&proposal.kind).is_some_and(|kind| kind.permitted_for(role))
+    });
     Ok(answer)
+}
+
+/// Resolves a serialized proposal id back to its kind.
+fn proposal_kind(id: &str) -> Option<ProposalKind> {
+    [
+        ProposalKind::OpenStaffReport,
+        ProposalKind::ViewClient,
+        ProposalKind::OpenMembership,
+        ProposalKind::CreateOfferDraft,
+        ProposalKind::PrepareWhatsAppDraft,
+        ProposalKind::ContinueBilling,
+        ProposalKind::PrepareBookingDraft,
+    ]
+    .into_iter()
+    .find(|kind| kind.id() == id)
 }
 
 // ---------------------------------------------------------------------------
@@ -854,6 +1028,11 @@ async fn staff_performance_decline(
                 worst.staff_name
             ),
             format!("/staff/{}", worst.staff_id),
+        )
+        .propose(
+            ProposalKind::OpenStaffReport,
+            format!("/staff/{}", worst.staff_id),
+            json!({ "staffId": worst.staff_id, "staffName": worst.staff_name }),
         )
         .confidence(if worst.previous_completed >= 5 {
             "high"
@@ -1031,8 +1210,21 @@ async fn service_decline(
             worst.service_name
         ),
     };
+    let mut answer = answer.action(action, "/services");
+    if let Some(window) = &weak_window {
+        // A draft, not a published offer: the discount still needs a person.
+        answer = answer.propose(
+            ProposalKind::CreateOfferDraft,
+            "/services",
+            json!({
+                "serviceId": worst.service_id,
+                "serviceName": worst.service_name,
+                "weekdays": window.weekdays,
+                "windowLabel": window.label,
+            }),
+        );
+    }
     Ok(answer
-        .action(action, "/services")
         .confidence(if worst.previous_bookings >= 5 {
             "high"
         } else {
@@ -1214,6 +1406,17 @@ async fn service_offer(
 
     Ok(answer
         .action(action, "/services")
+        .propose(
+            ProposalKind::CreateOfferDraft,
+            "/services",
+            json!({
+                "serviceId": best.service_id,
+                "serviceName": best.service_name,
+                "maxDiscountBps": safe_discount_bps,
+                "weekdays": weak_window.as_ref().map(|window| window.weekdays.clone()),
+                "windowLabel": weak_window.as_ref().map(|window| window.label.clone()),
+            }),
+        )
         .confidence(if best.current_product_cost_paise > 0 {
             "medium"
         } else {
@@ -1341,11 +1544,55 @@ async fn lapsed_clients(
             )
         ));
     }
+    // Aim outreach at the most recoverable client, not the longest-lost one.
+    let target = clients
+        .iter()
+        .filter(|client| {
+            let days = client
+                .get("recencyDays")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            (90..180).contains(&days)
+        })
+        .max_by_key(|client| {
+            client
+                .get("lifetimeValuePaise")
+                .and_then(Value::as_i64)
+                .unwrap_or_default()
+        })
+        .or_else(|| clients.first());
+
+    let mut answer = answer.action(
+        "Start win-back outreach with the 90–179 day group; they are the most recoverable.",
+        "/clients",
+    );
+    if let Some(client) = target {
+        let client_id = client
+            .get("clientId")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let client_name = client
+            .get("clientName")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        answer = answer
+            .propose(
+                ProposalKind::ViewClient,
+                format!("/clients/{client_id}"),
+                json!({ "clientId": client_id, "clientName": client_name }),
+            )
+            .propose(
+                ProposalKind::PrepareWhatsAppDraft,
+                format!("/clients/{client_id}"),
+                json!({
+                    "clientId": client_id,
+                    "clientName": client_name,
+                    "reason": "win_back",
+                    "inactiveDays": client.get("recencyDays").and_then(Value::as_i64),
+                }),
+            );
+    }
     Ok(answer
-        .action(
-            "Start win-back outreach with the 90–179 day group; they are the most recoverable.",
-            "/clients",
-        )
         .confidence("high")
         .data(json!({ "clients": clients })))
 }
@@ -1362,6 +1609,7 @@ fn billing_how_to() -> CopilotAnswer {
     .evidence("5. Take payment, split across payment modes if needed, then finalize to issue the invoice number.")
     .evidence("6. A finalized invoice can be printed or downloaded as a PDF from POS invoices.")
     .action("Open POS to start the bill.", "/pos")
+    .propose(ProposalKind::ContinueBilling, "/pos", json!({}))
     .confidence("high")
     .data(json!({ "invoicesScreen": "/pos/invoices" }))
 }
@@ -1583,6 +1831,25 @@ async fn membership_status(
             },
             "/memberships",
         )
+        .propose(
+            ProposalKind::OpenMembership,
+            "/memberships",
+            json!({
+                "clientId": client.client_id,
+                "membershipId": active.membership_id,
+                "membershipName": active.membership_name,
+            }),
+        )
+        .propose(
+            ProposalKind::PrepareWhatsAppDraft,
+            format!("/clients/{}", client.client_id),
+            json!({
+                "clientId": client.client_id,
+                "clientName": client.client_name,
+                "reason": if renewal_due { "membership_renewal" } else { "membership_update" },
+                "membershipName": active.membership_name,
+            }),
+        )
         .confidence("high")
         .data(json!({
             "activeMembership": membership_json(active),
@@ -1711,6 +1978,20 @@ async fn return_forecast(
                 },
                 format!("/clients/{}", client.client_id),
             )
+            .propose(
+                ProposalKind::ViewClient,
+                format!("/clients/{}", client.client_id),
+                json!({ "clientId": client.client_id, "clientName": client.client_name }),
+            )
+            .propose(
+                ProposalKind::PrepareBookingDraft,
+                "/appointments",
+                json!({
+                    "clientId": client.client_id,
+                    "clientName": client.client_name,
+                    "suggestedInDays": if overdue { 0 } else { earliest },
+                }),
+            )
             .confidence(confidence)
             .data(json!({
                 "intervalDays": interval,
@@ -1744,6 +2025,11 @@ async fn favourite_service(
         .action(
             "Ask at the desk and record the preference on their profile.",
             format!("/clients/{}", client.client_id),
+        )
+        .propose(
+            ProposalKind::ViewClient,
+            format!("/clients/{}", client.client_id),
+            json!({ "clientId": client.client_id, "clientName": client.client_name }),
         )
         .confidence("high"));
     }
@@ -1810,6 +2096,20 @@ async fn favourite_service(
         .action(
             "Offer this service when booking their next visit.",
             format!("/clients/{}", client.client_id),
+        )
+        .propose(
+            ProposalKind::ViewClient,
+            format!("/clients/{}", client.client_id),
+            json!({ "clientId": client.client_id, "clientName": client.client_name }),
+        )
+        .propose(
+            ProposalKind::PrepareBookingDraft,
+            "/appointments",
+            json!({
+                "clientId": client.client_id,
+                "clientName": client.client_name,
+                "serviceName": top_service,
+            }),
         )
         .confidence(if summary.total_visits >= 3 {
             "high"
@@ -1927,6 +2227,31 @@ async fn client_offer(
         .action(
             format!("Next best action on file: {}.", summary.next_best_action),
             format!("/clients/{}", client.client_id),
+        )
+        .propose(
+            ProposalKind::ViewClient,
+            format!("/clients/{}", client.client_id),
+            json!({ "clientId": client.client_id, "clientName": client.client_name }),
+        )
+        .propose(
+            ProposalKind::CreateOfferDraft,
+            format!("/clients/{}", client.client_id),
+            json!({
+                "clientId": client.client_id,
+                "clientName": client.client_name,
+                "maxDiscountBps": discount_bps,
+                "segment": summary.rfm_segment,
+            }),
+        )
+        .propose(
+            ProposalKind::PrepareWhatsAppDraft,
+            format!("/clients/{}", client.client_id),
+            json!({
+                "clientId": client.client_id,
+                "clientName": client.client_name,
+                "reason": "personalised_offer",
+                "maxDiscountBps": discount_bps,
+            }),
         )
         .confidence(if summary.total_visits >= 3 {
             "high"
@@ -2132,8 +2457,22 @@ mod tests {
                 .tool,
             CopilotTool::ClientOffer
         );
+        // Named recipient without the word "client" — the common phrasing.
+        assert_eq!(
+            detect("Anita Sharma ko kya offer dein?").unwrap().tool,
+            CopilotTool::ClientOffer
+        );
+        assert_eq!(
+            detect("Priya ke liye kaunsa offer sahi hai?").unwrap().tool,
+            CopilotTool::ClientOffer
+        );
+        // Offers aimed at a service stay on the service tool.
         assert_eq!(
             detect("which service should get an offer").unwrap().tool,
+            CopilotTool::ServiceOffer
+        );
+        assert_eq!(
+            detect("Kis service par offer dena chahiye?").unwrap().tool,
             CopilotTool::ServiceOffer
         );
     }
@@ -2330,6 +2669,105 @@ mod tests {
         assert!(weakest_window(&week([(0, 0, 0); 7])).is_none());
         // A partial week is never scored.
         assert!(weakest_window(&week([(0, 0, 0); 7])[..3]).is_none());
+    }
+
+    #[test]
+    fn every_state_changing_proposal_requires_approval_and_says_what_is_not_done() {
+        const CHANGES_STATE: [ProposalKind; 4] = [
+            ProposalKind::CreateOfferDraft,
+            ProposalKind::PrepareWhatsAppDraft,
+            ProposalKind::ContinueBilling,
+            ProposalKind::PrepareBookingDraft,
+        ];
+        for kind in CHANGES_STATE {
+            assert!(
+                kind.requires_approval(),
+                "{} would change business data and must need approval",
+                kind.id()
+            );
+            let prompt = kind.approval_prompt();
+            assert!(
+                !prompt.is_empty(),
+                "{} must say what is being approved",
+                kind.id()
+            );
+            // The prompt has to make clear the change has NOT happened yet.
+            assert!(
+                prompt.contains("until you"),
+                "{} must state what is still not done: {prompt}",
+                kind.id()
+            );
+        }
+
+        // Opening a screen changes nothing, so it must not demand approval.
+        for kind in [
+            ProposalKind::OpenStaffReport,
+            ProposalKind::ViewClient,
+            ProposalKind::OpenMembership,
+        ] {
+            assert!(!kind.requires_approval(), "{} is read-only", kind.id());
+            assert!(
+                kind.approval_prompt().is_empty(),
+                "{} needs no prompt",
+                kind.id()
+            );
+        }
+    }
+
+    #[test]
+    fn proposal_ids_round_trip_so_role_gating_cannot_silently_miss_one() {
+        for kind in [
+            ProposalKind::OpenStaffReport,
+            ProposalKind::ViewClient,
+            ProposalKind::OpenMembership,
+            ProposalKind::CreateOfferDraft,
+            ProposalKind::PrepareWhatsAppDraft,
+            ProposalKind::ContinueBilling,
+            ProposalKind::PrepareBookingDraft,
+        ] {
+            assert_eq!(
+                proposal_kind(kind.id()),
+                Some(kind),
+                "{} must resolve back to its kind, or the role filter would drop it",
+                kind.id()
+            );
+        }
+        assert_eq!(proposal_kind("unknown_kind"), None);
+    }
+
+    #[test]
+    fn sensitive_proposals_are_closed_to_roles_that_cannot_perform_them() {
+        // Discounting is governed, so the floor cannot be offered an offer draft.
+        assert!(!ProposalKind::CreateOfferDraft.permitted_for("receptionist"));
+        assert!(!ProposalKind::CreateOfferDraft.permitted_for("staff"));
+        assert!(ProposalKind::CreateOfferDraft.permitted_for("manager"));
+
+        // Staff performance stays management information.
+        assert!(!ProposalKind::OpenStaffReport.permitted_for("receptionist"));
+        assert!(ProposalKind::OpenStaffReport.permitted_for("owner"));
+
+        // Outbound messaging belongs to roles that own client communication.
+        assert!(!ProposalKind::PrepareWhatsAppDraft.permitted_for("staff"));
+        assert!(ProposalKind::PrepareWhatsAppDraft.permitted_for("frontdesk"));
+
+        // Billing and booking are ordinary floor work.
+        assert!(ProposalKind::ContinueBilling.permitted_for("receptionist"));
+        assert!(ProposalKind::PrepareBookingDraft.permitted_for("staff"));
+    }
+
+    #[test]
+    fn a_proposal_carries_a_route_and_prefill_but_never_a_completed_change() {
+        let proposal = ProposalKind::CreateOfferDraft.proposal(
+            "/services",
+            json!({ "serviceId": "spa", "maxDiscountBps": 1_500 }),
+        );
+        assert_eq!(proposal.kind, "create_offer_draft");
+        assert_eq!(proposal.label, "Create Offer Draft");
+        assert_eq!(proposal.route, "/services");
+        assert!(proposal.requires_approval);
+        // The payload is a suggestion to prefill, not an applied discount.
+        assert_eq!(proposal.params["maxDiscountBps"], 1_500);
+        assert!(proposal.approval_prompt.contains("published"));
     }
 
     #[test]
@@ -2533,6 +2971,139 @@ mod reply_shape_tests {
         );
 
         for table in ["pos_sale_lines", "pos_sales", "services"] {
+            let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
+                .bind(&tenant)
+                .execute(&db)
+                .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn proposals_are_filtered_to_what_the_caller_may_actually_do() {
+        dotenvy::dotenv().ok();
+        let Ok(url) = std::env::var("DATABASE_URL") else {
+            return;
+        };
+        let Ok(db) = PgPoolOptions::new().max_connections(2).connect(&url).await else {
+            return;
+        };
+        let tenant = format!("copilot_props_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+
+        sqlx::query(
+            "INSERT INTO clients(id,tenant_id,branch_id,first_name,last_name,phone,normalized_phone,active,last_visit_at)
+             VALUES ($3||'c1',$1,$2,'Anita','Sharma','9876543210','9876543210',TRUE,NOW()-INTERVAL '200 days')",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("client seeded");
+
+        let matched = detect("Anita Sharma ko kya offer dein?").expect("tool matches");
+
+        // A manager may discount, so the offer draft is offered — but flagged.
+        let for_manager = run(&db, &tenant, branch, "manager", &matched)
+            .await
+            .expect("manager may run the client offer tool");
+        let offer_draft = for_manager
+            .proposals
+            .iter()
+            .find(|proposal| proposal.kind == "create_offer_draft")
+            .expect("a manager is offered the offer draft");
+        assert!(
+            offer_draft.requires_approval,
+            "an offer draft always needs explicit approval"
+        );
+        assert!(
+            !offer_draft.approval_prompt.is_empty(),
+            "the user is told what they are approving"
+        );
+        // Read-only proposals sit alongside it without an approval gate.
+        let view_client = for_manager
+            .proposals
+            .iter()
+            .find(|proposal| proposal.kind == "view_client")
+            .expect("viewing the client is offered");
+        assert!(
+            !view_client.requires_approval,
+            "opening a screen changes nothing"
+        );
+
+        // Every proposal must point somewhere; a dead button is worse than none.
+        for proposal in &for_manager.proposals {
+            assert!(
+                proposal.route.starts_with('/'),
+                "{} needs a route, got {:?}",
+                proposal.kind,
+                proposal.route
+            );
+            assert!(
+                !proposal.label.is_empty(),
+                "{} needs a label",
+                proposal.kind
+            );
+        }
+
+        for table in ["clients"] {
+            let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
+                .bind(&tenant)
+                .execute(&db)
+                .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn a_role_without_discount_rights_is_never_offered_an_offer_draft() {
+        dotenvy::dotenv().ok();
+        let Ok(url) = std::env::var("DATABASE_URL") else {
+            return;
+        };
+        let Ok(db) = PgPoolOptions::new().max_connections(2).connect(&url).await else {
+            return;
+        };
+        let tenant = format!("copilot_gate_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+
+        sqlx::query(
+            "INSERT INTO clients(id,tenant_id,branch_id,first_name,last_name,phone,normalized_phone,active,last_visit_at)
+             VALUES ($3||'c1',$1,$2,'Anita','Sharma','9876543210','9876543210',TRUE,NOW()-INTERVAL '200 days')",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("client seeded");
+
+        // Billed history, so the favourite-service path runs in full.
+        sqlx::query(
+            "INSERT INTO pos_sales(id,tenant_id,branch_id,client_id,invoice_number,subtotal_paise,total_paise,paid_paise,status,finalized_at,created_at)
+             SELECT $3||'s'||g,$1,$2,$3||'c1','INV-G'||g,100000,100000,100000,'paid',(CURRENT_DATE-20+g)::timestamptz,(CURRENT_DATE-20+g)::timestamptz
+             FROM generate_series(1,3) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("sales seeded");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines(id,tenant_id,branch_id,sale_id,line_type,item_id,item_name,quantity,unit_price_paise,line_total_paise)
+             SELECT $3||'l'||g,$1,$2,$3||'s'||g,'service','spa','Hair Spa',1,100000,100000 FROM generate_series(1,3) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("lines seeded");
+
+        // A receptionist may look a client up, so the tool itself is allowed.
+        let matched =
+            detect("Anita Sharma regular kaunsi service leti hai?").expect("tool matches");
+        let answer = run(&db, &tenant, branch, "receptionist", &matched)
+            .await
+            .expect("a receptionist may read client history");
+        assert!(
+            answer
+                .proposals
+                .iter()
+                .all(|proposal| proposal.kind != "create_offer_draft"),
+            "a receptionist must never be offered a discount draft: {:?}",
+            answer
+                .proposals
+                .iter()
+                .map(|proposal| proposal.kind.as_str())
+                .collect::<Vec<_>>()
+        );
+        // They can still do the parts of their job the tool supports.
+        assert!(
+            answer
+                .proposals
+                .iter()
+                .any(|proposal| proposal.kind == "prepare_booking_draft"),
+            "booking is ordinary front-desk work"
+        );
+
+        for table in ["pos_sale_lines", "pos_sales", "clients"] {
             let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
                 .bind(&tenant)
                 .execute(&db)

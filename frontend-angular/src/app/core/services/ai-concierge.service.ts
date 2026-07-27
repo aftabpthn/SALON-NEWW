@@ -26,6 +26,25 @@ export type AiCopilotPeriod = {
   previousEnd: string;
 };
 
+/**
+ * Something the user can do next. The copilot only proposes — a proposal is a
+ * CRM route plus prefilled values, never a change that has already happened.
+ */
+export type AiCopilotProposal = {
+  /** Stable id, e.g. `create_offer_draft`. */
+  kind: string;
+  /** Button text, e.g. "Create Offer Draft". */
+  label: string;
+  /** CRM route to open. */
+  route: string;
+  /** Values to prefill on that screen. Never applied automatically. */
+  params: Record<string, unknown>;
+  /** True when completing this would change business data. */
+  requiresApproval: boolean;
+  /** What the user is approving, and what is still not done. Empty if read-only. */
+  approvalPrompt: string;
+};
+
 /** Grounded evidence from the CRM tool that answered the question. */
 export type AiCopilotAnswer = {
   /** Which read tool ran, e.g. `staff_performance_decline`. */
@@ -43,6 +62,8 @@ export type AiCopilotAnswer = {
   recommendedAction: string;
   /** CRM route to open to act on the answer. */
   deepLink: string;
+  /** What the user can do next. Nothing here has been done for them. */
+  proposals: AiCopilotProposal[];
   confidence: 'high' | 'medium' | 'low' | string;
   /** Structured rows behind the answer. */
   data: Record<string, unknown>;

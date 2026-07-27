@@ -504,6 +504,33 @@ async fn process_message(
         .await
         .map_err(|_| AppError::internal("failed to store AI action"))?;
     }
+    // Record every proposal that would change business data as pending, so there
+    // is an audit trail of what the copilot suggested and what a person then did
+    // with it. Recording a proposal performs nothing.
+    if let Some(answer) = copilot.answer() {
+        for proposal in answer
+            .proposals
+            .iter()
+            .filter(|proposal| proposal.requires_approval)
+        {
+            repository::add_action(
+                db,
+                tenant_id,
+                branch_id,
+                &session.id,
+                &assistant_message.id,
+                &proposal.kind,
+                &json!({
+                    "route": proposal.route,
+                    "params": proposal.params,
+                    "tool": answer.tool,
+                    "requiresApproval": true,
+                }),
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to store AI proposal"))?;
+        }
+    }
     if action_type == "human_handoff" {
         repository::set_session_status(db, tenant_id, branch_id, &session.id, "handoff")
             .await

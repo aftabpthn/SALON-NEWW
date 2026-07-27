@@ -3,7 +3,7 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Outpu
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
-import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiCopilotProposal, AiMessage, AiSession } from '../core/services/ai-concierge.service';
 import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
@@ -53,6 +53,8 @@ export class AppHeaderComponent implements OnInit {
   assistantCopilot: AiCopilotAnswer | null = null;
   /** Tool name when the last question needed a report this role cannot open. */
   assistantRestrictedTool = '';
+  /** Proposal awaiting the user's explicit go-ahead; nothing runs until they confirm. */
+  assistantPendingProposal: AiCopilotProposal | null = null;
   private assistantRetry: (() => Promise<void>) | null = null;
 
   get branchName(): string {
@@ -224,9 +226,54 @@ export class AppHeaderComponent implements OnInit {
     await this.router.navigateByUrl(link);
   }
 
+  /**
+   * Read-only proposals open straight away. Anything that would change business
+   * data is held here until the user confirms it — the copilot never acts alone.
+   */
+  async selectProposal(proposal: AiCopilotProposal): Promise<void> {
+    if (proposal.requiresApproval) {
+      this.assistantPendingProposal = proposal;
+      return;
+    }
+    await this.openProposal(proposal);
+  }
+
+  /** The user approved: open the prefilled screen so they can complete it there. */
+  async confirmProposal(): Promise<void> {
+    const proposal = this.assistantPendingProposal;
+    if (!proposal) return;
+    this.assistantPendingProposal = null;
+    await this.openProposal(proposal);
+  }
+
+  cancelProposal(): void {
+    this.assistantPendingProposal = null;
+  }
+
+  private async openProposal(proposal: AiCopilotProposal): Promise<void> {
+    this.assistantOpen = false;
+    // Params only prefill the target screen; the change is completed there.
+    await this.router.navigate([proposal.route], { queryParams: this.queryParams(proposal.params) });
+  }
+
+  /** Flattens a prefill payload into query params, dropping anything unusable. */
+  private queryParams(params: Record<string, unknown>): Record<string, string> {
+    const flattened: Record<string, string> = {};
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value === null || value === undefined) continue;
+      if (Array.isArray(value)) {
+        if (value.length) flattened[key] = value.join(',');
+      } else if (typeof value !== 'object') {
+        flattened[key] = String(value);
+      }
+    }
+    return flattened;
+  }
+
   private clearCopilotResult(): void {
     this.assistantCopilot = null;
     this.assistantRestrictedTool = '';
+    this.assistantPendingProposal = null;
   }
 
   private clearAssistantError(): void {
