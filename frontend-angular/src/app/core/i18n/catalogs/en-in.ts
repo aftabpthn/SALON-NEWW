@@ -42,6 +42,7 @@ export default {
   'header.aiFallbackAnswer': 'Answered from live CRM data.',
   'header.aiNotConnected': 'Not connected',
   'header.aiOpenScreen': 'Open the related screen',
+  'header.aiPreviousPeriod': 'previous',
   'header.aiProviderErrored': 'The AI provider returned an error.',
   'header.aiProviderNotConfigured': 'The AI provider is not configured.',
   'header.aiProviderUnreachable': 'The AI provider could not be reached.',

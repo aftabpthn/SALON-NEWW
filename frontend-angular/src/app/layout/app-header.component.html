@@ -160,14 +160,49 @@
             <strong>{{ 'header.aiEvidence' | translate }}</strong>
             <span class="assistant-confidence" [attr.data-level]="copilot.confidence">{{ 'header.aiConfidence' | translate }}: {{ copilot.confidence }}</span>
           </header>
-          @if (copilot.period) {
-            <p class="assistant-evidence-period">{{ copilot.period }}</p>
-          }
-          <ul>
-            @for (line of copilot.evidence; track line) {
-              <li>{{ line }}</li>
+          <p class="assistant-evidence-scope">
+            @if (copilot.branchName) {
+              <span>{{ copilot.branchName }}</span>
             }
-          </ul>
+            @if (copilot.period.label) {
+              <span>· {{ copilot.period.label }}</span>
+            }
+          </p>
+          @if (copilot.period.start) {
+            <p class="assistant-evidence-period">
+              {{ copilot.period.start }} → {{ copilot.period.end }}
+              @if (copilot.period.previousStart) {
+                <span>({{ 'header.aiPreviousPeriod' | translate }}: {{ copilot.period.previousStart }} → {{ copilot.period.previousEnd }})</span>
+              }
+            </p>
+          }
+          @if (copilot.metrics.length) {
+            <dl class="assistant-metrics">
+              @for (metric of copilot.metrics; track metric.label) {
+                <div>
+                  <dt>{{ metric.label }}</dt>
+                  <dd>
+                    <span class="assistant-metric-previous">{{ metric.previous }}</span>
+                    <span aria-hidden="true">→</span>
+                    <span class="assistant-metric-current">{{ metric.current }}</span>
+                    @if (metric.changePercent !== null) {
+                      <span class="assistant-metric-change" [attr.data-direction]="metric.direction">{{ metric.changePercent > 0 ? '+' : '' }}{{ metric.changePercent }}%</span>
+                    }
+                  </dd>
+                </div>
+              }
+            </dl>
+          }
+          @if (copilot.reason) {
+            <p class="assistant-evidence-reason">{{ copilot.reason }}</p>
+          }
+          @if (copilot.evidence.length) {
+            <ul>
+              @for (line of copilot.evidence; track line) {
+                <li>{{ line }}</li>
+              }
+            </ul>
+          }
           @if (copilot.recommendedAction) {
             <p class="assistant-evidence-action">{{ copilot.recommendedAction }}</p>
           }

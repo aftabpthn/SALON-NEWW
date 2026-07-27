@@ -42,6 +42,7 @@ export default {
   'header.aiFallbackAnswer': 'उत्तर लाइव CRM डेटा से दिया गया है।',
   'header.aiNotConnected': 'जुड़ा नहीं है',
   'header.aiOpenScreen': 'संबंधित स्क्रीन खोलें',
+  'header.aiPreviousPeriod': 'पिछला',
   'header.aiProviderErrored': 'AI प्रोवाइडर ने त्रुटि दी।',
   'header.aiProviderNotConfigured': 'AI प्रोवाइडर कॉन्फ़िगर नहीं है।',
   'header.aiProviderUnreachable': 'AI प्रोवाइडर तक नहीं पहुँच सके।',

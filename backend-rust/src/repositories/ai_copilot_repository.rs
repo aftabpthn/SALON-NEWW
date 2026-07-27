@@ -63,6 +63,121 @@ pub struct CopilotClientMatch {
     pub phone: String,
 }
 
+/// Demand and capacity for one day of the week, used to explain *why* a number moved.
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct WeekdayDemandRow {
+    /// ISO day of week: 1 = Monday through 7 = Sunday.
+    pub weekday: i32,
+    pub weekday_name: String,
+    pub completed_appointments: i64,
+    /// Cancellations and no-shows, which suppress demand without being idle time.
+    pub lost_appointments: i64,
+    pub booked_minutes: i64,
+    pub scheduled_minutes: i64,
+    pub service_bookings: i64,
+    pub service_revenue_paise: i64,
+}
+
+impl WeekdayDemandRow {
+    /// Booked share of rostered time, or `None` when nobody was rostered that day.
+    pub fn utilization_percent(&self) -> Option<i64> {
+        (self.scheduled_minutes > 0).then(|| self.booked_minutes * 100 / self.scheduled_minutes)
+    }
+}
+
+const WEEKDAY_DEMAND_SQL: &str = r#"
+WITH bounds AS (
+  SELECT (CURRENT_DATE - MAKE_INTERVAL(days => $3))::DATE AS start_date,
+         (CURRENT_DATE + 1)::DATE                          AS end_date
+), weekdays AS (
+  SELECT generate_series(1,7) AS weekday
+), appointment_days AS (
+  SELECT EXTRACT(ISODOW FROM appointment.start_at)::INT AS weekday,
+         COUNT(*) FILTER (WHERE appointment.status IN ('completed','billed','paid'))::BIGINT AS completed_appointments,
+         COUNT(*) FILTER (WHERE appointment.status IN ('cancelled','no-show'))::BIGINT AS lost_appointments,
+         COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))/60)
+           FILTER (WHERE appointment.status IN ('completed','billed','paid')),0)::BIGINT AS booked_minutes
+    FROM appointments appointment CROSS JOIN bounds
+   WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2
+     AND appointment.start_at >= bounds.start_date AND appointment.start_at < bounds.end_date
+   GROUP BY 1
+), schedule_days AS (
+  SELECT EXTRACT(ISODOW FROM schedule.schedule_date)::INT AS weekday,
+         COALESCE(SUM(
+           COALESCE(EXTRACT(EPOCH FROM (schedule.shift1_end-schedule.shift1_start))/60,0)
+         + COALESCE(EXTRACT(EPOCH FROM (schedule.shift2_end-schedule.shift2_start))/60,0)),0)::BIGINT AS scheduled_minutes
+    FROM staff_schedules schedule CROSS JOIN bounds
+   WHERE schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.status<>'off'
+     AND schedule.schedule_date >= bounds.start_date AND schedule.schedule_date < bounds.end_date
+   GROUP BY 1
+), service_days AS (
+  SELECT EXTRACT(ISODOW FROM COALESCE(sale.finalized_at,sale.created_at))::INT AS weekday,
+         COALESCE(SUM(line.quantity),0)::BIGINT AS service_bookings,
+         COALESCE(SUM(line.line_total_paise),0)::BIGINT AS service_revenue_paise
+    FROM pos_sale_lines line
+    JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id
+    CROSS JOIN bounds
+   WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service'
+     AND sale.status NOT IN ('draft','cancelled','voided','refunded')
+     AND COALESCE(sale.is_deleted,FALSE)=FALSE
+     AND ($4='' OR line.item_id=$4)
+     AND COALESCE(sale.finalized_at,sale.created_at)::DATE >= bounds.start_date
+     AND COALESCE(sale.finalized_at,sale.created_at)::DATE <  bounds.end_date
+   GROUP BY 1
+)
+SELECT weekdays.weekday::INT AS weekday,
+       BTRIM(TO_CHAR(DATE '2024-01-01' + (weekdays.weekday - 1), 'Day')) AS weekday_name,
+       COALESCE(appointment_days.completed_appointments,0)::BIGINT AS completed_appointments,
+       COALESCE(appointment_days.lost_appointments,0)::BIGINT AS lost_appointments,
+       COALESCE(appointment_days.booked_minutes,0)::BIGINT AS booked_minutes,
+       COALESCE(schedule_days.scheduled_minutes,0)::BIGINT AS scheduled_minutes,
+       COALESCE(service_days.service_bookings,0)::BIGINT AS service_bookings,
+       COALESCE(service_days.service_revenue_paise,0)::BIGINT AS service_revenue_paise
+  FROM weekdays
+  LEFT JOIN appointment_days ON appointment_days.weekday=weekdays.weekday
+  LEFT JOIN schedule_days ON schedule_days.weekday=weekdays.weekday
+  LEFT JOIN service_days ON service_days.weekday=weekdays.weekday
+ ORDER BY weekdays.weekday
+"#;
+
+/// Demand and capacity split by day of week, optionally narrowed to one service.
+/// Pass an empty `service_id` for the whole branch.
+pub async fn weekday_demand(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    days: i32,
+    service_id: &str,
+) -> Result<Vec<WeekdayDemandRow>, sqlx::Error> {
+    sqlx::query_as(WEEKDAY_DEMAND_SQL)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(days)
+        .bind(service_id)
+        .fetch_all(db)
+        .await
+}
+
+/// The branch's display name, so an answer states which branch it describes.
+///
+/// `branches.id` and `branches.tenant_id` are UUID columns while the rest of the
+/// schema carries them as text, and a branch may also be addressed by its
+/// `scope_id`. Both are matched, the same way the concierge branch check does.
+pub async fn branch_name(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT name FROM branches WHERE tenant_id::TEXT=$1 AND (id::TEXT=$2 OR scope_id=$2)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
+}
+
 const STAFF_PERFORMANCE_TREND_SQL: &str = r#"
 WITH bounds AS (
   SELECT (CURRENT_DATE - MAKE_INTERVAL(days => $3))::DATE     AS current_start,
@@ -572,6 +687,127 @@ mod tests {
         );
 
         cleanup(&db, &tenant).await;
+    }
+
+    #[tokio::test]
+    async fn weekday_demand_splits_bookings_onto_the_right_days() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("copilot_weekday_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        cleanup(&db, &tenant).await;
+
+        sqlx::query(
+            "INSERT INTO services(id,tenant_id,branch_id,name,category,duration_minutes,price_paise,active)
+             VALUES ($3||'spa',$1,$2,'Hair Spa','Hair',60,100000,TRUE)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("service seeded");
+
+        // Four sales, all placed on the most recent Wednesday so the day is exact.
+        sqlx::query(
+            "INSERT INTO pos_sales(id,tenant_id,branch_id,client_id,invoice_number,subtotal_paise,total_paise,paid_paise,status,finalized_at,created_at)
+             SELECT $3||'wed'||g,$1,$2,$3||'client'||g,'INV-W'||g,100000,100000,100000,'paid',
+                    (CURRENT_DATE - ((EXTRACT(ISODOW FROM CURRENT_DATE)::INT + 4) % 7) - 7)::timestamptz,
+                    (CURRENT_DATE - ((EXTRACT(ISODOW FROM CURRENT_DATE)::INT + 4) % 7) - 7)::timestamptz
+             FROM generate_series(1,4) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("wednesday sales seeded");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines(id,tenant_id,branch_id,sale_id,line_type,item_id,item_name,quantity,unit_price_paise,line_total_paise)
+             SELECT $3||'wedl'||g,$1,$2,$3||'wed'||g,'service',$3||'spa','Hair Spa',1,100000,100000 FROM generate_series(1,4) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("wednesday lines seeded");
+
+        let rows = weekday_demand(&db, &tenant, branch, 30, "")
+            .await
+            .expect("weekday demand loads");
+        assert_eq!(
+            rows.len(),
+            7,
+            "every weekday is present, including empty ones"
+        );
+        assert_eq!(rows[0].weekday, 1);
+        assert_eq!(rows[0].weekday_name, "Monday", "names carry no padding");
+        assert_eq!(rows[6].weekday_name, "Sunday");
+
+        let wednesday = &rows[2];
+        assert_eq!(wednesday.weekday_name, "Wednesday");
+        assert_eq!(
+            wednesday.service_bookings, 4,
+            "all four sales land on Wednesday"
+        );
+        assert_eq!(wednesday.service_revenue_paise, 400_000);
+        let other_days: i64 = rows
+            .iter()
+            .filter(|row| row.weekday != 3)
+            .map(|row| row.service_bookings)
+            .sum();
+        assert_eq!(other_days, 0, "no bookings leak onto other days");
+
+        // Filtering to a service the branch does not sell yields an empty week.
+        let filtered = weekday_demand(&db, &tenant, branch, 30, "no-such-service")
+            .await
+            .expect("weekday demand loads");
+        assert_eq!(filtered.len(), 7);
+        assert_eq!(
+            filtered.iter().map(|row| row.service_bookings).sum::<i64>(),
+            0
+        );
+
+        // With no roster recorded, utilization must be absent rather than zero.
+        assert!(
+            rows.iter().all(|row| row.utilization_percent().is_none()),
+            "utilization is unknown without a roster, not 0%"
+        );
+
+        cleanup(&db, &tenant).await;
+    }
+
+    #[tokio::test]
+    async fn branch_name_resolves_by_uuid_or_scope_id() {
+        let Some(db) = connect().await else { return };
+        // branches.id and branches.tenant_id are UUIDs, unlike the rest of the schema.
+        let tenant = Uuid::new_v4().to_string();
+        let branch = Uuid::new_v4().to_string();
+        // branches.tenant_id is a real foreign key, so the tenant must exist first.
+        // The schema rejects obviously fake business names, so use a plausible one.
+        sqlx::query(
+            "INSERT INTO tenants(id,name,status) VALUES ($1::UUID,'Aura Salon Group','active')",
+        )
+        .bind(&tenant)
+        .execute(&db)
+        .await
+        .expect("tenant seeded");
+        sqlx::query(
+            "INSERT INTO branches(id,tenant_id,name,scope_id,active) VALUES ($2::UUID,$1::UUID,'Andheri West','andheri-west',TRUE)",
+        )
+        .bind(&tenant)
+        .bind(&branch)
+        .execute(&db)
+        .await
+        .expect("branch seeded");
+
+        let by_uuid = branch_name(&db, &tenant, &branch)
+            .await
+            .expect("lookup runs");
+        assert_eq!(by_uuid.as_deref(), Some("Andheri West"));
+
+        // A branch addressed by its scope id must resolve to the same name.
+        let by_scope = branch_name(&db, &tenant, "andheri-west")
+            .await
+            .expect("lookup runs");
+        assert_eq!(by_scope.as_deref(), Some("Andheri West"));
+
+        // A non-UUID branch id must return nothing, not raise a type error.
+        let missing = branch_name(&db, &tenant, "no-such-branch")
+            .await
+            .expect("a non-uuid branch id is handled, not fatal");
+        assert_eq!(missing, None);
+
+        let _ = sqlx::query("DELETE FROM branches WHERE tenant_id::TEXT=$1")
+            .bind(&tenant)
+            .execute(&db)
+            .await;
+        let _ = sqlx::query("DELETE FROM tenants WHERE id::TEXT=$1")
+            .bind(&tenant)
+            .execute(&db)
+            .await;
     }
 
     #[tokio::test]

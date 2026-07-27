@@ -5,15 +5,41 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 
 export type AiSession = { id: string; channel: string; status: string; locale: string };
 export type AiMessage = { id: string; role: string; body: string; provider: string; modelName: string; promptVersion: string; intent: string; safetyFlags: string[]; createdAt: string };
+/** One quantity as current vs previous, with the change between them. */
+export type AiCopilotMetric = {
+  label: string;
+  /** Pre-formatted by the backend (currency, percent or count). */
+  current: string;
+  previous: string;
+  /** Null when the previous period was zero, so no percentage is meaningful. */
+  changePercent: number | null;
+  direction: 'up' | 'down' | 'flat' | string;
+};
+
+/** The exact date range an answer covers. */
+export type AiCopilotPeriod = {
+  label: string;
+  start: string;
+  end: string;
+  /** Empty for answers that do not compare against an earlier period. */
+  previousStart: string;
+  previousEnd: string;
+};
+
 /** Grounded evidence from the CRM tool that answered the question. */
 export type AiCopilotAnswer = {
   /** Which read tool ran, e.g. `staff_performance_decline`. */
   tool: string;
   headline: string;
+  /** Branch the figures describe. */
+  branchName: string;
+  period: AiCopilotPeriod;
+  /** Headline quantities, current vs previous. */
+  metrics: AiCopilotMetric[];
+  /** Why the numbers moved, derived from the data. */
+  reason: string;
   /** The figures the conclusion rests on. */
   evidence: string[];
-  /** Date range the figures cover. */
-  period: string;
   recommendedAction: string;
   /** CRM route to open to act on the answer. */
   deepLink: string;

@@ -7,6 +7,7 @@
 //! handed to the AI provider, so the provider analyses real numbers instead of
 //! inventing them.
 
+use chrono::{Duration, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -115,6 +116,57 @@ pub fn can_view_financials(role: &str) -> bool {
     )
 }
 
+/// One measured quantity stated as current vs previous, with the change between.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotMetric {
+    pub label: String,
+    /// Pre-formatted for display (currency, percent or plain count).
+    pub current: String,
+    pub previous: String,
+    /// Percent change, or `None` when the previous period was zero.
+    pub change_percent: Option<i64>,
+    /// `up`, `down` or `flat` — the direction of the change.
+    pub direction: String,
+}
+
+impl CopilotMetric {
+    /// Builds a metric from two raw numbers using `format` for display.
+    fn new(
+        label: impl Into<String>,
+        previous: i64,
+        current: i64,
+        format: fn(i64) -> String,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            current: format(current),
+            previous: format(previous),
+            // A percent change against a zero baseline is meaningless, not infinite.
+            change_percent: (previous != 0).then(|| (current - previous) * 100 / previous),
+            direction: match current.cmp(&previous) {
+                std::cmp::Ordering::Greater => "up",
+                std::cmp::Ordering::Less => "down",
+                std::cmp::Ordering::Equal => "flat",
+            }
+            .into(),
+        }
+    }
+}
+
+/// The date range an answer covers, stated explicitly so it can be checked.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotPeriod {
+    /// Human-readable summary, e.g. "Last 30 days vs the previous 30 days".
+    pub label: String,
+    pub start: String,
+    pub end: String,
+    /// Empty for tools that do not compare against an earlier period.
+    pub previous_start: String,
+    pub previous_end: String,
+}
+
 /// A grounded answer: what was found, the evidence behind it, and what to do next.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,10 +174,16 @@ pub struct CopilotAnswer {
     pub tool: String,
     /// One-line factual conclusion.
     pub headline: String,
-    /// The numbers the conclusion rests on, one statement per line.
+    /// Which branch the figures describe.
+    pub branch_name: String,
+    /// The exact dates behind the figures.
+    pub period: CopilotPeriod,
+    /// Headline quantities as current vs previous with the change between them.
+    pub metrics: Vec<CopilotMetric>,
+    /// Why the numbers moved, derived from the data — not a restatement of them.
+    pub reason: String,
+    /// The supporting figures, one statement per line.
     pub evidence: Vec<String>,
-    /// Human-readable date range the numbers cover.
-    pub period: String,
     pub recommended_action: String,
     /// CRM screen the user should open to act on this.
     pub deep_link: String,
@@ -140,8 +198,11 @@ impl CopilotAnswer {
         Self {
             tool: tool.name().into(),
             headline: headline.into(),
+            branch_name: String::new(),
+            period: CopilotPeriod::default(),
+            metrics: Vec::new(),
+            reason: String::new(),
             evidence: Vec::new(),
-            period: String::new(),
             recommended_action: String::new(),
             deep_link: String::new(),
             confidence: "medium".into(),
@@ -154,8 +215,32 @@ impl CopilotAnswer {
         self
     }
 
-    fn period(mut self, period: impl Into<String>) -> Self {
-        self.period = period.into();
+    /// Marks the answer as covering the standard current-vs-previous windows.
+    fn trend_period(mut self) -> Self {
+        self.period = trend_period();
+        self
+    }
+
+    /// Marks the answer as covering a single window ending today.
+    fn single_period(mut self, label: impl Into<String>, days: i64) -> Self {
+        let today = Utc::now().date_naive();
+        self.period = CopilotPeriod {
+            label: label.into(),
+            start: (today - Duration::days(days)).to_string(),
+            end: today.to_string(),
+            previous_start: String::new(),
+            previous_end: String::new(),
+        };
+        self
+    }
+
+    fn metric(mut self, metric: CopilotMetric) -> Self {
+        self.metrics.push(metric);
+        self
+    }
+
+    fn reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = reason.into();
         self
     }
 
@@ -175,11 +260,30 @@ impl CopilotAnswer {
         self
     }
 
-    /// Renders the answer as the deterministic chat reply.
+    /// Renders the answer as the deterministic chat reply, in the order a reader
+    /// needs it: what, where, when, by how much, why, and what to do.
     pub fn to_reply(&self) -> String {
         let mut reply = self.headline.clone();
-        if !self.period.is_empty() {
-            reply.push_str(&format!("\nPeriod: {}", self.period));
+        if !self.branch_name.is_empty() {
+            reply.push_str(&format!("\nBranch: {}", self.branch_name));
+        }
+        if !self.period.label.is_empty() {
+            reply.push_str(&format!("\nPeriod: {}", self.period_line()));
+        }
+        for metric in &self.metrics {
+            reply.push_str(&format!(
+                "\n{}: {} → {}{}",
+                metric.label,
+                metric.previous,
+                metric.current,
+                match metric.change_percent {
+                    Some(change) => format!(" ({change:+}%)"),
+                    None => String::new(),
+                }
+            ));
+        }
+        if !self.reason.is_empty() {
+            reply.push_str(&format!("\nWhy: {}", self.reason));
         }
         for line in &self.evidence {
             reply.push_str(&format!("\n• {line}"));
@@ -187,10 +291,40 @@ impl CopilotAnswer {
         if !self.recommended_action.is_empty() {
             reply.push_str(&format!("\nNext step: {}", self.recommended_action));
         }
-        if self.confidence != "high" {
-            reply.push_str(&format!("\nConfidence: {}", self.confidence));
-        }
+        reply.push_str(&format!("\nConfidence: {}", self.confidence));
         reply
+    }
+
+    /// Period label with the concrete dates appended.
+    fn period_line(&self) -> String {
+        if self.period.start.is_empty() {
+            return self.period.label.clone();
+        }
+        let mut line = format!(
+            "{} ({} to {}",
+            self.period.label, self.period.start, self.period.end
+        );
+        if !self.period.previous_start.is_empty() {
+            line.push_str(&format!(
+                "; previous {} to {}",
+                self.period.previous_start, self.period.previous_end
+            ));
+        }
+        line.push(')');
+        line
+    }
+}
+
+/// The two comparison windows every trend tool uses, as explicit dates.
+fn trend_period() -> CopilotPeriod {
+    let today = Utc::now().date_naive();
+    let days = i64::from(TREND_DAYS);
+    CopilotPeriod {
+        label: comparison_period(),
+        start: (today - Duration::days(days)).to_string(),
+        end: today.to_string(),
+        previous_start: (today - Duration::days(days * 2)).to_string(),
+        previous_end: (today - Duration::days(days)).to_string(),
     }
 }
 
@@ -560,14 +694,22 @@ pub async fn run(
         }
     };
     // A tool that cannot read its data must not fall through to an invented answer.
-    answer.map_err(|error| {
+    let mut answer = answer.map_err(|error| {
         tracing::warn!(
             tool = matched.tool.name(),
             error = error.message(),
             "copilot tool failed"
         );
         ToolRefusal::NoMatch
-    })
+    })?;
+    // Every answer names the branch it describes, so figures are never ambiguous
+    // for a user who can switch branches.
+    answer.branch_name = copilot_repository::branch_name(db, tenant_id, branch_id)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| branch_id.to_string());
+    Ok(answer)
 }
 
 // ---------------------------------------------------------------------------
@@ -594,26 +736,74 @@ async fn staff_performance_decline(
         .iter()
         .filter(|row| row.current_revenue_paise < row.previous_revenue_paise)
         .collect::<Vec<_>>();
+    // Branch totals frame every individual comparison below.
+    let branch_previous: i64 = rows.iter().map(|row| row.previous_revenue_paise).sum();
+    let branch_current: i64 = rows.iter().map(|row| row.current_revenue_paise).sum();
+
     if declining.is_empty() {
         return Ok(CopilotAnswer::new(
             CopilotTool::StaffPerformanceDecline,
             "No staff member has lower service revenue than the previous 30 days.",
         )
-        .period(comparison_period())
+        .trend_period()
+        .metric(CopilotMetric::new(
+            "Branch service revenue",
+            branch_previous,
+            branch_current,
+            rupees,
+        ))
         .action("Keep the current roster and incentives.", "/staff")
         .confidence(if rows.is_empty() { "low" } else { "high" })
         .data(json!({ "staff": rows })));
     }
 
+    let worst = declining[0];
     let mut answer = CopilotAnswer::new(
         CopilotTool::StaffPerformanceDecline,
         format!(
-            "{} staff member{} earned less service revenue than the previous 30 days.",
+            "{} staff member{} earned less service revenue than the previous 30 days; {} dropped most.",
             declining.len(),
-            if declining.len() == 1 { "" } else { "s" }
+            if declining.len() == 1 { "" } else { "s" },
+            worst.staff_name
         ),
     )
-    .period(comparison_period());
+    .trend_period()
+    .metric(CopilotMetric::new(
+        format!("{} revenue", worst.staff_name),
+        worst.previous_revenue_paise,
+        worst.current_revenue_paise,
+        rupees,
+    ))
+    .metric(CopilotMetric::new(
+        format!("{} completed visits", worst.staff_name),
+        worst.previous_completed,
+        worst.current_completed,
+        |value| value.to_string(),
+    ))
+    .metric(CopilotMetric::new(
+        "Branch service revenue",
+        branch_previous,
+        branch_current,
+        rupees,
+    ));
+    if worst.previous_scheduled_minutes > 0 && worst.current_scheduled_minutes > 0 {
+        answer = answer.metric(CopilotMetric::new(
+            format!("{} utilization", worst.staff_name),
+            percent_of(
+                worst.previous_booked_minutes,
+                worst.previous_scheduled_minutes,
+            ),
+            percent_of(
+                worst.current_booked_minutes,
+                worst.current_scheduled_minutes,
+            ),
+            |value| format!("{value}%"),
+        ));
+    }
+
+    // Explain the drop from the data: more cancellations, weaker rebooking, or
+    // simply fewer visits — whichever the numbers actually support.
+    answer = answer.reason(staff_decline_reason(worst));
 
     for row in declining.iter().take(3) {
         let mut line = format!(
@@ -657,7 +847,6 @@ async fn staff_performance_decline(
         );
     }
 
-    let worst = declining[0];
     Ok(answer
         .action(
             format!(
@@ -674,6 +863,54 @@ async fn staff_performance_decline(
         .data(json!({ "staff": rows })))
 }
 
+/// Picks the strongest supported explanation for one staff member's decline.
+fn staff_decline_reason(row: &copilot_repository::StaffPerformanceTrendRow) -> String {
+    let lost_visits = row.previous_completed - row.current_completed;
+    let extra_cancellations = (row.current_cancelled + row.current_no_show)
+        - (row.previous_cancelled + row.previous_no_show);
+
+    // Cancellations explain the drop when they account for a real share of it.
+    if extra_cancellations > 0 && lost_visits > 0 && extra_cancellations * 2 >= lost_visits {
+        return format!(
+            "Cancellations and no-shows rose by {extra_cancellations} while completed visits fell by {lost_visits}, so lost bookings explain most of the drop."
+        );
+    }
+    // A rebooking fall is only citable when both windows have enough settled visits.
+    if row.previous_rebook_eligible >= 3 && row.current_rebook_eligible >= 3 {
+        let previous_rate = percent_of(row.previous_rebooked, row.previous_rebook_eligible);
+        let current_rate = percent_of(row.current_rebooked, row.current_rebook_eligible);
+        if current_rate + 10 < previous_rate {
+            return format!(
+                "Rebooking fell from {previous_rate}% to {current_rate}%, so clients are not being booked back in at checkout."
+            );
+        }
+    }
+    if row.current_scheduled_minutes > 0 && row.previous_scheduled_minutes > 0 {
+        let previous_utilization =
+            percent_of(row.previous_booked_minutes, row.previous_scheduled_minutes);
+        let current_utilization =
+            percent_of(row.current_booked_minutes, row.current_scheduled_minutes);
+        if current_utilization + 10 < previous_utilization {
+            return format!(
+                "Utilization fell from {previous_utilization}% to {current_utilization}%, so rostered hours are going unbooked."
+            );
+        }
+        if row.current_scheduled_minutes < row.previous_scheduled_minutes {
+            return format!(
+                "Rostered time fell from {} to {} hours, so there was less capacity to sell.",
+                row.previous_scheduled_minutes / 60,
+                row.current_scheduled_minutes / 60
+            );
+        }
+    }
+    if lost_visits > 0 {
+        return format!(
+            "Completed visits fell by {lost_visits} with no rise in cancellations, which points to fewer bookings reaching this staff member."
+        );
+    }
+    "Revenue per visit fell while visit count held, which points to a cheaper service mix or larger discounts.".into()
+}
+
 async fn service_decline(
     db: &PgPool,
     tenant_id: &str,
@@ -688,26 +925,88 @@ async fn service_decline(
         .iter()
         .filter(|row| row.current_revenue_paise < row.previous_revenue_paise)
         .collect::<Vec<_>>();
+    let branch_previous: i64 = rows.iter().map(|row| row.previous_revenue_paise).sum();
+    let branch_current: i64 = rows.iter().map(|row| row.current_revenue_paise).sum();
+
     if declining.is_empty() {
         return Ok(CopilotAnswer::new(
             CopilotTool::ServiceDecline,
             "No service earned less than it did in the previous 30 days.",
         )
-        .period(comparison_period())
+        .trend_period()
+        .metric(CopilotMetric::new(
+            "Service revenue",
+            branch_previous,
+            branch_current,
+            rupees,
+        ))
         .action("No service needs recovery action right now.", "/services")
         .confidence(if rows.is_empty() { "low" } else { "high" })
         .data(json!({ "services": rows })));
     }
 
+    let worst = declining[0];
+    // Ask when in the week this service is weakest, so the answer explains where
+    // the demand went instead of only reporting that it fell.
+    let weekday_rows =
+        copilot_repository::weekday_demand(db, tenant_id, branch_id, TREND_DAYS, &worst.service_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load weekday demand"))?;
+    let weak_window = weakest_window(&weekday_rows);
+
     let mut answer = CopilotAnswer::new(
         CopilotTool::ServiceDecline,
         format!(
-            "{} service{} declined against the previous 30 days.",
+            "{} service{} declined against the previous 30 days; {} fell most.",
             declining.len(),
-            if declining.len() == 1 { "" } else { "s" }
+            if declining.len() == 1 { "" } else { "s" },
+            worst.service_name
         ),
     )
-    .period(comparison_period());
+    .trend_period()
+    .metric(CopilotMetric::new(
+        format!("{} bookings", worst.service_name),
+        worst.previous_bookings,
+        worst.current_bookings,
+        |value| value.to_string(),
+    ))
+    .metric(CopilotMetric::new(
+        format!("{} revenue", worst.service_name),
+        worst.previous_revenue_paise,
+        worst.current_revenue_paise,
+        rupees,
+    ))
+    .metric(CopilotMetric::new(
+        format!("{} distinct clients", worst.service_name),
+        worst.previous_clients,
+        worst.current_clients,
+        |value| value.to_string(),
+    ));
+
+    answer = answer.reason(match &weak_window {
+        Some(window) => weak_window_reason(window, &worst.service_name),
+        // Without a weekday signal, fall back to what the totals themselves show.
+        None => service_decline_reason(worst),
+    });
+    if weak_window.is_some() {
+        // Show the whole week, with utilization per day where a roster exists,
+        // so the quiet run can be checked against the days around it.
+        answer = answer.evidence(format!(
+            "Weekday split: {}",
+            weekday_rows
+                .iter()
+                .map(|row| match row.utilization_percent() {
+                    Some(utilization) => format!(
+                        "{} {} ({utilization}% used)",
+                        row.weekday_name, row.service_bookings
+                    ),
+                    None => format!("{} {}", row.weekday_name, row.service_bookings),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
     for row in declining.iter().take(3) {
         answer = answer.evidence(format!(
             "{}: revenue {} → {} ({}), bookings {} → {}, clients {} → {}, repeat clients {}",
@@ -722,21 +1021,49 @@ async fn service_decline(
             row.current_repeat_clients
         ));
     }
-    let worst = declining[0];
+    let action = match &weak_window {
+        Some(window) => format!(
+            "Target {} recovery at {} — that is where the capacity is idle.",
+            worst.service_name, window.label
+        ),
+        None => format!(
+            "Check {} first: pricing, staff availability and slot coverage.",
+            worst.service_name
+        ),
+    };
     Ok(answer
-        .action(
-            format!(
-                "Check {} first: pricing, staff availability and slot coverage.",
-                worst.service_name
-            ),
-            "/services",
-        )
+        .action(action, "/services")
         .confidence(if worst.previous_bookings >= 5 {
             "high"
         } else {
             "low"
         })
-        .data(json!({ "services": rows })))
+        .data(json!({
+            "services": rows,
+            "weekdayDemand": weekday_rows,
+            "weakWindow": weak_window.as_ref().map(|window| json!({
+                "label": window.label,
+                "weekdays": window.weekdays,
+                "utilizationPercent": window.utilization_percent,
+                "bookingSharePercent": window.booking_share_percent,
+            })),
+        })))
+}
+
+/// Explains a service decline from its own totals when no weekday signal exists.
+fn service_decline_reason(row: &copilot_repository::ServicePerformanceTrendRow) -> String {
+    let lost_clients = row.previous_clients - row.current_clients;
+    if lost_clients > 0 && row.current_repeat_clients == 0 {
+        return format!(
+            "{lost_clients} fewer clients booked it and none of the current buyers are repeat clients, so retention on this service has stopped."
+        );
+    }
+    if lost_clients > 0 {
+        return format!(
+            "{lost_clients} fewer distinct clients booked it, so the drop is lost demand rather than lower prices."
+        );
+    }
+    "The same clients booked it less often, which points to a longer gap between visits rather than lost clients.".into()
 }
 
 async fn service_offer(
@@ -765,7 +1092,11 @@ async fn service_offer(
             CopilotTool::ServiceOffer,
             "No service currently combines falling demand with margin headroom for a discount.",
         )
-        .period(comparison_period())
+        .trend_period()
+        .reason(
+            "Every declining service is already at or below its product cost, so a discount would sell at a loss."
+                .to_string(),
+        )
         .action(
             "Hold discounts; recover demand through scheduling and outreach instead.",
             "/services",
@@ -785,10 +1116,15 @@ async fn service_offer(
                 best.service_name
             ),
         )
-        .period(comparison_period())
-        .evidence(format!(
-            "{}: measured margin {}% after product cost of {}.",
-            best.service_name,
+        .trend_period()
+        .metric(CopilotMetric::new(
+            format!("{} bookings", best.service_name),
+            best.previous_bookings,
+            best.current_bookings,
+            |value| value.to_string(),
+        ))
+        .reason(format!(
+            "Measured margin is only {}% after product cost of {}, so a third of it rounds to nothing worth offering.",
             margin_bps / 100,
             rupees(best.current_product_cost_paise)
         ))
@@ -800,22 +1136,63 @@ async fn service_offer(
         .data(json!({ "services": rows })));
     }
 
-    Ok(CopilotAnswer::new(
+    // Find when this service is weakest, so the offer can be aimed at idle
+    // capacity instead of discounting slots that were already selling.
+    let weekday_rows =
+        copilot_repository::weekday_demand(db, tenant_id, branch_id, TREND_DAYS, &best.service_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load weekday demand"))?;
+    let weak_window = weakest_window(&weekday_rows);
+
+    let reason = match &weak_window {
+        Some(window) => format!(
+            "{} Margin is {}% after product cost, so a discount up to {}% stays margin-safe — which makes a {}-only offer the targeted move.",
+            weak_window_reason(window, &best.service_name),
+            margin_bps / 100,
+            safe_discount_bps / 100,
+            window.label
+        ),
+        None => format!(
+            "Bookings fell while margin held at {}% after product cost, so up to {}% can be given away without selling below cost.",
+            margin_bps / 100,
+            safe_discount_bps / 100
+        ),
+    };
+    let action = match &weak_window {
+        Some(window) => format!(
+            "Run a {}-only offer on {} at up to {}%, time-boxed, and re-check demand after 30 days.",
+            window.label,
+            best.service_name,
+            safe_discount_bps / 100
+        ),
+        None => format!(
+            "Run a time-boxed offer on {} up to {}% and re-check demand after 30 days.",
+            best.service_name,
+            safe_discount_bps / 100
+        ),
+    };
+
+    let mut answer = CopilotAnswer::new(
         CopilotTool::ServiceOffer,
         format!(
             "{} is the safest service to put an offer on.",
             best.service_name
         ),
     )
-    .period(comparison_period())
-    .evidence(format!(
-        "Bookings {} → {} and revenue {} → {} ({}).",
+    .trend_period()
+    .metric(CopilotMetric::new(
+        format!("{} bookings", best.service_name),
         best.previous_bookings,
         best.current_bookings,
-        rupees(best.previous_revenue_paise),
-        rupees(best.current_revenue_paise),
-        signed_change(best.previous_revenue_paise, best.current_revenue_paise)
+        |value| value.to_string(),
     ))
+    .metric(CopilotMetric::new(
+        format!("{} revenue", best.service_name),
+        best.previous_revenue_paise,
+        best.current_revenue_paise,
+        rupees,
+    ))
+    .reason(reason)
     .evidence(format!(
         "Measured margin is {}% after product cost of {}, so up to {}% discount stays margin-safe.",
         margin_bps / 100,
@@ -825,21 +1202,35 @@ async fn service_offer(
     .evidence(
         "Margin uses product cost from the stock ledger only; staff cost is not included."
             .to_string(),
-    )
-    .action(
-        format!(
-            "Run a time-boxed offer on {} up to {}% and re-check demand after 30 days.",
-            best.service_name,
-            safe_discount_bps / 100
-        ),
-        "/services",
-    )
-    .confidence(if best.current_product_cost_paise > 0 {
-        "medium"
-    } else {
-        "low"
-    })
-    .data(json!({ "services": rows, "recommendedService": best, "safeDiscountBps": safe_discount_bps })))
+    );
+    if let Some(window) = &weak_window {
+        if let Some(utilization) = window.utilization_percent {
+            answer = answer.evidence(format!(
+                "{} utilization is {}% against the rostered hours for those days.",
+                window.label, utilization
+            ));
+        }
+    }
+
+    Ok(answer
+        .action(action, "/services")
+        .confidence(if best.current_product_cost_paise > 0 {
+            "medium"
+        } else {
+            "low"
+        })
+        .data(json!({
+            "services": rows,
+            "recommendedService": best,
+            "safeDiscountBps": safe_discount_bps,
+            "weekdayDemand": weekday_rows,
+            "weakWindow": weak_window.as_ref().map(|window| json!({
+                "label": window.label,
+                "weekdays": window.weekdays,
+                "utilizationPercent": window.utilization_percent,
+                "bookingSharePercent": window.booking_share_percent,
+            })),
+        })))
 }
 
 async fn lapsed_clients(
@@ -871,7 +1262,10 @@ async fn lapsed_clients(
             CopilotTool::LapsedClients,
             format!("No client has been inactive for {LAPSED_DAYS} days or more."),
         )
-        .period(format!("Inactive for {LAPSED_DAYS}+ days as of today"))
+        .single_period(
+            format!("Clients with no visit in the last {LAPSED_DAYS} days"),
+            i64::from(LAPSED_DAYS),
+        )
         .action("No win-back outreach is needed right now.", "/clients")
         .confidence("high")
         .data(json!({ "clients": [] })));
@@ -901,7 +1295,29 @@ async fn lapsed_clients(
             clients.len()
         ),
     )
-    .period(format!("Inactive for {LAPSED_DAYS}+ days as of today"))
+    .single_period(
+        format!("Clients with no visit in the last {LAPSED_DAYS} days"),
+        i64::from(LAPSED_DAYS),
+    )
+    .metric(CopilotMetric::new(
+        "Recoverable (60–179 days)",
+        clients.len() as i64,
+        (buckets[0] + buckets[1]) as i64,
+        |value| value.to_string(),
+    ))
+    .reason(if buckets[2] > buckets[0] + buckets[1] {
+        format!(
+            "Most of the list ({} of {}) is past 180 days, so this is long-term churn rather than a recent drop-off.",
+            buckets[2],
+            clients.len()
+        )
+    } else {
+        format!(
+            "{} of {} are still inside 180 days, so the loss is recent and most of the list is still recoverable.",
+            buckets[0] + buckets[1],
+            clients.len()
+        )
+    })
     .evidence(format!(
         "{}–89 days: {} clients · 90–179 days: {} clients · 180+ days: {} clients",
         LAPSED_DAYS, buckets[0], buckets[1], buckets[2]
@@ -1138,9 +1554,24 @@ async fn membership_status(
     ));
 
     // Renewal is worth raising once the plan is inside its last 30 days.
-    let renewal_due = active
+    let days_left = active
         .expires_at
-        .is_some_and(|expires_at| (expires_at - chrono::Utc::now()).num_days() <= 30);
+        .map(|expires_at| (expires_at - Utc::now()).num_days());
+    let renewal_due = days_left.is_some_and(|days| days <= 30);
+    answer = answer.reason(match (days_left, active.auto_renew_enabled) {
+        (Some(days), false) if days < 0 => format!(
+            "The plan lapsed {} days ago with auto-renew off, so it will not restart on its own.",
+            -days
+        ),
+        (Some(days), false) if days <= 30 => format!(
+            "Only {days} days remain and auto-renew is off, so renewal needs a manual conversation now."
+        ),
+        (Some(days), true) if days <= 30 => format!(
+            "{days} days remain and auto-renew is on, so the risk is a failed payment rather than a lapsed plan."
+        ),
+        (Some(days), _) => format!("{days} days remain, so there is no renewal pressure yet."),
+        (None, _) => "The plan has no expiry date, so renewal is not time-driven.".into(),
+    });
     Ok(answer
         .action(
             if renewal_due && !active.auto_renew_enabled {
@@ -1236,10 +1667,31 @@ async fn return_forecast(
 
     Ok(
         CopilotAnswer::new(CopilotTool::ClientReturnForecast, headline)
-            .period(format!(
-                "Based on {} completed visits, last visit {elapsed} days ago",
-                summary.total_visits
+            .single_period(
+                format!(
+                    "Based on {} completed visits, last visit {elapsed} days ago",
+                    summary.total_visits
+                ),
+                elapsed,
+            )
+            .metric(CopilotMetric::new(
+                "Days since last visit vs usual gap",
+                interval,
+                elapsed,
+                |value| format!("{value} days"),
             ))
+            .reason(if overdue {
+                format!(
+                    "They are {} days past their usual {interval}-day gap, and their churn risk score is {}.",
+                    elapsed - interval,
+                    summary.churn_risk_score
+                )
+            } else {
+                format!(
+                    "Their own {interval}-day average gap across {} visits puts the next visit in this window; the range is ±{spread} days because that is how much their visits actually vary.",
+                    summary.total_visits
+                )
+            })
             .evidence(format!(
                 "Average gap between visits is {interval} days across {} visits.",
                 summary.total_visits
@@ -1347,6 +1799,14 @@ async fn favourite_service(
     }
 
     Ok(answer
+        .reason(if uses > 0 {
+            format!(
+                "{top_service} accounts for {uses} of their {} billed service lines, which is what makes it their usual choice.",
+                history.len()
+            )
+        } else {
+            "This is their most-billed service across their whole history.".to_string()
+        })
         .action(
             "Offer this service when booking their next visit.",
             format!("/clients/{}", client.client_id),
@@ -1453,6 +1913,17 @@ async fn client_offer(
     );
 
     Ok(answer
+        .reason(if issued >= 2 && returned == 0 {
+            format!(
+                "They are in the {} segment, but {issued} past offers brought them back zero times, so the depth is capped at 5% rather than the usual level.",
+                summary.rfm_segment
+            )
+        } else {
+            format!(
+                "Depth follows their {} segment and churn risk of {}: {reason}.",
+                summary.rfm_segment, summary.churn_risk_score
+            )
+        })
         .action(
             format!("Next best action on file: {}.", summary.next_best_action),
             format!("/clients/{}", client.client_id),
@@ -1468,6 +1939,101 @@ async fn client_offer(
             "suggestedDiscountBps": discount_bps,
             "winBack": win_back
         })))
+}
+
+// ---------------------------------------------------------------------------
+// Weekday pattern reasoning
+// ---------------------------------------------------------------------------
+
+/// The weakest run of days found in a weekday pattern, and how weak it is.
+#[derive(Debug, Clone)]
+struct WeakWindow {
+    /// Human-readable span, e.g. "Tuesday–Thursday".
+    label: String,
+    /// Weekday numbers in the span, for a targeted offer.
+    weekdays: Vec<i32>,
+    /// Utilization across the span, when a roster exists to measure against.
+    utilization_percent: Option<i64>,
+    /// Share of the period's service bookings that land in this span.
+    booking_share_percent: i64,
+}
+
+/// Finds the weakest three-day run in the week, so an answer can say *where*
+/// the demand is missing rather than only that it is missing.
+///
+/// Prefers utilization (booked vs rostered time) and falls back to booking
+/// volume when no roster is recorded. Returns `None` when there is not enough
+/// activity for the comparison to mean anything.
+fn weakest_window(rows: &[copilot_repository::WeekdayDemandRow]) -> Option<WeakWindow> {
+    const SPAN: usize = 3;
+    if rows.len() != 7 {
+        return None;
+    }
+    let total_bookings: i64 = rows.iter().map(|row| row.service_bookings).sum();
+    let rostered = rows.iter().any(|row| row.scheduled_minutes > 0);
+    // Without a roster or any bookings there is nothing to reason from.
+    if !rostered && total_bookings < SPAN as i64 {
+        return None;
+    }
+
+    // Score each contiguous span; the week wraps, so Sunday-Monday-Tuesday counts.
+    let mut best: Option<(i64, usize)> = None;
+    for start in 0..7 {
+        let span: Vec<&copilot_repository::WeekdayDemandRow> = (0..SPAN)
+            .map(|offset| &rows[(start + offset) % 7])
+            .collect();
+        let score = if rostered {
+            let booked: i64 = span.iter().map(|row| row.booked_minutes).sum();
+            let scheduled: i64 = span.iter().map(|row| row.scheduled_minutes).sum();
+            // Days nobody was rostered are not weak demand, they are closed days.
+            if scheduled == 0 {
+                continue;
+            }
+            booked * 100 / scheduled
+        } else {
+            span.iter().map(|row| row.service_bookings).sum::<i64>()
+        };
+        if best.is_none_or(|(best_score, _)| score < best_score) {
+            best = Some((score, start));
+        }
+    }
+
+    let (_, start) = best?;
+    let span: Vec<&copilot_repository::WeekdayDemandRow> = (0..SPAN)
+        .map(|offset| &rows[(start + offset) % 7])
+        .collect();
+    let booked: i64 = span.iter().map(|row| row.booked_minutes).sum();
+    let scheduled: i64 = span.iter().map(|row| row.scheduled_minutes).sum();
+    let span_bookings: i64 = span.iter().map(|row| row.service_bookings).sum();
+
+    Some(WeakWindow {
+        label: format!(
+            "{}–{}",
+            span.first().expect("span is not empty").weekday_name,
+            span.last().expect("span is not empty").weekday_name
+        ),
+        weekdays: span.iter().map(|row| row.weekday).collect(),
+        utilization_percent: (scheduled > 0).then(|| booked * 100 / scheduled),
+        booking_share_percent: if total_bookings > 0 {
+            span_bookings * 100 / total_bookings
+        } else {
+            0
+        },
+    })
+}
+
+/// Turns a weak window into the sentence that explains a decline.
+fn weak_window_reason(window: &WeakWindow, subject: &str) -> String {
+    match window.utilization_percent {
+        Some(utilization) => format!(
+            "{} is weakest on {}, where utilization is {}% and only {}% of bookings land.",
+            subject, window.label, utilization, window.booking_share_percent
+        ),
+        None => format!(
+            "{} is weakest on {}, which takes only {}% of the period's bookings.",
+            subject, window.label, window.booking_share_percent
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1633,5 +2199,344 @@ mod tests {
         assert_eq!(signed_change(0, 500), "new activity");
         assert_eq!(signed_change(100_000, 30_000), "-70%");
         assert_eq!(signed_change(100_000, 130_000), "+30%");
+    }
+
+    #[test]
+    fn a_metric_states_direction_and_change_without_dividing_by_zero() {
+        let fell = CopilotMetric::new("Revenue", 100_000, 30_000, rupees);
+        assert_eq!(fell.previous, "₹1000.00");
+        assert_eq!(fell.current, "₹300.00");
+        assert_eq!(fell.change_percent, Some(-70));
+        assert_eq!(fell.direction, "down");
+
+        let grew = CopilotMetric::new("Bookings", 4, 6, |value| value.to_string());
+        assert_eq!(grew.change_percent, Some(50));
+        assert_eq!(grew.direction, "up");
+
+        // A zero baseline has no meaningful percent change, so none is claimed.
+        let from_nothing = CopilotMetric::new("Bookings", 0, 5, |value| value.to_string());
+        assert_eq!(from_nothing.change_percent, None);
+        assert_eq!(from_nothing.direction, "up");
+
+        let unchanged = CopilotMetric::new("Bookings", 5, 5, |value| value.to_string());
+        assert_eq!(unchanged.change_percent, Some(0));
+        assert_eq!(unchanged.direction, "flat");
+    }
+
+    /// Builds a week where the caller chooses each day's booked/scheduled minutes.
+    fn week(days: [(i64, i64, i64); 7]) -> Vec<copilot_repository::WeekdayDemandRow> {
+        const NAMES: [&str; 7] = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ];
+        days.iter()
+            .enumerate()
+            .map(
+                |(index, (booked, scheduled, bookings))| copilot_repository::WeekdayDemandRow {
+                    weekday: index as i32 + 1,
+                    weekday_name: NAMES[index].into(),
+                    completed_appointments: *bookings,
+                    lost_appointments: 0,
+                    booked_minutes: *booked,
+                    scheduled_minutes: *scheduled,
+                    service_bookings: *bookings,
+                    service_revenue_paise: bookings * 1_000,
+                },
+            )
+            .collect()
+    }
+
+    #[test]
+    fn the_weakest_window_finds_the_quiet_midweek_run() {
+        // Tuesday-Thursday are rostered as heavily as the rest but barely booked.
+        let rows = week([
+            (400, 480, 10), // Monday
+            (100, 480, 2),  // Tuesday
+            (90, 480, 2),   // Wednesday
+            (110, 480, 2),  // Thursday
+            (420, 480, 11), // Friday
+            (450, 480, 12), // Saturday
+            (430, 480, 11), // Sunday
+        ]);
+        let window = weakest_window(&rows).expect("a weak window exists");
+        assert_eq!(window.label, "Tuesday–Thursday");
+        assert_eq!(window.weekdays, vec![2, 3, 4]);
+        // 300 booked of 1440 rostered minutes across the three days.
+        assert_eq!(window.utilization_percent, Some(20));
+
+        let reason = weak_window_reason(&window, "Hair Spa");
+        assert!(
+            reason.contains("Hair Spa"),
+            "reason names the subject: {reason}"
+        );
+        assert!(
+            reason.contains("Tuesday–Thursday"),
+            "reason names the days: {reason}"
+        );
+        assert!(
+            reason.contains("20%"),
+            "reason quotes utilization: {reason}"
+        );
+    }
+
+    #[test]
+    fn the_weakest_window_wraps_across_the_end_of_the_week() {
+        // Sunday, Monday and Tuesday are the quiet run.
+        let rows = week([
+            (60, 480, 1),
+            (80, 480, 2),
+            (400, 480, 10),
+            (420, 480, 11),
+            (430, 480, 11),
+            (450, 480, 12),
+            (50, 480, 1),
+        ]);
+        let window = weakest_window(&rows).expect("a weak window exists");
+        assert_eq!(
+            window.weekdays,
+            vec![7, 1, 2],
+            "the week wraps around Sunday"
+        );
+        assert_eq!(window.label, "Sunday–Tuesday");
+    }
+
+    #[test]
+    fn days_with_no_roster_are_not_reported_as_weak_demand() {
+        // Sunday and Monday are closed (nobody rostered); the real low is Wed-Fri.
+        let rows = week([
+            (0, 0, 0),      // Monday, closed
+            (400, 480, 10), // Tuesday
+            (120, 480, 3),  // Wednesday
+            (110, 480, 3),  // Thursday
+            (130, 480, 3),  // Friday
+            (450, 480, 12), // Saturday
+            (0, 0, 0),      // Sunday, closed
+        ]);
+        let window = weakest_window(&rows).expect("a weak window exists");
+        assert_eq!(
+            window.weekdays,
+            vec![3, 4, 5],
+            "a closed day is not idle capacity, so Wednesday-Friday is the weak run"
+        );
+    }
+
+    #[test]
+    fn no_window_is_claimed_without_enough_activity_to_judge() {
+        assert!(weakest_window(&week([(0, 0, 0); 7])).is_none());
+        // A partial week is never scored.
+        assert!(weakest_window(&week([(0, 0, 0); 7])[..3]).is_none());
+    }
+
+    #[test]
+    fn a_reply_states_branch_period_change_reason_action_and_confidence() {
+        let answer = CopilotAnswer::new(CopilotTool::ServiceDecline, "Hair Spa fell most.")
+            .trend_period()
+            .metric(CopilotMetric::new("Hair Spa bookings", 20, 8, |value| {
+                value.to_string()
+            }))
+            .reason("Hair Spa is weakest on Tuesday–Thursday, where utilization is 20%.")
+            .action("Target recovery at Tuesday–Thursday.", "/services")
+            .confidence("high");
+        let mut answer = answer;
+        answer.branch_name = "Andheri West".into();
+
+        let reply = answer.to_reply();
+        assert!(reply.contains("Andheri West"), "names the branch: {reply}");
+        assert!(reply.contains("Last 30 days"), "names the period: {reply}");
+        assert!(reply.contains("20 → 8 (-60%)"), "shows the change: {reply}");
+        assert!(reply.contains("Why: "), "gives a reason: {reply}");
+        assert!(reply.contains("Next step: "), "gives an action: {reply}");
+        assert!(
+            reply.contains("Confidence: high"),
+            "states confidence: {reply}"
+        );
+        // The concrete dates make the period checkable, not just descriptive.
+        assert!(
+            reply.contains(&answer.period.start),
+            "includes start date: {reply}"
+        );
+        assert!(
+            reply.contains(&answer.period.previous_start),
+            "includes the previous window: {reply}"
+        );
+    }
+
+    #[test]
+    fn a_staff_reason_prefers_the_explanation_the_numbers_support() {
+        let base = copilot_repository::StaffPerformanceTrendRow {
+            staff_id: "s1".into(),
+            staff_name: "Asha".into(),
+            job_title: "Stylist".into(),
+            current_completed: 3,
+            previous_completed: 10,
+            current_cancelled: 0,
+            previous_cancelled: 0,
+            current_no_show: 0,
+            previous_no_show: 0,
+            current_rebooked: 0,
+            previous_rebooked: 0,
+            current_rebook_eligible: 0,
+            previous_rebook_eligible: 0,
+            current_booked_minutes: 180,
+            previous_booked_minutes: 600,
+            current_scheduled_minutes: 0,
+            previous_scheduled_minutes: 0,
+            current_revenue_paise: 30_000,
+            previous_revenue_paise: 100_000,
+        };
+
+        // Cancellations that account for much of the loss are cited first.
+        let cancellations = copilot_repository::StaffPerformanceTrendRow {
+            current_cancelled: 5,
+            ..base.clone()
+        };
+        assert!(
+            staff_decline_reason(&cancellations).contains("Cancellations"),
+            "cancellations explain the drop"
+        );
+
+        // With enough settled visits, a rebooking collapse is the explanation.
+        let rebooking = copilot_repository::StaffPerformanceTrendRow {
+            previous_rebooked: 8,
+            previous_rebook_eligible: 10,
+            current_rebooked: 0,
+            current_rebook_eligible: 3,
+            ..base.clone()
+        };
+        assert!(
+            staff_decline_reason(&rebooking).contains("Rebooking fell"),
+            "rebooking explains the drop"
+        );
+
+        // Too few settled visits: the rebooking claim must not be made at all.
+        let thin_rebooking = copilot_repository::StaffPerformanceTrendRow {
+            previous_rebooked: 8,
+            previous_rebook_eligible: 10,
+            current_rebooked: 0,
+            current_rebook_eligible: 1,
+            ..base.clone()
+        };
+        assert!(
+            !staff_decline_reason(&thin_rebooking).contains("Rebooking fell"),
+            "an unmeasurable rebooking rate is never cited"
+        );
+
+        // Nothing else to point at: fall back to the visit count itself.
+        assert!(
+            staff_decline_reason(&base).contains("Completed visits fell"),
+            "the fallback explains from visit count"
+        );
+    }
+}
+
+/// Renders a full answer against real data so the Phase 2 output contract is
+/// checked as a whole, not field by field.
+#[cfg(test)]
+mod reply_shape_tests {
+    use super::*;
+    use sqlx::postgres::PgPoolOptions;
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn a_declining_service_answer_carries_every_required_element() {
+        dotenvy::dotenv().ok();
+        let Ok(url) = std::env::var("DATABASE_URL") else {
+            return;
+        };
+        let Ok(db) = PgPoolOptions::new().max_connections(2).connect(&url).await else {
+            return;
+        };
+        let tenant = format!("copilot_reply_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+
+        sqlx::query(
+            "INSERT INTO services(id,tenant_id,branch_id,name,category,duration_minutes,price_paise,active)
+             VALUES ($3||'spa',$1,$2,'Hair Spa','Hair',60,100000,TRUE)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("service seeded");
+        // Six sales in the previous window, one in the current: a clear decline.
+        sqlx::query(
+            "INSERT INTO pos_sales(id,tenant_id,branch_id,client_id,invoice_number,subtotal_paise,total_paise,paid_paise,status,finalized_at,created_at)
+             SELECT $3||'p'||g,$1,$2,$3||'c'||g,'INV-P'||g,100000,100000,100000,'paid',(CURRENT_DATE-40)::timestamptz,(CURRENT_DATE-40)::timestamptz FROM generate_series(1,6) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("previous sales");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines(id,tenant_id,branch_id,sale_id,line_type,item_id,item_name,quantity,unit_price_paise,line_total_paise)
+             SELECT $3||'pl'||g,$1,$2,$3||'p'||g,'service',$3||'spa','Hair Spa',1,100000,100000 FROM generate_series(1,6) g",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("previous lines");
+        sqlx::query(
+            "INSERT INTO pos_sales(id,tenant_id,branch_id,client_id,invoice_number,subtotal_paise,total_paise,paid_paise,status,finalized_at,created_at)
+             VALUES ($3||'cur',$1,$2,$3||'c1','INV-C',100000,100000,100000,'paid',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("current sale");
+        sqlx::query(
+            "INSERT INTO pos_sale_lines(id,tenant_id,branch_id,sale_id,line_type,item_id,item_name,quantity,unit_price_paise,line_total_paise)
+             VALUES ($3||'curl',$1,$2,$3||'cur','service',$3||'spa','Hair Spa',1,100000,100000)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("current line");
+
+        let matched = detect("Kaunsi service kam ho rahi hai?").expect("tool matches");
+        let answer = run(&db, &tenant, branch, "owner", &matched)
+            .await
+            .expect("tool runs for an owner");
+
+        assert_eq!(answer.tool, "service_decline");
+        assert!(
+            answer.headline.contains("Hair Spa"),
+            "names the service: {}",
+            answer.headline
+        );
+        assert!(!answer.branch_name.is_empty(), "states a branch");
+        assert!(!answer.period.start.is_empty(), "states concrete dates");
+        assert!(
+            !answer.period.previous_start.is_empty(),
+            "states the previous window"
+        );
+        assert!(!answer.reason.is_empty(), "gives a data-based reason");
+        assert!(!answer.recommended_action.is_empty(), "gives an action");
+        assert!(!answer.deep_link.is_empty(), "links a screen");
+
+        let bookings = answer
+            .metrics
+            .iter()
+            .find(|metric| metric.label.contains("bookings"))
+            .expect("a bookings metric");
+        assert_eq!(bookings.previous, "6");
+        assert_eq!(bookings.current, "1");
+        assert_eq!(bookings.change_percent, Some(-83));
+        assert_eq!(bookings.direction, "down");
+
+        // The rendered reply must expose every Phase 2 element to the reader.
+        let reply = answer.to_reply();
+        for expected in [
+            "Branch:",
+            "Period:",
+            "Why:",
+            "Next step:",
+            "Confidence:",
+            "6 → 1",
+        ] {
+            assert!(
+                reply.contains(expected),
+                "reply is missing {expected:?}:\n{reply}"
+            );
+        }
+
+        // A receptionist must not receive the same revenue comparison.
+        assert!(
+            matches!(
+                run(&db, &tenant, branch, "receptionist", &matched).await,
+                Err(ToolRefusal::Forbidden(_))
+            ),
+            "service revenue stays closed to non-finance roles"
+        );
+
+        for table in ["pos_sale_lines", "pos_sales", "services"] {
+            let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
+                .bind(&tenant)
+                .execute(&db)
+                .await;
+        }
     }
 }

@@ -731,11 +731,14 @@ async fn call_provider(
         "crm_evidence":copilot.map(|answer|json!({
             "tool":answer.tool,
             "headline":answer.headline,
-            "evidence":answer.evidence,
+            "branch":answer.branch_name,
             "period":answer.period,
+            "metrics":answer.metrics,
+            "reason":answer.reason,
+            "evidence":answer.evidence,
             "recommended_action":answer.recommended_action,
             "confidence":answer.confidence,
-            "instruction":"These figures come from the CRM database and are authoritative. Explain and summarise them; never invent numbers, names or dates that are not present here."
+            "instruction":"These figures come from the CRM database and are authoritative. Explain and summarise them, keeping the branch, the date period, the current-vs-previous values, the stated reason, the confidence level and the recommended action. Never invent numbers, names, dates or causes that are not present here, and never state a cause more strongly than the stated confidence supports."
         })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });
