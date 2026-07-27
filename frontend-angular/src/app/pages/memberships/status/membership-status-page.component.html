@@ -1,6 +1,6 @@
 <main class="status-page">
   <section class="status-card">
-    <header><span>AS</span><h1>Membership status</h1></header>
+    <header><span>AS</span><h1>Membership & rewards</h1></header>
     @if (loading) {
       <div class="loading">Loading membership...</div>
     }
@@ -9,6 +9,22 @@
     }
     @if (status; as item) {
       <dl><div><dt>Client</dt><dd>{{ item.clientName }}</dd></div><div><dt>Membership</dt><dd>{{ item.membershipName || '—' }}</dd></div><div><dt>Status</dt><dd><span class="pill">{{ item.status }}</span></dd></div><div><dt>Expiry</dt><dd>{{ formatDate(item.expiresAt) }}</dd></div></dl>
+      <section class="loyalty-panel">
+        <div><span>Reward points</span><strong>{{ item.rewardPointsBalance || 0 }}</strong></div>
+        <div><span>Link expiry</span><strong>{{ formatDate(item.tokenExpiresAt) }}</strong></div>
+      </section>
+      @if (item.stampCards?.length) {
+        <section class="stamp-section">
+          <h2>Stamp cards</h2>
+          @for (card of item.stampCards; track card.programCode) {
+            <article class="stamp-card">
+              <div><strong>{{ card.programName }}</strong><span>{{ card.balance }} / {{ card.stampsRequired }} stamps</span></div>
+              <div class="progress"><span [style.width.%]="progress(card)"></span></div>
+              <small><span>{{ card.remainingStamps }} remaining</span>@if (card.rewardPointsOnCompletion) { <span>· {{ card.rewardPointsOnCompletion }} points reward</span> }</small>
+            </article>
+          }
+        </section>
+      }
       @if (message) {
         <p class="success">{{ message }}</p>
       }
