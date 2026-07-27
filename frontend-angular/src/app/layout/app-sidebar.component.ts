@@ -90,6 +90,7 @@ export class AppSidebarComponent {
     ] },
     { label: 'Memberships', icon: 'bi-gem', route: '/memberships', exact: false, links: [
       { label: 'Memberships', icon: 'bi-gem', route: '/memberships', exact: false },
+      { label: 'Rewards', icon: 'bi-star', route: '/rewards', exact: false },
     ] },
     { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false, links: [
       { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false },

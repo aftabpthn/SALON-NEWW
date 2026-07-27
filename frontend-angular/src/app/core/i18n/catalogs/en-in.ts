@@ -105,6 +105,7 @@ export default {
   'nav.Purchase Bill Register': 'Purchase Bill Register',
   'nav.Purchase Orders': 'Purchase Orders',
   'nav.Reports': 'Reports',
+  'nav.Rewards': 'Rewards',
   'nav.SaaS Admin': 'SaaS Admin',
   'nav.Salary History': 'Salary History',
   'nav.Salary Rules': 'Salary Rules',
