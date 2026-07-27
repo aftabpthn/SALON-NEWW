@@ -116,6 +116,16 @@ pub fn completion_idempotency_key(sale_id: &str, program_code: &str) -> String {
     format!("stamp-completion:{sale_id}:{program_code}")
 }
 
+/// The stable key for reversing a stamp completion reward on refund.
+pub fn completion_reversal_idempotency_key(refund_id: &str, program_code: &str) -> String {
+    format!("stamp-completion-reversal:{refund_id}:{program_code}")
+}
+
+/// The stable key for the stamp-card reversal event on refund.
+pub fn stamp_reversal_idempotency_key(refund_id: &str, program_code: &str) -> String {
+    format!("stamp-reversal:{refund_id}:{program_code}")
+}
+
 /// Whether a completion event may follow this earn. Completion is allowed only
 /// when the stamp row was actually written: a replayed POS hook conflicts on
 /// the sale unique index and inserts nothing, and must not complete the card a
@@ -132,6 +142,29 @@ pub fn completion_follows_new_stamp(
 /// completed card must never drive the balance negative.
 pub fn reversed_balance(current_balance: i32, stamps: i32) -> i32 {
     current_balance.saturating_sub(stamps.max(0)).max(0)
+}
+
+/// Balance after reversing the invoice stamp. If the refunded invoice also
+/// completed the card, first restore the consumed card, then remove the
+/// refunded stamp.
+pub fn refund_reversal_balance(
+    current_balance: i32,
+    earned_stamps: i32,
+    completed_stamps: Option<i32>,
+) -> i32 {
+    match completed_stamps.filter(|stamps| *stamps > 0) {
+        Some(stamps) => current_balance
+            .saturating_add(stamps)
+            .saturating_sub(earned_stamps.max(0))
+            .max(0),
+        None => reversed_balance(current_balance, earned_stamps),
+    }
+}
+
+/// Negative points row needed to reverse a completion reward, floored by the
+/// current points balance.
+pub fn reward_reversal_delta(current_balance: i32, earned_points: i32) -> i32 {
+    earned_points.max(0).min(current_balance.max(0)).saturating_neg()
 }
 
 /// Whether a refund reverses the stamp. Phase 1B reverses only a full refund;
@@ -327,6 +360,15 @@ mod tests {
     }
 
     #[test]
+    fn completion_reward_reversal_key_is_stable() {
+        let key = completion_reversal_idempotency_key("refund-1", "coffee");
+        assert_eq!(key, "stamp-completion-reversal:refund-1:coffee");
+        assert_eq!(key, completion_reversal_idempotency_key("refund-1", "coffee"));
+        assert_ne!(key, completion_reversal_idempotency_key("refund-1", "spa"));
+        assert_ne!(key, completion_reversal_idempotency_key("refund-2", "coffee"));
+    }
+
+    #[test]
     fn one_stamp_per_invoice_replay_cannot_complete_twice() {
         let required = 5;
         // A freshly written stamp that fills the card completes it.
@@ -361,5 +403,30 @@ mod tests {
         assert_eq!(reversed_balance(0, 1), 0);
         assert_eq!(reversed_balance(1, 5), 0);
         assert_eq!(reversed_balance(2, -1), 2);
+    }
+
+    #[test]
+    fn full_refund_after_non_completed_stamp_subtracts_one_stamp() {
+        assert_eq!(refund_reversal_balance(3, 1, None), 2);
+        assert_eq!(refund_reversal_balance(0, 1, None), 0);
+    }
+
+    #[test]
+    fn full_refund_after_completed_card_restores_consumed_stamps_minus_refunded_stamp() {
+        // The refunded invoice was the fifth stamp on a 5-stamp card. Current
+        // balance is 0 after completion; refund restores the previous 4.
+        assert_eq!(refund_reversal_balance(0, 1, Some(5)), 4);
+        // If the customer earned 2 more stamps after completion, keep them.
+        assert_eq!(refund_reversal_balance(2, 1, Some(5)), 6);
+        // Defensive floor for malformed negative earned stamps.
+        assert_eq!(refund_reversal_balance(0, -1, Some(5)), 5);
+    }
+
+    #[test]
+    fn reward_reversal_floors_at_zero() {
+        assert_eq!(reward_reversal_delta(100, 40), -40);
+        assert_eq!(reward_reversal_delta(25, 40), -25);
+        assert_eq!(reward_reversal_delta(0, 40), 0);
+        assert_eq!(reward_reversal_delta(50, -10), 0);
     }
 }
