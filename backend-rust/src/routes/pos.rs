@@ -13836,7 +13836,16 @@ async fn post_membership_rewards(
             "active membership with shared loyalty is required for reward redemption",
         ));
     }
-    if !eligible && !loyalty_eligible {
+    // Owners may let any client earn points on a paid invoice. Redemption is
+    // unchanged and still requires an active membership — the check above has
+    // already rejected a non-member redemption, so reaching this point with
+    // `allow_non_members` only ever widens earning.
+    let allow_non_members = rewards_config
+        .get("allowNonMembers")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let earn_without_membership = allow_non_members && redeemed == 0;
+    if !eligible && !loyalty_eligible && !earn_without_membership {
         return Ok(());
     }
     if !enabled && redeemed > 0 {
@@ -13914,7 +13923,14 @@ async fn post_membership_rewards(
         reward_points_for_config(eligible_paise, &rewards_config)
     };
     if enabled && earned > 0 {
-        let mut target_balance = if reward_source.0 == branch_id && reward_source.1 == client_id {
+        // `source_balance` is only the earning client's running balance when
+        // this sale also redeemed from that same client. Otherwise the current
+        // balance must be read, or the ledger would record `balance_after` as
+        // just this sale's points and wipe the client's accrued total.
+        let mut target_balance = if reuses_redemption_balance(
+            redeemed,
+            reward_source.0 == branch_id && reward_source.1 == client_id,
+        ) {
             source_balance
         } else {
             sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
@@ -13927,6 +13943,14 @@ async fn post_membership_rewards(
             .map_err(|_| AppError::internal("failed to post earned rewards"))?;
     }
     Ok(())
+}
+
+/// Whether the post-redemption balance already reflects the earning client's
+/// running total. That only holds when this sale redeemed points from the same
+/// client in the same branch; with no redemption the running balance has not
+/// been loaded yet and must be read from the ledger.
+fn reuses_redemption_balance(redeemed_points: i64, source_is_earning_client: bool) -> bool {
+    redeemed_points > 0 && source_is_earning_client
 }
 
 fn reward_points_for_sale(total_paise: i64, points_per_100_rupees: i64) -> i64 {
@@ -14083,10 +14107,64 @@ fn membership_pos_policy(settings: &Value) -> MembershipPosPolicy {
 mod package_credit_value_tests {
     use super::{
         allocate_package_credit_values, membership_discount_paise, membership_pos_policy,
-        reward_discount_for_points, reward_points_for_sale,
+        reuses_redemption_balance, reward_discount_for_points, reward_points_for_config,
+        reward_points_for_sale,
     };
     use serde_json::json;
     use sqlx::PgPool;
+
+    /// Phase 1A: a paid invoice earns for any client only when the owner has
+    /// enabled it. The flag is read from the persisted rewards settings, so a
+    /// tenant that never opts in keeps the members-only behaviour.
+    fn earns_without_membership(rewards: &serde_json::Value, redeemed_points: i64) -> bool {
+        rewards
+            .get("allowNonMembers")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+            && redeemed_points == 0
+    }
+
+    #[test]
+    fn non_member_earning_is_off_until_the_owner_enables_it() {
+        // Default and legacy settings (flag absent) stay members-only.
+        assert!(!earns_without_membership(&json!({}), 0));
+        assert!(!earns_without_membership(&json!({ "allowNonMembers": false }), 0));
+
+        // Enabled: a paid invoice with no redemption earns for any client.
+        assert!(earns_without_membership(&json!({ "allowNonMembers": true }), 0));
+
+        // Redemption is untouched by the flag: a sale that spends points is
+        // never widened, so membership is still required to redeem.
+        assert!(!earns_without_membership(&json!({ "allowNonMembers": true }), 50));
+    }
+
+    #[test]
+    fn earned_points_add_to_the_existing_balance_not_reset_it() {
+        // No redemption: the running balance must be loaded from the ledger,
+        // otherwise balance_after would be written as just this sale's points.
+        assert!(!reuses_redemption_balance(0, true));
+        assert!(!reuses_redemption_balance(0, false));
+
+        // Redemption from the earning client: the post-redemption balance is
+        // already this client's running total.
+        assert!(reuses_redemption_balance(40, true));
+
+        // Redemption from a shared member in another branch: the earning
+        // client's own balance must still be loaded.
+        assert!(!reuses_redemption_balance(40, false));
+    }
+
+    #[test]
+    fn non_member_earning_uses_the_configured_ratio() {
+        // Earning maths is shared with members — enabling non-members does not
+        // introduce a second calculation path.
+        let rewards = json!({ "rewardValuePaise": 10_000, "rewardPoints": 5 });
+        assert_eq!(reward_points_for_config(10_000, &rewards), 5);
+        // Whole blocks only: 2.5 blocks earns 2 blocks' worth.
+        assert_eq!(reward_points_for_config(25_000, &rewards), 10);
+        assert_eq!(reward_points_for_config(9_999, &rewards), 0);
+        assert_eq!(reward_points_for_config(0, &rewards), 0);
+    }
 
     #[test]
     fn allocates_the_exact_sold_value_across_immutable_credits() {

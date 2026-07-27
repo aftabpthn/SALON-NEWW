@@ -1383,7 +1383,7 @@ fn default_membership_settings() -> Value {
         "notificationsRisk":{"renewalReminder":true,"lowCreditReminder":true,"ownerAlertForHighBalance":true,"highBalanceThreshold":1000000},
         "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
-        "rewards":{"enableForProducts":false,"enableForPackages":false,"enableForMemberships":false,"enableForServices":false,"rewardValuePaise":10000,"rewardPoints":5,"minimumRedemptionPoints":100,"bonusRules":[{"minBillPaise":0,"rewardType":"percentage","rewardValue":0}]},
+        "rewards":{"allowNonMembers":false,"enableForProducts":false,"enableForPackages":false,"enableForMemberships":false,"enableForServices":false,"rewardValuePaise":10000,"rewardPoints":5,"minimumRedemptionPoints":100,"bonusRules":[{"minBillPaise":0,"rewardType":"percentage","rewardValue":0}]},
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })
 }
@@ -1561,6 +1561,44 @@ mod tests {
     use chrono::{Duration, Utc};
     use serde_json::json;
     use sqlx::PgPool;
+
+    /// Phase 1A: `rewards.allowNonMembers` is part of the persisted settings
+    /// contract, defaults to false for backward compatibility, and survives a
+    /// settings save. `merge_known_settings` only keeps keys present in the
+    /// defaults, so a missing default would silently discard the owner's
+    /// choice on every save.
+    #[test]
+    fn allow_non_members_defaults_off_and_round_trips_through_settings() {
+        let defaults = default_membership_settings();
+        assert_eq!(
+            defaults.pointer("/rewards/allowNonMembers"),
+            Some(&json!(false)),
+            "non-member earning must default to off"
+        );
+
+        // An owner enabling the toggle is persisted.
+        let enabled = merge_known_settings(&defaults, &json!({ "rewards": { "allowNonMembers": true } }));
+        assert_eq!(enabled.pointer("/rewards/allowNonMembers"), Some(&json!(true)));
+
+        // Existing reward configuration is untouched by the new key.
+        assert_eq!(
+            enabled.pointer("/rewards/minimumRedemptionPoints"),
+            defaults.pointer("/rewards/minimumRedemptionPoints")
+        );
+        assert_eq!(
+            enabled.pointer("/redemptionRules"),
+            defaults.pointer("/redemptionRules"),
+            "redemption rules must be unchanged by Phase 1A"
+        );
+
+        // A tenant that never sends the key keeps the members-only default.
+        let untouched = merge_known_settings(&defaults, &json!({ "rewards": { "enableForServices": true } }));
+        assert_eq!(untouched.pointer("/rewards/allowNonMembers"), Some(&json!(false)));
+
+        // Turning it back off is persisted too.
+        let disabled = merge_known_settings(&enabled, &json!({ "rewards": { "allowNonMembers": false } }));
+        assert_eq!(disabled.pointer("/rewards/allowNonMembers"), Some(&json!(false)));
+    }
 
     #[test]
     fn proration_returns_charge_or_credit_for_remaining_term() {
