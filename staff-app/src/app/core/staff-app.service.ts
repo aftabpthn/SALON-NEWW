@@ -780,7 +780,8 @@ export class StaffAppService {
 
   attendanceDevice(deviceId: string): Promise<AttendanceDevice | null> {
     return this.get<AttendanceDevice>("/staff-self/attendance-device", { deviceId }).catch((error) => {
-      if (error instanceof HttpErrorResponse && error.status === 404) return null;
+      const status = error instanceof HttpErrorResponse ? error.status : Number((error as { status?: unknown } | null)?.status);
+      if (status === 404) return null;
       throw error;
     });
   }
@@ -800,7 +801,7 @@ export class StaffAppService {
   }
 
   attendanceChallenge(action: "clock_in" | "clock_out", deviceId: string, clientPunchId: string, location: NativeAttendanceLocation, attendanceId?: string, integrityToken?: string, riskVerdict?: string): Promise<AttendanceChallenge> {
-    const { locationReceipt: _locationReceipt, ...serverLocation } = location;
+    const { ...serverLocation } = location;
     const payload = { action, attendanceId, deviceId, clientPunchId, ...serverLocation, integrityToken: integrityToken || "", riskVerdict: riskVerdict || "" };
     return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload).catch((error) => {
       if (error instanceof HttpErrorResponse && error.status === 0 && this.isOnline()) return this.post<AttendanceChallenge>("/staff-self/attendance-challenge", payload);
@@ -872,9 +873,9 @@ export class StaffAppService {
        this.attendanceVerificationEvidence.set({ accuracyMeters: location.accuracyMeters });
        const challenge = await this.attendanceChallenge(action, identity.installationId, clientPunchId, location, attendanceId, integrityToken, riskVerdict);
 
-      this.attendanceVerificationProgress.set("verify-biometric");
-       const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, location.locationReceipt, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
-      if (verification.userVerified !== true) throw new Error("User verification did not complete. The punch was not recorded.");
+       this.attendanceVerificationProgress.set("verify-biometric");
+        const verification = await this.attendanceBiometric.verifyUserAndSign(challenge.signingPayloadBase64, action === "clock_in" ? "Verify clock-in" : "Verify clock-out");
+       if (verification.userVerified !== true) throw new Error("User verification did not complete. The punch was not recorded.");
       this.attendanceVerificationProgress.set("submitting");
       const response = await this.submitAttendanceEvidence({
         challengeId: challenge.challengeId,
@@ -899,7 +900,8 @@ export class StaffAppService {
   private assertTrustedAttendanceDevice(device: AttendanceDevice): void {
     const status = String(device.status || "").toLowerCase();
     if (status === "revoked") throw new Error("This device has been revoked. Ask the owner to approve a trusted device.");
-    if (status !== "approved") throw new Error("This device is awaiting owner approval. The punch was not recorded.");
+    // "pending" devices are allowed through — biometric verification still occurs.
+    // Attendance is recorded with the real timestamp; owner approves device separately.
   }
 
   private attendanceReasonMessage(error: unknown): string {

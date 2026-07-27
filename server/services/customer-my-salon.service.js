@@ -1,0 +1,493 @@
+/**
+ * Phase 1 — My Salon Mode
+ *
+ * Aggregates all salon-specific data for the customer's primary salon
+ * into a single API call. This eliminates the need for the frontend
+ * to make 6-8 separate calls on home page load.
+ *
+ * Endpoint: GET /customer/my-salon/dashboard
+ *
+ * Returns:
+ *  - salon profile (name, address, phone, hours, slug, cover image)
+ *  - customer's wallet balance + recent transactions
+ *  - customer's loyalty points + tier
+ *  - active membership at this salon
+ *  - active packages at this salon
+ *  - recent bookings at this salon (last 5)
+ *  - relationship info (visit count, type, last visit)
+ *  - salon services (top 10 active)
+ *  - salon staff (active, public-bookable)
+ *  - active offers
+ */
+import { db, tableHasColumn, columnsFor } from "../db.js";
+import { unauthorized } from "../utils/app-error.js";
+import {
+  getPrimarySalon,
+  getAllRelationships,
+} from "./customer-salon-relationship.service.js";
+
+const DEFAULT_TIMEZONE = "Asia/Kolkata";
+const DEFAULT_OPEN = "10:00";
+const DEFAULT_CLOSE = "20:00";
+
+function assertCustomer(access = {}) {
+  if (access.role !== "customer" || !access.userId) {
+    throw unauthorized("Customer session is required");
+  }
+}
+
+function json(value, fallback) {
+  if (Array.isArray(value) || (value && typeof value === "object")) return value;
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function paiseFromRupees(value) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+}
+
+function hasColumn(table, column) {
+  return columnsFor(table).includes(column);
+}
+
+function tableExists(table) {
+  return Boolean(
+    db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = @table"
+      )
+      .get({ table })
+  );
+}
+
+function slugify(value, fallback = "business") {
+  const slug = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
+// ─── Salon Profile ────────────────────────────────────────────────
+
+function resolveSalonProfile(tenantId, branchId) {
+  const row = db
+    .prepare(
+      `
+    SELECT
+      t.id AS tenantId,
+      t.name AS tenantName,
+      t.slug AS tenantSlug,
+      b.id AS branchId,
+      b.name AS branchName,
+      b.city,
+      b.address,
+      b.phone,
+      b.timezone,
+      b.slug AS branchSlug,
+      b.themeConfig,
+      b.seoConfig,
+      b.onlineBookingEnabled,
+      b.createdAt
+    FROM branches b
+    JOIN tenants t ON t.id = b.tenantId
+    WHERE t.id = @tenantId AND b.id = @branchId
+    LIMIT 1
+  `
+    )
+    .get({ tenantId, branchId });
+
+  if (!row) return null;
+
+  const timezone = row.timezone || DEFAULT_TIMEZONE;
+  const hours = json(row.themeConfig?.businessHours, {});
+
+  return {
+    tenantId: row.tenantId,
+    branchId: row.branchId,
+    name: row.branchName || row.tenantName || "Salon",
+    businessName: row.tenantName || row.branchName || "Salon",
+    slug: slugify(`${row.branchName || row.branchId}-${row.branchId}`),
+    address: row.address || "",
+    city: row.city || "",
+    phone: row.phone || "",
+    timezone,
+    onlineBookingEnabled: Boolean(row.onlineBookingEnabled ?? true),
+    coverImage: row.themeConfig?.coverImage || "",
+    logoImage: row.themeConfig?.logoImage || "",
+    galleryImages: json(row.themeConfig?.galleryImages, []),
+    isOpen: isOpenNow(hours, timezone),
+    hoursLabel: hoursLabel(hours, timezone),
+  };
+}
+
+// ─── Business hours helpers ───────────────────────────────────────
+
+function timeToMinutes(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function displayTime(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function formatTime(value) {
+  const minutes = timeToMinutes(value);
+  if (minutes === null) return "";
+  return displayTime(minutes);
+}
+
+function todayKey(timezone = DEFAULT_TIMEZONE) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    timeZone: timezone,
+  })
+    .format(new Date())
+    .toLowerCase();
+}
+
+function currentMinutes(timezone = DEFAULT_TIMEZONE) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZone: timezone,
+  }).formatToParts(new Date());
+  const hour = Number(
+    parts.find((part) => part.type === "hour")?.value || 0
+  );
+  const minute = Number(
+    parts.find((part) => part.type === "minute")?.value || 0
+  );
+  return hour * 60 + minute;
+}
+
+function currentHours(hours = {}, timezone = DEFAULT_TIMEZONE) {
+  const key = todayKey(timezone);
+  return hours?.[key] || null;
+}
+
+function isOpenNow(hours = {}, timezone = DEFAULT_TIMEZONE) {
+  if (!Object.keys(hours || {}).length) return true;
+  const today = currentHours(hours, timezone);
+  if (!today || today.open === false) return false;
+  const open = timeToMinutes(today.opensAt || today.openingTime || DEFAULT_OPEN);
+  const close = timeToMinutes(today.closesAt || today.closingTime || DEFAULT_CLOSE);
+  const now = currentMinutes(timezone);
+  if (open === null || close === null) return true;
+  return now >= open && now < close;
+}
+
+function hoursLabel(hours = {}, timezone = DEFAULT_TIMEZONE) {
+  if (!Object.keys(hours || {}).length) return "Online booking available";
+  const today = currentHours(hours, timezone);
+  if (!today || today.open === false) return "Closed today";
+  const opensAt = today.opensAt || today.openingTime || DEFAULT_OPEN;
+  const closesAt = today.closesAt || today.closingTime || DEFAULT_CLOSE;
+  return `Today ${formatTime(opensAt)} - ${formatTime(closesAt)}`;
+}
+
+// ─── Wallet ───────────────────────────────────────────────────────
+
+function walletForClient(tenantId, clientId) {
+  const row = db
+    .prepare(
+      `SELECT walletBalance FROM clients WHERE tenantId = @tenantId AND id = @clientId LIMIT 1`
+    )
+    .get({ tenantId, clientId });
+
+  const transactions = tableExists("wallet_transactions")
+    ? db
+        .prepare(
+          `SELECT * FROM wallet_transactions WHERE tenantId = @tenantId AND clientId = @clientId ORDER BY datetime(createdAt) DESC LIMIT 10`
+        )
+        .all({ tenantId, clientId })
+    : [];
+
+  return {
+    balancePaise: paiseFromRupees(row?.walletBalance || 0),
+    transactions: transactions.map((item) => ({
+      id: item.id,
+      type: item.type,
+      amountPaise: paiseFromRupees(item.amount),
+      balanceAfterPaise: paiseFromRupees(item.balanceAfter),
+      notes: item.notes || "",
+      createdAt: item.createdAt || "",
+    })),
+  };
+}
+
+// ─── Loyalty ──────────────────────────────────────────────────────
+
+function loyaltyForClient(tenantId, clientId) {
+  const row = db
+    .prepare(
+      `SELECT loyaltyPoints FROM clients WHERE tenantId = @tenantId AND id = @clientId LIMIT 1`
+    )
+    .get({ tenantId, clientId });
+
+  const points = Number(row?.loyaltyPoints || 0);
+  let tier = "Classic";
+  if (points >= 1000) tier = "Gold";
+  else if (points >= 500) tier = "Silver";
+
+  return { points, tier };
+}
+
+// ─── Membership ───────────────────────────────────────────────────
+
+function membershipForClient(clientId) {
+  if (!tableExists("memberships")) return null;
+  const row = db
+    .prepare(
+      `SELECT * FROM memberships WHERE clientId = @clientId AND status = 'active' ORDER BY datetime(createdAt) DESC LIMIT 1`
+    )
+    .get({ clientId });
+  if (!row) return null;
+  return {
+    id: row.id,
+    planName: row.planName,
+    pricePaise: paiseFromRupees(row.price),
+    planCredits: Number(row.planCredits || 0),
+    creditsRemaining: Number(row.creditsRemaining || 0),
+    validityDate: row.validityDate || "",
+    status: row.status || "active",
+    createdAt: row.createdAt || "",
+  };
+}
+
+// ─── Packages ─────────────────────────────────────────────────────
+
+function packagesForTenant(tenantId) {
+  if (!tableExists("packages")) return [];
+  return db
+    .prepare(
+      `SELECT * FROM packages WHERE tenantId = @tenantId AND status = 'active' ORDER BY datetime(createdAt) DESC LIMIT 5`
+    )
+    .all({ tenantId })
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      pricePaise: paiseFromRupees(item.price),
+      status: item.status || "active",
+      createdAt: item.createdAt || "",
+    }));
+}
+
+// ─── Recent Bookings ──────────────────────────────────────────────
+
+function recentBookings(access, tenantId) {
+  const whereTenant = tableHasColumn("appointments", "tenantId")
+    ? "tenantId = @tenantId AND"
+    : "";
+  const rows = db
+    .prepare(
+      `SELECT * FROM appointments WHERE ${whereTenant} clientId = @clientId ORDER BY datetime(startAt) DESC LIMIT 5`
+    )
+    .all({ tenantId, clientId: access.userId });
+
+  return rows.map((row) => ({
+    id: row.id,
+    serviceName: row.serviceName || "",
+    staffName: row.staffName || "",
+    startAt: row.startAt || "",
+    status: row.status || "",
+    totalPaise: paiseFromRupees(row.totalAmount || row.total || 0),
+  }));
+}
+
+// ─── Services ─────────────────────────────────────────────────────
+
+function salonServices(tenantId, branchId) {
+  const clauses = ["s.status = 'active'"];
+  const params = { tenantId, branchId };
+  if (hasColumn("services", "tenantId")) clauses.push("s.tenantId = @tenantId");
+  if (hasColumn("services", "branchId")) {
+    clauses.push("(s.branchId = @branchId OR COALESCE(s.branchId, '') = '')");
+  }
+  if (hasColumn("services", "onlineBookable")) {
+    clauses.push("COALESCE(s.onlineBookable, 1) = 1");
+  }
+  return db
+    .prepare(
+      `SELECT s.*
+       FROM services s
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY s.category, s.name
+       LIMIT 10`
+    )
+    .all(params)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category || "",
+      durationMinutes: Number(s.durationMinutes || s.duration || 0),
+      pricePaise: paiseFromRupees(s.price),
+      description: s.description || "",
+    }));
+}
+
+// ─── Staff ────────────────────────────────────────────────────────
+
+function salonStaff(tenantId, branchId) {
+  const clauses = ["s.status = 'active'"];
+  const params = { tenantId, branchId };
+  if (hasColumn("staff", "tenantId")) clauses.push("s.tenantId = @tenantId");
+  if (hasColumn("staff", "branchId")) clauses.push("s.branchId = @branchId");
+
+  return db
+    .prepare(
+      `SELECT s.*
+       FROM staff s
+       WHERE ${clauses.join(" AND ")}
+       ORDER BY s.name
+       LIMIT 10`
+    )
+    .all(params)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      role: s.role || "",
+      specialty: s.specialty || "",
+      avatar: s.avatar || s.photo || "",
+    }));
+}
+
+// ─── Active Offers ────────────────────────────────────────────────
+
+function activeOffers(tenantId, branchId) {
+  if (!tableExists("happy_hours_campaigns")) return [];
+  const rows = db
+    .prepare(
+      `SELECT id, title, discountType, discountValue, startDate, endDate, status
+       FROM happy_hours_campaigns
+       WHERE tenantId = @tenantId
+         AND status = 'active'
+         AND (branchId = @branchId OR COALESCE(branchId, '') = '')
+         AND (endDate = '' OR datetime(endDate) >= datetime('now'))
+       ORDER BY datetime(createdAt) DESC
+       LIMIT 5`
+    )
+    .all({ tenantId, branchId });
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title || "",
+    discountType: r.discountType || "",
+    discountValue: Number(r.discountValue || 0),
+    endDate: r.endDate || "",
+  }));
+}
+
+// ─── Dashboard (main) ─────────────────────────────────────────────
+
+export function getMySalonDashboard(access) {
+  assertCustomer(access);
+
+  const primary = getPrimarySalon(access.userId);
+  if (!primary) {
+    return {
+      hasPrimarySalon: false,
+      salon: null,
+      wallet: null,
+      loyalty: null,
+      membership: null,
+      packages: [],
+      recentBookings: [],
+      services: [],
+      staff: [],
+      offers: [],
+      relationship: null,
+    };
+  }
+
+  const { tenantId, branchId } = primary;
+  const salon = resolveSalonProfile(tenantId, branchId);
+
+  // Relationship
+  const allRels = getAllRelationships(access.userId);
+  const relationship = allRels.find(
+    (r) => r.tenantId === tenantId && r.branchId === branchId
+  ) || null;
+
+  // Client record for this tenant
+  const clientRow = db
+    .prepare(
+      `SELECT * FROM clients WHERE tenantId = @tenantId AND id = @clientId LIMIT 1`
+    )
+    .get({ tenantId, clientId: access.userId });
+
+  const wallet = clientRow
+    ? walletForClient(tenantId, access.userId)
+    : { balancePaise: 0, transactions: [] };
+  const loyalty = clientRow
+    ? loyaltyForClient(tenantId, access.userId)
+    : { points: 0, tier: "Classic" };
+  const membership = clientRow
+    ? membershipForClient(access.userId)
+    : null;
+  const packages = packagesForTenant(tenantId);
+  const bookings = recentBookings(access, tenantId);
+  const services = salonServices(tenantId, branchId);
+  const staff = salonStaff(tenantId, branchId);
+  const offers = activeOffers(tenantId, branchId);
+
+  return {
+    hasPrimarySalon: true,
+    salon,
+    wallet,
+    loyalty,
+    membership,
+    packages,
+    recentBookings: bookings,
+    services,
+    staff,
+    offers,
+    relationship: relationship
+      ? {
+          visitCount: relationship.visitCount,
+          type: relationship.relationshipType || "guest",
+          lastVisitAt: relationship.lastVisitAt || "",
+        }
+      : null,
+  };
+}
+
+// ─── Services list (for lazy load / refresh) ──────────────────────
+
+export function getMySalonServices(access) {
+  assertCustomer(access);
+  const primary = getPrimarySalon(access.userId);
+  if (!primary) return { services: [] };
+  return { services: salonServices(primary.tenantId, primary.branchId) };
+}
+
+// ─── Staff list (for lazy load / refresh) ─────────────────────────
+
+export function getMySalonStaff(access) {
+  assertCustomer(access);
+  const primary = getPrimarySalon(access.userId);
+  if (!primary) return { staff: [] };
+  return { staff: salonStaff(primary.tenantId, primary.branchId) };
+}
+
+// ─── Offers list (for lazy load / refresh) ────────────────────────
+
+export function getMySalonOffers(access) {
+  assertCustomer(access);
+  const primary = getPrimarySalon(access.userId);
+  if (!primary) return { offers: [] };
+  return { offers: activeOffers(primary.tenantId, primary.branchId) };
+}

@@ -131,7 +131,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
     if (this.staff.attendanceDeviceStatus()) values.push(`Device ${this.staff.attendanceDeviceStatus()}`);
     return values.join(" · ");
   });
-  readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
+  readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || this.attendance().find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   readonly todayShift = computed(() => this.today()?.schedules[0] || null);
   private readonly attendanceUpdated = () => void this.load();
@@ -194,8 +194,17 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
         this.message.set(`Offline: ${action.replace(/-/g, " ")} queued for sync (${result.queueId}).`);
         return;
       }
+      const rec = (result && typeof result === "object" && "data" in result ? (result as { data: StaffAttendance }).data : result) as StaffAttendance;
+      if (rec && typeof rec === "object" && rec.id) {
+        const curToday = this.today();
+        if (curToday) {
+          const list = [rec, ...curToday.attendance.filter((a) => a.id !== rec.id)];
+          this.today.set({ ...curToday, attendance: list });
+        }
+      }
       this.message.set(completedMessage);
       await this.load();
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     } catch {
       this.localError.set(this.staff.error() || `Unable to ${action.replace(/-/g, " ")}.`);
     } finally {

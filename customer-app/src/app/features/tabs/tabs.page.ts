@@ -2,7 +2,7 @@ import { Component, HostListener, signal } from "@angular/core";
 import { Router, RouterLink, RouterLinkActive } from "@angular/router";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronForwardOutline, closeOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import { calendarOutline, chevronForwardOutline, closeOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
 
 @Component({
@@ -73,18 +73,18 @@ import { AuthService } from "../../core/auth.service";
           </article>
         }
         <div class="menu-highlight-grid">
-          <a routerLink="/tabs/search" [queryParams]="{ nearMe: true }" (click)="closeMenu()"><ion-icon name="location-outline"></ion-icon><span>Near me</span></a>
-          <a routerLink="/tabs/offers" (click)="closeMenu()"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span></a>
-          <a routerLink="/tabs/rewards" (click)="closeMenu()"><ion-icon name="gift-outline"></ion-icon><span>Rewards</span></a>
-          <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="settings-outline"></ion-icon><span>Profile</span></a>
+          <a routerLink="/tabs/home" (click)="closeMenu()"><ion-icon name="home-outline"></ion-icon><span>My Salon</span></a>
+          <a routerLink="/tabs/search" (click)="closeMenu()"><ion-icon name="compass-outline"></ion-icon><span>Explore</span></a>
+          <a routerLink="/tabs/bookings" (click)="closeMenu()"><ion-icon name="calendar-outline"></ion-icon><span>Bookings</span></a>
+          <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="person-outline"></ion-icon><span>Profile</span></a>
         </div>
         <div class="menu-insight-strip">
           <article><span>Mode</span><strong>{{ auth.isAuthenticated() ? 'Member' : 'Guest' }}</strong></article>
-          <article><span>Explore</span><strong>Salons</strong></article>
-          <article><span>Fast path</span><strong>Bookings</strong></article>
+          <article><span>Tab</span><strong>My Salon</strong></article>
+          <article><span>Quick</span><strong>Explore</strong></article>
         </div>
         <nav class="mobile-menu-list">
-          <a routerLink="/tabs/home" (click)="closeMenu()"><span>Home</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a routerLink="/tabs/home" (click)="closeMenu()"><span>My Salon</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/search" (click)="closeMenu()"><span>Discover salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/consultation" (click)="closeMenu()"><span>Live consultation</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/bookings" (click)="closeMenu()"><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
@@ -100,12 +100,11 @@ import { AuthService } from "../../core/auth.service";
         </span>
       </a>
       <div class="nav-links">
-        <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
-        <a routerLink="/tabs/search" routerLinkActive="active">Discover</a>
+        <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">My Salon</a>
+        <a routerLink="/tabs/search" routerLinkActive="active">Explore</a>
         <a routerLink="/tabs/consultation" routerLinkActive="active">Consult</a>
         <a routerLink="/tabs/offers" routerLinkActive="active">Offers</a>
         <a routerLink="/tabs/bookings" routerLinkActive="active">Bookings</a>
-        <a routerLink="/tabs/rewards" routerLinkActive="active">Hub</a>
         <a routerLink="/tabs/profile" routerLinkActive="active">Profile</a>
       </div>
       <div class="nav-actions" aria-label="Customer quick actions">
@@ -137,11 +136,11 @@ import { AuthService } from "../../core/auth.service";
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="home" href="/tabs/home">
           <ion-icon name="home-outline"></ion-icon>
-          <ion-label>Home</ion-label>
+          <ion-label>My Salon</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="search" href="/tabs/search">
-          <ion-icon name="search-outline"></ion-icon>
-          <ion-label>Book</ion-label>
+          <ion-icon name="compass-outline"></ion-icon>
+          <ion-label>Explore</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="bookings" href="/tabs/bookings">
           <ion-icon name="calendar-outline"></ion-icon>

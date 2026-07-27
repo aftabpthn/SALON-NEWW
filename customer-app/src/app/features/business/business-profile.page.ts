@@ -6,15 +6,21 @@ import {
   callOutline,
   cardOutline,
   checkmarkCircleOutline,
+  clipboardOutline,
   heart,
   heartOutline,
   locationOutline,
   navigateOutline,
   peopleOutline,
+  pricetagOutline,
+  ribbonOutline,
   shareOutline,
   sparklesOutline,
-  timeOutline
+  starOutline,
+  timeOutline,
+  walletOutline
 } from "ionicons/icons";
+import { PublicOfferItem } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
@@ -106,6 +112,41 @@ import { MarketplaceService } from "../../core/marketplace.service";
               </div>
             </section>
 
+            @if (activeOffers().length > 0) {
+            <section class="offers-section">
+              <div class="section-heading">
+                <div>
+                  <h2 class="section-title">Offers & promotions</h2>
+                </div>
+              </div>
+              <div class="offers-stack">
+                @for (offer of activeOffers(); track offer.id) {
+                  <article class="offer-card premium-card" [class.coupon-offer]="offer.type === 'coupon'" [class.rule-offer]="offer.type === 'discount_rule'" [class.promo-offer]="offer.type === 'calendar_promotion'">
+                    <div class="offer-icon">
+                      @if (offer.type === 'coupon') {
+                        <ion-icon name="pricetag-outline"></ion-icon>
+                      } @else if (offer.type === 'discount_rule') {
+                        <ion-icon name="clipboard-outline"></ion-icon>
+                      } @else {
+                        <ion-icon name="time-outline"></ion-icon>
+                      }
+                    </div>
+                    <div class="offer-body">
+                      <strong>{{ offer.title }}</strong>
+                      <span class="offer-summary">{{ offerSummary(offer) }}</span>
+                      @if (offer.type === 'coupon') {
+                        <code class="coupon-code">{{ offer.code }}</code>
+                      }
+                      @if (offerValidity(offer); as validity) {
+                        <small class="offer-validity">Valid {{ validity.from }} – {{ validity.to }}</small>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            </section>
+            }
+
             <section class="staff-section">
               <div class="section-heading">
                 <div>
@@ -147,6 +188,58 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 }
               </div>
             </section>
+
+            @if (isAuthenticated()) {
+            <section class="loyalty-section">
+              <div class="section-heading">
+                <div>
+                  <h2 class="section-title">Loyalty & rewards</h2>
+                </div>
+              </div>
+              <div class="loyalty-grid">
+                @if (isPrimarySalon()) {
+                  <article class="loyalty-card primary-card">
+                    <ion-icon name="star-outline"></ion-icon>
+                    <div>
+                      <strong>Your primary salon</strong>
+                      <span>Quick access to bookings, wallet, and rewards for this salon</span>
+                    </div>
+                    <ion-button size="small" fill="outline" class="secondary-button" (click)="removeAsPrimary()">Change</ion-button>
+                  </article>
+                } @else {
+                  <article class="loyalty-card">
+                    <ion-icon name="star-outline"></ion-icon>
+                    <div>
+                      <strong>Set as your primary salon</strong>
+                      <span>Get quick access to booking, wallet, and loyalty rewards</span>
+                    </div>
+                    <ion-button size="small" class="primary-gradient" (click)="setAsPrimary()">Set primary</ion-button>
+                  </article>
+                }
+                <a class="loyalty-card" routerLink="/tabs/wallet">
+                  <ion-icon name="wallet-outline"></ion-icon>
+                  <div>
+                    <strong>Wallet</strong>
+                    <span>View credits, balance, and payment history for this salon</span>
+                  </div>
+                </a>
+                <a class="loyalty-card" routerLink="/tabs/rewards">
+                  <ion-icon name="ribbon-outline"></ion-icon>
+                  <div>
+                    <strong>Rewards</strong>
+                    <span>Loyalty points, referrals, and redemption options</span>
+                  </div>
+                </a>
+                <a class="loyalty-card" routerLink="/tabs/memberships">
+                  <ion-icon name="card-outline"></ion-icon>
+                  <div>
+                    <strong>Memberships</strong>
+                    <span>Exclusive plans and benefits for regular customers</span>
+                  </div>
+                </a>
+              </div>
+            </section>
+            }
 
             <section class="info-grid">
               <article class="premium-card info-card">
@@ -576,6 +669,179 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #EF4444;
     }
 
+    .offers-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .offer-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+    }
+
+    .offer-icon {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      background: var(--surface-soft);
+    }
+
+    .offer-icon ion-icon {
+      font-size: 1.15rem;
+      color: var(--primary);
+    }
+
+    .coupon-offer .offer-icon {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(139, 92, 246, 0.08));
+    }
+
+    .coupon-offer .offer-icon ion-icon {
+      color: #EC4899;
+    }
+
+    .promo-offer .offer-icon {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.08));
+    }
+
+    .promo-offer .offer-icon ion-icon {
+      color: #F59E0B;
+    }
+
+    .offer-body {
+      display: grid;
+      gap: 3px;
+    }
+
+    .offer-body strong {
+      font-size: 0.92rem;
+      letter-spacing: -0.02em;
+    }
+
+    .offer-summary {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.4;
+    }
+
+    .coupon-code {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: var(--primary-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      width: fit-content;
+    }
+
+    .offer-validity {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+
+    .loyalty-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .loyalty-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      padding: 18px;
+      border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .loyalty-card:hover,
+    .loyalty-card:focus-visible {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+
+    .loyalty-card.primary-card {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(236, 72, 153, 0.06));
+      border-color: rgba(139, 92, 246, 0.25);
+    }
+
+    .loyalty-card ion-icon {
+      font-size: 1.5rem;
+      color: var(--primary);
+    }
+
+    .loyalty-card div {
+      min-width: 0;
+    }
+
+    .loyalty-card strong {
+      display: block;
+      margin: 0;
+      font-size: 0.95rem;
+      letter-spacing: -0.02em;
+    }
+
+    .loyalty-card span {
+      display: block;
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+
+    .loyalty-card ion-button {
+      --padding-start: 12px;
+      --padding-end: 12px;
+    }
+
+    .loyalty-section {
+      margin-top: 4px;
+    }
+
+    @media (max-width: 599px) {
+      .loyalty-grid {
+        gap: 8px;
+      }
+
+      .loyalty-card {
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 10px;
+        padding: 14px;
+        border-radius: 16px;
+      }
+
+      .loyalty-card ion-button:last-child {
+        grid-column: 1 / -1;
+        justify-self: start;
+      }
+
+      .offer-card {
+        gap: 10px;
+        padding: 12px;
+        border-radius: 16px;
+      }
+
+      .offer-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 11px;
+      }
+    }
+
     @media (max-width: 599px) {
       .profile-page {
         padding-bottom: calc(82px + env(safe-area-inset-bottom));
@@ -734,20 +1000,33 @@ import { MarketplaceService } from "../../core/marketplace.service";
 export class BusinessProfilePage implements OnInit {
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
+  readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
+  readonly isPrimarySalon = computed(() => {
+    const biz = this.business();
+    const primary = this.marketplace.primarySalon();
+    if (!biz || !primary) return false;
+    return primary.branchId === biz.branchId || primary.businessId === biz.id;
+  });
+  readonly activeOffers = computed(() => this.marketplace.salonOffers()?.offers ?? []);
 
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
     addIcons({
       callOutline,
       cardOutline,
       checkmarkCircleOutline,
+      clipboardOutline,
       heart,
       heartOutline,
       locationOutline,
       navigateOutline,
       peopleOutline,
+      pricetagOutline,
+      ribbonOutline,
       shareOutline,
       sparklesOutline,
-      timeOutline
+      starOutline,
+      timeOutline,
+      walletOutline
     });
   }
 
@@ -758,7 +1037,16 @@ export class BusinessProfilePage implements OnInit {
 
   reload() {
     const slug = this.slug();
-    if (slug) void this.marketplace.loadBusiness(slug).catch(() => undefined);
+    if (slug) {
+      void this.marketplace.loadBusiness(slug).then(() => this.loadOffers()).catch(() => undefined);
+    }
+  }
+
+  private loadOffers() {
+    const biz = this.business();
+    if (biz?.tenantId && biz?.branchId) {
+      void this.marketplace.loadSalonOffers(biz.tenantId, biz.branchId).catch(() => undefined);
+    }
   }
 
   money(pricePaise: number): string {
@@ -790,5 +1078,30 @@ export class BusinessProfilePage implements OnInit {
       return;
     }
     void this.marketplace.toggleFavorite(business.id).catch(() => undefined);
+  }
+
+  setAsPrimary() {
+    const biz = this.business();
+    if (!biz || !biz.tenantId || !biz.branchId) return;
+    if (!this.isAuthenticated()) {
+      void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
+      return;
+    }
+    void this.marketplace.setPrimarySalon(biz.tenantId, biz.branchId, biz.id, biz.businessName).catch(() => undefined);
+  }
+
+  removeAsPrimary() {
+    void this.marketplace.removePrimarySalon().catch(() => undefined);
+  }
+
+  offerSummary(offer: PublicOfferItem): string {
+    if ("discountSummary" in offer) return offer.discountSummary || offer.description;
+    return offer.description;
+  }
+
+  offerValidity(offer: PublicOfferItem): { from: string; to: string } | null {
+    if ("validFrom" in offer) return { from: offer.validFrom, to: offer.validTo };
+    if ("startDate" in offer) return { from: offer.startDate, to: offer.endDate };
+    return null;
   }
 }

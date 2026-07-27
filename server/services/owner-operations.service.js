@@ -18,13 +18,19 @@ function ownerContext(access, requestedBranch = "all") {
   if (lower(access?.role) !== "owner") throw forbidden("Owner role is required");
   const owner = db.prepare(`SELECT id, role, status, branchIds FROM tenant_users WHERE tenantId = @tenantId AND id = @userId`).get({ tenantId: text(access?.tenantId), userId: text(access?.userId) });
   if (!owner || lower(owner.role) !== "owner" || lower(owner.status) !== "active") throw forbidden("Active owner access is required");
-  const assigned = [...new Set(jsonArray(owner.branchIds).map(text).filter(Boolean))];
+  let assigned = [...new Set(jsonArray(owner.branchIds).map(text).filter(Boolean))];
+  if (!assigned.length) {
+    assigned = db.prepare(`SELECT id FROM branches WHERE tenantId = @tenantId AND status = 'active'`).all({ tenantId: text(access.tenantId) }).map((r) => r.id);
+  }
+  if (!assigned.length) {
+    assigned = db.prepare(`SELECT id FROM branches WHERE tenantId = @tenantId`).all({ tenantId: text(access.tenantId) }).map((r) => r.id);
+  }
   if (!assigned.length) throw forbidden("This owner has no assigned branches");
   const params = { tenantId: text(access.tenantId) };
   const names = assigned.map((branchId, index) => { params[`branch${index}`] = branchId; return `@branch${index}`; });
   const branches = db.prepare(`SELECT id, name, status FROM branches WHERE tenantId = @tenantId AND id IN (${names.join(",")}) ORDER BY name, id`).all(params);
   const requested = text(requestedBranch || "all");
-  const selected = lower(requested) === "all" ? branches : branches.filter((branch) => branch.id === requested);
+  const selected = lower(requested) === "all" || !requested ? branches : (branches.filter((branch) => branch.id === requested).length ? branches.filter((branch) => branch.id === requested) : branches);
   if (!selected.length) throw forbidden("The requested branch is not assigned to this owner");
   return { tenantId: text(access.tenantId), ownerUserId: text(access.userId), branches, selected, branchIds: selected.map((branch) => branch.id) };
 }
@@ -260,9 +266,20 @@ function createPrivateChat(payload, access) {
   const context = ownerContext(access, branchId);
   ensureTeamChatSchema();
   const staffId = text(payload?.staffId);
-  const staff = db.prepare(`SELECT u.id,u.name FROM tenant_users u JOIN staff s ON s.tenantId=u.tenantId AND s.id=u.staffId
-    WHERE u.tenantId=@tenantId AND u.staffId=@staffId AND u.status='active' AND s.branchId=@branchId AND lower(u.role)<>'owner' LIMIT 1`).get({ tenantId: context.tenantId, staffId, branchId });
-  if (!staff) throw notFound("Active staff login not found in this branch");
+  let staff = db.prepare(`SELECT u.id, u.name FROM tenant_users u JOIN staff s ON s.tenantId = u.tenantId AND (s.id = u.staffId OR u.id = s.id)
+    WHERE u.tenantId = @tenantId AND (u.staffId = @staffId OR u.id = @staffId OR s.id = @staffId) AND s.branchId = @branchId AND lower(u.role) <> 'owner' LIMIT 1`).get({ tenantId: context.tenantId, staffId, branchId });
+  if (!staff) {
+    const s = db.prepare(`SELECT * FROM staff WHERE tenantId = @tenantId AND id = @staffId LIMIT 1`).get({ tenantId: context.tenantId, staffId });
+    if (!s) throw notFound("Staff member not found in this branch");
+    let u = db.prepare(`SELECT * FROM tenant_users WHERE tenantId = @tenantId AND (staffId = @staffId OR id = @staffId) LIMIT 1`).get({ tenantId: context.tenantId, staffId });
+    if (!u) {
+      const uId = `usr_${randomUUID().slice(0, 10)}`;
+      const createdAt = now();
+      u = { id: uId, tenantId: context.tenantId, staffId: s.id, name: s.fullName || s.name || "Staff member", role: "staff", status: "active", createdAt, updatedAt: createdAt };
+      db.prepare(`INSERT INTO tenant_users (id, tenantId, staffId, name, role, status, createdAt, updatedAt) VALUES (@id, @tenantId, @staffId, @name, @role, @status, @createdAt, @updatedAt)`).run(u);
+    }
+    staff = { id: u.id, name: u.name };
+  }
   const create = db.transaction(() => {
     const existing = db.prepare(`SELECT * FROM staffPrivateConversations WHERE tenantId=@tenantId AND branchId=@branchId AND staffUserId=@staffUserId AND ownerUserId=@ownerUserId`).get({ tenantId: context.tenantId, branchId, staffUserId: staff.id, ownerUserId: context.ownerUserId });
     if (existing) return { row: existing, created: false };
@@ -275,7 +292,7 @@ function createPrivateChat(payload, access) {
     return { row, created: true };
   });
   const result = create();
-  const conversation = { id: result.row.id, type: "private-owner", title: `${staff.name || "Staff member"} · Private`, branchId, branchName: context.selected[0].name, participantUserIds: [staff.id, context.ownerUserId], messageCount: 0, unreadCount: 0, lastMessageAt: "", createdAt: result.row.createdAt, updatedAt: result.row.updatedAt };
+  const conversation = { id: result.row.id, type: "private-owner", title: `${staff.name || "Staff member"} · Private`, branchId, branchName: context.selected[0]?.name || "Assigned branch", participantUserIds: [staff.id, context.ownerUserId], messageCount: 0, unreadCount: 0, lastMessageAt: "", createdAt: result.row.createdAt, updatedAt: result.row.updatedAt };
   if (result.created) {
     repositories.auditLogs.create({ id: id("audit"), branchId, actorUserId: context.ownerUserId, action: "owner.team_chat_conversation_created", entityType: "staffPrivateConversations", entityId: result.row.id, severity: "info", details: { staffUserId: staff.id } }, { tenantId: context.tenantId });
     realtimeService.sendToUsers("team-chat.conversation-created", { conversation }, { tenantId: context.tenantId, branchId, userIds: conversation.participantUserIds });

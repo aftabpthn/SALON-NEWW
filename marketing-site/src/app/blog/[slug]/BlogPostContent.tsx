@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "motion/react";
-import { ArrowLeft, Clock } from "lucide-react";
+import { useMemo, useRef, useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { motion, useScroll, useSpring } from "motion/react";
+import { ArrowLeft, Clock, ChevronRight, Share2, Link2, Check } from "lucide-react";
 import { BLOG_POSTS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
 import { Badge } from "@/components/ui/Badge";
+import { useLanguage } from "@/components/providers/LanguageProvider";
+import { BLOG_CONTENT_HI, BLOG_META_HI } from "@/lib/translations";
 
 const BLOG_CONTENT: Record<string, string> = {
   "how-to-increase-salon-revenue": `
@@ -248,19 +252,161 @@ interface BlogPostContentProps {
   slug: string;
 }
 
+function ReadingProgress() {
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30 });
+
+  return (
+    <motion.div
+      className="fixed top-0 left-0 right-0 h-[2px] z-50 origin-left"
+      style={{
+        scaleX,
+        background: "linear-gradient(90deg, var(--color-aura-burgundy), var(--color-aura-copper))",
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
+
+function LinkedInIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+}
+
+function ShareBar({ title, excerpt }: { title: string; excerpt: string }) {
+  const pathname = usePathname();
+  const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    setUrl(window.location.href);
+  }, []);
+
+  const shareLinks = [
+    {
+      name: "X",
+      icon: XIcon,
+      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
+    },
+    {
+      name: "LinkedIn",
+      icon: LinkedInIcon,
+      href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+    },
+    {
+      name: "WhatsApp",
+      icon: Share2,
+      href: `https://wa.me/?text=${encodeURIComponent(`${title}\n${url}`)}`,
+    },
+  ];
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mt-12 pt-8 border-t border-aura-border">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-[.14em] text-aura-text-muted">
+          Share this article
+        </p>
+        <div className="flex items-center gap-2">
+          {shareLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <a
+                key={link.name}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Share on ${link.name}`}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-aura-border bg-white text-aura-text-muted transition-all hover:border-aura-burgundy hover:text-aura-burgundy hover:shadow-sm"
+              >
+                <Icon className="h-4 w-4" />
+              </a>
+            );
+          })}
+          <button
+            type="button"
+            onClick={copyLink}
+            aria-label={copied ? "Link copied" : "Copy link"}
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-aura-border bg-white text-aura-text-muted transition-all hover:border-aura-burgundy hover:text-aura-burgundy hover:shadow-sm"
+          >
+            {copied ? <Check className="h-4 w-4 text-aura-success" /> : <Link2 className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RelatedPosts({ currentSlug, currentCategory }: { currentSlug: string; currentCategory: string }) {
+  const { language } = useLanguage();
+  const related = useMemo(() => {
+    const sameCategory = BLOG_POSTS.filter((p) => p.slug !== currentSlug && p.category === currentCategory);
+    const others = BLOG_POSTS.filter((p) => p.slug !== currentSlug && p.category !== currentCategory);
+    return [...sameCategory, ...others].slice(0, 3);
+  }, [currentSlug, currentCategory]);
+
+  if (related.length === 0) return null;
+
+  return (
+    <div className="mt-16 pt-12 border-t border-aura-border">
+      <h2 className="text-xl font-bold text-aura-text mb-6">
+        {language === "hi" ? "इसे भी पढ़ें" : "Continue reading"}
+      </h2>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {related.map((post) => (
+          <Link
+            key={post.slug}
+            href={`/blog/${post.slug}`}
+            className="group block rounded-xl border border-aura-border bg-white p-5 transition-all hover:shadow-[var(--aura-shadow-md)] hover:border-aura-rose"
+          >
+            <Badge className="mb-3 text-[10px]">{post.category}</Badge>
+            <h3 className="text-sm font-semibold text-aura-text leading-snug mb-2 line-clamp-2 group-hover:text-aura-burgundy transition-colors">
+              {post.title}
+            </h3>
+            <p className="text-xs text-aura-text-muted line-clamp-2">
+              {post.excerpt}
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-aura-burgundy opacity-0 transition-all group-hover:opacity-100">
+              {language === "hi" ? "पढ़ें" : "Read more"} <ChevronRight className="h-3 w-3" />
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function BlogPostContent({ slug }: BlogPostContentProps) {
+  const { language, t } = useLanguage();
   const post = BLOG_POSTS.find((p) => p.slug === slug);
 
   if (!post) {
     return (
       <Container className="pt-40 pb-20 text-center">
-        <h1 className="text-2xl font-bold text-aura-text">Post not found</h1>
-        <Link href="/blog" className="text-neon-violet mt-4 inline-block">← Back to blog</Link>
+         <h1 className="text-2xl font-bold text-aura-text">{t("blog.postMissing")}</h1>
+         <Link href="/blog" className="text-neon-violet mt-4 inline-block">← {t("common.backBlog")}</Link>
       </Container>
     );
   }
 
-  const content = BLOG_CONTENT[slug] || post.excerpt;
+  const translated = language === "hi" ? BLOG_META_HI[slug] : undefined;
+  const content = language === "hi" ? BLOG_CONTENT_HI[slug] || translated?.excerpt || post.excerpt : BLOG_CONTENT[slug] || post.excerpt;
 
   // Render content: split by double newlines, detect headings and bold
   const renderContent = (text: string) => {
@@ -270,11 +416,17 @@ export function BlogPostContent({ slug }: BlogPostContentProps) {
 
       // Heading
       if (trimmed.startsWith("## ")) {
+        const headingText = trimmed.replace("## ", "");
+        const headingId = headingText.toLowerCase().replace(/[^a-z0-9]+/g, "-");
         return (
-          <h2 key={i} className="text-xl md:text-2xl font-bold text-aura-text mt-10 mb-4 first:mt-0">
-            {trimmed.replace("## ", "")}
+          <h2 key={i} id={headingId} className="text-xl md:text-2xl font-bold text-aura-text mt-10 mb-4 first:mt-0 scroll-mt-28">
+            {headingText}
           </h2>
         );
+      }
+
+      if (trimmed.startsWith("### ")) {
+        return <h3 key={i} className="mt-8 mb-3 text-lg font-bold text-aura-text">{trimmed.replace("### ", "")}</h3>;
       }
 
       // List items (lines starting with -)
@@ -309,13 +461,24 @@ export function BlogPostContent({ slug }: BlogPostContentProps) {
     });
   };
 
+  const toc = useMemo(() => {
+    if (!content) return [];
+    return content.split("\n").filter((l) => l.trim().startsWith("## ")).map((l) => ({
+      id: l.trim().replace(/^##\s+/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      label: l.trim().replace(/^##\s+/, ""),
+    }));
+  }, [content]);
+
   return (
     <>
+      {/* Reading progress */}
+      <ReadingProgress />
+
       <section className="pt-28 pb-8 md:pt-36 bg-gradient-to-b from-aura-bg to-white">
         <Container>
           <Link href="/blog" className="inline-flex items-center gap-1.5 text-sm text-aura-text-muted hover:text-aura-text transition-colors mb-8">
             <ArrowLeft className="w-4 h-4" />
-            Back to blog
+             {t("common.backBlog")}
           </Link>
 
           <motion.div
@@ -325,32 +488,70 @@ export function BlogPostContent({ slug }: BlogPostContentProps) {
             className="max-w-3xl"
           >
             <div className="flex items-center gap-3 mb-4">
-              <Badge>{post.category}</Badge>
+               <Badge>{translated?.category ?? post.category}</Badge>
               <span className="flex items-center gap-1 text-xs text-aura-text-muted">
                 <Clock className="w-3 h-3" />
-                {post.readTime}
+                 {translated?.readTime ?? post.readTime}
               </span>
               <span className="text-xs text-aura-text-muted">
-                {new Date(post.date).toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" })}
+                 {new Date(post.date).toLocaleDateString(language === "hi" ? "hi-IN" : "en-IN", { year: "numeric", month: "long", day: "numeric" })}
               </span>
             </div>
             <h1 className="text-3xl md:text-4xl font-bold text-aura-text leading-tight">
-              {post.title}
+               {translated?.title ?? post.title}
             </h1>
+            <p className="mt-4 text-base text-aura-text-secondary leading-relaxed max-w-2xl">
+              {post.excerpt}
+            </p>
           </motion.div>
         </Container>
       </section>
 
       <section className="pb-20 md:pb-28 bg-white">
-        <Container size="narrow">
-          <motion.article
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="prose-aura"
-          >
-            {renderContent(content)}
-          </motion.article>
+        <Container size="wide">
+          <div className="mx-auto flex max-w-5xl gap-12">
+            {/* Table of contents - sidebar */}
+            {toc.length > 0 && (
+              <aside className="hidden lg:block w-56 shrink-0 pt-2">
+                <div className="sticky top-28">
+                  <p className="text-[10px] font-bold uppercase tracking-[.14em] text-aura-text-muted mb-4">
+                    {language === "hi" ? "इस लेख में" : "In this article"}
+                  </p>
+                  <nav aria-label="Table of contents">
+                    <ul className="space-y-1">
+                      {toc.map((item) => (
+                        <li key={item.id}>
+                          <a
+                            href={`#${item.id}`}
+                            className="group flex items-center gap-1.5 py-1.5 text-xs text-aura-text-muted transition-colors hover:text-aura-burgundy"
+                          >
+                            <ChevronRight className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                            <span className="line-clamp-2">{item.label}</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </nav>
+                </div>
+              </aside>
+            )}
+
+            {/* Article body */}
+            <motion.article
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="min-w-0 max-w-3xl prose-aura"
+            >
+              {renderContent(content)}
+            </motion.article>
+          </div>
+
+          {/* Share bar */}
+          <ShareBar title={post.title} excerpt={post.excerpt} />
+
+          {/* Related posts */}
+          <RelatedPosts currentSlug={post.slug} currentCategory={post.category} />
         </Container>
       </section>
     </>

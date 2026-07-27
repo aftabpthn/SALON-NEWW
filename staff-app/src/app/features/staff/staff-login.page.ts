@@ -124,6 +124,14 @@ export class StaffLoginPage {
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
+  async ngOnInit() {
+    if (this.staff.hasSavedSession()) {
+      const user = this.staff.user();
+      const isOwner = String(user?.role || "").trim().toLowerCase() === "owner";
+      await this.router.navigateByUrl(isOwner ? "/owner/dashboard" : "/staff/dashboard", { replaceUrl: true });
+    }
+  }
+
   async login(event?: Event) {
     event?.preventDefault();
     if (this.staff.loading()) return;

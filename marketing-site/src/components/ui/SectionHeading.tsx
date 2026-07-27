@@ -66,7 +66,7 @@ export function SectionHeading({
           initial={{ opacity: 0, y: 10, scale: 0.95 }}
           animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full bg-neon-violet/10 text-neon-violet mb-5"
+          className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-aura-burgundy mb-5 before:h-px before:w-6 before:bg-aura-amber"
         >
           {badge}
         </motion.span>
@@ -75,7 +75,7 @@ export function SectionHeading({
       {/* Title — word-by-word reveal */}
       <h2
         className={cn(
-          "text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight text-aura-text leading-[1.15]",
+          "font-display text-[clamp(2.2rem,5vw,4.75rem)] font-normal tracking-[-.035em] text-aura-text leading-[1.02] text-balance",
           gradient && "gradient-text"
         )}
       >
@@ -88,7 +88,7 @@ export function SectionHeading({
           initial={{ opacity: 0, y: 16 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.5, delay: 0.25, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-5 text-lg text-aura-text-secondary leading-relaxed max-w-2xl mx-auto"
+          className="mt-6 text-base md:text-lg text-aura-text-secondary leading-relaxed max-w-2xl mx-auto text-pretty"
         >
           {subtitle}
         </motion.p>

@@ -29,19 +29,19 @@ mobileAttendanceVerificationRouter.get(
 mobileAttendanceVerificationRouter.post(
   "/staff-self/attendance-device/register",
   staffAttendanceAccess,
-  staffSelfContext(["deviceId", "deviceLabel", "platform", "publicKeySpkiBase64", "publicKeyAlgorithm", "hardwareBacked", "verificationCapability", "attestationCertificateChainBase64"]),
+  staffSelfContext(["deviceId", "deviceLabel", "platform", "publicKeySpkiBase64", "publicKeyAlgorithm", "hardwareBacked", "verificationCapability", "attestationChain", "attestationStatus", "attestationCertificateChainBase64"]),
   asyncHandler((req, res) => res.status(201).json(service.registerDevice(req.body, req.access)))
 );
 mobileAttendanceVerificationRouter.post(
   "/staff-self/attendance-challenge",
   staffAttendanceAccess,
-  staffSelfContext(["action", "attendanceId", "deviceId", "clientPunchId", "latitude", "longitude", "accuracyMeters", "capturedAt", "mockLocation", "integrityVerdict"]),
+  staffSelfContext(["action", "attendanceId", "deviceId", "clientPunchId", "latitude", "longitude", "accuracyMeters", "capturedAt", "mockLocation", "integrityVerdict", "integrityToken", "riskVerdict"]),
   asyncHandler((req, res) => res.status(201).json(service.createChallenge(req.body, req.access)))
 );
 mobileAttendanceVerificationRouter.post(
   "/staff-self/attendance-verified-punch",
   staffAttendanceAccess,
-  staffSelfContext(["challengeId", "deviceId", "signatureBase64", "idempotencyKey"]),
+  staffSelfContext(["challengeId", "deviceId", "signatureBase64", "idempotencyKey", "integrityToken"]),
   asyncHandler((req, res) => res.status(201).json(service.submitVerifiedPunch(req.body, req.access)))
 );
 

@@ -30,6 +30,7 @@ export function ensureAttendanceVerificationSchema() {
   addColumn("attendanceVerificationChallenges", "resultJson TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationChallenges", "integrityToken TEXT NOT NULL DEFAULT ''");
   addColumn("attendanceVerificationEvidence", "integrityToken TEXT NOT NULL DEFAULT ''");
+  addColumn("attendanceVerificationChallenges", "riskVerdict TEXT NOT NULL DEFAULT ''");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idxAttendanceChallengeClientPunch ON attendanceVerificationChallenges(tenantId, branchId, staffId, clientPunchId) WHERE clientPunchId <> ''");
   ensured = true;
 }

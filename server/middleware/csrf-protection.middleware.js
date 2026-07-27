@@ -42,7 +42,11 @@ function hasCookieAuth(cookies) {
 }
 
 function hasBearerAuth(req) {
-  return /^Bearer\s+\S+$/i.test(String(req.get("authorization") || ""));
+  // Accept both standard Authorization: Bearer and the mobile x-auth-token header.
+  // This must stay in sync with bearerToken() in server/middleware/auth.js.
+  if (/^Bearer\s+\S+$/i.test(String(req.get("authorization") || ""))) return true;
+  if (req.get("x-auth-token")) return true;
+  return false;
 }
 
 export function csrfProtection(req, _res, next) {

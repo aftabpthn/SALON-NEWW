@@ -3,7 +3,7 @@ import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
 import { IonButton, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline } from "ionicons/icons";
+import { callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline, flashOutline } from "ionicons/icons";
 import { environment } from "../../../environments/environment";
 import { AuthService } from "../../core/auth.service";
 import { CustomerProfile } from "../../core/api.types";
@@ -27,8 +27,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
             <span>Rewards</span>
             <span>Fast OTP</span>
           </div>
-          <a class="staff-switch" [href]="staffAppUrl">Staff? Open staff login</a>
-
           @if (notice) {
             <p class="notice-text">{{ notice }}</p>
           }
@@ -63,6 +61,10 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
               <ion-button expand="block" fill="outline" class="choice-button" (click)="showWhatsApp()" [disabled]="auth.loading()">
                 <ion-icon name="logo-whatsapp" slot="start"></ion-icon>
                 Continue with WhatsApp
+              </ion-button>
+              <ion-button expand="block" fill="outline" class="choice-button demo-login-button" (click)="continueWithDemo()" [disabled]="auth.loading()">
+                <ion-icon name="flash-outline" slot="start"></ion-icon>
+                Demo login as garvkataria
               </ion-button>
               <ion-button expand="block" fill="clear" class="guest-button" (click)="continueAsGuest()" [disabled]="auth.loading()">
                 Continue as guest
@@ -353,21 +355,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       font-weight: 950;
     }
 
-    .staff-switch {
-      justify-self: center;
-      display: inline-grid;
-      place-items: center;
-      min-height: 38px;
-      padding: 0 16px;
-      border: 1px solid rgba(214, 169, 74, 0.32);
-      border-radius: 999px;
-      color: #6E4810;
-      background: rgba(255, 255, 255, 0.66);
-      font-size: 0.84rem;
-      font-weight: 950;
-      text-decoration: none;
-    }
-
     .subtitle,
     .step-copy {
       margin: 0;
@@ -486,6 +473,18 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .choice-button ion-icon[name="logo-whatsapp"] {
       color: #25D366;
+    }
+
+    .choice-button.demo-login-button {
+      --border-color: rgba(16, 185, 129, 0.45);
+      --background: rgba(16, 185, 129, 0.06);
+      --color: #047857;
+      --color-activated: #047857;
+      --background-activated: rgba(16, 185, 129, 0.14);
+    }
+
+    .choice-button.demo-login-button ion-icon {
+      color: #10B981;
     }
 
     .dark-continue-button {
@@ -822,11 +821,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.16);
       }
 
-      .staff-switch {
-        min-height: 40px;
-        background: rgba(255,255,255,0.8);
-        box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
-      }
+
 
       .choice-email-form,
       .auth-form,
@@ -930,7 +925,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
   `]
 })
 export class LoginPage implements OnInit, OnDestroy {
-  readonly staffAppUrl = environment.staffAppUrl;
   readonly appleLoginEnabled = APPLE_LOGIN_ENABLED;
   readonly countryOptions = [
     { code: "+91", label: "India +91" }
@@ -966,7 +960,7 @@ export class LoginPage implements OnInit, OnDestroy {
   @ViewChildren("mobileOtpBox") private readonly mobileOtpBoxes!: QueryList<ElementRef<HTMLInputElement>>;
 
   constructor(readonly auth: AuthService, private readonly router: Router, private readonly route: ActivatedRoute) {
-    addIcons({ callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline });
+    addIcons({ callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline, flashOutline });
   }
 
   ngOnInit() {
@@ -1244,6 +1238,13 @@ export class LoginPage implements OnInit, OnDestroy {
 
   continueAsGuest() {
     void this.router.navigateByUrl("/tabs/home");
+  }
+
+  async continueWithDemo() {
+    this.notice = "";
+    await this.auth.demoLogin()
+      .then((session) => this.afterProviderSignIn(session))
+      .catch(() => undefined);
   }
 
   fullPhone(): string {

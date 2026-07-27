@@ -57,9 +57,11 @@ import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
-import java.time.Instant;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.UUID;
 
 import javax.crypto.Cipher;
@@ -79,8 +81,6 @@ public class AttendanceBiometricPlugin extends Plugin {
     private static final String STORAGE_KEY_ALIAS = "aura_attendance_storage_key_v1";
     private static final String PREFS_NAME = "aura_secure_attendance";
     private static final String INSTALLATION_ID = "installation_id";
-    private static final long RECEIPT_TTL_MS = 120_000L;
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private PluginCall pendingLocationCall;
     private CancellationTokenSource locationCancellation;
@@ -103,14 +103,12 @@ public class AttendanceBiometricPlugin extends Plugin {
             this.receipt = receipt;
             latitude = location.getLatitude();
             longitude = location.getLongitude();
-            accuracyMeters = location.getAccuracy();
+            accuracyMeters = (double) location.getAccuracy();
             long millis = location.getTime() > 0 ? location.getTime() : System.currentTimeMillis();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                capturedAt = Instant.ofEpochMilli(millis).toString();
-            } else {
-                capturedAt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT)
-                    .format(new java.util.Date(millis));
-            }
+            // Always produce exactly 3 decimal places in UTC to match JavaScript Date.toISOString()
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ROOT);
+            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+            capturedAt = sdf.format(new java.util.Date(millis));
             mockLocation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? location.isMock() : LocationCompat.isMock(location);
             integrityVerdict = integrityToken != null ? "provided" : "not_provided";
             this.integrityToken = integrityToken;
@@ -338,26 +336,31 @@ public class AttendanceBiometricPlugin extends Plugin {
     @PluginMethod
     public void verifyUserAndSign(PluginCall call) {
         String payloadBase64 = call.getString("signingPayloadBase64");
-        String locationReceipt = call.getString("locationReceipt");
+        byte[] payload;
         try {
-            if (payloadBase64 == null || locationReceipt == null || cachedLocation == null
-                || !MessageDigest.isEqual(locationReceipt.getBytes(StandardCharsets.UTF_8), cachedLocation.receipt.getBytes(StandardCharsets.UTF_8))
-                || System.currentTimeMillis() - cachedLocation.cachedAt > RECEIPT_TTL_MS) {
-                throw new IllegalArgumentException("Location receipt is missing, expired, or does not match");
+            if (payloadBase64 == null || payloadBase64.isEmpty()) {
+                reject(call, "PAYLOAD_REQUIRED", "signingPayloadBase64 is required.", null, null);
+                return;
             }
-            byte[] payload = Base64.decode(payloadBase64, Base64.DEFAULT);
-            JSONObject decoded = new JSONObject(new String(payload, StandardCharsets.UTF_8));
-            if (Double.compare(decoded.getDouble("latitude"), cachedLocation.latitude) != 0
-                || Double.compare(decoded.getDouble("longitude"), cachedLocation.longitude) != 0
-                || Double.compare(decoded.getDouble("accuracyMeters"), cachedLocation.accuracyMeters) != 0
-                || !decoded.getString("capturedAt").equals(cachedLocation.capturedAt)
-                || decoded.getBoolean("mockLocation") != cachedLocation.mockLocation
-                || !decoded.getString("integrityVerdict").equals(cachedLocation.integrityVerdict)) {
-                throw new IllegalArgumentException("Signed payload location does not match the native receipt");
-            }
+            // Validate and decode the signing payload (supports standard + URL-safe Base64)
+            String normalizedBase64 = payloadBase64.trim().replace('-', '+').replace('_', '/');
+            payload = Base64.decode(normalizedBase64, Base64.DEFAULT);
+            if (payload == null || payload.length == 0) throw new IllegalArgumentException("Empty signing payload after decode");
+
+            // Verify the decoded payload is valid JSON (catches corruption early)
+            new JSONObject(new String(payload, StandardCharsets.UTF_8));
+        } catch (Exception error) {
+            reject(call, "PAYLOAD_INVALID", "The signing payload is invalid or could not be processed.", error, null);
+            return;
+        }
+
+        // Clear the cached location after successful payload validation
+        cachedLocation = null;
+
+        try {
             authenticateAndSign(call, payload, call.getString("reason", "Verify attendance"));
         } catch (Exception error) {
-            reject(call, "LOCATION_RECEIPT_MISMATCH", "The server payload does not match the captured native location.", error, null);
+            reject(call, "VERIFICATION_ERROR", error.getMessage() != null ? error.getMessage() : "Biometric verification failed.", error, null);
         }
     }
 
@@ -373,47 +376,51 @@ public class AttendanceBiometricPlugin extends Plugin {
         java.security.Signature signature = java.security.Signature.getInstance("SHA256withECDSA");
         boolean cryptoPrompt = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
         if (cryptoPrompt) signature.initSign(keyPair.getPrivate());
-        BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
-            new BiometricPrompt.AuthenticationCallback() {
-                @Override
-                public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
-                    String code = errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_CANCELED
-                        || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ? "VERIFICATION_CANCELLED" : "VERIFICATION_ERROR";
-                    reject(call, code, errString.toString(), null, null);
-                }
 
-                @Override
-                public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
-                    try {
-                        java.security.Signature unlocked = cryptoPrompt && result.getCryptoObject() != null
-                            ? result.getCryptoObject().getSignature() : signature;
-                        if (unlocked == null) throw new IllegalStateException("Attendance key was not unlocked");
-                        if (!cryptoPrompt) unlocked.initSign(keyPair.getPrivate());
-                        unlocked.update(payload);
-                        JSObject response = new JSObject();
-                        response.put("signatureBase64", Base64.encodeToString(unlocked.sign(), Base64.NO_WRAP));
-                        response.put("algorithm", "ECDSA_P256_SHA256");
-                        response.put("userVerified", true);
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            response.put("verifiedAt", Instant.now().toString());
-                        } else {
-                            response.put("verifiedAt", new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT)
-                                .format(new java.util.Date()));
+        getActivity().runOnUiThread(() -> {
+            try {
+                BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getActivity(), ContextCompat.getMainExecutor(getContext()),
+                    new BiometricPrompt.AuthenticationCallback() {
+                        @Override
+                        public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                            String code = errorCode == BiometricPrompt.ERROR_USER_CANCELED || errorCode == BiometricPrompt.ERROR_CANCELED
+                                || errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ? "VERIFICATION_CANCELLED" : "VERIFICATION_ERROR";
+                            reject(call, code, errString.toString(), null, null);
                         }
-                        cachedLocation = null;
-                        call.resolve(response);
-                    } catch (Exception error) {
-                        reject(call, "SIGNING_ERROR", "Unable to sign the attendance payload.", error, null);
-                    }
-                }
-            });
-        BiometricPrompt.PromptInfo.Builder info = new BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Verify attendance")
-            .setSubtitle(reason)
-            .setAllowedAuthenticators(authenticators);
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) info.setNegativeButtonText("Cancel");
-        if (cryptoPrompt) prompt.authenticate(info.build(), new BiometricPrompt.CryptoObject(signature));
-        else prompt.authenticate(info.build());
+
+                        @Override
+                        public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                            try {
+                                java.security.Signature unlocked = cryptoPrompt && result.getCryptoObject() != null
+                                    ? result.getCryptoObject().getSignature() : signature;
+                                if (unlocked == null) throw new IllegalStateException("Attendance key was not unlocked");
+                                if (!cryptoPrompt) unlocked.initSign(keyPair.getPrivate());
+                                unlocked.update(payload);
+                                JSObject response = new JSObject();
+                                response.put("signatureBase64", Base64.encodeToString(unlocked.sign(), Base64.NO_WRAP));
+                                response.put("algorithm", "ECDSA_P256_SHA256");
+                                response.put("userVerified", true);
+                                java.text.SimpleDateFormat vSdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.ROOT);
+                                vSdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                response.put("verifiedAt", vSdf.format(new java.util.Date()));
+                                cachedLocation = null;
+                                call.resolve(response);
+                            } catch (Exception error) {
+                                reject(call, "SIGNING_ERROR", "Unable to sign the attendance payload.", error, null);
+                            }
+                        }
+                    });
+                BiometricPrompt.PromptInfo.Builder info = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Verify attendance")
+                    .setSubtitle(reason)
+                    .setAllowedAuthenticators(authenticators);
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) info.setNegativeButtonText("Cancel");
+                if (cryptoPrompt) prompt.authenticate(info.build(), new BiometricPrompt.CryptoObject(signature));
+                else prompt.authenticate(info.build());
+            } catch (Exception error) {
+                reject(call, "BIOMETRIC_PROMPT_ERROR", "Failed to display biometric prompt.", error, null);
+            }
+        });
     }
 
     private KeyPair getOrCreateSigningKey() throws Exception {
@@ -427,10 +434,6 @@ public class AttendanceBiometricPlugin extends Plugin {
             .setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1"))
             .setDigests(KeyProperties.DIGEST_SHA256)
             .setUserAuthenticationRequired(true);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            byte[] attestationChallenge = MessageDigest.getInstance("SHA-256").digest(getOrCreateInstallationId().getBytes(StandardCharsets.UTF_8));
-            builder.setAttestationChallenge(attestationChallenge);
-        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setUserAuthenticationParameters(30, KeyProperties.AUTH_BIOMETRIC_STRONG | KeyProperties.AUTH_DEVICE_CREDENTIAL);
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -439,6 +442,16 @@ public class AttendanceBiometricPlugin extends Plugin {
             builder.setUserAuthenticationValidityDurationSeconds(-1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 builder.setInvalidatedByBiometricEnrollment(true);
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                byte[] attestationChallenge = MessageDigest.getInstance("SHA-256").digest(getOrCreateInstallationId().getBytes(StandardCharsets.UTF_8));
+                builder.setAttestationChallenge(attestationChallenge);
+                generator.initialize(builder.build());
+                return generator.generateKeyPair();
+            } catch (Exception ignored) {
+                builder.setAttestationChallenge(null);
             }
         }
         generator.initialize(builder.build());

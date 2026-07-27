@@ -1,6 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { isQueuedMutation, MutationResult, StaffAttendance, StaffAppService, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -171,7 +171,17 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   async runAction(action: DashboardAction) {
     if (this.pendingMutation()) return;
     if (action.route) { await this.router.navigate(Array.isArray(action.route) ? [...action.route] : [action.route]); return; }
-    if (action.kind === "clock") { await this.clockAction(); return; }
+    if (action.kind === "clock") {
+      const isOpen = this.today()?.attendance.some((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")));
+      if (isOpen) {
+        const attendanceId = this.today()?.attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")))?.id || "";
+        await this.runMutation("clock-out", () => this.staff.clockOut(attendanceId), "Clocked out.");
+      } else {
+        await this.runMutation("clock-in", () => this.staff.clockIn(), "Clocked in.");
+      }
+      window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
+      return;
+    }
     if (action.kind === "end-break") { await this.runMutation("end-break", () => this.staff.endBreak(), "Break ended."); return; }
   }
 
@@ -184,11 +194,6 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
 
   async signOut() { await this.staff.logout(); await this.router.navigateByUrl("/staff/login"); }
 
-  private async clockAction() {
-    if (!this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"])) return;
-    await this.router.navigateByUrl("/staff/attendance");
-  }
-
   private async runMutation(id: string, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
     if (this.pendingMutation()) return;
     this.pendingMutation.set(id); this.actionMessage.set(""); this.actionFailed.set(false);
@@ -196,6 +201,14 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       const result = await mutate();
       if (isQueuedMutation(result)) {
         this.actionMessage.set("Change saved offline and queued for sync."); this.queuedActions.set(this.staff.offlineQueueSize()); return;
+      }
+      const rec = (result && typeof result === "object" && "data" in result ? (result as { data: StaffAttendance }).data : result) as StaffAttendance;
+      if (rec && typeof rec === "object" && rec.id) {
+        const curToday = this.today();
+        if (curToday) {
+          const list = [rec, ...curToday.attendance.filter((a) => a.id !== rec.id)];
+          this.today.set({ ...curToday, attendance: list });
+        }
       }
       this.actionMessage.set(completedMessage); await this.load();
     } catch {

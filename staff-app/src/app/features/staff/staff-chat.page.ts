@@ -32,7 +32,24 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
             <div class="chat-sidebar-head"><div><p class="eyebrow">Conversations</p><h2>Inbox</h2></div><span>{{ conversations().length }}</span></div>
             <div class="chat-local-search">
               <label for="conversation-search">Search this conversation list</label>
-              <div class="chat-search-control"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" autocomplete="off" [ngModel]="conversationSearch()" (ngModelChange)="setConversationSearch($event)" placeholder="Search titles or type"><small>On this device</small></div>
+              <div class="chat-search-control"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" autocomplete="off" [ngModel]="conversationSearch()" (ngModelChange)="setConversationSearch($event)" (focus)="showConvSuggestions.set(true)" (blur)="closeConvSuggestions()" placeholder="Search titles or type"><small>On this device</small></div>
+              @if (showConvSuggestions() && convSuggestions().length) {
+                <div class="search-suggestions" role="listbox">
+                  @for (s of convSuggestions(); track s) {
+                    <button type="button" (mousedown)="$event.preventDefault(); selectConvSuggestion(s)" (click)="selectConvSuggestion(s)">
+                      <span>🔍 {{ s }}</span>
+                      <small>Chat</small>
+                    </button>
+                  }
+                </div>
+              }
+              <div class="search-chips-row">
+                @for (s of convSuggestions().slice(0, 3); track s) {
+                  <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectConvSuggestion(s)" (click)="selectConvSuggestion(s)">
+                    <span>🏷️ {{ s }}</span>
+                  </button>
+                }
+              </div>
             </div>
             <nav class="chat-conversation-list" aria-label="Choose a conversation">
               @for (conversation of filteredConversations(); track conversation.id) {
@@ -66,7 +83,24 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
 
               <div class="chat-local-search message-search">
                 <label for="message-search">Search loaded messages in {{ active.title }}</label>
-                <div class="chat-search-control"><span aria-hidden="true">⌕</span><input id="message-search" type="search" autocomplete="off" [ngModel]="messageSearch()" (ngModelChange)="setMessageSearch($event)" placeholder="Search sender or message"><small>Loaded messages only</small></div>
+                <div class="chat-search-control"><span aria-hidden="true">⌕</span><input id="message-search" type="search" autocomplete="off" [ngModel]="messageSearch()" (ngModelChange)="setMessageSearch($event)" (focus)="showMsgSuggestions.set(true)" (blur)="closeMsgSuggestions()" placeholder="Search sender or message"><small>Loaded messages only</small></div>
+                @if (showMsgSuggestions() && messageSuggestions().length) {
+                  <div class="search-suggestions" role="listbox">
+                    @for (s of messageSuggestions(); track s) {
+                      <button type="button" (mousedown)="$event.preventDefault(); selectMsgSuggestion(s)" (click)="selectMsgSuggestion(s)">
+                        <span>🔍 {{ s }}</span>
+                        <small>Message</small>
+                      </button>
+                    }
+                  </div>
+                }
+                <div class="search-chips-row">
+                  @for (s of messageSuggestions().slice(0, 3); track s) {
+                    <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectMsgSuggestion(s)" (click)="selectMsgSuggestion(s)">
+                      <span>🏷️ {{ s }}</span>
+                    </button>
+                  }
+                </div>
               </div>
 
               <div #messageViewport class="chat-message-viewport" (scroll)="onMessageScroll()" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">
@@ -183,6 +217,40 @@ export class StaffChatPage implements OnInit, OnDestroy {
     if (!query) return this.messages();
     return this.messages().filter((item) => this.normalizeSearch(`${item.senderName || "Team member"} ${item.senderUserId === this.staff.user()?.id ? "You" : ""} ${item.body}`).includes(query));
   });
+  readonly showConvSuggestions = signal(false);
+  readonly showMsgSuggestions = signal(false);
+
+  readonly convSuggestions = computed(() => {
+    const q = this.normalizeSearch(this.conversationSearch());
+    const titles = this.conversations().map((c) => c.title);
+    const types = ["Branch team", "Private owner chat", "Inbox"];
+    const all = [...new Set([...titles, ...types])];
+    return all.filter((s) => !q || this.normalizeSearch(s).includes(q));
+  });
+
+  readonly messageSuggestions = computed(() => {
+    const q = this.normalizeSearch(this.messageSearch());
+    const senders = this.messages().map((m) => m.senderName || "Team member");
+    const phrases = ["Hello", "Appointment", "Shift", "Attendance", "Ready", "Client"];
+    const all = [...new Set([...senders, ...phrases])];
+    return all.filter((s) => !q || this.normalizeSearch(s).includes(q));
+  });
+
+  selectConvSuggestion(val: string): void {
+    this.conversationSearch.set(val);
+    this.showConvSuggestions.set(false);
+  }
+  closeConvSuggestions(): void {
+    setTimeout(() => this.showConvSuggestions.set(false), 150);
+  }
+
+  selectMsgSuggestion(val: string): void {
+    this.messageSearch.set(val);
+    this.showMsgSuggestions.set(false);
+  }
+  closeMsgSuggestions(): void {
+    setTimeout(() => this.showMsgSuggestions.set(false), 150);
+  }
   readonly connectionLabel = computed(() => ({ connecting: "Connecting", live: "Live", polling: "Syncing", offline: "Offline" })[this.connectionState()]);
   readonly typingLabel = computed(() => {
     const names = Object.values(this.typingUsers());

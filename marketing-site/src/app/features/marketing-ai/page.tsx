@@ -1,8 +1,19 @@
-"use client";
+import type { Metadata } from "next";
+import { getFeaturePageSEO, breadcrumbJsonLd } from "@/lib/seo";
+import MarketingAiPageClient from "./MarketingAiPageClient";
 
-import { FEATURE_PAGES } from "@/lib/constants";
-import { FeaturePageTemplate } from "@/components/features/FeaturePageTemplate";
+export const metadata: Metadata = getFeaturePageSEO("marketing-ai");
 
 export default function MarketingAiPage() {
-  return <FeaturePageTemplate data={FEATURE_PAGES["marketing-ai"]} />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Features", url: "/features" },
+    { name: "Marketing Workflows", url: "/features/marketing-ai" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <MarketingAiPageClient />
+    </>
+  );
 }

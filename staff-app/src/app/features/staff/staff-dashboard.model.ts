@@ -264,9 +264,20 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
   const actions: DashboardAction[] = [];
   if (activeAlerts.some((item) => item.tone === "critical")) {
     title = "The floor needs attention"; detail = activeAlerts[0].detail; actions.push({ id: "urgent", label: "Review urgent items", route: activeAlerts[0].route, primary: true });
+  } else if (input.openAttendance) {
+    eyebrow = "Clocked in";
+    title = "You're clocked in";
+    detail = `Clocked in at ${timeLabel(input.openAttendance.clockInAt)}`;
+    if (input.today?.activeBreak && canClock) {
+      actions.push({ id: "end-break", label: "End break", kind: "end-break", primary: true });
+    } else if (canClock) {
+      actions.push({ id: "clock-out", label: "Clock Out", kind: "clock", primary: true });
+    }
+    if (canOpenAttendance) actions.push({ id: "attendance-details", label: "Attendance", route: "/staff/attendance" });
   } else if (input.shiftCompleted) {
     title = "Your shift is complete"; detail = "Today’s attendance has been recorded.";
-  } else if (!input.openAttendance) {
+    if (input.hasPermission("read:appointments")) actions.push({ id: "schedule", label: "Today’s Schedule", route: "/staff/appointments", primary: true });
+  } else {
     if (shift && canClock) {
       title = "Ready to start your shift? 👋";
       detail = "Not clocked in";
@@ -284,21 +295,6 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
       detail = "Not clocked in";
     }
     if (input.hasPermission("read:appointments")) actions.push({ id: "schedule", label: "Today’s Schedule", route: "/staff/appointments", primary: !actions.length });
-  } else {
-    eyebrow = "Clocked in";
-    title = "You’re clocked in";
-    detail = `Clocked in at ${timeLabel(input.openAttendance.clockInAt)}`;
-    if (input.today?.activeBreak && canClock) actions.push({ id: "end-break", label: "End break", kind: "end-break", primary: true });
-    else if (input.activeAppointment) {
-      if (input.hasPermission("read:appointments")) actions.push({ id: "queue", label: "View Current Service", route: "/staff/queue", primary: true });
-    } else if (input.nextAppointment && input.hasPermission("read:appointments")) {
-      actions.push({ id: "next", label: "View Next Appointment", route: "/staff/appointments", primary: true });
-    } else if (input.openTaskCount > 0 && input.hasPermission("read:staff")) {
-      actions.push({ id: "tasks", label: "Open Tasks", route: "/staff/tasks", primary: true });
-    } else if (input.hasPermission("read:appointments")) {
-      actions.push({ id: "queue", label: "View Today’s Queue", route: "/staff/queue", primary: true });
-    }
-    if (canOpenAttendance) actions.push({ id: "attendance-details", label: "Attendance", route: "/staff/attendance" });
   }
   if (!actions.length && input.hasPermission("read:appointments")) actions.push({ id: "appointments", label: "Today’s Schedule", route: "/staff/appointments", primary: true });
   return { eyebrow, title, detail, hint, shift: shiftText, shiftAssigned: !!shift, actions: actions.slice(0, 2) };
@@ -364,10 +360,13 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const quick = QUICK_ACTIONS
     .filter((entry) => allowed(entry, ctx))
     .map((entry) => {
-      if (entry.item.id === "attendance" && (ctx.shiftCompleted || !!ctx.today?.activeBreak)) {
-        return { ...entry.item, label: "Attendance", kind: undefined, route: "/staff/attendance", status: quickActionStatus(entry.item.id, ctx) };
+      if (entry.item.id === "attendance") {
+        if (!ctx.openAttendance && (ctx.shiftCompleted || !!ctx.today?.activeBreak)) {
+          return { ...entry.item, label: "Attendance", kind: undefined, route: "/staff/attendance", status: quickActionStatus(entry.item.id, ctx) };
+        }
+        return { ...entry.item, label: ctx.openAttendance ? "Clock out" : "Clock in", kind: "clock" as DashboardActionKind, status: quickActionStatus(entry.item.id, ctx) };
       }
-      return { ...entry.item, label: entry.item.id === "attendance" ? (ctx.openAttendance ? "Clock out" : "Clock in") : entry.item.label, status: quickActionStatus(entry.item.id, ctx) };
+      return { ...entry.item, status: quickActionStatus(entry.item.id, ctx) };
     })
     .filter((action) => !heroModel.actions.some((heroAction) => heroAction.primary && sameAction(action, heroAction)));
   const overview: DashboardMetric[] = [

@@ -58,11 +58,18 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
                   @if (showSearchSuggestions() && searchSuggestions().length) {
                     <div id="business-search-suggestions" class="search-suggestions" role="listbox">
                       @for (suggestion of searchSuggestions(); track suggestion.type + suggestion.value) {
-                        <button type="button" role="option" (pointerdown)="$event.preventDefault()" (click)="selectSuggestion(suggestion)">
-                          <span>{{ suggestion.value }}</span><small>{{ suggestion.type }}</small>
+                        <button type="button" role="option" (mousedown)="$event.preventDefault(); selectSuggestion(suggestion)" (click)="selectSuggestion(suggestion)">
+                          <span>🔍 {{ suggestion.value }}</span><small>{{ suggestion.type }}</small>
                         </button>
                       }
                     </div>
+                  }
+                </div>
+                <div class="search-chips-row">
+                  @for (suggestion of searchSuggestions().slice(0, 4); track suggestion.type + suggestion.value) {
+                    <button type="button" class="suggestion-chip" (mousedown)="$event.preventDefault(); selectSuggestion(suggestion)" (click)="selectSuggestion(suggestion)">
+                      <span>🏷️ {{ suggestion.value }}</span>
+                    </button>
                   }
                 </div>
               </div>

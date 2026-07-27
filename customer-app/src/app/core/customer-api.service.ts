@@ -25,8 +25,11 @@ import {
   CustomerPackage,
   CustomerPayment,
   CustomerPaymentLink,
+  CustomerPrimarySalon,
+  MySalonDashboard,
   CustomerProfile,
   CustomerRewardSummary,
+  CustomerSalonsResponse,
   CustomerWallet,
   CustomerWaitlistEntry,
   FirebaseAuthPayload,
@@ -34,6 +37,7 @@ import {
   LiveConsultationRequest,
   LiveConsultationResponse,
   OtpRequestResponse,
+  PublicOffersResponse,
   PurchaseGiftCardPayload,
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
@@ -100,6 +104,14 @@ export class CustomerApiService {
     );
   }
 
+  getPublicOffers(tenantId: string, branchId: string): Observable<PublicOffersResponse> {
+    return this.http.get<ApiResponse<PublicOffersResponse>>(`${this.baseUrl}/happy-hours-offers`, {
+      params: this.toParams({ tenantId, branchId }),
+    }).pipe(
+      map((response) => this.unwrap<PublicOffersResponse>(response))
+    );
+  }
+
   createLiveConsultation(payload: LiveConsultationRequest): Observable<LiveConsultationResponse> {
     return this.http.post<ApiResponse<LiveConsultationResponse>>(`${this.baseUrl}/public/live-consultations`, payload).pipe(
       map((response) => this.unwrap<LiveConsultationResponse>(response))
@@ -138,6 +150,12 @@ export class CustomerApiService {
 
   refreshCustomerSession(refreshToken: string, device?: CustomerDeviceInfo): Observable<AuthSession> {
     return this.http.post<ApiResponse<AuthSession>>(`${this.baseUrl}/customer/auth/refresh`, { refreshToken, device }).pipe(
+      map((response) => this.unwrap<AuthSession>(response))
+    );
+  }
+
+  demoLogin(device?: CustomerDeviceInfo): Observable<AuthSession> {
+    return this.http.post<ApiResponse<AuthSession>>(`${this.baseUrl}/customer/auth/demo`, { device }).pipe(
       map((response) => this.unwrap<AuthSession>(response))
     );
   }
@@ -343,6 +361,62 @@ export class CustomerApiService {
   listNotifications(): Observable<CustomerNotification[]> {
     return this.http.get<ApiResponse<CustomerNotification[] | ApiList<CustomerNotification>>>(`${this.baseUrl}/customer/notifications`).pipe(
       map((response) => this.unwrapList<CustomerNotification>(response))
+    );
+  }
+
+  // ─── Customer-Salon Relationships ────────────────────────────────
+  getMySalons(): Observable<CustomerSalonsResponse> {
+    return this.http.get<ApiResponse<CustomerSalonsResponse>>(`${this.baseUrl}/customer/salons`).pipe(
+      map((response) => this.unwrap<CustomerSalonsResponse>(response))
+    );
+  }
+
+  setPrimarySalon(tenantId: string, payload: { branchId: string; businessId: string; businessName: string; reason: string }): Observable<{ primarySalon: CustomerPrimarySalon }> {
+    return this.http.post<ApiResponse<{ primarySalon: CustomerPrimarySalon }>>(`${this.baseUrl}/customer/salons/${encodeURIComponent(tenantId)}/primary`, payload).pipe(
+      map((response) => this.unwrap<{ primarySalon: CustomerPrimarySalon }>(response))
+    );
+  }
+
+  removePrimarySalon(): Observable<{ ok: boolean }> {
+    return this.http.delete<ApiResponse<{ ok: boolean }>>(`${this.baseUrl}/customer/salons/primary`).pipe(
+      map((response) => this.unwrap<{ ok: boolean }>(response))
+    );
+  }
+
+  checkPrimarySalonPrompt(): Observable<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }> {
+    return this.http.get<ApiResponse<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }>>(`${this.baseUrl}/customer/salons/primary/prompt`).pipe(
+      map((response) => this.unwrap<{ prompt: boolean; reason: string; suggestedSalon: unknown | null }>(response))
+    );
+  }
+
+  recordSalonVisit(tenantId: string, payload: { branchId: string; businessId: string; businessName: string }): Observable<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }> {
+    return this.http.post<ApiResponse<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>>(`${this.baseUrl}/customer/salons/${encodeURIComponent(tenantId)}/visit`, payload).pipe(
+      map((response) => this.unwrap<{ relationship: unknown; shouldPromptPrimary: boolean; suggestedSalon: unknown | null }>(response))
+    );
+  }
+
+  // ─── My Salon Dashboard ──────────────────────────────────────
+  getMySalonDashboard(): Observable<MySalonDashboard> {
+    return this.http.get<ApiResponse<MySalonDashboard>>(`${this.baseUrl}/customer/my-salon/dashboard`).pipe(
+      map((response) => this.unwrap<MySalonDashboard>(response))
+    );
+  }
+
+  getMySalonServices(): Observable<MySalonDashboard["services"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["services"]>>(`${this.baseUrl}/customer/my-salon/services`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["services"]>(response))
+    );
+  }
+
+  getMySalonStaff(): Observable<MySalonDashboard["staff"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["staff"]>>(`${this.baseUrl}/customer/my-salon/staff`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["staff"]>(response))
+    );
+  }
+
+  getMySalonOffers(): Observable<MySalonDashboard["offers"]> {
+    return this.http.get<ApiResponse<MySalonDashboard["offers"]>>(`${this.baseUrl}/customer/my-salon/offers`).pipe(
+      map((response) => this.unwrap<MySalonDashboard["offers"]>(response))
     );
   }
 

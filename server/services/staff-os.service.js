@@ -3795,10 +3795,18 @@ export class StaffOsService {
     const activeBreak = db.prepare(`SELECT * FROM staff_breaks
       WHERE tenant_id = @tenantId AND staff_id = @staffId AND status = 'active'
       ORDER BY created_at DESC LIMIT 1`).get({ tenantId: access.tenantId, staffId });
+    let attendance = this.listAttendance({ staffId, branchId: staff.branchId, from: date, to: date }, access);
+    const openRecord = db.prepare(`SELECT * FROM staff_attendance_logs WHERE tenant_id = @tenant_id AND staff_id = @staff_id AND status = 'clocked_in' ORDER BY created_at DESC LIMIT 1`).get({ tenant_id: access.tenantId, staff_id: staffId });
+    if (openRecord) {
+      const decorated = staffOvertimeService.decorateAttendanceRows([rowToCamel(openRecord)], access.tenantId)[0];
+      if (decorated && !attendance.some((item) => item.id === decorated.id)) {
+        attendance = [decorated, ...attendance];
+      }
+    }
     return {
       date,
       schedules: this.listSchedules({ staffId, branchId: staff.branchId, from: date, to: date }, access),
-      attendance: this.listAttendance({ staffId, branchId: staff.branchId, from: date, to: date }, access),
+      attendance,
       tasks: this.listTasks({ staffId, branchId: staff.branchId, status: "open" }, access),
       activeBreak: activeBreak ? rowToCamel(activeBreak) : null
     };

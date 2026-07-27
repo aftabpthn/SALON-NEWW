@@ -1,8 +1,19 @@
-"use client";
+import type { Metadata } from "next";
+import { getFeaturePageSEO, breadcrumbJsonLd } from "@/lib/seo";
+import BillingPageClient from "./BillingPageClient";
 
-import { FEATURE_PAGES } from "@/lib/constants";
-import { FeaturePageTemplate } from "@/components/features/FeaturePageTemplate";
+export const metadata: Metadata = getFeaturePageSEO("billing");
 
 export default function BillingPage() {
-  return <FeaturePageTemplate data={FEATURE_PAGES["billing"]} />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Features", url: "/features" },
+    { name: "POS & Billing", url: "/features/billing" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <BillingPageClient />
+    </>
+  );
 }

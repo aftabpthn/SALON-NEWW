@@ -1,8 +1,19 @@
-"use client";
+import type { Metadata } from "next";
+import { getFeaturePageSEO, breadcrumbJsonLd } from "@/lib/seo";
+import WhiteLabelPageClient from "./WhiteLabelPageClient";
 
-import { FEATURE_PAGES } from "@/lib/constants";
-import { FeaturePageTemplate } from "@/components/features/FeaturePageTemplate";
+export const metadata: Metadata = getFeaturePageSEO("white-label");
 
 export default function WhiteLabelPage() {
-  return <FeaturePageTemplate data={FEATURE_PAGES["white-label"]} />;
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", url: "/" },
+    { name: "Features", url: "/features" },
+    { name: "White Label", url: "/features/white-label" },
+  ]);
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbs) }} />
+      <WhiteLabelPageClient />
+    </>
+  );
 }

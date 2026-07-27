@@ -5,11 +5,12 @@ import { IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList
 import { addIcons } from "ionicons";
 import { briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { CustomerNotificationPreferences } from "../../core/api.types";
+import { YourSalonsListComponent } from "../../shared/your-salons-list.component";
+import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../../core/api.types";
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList],
+  imports: [FormsModule, RouterLink, IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList, YourSalonsListComponent],
   template: `
     <ion-content>
       <main class="page-narrow profile-page">
@@ -69,6 +70,13 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
               <span>Loyalty and rewards status</span>
             </article>
           </section>
+
+          <aura-your-salons-list
+            [salons]="marketplace.mySalons()"
+            [primarySalon]="marketplace.primarySalon()"
+            (setAsPrimary)="onSetPrimarySalon($event)"
+            (removePrimary)="onRemovePrimarySalon()">
+          </aura-your-salons-list>
 
           @if (editMode()) {
           <section class="profile-editor premium-card">
@@ -769,6 +777,7 @@ export class ProfilePage implements OnInit {
       await this.marketplace.loadCustomer().then(() => this.syncForm()).catch(() => undefined);
       await this.marketplace.loadBookings().catch(() => undefined);
       await this.marketplace.loadFavorites().catch(() => undefined);
+      await this.marketplace.loadMySalons().catch(() => undefined);
     }
   }
 
@@ -910,6 +919,22 @@ export class ProfilePage implements OnInit {
   logout() {
     void this.marketplace.logout()
       .finally(() => this.router.navigateByUrl("/login"));
+  }
+
+  async onSetPrimarySalon(salon: CustomerSalonRelationship) {
+    try {
+      await this.marketplace.setPrimarySalon(salon.tenantId, salon.branchId, salon.businessId, salon.businessName);
+    } catch {
+      // error is handled by marketplace service
+    }
+  }
+
+  async onRemovePrimarySalon() {
+    try {
+      await this.marketplace.removePrimarySalon();
+    } catch {
+      // error is handled by marketplace service
+    }
   }
 
   private syncForm() {
