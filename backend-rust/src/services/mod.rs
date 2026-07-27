@@ -57,6 +57,7 @@ pub mod staff_enterprise_service;
 pub mod staff_identity_service;
 pub mod staff_leave_service;
 pub mod staff_operations_service;
+pub mod staff_os_registry;
 pub mod staff_payroll_service;
 pub mod staff_schedule_service;
 pub mod staff_service;

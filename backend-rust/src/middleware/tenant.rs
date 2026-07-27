@@ -423,6 +423,7 @@ pub(crate) fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         );
     }
     if path_starts_with(path, "/staff-payroll")
+        || path_starts_with(path, "/staff-advances")
         || path_starts_with(path, "/staff/payroll-compliance")
         || path_starts_with(path, "/staff/tips/payouts")
         || path.contains("/salary-revisions")
