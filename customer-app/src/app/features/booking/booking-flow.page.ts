@@ -160,7 +160,7 @@ type PendingBookingIntent = {
           }
         </main>
 
-        <div class="booking-cta">
+        <div class="booking-cta sticky-cta">
           <div class="bottom-action-card">
             <div>
               <small>{{ selectedService()?.name || "Select a service" }}</small>
@@ -189,6 +189,7 @@ type PendingBookingIntent = {
   styles: [`
     .booking-page { max-width: 980px; padding-bottom: 14px; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
+    .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)) !important; }
     .booking-hero { display: grid; gap: 18px; align-items: center; padding: 14px; }
     .booking-hero img { width: 100%; aspect-ratio: 16 / 10; height: auto; border-radius: 24px; object-fit: cover; }
     .booking-hero .page-title { font-size: clamp(2rem, 5vw, 3.6rem); }
