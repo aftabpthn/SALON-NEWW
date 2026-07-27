@@ -221,6 +221,10 @@ pub fn public_router() -> Router<AppState> {
             "/membership-enterprise/self-service/public/:token/request",
             axum::routing::post(public_self_service_request),
         )
+        .route(
+            "/membership-enterprise/self-service/public/:token/reward-qr",
+            axum::routing::post(public_reward_qr),
+        )
 }
 
 #[derive(Deserialize)]
@@ -365,6 +369,14 @@ struct PublicSelfServiceRequest {
     credit_delta: Option<i32>,
     service_id: Option<String>,
     payment_reference: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicRewardQrRequest {
+    points: i32,
+    amount_paise: i64,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -1043,6 +1055,30 @@ async fn public_renew_request(
     Ok(Json(ApiResponse::ok(
         membership_service::public_renew_request(&state.db, &token).await?,
     )))
+}
+
+async fn public_reward_qr(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    Json(payload): Json<PublicRewardQrRequest>,
+) -> ApiResult<Value> {
+    let item = membership_service::create_public_reward_qr(
+        &state.db,
+        &token,
+        payload.points,
+        payload.amount_paise,
+        &payload.idempotency_key,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "id": item.id,
+        "token": item.token,
+        "points": item.points,
+        "amountPaise": item.amount_paise,
+        "status": item.status,
+        "expiresAt": item.expires_at,
+        "qrSvg": membership_qr_svg(&item.token)?,
+    }))))
 }
 
 async fn proration_preview(

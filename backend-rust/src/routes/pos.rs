@@ -251,6 +251,14 @@ pub fn router() -> Router<AppState> {
         .route("/pos/sales/:id/payments", post(add_pos_payment))
         .route("/pos/invoices/:id/payments", post(add_pos_payment))
         .route("/invoices/:id/payments", post(add_pos_payment))
+        .route(
+            "/pos/loyalty/redeem-qr/verify",
+            post(verify_loyalty_redeem_qr),
+        )
+        .route(
+            "/pos/invoices/:id/loyalty-redeem-qr",
+            post(redeem_loyalty_redeem_qr),
+        )
         .route("/pos/payments", get(list_pos_payments))
         .route(
             "/pos/happy-hours/rules",
@@ -536,6 +544,12 @@ pub struct PosPaymentInput {
     pub idempotency_key: Option<String>,
     pub cash_drawer_till_id: Option<String>,
     pub paid_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoyaltyQrInput {
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -2137,6 +2151,39 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         terminal_id: None,
         wallet_credit_paise: None,
     }
+}
+
+async fn verify_loyalty_redeem_qr(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<LoyaltyQrInput>,
+) -> ApiResult<membership_service::LoyaltyRedeemQrToken> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::verify_reward_qr(&state.db, &tenant_id, &branch_id, &payload.token)
+            .await?,
+    )))
+}
+
+async fn redeem_loyalty_redeem_qr(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<LoyaltyQrInput>,
+) -> ApiResult<membership_service::LoyaltyQrRedeemResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::redeem_reward_qr(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &id,
+            &payload.token,
+            &claims.sub,
+        )
+        .await?,
+    )))
 }
 
 fn payment_response(row: PosPaymentRow) -> PosPaymentResponse {
@@ -13804,10 +13851,20 @@ async fn post_membership_rewards(
     // gated, so they are posted before the membership eligibility checks
     // below. Same transaction, same call sites, same idempotency guarantees.
     post_stamp_cards(
-        tx, tenant_id, branch_id, client_id, staff_id, sale_id, total_paise, &settings,
+        tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        staff_id,
+        sale_id,
+        total_paise,
+        &settings,
     )
     .await?;
-    let rewards_config = settings.get("rewards").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let rewards_config = settings
+        .get("rewards")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
     let reward_line_types: Vec<String> = [
         ("service", "enableForServices"),
         ("product", "enableForProducts"),
@@ -13990,10 +14047,9 @@ async fn post_stamp_cards(
         if !stamp_card_service::invoice_earns_stamp(&program, total_paise, &line_types) {
             continue;
         }
-        let balance = stamp_card_service::current_balance(
-            tx, tenant_id, branch_id, client_id, &program.code,
-        )
-        .await?;
+        let balance =
+            stamp_card_service::current_balance(tx, tenant_id, branch_id, client_id, &program.code)
+                .await?;
         let earned_balance = balance.saturating_add(1);
         let posted = stamp_card_service::insert_event(
             tx,
@@ -14040,8 +14096,7 @@ async fn post_stamp_cards(
             continue;
         }
         let completion_balance = earned_balance - program.stamps_required;
-        let completion_key =
-            stamp_card_service::completion_idempotency_key(sale_id, &program.code);
+        let completion_key = stamp_card_service::completion_idempotency_key(sale_id, &program.code);
         let completed = stamp_card_service::insert_event(
             tx,
             tenant_id,
@@ -14152,8 +14207,7 @@ pub(crate) async fn reverse_stamp_cards_for_refund(
     .map_err(|_| AppError::internal("failed to load stamps for refund"))?;
 
     for (program_code, stamps) in earned {
-        let completion_key =
-            stamp_card_service::completion_idempotency_key(sale_id, &program_code);
+        let completion_key = stamp_card_service::completion_idempotency_key(sale_id, &program_code);
         let completed_stamps = sqlx::query_scalar::<_, i32>(
             "SELECT stamps FROM stamp_card_events \
              WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND program_code=$4 \
@@ -14172,10 +14226,8 @@ pub(crate) async fn reverse_stamp_cards_for_refund(
                 .await?;
         let reversed =
             stamp_card_service::refund_reversal_balance(balance, stamps, completed_stamps);
-        let reversal_key = stamp_card_service::stamp_reversal_idempotency_key(
-            refund_id,
-            &program_code,
-        );
+        let reversal_key =
+            stamp_card_service::stamp_reversal_idempotency_key(refund_id, &program_code);
         let posted = stamp_card_service::insert_event(
             tx,
             tenant_id,
@@ -14306,7 +14358,10 @@ fn reward_points_for_config(eligible_paise: i64, rewards: &Value) -> i64 {
         .into_iter()
         .flatten()
         .filter_map(|rule| {
-            let min_bill = rule.get("minBillPaise").and_then(Value::as_i64).unwrap_or(0);
+            let min_bill = rule
+                .get("minBillPaise")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
             let bonus_value = rule.get("rewardValue").and_then(Value::as_i64).unwrap_or(0);
             let reward_type = rule.get("rewardType").and_then(Value::as_str).unwrap_or("");
             (bonus_value > 0 && eligible_paise >= min_bill)
@@ -14454,14 +14509,23 @@ mod package_credit_value_tests {
     fn non_member_earning_is_off_until_the_owner_enables_it() {
         // Default and legacy settings (flag absent) stay members-only.
         assert!(!earns_without_membership(&json!({}), 0));
-        assert!(!earns_without_membership(&json!({ "allowNonMembers": false }), 0));
+        assert!(!earns_without_membership(
+            &json!({ "allowNonMembers": false }),
+            0
+        ));
 
         // Enabled: a paid invoice with no redemption earns for any client.
-        assert!(earns_without_membership(&json!({ "allowNonMembers": true }), 0));
+        assert!(earns_without_membership(
+            &json!({ "allowNonMembers": true }),
+            0
+        ));
 
         // Redemption is untouched by the flag: a sale that spends points is
         // never widened, so membership is still required to redeem.
-        assert!(!earns_without_membership(&json!({ "allowNonMembers": true }), 50));
+        assert!(!earns_without_membership(
+            &json!({ "allowNonMembers": true }),
+            50
+        ));
     }
 
     #[test]

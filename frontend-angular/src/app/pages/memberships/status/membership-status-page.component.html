@@ -28,6 +28,19 @@
       @if (message) {
         <p class="success">{{ message }}</p>
       }
+      <section class="request-section">
+        <h2>Redeem QR</h2>
+        <label>Points<input type="number" min="1" [(ngModel)]="redeemPoints" /></label>
+        <label>Amount<input type="number" min="1" step="0.01" [(ngModel)]="redeemAmountRupees" /></label>
+        <button type="button" [disabled]="requesting || !item.rewardPointsBalance" (click)="createRewardQr()">Generate one-time QR</button>
+        @if (rewardQr) {
+          <div class="qr-box">
+            <div [innerHTML]="rewardQr.qrSvg"></div>
+            <strong>{{ rewardQr.points }} points · ₹{{ rewardQr.amountPaise / 100 }}</strong>
+            <span>Expires {{ formatDate(rewardQr.expiresAt) }}</span>
+          </div>
+        }
+      </section>
       <section class="request-section"><h2>Renewal</h2><button type="button" [disabled]="requesting" (click)="requestRenewal()">Request renewal</button></section>
       <section class="request-section"><h2>Payment update</h2><label>Payment reference<input [(ngModel)]="paymentReference" maxlength="200" /></label><button type="button" [disabled]="requesting" (click)="submitRequest('payment_method_update')">Submit payment update</button></section>
       <section class="request-section"><h2>Credit adjustment</h2><label>Service<select [(ngModel)]="creditServiceId"><option value="">Select service</option>@for (credit of item.credits; track credit) {
