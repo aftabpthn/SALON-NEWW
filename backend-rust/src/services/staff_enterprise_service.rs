@@ -80,6 +80,16 @@ pub struct StatutoryRuleRequest {
     pub rule: Value,
     pub effective_from: NaiveDate,
     pub effective_to: Option<NaiveDate>,
+    /// Paise/rupee rounding for rate-based amounts; defaults to legacy floor.
+    #[serde(default)]
+    pub rounding_method: Option<String>,
+    /// Citation of the notification/circular/section this rate implements.
+    pub official_reference: String,
+    /// The CA/labour professional who approved this configuration.
+    pub approved_by: String,
+    /// Structured applicability conditions (e.g. monthly gross bounds).
+    #[serde(default)]
+    pub applicability: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -603,6 +613,72 @@ pub async fn list_rules(
         .map_err(internal("load statutory rules"))
 }
 
+pub const ROUNDING_METHODS: &[&str] = &[
+    "floor",
+    "nearest_paisa",
+    "ceiling_paisa",
+    "floor_rupee",
+    "nearest_rupee",
+    "ceiling_rupee",
+];
+
+fn validate_applicability(value: &Value) -> Result<(), AppError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| AppError::validation("applicability must be an object"))?;
+    for (key, entry) in object {
+        match key.as_str() {
+            "minMonthlyGrossPaise" | "maxMonthlyGrossPaise" => {
+                if !entry.as_i64().is_some_and(|amount| amount >= 0) {
+                    return Err(AppError::validation(format!(
+                        "applicability {key} must be a non-negative amount in paise"
+                    )));
+                }
+            }
+            "notes" => {
+                if !entry.as_str().is_some_and(|text| text.chars().count() <= 500) {
+                    return Err(AppError::validation("applicability notes are invalid"));
+                }
+            }
+            _ => {
+                return Err(AppError::validation(format!(
+                    "applicability condition {key} is not supported"
+                )))
+            }
+        }
+    }
+    if let (Some(min), Some(max)) = (
+        object.get("minMonthlyGrossPaise").and_then(Value::as_i64),
+        object.get("maxMonthlyGrossPaise").and_then(Value::as_i64),
+    ) {
+        if max < min {
+            return Err(AppError::validation(
+                "applicability gross bounds are inverted",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Whether a statutory rule applies to this month's gross, per its stored
+/// applicability conditions.
+pub(crate) fn rule_applies(gross_paise: i64, applicability: &Value) -> bool {
+    let Some(object) = applicability.as_object() else {
+        return true;
+    };
+    if let Some(min) = object.get("minMonthlyGrossPaise").and_then(Value::as_i64) {
+        if gross_paise < min {
+            return false;
+        }
+    }
+    if let Some(max) = object.get("maxMonthlyGrossPaise").and_then(Value::as_i64) {
+        if gross_paise > max {
+            return false;
+        }
+    }
+    true
+}
+
 pub async fn create_rule(
     db: &PgPool,
     t: &str,
@@ -615,6 +691,16 @@ pub async fn create_rule(
     if r.effective_to.is_some_and(|d| d < r.effective_from) {
         return Err(AppError::validation("effective date range is invalid"));
     }
+    let rounding = match r.rounding_method.as_deref().map(str::trim) {
+        None | Some("") => "floor".to_string(),
+        Some(value) => required_enum(value, ROUNDING_METHODS, "rounding method")?,
+    };
+    // Legal provenance is mandatory: rates enter the system only as reviewed,
+    // referenced configuration — never as code.
+    let official_reference = required(&r.official_reference, 300, "official reference")?;
+    let approved_by = required(&r.approved_by, 120, "approved by")?;
+    let applicability = r.applicability.unwrap_or_else(|| json!({}));
+    validate_applicability(&applicability)?;
     repository::create_statutory_rule(
         db,
         t,
@@ -625,6 +711,12 @@ pub async fn create_rule(
         &r.rule,
         r.effective_from,
         r.effective_to,
+        repository::StatutoryRuleGovernance {
+            rounding_method: &rounding,
+            official_reference: &official_reference,
+            approved_by: &approved_by,
+            applicability: &applicability,
+        },
     )
     .await
     .map_err(db_write(
@@ -661,7 +753,10 @@ pub async fn calculate_statutory(
     let mut accrual = 0;
     let mut breakdown = serde_json::Map::new();
     for rule in rules {
-        let result = calculate_rule(gross, &rule.rule_json)?;
+        if !rule_applies(gross, &rule.applicability_json) {
+            continue;
+        }
+        let result = calculate_rule(gross, &rule.rule_json, &rule.rounding_method)?;
         employee += result.0;
         employer += result.1;
         accrual += result.2;
@@ -2017,11 +2112,53 @@ fn validate_rule(v: &Value) -> Result<(), AppError> {
         "employeeFixedPaise",
         "employerFixedPaise",
         "accrualFixedPaise",
+        "employeeSlabs",
     ];
     if !recognized.iter().any(|key| o.contains_key(*key)) {
         return Err(AppError::validation(
-            "statutory rule requires a rate or fixed amount",
+            "statutory rule requires a rate, fixed amount, or slab table",
         ));
+    }
+    if let Some(slabs) = o.get("employeeSlabs") {
+        let slabs = slabs
+            .as_array()
+            .ok_or_else(|| AppError::validation("employeeSlabs must be an array"))?;
+        if slabs.is_empty() || slabs.len() > 20 {
+            return Err(AppError::validation(
+                "employeeSlabs must contain 1 to 20 slabs",
+            ));
+        }
+        let mut previous_up_to = 0_i64;
+        for (index, slab) in slabs.iter().enumerate() {
+            let slab = slab
+                .as_object()
+                .ok_or_else(|| AppError::validation("each slab must be an object"))?;
+            let up_to = slab.get("upToPaise").and_then(Value::as_i64);
+            match up_to {
+                Some(up_to) if up_to > previous_up_to => previous_up_to = up_to,
+                Some(_) => {
+                    return Err(AppError::validation(
+                        "slab upToPaise values must be positive and ascending",
+                    ))
+                }
+                // Only the final slab may be open-ended.
+                None if index + 1 == slabs.len() => {}
+                None => {
+                    return Err(AppError::validation(
+                        "only the last slab may omit upToPaise",
+                    ))
+                }
+            }
+            let amount = slab.get("amountPaise").and_then(Value::as_i64);
+            let basis_points = slab.get("basisPoints").and_then(Value::as_i64);
+            let amount_valid = amount.is_some_and(|value| value >= 0);
+            let rate_valid = basis_points.is_some_and(|value| (0..=10_000).contains(&value));
+            if !(amount_valid || rate_valid) {
+                return Err(AppError::validation(
+                    "each slab needs amountPaise or basisPoints",
+                ));
+            }
+        }
     }
     for k in [
         "employeeBasisPoints",
@@ -2048,7 +2185,57 @@ fn validate_rule(v: &Value) -> Result<(), AppError> {
     }
     Ok(())
 }
-pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), AppError> {
+/// Rounds `numerator / denominator` according to the configured statutory
+/// rounding method's direction (floor, nearest half-up, or ceiling).
+fn round_division(numerator: i64, denominator: i64, direction: &str) -> i64 {
+    match direction {
+        "ceiling" => (numerator + denominator - 1) / denominator,
+        "nearest" => (numerator + denominator / 2) / denominator,
+        _ => numerator / denominator,
+    }
+}
+
+/// Applies a basis-point rate to a wage using the rule's rounding method.
+/// Paisa modes round the paise result directly; rupee modes round the result
+/// to whole rupees (EPFO-style nearest-rupee rounding is `nearest_rupee`).
+fn rounded_rate(wage_paise: i64, basis_points: i64, rounding: &str) -> i64 {
+    let numerator = wage_paise.saturating_mul(basis_points);
+    match rounding {
+        "nearest_paisa" => round_division(numerator, 10_000, "nearest"),
+        "ceiling_paisa" => round_division(numerator, 10_000, "ceiling"),
+        "floor_rupee" => round_division(numerator, 1_000_000, "floor") * 100,
+        "nearest_rupee" => round_division(numerator, 1_000_000, "nearest") * 100,
+        "ceiling_rupee" => round_division(numerator, 1_000_000, "ceiling") * 100,
+        _ => numerator / 10_000,
+    }
+}
+
+/// Bracket-style slab lookup (professional tax and slab-configured TDS): the
+/// first slab whose `upToPaise` covers the wage (or the open-ended last slab)
+/// supplies either a fixed `amountPaise` or `basisPoints` on the wage.
+fn slab_amount(wage_paise: i64, slabs: &[Value], rounding: &str) -> i64 {
+    for slab in slabs {
+        let covers = match slab.get("upToPaise").and_then(Value::as_i64) {
+            Some(up_to) => wage_paise <= up_to,
+            None => true,
+        };
+        if !covers {
+            continue;
+        }
+        if let Some(amount) = slab.get("amountPaise").and_then(Value::as_i64) {
+            return amount.max(0);
+        }
+        let basis_points = slab.get("basisPoints").and_then(Value::as_i64).unwrap_or(0);
+        return rounded_rate(wage_paise, basis_points, rounding).max(0);
+    }
+    0
+}
+
+pub(crate) fn calculate_rule(
+    gross: i64,
+    v: &Value,
+    rounding: &str,
+) -> Result<(i64, i64, i64), AppError> {
     validate_rule(v)?;
     let cap = v
         .get("wageCapPaise")
@@ -2067,12 +2254,16 @@ pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), A
         v.get(fixed)
             .and_then(Value::as_i64)
             .unwrap_or_else(|| {
-                wage.saturating_mul(v.get(key).and_then(Value::as_i64).unwrap_or(0)) / 10000
+                rounded_rate(wage, v.get(key).and_then(Value::as_i64).unwrap_or(0), rounding)
             })
             .max(0)
     };
+    let employee = match v.get("employeeSlabs").and_then(Value::as_array) {
+        Some(slabs) => slab_amount(wage, slabs, rounding),
+        None => calc("employeeBasisPoints", "employeeFixedPaise"),
+    };
     Ok((
-        calc("employeeBasisPoints", "employeeFixedPaise"),
+        employee,
         calc("employerBasisPoints", "employerFixedPaise"),
         calc("accrualBasisPoints", "accrualFixedPaise"),
     ))
@@ -2139,7 +2330,68 @@ mod tests {
     use std::collections::HashMap;
     #[test]
     fn statutory_money_uses_basis_points_and_caps() {
-        assert_eq!(calculate_rule(2_000_000,&json!({"wageCapPaise":1_500_000,"employeeBasisPoints":1200,"employerBasisPoints":1200})).unwrap(),(180_000,180_000,0));
+        assert_eq!(calculate_rule(2_000_000,&json!({"wageCapPaise":1_500_000,"employeeBasisPoints":1200,"employerBasisPoints":1200}),"floor").unwrap(),(180_000,180_000,0));
+    }
+
+    #[test]
+    fn statutory_rounding_methods_are_configuration_not_code() {
+        let rule = json!({"employeeBasisPoints": 1, "employerBasisPoints": 0});
+        // 1_234_567 * 1bp = 123.4567 paise.
+        assert_eq!(calculate_rule(1_234_567, &rule, "floor").unwrap().0, 123);
+        assert_eq!(calculate_rule(1_234_567, &rule, "nearest_paisa").unwrap().0, 123);
+        assert_eq!(calculate_rule(1_234_567, &rule, "ceiling_paisa").unwrap().0, 124);
+        // 1_000_000 * 1200bp = 120_000 paise = Rs 1200; odd wage exercises rupee rounding.
+        let pf = json!({"employeeBasisPoints": 1200});
+        assert_eq!(calculate_rule(1_004_170, &pf, "floor").unwrap().0, 120_500);
+        assert_eq!(calculate_rule(1_004_170, &pf, "floor_rupee").unwrap().0, 120_500);
+        assert_eq!(calculate_rule(1_004_170, &pf, "nearest_rupee").unwrap().0, 120_500);
+        assert_eq!(calculate_rule(1_004_580, &pf, "nearest_rupee").unwrap().0, 120_500);
+        assert_eq!(calculate_rule(1_004_580, &pf, "ceiling_rupee").unwrap().0, 120_600);
+    }
+
+    #[test]
+    fn professional_tax_slabs_pick_the_covering_bracket() {
+        let pt = json!({"employeeSlabs": [
+            {"upToPaise": 1_000_000, "amountPaise": 0},
+            {"upToPaise": 1_500_000, "amountPaise": 15_000},
+            {"amountPaise": 20_000}
+        ]});
+        assert_eq!(calculate_rule(900_000, &pt, "floor").unwrap().0, 0);
+        assert_eq!(calculate_rule(1_200_000, &pt, "floor").unwrap().0, 15_000);
+        assert_eq!(calculate_rule(2_500_000, &pt, "floor").unwrap().0, 20_000);
+        // Rate-based slab rows apply the rule's rounding to the wage.
+        let tds = json!({"employeeSlabs": [
+            {"upToPaise": 5_000_000, "basisPoints": 0},
+            {"basisPoints": 500}
+        ]});
+        assert_eq!(calculate_rule(4_000_000, &tds, "floor").unwrap().0, 0);
+        assert_eq!(calculate_rule(8_000_000, &tds, "floor").unwrap().0, 400_000);
+
+        // Malformed slab tables are rejected, never silently defaulted.
+        assert!(calculate_rule(1, &json!({"employeeSlabs": []}), "floor").is_err());
+        assert!(calculate_rule(
+            1,
+            &json!({"employeeSlabs": [{"upToPaise": 100}, {"upToPaise": 50, "amountPaise": 1}]}),
+            "floor"
+        )
+        .is_err());
+        assert!(calculate_rule(
+            1,
+            &json!({"employeeSlabs": [{"amountPaise": 1}, {"upToPaise": 100, "amountPaise": 2}]}),
+            "floor"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn applicability_conditions_bound_the_rule() {
+        use super::rule_applies;
+        let window = json!({"minMonthlyGrossPaise": 1_000_000, "maxMonthlyGrossPaise": 2_000_000});
+        assert!(!rule_applies(900_000, &window));
+        assert!(rule_applies(1_000_000, &window));
+        assert!(rule_applies(2_000_000, &window));
+        assert!(!rule_applies(2_000_001, &window));
+        assert!(rule_applies(1, &json!({})));
     }
 
     #[test]

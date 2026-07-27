@@ -18,7 +18,69 @@ use crate::{
     services::{auth_service, security_service},
 };
 
-const API_SCOPES: &[&str] = &["clients.read", "appointments.read", "sales.read"];
+/// Scopes an integration key may hold. These are machine data scopes only —
+/// there is deliberately no scope that grants a staff session, staff
+/// self-service, role administration, or payroll mutation.
+const API_SCOPES: &[&str] = &[
+    "clients.read",
+    "appointments.read",
+    "sales.read",
+    "attendance.write",
+    "attendance.read",
+    "accounting.read",
+    "payroll.read",
+    "payroll.export",
+    "messaging.send",
+    "messaging.status.write",
+    "analytics.read",
+    "reports.read",
+];
+
+/// The machine integrations API keys exist for. API keys are never issued for
+/// a human staff login; browser and mobile users authenticate with JWT plus a
+/// secure refresh cookie and CSRF token.
+pub const INTEGRATION_TYPES: &[(&str, &[&str])] = &[
+    ("attendance_device", &["attendance.write", "attendance.read"]),
+    (
+        "accounting_export",
+        &["accounting.read", "sales.read", "reports.read"],
+    ),
+    (
+        "payroll_provider",
+        &["payroll.read", "payroll.export", "attendance.read"],
+    ),
+    (
+        "messaging_provider",
+        &["messaging.send", "messaging.status.write", "clients.read"],
+    ),
+    (
+        "ai_service",
+        &[
+            "clients.read",
+            "appointments.read",
+            "sales.read",
+            "analytics.read",
+            "reports.read",
+        ],
+    ),
+    (
+        "external_reporting",
+        &[
+            "clients.read",
+            "appointments.read",
+            "sales.read",
+            "reports.read",
+            "analytics.read",
+        ],
+    ),
+];
+
+/// Longest life an integration key may be issued for.
+const MAX_API_KEY_DAYS: i64 = 400;
+/// Validity granted when rotating a key whose expiry is missing or already past.
+const ROTATION_DEFAULT_DAYS: i64 = 90;
+/// Upper bound for a per-key request budget.
+const MAX_RATE_LIMIT_PER_MINUTE: i32 = 100_000;
 const WEBHOOK_EVENTS: &[&str] = &[
     "client.created",
     "appointment.created",
@@ -158,6 +220,14 @@ pub async fn list_api_keys(
         .map_err(|_| AppError::internal("failed to list API keys"))
 }
 
+/// Machine-integration controls supplied when issuing a key.
+pub struct ApiKeyRequest {
+    pub integration_type: String,
+    pub rate_limit_per_minute: i32,
+    pub ip_allowlist: Vec<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn create_api_key(
     db: &PgPool,
     tenant: &str,
@@ -167,13 +237,18 @@ pub async fn create_api_key(
     scopes: Vec<String>,
     expires_at: Option<DateTime<Utc>>,
     rotated_from: Option<&str>,
+    request: ApiKeyRequest,
 ) -> Result<ApiKeyCreated, AppError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > 120 {
         return Err(AppError::validation("API key name is invalid"));
     }
     validate_scopes(&scopes)?;
+    let integration_type = request.integration_type.trim().to_ascii_lowercase();
+    validate_integration_scopes(&integration_type, &scopes)?;
     validate_expiry(expires_at)?;
+    validate_rate_limit(request.rate_limit_per_minute)?;
+    let ip_allowlist = validate_ip_allowlist(&request.ip_allowlist)?;
     let (api_key, prefix, secret_hash) = generate_api_key()?;
     let record = integration_repository::insert_api_key(
         db,
@@ -186,16 +261,32 @@ pub async fn create_api_key(
         expires_at,
         actor,
         rotated_from,
+        integration_repository::ApiKeyControls {
+            integration_type: &integration_type,
+            rate_limit_per_minute: request.rate_limit_per_minute,
+            ip_allowlist: &ip_allowlist,
+        },
     )
     .await
     .map_err(|_| AppError::internal("failed to create API key"))?;
+    // The audit trail records the key id and prefix only — the raw secret is
+    // returned to the caller once and never written to storage or logs.
     let _ = security_service::record_audit(
         db,
         tenant,
         branch,
         actor,
         "api_client.created",
-        json!({"apiClientId": record.id, "name": record.name, "scopes": record.scopes_json}),
+        json!({
+            "apiClientId": record.id,
+            "name": record.name,
+            "keyPrefix": record.key_prefix,
+            "integrationType": record.integration_type,
+            "scopes": record.scopes_json,
+            "expiresAt": record.expires_at,
+            "rateLimitPerMinute": record.rate_limit_per_minute,
+            "ipAllowlist": record.ip_allowlist_json,
+        }),
     )
     .await;
     Ok(ApiKeyCreated { record, api_key })
@@ -223,7 +314,15 @@ pub async fn rotate_api_key(
         .map(str::to_string)
         .collect::<Vec<_>>();
     validate_scopes(&scopes)?;
-    validate_expiry(old.expires_at)?;
+    validate_integration_scopes(&old.integration_type, &scopes)?;
+    // Rotation keeps the remaining validity when it is still in the future;
+    // legacy keys without a usable expiry get a fresh bounded window rather
+    // than carrying an unbounded credential forward.
+    let expires_at = match old.expires_at {
+        Some(expires_at) if expires_at > Utc::now() => expires_at,
+        _ => Utc::now() + Duration::days(ROTATION_DEFAULT_DAYS),
+    };
+    validate_expiry(Some(expires_at))?;
     let (api_key, prefix, secret_hash) = generate_api_key()?;
     let record = integration_repository::rotate_api_key(
         db,
@@ -234,8 +333,13 @@ pub async fn rotate_api_key(
         &prefix,
         &secret_hash,
         &json!(scopes),
-        old.expires_at,
+        Some(expires_at),
         actor,
+        integration_repository::ApiKeyControls {
+            integration_type: &old.integration_type,
+            rate_limit_per_minute: old.rate_limit_per_minute,
+            ip_allowlist: &old.ip_allowlist_json,
+        },
     )
     .await
     .map_err(|_| AppError::internal("failed to rotate API key"))?
@@ -246,7 +350,15 @@ pub async fn rotate_api_key(
         branch,
         actor,
         "api_client.rotated",
-        json!({"apiClientId": record.id, "rotatedFromId": old.id, "name": record.name, "scopes": record.scopes_json}),
+        json!({
+            "apiClientId": record.id,
+            "rotatedFromId": old.id,
+            "name": record.name,
+            "keyPrefix": record.key_prefix,
+            "integrationType": record.integration_type,
+            "scopes": record.scopes_json,
+            "expiresAt": record.expires_at,
+        }),
     )
     .await;
     Ok(ApiKeyCreated { record, api_key })
@@ -277,10 +389,18 @@ pub async fn revoke_api_key(
     Ok(())
 }
 
+/// Authenticates a machine integration key.
+///
+/// Order matters: the secret is verified before any per-key control is
+/// consulted, and only the prefix (never the raw key) is used for lookup,
+/// logging, or auditing. An authenticated key grants data scopes only — it
+/// never produces a user session, JWT, or staff identity.
 pub async fn authenticate_api_key(
     db: &PgPool,
+    redis: Option<&crate::infrastructure::cache::RedisClient>,
     api_key: &str,
     required_scope: &str,
+    client_ip: Option<&str>,
 ) -> Result<ApiKeyCredential, AppError> {
     let prefix = api_key.chars().take(17).collect::<String>();
     let credential = integration_repository::active_api_key(db, &prefix)
@@ -299,10 +419,81 @@ pub async fn authenticate_api_key(
     if !allowed {
         return Err(AppError::forbidden("API key scope is not allowed"));
     }
-    integration_repository::touch_api_key(db, &credential.id)
+    if !ip_allowed(&credential.ip_allowlist_json, client_ip) {
+        let _ = security_service::record_audit(
+            db,
+            &credential.tenant_id,
+            &credential.branch_id,
+            &credential.id,
+            "api_client.ip_blocked",
+            json!({
+                "keyPrefix": prefix,
+                "integrationType": credential.integration_type,
+                "clientIp": client_ip,
+            }),
+        )
+        .await;
+        return Err(AppError::forbidden(
+            "API key is not allowed from this IP address",
+        ));
+    }
+    if let Some(redis) = redis {
+        if !within_rate_limit(redis, &credential.id, credential.rate_limit_per_minute).await? {
+            let _ = security_service::record_audit(
+                db,
+                &credential.tenant_id,
+                &credential.branch_id,
+                &credential.id,
+                "api_client.rate_limited",
+                json!({
+                    "keyPrefix": prefix,
+                    "integrationType": credential.integration_type,
+                    "rateLimitPerMinute": credential.rate_limit_per_minute,
+                }),
+            )
+            .await;
+            return Err(AppError::rate_limited(
+                "API key rate limit exceeded; retry shortly",
+            ));
+        }
+    }
+    integration_repository::touch_api_key(db, &credential.id, client_ip)
         .await
         .map_err(|_| AppError::internal("failed to record API key usage"))?;
     Ok(credential)
+}
+
+/// Fixed-window per-key request budget kept in Redis (the sanctioned store for
+/// rate limits). A Redis outage fails open on the limit rather than taking
+/// every integration offline — authentication, scope, and IP checks still
+/// apply.
+async fn within_rate_limit(
+    redis: &crate::infrastructure::cache::RedisClient,
+    key_id: &str,
+    limit_per_minute: i32,
+) -> Result<bool, AppError> {
+    let window = Utc::now().timestamp() / 60;
+    let bucket = format!("apikey:rate:{key_id}:{window}");
+    let Ok(mut connection) = redis.get_multiplexed_async_connection().await else {
+        return Ok(true);
+    };
+    let count: Option<i64> = redis::cmd("INCR")
+        .arg(&bucket)
+        .query_async(&mut connection)
+        .await
+        .ok();
+    let Some(count) = count else {
+        return Ok(true);
+    };
+    if count == 1 {
+        let _: Option<i64> = redis::cmd("EXPIRE")
+            .arg(&bucket)
+            .arg(120)
+            .query_async(&mut connection)
+            .await
+            .ok();
+    }
+    Ok(count <= i64::from(limit_per_minute))
 }
 
 pub async fn api_clients(
@@ -1271,11 +1462,146 @@ fn validate_scopes(scopes: &[String]) -> Result<(), AppError> {
     }
     Ok(())
 }
-fn validate_expiry(expires_at: Option<DateTime<Utc>>) -> Result<(), AppError> {
-    if expires_at.is_some_and(|value| value <= Utc::now()) {
-        return Err(AppError::validation("API key expiry must be in the future"));
+
+/// Scopes must belong to the declared machine integration: an attendance
+/// device cannot hold payroll export, a messaging provider cannot read sales.
+pub(crate) fn validate_integration_scopes(
+    integration_type: &str,
+    scopes: &[String],
+) -> Result<(), AppError> {
+    let allowed = INTEGRATION_TYPES
+        .iter()
+        .find(|(name, _)| *name == integration_type)
+        .map(|(_, allowed)| *allowed)
+        .ok_or_else(|| AppError::validation("integrationType is invalid"))?;
+    if let Some(scope) = scopes.iter().find(|scope| !allowed.contains(&scope.as_str())) {
+        return Err(AppError::validation(format!(
+            "scope {scope} is not allowed for a {integration_type} integration"
+        )));
     }
     Ok(())
+}
+
+/// Integration keys must expire; an unbounded machine credential is exactly
+/// what rotation and revocation exist to avoid.
+fn validate_expiry(expires_at: Option<DateTime<Utc>>) -> Result<(), AppError> {
+    let Some(expires_at) = expires_at else {
+        return Err(AppError::validation("API key expiry is required"));
+    };
+    let now = Utc::now();
+    if expires_at <= now {
+        return Err(AppError::validation("API key expiry must be in the future"));
+    }
+    if expires_at > now + Duration::days(MAX_API_KEY_DAYS) {
+        return Err(AppError::validation(format!(
+            "API key expiry cannot exceed {MAX_API_KEY_DAYS} days"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_rate_limit(rate_limit_per_minute: i32) -> Result<(), AppError> {
+    if !(1..=MAX_RATE_LIMIT_PER_MINUTE).contains(&rate_limit_per_minute) {
+        return Err(AppError::validation(format!(
+            "rateLimitPerMinute must be between 1 and {MAX_RATE_LIMIT_PER_MINUTE}"
+        )));
+    }
+    Ok(())
+}
+
+/// Optional IP allowlist. Entries are plain IPv4/IPv6 addresses or CIDR
+/// blocks; an empty list means the key is not IP-restricted.
+fn validate_ip_allowlist(entries: &[String]) -> Result<Value, AppError> {
+    if entries.len() > 50 {
+        return Err(AppError::validation(
+            "ipAllowlist supports at most 50 entries",
+        ));
+    }
+    let mut normalized = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        if !parse_allowlist_entry(entry).is_some() {
+            return Err(AppError::validation(format!(
+                "ipAllowlist entry {entry} is not a valid IP address or CIDR block"
+            )));
+        }
+        let entry = entry.to_string();
+        if !normalized.contains(&entry) {
+            normalized.push(entry);
+        }
+    }
+    Ok(json!(normalized))
+}
+
+/// Parses an allowlist entry into (address, prefix_len).
+fn parse_allowlist_entry(entry: &str) -> Option<(std::net::IpAddr, u8)> {
+    let (address, prefix) = match entry.split_once('/') {
+        Some((address, prefix)) => (address, Some(prefix)),
+        None => (entry, None),
+    };
+    let address: std::net::IpAddr = address.parse().ok()?;
+    let max_prefix = if address.is_ipv4() { 32 } else { 128 };
+    let prefix_len = match prefix {
+        Some(prefix) => {
+            let parsed: u8 = prefix.parse().ok()?;
+            if parsed > max_prefix {
+                return None;
+            }
+            parsed
+        }
+        None => max_prefix,
+    };
+    Some((address, prefix_len))
+}
+
+fn ip_matches(candidate: std::net::IpAddr, address: std::net::IpAddr, prefix_len: u8) -> bool {
+    match (candidate, address) {
+        (std::net::IpAddr::V4(candidate), std::net::IpAddr::V4(address)) => {
+            prefix_matches(&candidate.octets(), &address.octets(), prefix_len)
+        }
+        (std::net::IpAddr::V6(candidate), std::net::IpAddr::V6(address)) => {
+            prefix_matches(&candidate.octets(), &address.octets(), prefix_len)
+        }
+        _ => false,
+    }
+}
+
+fn prefix_matches(candidate: &[u8], address: &[u8], prefix_len: u8) -> bool {
+    let full_bytes = usize::from(prefix_len / 8);
+    let remainder_bits = prefix_len % 8;
+    if candidate[..full_bytes] != address[..full_bytes] {
+        return false;
+    }
+    if remainder_bits == 0 {
+        return true;
+    }
+    let mask = 0xffu8 << (8 - remainder_bits);
+    candidate[full_bytes] & mask == address[full_bytes] & mask
+}
+
+/// Whether a caller IP satisfies a key's allowlist. An empty allowlist means
+/// the key is not IP-restricted; a non-empty allowlist with an unknown caller
+/// IP fails closed.
+pub(crate) fn ip_allowed(allowlist: &Value, client_ip: Option<&str>) -> bool {
+    let entries: Vec<&str> = allowlist
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if entries.is_empty() {
+        return true;
+    }
+    let Some(candidate) = client_ip.and_then(|ip| ip.parse::<std::net::IpAddr>().ok()) else {
+        return false;
+    };
+    entries.iter().any(|entry| {
+        parse_allowlist_entry(entry)
+            .is_some_and(|(address, prefix_len)| ip_matches(candidate, address, prefix_len))
+    })
 }
 fn generate_api_key() -> Result<(String, String, String), AppError> {
     let api_key = format!(
@@ -1347,8 +1673,9 @@ fn sign(secret: &str, message: &str) -> Result<String, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        connector_token_hash, sign, validate_expiry, validate_scopes, validate_webhook,
-        ConnectorProvider,
+        connector_token_hash, ip_allowed, sign, validate_expiry, validate_integration_scopes,
+        validate_ip_allowlist, validate_rate_limit, validate_scopes, validate_webhook,
+        ConnectorProvider, API_SCOPES, INTEGRATION_TYPES,
     };
     use chrono::{Duration, Utc};
     #[test]
@@ -1372,5 +1699,112 @@ mod tests {
         );
         assert!(ConnectorProvider::parse("unknown").is_err());
         assert_eq!(connector_token_hash("state").len(), 64);
+    }
+
+    /// API keys are machine credentials. No scope may grant a staff session,
+    /// staff self-service, role/permission administration, or any write to
+    /// payroll, security, or settings — those belong to authenticated humans
+    /// holding a JWT.
+    #[test]
+    fn api_scopes_never_grant_human_or_administrative_access() {
+        for scope in API_SCOPES {
+            let forbidden_fragment = [
+                "auth", "login", "session", "self", "role", "permission", "password", "user",
+                "security", "settings", "staff.manage", "management",
+            ]
+            .iter()
+            .find(|fragment| scope.contains(*fragment));
+            assert!(
+                forbidden_fragment.is_none(),
+                "API scope {scope} looks like human/administrative access ({forbidden_fragment:?})"
+            );
+            // Machine scopes are read, export, send, or status writes only.
+            assert!(
+                scope.ends_with(".read")
+                    || scope.ends_with(".export")
+                    || scope.ends_with(".send")
+                    || scope.ends_with(".write"),
+                "API scope {scope} has an unrecognised action"
+            );
+        }
+        // Every registered permission-engine key that grants staff or role
+        // administration must be absent from the API scope catalog.
+        for permission in ["staff.manage", "security.manage", "settings.manage", "staff.self_manage"] {
+            assert!(
+                !API_SCOPES.contains(&permission),
+                "{permission} must never be an API key scope"
+            );
+        }
+    }
+
+    #[test]
+    fn every_integration_type_declares_known_scopes() {
+        assert_eq!(INTEGRATION_TYPES.len(), 6);
+        for (integration_type, scopes) in INTEGRATION_TYPES {
+            assert!(!scopes.is_empty(), "{integration_type} has no scopes");
+            for scope in *scopes {
+                assert!(
+                    API_SCOPES.contains(scope),
+                    "{integration_type} declares unknown scope {scope}"
+                );
+            }
+        }
+        // Scopes are constrained to the declared integration.
+        assert!(validate_integration_scopes("attendance_device", &["attendance.write".into()]).is_ok());
+        assert!(
+            validate_integration_scopes("attendance_device", &["payroll.export".into()]).is_err(),
+            "an attendance device must not be able to export payroll"
+        );
+        assert!(
+            validate_integration_scopes("messaging_provider", &["sales.read".into()]).is_err(),
+            "a messaging provider must not be able to read sales"
+        );
+        assert!(validate_integration_scopes("unknown_type", &["clients.read".into()]).is_err());
+    }
+
+    #[test]
+    fn integration_keys_must_expire_within_bounds() {
+        assert!(
+            validate_expiry(None).is_err(),
+            "machine credentials must not be issued without an expiry"
+        );
+        assert!(validate_expiry(Some(Utc::now() + Duration::days(30))).is_ok());
+        assert!(validate_expiry(Some(Utc::now() + Duration::days(401))).is_err());
+    }
+
+    #[test]
+    fn rate_limit_and_allowlist_inputs_are_validated() {
+        assert!(validate_rate_limit(0).is_err());
+        assert!(validate_rate_limit(120).is_ok());
+        assert!(validate_rate_limit(100_001).is_err());
+
+        assert!(validate_ip_allowlist(&["203.0.113.7".into()]).is_ok());
+        assert!(validate_ip_allowlist(&["203.0.113.0/24".into()]).is_ok());
+        assert!(validate_ip_allowlist(&["2001:db8::/32".into()]).is_ok());
+        assert!(validate_ip_allowlist(&["not-an-ip".into()]).is_err());
+        assert!(validate_ip_allowlist(&["203.0.113.0/33".into()]).is_err());
+    }
+
+    #[test]
+    fn ip_allowlist_fails_closed_and_matches_cidr() {
+        let empty = serde_json::json!([]);
+        assert!(ip_allowed(&empty, None), "no allowlist means no IP restriction");
+        assert!(ip_allowed(&empty, Some("203.0.113.7")));
+
+        let allowlist = serde_json::json!(["203.0.113.0/24", "198.51.100.9"]);
+        assert!(ip_allowed(&allowlist, Some("203.0.113.7")));
+        assert!(ip_allowed(&allowlist, Some("203.0.113.255")));
+        assert!(!ip_allowed(&allowlist, Some("203.0.114.1")));
+        assert!(ip_allowed(&allowlist, Some("198.51.100.9")));
+        assert!(!ip_allowed(&allowlist, Some("198.51.100.10")));
+        assert!(
+            !ip_allowed(&allowlist, None),
+            "a restricted key with an unknown caller IP must fail closed"
+        );
+        assert!(!ip_allowed(&allowlist, Some("garbage")));
+
+        let v6 = serde_json::json!(["2001:db8::/32"]);
+        assert!(ip_allowed(&v6, Some("2001:db8::1")));
+        assert!(!ip_allowed(&v6, Some("2001:db9::1")));
     }
 }

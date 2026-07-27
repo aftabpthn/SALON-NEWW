@@ -1,6 +1,8 @@
+use std::net::SocketAddr;
+
 use axum::{
     body::{Body, Bytes},
-    extract::{DefaultBodyLimit, Path, Query, State},
+    extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{Redirect, Response},
     routing::{delete, get, post, put},
@@ -221,6 +223,16 @@ struct ApiKeyWrite {
     name: String,
     scopes: Vec<String>,
     expires_at: Option<DateTime<Utc>>,
+    /// Which machine integration this key belongs to.
+    integration_type: String,
+    #[serde(default = "default_rate_limit")]
+    rate_limit_per_minute: i32,
+    #[serde(default)]
+    ip_allowlist: Vec<String>,
+}
+
+fn default_rate_limit() -> i32 {
+    120
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -387,6 +399,11 @@ async fn create_api_key(
             p.scopes,
             p.expires_at,
             None,
+            integration_service::ApiKeyRequest {
+                integration_type: p.integration_type,
+                rate_limit_per_minute: p.rate_limit_per_minute,
+                ip_allowlist: p.ip_allowlist,
+            },
         )
         .await?,
     )))
@@ -845,9 +862,11 @@ async fn download_import_source_evidence(
 }
 async fn api_clients(
     State(s): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
+    let client_ip = caller_ip(&headers, connect_info.as_ref());
     let key = headers
         .get("x-api-key")
         .and_then(|v| v.to_str().ok())
@@ -855,34 +874,71 @@ async fn api_clients(
     if key.is_empty() {
         return Err(AppError::unauthenticated("x-api-key is required"));
     }
-    let credential = integration_service::authenticate_api_key(&s.db, key, "clients.read").await?;
+    let credential = integration_service::authenticate_api_key(
+        &s.db,
+        Some(&s.redis),
+        key,
+        "clients.read",
+        client_ip.as_deref(),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_clients(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
 }
 async fn api_appointments(
     State(s): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
+    let client_ip = caller_ip(&headers, connect_info.as_ref());
     let key = api_key_header(&headers)?;
-    let credential =
-        integration_service::authenticate_api_key(&s.db, key, "appointments.read").await?;
+    let credential = integration_service::authenticate_api_key(
+        &s.db,
+        Some(&s.redis),
+        key,
+        "appointments.read",
+        client_ip.as_deref(),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_appointments(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
 }
 async fn api_sales(
     State(s): State<AppState>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
+    let client_ip = caller_ip(&headers, connect_info.as_ref());
     let key = api_key_header(&headers)?;
-    let credential = integration_service::authenticate_api_key(&s.db, key, "sales.read").await?;
+    let credential = integration_service::authenticate_api_key(
+        &s.db,
+        Some(&s.redis),
+        key,
+        "sales.read",
+        client_ip.as_deref(),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_sales(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
 }
+/// Caller IP for API key allowlist checks: the left-most `x-forwarded-for`
+/// entry when the service runs behind a trusted proxy, else the socket peer.
+fn caller_ip(headers: &HeaderMap, connect_info: Option<&ConnectInfo<SocketAddr>>) -> Option<String> {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(',').next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| connect_info.map(|info| info.0.ip().to_string()))
+}
+
 fn api_key_header(headers: &HeaderMap) -> Result<&str, AppError> {
     headers
         .get("x-api-key")

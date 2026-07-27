@@ -496,7 +496,7 @@ fn mfa_enrollment_required(path: &str, required: bool) -> bool {
     required && !path.contains("/auth/mfa/") && !path.ends_with("/auth/change-password")
 }
 
-fn scope_header_mismatch(
+pub(crate) fn scope_header_mismatch(
     headers: &axum::http::HeaderMap,
     claims: &AuthClaims,
 ) -> Option<(&'static str, &'static str)> {

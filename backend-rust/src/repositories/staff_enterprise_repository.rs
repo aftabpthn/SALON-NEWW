@@ -63,6 +63,11 @@ pub struct StatutoryRuleRecord {
     pub effective_to: Option<NaiveDate>,
     pub active: bool,
     pub version: i32,
+    pub rounding_method: String,
+    pub official_reference: String,
+    pub approved_by: String,
+    pub approved_at: Option<DateTime<Utc>>,
+    pub applicability_json: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }
@@ -676,10 +681,18 @@ pub async fn list_statutory_rules(
     tenant: &str,
     branch: &str,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 ORDER BY effective_from DESC,rule_type")
+    sqlx::query_as("SELECT id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,rounding_method,official_reference,approved_by,approved_at,applicability_json,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 ORDER BY effective_from DESC,rule_type")
       .bind(tenant).bind(branch).fetch_all(db).await
 }
 
+pub struct StatutoryRuleGovernance<'a> {
+    pub rounding_method: &'a str,
+    pub official_reference: &'a str,
+    pub approved_by: &'a str,
+    pub applicability: &'a Value,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn create_statutory_rule(
     db: &PgPool,
     tenant: &str,
@@ -690,9 +703,12 @@ pub async fn create_statutory_rule(
     rule: &Value,
     from: NaiveDate,
     to: Option<NaiveDate>,
+    governance: StatutoryRuleGovernance<'_>,
 ) -> Result<StatutoryRuleRecord, sqlx::Error> {
-    sqlx::query_as("INSERT INTO staff_payroll_statutory_rules(tenant_id,branch_id,rule_type,state_code,rule_json,effective_from,effective_to,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at")
-      .bind(tenant).bind(branch).bind(rule_type).bind(state).bind(rule).bind(from).bind(to).bind(actor).fetch_one(db).await
+    sqlx::query_as("INSERT INTO staff_payroll_statutory_rules(tenant_id,branch_id,rule_type,state_code,rule_json,effective_from,effective_to,created_by,rounding_method,official_reference,approved_by,approved_at,applicability_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),$12) RETURNING id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,rounding_method,official_reference,approved_by,approved_at,applicability_json,created_at,updated_at")
+      .bind(tenant).bind(branch).bind(rule_type).bind(state).bind(rule).bind(from).bind(to).bind(actor)
+      .bind(governance.rounding_method).bind(governance.official_reference).bind(governance.approved_by).bind(governance.applicability)
+      .fetch_one(db).await
 }
 
 pub async fn payroll_item(
@@ -712,7 +728,7 @@ pub async fn effective_rules(
     branch: &str,
     date: NaiveDate,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT DISTINCT ON(rule_type) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,effective_from DESC")
+    sqlx::query_as("SELECT DISTINCT ON(rule_type) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,rounding_method,official_reference,approved_by,approved_at,applicability_json,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,effective_from DESC")
       .bind(tenant).bind(branch).bind(date).fetch_all(db).await
 }
 
@@ -725,7 +741,7 @@ pub async fn effective_rules_all(
     branch: &str,
     date: NaiveDate,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT DISTINCT ON(rule_type,state_code) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,state_code,effective_from DESC")
+    sqlx::query_as("SELECT DISTINCT ON(rule_type,state_code) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,rounding_method,official_reference,approved_by,approved_at,applicability_json,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,state_code,effective_from DESC")
       .bind(tenant).bind(branch).bind(date).fetch_all(db).await
 }
 
