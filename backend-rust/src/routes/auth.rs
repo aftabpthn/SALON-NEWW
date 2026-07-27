@@ -1227,7 +1227,7 @@ async fn current_user(
         .ok_or_else(|| AppError::unauthenticated("user is not active"))
 }
 
-fn validate_permission_version(
+pub(crate) fn validate_permission_version(
     user: &AuthUser,
     claims: &auth_service::AuthClaims,
 ) -> Result<(), AppError> {
