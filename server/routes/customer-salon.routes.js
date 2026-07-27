@@ -21,7 +21,7 @@ customerSalonRouter.use("/customer/salons", authenticateJwt());
 // ─── Get all salons this customer has visited ─────────────────────
 // Intentionally cross-tenant: marketplace view shows all customer relationships
 customerSalonRouter.get("/customer/salons", asyncHandler((req, res) => {
-  const customerId = req.access?.uid || req.access?.customerId || "";
+  const customerId = req.access?.userId || req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
   const relationships = getAllRelationships(customerId);
@@ -38,7 +38,7 @@ customerSalonRouter.get("/customer/salons", asyncHandler((req, res) => {
 
 // ─── Set a salon as primary ───────────────────────────────────────
 customerSalonRouter.post("/customer/salons/:tenantId/primary", asyncHandler((req, res) => {
-  const customerId = req.access?.uid || req.access?.customerId || "";
+  const customerId = req.access?.userId || req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
   const { tenantId } = req.params;
@@ -63,7 +63,7 @@ customerSalonRouter.post("/customer/salons/:tenantId/primary", asyncHandler((req
 
 // ─── Remove primary salon ─────────────────────────────────────────
 customerSalonRouter.delete("/customer/salons/primary", asyncHandler((req, res) => {
-  const customerId = req.access?.uid || req.access?.customerId || "";
+  const customerId = req.access?.userId || req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
   const tenantId = req.access?.tenantId || null;
@@ -73,7 +73,7 @@ customerSalonRouter.delete("/customer/salons/primary", asyncHandler((req, res) =
 
 // ─── Check if prompt needed ───────────────────────────────────────
 customerSalonRouter.get("/customer/salons/primary/prompt", asyncHandler((req, res) => {
-  const customerId = req.access?.uid || req.access?.customerId || "";
+  const customerId = req.access?.userId || req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
   const check = shouldPromptPrimarySalon(customerId);
@@ -82,7 +82,7 @@ customerSalonRouter.get("/customer/salons/primary/prompt", asyncHandler((req, re
 
 // ─── Record a visit (internal use, called after booking completion) ─
 customerSalonRouter.post("/customer/salons/:tenantId/visit", asyncHandler((req, res) => {
-  const customerId = req.access?.uid || req.access?.customerId || "";
+  const customerId = req.access?.userId || req.access?.uid || req.access?.customerId || "";
   if (!customerId) return res.status(401).json({ error: "Customer ID required" });
 
   const { tenantId } = req.params;
