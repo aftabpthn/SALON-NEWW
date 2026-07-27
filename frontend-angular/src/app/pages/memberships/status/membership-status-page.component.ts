@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
 type PublicCredit = { serviceId: string; serviceName: string; remainingQty: number };
+type AdvancedReward = { code: string; name: string; active: boolean; rewardType: string; pointsRequired: number; amountPaise: number; discountBps: number; serviceId: string; occasionType: string; validityDays: number };
 type PublicStampCard = {
   programCode: string;
   programName: string;
@@ -24,6 +25,7 @@ type PublicStatus = {
   credits: PublicCredit[];
   rewardPointsBalance: number;
   stampCards: PublicStampCard[];
+  advancedRewards: AdvancedReward[];
 };
 type RewardQr = { token: string; points: number; amountPaise: number; status: string; expiresAt: string; qrSvg: string };
 
@@ -47,6 +49,7 @@ export class MembershipStatusPageComponent implements OnInit {
   reason = '';
   redeemPoints: string | number = '';
   redeemAmountRupees: string | number = '';
+  selectedRewardCode = '';
   rewardQr: RewardQr | null = null;
 
   ngOnInit() { void this.load(); }
@@ -69,13 +72,14 @@ export class MembershipStatusPageComponent implements OnInit {
     finally { this.requesting = false; }
   }
   async createRewardQr() {
-    const points = Number(this.redeemPoints || 0);
-    const amountPaise = Math.round(Number(this.redeemAmountRupees || 0) * 100);
+    const reward = this.status?.advancedRewards?.find((item) => item.code === this.selectedRewardCode);
+    const points = Number(reward?.pointsRequired || this.redeemPoints || 0);
+    const amountPaise = Number(reward?.amountPaise || Math.round(Number(this.redeemAmountRupees || 0) * 100));
     if (points <= 0 || amountPaise <= 0) { this.error = 'Points and amount required'; return; }
     if (this.status && points > (this.status.rewardPointsBalance || 0)) { this.error = 'Insufficient reward points'; return; }
     this.requesting = true; this.error = ''; this.message = ''; this.rewardQr = null;
     try {
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<RewardQr>>(`/membership-enterprise/self-service/public/${this.token()}/reward-qr`, { points, amountPaise, idempotencyKey: this.randomKey() }));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<RewardQr>>(`/membership-enterprise/self-service/public/${this.token()}/reward-qr`, { points, amountPaise, idempotencyKey: this.randomKey(), rewardCode: reward?.code || '', rewardType: reward?.rewardType || 'flat_discount', rewardLabel: reward?.name || '', rewardBps: reward?.discountBps || 0, serviceId: reward?.serviceId || '', occasionType: reward?.occasionType || '' }));
       this.rewardQr = result.data || null; this.message = 'Redeem QR generated';
     } catch { this.error = 'Redeem QR could not be generated'; }
     finally { this.requesting = false; }

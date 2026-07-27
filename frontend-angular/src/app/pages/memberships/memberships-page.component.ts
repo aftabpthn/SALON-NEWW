@@ -31,6 +31,8 @@ type RiskReport = { metrics: { total: number; pending: number; reviewed: number;
 type RewardEntry = { id: string; clientId: string; clientName: string; sourceSaleId: string; transactionType: string; points: number; balanceAfter: number; expiresAt?: string; staffId: string; note: string; createdAt: string };
 type RewardsRoi = { metrics: { totalRewardClients: number; totalPointsEarned: number; totalPointsRedeemed: number; rewardUsersRevenuePaise: number; nonRewardUsersRevenuePaise: number } };
 type LoyaltyTier = { code: string; name: string; minimumPoints: number | string };
+type AdvancedReward = { code: string; name: string; active: boolean; rewardType: string; pointsRequired: number | string; amountPaise: number | string; discountBps: number | string; serviceId: string; occasionType: string; validityDays: number | string };
+type AntiFraudApproval = { id: string; requestedBy: string; decidedBy?: string; actionType: string; summary: string; detailsJson: Record<string, any>; status: string; decisionNote: string; createdAt: string; decidedAt?: string };
 type EnterpriseReport = { metrics: { membershipSalesPaise: number; commissionPaise: number; serviceCostPaise: number; redeemedValuePaise: number; netProfitPaise: number; contributionPaise: number; creditLiability: number }; customerSales: Array<{ clientId: string; clientName: string; saleCount: number; revenuePaise: number }>; redemption: Array<{ clientId: string; clientName: string; membershipName: string; serviceName: string; quantity: number; visitCount: number }>; profitability: Array<{ membershipId: string; membershipName: string; soldCount: number; revenuePaise: number; commissionPaise: number; redeemedCredits: number; redeemedValuePaise: number; serviceCostPaise: number; netProfitPaise: number }> };
 type MembershipSettings = {
   membershipCatalog: { membershipSalesEnabled: boolean; visibleInPos: boolean; visibleOnline: boolean; freeMembershipEnabled: boolean; paidMembershipEnabled: boolean };
@@ -42,6 +44,8 @@ type MembershipSettings = {
   notificationsRisk: { renewalReminder: boolean; lowCreditReminder: boolean; ownerAlertForHighBalance: boolean; highBalanceThreshold: number };
   loyaltyTiers: { enabled: boolean; tiers: LoyaltyTier[] };
   referrals: { enabled: boolean; referrerRewardPoints: number | string; referredRewardPoints: number | string };
+  advancedRewards: AdvancedReward[];
+  antiFraud: { manualStampApprovalRequired: boolean; highValueRewardApprovalPaise: number | string; suspiciousRedemptionDailyLimit: number | string };
   defaults: { defaultStatus: string; defaultMembershipType: string };
 };
 
@@ -95,6 +99,7 @@ export class MembershipsPageComponent implements OnInit {
   rewardRoi: RewardsRoi = { metrics: { totalRewardClients: 0, totalPointsEarned: 0, totalPointsRedeemed: 0, rewardUsersRevenuePaise: 0, nonRewardUsersRevenuePaise: 0 } };
   expiringRewards: Array<{ clientName: string; pointsExpiring: number; expiryDate: string; daysLeft: number }> = [];
   rewardAlerts: Array<{ clientName: string; riskLevel: string; alertType: string }> = [];
+  antiFraudApprovals: AntiFraudApproval[] = [];
   settings = this.defaultSettings();
   report: MembershipReport = { activeMembers: 0, expiredMembers: 0, cancelledMembers: 0, creditLiability: 0, membershipSalesPaise: 0, redeemedCredits: 0, atRiskMembers: 0, autoRenewFailed: 0, commissionPaise: 0 };
   enterpriseReport: EnterpriseReport = this.emptyEnterpriseReport();
@@ -118,6 +123,7 @@ export class MembershipsPageComponent implements OnInit {
   form = this.blankForm();
   sellForm = { clientId: '', planId: '' };
   workflowForm = { targetMembershipId: '', effectiveAt: 'now', memberClientId: '', relationship: '', requestType: 'renew', reason: '', creditDelta: '' as string | number, serviceId: '', paymentReference: '', freezeDays: 30 as string | number, freezeReason: '' };
+  manualStampForm = { clientId: '', programCode: '', stamps: '' as string | number, note: '' };
   selfServiceLink = '';
 
   ngOnInit() { void this.loadWorkspace(); }
@@ -382,6 +388,28 @@ export class MembershipsPageComponent implements OnInit {
     } catch (error) { this.error = error instanceof Error ? error.message : 'Risk review failed'; }
   }
 
+  async requestManualStampApproval() {
+    if (!this.manualStampForm.clientId || !this.manualStampForm.programCode.trim() || this.number(this.manualStampForm.stamps) <= 0) { this.error = 'Client, program, and stamps required'; return; }
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<AntiFraudApproval>>('/membership-enterprise/rewards/stamps/manual-approvals', { clientId: this.manualStampForm.clientId, programCode: this.manualStampForm.programCode.trim(), stamps: this.number(this.manualStampForm.stamps), note: this.manualStampForm.note.trim() }));
+      if (!result.success) throw new Error(result.error?.message || 'Manual stamp approval failed');
+      this.manualStampForm = { clientId: '', programCode: '', stamps: '', note: '' };
+      await this.loadRewards(); this.message = 'Manual stamp approval requested';
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Manual stamp approval failed'; }
+    finally { this.saving = false; }
+  }
+
+  async decideAntiFraudApproval(item: AntiFraudApproval, decision: 'approved' | 'rejected') {
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/membership-enterprise/rewards/anti-fraud/approvals/${item.id}/decision`, { decision, note: '' }));
+      if (!result.success) throw new Error(result.error?.message || 'Approval update failed');
+      await this.loadRewards(); this.message = `Approval ${decision}`;
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Approval update failed'; }
+    finally { this.saving = false; }
+  }
+
   async saveSettings() {
     this.saving = true; this.error = '';
     try {
@@ -399,6 +427,14 @@ export class MembershipsPageComponent implements OnInit {
 
   removeLoyaltyTier(index: number) {
     if (this.settings.loyaltyTiers.tiers.length > 1) this.settings.loyaltyTiers.tiers.splice(index, 1);
+  }
+
+  addAdvancedReward() {
+    this.settings.advancedRewards.push({ code: '', name: '', active: true, rewardType: 'flat_discount', pointsRequired: '', amountPaise: '', discountBps: '', serviceId: '', occasionType: '', validityDays: 30 });
+  }
+
+  removeAdvancedReward(index: number) {
+    this.settings.advancedRewards.splice(index, 1);
   }
 
   async exportReport(format: 'csv' | 'pdf') {
@@ -425,7 +461,7 @@ export class MembershipsPageComponent implements OnInit {
   private async loadReminders() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Reminder[]>>('/membership-enterprise/reminders')); this.reminders = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.reminders = []; } }
   private async loadCommission() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<CommissionReport>>('/membership-enterprise/reports/commission')); if (result.success && result.data) this.commission = result.data; } catch { this.commission = { metrics: { totalRevenuePaise: 0, commissionPaise: 0, saleCount: 0, staffCount: 0 }, staff: [], entries: [] }; } }
   private async loadRisk() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<RiskReport>>('/membership-enterprise/reports/risk')); if (result.success && result.data) this.risk = result.data; } catch { this.risk = { metrics: { total: 0, pending: 0, reviewed: 0, critical: 0, high: 0, medium: 0, low: 0 }, signals: [] }; } }
-  private async loadRewards() { try { const [ledger, roi, expiring, alerts] = await Promise.all([firstValueFrom(this.api.get<ApiEnvelope<RewardEntry[]>>('/membership-enterprise/rewards/ledger')), firstValueFrom(this.api.get<ApiEnvelope<RewardsRoi>>('/membership-enterprise/rewards/roi')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; pointsExpiring: number; expiryDate: string; daysLeft: number }>>>('/membership-enterprise/rewards/expiring?days=30')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; riskLevel: string; alertType: string }>>>('/membership-enterprise/rewards/abuse-alerts'))]); this.rewardLedger = ledger.success && Array.isArray(ledger.data) ? ledger.data : []; if (roi.success && roi.data) this.rewardRoi = roi.data; this.expiringRewards = expiring.success && Array.isArray(expiring.data) ? expiring.data : []; this.rewardAlerts = alerts.success && Array.isArray(alerts.data) ? alerts.data : []; } catch { this.rewardLedger = []; this.expiringRewards = []; this.rewardAlerts = []; } }
+  private async loadRewards() { try { const [ledger, roi, expiring, alerts, approvals] = await Promise.all([firstValueFrom(this.api.get<ApiEnvelope<RewardEntry[]>>('/membership-enterprise/rewards/ledger')), firstValueFrom(this.api.get<ApiEnvelope<RewardsRoi>>('/membership-enterprise/rewards/roi')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; pointsExpiring: number; expiryDate: string; daysLeft: number }>>>('/membership-enterprise/rewards/expiring?days=30')), firstValueFrom(this.api.get<ApiEnvelope<Array<{ clientName: string; riskLevel: string; alertType: string }>>>('/membership-enterprise/rewards/abuse-alerts')), firstValueFrom(this.api.get<ApiEnvelope<AntiFraudApproval[]>>('/membership-enterprise/rewards/anti-fraud/approvals?status=all'))]); this.rewardLedger = ledger.success && Array.isArray(ledger.data) ? ledger.data : []; if (roi.success && roi.data) this.rewardRoi = roi.data; this.expiringRewards = expiring.success && Array.isArray(expiring.data) ? expiring.data : []; this.rewardAlerts = alerts.success && Array.isArray(alerts.data) ? alerts.data : []; this.antiFraudApprovals = approvals.success && Array.isArray(approvals.data) ? approvals.data : []; } catch { this.rewardLedger = []; this.expiringRewards = []; this.rewardAlerts = []; this.antiFraudApprovals = []; } }
   private async loadSettings() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<MembershipSettings>>('/membership-enterprise/settings')); if (result.success && result.data) this.settings = result.data; } catch { this.settings = this.defaultSettings(); } }
   private async loadReport() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<MembershipReport>>('/membership-enterprise/reports/lifecycle')); if (result.success && result.data) this.report = result.data; } catch { /* empty report stays truthful */ } }
   private async loadEnterpriseReport() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<EnterpriseReport>>('/membership-enterprise/reports/enterprise')); if (result.success && result.data) this.enterpriseReport = { ...this.emptyEnterpriseReport(), ...result.data, metrics: { ...this.emptyEnterpriseReport().metrics, ...result.data.metrics }, profitability: Array.isArray(result.data.profitability) ? result.data.profitability : [] }; } catch { this.enterpriseReport = this.emptyEnterpriseReport(); } }
@@ -433,7 +469,7 @@ export class MembershipsPageComponent implements OnInit {
   private async loadServices() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Service[]>>('/services')); this.services = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.services = []; } }
   private async loadClients() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')); this.clients = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.clients = []; } }
   private blankForm() { return { name: '', code: '', planType: 'discount' as PlanType, specialOfferPrice: '' as string | number, actualPrice: '' as string | number, pointsRequired: '' as string | number, discountPercent: '' as string | number, validityDays: '' as string | number, creditAmount: '' as string | number, familyLimit: '' as string | number, gstPercent: '' as string | number, notes: '', serviceIds: [] as string[], mobileVisible: false, bookingPageVisible: false, birthdayBenefit: false, anniversaryBenefit: false, priorityBooking: false, active: true }; }
-  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
+  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, advancedRewards: [{ code: '', name: '', active: false, rewardType: 'flat_discount', pointsRequired: '', amountPaise: '', discountBps: '', serviceId: '', occasionType: '', validityDays: 30 }], antiFraud: { manualStampApprovalRequired: true, highValueRewardApprovalPaise: 50000, suspiciousRedemptionDailyLimit: 3 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
   private navigateCheckout(intent: CheckoutIntent) { return this.router.navigate(['/pos'], { queryParams: { clientId: intent.clientId, membershipId: intent.planId, unitPricePaise: intent.pricePaise, reference: intent.referenceId || null } }); }
   private number(value: string | number) { return Math.max(0, Number(value) || 0); }
 }
