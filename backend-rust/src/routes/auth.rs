@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
     Extension, Json, Router,
 };
@@ -30,6 +30,10 @@ const LOGIN_RATE_LIMIT_SECONDS: usize = 60;
 const MAX_FAILED_LOGIN_ATTEMPTS: i32 = 5;
 const LOGIN_LOCK_MINUTES: i32 = 15;
 const REFRESH_COOKIE: &str = "aurashine_refresh_token";
+/// Double-submit CSRF cookie. Readable by the browser (unlike the refresh
+/// cookie) so the client can echo it back in the `x-csrf-token` header.
+const CSRF_COOKIE: &str = "aurashine_csrf";
+const CSRF_HEADER: &str = "x-csrf-token";
 
 type AuthApiResult<T> = Result<(HeaderMap, Json<ApiResponse<T>>), AppError>;
 
@@ -197,11 +201,38 @@ pub fn router() -> Router<AppState> {
         .route("/auth/me", get(me))
 }
 
-pub async fn csrf() -> ApiResult<CsrfResponse> {
-    Ok(Json(ApiResponse::ok(CsrfResponse {
-        csrf_token: Uuid::new_v4().to_string(),
-        expires_at: (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
-    })))
+/// Issues a CSRF token and sets it as a readable cookie so browser clients can
+/// echo it back in `x-csrf-token` (double-submit). Cookie-borne refresh
+/// requests are rejected without a matching header.
+pub async fn csrf(State(state): State<AppState>) -> Result<Response, AppError> {
+    let csrf_token = Uuid::new_v4().to_string();
+    let expires_at = (Utc::now() + chrono::Duration::hours(12)).to_rfc3339();
+    let cookie = csrf_cookie(&state, &csrf_token, 12 * 3_600)?;
+    let mut response = Json(ApiResponse::ok(CsrfResponse {
+        csrf_token,
+        expires_at,
+    }))
+    .into_response();
+    response.headers_mut().append(header::SET_COOKIE, cookie);
+    Ok(response)
+}
+
+fn csrf_cookie(
+    state: &AppState,
+    value: &str,
+    max_age: u64,
+) -> Result<HeaderValue, AppError> {
+    let secure = if is_local_env(&state.settings.app_env) {
+        ""
+    } else {
+        "; Secure"
+    };
+    // Deliberately not HttpOnly: the double-submit pattern requires the
+    // client to read this value and send it back as a header.
+    HeaderValue::from_str(&format!(
+        "{CSRF_COOKIE}={value}; Path=/api; SameSite=Strict; Max-Age={max_age}{secure}"
+    ))
+    .map_err(|_| AppError::internal("failed to create CSRF cookie"))
 }
 pub async fn sso_providers(
     State(state): State<AppState>,
@@ -1259,17 +1290,55 @@ fn bearer_token(headers: &HeaderMap) -> Result<&str, AppError> {
         .ok_or_else(|| AppError::unauthenticated("missing bearer token"))
 }
 
+/// Returns the refresh token and whether it came from the cookie. A token
+/// supplied in the request body is not an ambient credential (native clients
+/// hold it themselves), so CSRF does not apply to it; a cookie-borne token is
+/// ambient and must be accompanied by a matching CSRF token.
+fn request_refresh_token_with_source(
+    headers: &HeaderMap,
+    body_token: Option<&str>,
+) -> Result<(String, bool), AppError> {
+    if let Some(token) = body_token
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+    {
+        return Ok((token, false));
+    }
+    cookie(headers, REFRESH_COOKIE)
+        .map(|token| (token, true))
+        .ok_or_else(|| AppError::unauthenticated("refresh token is required"))
+}
+
 fn request_refresh_token(
     headers: &HeaderMap,
     body_token: Option<&str>,
 ) -> Result<String, AppError> {
-    body_token
+    let (token, from_cookie) = request_refresh_token_with_source(headers, body_token)?;
+    if from_cookie {
+        verify_csrf(headers)?;
+    }
+    Ok(token)
+}
+
+/// Double-submit check: the `x-csrf-token` header must match the CSRF cookie.
+/// Both are set by `GET /auth/csrf`; an attacker on another origin can send
+/// the cookie but cannot read it to populate the header.
+fn verify_csrf(headers: &HeaderMap) -> Result<(), AppError> {
+    let cookie_token = cookie(headers, CSRF_COOKIE)
+        .ok_or_else(|| AppError::forbidden("CSRF token is required for cookie sessions"))?;
+    let header_token = headers
+        .get(CSRF_HEADER)
+        .and_then(|value| value.to_str().ok())
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(str::to_string)
-        .or_else(|| cookie(headers, REFRESH_COOKIE))
-        .ok_or_else(|| AppError::unauthenticated("refresh token is required"))
+        .ok_or_else(|| AppError::forbidden("CSRF token is required for cookie sessions"))?;
+    if !constant_time_eq(cookie_token.as_bytes(), header_token.as_bytes()) {
+        return Err(AppError::forbidden("CSRF token mismatch"));
+    }
+    Ok(())
 }
+
 
 fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
@@ -1473,4 +1542,63 @@ async fn consume_branch_selection_token(state: &AppState, jti: &str) -> Result<(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::{header, HeaderMap, HeaderValue};
+
+    use super::{request_refresh_token, request_refresh_token_with_source, verify_csrf};
+
+    fn headers(cookie: Option<&str>, csrf_header: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(cookie) = cookie {
+            headers.insert(header::COOKIE, HeaderValue::from_str(cookie).unwrap());
+        }
+        if let Some(csrf) = csrf_header {
+            headers.insert("x-csrf-token", HeaderValue::from_str(csrf).unwrap());
+        }
+        headers
+    }
+
+    #[test]
+    fn body_refresh_tokens_are_not_ambient_and_skip_csrf() {
+        let (token, from_cookie) =
+            request_refresh_token_with_source(&HeaderMap::new(), Some("native-token")).unwrap();
+        assert_eq!(token, "native-token");
+        assert!(!from_cookie);
+        // Native clients hold the token themselves, so no CSRF is required.
+        assert!(request_refresh_token(&HeaderMap::new(), Some("native-token")).is_ok());
+    }
+
+    #[test]
+    fn cookie_refresh_requires_a_matching_csrf_token() {
+        let cookie = "aurashine_refresh_token=refresh-1; aurashine_csrf=csrf-1";
+        let (token, from_cookie) =
+            request_refresh_token_with_source(&headers(Some(cookie), None), None).unwrap();
+        assert_eq!(token, "refresh-1");
+        assert!(from_cookie);
+
+        // Missing header, wrong header, and missing cookie all fail.
+        assert!(request_refresh_token(&headers(Some(cookie), None), None).is_err());
+        assert!(request_refresh_token(&headers(Some(cookie), Some("wrong")), None).is_err());
+        assert!(request_refresh_token(
+            &headers(Some("aurashine_refresh_token=refresh-1"), Some("csrf-1")),
+            None
+        )
+        .is_err());
+
+        // Matching double-submit succeeds.
+        assert!(request_refresh_token(&headers(Some(cookie), Some("csrf-1")), None).is_ok());
+    }
+
+    #[test]
+    fn csrf_comparison_rejects_partial_and_empty_matches() {
+        let cookie = "aurashine_csrf=abcdef";
+        assert!(verify_csrf(&headers(Some(cookie), Some("abcdef"))).is_ok());
+        assert!(verify_csrf(&headers(Some(cookie), Some("abcde"))).is_err());
+        assert!(verify_csrf(&headers(Some(cookie), Some("abcdefg"))).is_err());
+        assert!(verify_csrf(&headers(Some(cookie), Some("   "))).is_err());
+        assert!(verify_csrf(&headers(None, Some("abcdef"))).is_err());
+    }
 }
