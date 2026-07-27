@@ -45,6 +45,35 @@ pub struct RewardAdjustmentResult {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LoyaltyRedeemQrToken {
+    pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub client_id: String,
+    pub token: String,
+    pub points: i32,
+    pub amount_paise: i64,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub redeemed_sale_id: String,
+    pub redeemed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoyaltyQrRedeemResult {
+    pub redemption_id: String,
+    pub payment_id: String,
+    pub invoice_id: String,
+    pub token_id: String,
+    pub client_id: String,
+    pub points: i32,
+    pub amount_paise: i64,
+    pub balance_after_points: i32,
+}
+
 pub async fn active_memberships(
     db: &PgPool,
     tenant_id: &str,
@@ -1097,6 +1126,55 @@ async fn reward_balance(
         .map(|value| value.unwrap_or(0)).map_err(|_| AppError::internal("failed to load reward balance"))
 }
 
+async fn reward_balance_pool(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<i32, AppError> {
+    sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(db).await
+        .map(|value| value.unwrap_or(0)).map_err(|_| AppError::internal("failed to load reward balance"))
+}
+
+fn validate_reward_qr_request(
+    points: i32,
+    amount_paise: i64,
+    idempotency_key: &str,
+) -> Result<(), AppError> {
+    let key = idempotency_key.trim();
+    if points <= 0 {
+        return Err(AppError::validation("points must be greater than zero"));
+    }
+    if amount_paise <= 0 {
+        return Err(AppError::validation(
+            "amountPaise must be greater than zero",
+        ));
+    }
+    if amount_paise > i64::from(points).saturating_mul(100) {
+        return Err(AppError::validation("amountPaise exceeds point value"));
+    }
+    if key.len() < 8 || key.len() > 120 {
+        return Err(AppError::validation(
+            "idempotencyKey must be 8 to 120 characters",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_qr_is_usable(item: &LoyaltyRedeemQrToken) -> Result<(), AppError> {
+    if item.status == "redeemed" {
+        return Err(AppError::conflict("loyalty QR token is already redeemed"));
+    }
+    if item.status != "issued" {
+        return Err(AppError::conflict("loyalty QR token is not active"));
+    }
+    if item.expires_at <= Utc::now() {
+        return Err(AppError::validation("loyalty QR token is expired"));
+    }
+    Ok(())
+}
+
 async fn load_reward_adjustment(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -1291,6 +1369,205 @@ pub async fn public_status(db: &PgPool, token: &str) -> Result<Value, AppError> 
         "rewardPointsBalance":reward_points_balance,
         "stampCards":stamp_cards
     }))
+}
+
+pub async fn create_public_reward_qr(
+    db: &PgPool,
+    public_token: &str,
+    points: i32,
+    amount_paise: i64,
+    idempotency_key: &str,
+) -> Result<LoyaltyRedeemQrToken, AppError> {
+    validate_reward_qr_request(points, amount_paise, idempotency_key)?;
+    let status = membership_advanced_repository::public_status(db, public_token)
+        .await
+        .map_err(|_| AppError::internal("failed to load membership status"))?
+        .ok_or_else(|| AppError::not_found("membership status link is invalid or expired"))?;
+    let current_points =
+        reward_balance_pool(db, &status.tenant_id, &status.branch_id, &status.client_id)
+            .await
+            .unwrap_or(0);
+    if points > current_points {
+        return Err(AppError::validation(
+            "reward points balance is insufficient",
+        ));
+    }
+    let token = uuid::Uuid::new_v4().to_string();
+    sqlx::query_as::<_, LoyaltyRedeemQrToken>(
+        "INSERT INTO loyalty_redeem_qr_tokens \
+         (tenant_id,branch_id,client_id,token,points,amount_paise,expires_at,idempotency_key) \
+         VALUES ($1,$2,$3,$4,$5,$6,NOW()+INTERVAL '10 minutes',$7) \
+         ON CONFLICT (tenant_id,branch_id,client_id,idempotency_key) WHERE idempotency_key<>'' DO UPDATE SET updated_at=loyalty_redeem_qr_tokens.updated_at \
+         RETURNING id,tenant_id,branch_id,client_id,token,points,amount_paise,status,expires_at,redeemed_sale_id,redeemed_at",
+    )
+    .bind(&status.tenant_id)
+    .bind(&status.branch_id)
+    .bind(&status.client_id)
+    .bind(token)
+    .bind(points)
+    .bind(amount_paise)
+    .bind(idempotency_key.trim())
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to create loyalty QR token"))
+}
+
+pub async fn verify_reward_qr(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    token: &str,
+) -> Result<LoyaltyRedeemQrToken, AppError> {
+    let item = sqlx::query_as::<_, LoyaltyRedeemQrToken>(
+        "SELECT id,tenant_id,branch_id,client_id,token,points,amount_paise,status,expires_at,redeemed_sale_id,redeemed_at \
+         FROM loyalty_redeem_qr_tokens WHERE tenant_id=$1 AND branch_id=$2 AND token=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(token.trim())
+    .fetch_optional(db)
+    .await
+    .map_err(|_| AppError::internal("failed to verify loyalty QR token"))?
+    .ok_or_else(|| AppError::not_found("loyalty QR token was not found"))?;
+    ensure_qr_is_usable(&item)?;
+    Ok(item)
+}
+
+pub async fn redeem_reward_qr(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    token: &str,
+    actor_user_id: &str,
+) -> Result<LoyaltyQrRedeemResult, AppError> {
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start loyalty QR redemption"))?;
+    let item = sqlx::query_as::<_, LoyaltyRedeemQrToken>(
+        "SELECT id,tenant_id,branch_id,client_id,token,points,amount_paise,status,expires_at,redeemed_sale_id,redeemed_at \
+         FROM loyalty_redeem_qr_tokens WHERE tenant_id=$1 AND branch_id=$2 AND token=$3 FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(token.trim())
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to lock loyalty QR token"))?
+    .ok_or_else(|| AppError::not_found("loyalty QR token was not found"))?;
+    ensure_qr_is_usable(&item)?;
+    let (sale_client_id, total_paise, paid_paise, status) =
+        sqlx::query_as::<_, (String, i64, i64, String)>(
+            "SELECT client_id,total_paise,paid_paise,status FROM pos_sales \
+             WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(sale_id.trim())
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to load invoice for loyalty QR"))?
+        .ok_or_else(|| AppError::not_found("invoice was not found"))?;
+    if sale_client_id != item.client_id {
+        return Err(AppError::validation(
+            "loyalty QR token belongs to another client",
+        ));
+    }
+    let invoice_balance = total_paise.saturating_sub(paid_paise).max(0);
+    if matches!(status.as_str(), "paid" | "voided" | "cancelled") || invoice_balance <= 0 {
+        return Err(AppError::validation("invoice is not payable"));
+    }
+    if item.amount_paise > invoice_balance {
+        return Err(AppError::validation(
+            "loyalty QR amount exceeds invoice balance",
+        ));
+    }
+    sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&item.client_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock loyalty balance"))?;
+    let current_points = reward_balance(&mut tx, tenant_id, branch_id, &item.client_id).await?;
+    if item.points > current_points {
+        return Err(AppError::validation(
+            "reward points balance is insufficient",
+        ));
+    }
+    let idempotency_key = format!("loyalty-qr:{}:{}", item.id, sale_id.trim());
+    let payment_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO pos_payments (id,tenant_id,branch_id,sale_id,method,amount_paise,method_reference,label,notes,idempotency_key,paid_at,created_at) VALUES ($1,$2,$3,$4,'store_credit',$5,$6,'Loyalty QR','POS loyalty QR redemption',$7,NOW(),NOW())")
+        .bind(&payment_id)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(sale_id.trim())
+        .bind(item.amount_paise)
+        .bind(format!("LOYALTY-QR:{}", item.id))
+        .bind(&idempotency_key)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to post loyalty QR payment"))?;
+    let new_paid = paid_paise.saturating_add(item.amount_paise);
+    let new_status = if new_paid >= total_paise {
+        "paid"
+    } else {
+        "partially_paid"
+    };
+    sqlx::query("UPDATE pos_sales SET paid_paise=$4,status=$5,locked_at=CASE WHEN $5='paid' THEN COALESCE(locked_at,NOW()) ELSE locked_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(sale_id.trim())
+        .bind(new_paid)
+        .bind(new_status)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to update loyalty QR invoice"))?;
+    let balance_after = current_points.saturating_sub(item.points);
+    let redemption_id: String = sqlx::query_scalar("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) VALUES ($1,$2,$3,$4,'redeemed',$5,$6,$7,'POS loyalty QR redemption',$8) RETURNING id")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&item.client_id)
+        .bind(sale_id.trim())
+        .bind(item.points)
+        .bind(balance_after)
+        .bind(actor_user_id)
+        .bind(&idempotency_key)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| AppError::conflict("reward points were already redeemed for this invoice"))?;
+    sqlx::query("UPDATE loyalty_redeem_qr_tokens SET status='redeemed',redeemed_sale_id=$4,redeemed_by_user_id=$5,redeemed_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&item.id)
+        .bind(sale_id.trim())
+        .bind(actor_user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to consume loyalty QR token"))?;
+    crate::services::security_service::record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        "loyalty.qr_redeemed",
+        json!({"tokenId":item.id,"saleId":sale_id.trim(),"clientId":item.client_id,"points":item.points,"amountPaise":item.amount_paise}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit loyalty QR redemption"))?;
+    Ok(LoyaltyQrRedeemResult {
+        redemption_id,
+        payment_id,
+        invoice_id: sale_id.trim().to_string(),
+        token_id: item.id,
+        client_id: item.client_id,
+        points: item.points,
+        amount_paise: item.amount_paise,
+        balance_after_points: balance_after,
+    })
 }
 
 pub async fn public_renew_request(
@@ -1563,10 +1840,7 @@ fn validate_retention_settings(settings: &Value) -> Result<(), AppError> {
         .and_then(Value::as_array)
     {
         for rule in rules {
-            let reward_type = rule
-                .get("rewardType")
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let reward_type = rule.get("rewardType").and_then(Value::as_str).unwrap_or("");
             if !matches!(reward_type, "percentage" | "flat") {
                 return Err(AppError::validation(
                     "reward bonus rule type must be percentage or flat",
@@ -1628,9 +1902,10 @@ fn price_paise(price: Option<i64>, price_paise: Option<i64>) -> Result<i64, AppE
 #[cfg(test)]
 mod tests {
     use super::{
-        adjust_reward_balance, default_membership_settings, membership_settings,
-        merge_known_settings, prorated_amounts, reverse_rewards_for_refund,
-        save_membership_settings, validate_retention_settings,
+        adjust_reward_balance, default_membership_settings, ensure_qr_is_usable,
+        membership_settings, merge_known_settings, prorated_amounts, reverse_rewards_for_refund,
+        save_membership_settings, validate_retention_settings, validate_reward_qr_request,
+        LoyaltyRedeemQrToken,
     };
     use chrono::{Duration, Utc};
     use serde_json::json;
@@ -1651,8 +1926,14 @@ mod tests {
         );
 
         // An owner enabling the toggle is persisted.
-        let enabled = merge_known_settings(&defaults, &json!({ "rewards": { "allowNonMembers": true } }));
-        assert_eq!(enabled.pointer("/rewards/allowNonMembers"), Some(&json!(true)));
+        let enabled = merge_known_settings(
+            &defaults,
+            &json!({ "rewards": { "allowNonMembers": true } }),
+        );
+        assert_eq!(
+            enabled.pointer("/rewards/allowNonMembers"),
+            Some(&json!(true))
+        );
 
         // Existing reward configuration is untouched by the new key.
         assert_eq!(
@@ -1666,12 +1947,24 @@ mod tests {
         );
 
         // A tenant that never sends the key keeps the members-only default.
-        let untouched = merge_known_settings(&defaults, &json!({ "rewards": { "enableForServices": true } }));
-        assert_eq!(untouched.pointer("/rewards/allowNonMembers"), Some(&json!(false)));
+        let untouched = merge_known_settings(
+            &defaults,
+            &json!({ "rewards": { "enableForServices": true } }),
+        );
+        assert_eq!(
+            untouched.pointer("/rewards/allowNonMembers"),
+            Some(&json!(false))
+        );
 
         // Turning it back off is persisted too.
-        let disabled = merge_known_settings(&enabled, &json!({ "rewards": { "allowNonMembers": false } }));
-        assert_eq!(disabled.pointer("/rewards/allowNonMembers"), Some(&json!(false)));
+        let disabled = merge_known_settings(
+            &enabled,
+            &json!({ "rewards": { "allowNonMembers": false } }),
+        );
+        assert_eq!(
+            disabled.pointer("/rewards/allowNonMembers"),
+            Some(&json!(false))
+        );
     }
 
     /// Phase 1B: `stampCards` programs must survive a settings save.
@@ -1703,7 +1996,10 @@ mod tests {
         );
         assert_eq!(saved.pointer("/stampCards/0/code"), Some(&json!("coffee")));
         assert_eq!(saved.pointer("/stampCards/0/active"), Some(&json!(true)));
-        assert_eq!(saved.pointer("/stampCards/0/stampsRequired"), Some(&json!(6)));
+        assert_eq!(
+            saved.pointer("/stampCards/0/stampsRequired"),
+            Some(&json!(6))
+        );
         assert_eq!(
             saved.pointer("/stampCards/0/rewardPointsOnCompletion"),
             Some(&json!(40))
@@ -1749,8 +2045,14 @@ mod tests {
         );
 
         // A tenant that never configures a card keeps the inactive template.
-        let untouched = merge_known_settings(&defaults, &json!({ "rewards": { "allowNonMembers": true } }));
-        assert_eq!(untouched.pointer("/stampCards/0/active"), Some(&json!(false)));
+        let untouched = merge_known_settings(
+            &defaults,
+            &json!({ "rewards": { "allowNonMembers": true } }),
+        );
+        assert_eq!(
+            untouched.pointer("/stampCards/0/active"),
+            Some(&json!(false))
+        );
     }
 
     #[test]
@@ -1788,6 +2090,46 @@ mod tests {
         assert_eq!(merged["crossLocation"]["enabled"], true);
         assert_eq!(merged["crossLocation"]["scope"], "zone");
         assert!(validate_retention_settings(&merged).is_ok());
+    }
+
+    #[test]
+    fn reward_qr_validation_rejects_invalid_amount() {
+        assert!(validate_reward_qr_request(10, 0, "redeem-key-1").is_err());
+        assert!(validate_reward_qr_request(10, 1_001, "redeem-key-1").is_err());
+    }
+
+    #[test]
+    fn reward_qr_validation_rejects_short_key() {
+        assert!(validate_reward_qr_request(10, 500, "short").is_err());
+        assert!(validate_reward_qr_request(10, 500, "redeem-key-1").is_ok());
+    }
+
+    #[test]
+    fn issued_reward_qr_is_usable_before_expiry() {
+        let token = loyalty_qr_fixture("issued", Utc::now() + Duration::minutes(10));
+        assert!(ensure_qr_is_usable(&token).is_ok());
+    }
+
+    #[test]
+    fn redeemed_reward_qr_is_not_usable() {
+        let token = loyalty_qr_fixture("redeemed", Utc::now() + Duration::minutes(10));
+        assert!(ensure_qr_is_usable(&token).is_err());
+    }
+
+    fn loyalty_qr_fixture(status: &str, expires_at: chrono::DateTime<Utc>) -> LoyaltyRedeemQrToken {
+        LoyaltyRedeemQrToken {
+            id: "qr-1".to_string(),
+            tenant_id: "tenant-1".to_string(),
+            branch_id: "branch-1".to_string(),
+            client_id: "client-1".to_string(),
+            token: "token-1".to_string(),
+            points: 10,
+            amount_paise: 1_000,
+            status: status.to_string(),
+            expires_at,
+            redeemed_sale_id: String::new(),
+            redeemed_at: None,
+        }
     }
 
     #[sqlx::test(migrations = false)]

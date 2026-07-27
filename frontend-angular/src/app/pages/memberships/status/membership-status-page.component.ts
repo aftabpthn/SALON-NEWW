@@ -25,6 +25,7 @@ type PublicStatus = {
   rewardPointsBalance: number;
   stampCards: PublicStampCard[];
 };
+type RewardQr = { token: string; points: number; amountPaise: number; status: string; expiresAt: string; qrSvg: string };
 
 @Component({
     selector: 'page-membership-status',
@@ -44,6 +45,9 @@ export class MembershipStatusPageComponent implements OnInit {
   creditServiceId = '';
   creditDelta: string | number = '';
   reason = '';
+  redeemPoints: string | number = '';
+  redeemAmountRupees: string | number = '';
+  rewardQr: RewardQr | null = null;
 
   ngOnInit() { void this.load(); }
   formatDate(value?: string) { if (!value) return 'No expiry'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB').format(date); }
@@ -64,10 +68,23 @@ export class MembershipStatusPageComponent implements OnInit {
     } catch { this.error = 'Request could not be submitted'; }
     finally { this.requesting = false; }
   }
+  async createRewardQr() {
+    const points = Number(this.redeemPoints || 0);
+    const amountPaise = Math.round(Number(this.redeemAmountRupees || 0) * 100);
+    if (points <= 0 || amountPaise <= 0) { this.error = 'Points and amount required'; return; }
+    if (this.status && points > (this.status.rewardPointsBalance || 0)) { this.error = 'Insufficient reward points'; return; }
+    this.requesting = true; this.error = ''; this.message = ''; this.rewardQr = null;
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<RewardQr>>(`/membership-enterprise/self-service/public/${this.token()}/reward-qr`, { points, amountPaise, idempotencyKey: this.randomKey() }));
+      this.rewardQr = result.data || null; this.message = 'Redeem QR generated';
+    } catch { this.error = 'Redeem QR could not be generated'; }
+    finally { this.requesting = false; }
+  }
   private async load() {
     try { const result = await firstValueFrom(this.api.get<ApiEnvelope<PublicStatus>>(`/membership-enterprise/self-service/public/${this.token()}`)); this.status = result.data || null; if (!this.status) this.error = 'Membership link is invalid or expired'; }
     catch { this.error = 'Membership link is invalid or expired'; }
     finally { this.loading = false; }
   }
   private token() { return this.route.snapshot.paramMap.get('token') || ''; }
+  private randomKey() { return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 }
