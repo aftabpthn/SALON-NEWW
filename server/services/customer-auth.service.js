@@ -8,6 +8,7 @@ import { ensureCustomerAuthSchema } from "./customer-auth-schema.service.js";
 import { jobQueueService } from "./job-queue.service.js";
 import { tenantService } from "./tenant.service.js";
 import { whatsappAutomationService } from "./whatsapp-automation.service.js";
+import { resolveOrCreateAccount, lazyLinkClients } from "./customer-identity.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -387,7 +388,7 @@ function assertFirebaseIdentity(decoded = {}, provider = "") {
   }
 }
 
-function issueCustomerSession({ tenant, customer, provider, device = {} }) {
+function issueCustomerSession({ tenant, customer, provider, device = {}, globalAccountId = "" }) {
   const tokenUser = {
     id: customer.id,
     name: customer.name,
@@ -395,7 +396,8 @@ function issueCustomerSession({ tenant, customer, provider, device = {} }) {
     loginId: customer.email || customer.phone || customer.id,
     role: "customer",
     staffId: "",
-    branchIds: []
+    branchIds: [],
+    globalAccountId
   };
   const pair = authService.issueTokenPair({ tenant, user: tokenUser, branchId: "", deviceId: device.deviceId || "" });
   return {
@@ -404,7 +406,7 @@ function issueCustomerSession({ tenant, customer, provider, device = {} }) {
     refreshExpiresAt: pair.refreshExpiresAt,
     isNewCustomer: customer.isNewCustomer,
     authProvider: provider,
-    customer: rowToCustomer(customer)
+    customer: { ...rowToCustomer(customer), globalAccountId }
   };
 }
 
@@ -447,10 +449,18 @@ export const customerAuthService = {
       ? updateClient(existing, { name, email, phone: "", firebaseUid: "", provider: "email_otp" })
       : insertClient({ tenantId: tenant.id, branchId: verified.branchId, name, email, phone: "", firebaseUid: "", provider: "email_otp" });
     customer.isNewCustomer = !existing;
+
+    // Global account: create/find + lazy link
+    const { account: globalAccount } = resolveOrCreateAccount({ name, email, authProvider: "email_otp" });
+    lazyLinkClients(globalAccount, { email });
+    if (tableHasColumn("clients", "customerAccountId") && !customer.customerAccountId) {
+      db.prepare("UPDATE clients SET customerAccountId = @accountId WHERE id = @id").run({ accountId: globalAccount.id, id: customer.id });
+    }
+
     if (customer.isNewCustomer) {
       queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || verified.branchId, branchIds: [customer.branchId || verified.branchId] });
     }
-    return issueCustomerSession({ tenant, customer, provider: "email_otp", device: payload.device || {} });
+    return issueCustomerSession({ tenant, customer, provider: "email_otp", device: payload.device || {}, globalAccountId: globalAccount.id });
   },
 
   requestOtp(payload = {}, request = {}) {
@@ -506,10 +516,18 @@ export const customerAuthService = {
       ? updateClient(existing, { name: "", email: "", phone, firebaseUid: "", provider: "phone_otp" })
       : insertClient({ tenantId: tenant.id, branchId: verified.branchId, name: phone, email: "", phone, firebaseUid: "", provider: "phone_otp" });
     customer.isNewCustomer = !existing;
+
+    // Global account: create/find + lazy link (phone is verified at this point)
+    const { account: globalAccount } = resolveOrCreateAccount({ name: "", phone, authProvider: "phone_otp" });
+    lazyLinkClients(globalAccount, { phone });
+    if (tableHasColumn("clients", "customerAccountId") && !customer.customerAccountId) {
+      db.prepare("UPDATE clients SET customerAccountId = @accountId WHERE id = @id").run({ accountId: globalAccount.id, id: customer.id });
+    }
+
     if (customer.isNewCustomer) {
       queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || verified.branchId, branchIds: [customer.branchId || verified.branchId] });
     }
-    return issueCustomerSession({ tenant, customer, provider: "phone_otp", device: payload.device || {} });
+    return issueCustomerSession({ tenant, customer, provider: "phone_otp", device: payload.device || {}, globalAccountId: globalAccount.id });
   },
 
   async exchangeFirebaseToken(payload = {}, request = {}) {
@@ -526,17 +544,26 @@ export const customerAuthService = {
       ? updateClient(existing, { name, email, phone, firebaseUid, provider })
       : insertClient({ tenantId: tenant.id, branchId: payload.branchId || request.branchId || "", name, email, phone, firebaseUid, provider });
     customer.isNewCustomer = !existing;
+
+    // Global account: create/find + lazy link
+    const { account: globalAccount } = resolveOrCreateAccount({ name, phone, email, firebaseUid, authProvider: provider });
+    lazyLinkClients(globalAccount, { phone, email });
+    if (tableHasColumn("clients", "customerAccountId") && !customer.customerAccountId) {
+      db.prepare("UPDATE clients SET customerAccountId = @accountId WHERE id = @id").run({ accountId: globalAccount.id, id: customer.id });
+    }
+
     if (customer.isNewCustomer) {
       queueAccountCreatedNotifications(rowToCustomer(customer), tenant, { tenantId: tenant.id, role: "owner", userId: "customer-auth", branchId: customer.branchId || "", branchIds: customer.branchId ? [customer.branchId] : [] });
     }
-    return issueCustomerSession({ tenant, customer, provider, device: payload.device || {} });
+    return issueCustomerSession({ tenant, customer, provider, device: payload.device || {}, globalAccountId: globalAccount.id });
   },
 
   me(access = {}) {
     assertCustomer(access);
     const row = clientById(access.tenantId || DEFAULT_TENANT_ID, access.userId);
     if (!row) throw unauthorized("Customer session is invalid");
-    return rowToCustomer(row);
+    const globalAccountId = tableHasColumn("clients", "customerAccountId") ? (row.customerAccountId || "") : "";
+    return { ...rowToCustomer(row), globalAccountId };
   },
 
   updateMe(payload = {}, access = {}) {
@@ -659,7 +686,8 @@ export const customerAuthService = {
     const customer = clientById(record.tenantId, record.userId);
     if (!tenant || !customer) throw unauthorized("Customer session is invalid");
     db.prepare("UPDATE auth_refresh_tokens SET revokedAt = @revokedAt, updatedAt = @updatedAt WHERE id = @id").run({ id: record.id, revokedAt: now(), updatedAt: now() });
-    return issueCustomerSession({ tenant, customer: { ...customer, isNewCustomer: false }, provider: customer.authProvider || "customer", device });
+    const globalAccountId = tableHasColumn("clients", "customerAccountId") ? (customer.customerAccountId || "") : "";
+    return issueCustomerSession({ tenant, customer: { ...customer, isNewCustomer: false }, provider: customer.authProvider || "customer", device, globalAccountId });
   },
 
   logout(refreshToken = "") {
@@ -685,6 +713,14 @@ export const customerAuthService = {
       ? updateClient(existing, { name, email, phone, firebaseUid: "", provider: "demo", forceName: true })
       : insertClient({ tenantId: tenant.id, branchId: payload.branchId || request.branchId || "", name, email, phone, firebaseUid: "", provider: "demo" });
     customer.isNewCustomer = !existing;
-    return issueCustomerSession({ tenant, customer, provider: "demo", device: payload.device || {} });
+
+    // Global account: create/find + lazy link
+    const { account: globalAccount } = resolveOrCreateAccount({ name, phone, email, authProvider: "demo" });
+    lazyLinkClients(globalAccount, { phone, email });
+    if (tableHasColumn("clients", "customerAccountId") && !customer.customerAccountId) {
+      db.prepare("UPDATE clients SET customerAccountId = @accountId WHERE id = @id").run({ accountId: globalAccount.id, id: customer.id });
+    }
+
+    return issueCustomerSession({ tenant, customer, provider: "demo", device: payload.device || {}, globalAccountId: globalAccount.id });
   }
 };
