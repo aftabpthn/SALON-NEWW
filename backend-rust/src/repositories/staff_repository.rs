@@ -615,6 +615,35 @@ pub async fn update_auth_role(
     .await
 }
 
+/// Invalidates active sessions for every user holding the role, either as
+/// their primary role or through a branch assignment. The auth middleware
+/// rejects tokens whose permission_version no longer matches, forcing re-login.
+pub async fn bump_permission_version_for_role(
+    db: &PgPool,
+    tenant_id: &str,
+    role_id: &str,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET permission_version = permission_version + 1
+        WHERE tenant_id = $1
+          AND (
+            role_id = $2
+            OR id IN (
+              SELECT user_id FROM user_branch_roles
+              WHERE tenant_id = $1 AND role_id = $2 AND active = TRUE
+            )
+          )
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(role_id)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected())
+}
+
 pub async fn replace_branch_access(
     db: &PgPool,
     tenant_id: &str,

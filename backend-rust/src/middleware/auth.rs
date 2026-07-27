@@ -162,7 +162,13 @@ pub async fn require_auth(
     }
 
     if request_mutates_data(req.method()) {
-        entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
+        entitlement_service::ensure_route_write_allowed(
+            &state.db,
+            &claims.tenant_id,
+            req.method(),
+            req.uri().path(),
+        )
+        .await?;
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)

@@ -464,7 +464,14 @@
                   <h4>{{ group.name }}</h4>
                   @for (permission of group.permissions; track trackByPermissionCode($index, permission)) {
                     <div class="permission-option">
-                      <span><b>{{ permission.label }}</b><small>{{ permission.code }}</small></span>
+                      <span>
+                        <b>{{ permission.label }}
+                          @if (permission.sensitive) {
+                            <em class="sensitive-badge">Sensitive</em>
+                          }
+                        </b>
+                        <small>{{ permission.code }}</small>
+                      </span>
                       <div class="permission-decisions">
                         <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasRolePermission(permission.code)" (change)="toggleRolePermission(permission.code)" />Allow</label>
                         <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasDeniedPermission(permission.code)" (change)="toggleDeniedPermission(permission.code)" />Deny</label>
@@ -488,6 +495,19 @@
                     </label>
                   }
                 </div>
+              </section>
+            }
+            @if (sensitiveRoleGrants.length && !selectedRole?.isSystem) {
+              <section class="role-policy-block sensitive-reason-block">
+                <h4>Sensitive permission reason</h4>
+                <label>
+                  <span>Why does this role need {{ sensitiveRoleGrants.length }} sensitive permission{{ sensitiveRoleGrants.length > 1 ? 's' : '' }}?</span>
+                  <input
+                    [(ngModel)]="roleReason"
+                    maxlength="240"
+                    placeholder="Reason (recorded in the audit log)"
+                  />
+                </label>
               </section>
             }
             <section class="role-policy-block">

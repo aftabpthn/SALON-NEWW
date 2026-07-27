@@ -16,9 +16,11 @@ use crate::{
         },
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_attendance_service, staff_enterprise_service},
+    services::{auth_service::AuthClaims, staff_attendance_service, staff_identity_service},
     state::AppState,
 };
+
+const ATTENDANCE_MANAGE_PERMISSIONS: &[&str] = &["staff.attendance.manage"];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -122,18 +124,28 @@ struct AttendanceBreakRequest {
 
 async fn get_summary(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_filter = staff_identity_service::resolve_read_filter(
+        &state.db,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        query.staff_id.as_deref().unwrap_or(""),
+        ATTENDANCE_MANAGE_PERMISSIONS,
+    )
+    .await?;
     let rows = staff_attendance_service::summary(
         &state.db,
         &tenant_id,
         &branch_id,
         query.year,
         query.month,
-        query.staff_id.as_deref().unwrap_or("").trim(),
+        &staff_filter,
     )
     .await?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -141,10 +153,11 @@ async fn get_summary(
 
 async fn recalculate_summary(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
-    get_summary(State(state), headers, Query(query)).await
+    get_summary(State(state), Extension(claims), headers, Query(query)).await
 }
 
 async fn save_summary(
@@ -176,12 +189,22 @@ async fn save_summary(
 
 async fn get_details(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(staff_id): Path<String>,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<crate::repositories::staff_attendance_repository::AttendanceDetailRecord>> {
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = staff_identity_service::resolve_read_filter(
+        &state.db,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        ATTENDANCE_MANAGE_PERMISSIONS,
+    )
+    .await?;
     let rows = staff_attendance_service::details(
         &state.db,
         &tenant_id,
@@ -230,7 +253,8 @@ async fn clock_out(
     Json(payload): Json<ClockOutRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let self_service = claims.role.eq_ignore_ascii_case("staff");
+    let self_service =
+        !staff_identity_service::can_act_for_other_staff(&claims, ATTENDANCE_MANAGE_PERMISSIONS);
     let staff_id = self_scoped_staff_id(
         &state,
         &claims,
@@ -310,6 +334,8 @@ async fn end_break(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+/// Staff identity for attendance writes comes from the session unless the
+/// caller can manage other staff; the body `staffId` is ignored otherwise.
 async fn self_scoped_staff_id(
     state: &AppState,
     claims: &AuthClaims,
@@ -317,11 +343,15 @@ async fn self_scoped_staff_id(
     branch_id: &str,
     requested_staff_id: &str,
 ) -> Result<String, AppError> {
-    if claims.role.eq_ignore_ascii_case("staff") {
-        staff_enterprise_service::self_staff_id(&state.db, tenant_id, branch_id, &claims.sub).await
-    } else {
-        Ok(requested_staff_id.to_string())
-    }
+    staff_identity_service::resolve_write_scope(
+        &state.db,
+        claims,
+        tenant_id,
+        branch_id,
+        requested_staff_id,
+        ATTENDANCE_MANAGE_PERMISSIONS,
+    )
+    .await
 }
 
 async fn correct_attendance(

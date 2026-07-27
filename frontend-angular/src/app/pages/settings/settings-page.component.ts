@@ -44,7 +44,15 @@ type AppointmentSettings = {
 };
 
 type ChairRoomOption = { id: string; name: string; kind: string };
-type AuthPermissionOption = { code: string; label: string; group: string };
+type AuthPermissionOption = {
+  code: string;
+  label: string;
+  group: string;
+  action?: string;
+  scope?: string;
+  sensitive?: boolean;
+  featureKey?: string;
+};
 type AuthPermissionGroup = { name: string; permissions: AuthPermissionOption[] };
 type AuthMaskOption = { code: string; label: string };
 type ManagedAuthRole = {
@@ -209,6 +217,7 @@ export class SettingsPageComponent implements OnInit {
   roleMaxDiscount = '';
   roleMaxRefund = '';
   roleMaxCashMovement = '';
+  roleReason = '';
   permissionSearch = '';
   rolesLoading = false;
   rolesSaving = false;
@@ -758,6 +767,7 @@ export class SettingsPageComponent implements OnInit {
     this.roleMaxDiscount = '';
     this.roleMaxRefund = '';
     this.roleMaxCashMovement = '';
+    this.roleReason = '';
     this.roleError = '';
     this.roleStatus = '';
   }
@@ -771,6 +781,7 @@ export class SettingsPageComponent implements OnInit {
     this.roleMaxDiscount = this.rupeeLimit(role.maxDiscountPaise);
     this.roleMaxRefund = this.rupeeLimit(role.maxRefundPaise);
     this.roleMaxCashMovement = this.rupeeLimit(role.maxCashMovementPaise);
+    this.roleReason = '';
     this.roleError = '';
     this.roleStatus = '';
   }
@@ -818,6 +829,12 @@ export class SettingsPageComponent implements OnInit {
     this.rolePermissions = this.rolePermissions.filter((permission) => permission !== code);
   }
 
+  get sensitiveRoleGrants(): AuthPermissionOption[] {
+    return this.permissionOptions.filter(
+      (permission) => permission.sensitive && this.rolePermissions.includes(permission.code)
+    );
+  }
+
   hasRoleMask(code: string) {
     return this.roleMaskedFields.includes(code);
   }
@@ -838,6 +855,20 @@ export class SettingsPageComponent implements OnInit {
       this.roleError = 'Role name and permission are required';
       return;
     }
+    const sensitiveGrants = this.sensitiveRoleGrants;
+    const reason = this.roleReason.trim();
+    if (sensitiveGrants.length) {
+      if (reason.length < 5) {
+        this.roleError = 'A reason (at least 5 characters) is required for sensitive permissions';
+        return;
+      }
+      const confirmed = window.confirm(
+        `This role grants sensitive permissions:\n${sensitiveGrants
+          .map((permission) => `• ${permission.label} (${permission.code})`)
+          .join('\n')}\n\nSave with the recorded reason?`
+      );
+      if (!confirmed) return;
+    }
     this.rolesSaving = true;
     try {
       const path = this.selectedRoleId
@@ -851,6 +882,7 @@ export class SettingsPageComponent implements OnInit {
         maxDiscountPaise: this.limitPaise(this.roleMaxDiscount),
         maxRefundPaise: this.limitPaise(this.roleMaxRefund),
         maxCashMovementPaise: this.limitPaise(this.roleMaxCashMovement),
+        reason: sensitiveGrants.length ? reason : null,
       };
       const request = this.selectedRoleId
         ? this.api.put<any>(path, payload)
@@ -860,6 +892,7 @@ export class SettingsPageComponent implements OnInit {
       const saved = this.roles.find((role) => role.id === this.selectedRoleId)
         ?? this.roles.find((role) => role.name.toLowerCase() === name.toLowerCase());
       if (saved) this.selectRole(saved);
+      this.roleReason = '';
       this.roleStatus = 'Saved';
     } catch (error: any) {
       this.roleError = error?.error?.error?.message || error?.error?.message || error?.message || 'Unable to save role';
