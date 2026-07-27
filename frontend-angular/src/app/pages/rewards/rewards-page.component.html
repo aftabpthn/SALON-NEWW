@@ -1,0 +1,86 @@
+<div class="rewards-page">
+  <header class="page-head">
+    <h1>Rewards</h1>
+    <p class="subtitle">
+      Boost loyalty incentive programs with custom rewards management for your clients. Engage your customers with
+      loyalty programs.
+    </p>
+  </header>
+
+  <div class="card" *ngIf="!loading; else loadingBlock">
+    <div class="alert error" *ngIf="error">{{ error }}</div>
+    <div class="alert success" *ngIf="message">{{ message }}</div>
+
+    <section class="toggles">
+      <label class="check-row">
+        <input type="checkbox" [(ngModel)]="enableForProducts" />
+        <span>Enable reward point for products</span>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" [(ngModel)]="enableForPackages" />
+        <span>Enable reward point for packages</span>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" [(ngModel)]="enableForMemberships" />
+        <span>Enable reward point for memberships</span>
+      </label>
+      <label class="check-row">
+        <input type="checkbox" [(ngModel)]="enableForServices" />
+        <span>Enable reward point for services</span>
+      </label>
+    </section>
+
+    <section class="field-group">
+      <h2>Reward Value / Points<span class="required">*</span></h2>
+      <div class="prefixed-input">
+        <span class="prefix">Value (&#8377;)</span>
+        <input type="number" min="0" step="0.01" [(ngModel)]="rewardValueRupees" />
+      </div>
+      <div class="prefixed-input">
+        <span class="prefix">Point</span>
+        <input type="number" min="0" step="1" [(ngModel)]="rewardPoints" />
+      </div>
+      <p class="hint">Clients earn the points above for every &#8377;{{ rewardValueRupees || 0 }} billed on enabled items.</p>
+    </section>
+
+    <section class="field-group">
+      <h2>Minimum points eligible for redemption<span class="required">*</span></h2>
+      <input class="plain-input" type="number" min="0" step="1" [(ngModel)]="minimumRedemptionPoints" />
+    </section>
+
+    <section class="field-group">
+      <h2>Bonus rules</h2>
+      <p class="hint">Give extra points when the eligible bill value crosses a threshold. The highest matching threshold applies.</p>
+      <div class="rule-row" *ngFor="let rule of bonusRules; let i = index">
+        <div class="prefixed-input">
+          <span class="prefix">Bill above (&#8377;)</span>
+          <input type="number" min="0" step="0.01" [(ngModel)]="rule.minBillRupees" />
+        </div>
+        <select [(ngModel)]="rule.rewardType">
+          <option value="percentage">Percentage</option>
+          <option value="flat">Flat points</option>
+        </select>
+        <div class="prefixed-input">
+          <span class="prefix">{{ rule.rewardType === 'percentage' ? '% extra' : 'Points' }}</span>
+          <input type="number" min="0" step="1" [(ngModel)]="rule.rewardValue" />
+        </div>
+        <button type="button" class="icon-btn danger" (click)="removeBonusRule(i)" aria-label="Remove bonus rule">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+      <button type="button" class="btn ghost" (click)="addBonusRule()">
+        <i class="bi bi-plus-lg"></i> Add More
+      </button>
+    </section>
+
+    <footer class="actions">
+      <button type="button" class="btn primary" [disabled]="saving" (click)="save()">
+        {{ saving ? 'Saving…' : 'Save' }}
+      </button>
+    </footer>
+  </div>
+
+  <ng-template #loadingBlock>
+    <div class="card loading-state">Loading reward settings…</div>
+  </ng-template>
+</div>

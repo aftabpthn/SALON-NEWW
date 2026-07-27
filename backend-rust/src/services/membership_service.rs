@@ -1383,6 +1383,7 @@ fn default_membership_settings() -> Value {
         "notificationsRisk":{"renewalReminder":true,"lowCreditReminder":true,"ownerAlertForHighBalance":true,"highBalanceThreshold":1000000},
         "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
+        "rewards":{"enableForProducts":false,"enableForPackages":false,"enableForMemberships":false,"enableForServices":false,"rewardValuePaise":10000,"rewardPoints":5,"minimumRedemptionPoints":100,"bonusRules":[{"minBillPaise":0,"rewardType":"percentage","rewardValue":0}]},
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })
 }
@@ -1468,6 +1469,41 @@ fn validate_retention_settings(settings: &Value) -> Result<(), AppError> {
         }
         if !codes.insert(code.to_ascii_lowercase()) {
             return Err(AppError::validation("loyalty tier codes must be unique"));
+        }
+    }
+    let reward_points = settings
+        .pointer("/rewards/rewardPoints")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let reward_value_paise = settings
+        .pointer("/rewards/rewardValuePaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if reward_points > 0 && reward_value_paise <= 0 {
+        return Err(AppError::validation(
+            "reward value must be greater than zero when reward points are set",
+        ));
+    }
+    if let Some(rules) = settings
+        .pointer("/rewards/bonusRules")
+        .and_then(Value::as_array)
+    {
+        for rule in rules {
+            let reward_type = rule
+                .get("rewardType")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if !matches!(reward_type, "percentage" | "flat") {
+                return Err(AppError::validation(
+                    "reward bonus rule type must be percentage or flat",
+                ));
+            }
+            let bonus_value = rule.get("rewardValue").and_then(Value::as_i64).unwrap_or(0);
+            if reward_type == "percentage" && bonus_value > 1000 {
+                return Err(AppError::validation(
+                    "reward bonus percentage cannot exceed 1000",
+                ));
+            }
         }
     }
     Ok(())

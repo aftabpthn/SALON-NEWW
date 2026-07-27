@@ -105,6 +105,7 @@ export default {
   'nav.Purchase Bill Register': 'खरीद बिल रजिस्टर',
   'nav.Purchase Orders': 'खरीद आदेश',
   'nav.Reports': 'रिपोर्ट',
+  'nav.Rewards': 'रिवॉर्ड्स',
   'nav.SaaS Admin': 'SaaS एडमिन',
   'nav.Salary History': 'वेतन इतिहास',
   'nav.Salary Rules': 'वेतन नियम',

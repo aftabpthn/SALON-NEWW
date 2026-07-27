@@ -132,6 +132,7 @@ export const routes: Routes = [
   { path: 'finance/expenses', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
   { path: 'transactions/expenses', redirectTo: 'finance/outgoing-funds', pathMatch: 'full' },
   { path: 'memberships', loadComponent: () => import('./pages/memberships/memberships-page.component').then((m) => m.MembershipsPageComponent), canActivate: [authGuard] },
+  { path: 'rewards', loadComponent: () => import('./pages/rewards/rewards-page.component').then((m) => m.RewardsPageComponent), canActivate: [authGuard] },
   { path: 'membership-status/:token', loadComponent: () => import('./pages/memberships/status/membership-status-page.component').then((m) => m.MembershipStatusPageComponent) },
   { path: 'packages', loadComponent: () => import('./pages/packages/packages-page.component').then((m) => m.PackagesPageComponent), canActivate: [authGuard] },
   { path: 'reports/pending-packages', canActivate: [packageReportRedirect('pending')], children: [] },

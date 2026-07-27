@@ -13787,6 +13787,22 @@ async fn post_membership_rewards(
         .and_then(Value::as_i64)
         .unwrap_or(0)
         .clamp(0, i64::from(i32::MAX));
+    let rewards_config = settings.get("rewards").cloned().unwrap_or_else(|| serde_json::json!({}));
+    let reward_line_types: Vec<String> = [
+        ("service", "enableForServices"),
+        ("product", "enableForProducts"),
+        ("package", "enableForPackages"),
+        ("membership", "enableForMemberships"),
+    ]
+    .iter()
+    .filter(|(_, flag)| {
+        rewards_config
+            .get(*flag)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    })
+    .map(|(line_type, _)| (*line_type).to_string())
+    .collect();
     let redeemed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(quantity),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='redemption' AND item_id='reward_points'")
         .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
         .map_err(|_| AppError::internal("failed to load reward redemption"))?;
@@ -13857,6 +13873,16 @@ async fn post_membership_rewards(
         .await
         .map_err(|_| AppError::internal("failed to load shared reward balance"))?
         .ok_or_else(|| AppError::validation("reward points balance is insufficient or not shared with this branch"))?;
+        let minimum_redemption = rewards_config
+            .get("minimumRedemptionPoints")
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
+            .clamp(0, i64::from(i32::MAX));
+        if !reward_line_types.is_empty() && i64::from(reward_source.2) < minimum_redemption {
+            return Err(AppError::validation(
+                "reward points balance is below the minimum eligible for redemption",
+            ));
+        }
     }
     sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant_id)
@@ -13872,7 +13898,21 @@ async fn post_membership_rewards(
             .bind(tenant_id).bind(&reward_source.0).bind(&reward_source.1).bind(sale_id).bind(redeemed as i32).bind(source_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post reward redemption"))?;
     }
-    let earned = reward_points_for_sale(total_paise, rate);
+    let earned = if reward_line_types.is_empty() {
+        reward_points_for_sale(total_paise, rate)
+    } else {
+        let eligible_paise = sqlx::query_scalar::<_, i64>(
+            "SELECT COALESCE(SUM(line_total_paise),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type=ANY($4)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(sale_id)
+        .bind(&reward_line_types)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to load reward eligible amount"))?;
+        reward_points_for_config(eligible_paise, &rewards_config)
+    };
     if enabled && earned > 0 {
         let mut target_balance = if reward_source.0 == branch_id && reward_source.1 == client_id {
             source_balance
@@ -13894,6 +13934,42 @@ fn reward_points_for_sale(total_paise: i64, points_per_100_rupees: i64) -> i64 {
         .max(0)
         .saturating_mul(points_per_100_rupees.max(0))
         / 10_000
+}
+
+fn reward_points_for_config(eligible_paise: i64, rewards: &Value) -> i64 {
+    let value_paise = rewards
+        .get("rewardValuePaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let points = rewards
+        .get("rewardPoints")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if value_paise <= 0 || points <= 0 {
+        return 0;
+    }
+    let mut earned = (eligible_paise.max(0) / value_paise).saturating_mul(points);
+    // Only the highest matching bill threshold applies, so bonuses never stack.
+    let best_rule = rewards
+        .get("bonusRules")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|rule| {
+            let min_bill = rule.get("minBillPaise").and_then(Value::as_i64).unwrap_or(0);
+            let bonus_value = rule.get("rewardValue").and_then(Value::as_i64).unwrap_or(0);
+            let reward_type = rule.get("rewardType").and_then(Value::as_str).unwrap_or("");
+            (bonus_value > 0 && eligible_paise >= min_bill)
+                .then(|| (min_bill, reward_type.to_string(), bonus_value))
+        })
+        .max_by_key(|(min_bill, _, _)| *min_bill);
+    if let Some((_, reward_type, bonus_value)) = best_rule {
+        earned = match reward_type.as_str() {
+            "percentage" => earned.saturating_add(earned.saturating_mul(bonus_value) / 100),
+            _ => earned.saturating_add(bonus_value),
+        };
+    }
+    earned
 }
 
 fn package_setting<'a>(settings: &'a Value, path: &[&str]) -> Option<&'a Value> {
