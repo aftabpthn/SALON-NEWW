@@ -3,7 +3,7 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Outpu
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
-import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiMessage, AiSession } from '../core/services/ai-concierge.service';
 import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
@@ -49,6 +49,10 @@ export class AppHeaderComponent implements OnInit {
   assistantConnection: 'idle' | 'connecting' | 'ready' | 'error' = 'idle';
   /** `live` when the AI provider answered, otherwise why the CRM fallback replied. */
   assistantProviderStatus = '';
+  /** Evidence from the CRM tool that answered the last question, if any. */
+  assistantCopilot: AiCopilotAnswer | null = null;
+  /** Tool name when the last question needed a report this role cannot open. */
+  assistantRestrictedTool = '';
   private assistantRetry: (() => Promise<void>) | null = null;
 
   get branchName(): string {
@@ -148,6 +152,7 @@ export class AppHeaderComponent implements OnInit {
     this.assistantBusy = true;
     this.assistantConnection = 'connecting';
     this.assistantProviderStatus = '';
+    this.clearCopilotResult();
     this.clearAssistantError();
     try {
       this.assistantSession ??= await this.concierge.open();
@@ -164,11 +169,14 @@ export class AppHeaderComponent implements OnInit {
     if (!body || !this.assistantSession || this.assistantBusy) return;
     this.assistantBusy = true;
     this.assistantProviderStatus = '';
+    this.clearCopilotResult();
     this.clearAssistantError();
     try {
       const response = await this.concierge.send(this.assistantSession.id, body);
       this.assistantDraft = '';
       this.assistantProviderStatus = response.providerStatus || '';
+      this.assistantCopilot = response.copilot ?? null;
+      this.assistantRestrictedTool = response.restrictedTool ?? '';
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
       this.assistantConnection = 'ready';
       this.assistantAction = response.actionType ? { type: response.actionType, serviceId: response.actionPayload?.serviceId || '' } : null;
@@ -206,6 +214,19 @@ export class AppHeaderComponent implements OnInit {
       ready: 'header.aiConnected',
       error: 'header.aiConnectionFailed',
     } as Record<string, string>)[this.assistantConnection];
+  }
+
+  /** Opens the CRM screen the tool pointed at, and closes the drawer behind it. */
+  async openCopilotLink(): Promise<void> {
+    const link = this.assistantCopilot?.deepLink;
+    if (!link) return;
+    this.assistantOpen = false;
+    await this.router.navigateByUrl(link);
+  }
+
+  private clearCopilotResult(): void {
+    this.assistantCopilot = null;
+    this.assistantRestrictedTool = '';
   }
 
   private clearAssistantError(): void {

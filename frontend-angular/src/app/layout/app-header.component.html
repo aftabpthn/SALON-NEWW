@@ -151,6 +151,31 @@
       @if (assistantFallbackReasonKey) {
         <div class="assistant-notice">{{ 'header.aiFallbackAnswer' | translate }} {{ assistantFallbackReasonKey | translate }}</div>
       }
+      @if (assistantRestrictedTool) {
+        <div class="assistant-notice">{{ 'header.aiToolRestricted' | translate }}</div>
+      }
+      @if (assistantCopilot; as copilot) {
+        <section class="assistant-evidence" [attr.aria-label]="'header.aiEvidence' | translate">
+          <header>
+            <strong>{{ 'header.aiEvidence' | translate }}</strong>
+            <span class="assistant-confidence" [attr.data-level]="copilot.confidence">{{ 'header.aiConfidence' | translate }}: {{ copilot.confidence }}</span>
+          </header>
+          @if (copilot.period) {
+            <p class="assistant-evidence-period">{{ copilot.period }}</p>
+          }
+          <ul>
+            @for (line of copilot.evidence; track line) {
+              <li>{{ line }}</li>
+            }
+          </ul>
+          @if (copilot.recommendedAction) {
+            <p class="assistant-evidence-action">{{ copilot.recommendedAction }}</p>
+          }
+          @if (copilot.deepLink) {
+            <button type="button" (click)="openCopilotLink()">{{ 'header.aiOpenScreen' | translate }}</button>
+          }
+        </section>
+      }
       <div class="assistant-transcript">
         @for (message of assistantMessages; track message) {
           <article [class.assistant]="message.role === 'assistant'">

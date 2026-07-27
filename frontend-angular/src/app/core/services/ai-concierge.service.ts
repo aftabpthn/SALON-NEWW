@@ -5,7 +5,34 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 
 export type AiSession = { id: string; channel: string; status: string; locale: string };
 export type AiMessage = { id: string; role: string; body: string; provider: string; modelName: string; promptVersion: string; intent: string; safetyFlags: string[]; createdAt: string };
-export type AiReply = { session: AiSession; userMessage: AiMessage; assistantMessage: AiMessage; actionType: string; actionPayload: { serviceId?: string; bookingUrl?: string; requiresConfirmation?: boolean }; providerStatus: string };
+/** Grounded evidence from the CRM tool that answered the question. */
+export type AiCopilotAnswer = {
+  /** Which read tool ran, e.g. `staff_performance_decline`. */
+  tool: string;
+  headline: string;
+  /** The figures the conclusion rests on. */
+  evidence: string[];
+  /** Date range the figures cover. */
+  period: string;
+  recommendedAction: string;
+  /** CRM route to open to act on the answer. */
+  deepLink: string;
+  confidence: 'high' | 'medium' | 'low' | string;
+  /** Structured rows behind the answer. */
+  data: Record<string, unknown>;
+};
+
+export type AiReply = {
+  session: AiSession;
+  userMessage: AiMessage;
+  assistantMessage: AiMessage;
+  actionType: string;
+  actionPayload: { serviceId?: string; bookingUrl?: string; requiresConfirmation?: boolean };
+  providerStatus: string;
+  copilot?: AiCopilotAnswer;
+  /** Set when a tool matched but the signed-in role may not run it. */
+  restrictedTool?: string;
+};
 
 /** Which concierge call failed, so the drawer can retry exactly that step. */
 export type AiConciergeStep = 'open' | 'transcript' | 'send';
