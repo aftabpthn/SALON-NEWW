@@ -574,3 +574,92 @@ pub async fn recent_voice_calls(
     .fetch_all(db)
     .await
 }
+
+/// Records one copilot tool call. Called for every attempt, allowed or refused,
+/// so the audit trail shows what was asked as well as what was answered.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_tool_audit(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    user_role: &str,
+    session_id: &str,
+    tool: &str,
+    outcome: &str,
+    redacted_question: &str,
+    row_count: i32,
+    duration_ms: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO ai_copilot_tool_audit(tenant_id,branch_id,user_id,user_role,session_id,tool,outcome,redacted_question,row_count,duration_ms) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(user_id)
+    .bind(user_role)
+    .bind(session_id)
+    .bind(tool)
+    .bind(outcome)
+    .bind(redacted_question)
+    .bind(row_count)
+    .bind(duration_ms)
+    .execute(db)
+    .await
+    .map(|_| ())
+}
+
+/// Stores whether an answer was useful. A second vote by the same user on the
+/// same message replaces the first rather than stacking.
+#[allow(clippy::too_many_arguments)]
+pub async fn save_feedback(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    message_id: &str,
+    user_id: &str,
+    helpful: bool,
+    note: &str,
+    tool: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO ai_copilot_feedback(tenant_id,branch_id,session_id,message_id,user_id,helpful,note,tool) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) \
+         ON CONFLICT (message_id,user_id) DO UPDATE \
+           SET helpful=EXCLUDED.helpful, note=EXCLUDED.note, updated_at=NOW()",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(session_id)
+    .bind(message_id)
+    .bind(user_id)
+    .bind(helpful)
+    .bind(note)
+    .bind(tool)
+    .execute(db)
+    .await
+    .map(|_| ())
+}
+
+/// Confirms an assistant message belongs to this tenant, branch and session
+/// before feedback is attached to it.
+pub async fn message_belongs_to_session(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    message_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM ai_concierge_messages \
+          WHERE tenant_id=$1 AND branch_id=$2 AND session_id=$3 AND id=$4 AND role='assistant')",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(session_id)
+    .bind(message_id)
+    .fetch_one(db)
+    .await
+}
