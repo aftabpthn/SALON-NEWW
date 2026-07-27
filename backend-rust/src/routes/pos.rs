@@ -14152,10 +14152,30 @@ pub(crate) async fn reverse_stamp_cards_for_refund(
     .map_err(|_| AppError::internal("failed to load stamps for refund"))?;
 
     for (program_code, stamps) in earned {
+        let completion_key =
+            stamp_card_service::completion_idempotency_key(sale_id, &program_code);
+        let completed_stamps = sqlx::query_scalar::<_, i32>(
+            "SELECT stamps FROM stamp_card_events \
+             WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND program_code=$4 \
+               AND event_type='redeemed' AND idempotency_key=$5",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(client_id)
+        .bind(&program_code)
+        .bind(&completion_key)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to load stamp completion for refund"))?;
         let balance =
             stamp_card_service::current_balance(tx, tenant_id, branch_id, client_id, &program_code)
                 .await?;
-        let reversed = stamp_card_service::reversed_balance(balance, stamps);
+        let reversed =
+            stamp_card_service::refund_reversal_balance(balance, stamps, completed_stamps);
+        let reversal_key = stamp_card_service::stamp_reversal_idempotency_key(
+            refund_id,
+            &program_code,
+        );
         let posted = stamp_card_service::insert_event(
             tx,
             tenant_id,
@@ -14170,11 +14190,64 @@ pub(crate) async fn reverse_stamp_cards_for_refund(
                 balance_after: reversed,
                 staff_id,
                 note: "POS refund stamp reversal",
-                idempotency_key: &format!("stamp-reversal:{refund_id}:{program_code}"),
+                idempotency_key: &reversal_key,
             },
         )
         .await?;
         if posted {
+            let completion_points = sqlx::query_scalar::<_, i32>(
+                "SELECT points FROM membership_reward_ledger \
+                 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
+                   AND transaction_type='earned' AND idempotency_key=$4",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(client_id)
+            .bind(&completion_key)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|_| AppError::internal("failed to load stamp reward completion"))?
+            .unwrap_or(0);
+            if completion_points > 0 {
+                let points_balance = sqlx::query_scalar::<_, i32>(
+                    "SELECT balance_after FROM membership_reward_ledger \
+                     WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
+                     ORDER BY created_at DESC, id DESC LIMIT 1",
+                )
+                .bind(tenant_id)
+                .bind(branch_id)
+                .bind(client_id)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(|_| AppError::internal("failed to load reward balance"))?
+                .unwrap_or(0);
+                let delta =
+                    stamp_card_service::reward_reversal_delta(points_balance, completion_points);
+                if delta != 0 {
+                    let reward_reversal_key =
+                        stamp_card_service::completion_reversal_idempotency_key(
+                            refund_id,
+                            &program_code,
+                        );
+                    sqlx::query(
+                        "INSERT INTO membership_reward_ledger \
+                         (tenant_id,branch_id,client_id,source_refund_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) \
+                         VALUES ($1,$2,$3,$4,'reversed',$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING",
+                    )
+                    .bind(tenant_id)
+                    .bind(branch_id)
+                    .bind(client_id)
+                    .bind(&reward_reversal_key)
+                    .bind(delta)
+                    .bind(points_balance.saturating_add(delta))
+                    .bind(staff_id)
+                    .bind(format!("Stamp card reward reversal: {program_code}"))
+                    .bind(&reward_reversal_key)
+                    .execute(&mut **tx)
+                    .await
+                    .map_err(|_| AppError::internal("failed to reverse stamp card reward points"))?;
+                }
+            }
             security_service::record_audit_tx(
                 tx,
                 tenant_id,
@@ -14187,6 +14260,8 @@ pub(crate) async fn reverse_stamp_cards_for_refund(
                     "saleId": sale_id,
                     "refundId": refund_id,
                     "stamps": stamps,
+                    "completedStamps": completed_stamps.unwrap_or(0),
+                    "reversedRewardPoints": completion_points,
                     "balanceAfter": reversed,
                 }),
             )
