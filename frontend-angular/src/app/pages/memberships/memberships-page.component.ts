@@ -31,6 +31,7 @@ type RiskReport = { metrics: { total: number; pending: number; reviewed: number;
 type RewardEntry = { id: string; clientId: string; clientName: string; sourceSaleId: string; transactionType: string; points: number; balanceAfter: number; expiresAt?: string; staffId: string; note: string; createdAt: string };
 type RewardsRoi = { metrics: { totalRewardClients: number; totalPointsEarned: number; totalPointsRedeemed: number; rewardUsersRevenuePaise: number; nonRewardUsersRevenuePaise: number } };
 type LoyaltyTier = { code: string; name: string; minimumPoints: number | string };
+type AdvancedReward = { code: string; name: string; active: boolean; rewardType: string; pointsRequired: number | string; amountPaise: number | string; discountBps: number | string; serviceId: string; occasionType: string; validityDays: number | string };
 type EnterpriseReport = { metrics: { membershipSalesPaise: number; commissionPaise: number; serviceCostPaise: number; redeemedValuePaise: number; netProfitPaise: number; contributionPaise: number; creditLiability: number }; customerSales: Array<{ clientId: string; clientName: string; saleCount: number; revenuePaise: number }>; redemption: Array<{ clientId: string; clientName: string; membershipName: string; serviceName: string; quantity: number; visitCount: number }>; profitability: Array<{ membershipId: string; membershipName: string; soldCount: number; revenuePaise: number; commissionPaise: number; redeemedCredits: number; redeemedValuePaise: number; serviceCostPaise: number; netProfitPaise: number }> };
 type MembershipSettings = {
   membershipCatalog: { membershipSalesEnabled: boolean; visibleInPos: boolean; visibleOnline: boolean; freeMembershipEnabled: boolean; paidMembershipEnabled: boolean };
@@ -42,6 +43,7 @@ type MembershipSettings = {
   notificationsRisk: { renewalReminder: boolean; lowCreditReminder: boolean; ownerAlertForHighBalance: boolean; highBalanceThreshold: number };
   loyaltyTiers: { enabled: boolean; tiers: LoyaltyTier[] };
   referrals: { enabled: boolean; referrerRewardPoints: number | string; referredRewardPoints: number | string };
+  advancedRewards: AdvancedReward[];
   defaults: { defaultStatus: string; defaultMembershipType: string };
 };
 
@@ -401,6 +403,14 @@ export class MembershipsPageComponent implements OnInit {
     if (this.settings.loyaltyTiers.tiers.length > 1) this.settings.loyaltyTiers.tiers.splice(index, 1);
   }
 
+  addAdvancedReward() {
+    this.settings.advancedRewards.push({ code: '', name: '', active: true, rewardType: 'flat_discount', pointsRequired: '', amountPaise: '', discountBps: '', serviceId: '', occasionType: '', validityDays: 30 });
+  }
+
+  removeAdvancedReward(index: number) {
+    this.settings.advancedRewards.splice(index, 1);
+  }
+
   async exportReport(format: 'csv' | 'pdf') {
     try {
       const blob = await firstValueFrom(this.api.getBlob(`/membership-enterprise/reports/export?format=${format}`));
@@ -433,7 +443,7 @@ export class MembershipsPageComponent implements OnInit {
   private async loadServices() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Service[]>>('/services')); this.services = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.services = []; } }
   private async loadClients() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')); this.clients = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.clients = []; } }
   private blankForm() { return { name: '', code: '', planType: 'discount' as PlanType, specialOfferPrice: '' as string | number, actualPrice: '' as string | number, pointsRequired: '' as string | number, discountPercent: '' as string | number, validityDays: '' as string | number, creditAmount: '' as string | number, familyLimit: '' as string | number, gstPercent: '' as string | number, notes: '', serviceIds: [] as string[], mobileVisible: false, bookingPageVisible: false, birthdayBenefit: false, anniversaryBenefit: false, priorityBooking: false, active: true }; }
-  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
+  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, advancedRewards: [{ code: '', name: '', active: false, rewardType: 'flat_discount', pointsRequired: '', amountPaise: '', discountBps: '', serviceId: '', occasionType: '', validityDays: 30 }], defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
   private navigateCheckout(intent: CheckoutIntent) { return this.router.navigate(['/pos'], { queryParams: { clientId: intent.clientId, membershipId: intent.planId, unitPricePaise: intent.pricePaise, reference: intent.referenceId || null } }); }
   private number(value: string | number) { return Math.max(0, Number(value) || 0); }
 }

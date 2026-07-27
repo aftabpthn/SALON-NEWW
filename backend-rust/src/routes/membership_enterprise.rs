@@ -1,8 +1,8 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::{header, HeaderMap, HeaderValue},
-    response::{IntoResponse, Response},
     Json, Router,
+    extract::{Path, Query, State},
+    http::{HeaderMap, HeaderValue, header},
+    response::{IntoResponse, Response},
 };
 use qrcodegen::{QrCode, QrCodeEcc};
 use serde::{Deserialize, Serialize};
@@ -377,6 +377,12 @@ struct PublicRewardQrRequest {
     points: i32,
     amount_paise: i64,
     idempotency_key: String,
+    reward_code: Option<String>,
+    reward_type: Option<String>,
+    reward_label: Option<String>,
+    reward_bps: Option<i32>,
+    service_id: Option<String>,
+    occasion_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1065,9 +1071,17 @@ async fn public_reward_qr(
     let item = membership_service::create_public_reward_qr(
         &state.db,
         &token,
-        payload.points,
-        payload.amount_paise,
-        &payload.idempotency_key,
+        membership_service::CreateRewardQrInput {
+            points: payload.points,
+            amount_paise: payload.amount_paise,
+            idempotency_key: payload.idempotency_key,
+            reward_code: payload.reward_code,
+            reward_type: payload.reward_type,
+            reward_label: payload.reward_label,
+            reward_bps: payload.reward_bps,
+            service_id: payload.service_id,
+            occasion_type: payload.occasion_type,
+        },
     )
     .await?;
     Ok(Json(ApiResponse::ok(serde_json::json!({
@@ -1075,6 +1089,12 @@ async fn public_reward_qr(
         "token": item.token,
         "points": item.points,
         "amountPaise": item.amount_paise,
+        "rewardCode": item.reward_code,
+        "rewardType": item.reward_type,
+        "rewardLabel": item.reward_label,
+        "rewardBps": item.reward_bps,
+        "serviceId": item.service_id,
+        "occasionType": item.occasion_type,
         "status": item.status,
         "expiresAt": item.expires_at,
         "qrSvg": membership_qr_svg(&item.token)?,
