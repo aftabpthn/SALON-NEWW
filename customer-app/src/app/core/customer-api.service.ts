@@ -153,6 +153,12 @@ export class CustomerApiService {
     );
   }
 
+  demoLogin(device?: CustomerDeviceInfo): Observable<AuthSession> {
+    return this.http.post<ApiResponse<AuthSession>>(`${this.baseUrl}/customer/auth/demo`, { device }).pipe(
+      map((response) => this.unwrap<AuthSession>(response))
+    );
+  }
+
   logout(): Observable<void> {
     return this.http.post<ApiResponse<void>>(`${this.baseUrl}/customer/auth/logout`, {}).pipe(
       map(() => undefined)

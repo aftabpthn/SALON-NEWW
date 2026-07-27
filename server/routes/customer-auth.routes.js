@@ -61,6 +61,17 @@ customerAuthRouter.post(
 );
 
 customerAuthRouter.post(
+  "/customer/auth/demo",
+  asyncHandler((req, res) => {
+    res.status(201).json(customerAuthService.demoLogin(req.body || {}, {
+      tenantId: req.get("x-tenant-id") || "",
+      branchId: req.get("x-branch-id") || "",
+      host: req.get("host") || ""
+    }));
+  })
+);
+
+customerAuthRouter.post(
   "/customer/auth/refresh",
   asyncHandler((req, res) => {
     res.json(customerAuthService.refresh(req.body?.refreshToken || "", req.body?.device || {}));

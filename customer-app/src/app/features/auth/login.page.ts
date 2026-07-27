@@ -3,7 +3,7 @@ import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router } from "@angular/router";
 import { IonButton, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline } from "ionicons/icons";
+import { callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline, flashOutline } from "ionicons/icons";
 import { environment } from "../../../environments/environment";
 import { AuthService } from "../../core/auth.service";
 import { CustomerProfile } from "../../core/api.types";
@@ -61,6 +61,10 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
               <ion-button expand="block" fill="outline" class="choice-button" (click)="showWhatsApp()" [disabled]="auth.loading()">
                 <ion-icon name="logo-whatsapp" slot="start"></ion-icon>
                 Continue with WhatsApp
+              </ion-button>
+              <ion-button expand="block" fill="outline" class="choice-button demo-login-button" (click)="continueWithDemo()" [disabled]="auth.loading()">
+                <ion-icon name="flash-outline" slot="start"></ion-icon>
+                Demo login as garvkataria
               </ion-button>
               <ion-button expand="block" fill="clear" class="guest-button" (click)="continueAsGuest()" [disabled]="auth.loading()">
                 Continue as guest
@@ -469,6 +473,18 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .choice-button ion-icon[name="logo-whatsapp"] {
       color: #25D366;
+    }
+
+    .choice-button.demo-login-button {
+      --border-color: rgba(16, 185, 129, 0.45);
+      --background: rgba(16, 185, 129, 0.06);
+      --color: #047857;
+      --color-activated: #047857;
+      --background-activated: rgba(16, 185, 129, 0.14);
+    }
+
+    .choice-button.demo-login-button ion-icon {
+      color: #10B981;
     }
 
     .dark-continue-button {
@@ -944,7 +960,7 @@ export class LoginPage implements OnInit, OnDestroy {
   @ViewChildren("mobileOtpBox") private readonly mobileOtpBoxes!: QueryList<ElementRef<HTMLInputElement>>;
 
   constructor(readonly auth: AuthService, private readonly router: Router, private readonly route: ActivatedRoute) {
-    addIcons({ callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline });
+    addIcons({ callOutline, closeOutline, logoApple, logoFacebook, logoGoogle, logoWhatsapp, mailOutline, personOutline, shieldCheckmarkOutline, sparklesOutline, flashOutline });
   }
 
   ngOnInit() {
@@ -1222,6 +1238,13 @@ export class LoginPage implements OnInit, OnDestroy {
 
   continueAsGuest() {
     void this.router.navigateByUrl("/tabs/home");
+  }
+
+  async continueWithDemo() {
+    this.notice = "";
+    await this.auth.demoLogin()
+      .then((session) => this.afterProviderSignIn(session))
+      .catch(() => undefined);
   }
 
   fullPhone(): string {

@@ -673,5 +673,18 @@ export const customerAuthService = {
          AND COALESCE(revokedAt, '') = ''
     `).run({ tokenHash: hashToken(refreshToken), revokedAt: now(), updatedAt: now() });
     return { revoked: result.changes > 0 };
+  },
+
+  demoLogin(payload = {}, request = {}) {
+    const tenant = resolveCustomerTenant(payload, request);
+    const email = "garvkataria@demo.aura";
+    const phone = "+919999999999";
+    const name = "garvkataria";
+    const existing = findClient({ tenantId: tenant.id, email });
+    const customer = existing
+      ? updateClient(existing, { name, email, phone, firebaseUid: "", provider: "demo" })
+      : insertClient({ tenantId: tenant.id, branchId: payload.branchId || request.branchId || "", name, email, phone, firebaseUid: "", provider: "demo" });
+    customer.isNewCustomer = !existing;
+    return issueCustomerSession({ tenant, customer, provider: "demo", device: payload.device || {} });
   }
 };
