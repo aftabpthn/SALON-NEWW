@@ -11,7 +11,7 @@ use crate::{
     repositories::membership_repository::{
         self, CreateMembership, MembershipRecord, UpdateMembership,
     },
-    repositories::{clients_repository, membership_advanced_repository},
+    repositories::{clients_repository, membership_advanced_repository, security_repository},
 };
 
 #[derive(serde::Serialize)]
@@ -93,6 +93,14 @@ pub struct LoyaltyQrRedeemResult {
     pub points: i32,
     pub amount_paise: i64,
     pub balance_after_points: i32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualStampApprovalResult {
+    pub approval_id: String,
+    pub status: String,
+    pub stamp_posted: bool,
 }
 
 pub async fn active_memberships(
@@ -1238,6 +1246,160 @@ async fn advanced_rewards_from_settings(
     .map_err(|_| AppError::internal("failed to load advanced rewards"))
 }
 
+async fn post_manual_stamp_from_approval(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    approval: &security_repository::SecurityApprovalRecord,
+) -> Result<bool, AppError> {
+    let details = &approval.details_json;
+    let client_id = details
+        .get("clientId")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    let program_code = details
+        .get("programCode")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
+    let stamps = details
+        .get("stamps")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .clamp(1, i64::from(i32::MAX)) as i32;
+    if client_id.is_empty() || program_code.is_empty() {
+        return Err(AppError::validation(
+            "manual stamp approval details are invalid",
+        ));
+    }
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start manual stamp workflow"))?;
+    let balance = crate::services::stamp_card_service::current_balance(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        program_code,
+    )
+    .await?;
+    let idempotency_key = manual_stamp_idempotency_key(&approval.id);
+    let posted = crate::services::stamp_card_service::insert_event(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        program_code,
+        crate::services::stamp_card_service::StampEvent {
+            source_sale_id: "",
+            source_refund_id: "",
+            event_type: "adjusted",
+            stamps,
+            balance_after: balance.saturating_add(stamps),
+            staff_id: actor_id,
+            note: details
+                .get("note")
+                .and_then(Value::as_str)
+                .unwrap_or("Manual stamp approval"),
+            idempotency_key: &idempotency_key,
+        },
+    )
+    .await?;
+    crate::services::security_service::record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "loyalty.manual_stamp.approved",
+        json!({"approvalId":approval.id,"clientId":client_id,"programCode":program_code,"stamps":stamps,"posted":posted}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit manual stamp workflow"))?;
+    Ok(posted)
+}
+
+async fn suspicious_redemption_alerts(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, AppError> {
+    let settings = membership_settings(db, tenant_id, branch_id).await?;
+    let daily_limit = settings
+        .pointer("/antiFraud/suspiciousRedemptionDailyLimit")
+        .and_then(Value::as_i64)
+        .unwrap_or(3)
+        .max(1);
+    let high_value = settings
+        .pointer("/antiFraud/highValueRewardApprovalPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(50000)
+        .max(0);
+    let rows = sqlx::query_as::<_, (String, String, i64, i64)>(
+        "SELECT token.client_id, COALESCE(NULLIF(CONCAT_WS(' ',client.first_name,client.last_name),''),token.client_id) client_name, \
+                COUNT(*)::BIGINT redeemed_count, COALESCE(SUM(token.amount_paise),0)::BIGINT redeemed_paise \
+           FROM loyalty_redeem_qr_tokens token \
+           LEFT JOIN clients client ON client.tenant_id=token.tenant_id AND client.branch_id=token.branch_id AND client.id=token.client_id \
+          WHERE token.tenant_id=$1 AND token.branch_id=$2 AND token.status='redeemed' AND token.redeemed_at >= NOW()-INTERVAL '1 day' \
+          GROUP BY token.client_id, client.first_name, client.last_name",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load redemption fraud alerts"))?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(client_id, client_name, redeemed_count, redeemed_paise)| {
+            suspicious_redemption_alert(
+                &client_id,
+                &client_name,
+                redeemed_count,
+                redeemed_paise,
+                daily_limit,
+                high_value,
+            )
+        })
+        .collect())
+}
+
+fn suspicious_redemption_alert(
+    client_id: &str,
+    client_name: &str,
+    redeemed_count: i64,
+    redeemed_paise: i64,
+    daily_limit: i64,
+    high_value_paise: i64,
+) -> Option<Value> {
+    if redeemed_count >= daily_limit {
+        return Some(
+            json!({"clientId":client_id,"clientName":client_name,"riskLevel":"high","alertType":"Multiple one-time reward redemptions in 24h","redeemedCount":redeemed_count,"redeemedPaise":redeemed_paise}),
+        );
+    }
+    if high_value_paise > 0 && redeemed_paise >= high_value_paise {
+        return Some(
+            json!({"clientId":client_id,"clientName":client_name,"riskLevel":"medium","alertType":"High-value reward redeemed in 24h","redeemedCount":redeemed_count,"redeemedPaise":redeemed_paise}),
+        );
+    }
+    None
+}
+
+fn reward_qr_issue_status(amount_paise: i64, high_value_threshold_paise: i64) -> &'static str {
+    if high_value_threshold_paise > 0 && amount_paise >= high_value_threshold_paise {
+        "pending_approval"
+    } else {
+        "issued"
+    }
+}
+
+fn manual_stamp_idempotency_key(approval_id: &str) -> String {
+    format!("manual-stamp:{}", approval_id)
+}
+
 fn ensure_qr_is_usable(item: &LoyaltyRedeemQrToken) -> Result<(), AppError> {
     if item.status == "redeemed" {
         return Err(AppError::conflict("loyalty QR token is already redeemed"));
@@ -1330,10 +1492,130 @@ pub async fn reward_abuse_alerts(
             _ => {}
         }
     }
-    Ok(totals.into_iter().filter_map(|(client_id,(client_name,earned,redeemed,adjustments))|{
+    let mut alerts = totals.into_iter().filter_map(|(client_id,(client_name,earned,redeemed,adjustments))|{
         if redeemed>earned{Some(json!({"clientId":client_id,"clientName":client_name,"riskLevel":"critical","alertType":"Redeemed points exceed earned points","earned":earned,"redeemed":redeemed}))}
         else if adjustments>=2{Some(json!({"clientId":client_id,"clientName":client_name,"riskLevel":"medium","alertType":"Repeated reward adjustment","adjustments":adjustments}))}else{None}
-    }).collect())
+    }).collect::<Vec<_>>();
+    alerts.extend(suspicious_redemption_alerts(db, tenant_id, branch_id).await?);
+    Ok(alerts)
+}
+
+pub async fn anti_fraud_approvals(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    status: &str,
+) -> Result<Vec<security_repository::SecurityApprovalRecord>, AppError> {
+    let approvals =
+        crate::services::security_service::list_approvals(db, tenant_id, branch_id, status).await?;
+    Ok(approvals
+        .into_iter()
+        .filter(|item| {
+            matches!(
+                item.action_type.as_str(),
+                "loyalty.manual_stamp" | "loyalty.high_value_reward"
+            )
+        })
+        .collect())
+}
+
+pub async fn request_manual_stamp_approval(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    client_id: &str,
+    program_code: &str,
+    stamps: i32,
+    note: &str,
+) -> Result<security_repository::SecurityApprovalRecord, AppError> {
+    let client_id = client_id.trim();
+    let program_code = program_code.trim();
+    let note = note.trim();
+    if client_id.is_empty() || program_code.is_empty() {
+        return Err(AppError::validation(
+            "clientId and programCode are required",
+        ));
+    }
+    if !(1..=25).contains(&stamps) {
+        return Err(AppError::validation("stamps must be between 1 and 25"));
+    }
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(client_id)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to validate manual stamp client"))?;
+    if !exists {
+        return Err(AppError::not_found("client not found"));
+    }
+    crate::services::security_service::create_approval(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "loyalty.manual_stamp",
+        "Manual loyalty stamp approval",
+        json!({"clientId":client_id,"programCode":program_code,"stamps":stamps,"note":note}),
+    )
+    .await
+}
+
+pub async fn decide_anti_fraud_approval(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    approval_id: &str,
+    decision: &str,
+    note: &str,
+) -> Result<ManualStampApprovalResult, AppError> {
+    let approval = crate::services::security_service::decide_approval(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        approval_id,
+        decision,
+        Some(note),
+    )
+    .await?;
+    let mut stamp_posted = false;
+    if approval.action_type == "loyalty.high_value_reward" {
+        let token_id = approval
+            .details_json
+            .get("tokenId")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if !token_id.is_empty() {
+            sqlx::query(
+                "UPDATE loyalty_redeem_qr_tokens SET status=$4,updated_at=NOW() \
+                 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending_approval'",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(token_id)
+            .bind(if approval.status == "approved" {
+                "issued"
+            } else {
+                "cancelled"
+            })
+            .execute(db)
+            .await
+            .map_err(|_| AppError::internal("failed to update reward approval token"))?;
+        }
+    } else if approval.action_type == "loyalty.manual_stamp" && approval.status == "approved" {
+        stamp_posted =
+            post_manual_stamp_from_approval(db, tenant_id, branch_id, actor_id, &approval).await?;
+    }
+    Ok(ManualStampApprovalResult {
+        approval_id: approval.id,
+        status: approval.status,
+        stamp_posted,
+    })
 }
 
 pub async fn create_status_link(
@@ -1484,11 +1766,18 @@ pub async fn create_public_reward_qr(
             "reward points balance is insufficient",
         ));
     }
+    let settings = membership_settings(db, &status.tenant_id, &status.branch_id).await?;
+    let high_value_threshold = settings
+        .pointer("/antiFraud/highValueRewardApprovalPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .max(0);
+    let qr_status = reward_qr_issue_status(input.amount_paise, high_value_threshold);
     let token = uuid::Uuid::new_v4().to_string();
-    sqlx::query_as::<_, LoyaltyRedeemQrToken>(
+    let item = sqlx::query_as::<_, LoyaltyRedeemQrToken>(
         "INSERT INTO loyalty_redeem_qr_tokens \
-         (tenant_id,branch_id,client_id,token,points,amount_paise,reward_code,reward_type,reward_label,reward_value_paise,reward_bps,service_id,occasion_type,expires_at,idempotency_key) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()+INTERVAL '10 minutes',$14) \
+         (tenant_id,branch_id,client_id,token,points,amount_paise,reward_code,reward_type,reward_label,reward_value_paise,reward_bps,service_id,occasion_type,status,expires_at,idempotency_key) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()+INTERVAL '10 minutes',$15) \
          ON CONFLICT (tenant_id,branch_id,client_id,idempotency_key) WHERE idempotency_key<>'' DO UPDATE SET updated_at=loyalty_redeem_qr_tokens.updated_at \
          RETURNING id,tenant_id,branch_id,client_id,token,points,amount_paise,reward_code,reward_type,reward_label,reward_value_paise,reward_bps,service_id,occasion_type,status,expires_at,redeemed_sale_id,redeemed_at",
     )
@@ -1505,10 +1794,44 @@ pub async fn create_public_reward_qr(
     .bind(reward_bps)
     .bind(input.service_id.unwrap_or_default().trim().to_string())
     .bind(input.occasion_type.unwrap_or_default().trim().to_string())
+    .bind(qr_status)
     .bind(input.idempotency_key.trim())
     .fetch_one(db)
     .await
-    .map_err(|_| AppError::internal("failed to create loyalty QR token"))
+    .map_err(|_| AppError::internal("failed to create loyalty QR token"))?;
+    if item.status == "pending_approval"
+        && !high_value_reward_approval_exists(db, &status.tenant_id, &status.branch_id, &item.id)
+            .await?
+    {
+        crate::services::security_service::create_approval(
+            db,
+            &status.tenant_id,
+            &status.branch_id,
+            &status.client_id,
+            "loyalty.high_value_reward",
+            "High-value loyalty reward approval",
+            json!({"tokenId":item.id,"clientId":status.client_id,"points":item.points,"amountPaise":item.amount_paise,"rewardType":item.reward_type,"rewardCode":item.reward_code}),
+        )
+        .await?;
+    }
+    Ok(item)
+}
+
+async fn high_value_reward_approval_exists(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    token_id: &str,
+) -> Result<bool, AppError> {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM security_approval_requests WHERE tenant_id=$1 AND branch_id=$2 AND action_type='loyalty.high_value_reward' AND details_json->>'tokenId'=$3)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(token_id)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to check reward approval replay"))
 }
 
 pub async fn verify_reward_qr(
@@ -1840,6 +2163,7 @@ fn default_membership_settings() -> Value {
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
         "rewards":{"allowNonMembers":false,"enableForProducts":false,"enableForPackages":false,"enableForMemberships":false,"enableForServices":false,"rewardValuePaise":10000,"rewardPoints":5,"minimumRedemptionPoints":100,"bonusRules":[{"minBillPaise":0,"rewardType":"percentage","rewardValue":0}]},
         "advancedRewards":[{"code":"","name":"","active":false,"rewardType":"flat_discount","pointsRequired":0,"amountPaise":0,"discountBps":0,"serviceId":"","occasionType":"","validityDays":30}],
+        "antiFraud":{"manualStampApprovalRequired":true,"highValueRewardApprovalPaise":50000,"suspiciousRedemptionDailyLimit":3},
         // `eligibleLineTypes` is a boolean map rather than a string array
         // because merge_known_settings keeps only object elements inside
         // arrays; a string array would be silently emptied on every save.
@@ -1979,6 +2303,17 @@ fn validate_retention_settings(settings: &Value) -> Result<(), AppError> {
             )?;
         }
     }
+    let high_value = settings
+        .pointer("/antiFraud/highValueRewardApprovalPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let daily_limit = settings
+        .pointer("/antiFraud/suspiciousRedemptionDailyLimit")
+        .and_then(Value::as_i64)
+        .unwrap_or(1);
+    if high_value < 0 || !(1..=100).contains(&daily_limit) {
+        return Err(AppError::validation("anti-fraud settings are invalid"));
+    }
     Ok(())
 }
 
@@ -2028,8 +2363,9 @@ fn price_paise(price: Option<i64>, price_paise: Option<i64>) -> Result<i64, AppE
 mod tests {
     use super::{
         LoyaltyRedeemQrToken, adjust_reward_balance, default_membership_settings,
-        ensure_qr_is_usable, membership_settings, merge_known_settings, prorated_amounts,
-        reverse_rewards_for_refund, reward_apply_amount, save_membership_settings,
+        ensure_qr_is_usable, manual_stamp_idempotency_key, membership_settings,
+        merge_known_settings, prorated_amounts, reverse_rewards_for_refund, reward_apply_amount,
+        reward_qr_issue_status, save_membership_settings, suspicious_redemption_alert,
         validate_retention_settings, validate_reward_qr_request,
     };
     use chrono::{Duration, Utc};
@@ -2215,6 +2551,34 @@ mod tests {
     }
 
     #[test]
+    fn anti_fraud_settings_round_trip_and_validate() {
+        let merged = merge_known_settings(
+            &default_membership_settings(),
+            &json!({"antiFraud":{"manualStampApprovalRequired":false,"highValueRewardApprovalPaise":75000,"suspiciousRedemptionDailyLimit":5,"unknown":true}}),
+        );
+        assert_eq!(
+            merged.pointer("/antiFraud/manualStampApprovalRequired"),
+            Some(&json!(false))
+        );
+        assert_eq!(
+            merged.pointer("/antiFraud/highValueRewardApprovalPaise"),
+            Some(&json!(75000))
+        );
+        assert_eq!(
+            merged.pointer("/antiFraud/suspiciousRedemptionDailyLimit"),
+            Some(&json!(5))
+        );
+        assert!(merged.pointer("/antiFraud/unknown").is_none());
+        assert!(validate_retention_settings(&merged).is_ok());
+
+        let invalid = merge_known_settings(
+            &default_membership_settings(),
+            &json!({"antiFraud":{"suspiciousRedemptionDailyLimit":101}}),
+        );
+        assert!(validate_retention_settings(&invalid).is_err());
+    }
+
+    #[test]
     fn proration_returns_charge_or_credit_for_remaining_term() {
         let now = Utc::now();
         assert_eq!(
@@ -2271,6 +2635,45 @@ mod tests {
         token.amount_paise = 3_000;
         assert_eq!(reward_apply_amount(&token, 20_000), 3_000);
         assert_eq!(reward_apply_amount(&token, 8_000), 2_000);
+    }
+
+    #[test]
+    fn high_value_reward_requires_approval_at_threshold() {
+        assert_eq!(reward_qr_issue_status(49_999, 50_000), "issued");
+        assert_eq!(reward_qr_issue_status(50_000, 50_000), "pending_approval");
+        assert_eq!(reward_qr_issue_status(1_00_000, 0), "issued");
+    }
+
+    #[test]
+    fn suspicious_redemption_alert_detects_count_and_value() {
+        let count_alert =
+            suspicious_redemption_alert("client-1", "Client One", 3, 10_000, 3, 50_000)
+                .expect("count alert");
+        assert_eq!(count_alert["riskLevel"], "high");
+        assert_eq!(
+            count_alert["alertType"],
+            "Multiple one-time reward redemptions in 24h"
+        );
+
+        let value_alert =
+            suspicious_redemption_alert("client-1", "Client One", 1, 50_000, 3, 50_000)
+                .expect("value alert");
+        assert_eq!(value_alert["riskLevel"], "medium");
+        assert_eq!(
+            value_alert["alertType"],
+            "High-value reward redeemed in 24h"
+        );
+        assert!(
+            suspicious_redemption_alert("client-1", "Client One", 1, 10_000, 3, 50_000).is_none()
+        );
+    }
+
+    #[test]
+    fn manual_stamp_approval_idempotency_key_is_stable() {
+        assert_eq!(
+            manual_stamp_idempotency_key("approval-1"),
+            "manual-stamp:approval-1"
+        );
     }
 
     #[test]

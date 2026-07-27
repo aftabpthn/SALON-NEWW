@@ -126,6 +126,18 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(reward_abuse_alerts),
         )
         .route(
+            "/membership-enterprise/rewards/anti-fraud/approvals",
+            axum::routing::get(anti_fraud_approvals),
+        )
+        .route(
+            "/membership-enterprise/rewards/stamps/manual-approvals",
+            axum::routing::post(request_manual_stamp_approval),
+        )
+        .route(
+            "/membership-enterprise/rewards/anti-fraud/approvals/:id/decision",
+            axum::routing::post(decide_anti_fraud_approval),
+        )
+        .route(
             "/membership-enterprise/risk-signals/:id/review",
             axum::routing::post(review_risk_signal),
         )
@@ -288,6 +300,7 @@ struct FreezeRequest {
 struct ListQuery {
     days: Option<i64>,
     limit: Option<i64>,
+    status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -297,6 +310,22 @@ struct RewardAdjustmentRequest {
     points: i32,
     note: String,
     idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManualStampApprovalRequest {
+    client_id: String,
+    program_code: String,
+    stamps: i32,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApprovalDecisionRequest {
+    decision: String,
+    note: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -857,6 +886,65 @@ async fn reward_abuse_alerts(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         membership_service::reward_abuse_alerts(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn anti_fraud_approvals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> ApiResult<Vec<crate::repositories::security_repository::SecurityApprovalRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::anti_fraud_approvals(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            query.status.as_deref().unwrap_or("all"),
+        )
+        .await?,
+    )))
+}
+
+async fn request_manual_stamp_approval(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<ManualStampApprovalRequest>,
+) -> ApiResult<crate::repositories::security_repository::SecurityApprovalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::request_manual_stamp_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &actor(&headers),
+            &payload.client_id,
+            &payload.program_code,
+            payload.stamps,
+            payload.note.as_deref().unwrap_or(""),
+        )
+        .await?,
+    )))
+}
+
+async fn decide_anti_fraud_approval(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ApprovalDecisionRequest>,
+) -> ApiResult<membership_service::ManualStampApprovalResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::decide_anti_fraud_approval(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &actor(&headers),
+            &id,
+            &payload.decision,
+            payload.note.as_deref().unwrap_or(""),
+        )
+        .await?,
     )))
 }
 

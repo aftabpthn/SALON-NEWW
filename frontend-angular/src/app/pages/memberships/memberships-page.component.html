@@ -201,6 +201,13 @@
   <tr><td>{{ item.clientName }}</td><td>{{ item.riskLevel }}</td><td>{{ item.alertType }}</td></tr>
 }</tbody></table></div></div></div>
 }
+<div class="split-tables"><div class="subtable"><h3>Manual stamp approval</h3><div class="panel-controls"><select [(ngModel)]="manualStampForm.clientId" aria-label="Client"><option value="">Client</option>@for (client of clients; track client.id) { <option [value]="client.id">{{ client.firstName }} {{ client.lastName }}</option> }</select><input [(ngModel)]="manualStampForm.programCode" placeholder="Program code" aria-label="Program code" /><input type="number" min="1" [(ngModel)]="manualStampForm.stamps" placeholder="Stamps" aria-label="Stamps" /><input [(ngModel)]="manualStampForm.note" placeholder="Note" aria-label="Note" /><button type="button" [disabled]="saving" (click)="requestManualStampApproval()">Request</button></div></div><div class="subtable"><h3>Anti-fraud approvals</h3><div class="table-wrap"><table><thead><tr><th>Type</th><th>Status</th><th>Details</th><th>Requested</th><th></th></tr></thead><tbody>@for (item of antiFraudApprovals; track item.id) {
+<tr><td>{{ item.actionType }}</td><td>{{ item.status }}</td><td>{{ item.detailsJson['clientId'] || '—' }} {{ item.detailsJson['programCode'] || item.detailsJson['rewardCode'] || '' }}</td><td>{{ formatDate(item.createdAt) }}</td><td class="row-actions">@if (item.status === 'pending') {
+  <button type="button" (click)="decideAntiFraudApproval(item, 'approved')">Approve</button><button type="button" (click)="decideAntiFraudApproval(item, 'rejected')">Reject</button>
+}</td></tr>
+}</tbody></table>@if (antiFraudApprovals.length === 0) {
+<div class="empty-state"><strong>No anti-fraud approvals yet</strong></div>
+}</div></div></div>
 </section>
 }
 @if (activeDesk === 'reports') {
@@ -268,6 +275,7 @@
       <fieldset class="retention-settings"><legend>Advanced rewards</legend>@for (reward of settings.advancedRewards; track reward; let index = $index) {
         <div class="tier-setting"><input [(ngModel)]="reward.code" aria-label="Reward code" placeholder="Code" /><input [(ngModel)]="reward.name" aria-label="Reward name" placeholder="Name" /><select [(ngModel)]="reward.rewardType" aria-label="Reward type"><option value="free_service">Free service</option><option value="flat_discount">Flat discount</option><option value="percentage_discount">Percentage discount</option><option value="wallet_credit">Wallet credit</option><option value="birthday_reward">Birthday reward</option><option value="anniversary_reward">Anniversary reward</option></select><input type="number" min="0" [(ngModel)]="reward.pointsRequired" aria-label="Points required" placeholder="Points" /><input type="number" min="0" [(ngModel)]="reward.amountPaise" aria-label="Amount paise" placeholder="Amount paise" /><input type="number" min="0" max="10000" [(ngModel)]="reward.discountBps" aria-label="Discount basis points" placeholder="Bps" /><select [(ngModel)]="reward.serviceId" aria-label="Service"><option value="">Any service</option>@for (service of services; track service.id) { <option [value]="service.id">{{ service.name }}</option> }</select><input type="number" min="1" [(ngModel)]="reward.validityDays" aria-label="Validity days" placeholder="Days" /><label><span>Active</span><input type="checkbox" [(ngModel)]="reward.active" /></label><button type="button" (click)="removeAdvancedReward(index)" aria-label="Remove reward">×</button></div>
       }<button class="add-tier" type="button" [disabled]="settings.advancedRewards.length >= 10" (click)="addAdvancedReward()">Add reward</button></fieldset>
+      <fieldset><legend>Loyalty anti-fraud</legend><label><span>Manual stamp approval</span><input type="checkbox" [(ngModel)]="settings.antiFraud.manualStampApprovalRequired" /></label><label class="input-setting"><span>High-value reward approval (paise)</span><input type="number" min="0" [(ngModel)]="settings.antiFraud.highValueRewardApprovalPaise" /></label><label class="input-setting"><span>Suspicious redemption daily limit</span><input type="number" min="1" max="100" [(ngModel)]="settings.antiFraud.suspiciousRedemptionDailyLimit" /></label></fieldset>
     </div>
   </section>
 }
