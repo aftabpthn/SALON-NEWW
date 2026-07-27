@@ -14042,7 +14042,7 @@ async fn post_stamp_cards(
         let completion_balance = earned_balance - program.stamps_required;
         let completion_key =
             stamp_card_service::completion_idempotency_key(sale_id, &program.code);
-        stamp_card_service::insert_event(
+        let completed = stamp_card_service::insert_event(
             tx,
             tenant_id,
             branch_id,
@@ -14060,6 +14060,12 @@ async fn post_stamp_cards(
             },
         )
         .await?;
+        // The completion event carries the authoritative replay guard. If it
+        // conflicted, this card was already completed for this sale: issuing
+        // points or auditing again would double-reward the customer.
+        if !completed {
+            continue;
+        }
 
         if program.reward_points_on_completion > 0 {
             // Issued with an empty source_sale_id so it cannot collide with

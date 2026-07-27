@@ -1387,7 +1387,10 @@ fn default_membership_settings() -> Value {
         // `eligibleLineTypes` is a boolean map rather than a string array
         // because merge_known_settings keeps only object elements inside
         // arrays; a string array would be silently emptied on every save.
-        "stampCards":[{"code":"","name":"","active":false,"stampsRequired":10,"rewardPointsOnCompletion":0,"earnRule":{"minimumBillPaise":0,"eligibleLineTypes":{"service":true,"product":false,"package":false,"membership":false}},"scope":"branch"}],
+        // Stamp balances are branch-scoped in Phase 1B, so there is no
+        // `scope` knob: a configurable tenant scope that still behaved
+        // branch-scoped would mislead owners. Tenant-wide cards are Phase 1D.
+        "stampCards":[{"code":"","name":"","active":false,"stampsRequired":10,"rewardPointsOnCompletion":0,"earnRule":{"minimumBillPaise":0,"eligibleLineTypes":{"service":true,"product":false,"package":false,"membership":false}}}],
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })
 }
@@ -1628,8 +1631,7 @@ mod tests {
                 "earnRule": {
                     "minimumBillPaise": 50_000,
                     "eligibleLineTypes": { "service": true, "product": true }
-                },
-                "scope": "tenant"
+                }
             }] }),
         );
         assert_eq!(saved.pointer("/stampCards/0/code"), Some(&json!("coffee")));
@@ -1643,7 +1645,17 @@ mod tests {
             saved.pointer("/stampCards/0/earnRule/minimumBillPaise"),
             Some(&json!(50_000))
         );
-        assert_eq!(saved.pointer("/stampCards/0/scope"), Some(&json!("tenant")));
+        // Phase 1B is branch-only: no scope knob is exposed, so an owner
+        // cannot configure a tenant-wide card that would silently behave as
+        // branch-scoped. Tenant scope arrives in Phase 1D.
+        assert!(saved.pointer("/stampCards/0/scope").is_none());
+        assert!(defaults.pointer("/stampCards/0/scope").is_none());
+        // An unknown key sent by a client is dropped by the merge.
+        let injected = merge_known_settings(
+            &defaults,
+            &json!({ "stampCards": [{ "code": "c", "scope": "tenant" }] }),
+        );
+        assert!(injected.pointer("/stampCards/0/scope").is_none());
         // The boolean line-type map survives; a string array would be dropped
         // by the object-only array filter in merge_known_settings.
         assert_eq!(

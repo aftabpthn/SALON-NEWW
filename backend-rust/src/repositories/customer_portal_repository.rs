@@ -613,19 +613,49 @@ pub async fn account_rewards(db: &PgPool, account_id: &str) -> Result<Value, sql
         "Bronze"
     };
     // Stamp card progress, scoped through the account's linked clients so a
-    // customer only ever sees their own tenant/branch cards. Programs the
-    // customer has no events for simply do not appear.
+    // customer only ever sees their own tenant/branch cards. The latest
+    // balance is joined to the branch's program configuration so the customer
+    // sees real progress (3 of 5, 60%) rather than a bare number. Balances are
+    // per branch in Phase 1B. Programs the customer has no events for do not
+    // appear; a card whose program was removed still reports its balance with
+    // a null target rather than vanishing.
     let stamp_cards: Vec<Value> = sqlx::query_scalar(
-        "SELECT jsonb_build_object(\
-           'programCode',x.program_code,'branchId',x.branch_id,\
-           'stamps',x.balance_after,'updatedAt',x.created_at) \
-         FROM (SELECT DISTINCT ON (s.tenant_id,s.branch_id,s.client_id,s.program_code) \
-                 s.tenant_id,s.branch_id,s.client_id,s.program_code,s.balance_after,s.created_at \
-                 FROM stamp_card_events s \
-                 JOIN customer_account_clients l ON l.account_id=$1 \
-                   AND l.tenant_id=s.tenant_id AND l.branch_id=s.branch_id AND l.client_id=s.client_id \
-                ORDER BY s.tenant_id,s.branch_id,s.client_id,s.program_code,s.created_at DESC,s.id DESC) x \
-         ORDER BY x.created_at DESC",
+        r#"
+        SELECT jsonb_build_object(
+                 'programCode', x.program_code,
+                 'programName', COALESCE(NULLIF(program.value->>'name',''), x.program_code),
+                 'branchId', x.branch_id,
+                 'stamps', x.balance_after,
+                 'stampsRequired', required.value,
+                 'remainingStamps',
+                   CASE WHEN required.value IS NULL THEN NULL
+                        ELSE GREATEST(required.value - x.balance_after, 0) END,
+                 'rewardPointsOnCompletion',
+                   COALESCE((program.value->>'rewardPointsOnCompletion')::INT, 0),
+                 'progressBps',
+                   CASE WHEN COALESCE(required.value, 0) <= 0 THEN 0
+                        ELSE LEAST(x.balance_after::BIGINT * 10000 / required.value, 10000) END,
+                 'updatedAt', x.created_at)
+          FROM (SELECT DISTINCT ON (s.tenant_id,s.branch_id,s.client_id,s.program_code)
+                       s.tenant_id, s.branch_id, s.client_id, s.program_code,
+                       s.balance_after, s.created_at
+                  FROM stamp_card_events s
+                  JOIN customer_account_clients l ON l.account_id=$1
+                    AND l.tenant_id=s.tenant_id AND l.branch_id=s.branch_id AND l.client_id=s.client_id
+                 ORDER BY s.tenant_id,s.branch_id,s.client_id,s.program_code,s.created_at DESC,s.id DESC) x
+          LEFT JOIN membership_settings ms
+            ON ms.tenant_id=x.tenant_id AND ms.branch_id=x.branch_id
+          LEFT JOIN LATERAL (
+                 SELECT entry AS value
+                   FROM jsonb_array_elements(
+                          CASE WHEN jsonb_typeof(ms.settings_json->'stampCards')='array'
+                               THEN ms.settings_json->'stampCards' ELSE '[]'::jsonb END) entry
+                  WHERE entry->>'code' = x.program_code
+                  LIMIT 1) program ON TRUE
+          LEFT JOIN LATERAL (
+                 SELECT NULLIF((program.value->>'stampsRequired'),'')::INT AS value) required ON TRUE
+         ORDER BY x.created_at DESC
+        "#,
     )
     .bind(account_id)
     .fetch_all(db)

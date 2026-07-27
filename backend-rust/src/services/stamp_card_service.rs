@@ -10,6 +10,11 @@
 //! Every query is tenant and branch scoped, and the database unique indexes —
 //! not application logic — are the duplicate guard, because the POS reward
 //! hook can run several times for one sale.
+//!
+//! Phase 1B balances are strictly per branch: a card earned at one branch is
+//! not spendable at another. There is deliberately no `scope` setting, because
+//! exposing a tenant option that still resolved balances per branch would
+//! mislead owners. Tenant-wide cards are Phase 1D.
 
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
@@ -26,8 +31,6 @@ pub struct StampProgram {
     pub minimum_bill_paise: i64,
     /// POS line types that make an invoice eligible, e.g. `service`.
     pub eligible_line_types: Vec<String>,
-    /// `branch` or `tenant`.
-    pub scope: String,
 }
 
 /// Reads the active, usable programs from membership settings. Blank template
@@ -81,10 +84,6 @@ pub fn active_programs(settings: &Value) -> Vec<StampProgram> {
                     .unwrap_or(0)
                     .max(0),
                 eligible_line_types,
-                scope: match entry.get("scope").and_then(Value::as_str) {
-                    Some("tenant") => "tenant".to_string(),
-                    _ => "branch".to_string(),
-                },
             })
         })
         .collect()
@@ -247,7 +246,6 @@ mod tests {
             reward_points_on_completion: 50,
             minimum_bill_paise: 50_000,
             eligible_line_types: vec!["service".into()],
-            scope: "branch".into(),
         }
     }
 
@@ -258,7 +256,6 @@ mod tests {
             "code": "", "name": "", "active": false, "stampsRequired": 10,
             "rewardPointsOnCompletion": 0,
             "earnRule": { "minimumBillPaise": 0, "eligibleLineTypes": { "service": true } },
-            "scope": "branch"
         }]));
         assert!(active_programs(&blank).is_empty());
 
@@ -277,8 +274,7 @@ mod tests {
             "earnRule": {
                 "minimumBillPaise": 50_000,
                 "eligibleLineTypes": { "service": true, "product": false }
-            },
-            "scope": "branch"
+            }
         }]));
         assert_eq!(active_programs(&configured), vec![program()]);
 
