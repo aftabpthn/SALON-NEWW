@@ -77,6 +77,61 @@
       </button>
     </section>
 
+    <section class="field-group">
+      <h2>Stamp cards</h2>
+      <p class="hint">A paid invoice earns one stamp per active program when it matches the rules. Stamps are counted per branch.</p>
+      <div class="rule-row" *ngFor="let card of stampCards; let i = index">
+        <div class="prefixed-input">
+          <span class="prefix">Code</span>
+          <input type="text" maxlength="40" [(ngModel)]="card.code" [name]="'stampCode' + i" placeholder="coffee" />
+        </div>
+        <div class="prefixed-input">
+          <span class="prefix">Name</span>
+          <input type="text" maxlength="80" [(ngModel)]="card.name" [name]="'stampName' + i" placeholder="Coffee card" />
+        </div>
+        <label class="check-row">
+          <input type="checkbox" [(ngModel)]="card.active" [name]="'stampActive' + i" />
+          <span>Active</span>
+        </label>
+        <div class="prefixed-input">
+          <span class="prefix">Stamps required</span>
+          <input type="number" min="1" step="1" [(ngModel)]="card.stampsRequired" [name]="'stampRequired' + i" />
+        </div>
+        <div class="prefixed-input">
+          <span class="prefix">Points on completion</span>
+          <input type="number" min="0" step="1" [(ngModel)]="card.rewardPointsOnCompletion" [name]="'stampPoints' + i" />
+        </div>
+        <div class="prefixed-input">
+          <span class="prefix">Minimum bill (&#8377;)</span>
+          <input type="number" min="0" step="0.01" [(ngModel)]="card.minimumBillRupees" [name]="'stampMinBill' + i" />
+        </div>
+        <div class="toggles">
+          <label class="check-row">
+            <input type="checkbox" [(ngModel)]="card.service" [name]="'stampService' + i" />
+            <span>Services</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" [(ngModel)]="card.product" [name]="'stampProduct' + i" />
+            <span>Products</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" [(ngModel)]="card.package" [name]="'stampPackage' + i" />
+            <span>Packages</span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" [(ngModel)]="card.membership" [name]="'stampMembership' + i" />
+            <span>Memberships</span>
+          </label>
+        </div>
+        <button type="button" class="icon-btn danger" (click)="removeStampCard(i)" aria-label="Remove stamp card">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+      <button type="button" class="btn ghost" (click)="addStampCard()">
+        <i class="bi bi-plus-lg"></i> Add stamp card
+      </button>
+    </section>
+
     <footer class="actions">
       <button type="button" class="btn primary" [disabled]="saving" (click)="save()">
         {{ saving ? 'Saving…' : 'Save' }}

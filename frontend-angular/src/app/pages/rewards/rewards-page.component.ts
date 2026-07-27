@@ -18,7 +18,35 @@ type RewardsSettings = {
   bonusRules: Array<{ minBillPaise: number; rewardType: string; rewardValue: number }>;
 };
 
-type MembershipSettingsPayload = Record<string, unknown> & { rewards?: RewardsSettings };
+type StampCardLineTypes = { service: boolean; product: boolean; package: boolean; membership: boolean };
+
+type StampCardSettings = {
+  code: string;
+  name: string;
+  active: boolean;
+  stampsRequired: number;
+  rewardPointsOnCompletion: number;
+  earnRule: { minimumBillPaise: number; eligibleLineTypes: StampCardLineTypes };
+};
+
+/// Owner-facing form row. Minimum bill is edited in rupees and stored in paise.
+type StampCardForm = {
+  code: string;
+  name: string;
+  active: boolean;
+  stampsRequired: number | string;
+  rewardPointsOnCompletion: number | string;
+  minimumBillRupees: number | string;
+  service: boolean;
+  product: boolean;
+  package: boolean;
+  membership: boolean;
+};
+
+type MembershipSettingsPayload = Record<string, unknown> & {
+  rewards?: RewardsSettings;
+  stampCards?: StampCardSettings[];
+};
 
 @Component({
     selector: 'page-rewards',
@@ -43,6 +71,7 @@ export class RewardsPageComponent implements OnInit {
   rewardPoints: number | string = 5;
   minimumRedemptionPoints: number | string = 100;
   bonusRules: BonusRuleForm[] = [];
+  stampCards: StampCardForm[] = [];
 
   private settings: MembershipSettingsPayload = {};
 
@@ -62,6 +91,32 @@ export class RewardsPageComponent implements OnInit {
     this.bonusRules = this.bonusRules.filter((_, i) => i !== index);
   }
 
+  addStampCard() {
+    if (this.stampCards.length >= 10) {
+      this.error = 'A maximum of 10 stamp card programs is supported.';
+      return;
+    }
+    this.stampCards = [
+      ...this.stampCards,
+      {
+        code: '',
+        name: '',
+        active: false,
+        stampsRequired: 10,
+        rewardPointsOnCompletion: 0,
+        minimumBillRupees: '',
+        service: true,
+        product: false,
+        package: false,
+        membership: false,
+      },
+    ];
+  }
+
+  removeStampCard(index: number) {
+    this.stampCards = this.stampCards.filter((_, i) => i !== index);
+  }
+
   async save() {
     this.error = '';
     this.message = '';
@@ -76,6 +131,23 @@ export class RewardsPageComponent implements OnInit {
       const value = Math.round(Number(rule.rewardValue || 0));
       if (value < 0 || (rule.rewardType === 'percentage' && value > 1000)) {
         this.error = 'Bonus values must be positive; percentages cannot exceed 1000.';
+        return;
+      }
+    }
+    const stampCodes = new Set<string>();
+    for (const card of this.stampCards) {
+      const code = card.code.trim().toLowerCase();
+      if (card.active && !code) {
+        this.error = 'An active stamp card needs a code.';
+        return;
+      }
+      if (code && stampCodes.has(code)) {
+        this.error = 'Stamp card codes must be unique.';
+        return;
+      }
+      if (code) stampCodes.add(code);
+      if (card.active && Math.round(Number(card.stampsRequired || 0)) < 1) {
+        this.error = 'Stamps required must be at least 1 for an active stamp card.';
         return;
       }
     }
@@ -98,6 +170,22 @@ export class RewardsPageComponent implements OnInit {
             rewardValue: Math.max(0, Math.round(Number(rule.rewardValue || 0))),
           })),
         },
+        stampCards: this.stampCards.map((card) => ({
+          code: card.code.trim(),
+          name: card.name.trim(),
+          active: card.active,
+          stampsRequired: Math.max(1, Math.round(Number(card.stampsRequired || 0))),
+          rewardPointsOnCompletion: Math.max(0, Math.round(Number(card.rewardPointsOnCompletion || 0))),
+          earnRule: {
+            minimumBillPaise: Math.max(0, Math.round(Number(card.minimumBillRupees || 0) * 100)),
+            eligibleLineTypes: {
+              service: card.service,
+              product: card.product,
+              package: card.package,
+              membership: card.membership,
+            },
+          },
+        })),
       };
       const result = await firstValueFrom(
         this.api.patch<ApiEnvelope<MembershipSettingsPayload>>('/membership-enterprise/settings', payload),
@@ -136,6 +224,21 @@ export class RewardsPageComponent implements OnInit {
 
   private applySettings(settings: MembershipSettingsPayload) {
     this.settings = settings;
+    this.stampCards = (settings.stampCards || [])
+      // Skip the blank inactive template the backend ships as the default.
+      .filter((card) => (card.code || '').trim().length > 0)
+      .map((card) => ({
+        code: card.code || '',
+        name: card.name || '',
+        active: !!card.active,
+        stampsRequired: Number(card.stampsRequired) || 10,
+        rewardPointsOnCompletion: Number(card.rewardPointsOnCompletion) || 0,
+        minimumBillRupees: (Number(card.earnRule?.minimumBillPaise) || 0) / 100,
+        service: !!card.earnRule?.eligibleLineTypes?.service,
+        product: !!card.earnRule?.eligibleLineTypes?.product,
+        package: !!card.earnRule?.eligibleLineTypes?.package,
+        membership: !!card.earnRule?.eligibleLineTypes?.membership,
+      }));
     const rewards = settings.rewards;
     if (!rewards) return;
     this.allowNonMembers = !!rewards.allowNonMembers;
