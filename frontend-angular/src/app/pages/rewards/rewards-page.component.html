@@ -13,6 +13,10 @@
 
     <section class="toggles">
       <label class="check-row">
+        <input type="checkbox" [(ngModel)]="allowNonMembers" />
+        <span>Allow non-members to earn rewards</span>
+      </label>
+      <label class="check-row">
         <input type="checkbox" [(ngModel)]="enableForProducts" />
         <span>Enable reward point for products</span>
       </label>

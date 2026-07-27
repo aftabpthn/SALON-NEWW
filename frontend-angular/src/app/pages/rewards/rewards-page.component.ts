@@ -7,6 +7,7 @@ import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 type BonusRuleForm = { minBillRupees: number | string; rewardType: 'percentage' | 'flat'; rewardValue: number | string };
 
 type RewardsSettings = {
+  allowNonMembers: boolean;
   enableForProducts: boolean;
   enableForPackages: boolean;
   enableForMemberships: boolean;
@@ -33,6 +34,7 @@ export class RewardsPageComponent implements OnInit {
   error = '';
   message = '';
 
+  allowNonMembers = false;
   enableForProducts = false;
   enableForPackages = false;
   enableForMemberships = false;
@@ -82,6 +84,7 @@ export class RewardsPageComponent implements OnInit {
       const payload: MembershipSettingsPayload = {
         ...this.settings,
         rewards: {
+          allowNonMembers: this.allowNonMembers,
           enableForProducts: this.enableForProducts,
           enableForPackages: this.enableForPackages,
           enableForMemberships: this.enableForMemberships,
@@ -135,6 +138,7 @@ export class RewardsPageComponent implements OnInit {
     this.settings = settings;
     const rewards = settings.rewards;
     if (!rewards) return;
+    this.allowNonMembers = !!rewards.allowNonMembers;
     this.enableForProducts = !!rewards.enableForProducts;
     this.enableForPackages = !!rewards.enableForPackages;
     this.enableForMemberships = !!rewards.enableForMemberships;
