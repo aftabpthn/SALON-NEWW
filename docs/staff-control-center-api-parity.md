@@ -36,6 +36,7 @@
 | `POST /staff/branch-transfers/:id/decision` | `staff_operations::decide_branch_transfer` | DTO `DecisionRequest` |
 | `GET /staff/roster/coverage?periodStart&periodEnd` | `staff_enterprise::roster_coverage` | `read` |
 | `GET /staff/manpower/forecast?periodStart&periodEnd` | `staff_enterprise::manpower_forecast` | `read` |
+| `GET /staff/intelligence/ai-analysis?periodStart&periodEnd` | `staff_enterprise::staff_ai_analysis` | `read` |
 | `POST /staff/roster/optimize` | `staff_enterprise::optimize_roster` | `payroll` |
 | `POST /staff/roster/drafts/:id/apply` | `staff_enterprise::apply_roster` | `payroll` |
 
@@ -85,6 +86,16 @@
 | `POST /staff/notification-templates` | `staff_enterprise::create_notification_template` | `manager` |
 | `PUT /staff/:staffId/notification-preferences` | `staff_enterprise::save_notification_preference` | DTO `NotificationPreferenceRequest` |
 
+### Content
+| UI call | Backend route | Notes |
+| --- | --- | --- |
+| `GET /staff/tasks` | `staff_advanced::list_tasks` | Loads current task records in the Content tab |
+| `POST /staff/tasks` | `staff_advanced::create_task` | Creates a staff-visible task |
+| `GET /marketing/offers` | `marketing_leads::list_marketing_offers` | Loads current offer records in the Content tab |
+| `POST /marketing/offers` | `marketing_leads::create_marketing_offer` | Creates a CRM offer that staff app reads from `pos_coupons` |
+| `GET /staff/payroll-adjustment-rules` | `staff_advanced::list_adjustment_rules` | Loads current fine / allowance / deduction rules in the Content tab |
+| `POST /staff/payroll-adjustment-rules` | `staff_advanced::create_adjustment_rule` | Creates fine / allowance / deduction rules staff can see through payroll and attendance |
+
 ## Fixed Payload Mismatch
 - UI sent `notes` for approval decision while backend expected `comments` (`DecisionRequest::comments`) in staff enterprise service.
 - Fix applied:
@@ -96,10 +107,12 @@
 - No new UI layout changes or component additions were needed for this parity pass because existing control-center screen already hosts all actions above.
 
 ## Automated Parity Smoke Checklist
-- `cargo test --test staff-control-center-api-parity -- --nocapture` checks that required control-center endpoints still exist in the backend route table.
+- `cargo test --test staff_control_center_api_parity -- --nocapture` checks that required control-center endpoints still exist in the backend route table.
 - File: `backend-rust/tests/staff_control_center_api_parity.rs`
+- GitHub check: `Staff quality gate / staff-contracts` runs this parity test and the complete staff-app Vitest suite on pull requests and `main` pushes.
+- CRM control-center content actions now cover task, offer, and penalty-rule creation without adding a new duplicate module.
 - Current scope:
-  - UI route coverage grouped by tab (`command`, `workforce`, `development`, `systems`, `governance`).
+  - UI route coverage grouped by tab (`command`, `workforce`, `development`, `systems`, `governance`, `content`).
   - Endpoint presence for each required method (`GET`/`POST`/`PUT`/`PATCH`).
   - `DecisionRequest` compatibility check for alias support (`comments` + legacy `notes`).
 

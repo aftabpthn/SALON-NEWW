@@ -9,6 +9,11 @@
     <select [(ngModel)]="paymentMode"><option value="">All payment modes</option>@for (mode of modes; track mode) {
     <option [value]="mode">{{ mode }}</option>
   }</select>
+  <select [(ngModel)]="payoutStatus">
+    <option value="">All payout status</option>
+    <option value="pending">Pending payout</option>
+    <option value="paid">Paid out</option>
+  </select>
   <span class="record-count">{{ filtered.length }} tips</span>
 </section>
 
@@ -18,7 +23,7 @@
 
 <section class="ledger-kpis" aria-label="Tip summary">
   <article class="ledger-kpi"><span>Tips</span><strong>{{ money(totalPaise) }}</strong></article>
-  <article class="ledger-kpi"><span>Staff paid</span><strong>{{ staffPaid }}</strong></article>
+  <article class="ledger-kpi"><span>Paid out</span><strong>{{ money(paidPaise) }}</strong></article>
   <article class="ledger-kpi"><span>Cash tips</span><strong>{{ money(cashPaise) }}</strong></article>
   <article class="ledger-kpi"><span>Digital tips</span><strong>{{ money(digitalPaise) }}</strong></article>
 </section>
@@ -36,7 +41,7 @@
       <span class="amount">{{ money(tip.tipPaise) }}</span>
       <span><mark class="payment-badge" [class]="'payment-badge ' + paymentClass(tip)">{{ tip.paymentMode }}</mark></span>
       <span><strong>{{ tip.invoiceNumber }}</strong></span>
-      <span><em class="status-badge">{{ tip.status }}</em></span>
+      <span><em class="status-badge">{{ tip.payoutStatus === 'paid' ? 'paid out' : 'pending payout' }}</em></span>
     </button>
   }
   @if (!filtered.length) {
@@ -47,14 +52,17 @@
 @if (selected) {
   <aside class="ledger-detail">
     <h2>Tip details</h2>
-    <div class="detail-section"><span class="detail-label">Client</span><strong>{{ selected.clientName }}</strong>@if (selected.clientPhone) {
+  <div class="detail-section"><span class="detail-label">Client</span><strong>{{ selected.clientName }}</strong>@if (selected.clientPhone) {
     <span>{{ selected.clientPhone }}</span>
   }</div>
   <div class="detail-section"><span class="detail-label">Staff</span><strong>{{ selected.staffName || 'Unassigned' }}</strong></div>
-  <div class="detail-section"><span class="detail-label">Invoice</span><strong>{{ selected.invoiceNumber }}</strong><span>{{ dateTime(selected.businessDate) }}</span></div>
+  <div class="detail-section"><span class="detail-label">Invoice</span><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: selected.id, view: 'full' }"><strong>{{ selected.invoiceNumber }}</strong></a><span>{{ dateTime(selected.businessDate) }}</span></div>
   <div class="detail-section"><span class="detail-label">Tip amount</span><strong>{{ money(selected.tipPaise) }}</strong></div>
   <div class="detail-section"><span class="detail-label">Payment mode</span><strong>{{ selected.paymentMode }}</strong></div>
-  <div class="detail-section"><span class="detail-label">Status</span><strong>{{ selected.status }}</strong></div>
+  <div class="detail-section"><span class="detail-label">Payment split</span><strong>{{ selected.paymentBreakdown }}</strong></div>
+  <div class="detail-section"><span class="detail-label">Payout status</span><strong>{{ selected.payoutStatus === 'paid' ? 'Paid out' : 'Pending payout' }}</strong>@if (selected.payoutId) {
+    <span>{{ selected.payoutId }}</span>
+  }</div>
 </aside>
 }
 </main>

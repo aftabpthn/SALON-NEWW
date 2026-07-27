@@ -26,6 +26,7 @@ export type BackbarItem = {
   stockQuantity: number;
   reorderPoint: number;
   unitCostPaise: number;
+  dualUseStock: boolean;
   active: boolean;
 };
 
@@ -38,6 +39,7 @@ export type BackbarStaff = {
 };
 
 export type BackbarClient = { id:string; firstName:string; lastName:string; phone?:string; active:boolean };
+export type BackbarAppointment = { id:string; clientId:string; staffId:string; serviceIds:string[]; startAt:string; status:string };
 
 export type BackbarUsage = {
   id: string;
@@ -59,6 +61,10 @@ export type BackbarUsage = {
   approvalThresholdPercent: number;
   unit: string;
   status: string;
+  dualUseStock: boolean;
+  retailShelfQuantity: number;
+  sealedBackbarQuantity: number;
+  openContainerBalance: number;
   notes: string;
   reviewNote: string;
   createdAt: string;
@@ -100,6 +106,10 @@ export type BackbarProduct360 = {
   lastSupplier?: string;
   recipeCount: number;
   consumedQuantity: number;
+  retailShelfQuantity: number;
+  sealedBackbarQuantity: number;
+  openContainerBalance: number;
+  openContainerUnit?: string;
   kitComponents: Array<{ componentName?: string; quantity?: number }>;
 };
 
@@ -133,11 +143,18 @@ export class BackbarControlService {
     return (await this.get<BackbarClient[]>('/clients?pageSize=200')).filter((row) => row.active !== false);
   }
 
-  usage(date = '', staffId = '') {
+  usage(date = '', staffId = '', clientId = '', appointmentId = '') {
     const query = new URLSearchParams();
     if (date) query.set('date', date);
     if (staffId) query.set('staffId', staffId);
+    if (clientId) query.set('clientId', clientId);
+    if (appointmentId) query.set('appointmentId', appointmentId);
     return this.get<BackbarUsage[]>(`/inventory/backbar-usage?${query}`);
+  }
+
+  async appointments() {
+    const rows = await firstValueFrom(this.api.get<BackbarAppointment[]>('/appointments'));
+    return Array.isArray(rows) ? rows : [];
   }
 
   containers() { return this.get<BackbarContainer[]>('/inventory/backbar-containers'); }

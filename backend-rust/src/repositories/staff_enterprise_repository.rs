@@ -58,10 +58,18 @@ pub struct StatutoryRuleRecord {
     pub id: String,
     pub rule_type: String,
     pub state_code: String,
+    pub jurisdiction_code: String,
+    pub rounding_method: String,
+    pub official_reference: String,
     pub rule_json: Value,
     pub effective_from: NaiveDate,
     pub effective_to: Option<NaiveDate>,
     pub active: bool,
+    pub approval_status: String,
+    pub created_by: String,
+    pub approved_by: Option<String>,
+    pub approved_at: Option<DateTime<Utc>>,
+    pub review_note: String,
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -147,8 +155,10 @@ pub struct SelfDashboardRecord {
     pub attendance: Option<Value>,
     pub tasks: Value,
     pub appointments: Value,
+    pub sales: Value,
     pub leave_requests: Value,
     pub payroll: Value,
+    pub payroll_rules: Value,
     pub holidays: Value,
 }
 
@@ -391,6 +401,7 @@ pub struct StaffNotificationContext {
     pub mobile_phone: String,
     pub whatsapp_opt_in: Option<bool>,
     pub allow_payroll_amounts: Option<bool>,
+    pub language_code: String,
     pub quiet_hours_start: Option<NaiveTime>,
     pub quiet_hours_end: Option<NaiveTime>,
 }
@@ -592,15 +603,46 @@ pub async fn self_dashboard(
     date: NaiveDate,
 ) -> Result<Option<SelfDashboardRecord>, sqlx::Error> {
     sqlx::query_as(r#"SELECT
-      jsonb_build_object('id',s.id,'employeeCode',s.employee_code,'displayName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'jobTitle',s.job_title) staff,
+      jsonb_build_object(
+        'id',s.id,'employeeCode',s.employee_code,
+        'fullName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),
+        'displayName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),
+        'firstName',s.first_name,'lastName',s.last_name,
+        'mobile',s.mobile_phone,'email',s.email,'jobTitle',s.job_title,
+        'department',COALESCE(profile.department,''),
+        'designation',COALESCE(NULLIF(profile.designation,''),s.job_title),
+        'status',CASE WHEN s.active THEN 'active' ELSE 'inactive' END
+      ) staff,
       (SELECT to_jsonb(sc)-'tenant_id'-'branch_id'-'staff_id' FROM staff_schedules sc WHERE sc.tenant_id=s.tenant_id AND sc.branch_id=s.branch_id AND sc.staff_id=s.id AND sc.schedule_date=$4) schedule,
       (SELECT to_jsonb(a)-'tenant_id'-'branch_id'-'staff_id' FROM staff_attendance_records a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.staff_id=s.id AND a.business_date=$4) attendance,
-      COALESCE((SELECT jsonb_agg(to_jsonb(t)-'tenant_id'-'branch_id') FROM staff_tasks t WHERE t.tenant_id=s.tenant_id AND t.branch_id=s.branch_id AND t.staff_id=s.id AND t.status IN ('open','in_progress','blocked')),'[]'::jsonb) tasks,
+      COALESCE((SELECT jsonb_agg(to_jsonb(t)-'tenant_id'-'branch_id' ORDER BY t.due_at NULLS LAST,t.updated_at DESC,t.created_at DESC) FROM staff_tasks t WHERE t.tenant_id=s.tenant_id AND t.branch_id=s.branch_id AND t.staff_id=s.id AND (t.status IN ('open','in_progress','blocked') OR (t.status='completed' AND COALESCE(t.completed_at,t.updated_at,t.created_at)::DATE=$4))),'[]'::jsonb) tasks,
       COALESCE((SELECT jsonb_agg(to_jsonb(ap)-'tenant_id'-'branch_id') FROM appointments ap WHERE ap.tenant_id=s.tenant_id AND ap.branch_id=s.branch_id AND ap.staff_id=s.id AND ap.start_at::DATE=$4),'[]'::jsonb) appointments,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'id',sale.id,'totalPaise',COALESCE(attribution.base_paise,sale.total_paise),
+        'commissionPaise',COALESCE(attribution.commission_paise,0),
+        'status',sale.status,'createdAt',sale.created_at
+      ) ORDER BY sale.created_at DESC)
+        FROM pos_sales sale
+        LEFT JOIN LATERAL (
+          SELECT sale_id,SUM(base_paise)::BIGINT base_paise,SUM(commission_paise)::BIGINT commission_paise
+          FROM pos_staff_commission_snapshots
+          WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=s.id AND business_date=$4
+          GROUP BY sale_id
+        ) attribution ON attribution.sale_id=sale.id
+        WHERE sale.tenant_id=s.tenant_id AND sale.branch_id=s.branch_id
+          AND COALESCE(sale.business_date,sale.created_at::DATE)=$4
+          AND LOWER(sale.status) NOT IN ('draft','cancelled','canceled','voided')
+          AND (sale.staff_id=s.id OR attribution.sale_id IS NOT NULL)
+      ),'[]'::jsonb) sales,
       COALESCE((SELECT jsonb_agg(to_jsonb(l)-'tenant_id'-'branch_id' ORDER BY l.created_at DESC) FROM (SELECT * FROM staff_leave_requests lr WHERE lr.tenant_id=s.tenant_id AND lr.branch_id=s.branch_id AND lr.staff_id=s.id ORDER BY lr.created_at DESC LIMIT 20) l),'[]'::jsonb) leave_requests,
-      COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',r.id,'periodStart',r.period_start,'periodEnd',r.period_end,'status',r.status,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'payslipPath','/staff/self/payslips/'||r.id) ORDER BY r.period_end DESC) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id LEFT JOIN staff_payroll_payouts p ON p.payroll_item_id=i.id AND p.tenant_id=i.tenant_id AND p.branch_id=i.branch_id WHERE i.tenant_id=s.tenant_id AND i.branch_id=s.branch_id AND i.staff_id=s.id AND r.status IN ('finalized','paid')),'[]'::jsonb) payroll,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',r.id,'periodStart',r.period_start,'periodEnd',r.period_end,'status',r.status,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'payslipPath','/staff/self/payslips/'||r.id) ORDER BY r.period_end DESC) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id LEFT JOIN staff_payroll_payouts p ON p.payroll_item_id=i.id AND p.tenant_id=i.tenant_id AND p.branch_id=i.branch_id WHERE i.tenant_id=s.tenant_id AND i.branch_id=s.branch_id AND i.staff_id=s.id AND r.status IN ('finalized','partially_paid','paid')),'[]'::jsonb) payroll,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',pr.id,'name',pr.name,'kind',pr.kind,'amountPaise',pr.amount_paise,'triggerType',pr.trigger_type,'triggerCount',pr.trigger_count,'applicationMode',pr.application_mode,'autoApply',pr.auto_apply,'notes',pr.notes) ORDER BY pr.name,pr.id) FROM staff_payroll_adjustment_rules pr WHERE pr.tenant_id=s.tenant_id AND pr.branch_id=s.branch_id AND pr.active=TRUE),'[]'::jsonb) payroll_rules,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',h.id,'holidayDate',h.holiday_date,'name',h.name,'isPaid',h.is_paid) ORDER BY h.holiday_date) FROM staff_holidays h WHERE h.tenant_id=s.tenant_id AND h.branch_id=s.branch_id AND h.active=TRUE AND h.holiday_date BETWEEN $4-INTERVAL '30 days' AND $4+INTERVAL '365 days'),'[]'::jsonb) holidays
-      FROM staff s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.user_id=$3 AND s.active=TRUE"#)
+      FROM staff s
+      JOIN users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id AND u.active=TRUE
+      LEFT JOIN staff_profiles profile ON profile.tenant_id=s.tenant_id AND profile.branch_id=s.branch_id AND profile.staff_id=s.id
+      WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.user_id=$3 AND s.active=TRUE
+        AND REGEXP_REPLACE(LOWER(u.role_name), '[-_ ]', '', 'g') NOT IN ('owner','admin','superadmin')"#)
       .bind(tenant).bind(branch).bind(user).bind(date).fetch_optional(db).await
 }
 
@@ -611,7 +653,7 @@ pub async fn linked_staff_id(
     user: &str,
 ) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND user_id=$3 AND active=TRUE",
+        "SELECT s.id FROM staff s JOIN users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id AND u.active=TRUE WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.user_id=$3 AND s.active=TRUE AND REGEXP_REPLACE(LOWER(u.role_name), '[-_ ]', '', 'g') NOT IN ('owner','admin','superadmin')",
     )
     .bind(tenant)
     .bind(branch)
@@ -676,7 +718,7 @@ pub async fn list_statutory_rules(
     tenant: &str,
     branch: &str,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 ORDER BY effective_from DESC,rule_type")
+    sqlx::query_as("SELECT id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by,approved_by,approved_at,review_note,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 ORDER BY effective_from DESC,rule_type")
       .bind(tenant).bind(branch).fetch_all(db).await
 }
 
@@ -687,12 +729,39 @@ pub async fn create_statutory_rule(
     actor: &str,
     rule_type: &str,
     state: &str,
+    jurisdiction: &str,
+    rounding_method: &str,
+    official_reference: &str,
     rule: &Value,
     from: NaiveDate,
     to: Option<NaiveDate>,
 ) -> Result<StatutoryRuleRecord, sqlx::Error> {
-    sqlx::query_as("INSERT INTO staff_payroll_statutory_rules(tenant_id,branch_id,rule_type,state_code,rule_json,effective_from,effective_to,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at")
-      .bind(tenant).bind(branch).bind(rule_type).bind(state).bind(rule).bind(from).bind(to).bind(actor).fetch_one(db).await
+    sqlx::query_as("INSERT INTO staff_payroll_statutory_rules(tenant_id,branch_id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,FALSE,'pending',$11) RETURNING id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by,approved_by,approved_at,review_note,version,created_at,updated_at")
+      .bind(tenant).bind(branch).bind(rule_type).bind(state).bind(jurisdiction).bind(rounding_method).bind(official_reference).bind(rule).bind(from).bind(to).bind(actor).fetch_one(db).await
+}
+
+pub async fn statutory_rule(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<Option<StatutoryRuleRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by,approved_by,approved_at,review_note,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant).bind(branch).bind(id).fetch_optional(db).await
+}
+
+pub async fn decide_statutory_rule(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    actor: &str,
+    decision: &str,
+    comments: &str,
+) -> Result<Option<StatutoryRuleRecord>, sqlx::Error> {
+    sqlx::query_as("UPDATE staff_payroll_statutory_rules SET approval_status=$6,active=($6='approved'),approved_by=$5,approved_at=NOW(),review_note=$7,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND approval_status='pending' AND created_by<>$5 RETURNING id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by,approved_by,approved_at,review_note,version,created_at,updated_at")
+        .bind(tenant).bind(branch).bind(id).bind(version).bind(actor).bind(decision).bind(comments).fetch_optional(db).await
 }
 
 pub async fn payroll_item(
@@ -706,47 +775,27 @@ pub async fn payroll_item(
       .bind(tenant).bind(branch).bind(run).bind(staff).fetch_optional(db).await
 }
 
-pub async fn effective_rules(
-    db: &PgPool,
-    tenant: &str,
-    branch: &str,
-    date: NaiveDate,
-) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT DISTINCT ON(rule_type) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,effective_from DESC")
-      .bind(tenant).bind(branch).bind(date).fetch_all(db).await
-}
-
 /// All active statutory rules effective on `date`, one row per (rule_type, state_code) —
-/// unlike `effective_rules`, this does not collapse multiple state-scoped rules of the
-/// same `rule_type` (e.g. professional_tax) into a single arbitrary row.
+/// this does not collapse multiple state-scoped rules of the same `rule_type`
+/// (e.g. professional_tax) into a single arbitrary row.
 pub async fn effective_rules_all(
     db: &PgPool,
     tenant: &str,
     branch: &str,
     date: NaiveDate,
 ) -> Result<Vec<StatutoryRuleRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT DISTINCT ON(rule_type,state_code) id,rule_type,state_code,rule_json,effective_from,effective_to,active,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,state_code,effective_from DESC")
+    sqlx::query_as("SELECT DISTINCT ON(rule_type,state_code) id,rule_type,state_code,jurisdiction_code,rounding_method,official_reference,rule_json,effective_from,effective_to,active,approval_status,created_by,approved_by,approved_at,review_note,version,created_at,updated_at FROM staff_payroll_statutory_rules WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND approval_status='approved' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>=$3) ORDER BY rule_type,state_code,effective_from DESC")
       .bind(tenant).bind(branch).bind(date).fetch_all(db).await
 }
 
-pub async fn save_statutory_calculation(
+pub async fn statutory_calculation_for_item(
     db: &PgPool,
     tenant: &str,
     branch: &str,
-    run: &str,
     item: &str,
-    staff: &str,
-    from: NaiveDate,
-    to: NaiveDate,
-    gross: i64,
-    employee: i64,
-    employer: i64,
-    accrual: i64,
-    breakdown: &Value,
-    actor: &str,
-) -> Result<StatutoryCalculationRecord, sqlx::Error> {
-    sqlx::query_as("INSERT INTO staff_payroll_statutory_calculations(tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,period_start,period_end,gross_paise,employee_deduction_paise,employer_contribution_paise,accrual_paise,breakdown_json,calculated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(tenant_id,branch_id,payroll_item_id) DO UPDATE SET employee_deduction_paise=EXCLUDED.employee_deduction_paise,employer_contribution_paise=EXCLUDED.employer_contribution_paise,accrual_paise=EXCLUDED.accrual_paise,breakdown_json=EXCLUDED.breakdown_json,calculated_by=EXCLUDED.calculated_by,calculated_at=NOW() RETURNING id,payroll_run_id,payroll_item_id,staff_id,period_start,period_end,gross_paise,employee_deduction_paise,employer_contribution_paise,accrual_paise,breakdown_json,calculated_by,calculated_at")
-      .bind(tenant).bind(branch).bind(run).bind(item).bind(staff).bind(from).bind(to).bind(gross).bind(employee).bind(employer).bind(accrual).bind(breakdown).bind(actor).fetch_one(db).await
+) -> Result<Option<StatutoryCalculationRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,payroll_run_id,payroll_item_id,staff_id,period_start,period_end,gross_paise,employee_deduction_paise,employer_contribution_paise,accrual_paise,breakdown_json,calculated_by,calculated_at FROM staff_payroll_statutory_calculations WHERE tenant_id=$1 AND branch_id=$2 AND payroll_item_id=$3")
+        .bind(tenant).bind(branch).bind(item).fetch_optional(db).await
 }
 
 pub async fn statutory_summary(
@@ -1189,16 +1238,16 @@ pub async fn staff_operational_report(
 ) -> Result<Vec<Value>, sqlx::Error> {
     let sql = match report_type {
         "attendance" => {
-            r#"SELECT jsonb_build_object('staffId',a.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'days',COUNT(*),'presentDays',COUNT(*) FILTER(WHERE COALESCE(a.manual_status,a.status) IN ('present','clocked_in','clocked_out')),'workedMinutes',SUM(a.worked_minutes),'breakMinutes',SUM(a.break_minutes),'lateMinutes',SUM(a.late_minutes),'overtimeMinutes',SUM(a.overtime_minutes)) FROM staff_attendance_records a JOIN staff s ON s.id=a.staff_id AND s.tenant_id=a.tenant_id AND s.branch_id=a.branch_id WHERE a.tenant_id=$1 AND a.branch_id=$2 AND a.business_date BETWEEN $3 AND $4 GROUP BY a.staff_id,s.appointment_display_name,s.first_name,s.last_name ORDER BY 1->>'staffName'"#
+            r#"SELECT row FROM (SELECT jsonb_build_object('staffId',a.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'days',COUNT(*),'presentDays',COUNT(*) FILTER(WHERE COALESCE(a.manual_status,a.status) IN ('present','clocked_in','clocked_out')),'workedMinutes',SUM(a.worked_minutes),'breakMinutes',SUM(a.break_minutes),'lateMinutes',SUM(a.late_minutes),'overtimeMinutes',SUM(a.overtime_minutes)) AS row FROM staff_attendance_records a JOIN staff s ON s.id=a.staff_id AND s.tenant_id=a.tenant_id AND s.branch_id=a.branch_id WHERE a.tenant_id=$1 AND a.branch_id=$2 AND a.business_date BETWEEN $3 AND $4 GROUP BY a.staff_id,s.appointment_display_name,s.first_name,s.last_name) report ORDER BY row->>'staffName'"#
         }
         "payroll" => {
             r#"SELECT jsonb_build_object('staffId',i.staff_id,'staffName',i.staff_name,'runs',COUNT(*),'grossPaise',SUM(i.gross_paise),'deductionsPaise',SUM(i.deductions_paise),'netPaise',SUM(i.net_paise),'commissionPaise',SUM(i.commission_paise)) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id WHERE i.tenant_id=$1 AND i.branch_id=$2 AND r.period_start<=$4 AND r.period_end>=$3 GROUP BY i.staff_id,i.staff_name ORDER BY i.staff_name"#
         }
         "commission" => {
-            r#"SELECT jsonb_build_object('staffId',c.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'saleCount',COUNT(DISTINCT c.sale_id),'lineCount',COUNT(*),'basePaise',SUM(c.base_paise),'commissionPaise',SUM(c.commission_paise)) FROM pos_staff_commission_snapshots c LEFT JOIN staff s ON s.id=c.staff_id AND s.tenant_id=c.tenant_id AND s.branch_id=c.branch_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.business_date BETWEEN $3 AND $4 GROUP BY c.staff_id,s.appointment_display_name,s.first_name,s.last_name ORDER BY 1->>'staffName'"#
+            r#"SELECT row FROM (SELECT jsonb_build_object('staffId',c.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'saleCount',COUNT(DISTINCT c.sale_id),'lineCount',COUNT(*),'basePaise',SUM(c.base_paise),'commissionPaise',SUM(c.commission_paise)) AS row FROM pos_staff_commission_snapshots c LEFT JOIN staff s ON s.id=c.staff_id AND s.tenant_id=c.tenant_id AND s.branch_id=c.branch_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.business_date BETWEEN $3 AND $4 GROUP BY c.staff_id,s.appointment_display_name,s.first_name,s.last_name) report ORDER BY row->>'staffName'"#
         }
         "training" => {
-            r#"SELECT jsonb_build_object('staffId',t.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'assigned',COUNT(*),'completed',COUNT(*) FILTER(WHERE t.status='completed'),'overdue',COUNT(*) FILTER(WHERE t.status NOT IN ('completed','cancelled') AND t.due_at<NOW())) FROM staff_tasks t LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.task_type='training' AND t.created_at::DATE BETWEEN $3 AND $4 GROUP BY t.staff_id,s.appointment_display_name,s.first_name,s.last_name ORDER BY 1->>'staffName'"#
+            r#"SELECT row FROM (SELECT jsonb_build_object('staffId',t.staff_id,'staffName',COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'assigned',COUNT(*),'completed',COUNT(*) FILTER(WHERE t.status='completed'),'overdue',COUNT(*) FILTER(WHERE t.status NOT IN ('completed','cancelled') AND t.due_at<NOW())) AS row FROM staff_tasks t LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.task_type='training' AND t.created_at::DATE BETWEEN $3 AND $4 GROUP BY t.staff_id,s.appointment_display_name,s.first_name,s.last_name) report ORDER BY row->>'staffName'"#
         }
         _ => return Ok(Vec::new()),
     };
@@ -1217,7 +1266,7 @@ pub async fn notification_context(
     branch: &str,
     staff_id: &str,
 ) -> Result<Option<StaffNotificationContext>, sqlx::Error> {
-    sqlx::query_as("SELECT s.id staff_id,s.first_name,COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) display_name,s.mobile_phone,p.whatsapp_opt_in,p.allow_payroll_amounts,p.quiet_hours_start,p.quiet_hours_end FROM staff s LEFT JOIN staff_notification_preferences p ON p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id AND p.staff_id=s.id WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE")
+    sqlx::query_as("SELECT s.id staff_id,s.first_name,COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) display_name,s.mobile_phone,p.whatsapp_opt_in,p.allow_payroll_amounts,COALESCE(NULLIF(p.language_code,''),'en-IN') language_code,p.quiet_hours_start,p.quiet_hours_end FROM staff s LEFT JOIN staff_notification_preferences p ON p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id AND p.staff_id=s.id WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE")
         .bind(tenant).bind(branch).bind(staff_id).fetch_optional(db).await
 }
 
@@ -1291,7 +1340,7 @@ pub async fn active_notification_template_by_type(
     notification_type: &str,
     language_code: &str,
 ) -> Result<Option<StaffNotificationTemplateRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,notification_type,language_code,title,body_template,sensitive,active,version,created_at,updated_at FROM staff_notification_templates WHERE tenant_id=$1 AND branch_id=$2 AND notification_type=$3 AND language_code=$4 AND active=TRUE")
+    sqlx::query_as("SELECT id,notification_type,language_code,title,body_template,sensitive,active,version,created_at,updated_at FROM staff_notification_templates WHERE tenant_id=$1 AND branch_id=$2 AND notification_type=$3 AND language_code IN ($4,'en-IN') AND active=TRUE ORDER BY CASE WHEN language_code=$4 THEN 0 ELSE 1 END LIMIT 1")
         .bind(tenant).bind(branch).bind(notification_type).bind(language_code).fetch_optional(db).await
 }
 
@@ -1299,8 +1348,8 @@ pub async fn active_notification_template_by_type(
 /// exact idempotency key already been queued for this staff/notification_type? Mirrors the
 /// `metadata->>'idempotencyKey'` pattern already used by `staff_operations_repository`'s
 /// `queue_staff_operation_notification`, since `staff_notification_queue` has no DB-level unique
-/// constraint for this — the check is app-level, done before calling the shared
-/// `queue_notification` service function so its existing behavior for other callers is untouched.
+/// constraint for this. The database unique index remains authoritative; this pre-check avoids a
+/// predictable conflict on ordinary retries before calling the shared queue service.
 pub async fn notification_already_queued(
     db: &PgPool,
     tenant: &str,

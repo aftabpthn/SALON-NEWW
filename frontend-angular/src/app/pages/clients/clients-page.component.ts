@@ -6,6 +6,7 @@ import { firstValueFrom, Observable } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
+import { AuthService } from '../../core/services/auth.service';
 
 type WorkspaceTab = 'Timeline' | 'Profile' | 'Insights' | 'Growth' | 'Clinical' | 'Consent' | 'Forms' | 'Communications' | 'Reports' | 'Masters';
 type TimelineType = 'Appointments' | 'Invoices' | 'Services' | 'Payments' | 'Wallet' | 'Loyalty' | 'Memberships' | 'Packages' | 'WhatsApp' | 'Notes' | 'Custom forms' | 'Consent' | 'Reviews' | 'Audit activity';
@@ -71,6 +72,7 @@ type TreatmentPhoto = { id: string; appointmentId?: string; caption: string; fil
 })
 export class ClientsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private searchTimer?: ReturnType<typeof setTimeout>;
@@ -244,6 +246,26 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
 
   get searchResults() {
     return this.clientRows.slice(0, 8);
+  }
+
+  get canManageClients() {
+    return this.auth.hasPermission('clients.manage', 'front_desk.write') || this.auth.hasRole('owner', 'admin', 'manager', 'receptionist');
+  }
+
+  get canManageClientConsent() {
+    return this.auth.hasPermission('clients.consent.manage', 'clients.manage', 'front_desk.write') || this.auth.hasRole('owner', 'admin', 'manager');
+  }
+
+  get canManageClientForms() {
+    return this.auth.hasPermission('clients.forms.manage', 'clients.manage', 'management.write') || this.auth.hasRole('owner', 'admin', 'manager');
+  }
+
+  get canMergeClients() {
+    return this.auth.hasPermission('clients.merge', 'clients.manage', 'front_desk.write') || this.auth.hasRole('owner', 'admin', 'manager');
+  }
+
+  get canLinkClientReviews() {
+    return this.auth.hasPermission('clients.reviews.link', 'clients.manage', 'front_desk.write') || this.auth.hasRole('owner', 'admin', 'manager');
   }
 
   get visibleTimeline() {
@@ -540,6 +562,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showCreate() {
+    if (!this.canManageClients) return;
     this.editingClientId = '';
     this.createGuest = this.blankGuestForm();
     this.clientError = '';
@@ -547,7 +570,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showEdit() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     const client = this.selectedClient;
     this.editingClientId = client.id;
     this.createGuest = {
@@ -565,7 +588,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showNote() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.noteDraft = '';
     this.noteType = 'general';
     this.clientError = '';
@@ -573,7 +596,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showClinicalProfile() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.clinicalDraft = {
       allergies: String(this.clinicalProfile?.allergies || ''),
       preferences: String(this.clinicalProfile?.preferences || ''),
@@ -584,14 +607,14 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showFamilyLink() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.familyDraft = { relatedClientId: '', relationshipType: 'spouse' };
     this.clientError = '';
     this.drawerMode = 'family';
   }
 
   showSoapNote(note?: any) {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.soapDraft = note ? {
       id: String(note.id || ''), appointmentId: String(note.appointmentId || ''),
       subjective: String(note.subjective || ''), objective: String(note.objective || ''),
@@ -603,7 +626,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showContactPreferences() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClientConsent) return;
     this.contactDraft = {
       preferredStaffId: this.selectedClient.preferredStaffId,
       preferredCommunicationChannel: this.selectedClient.preferredCommunicationChannel || 'none',
@@ -617,7 +640,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   openRetention(action: Exclude<RetentionAction, null>, record?: any) {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.retentionAction = action;
     this.retentionDraft = { ...this.blankRetentionDraft(), giftCardId: String(record?.id || ''), idempotencyKey: this.retentionKey(action) };
     this.clientError = '';
@@ -684,6 +707,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showClientMaster(record?: any) {
+    if (!this.canManageClients) return;
     const definition = record?.definitionJson && typeof record.definitionJson === 'object' ? record.definitionJson : {};
     this.editingMasterId = String(record?.id || '');
     this.masterDraft = record ? {
@@ -702,6 +726,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showDiscountRule(record?: any) {
+    if (!this.canManageClients) return;
     this.editingDiscountRuleId = String(record?.id || '');
     this.discountRuleDraft = record ? {
       name: String(record.name || ''), segments: Array.isArray(record.segments) ? record.segments.join(', ') : '',
@@ -718,14 +743,14 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showDiscountDecision() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.discountDraft = { serviceCategory: '', subtotal: '', discountPercent: '' };
     this.clientError = '';
     this.drawerMode = 'discount';
   }
 
   showWinBackOffer(decision?: any) {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.winBackDraft = {
       decisionId: String(decision?.id || ''), offerCode: '', title: '',
       discountPercent: decision?.approvedDiscountBps ? String(Number(decision.approvedDiscountBps) / 100) : '',
@@ -817,20 +842,21 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showReviewLink() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canLinkClientReviews) return;
     this.reviewDraft = { platform: 'google', externalReviewId: '', rating: '', reviewText: '', reviewedAt: '' };
     this.clientError = '';
     this.drawerMode = 'review';
   }
 
   showMerge() {
-    if (!this.selectedClient || !this.duplicates.length) return;
+    if (!this.selectedClient || !this.duplicates.length || !this.canMergeClients) return;
     this.mergeTargetId = String(this.duplicates[0]?.id || '');
     this.clientError = '';
     this.drawerMode = 'merge';
   }
 
   showFormDefinition(definition?: any) {
+    if (!this.canManageClientForms) return;
     this.definitionDraft = definition ? {
       formKey: String(definition.formKey || ''), name: String(definition.name || ''), formType: String(definition.formType || 'consent'),
       body: String(definition.body || ''), questions: this.formFields(definition).map((field) => this.formFieldLine(field)).join('\n'),
@@ -842,7 +868,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showFormSubmission(definition?: any) {
-    if (!this.selectedClient || (!definition && !this.formDefinitions.length)) return;
+    if (!this.selectedClient || !this.canManageClientForms || (!definition && !this.formDefinitions.length)) return;
     this.submissionDraft = this.blankSubmissionDraft();
     this.submissionDraft.definitionId = String(definition?.id || this.formDefinitions[0]?.id || '');
     this.clientError = '';
@@ -850,7 +876,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   showPhotoUpload() {
-    if (!this.selectedClient) return;
+    if (!this.selectedClient || !this.canManageClients) return;
     this.photoCaption = '';
     this.photoType = 'other';
     this.selectedPhoto = null;

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Observable, Subscription } from 'rxjs';
 import { PosRealtimeService } from '../../../core/services/pos-realtime.service';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiService } from '../../../shared/services/api.service';
 
 interface Terminal { id: string; terminalCode: string; terminalName: string; assignedCounter: string; status: string; lastSeenAt: string | null; activeSessionId: string | null; }
@@ -19,13 +20,13 @@ interface NotificationProfile { senderEmail: string; senderPhone: string; logoUr
 
 @Component({
     selector: 'app-pos-enterprise-page',
-    imports: [CommonModule, FormsModule, RouterLink],
+    imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
     templateUrl: './pos-enterprise-page.component.html',
     styleUrls: ['./pos-enterprise-page.component.css']
 })
 export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   tab: 'eod' | 'terminals' | 'print' | 'risk' | 'corporate' | 'reliability' | 'notifications' = 'eod';
-  businessDate = this.displayDate(new Date());
+  businessDate = this.toIsoDate(new Date());
   terminals: Terminal[] = [];
   terminalSales: TerminalSalesSummary | null = null;
   devices: PrintDevice[] = [];
@@ -74,6 +75,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void { this.liveUpdates?.unsubscribe(); }
 
   load(): void {
+    if (!this.isoDate()) { this.error = 'Select a valid business date'; return; }
     this.loading = true; this.error = ''; this.message = '';
     let pending = 14;
     const done = () => { pending -= 1; if (!pending) this.loading = false; };
@@ -122,7 +124,11 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   }
   retryJob(row: PrintJob): void { this.run(this.api.post(`/api/v1/pos/print-jobs/${row.id}/retry`, {}), 'Print job queued again'); }
 
-  lockDay(): void { if (!this.dayReason.trim()) return this.fail('Lock reason is required'); this.run(this.api.post(`/api/v1/pos/day-close/${this.isoDate()}/lock`, { reason: this.dayReason.trim() }), 'Business day locked', () => this.dayReason = ''); }
+  lockDay(): void {
+    if (!this.drawerReadyForLock) return this.fail('Close and approve the branch cash drawer before locking the day');
+    if (!this.dayReason.trim()) return this.fail('Lock reason is required');
+    this.run(this.api.post(`/api/v1/pos/day-close/${this.isoDate()}/lock`, { reason: this.dayReason.trim() }), 'Business day locked', () => this.dayReason = '');
+  }
   reopenDay(): void { if (!this.reopenReason.trim()) return this.fail('Reopen reason is required'); this.run(this.api.post(`/api/v1/pos/day-close/${this.isoDate()}/reopen`, { reason: this.reopenReason.trim() }), 'Business day reopened', () => this.reopenReason = ''); }
   generateZ(): void { this.run(this.api.post(`/api/v1/pos/z-reports/${this.isoDate()}`, {}), 'Immutable Z-report generated'); }
   postAccounting(): void { this.run(this.api.post(`/api/v1/pos/z-reports/${this.isoDate()}/post-accounting`, {}), 'EOD accounting batch posted'); }
@@ -152,6 +158,10 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   reloadReliability(): void { this.read<any>('/api/v1/pos/reliability', (row) => this.reliability = row, () => {}); }
 
   money(paise: number | null | undefined): number { return Number(paise ?? 0) / 100; }
+  get displayBusinessDate(): string { return this.displayDate(this.businessDate); }
+  get drawerStatus(): string { return this.drawer?.status ? String(this.drawer.status).replace('_', ' ') : 'Not opened'; }
+  get drawerReadyForLock(): boolean { return !this.drawer || this.drawer.status === 'closed'; }
+  onBusinessDateChange(value: string): void { this.businessDate = value; this.load(); }
   terminalNameFor(id: string): string { return this.terminals.find((row) => row.id === id)?.terminalName ?? id; }
   terminalPresence(row: Terminal): string {
     if (row.status !== 'active') return 'Suspended';
@@ -165,7 +175,11 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   private run(request: Observable<any>, success: string, reset?: () => void, capture?: (value: any) => void): void { if (this.busy) return; this.busy = true; this.error = ''; this.message = ''; request.subscribe({ next: (response) => { const value = response?.data ?? response; capture?.(value); reset?.(); this.busy = false; this.load(); if (this.corporateAccountId) this.selectCorporateAccount(this.corporateAccountId); this.message = success; }, error: (error) => { this.busy = false; this.error = this.errorText(error); } }); }
   private fail(message: string): void { this.error = message; }
   private toPaise(value: string): number { return Math.round(Number(value || 0) * 100); }
-  private isoDate(): string { const [day, month, year] = this.businessDate.split('/').map(Number); return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`; }
-  private displayDate(date: Date): string { return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`; }
+  private isoDate(): string { return /^\d{4}-\d{2}-\d{2}$/.test(this.businessDate) ? this.businessDate : ''; }
+  private displayDate(value: string): string {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+  }
+  private toIsoDate(date: Date): string { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
   private errorText(error: any): string { return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? 'Request failed'; }
 }

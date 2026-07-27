@@ -114,7 +114,93 @@ describe("StaffAppService security behavior", () => {
     expect(http.calls.find((call) => call.url.endsWith("/auth/login"))?.options.headers?.get("X-Tenant-Id")).toBe("tenant-one");
   });
 
-  it("shares one refresh request between concurrent requests without an access token", async () => {
+  it("supports custom staff roles and lets a specific Staff App deny override legacy access", async () => {
+    const { service } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of({ data: { access_token: "rust-access" } });
+      if (method === "GET" && url.endsWith("/auth/me")) return of({ data: {
+        userId: "user-1", tenantId: "tenant-one", branchId: "branch-1", role: "Senior Stylist",
+        permissions: ["appointments.read", "staff.self_manage"], deniedPermissions: ["staff.app.business.read"]
+      } });
+      if (method === "GET" && url.endsWith("/staff/self/dashboard")) return of({ data: { staff: { id: "staff-1", displayName: "Asha Staff" } } });
+      return of({});
+    });
+
+    await expect(service.login({ tenantId: "tenant-one", loginId: "asha.staff", password: "password" })).resolves.toMatchObject({ role: "Senior Stylist" });
+
+    expect(service.hasPermission("staff.app.appointments.read")).toBe(true);
+    expect(service.hasPermission("staff.app.business.read")).toBe(false);
+  });
+
+  it("rejects protected management roles even when linked to a staff profile", async () => {
+    const owner = { ...user("owner"), role: "Owner", permissions: ["staff.app.dashboard.read"] };
+    const { service } = serviceWith((_method, url) => url.endsWith("/auth/login")
+      ? of({ ...loginSession("owner"), user: owner })
+      : of({}));
+
+    await expect(service.login({ tenantId: "tenant-one", loginId: "owner", password: "password" }))
+      .rejects.toThrow("Owner and administrator accounts cannot use Staff App.");
+    expect(service.isAuthenticated()).toBe(false);
+  });
+
+  it("forwards an MFA code through the existing login contract", async () => {
+    const { service, http } = serviceWith((_method, url) => url.endsWith("/auth/login") ? of(loginSession("one")) : of({}));
+
+    await service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password", mfaCode: "123456" });
+
+    expect(http.calls.find((call) => call.url.endsWith("/auth/login"))?.body).toMatchObject({ mfaCode: "123456" });
+  });
+
+  it("changes a forced temporary password before loading protected staff data", async () => {
+    const { service, http } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of({ ...loginSession("one"), must_change_password: true });
+      if (method === "POST" && url.endsWith("/auth/change-password")) return of({ data: { passwordChanged: true } });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+
+    await expect(service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "temporary-password" }))
+      .rejects.toThrow("Create a new password before opening the Staff App.");
+    expect(service.passwordChangeRequired()).toBe(true);
+    expect(http.calls.some((call) => call.url.endsWith("/auth/me"))).toBe(false);
+
+    await service.changeRequiredPassword("new-secure-password");
+
+    expect(http.calls.find((call) => call.url.endsWith("/auth/change-password"))?.body).toEqual({ newPassword: "new-secure-password" });
+    expect(service.passwordChangeRequired()).toBe(false);
+  });
+
+  it("enrolls required MFA before loading protected staff data", async () => {
+    const { service, http } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of({ ...loginSession("one"), mfa_enrollment_required: true });
+      if (method === "POST" && url.endsWith("/auth/mfa/setup")) return of({ data: { secret: "SETUPKEY", otpAuthUri: "otpauth://totp/test", algorithm: "SHA1", digits: 6, period: 30 } });
+      if (method === "POST" && url.endsWith("/auth/mfa/enable")) return of({ data: { enabled: true, recoveryCodes: ["RECOVERY-1"] } });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+
+    await expect(service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" }))
+      .rejects.toThrow("Set up an authenticator before opening the Staff App.");
+    expect(service.mfaSetup()?.secret).toBe("SETUPKEY");
+    expect(http.calls.some((call) => call.url.endsWith("/auth/me"))).toBe(false);
+
+    await expect(service.enableRequiredMfa("123456")).resolves.toEqual(["RECOVERY-1"]);
+    expect(service.mfaEnrollmentRequired()).toBe(false);
+  });
+
+  it("uses the canonical tenant claim after login with a short salon code", async () => {
+    const payload = btoa(JSON.stringify({ tenant_id: "canonical-tenant" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    const token = `header.${payload}.signature`;
+    const { service, http } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of({ data: { access_token: token } });
+      if (method === "GET" && url.endsWith("/auth/me")) return of({ data: { userId: "user-1", tenantId: "canonical-tenant", branchId: "branch-1", role: "staff", permissions: [] } });
+      if (method === "GET" && url.endsWith("/staff/self/dashboard")) return of({ data: { staff: { id: "staff-1", displayName: "Asha Staff" } } });
+      return of({});
+    });
+
+    await service.login({ tenantId: "short-salon", loginId: "asha.staff", password: "password" });
+
+    expect(http.calls.find((call) => call.url.endsWith("/auth/me"))?.options.headers?.get("X-Tenant-Id")).toBe("canonical-tenant");
+  });
+
+  it("shares one refresh and dashboard request between concurrent reads", async () => {
     const refresh = new Subject<unknown>();
     const { service, http } = serviceWith((method, url) => {
       if (method === "POST" && url.endsWith("/auth/refresh")) return refresh;
@@ -129,10 +215,36 @@ describe("StaffAppService security behavior", () => {
     expect(http.calls.filter((call) => call.url.endsWith("/auth/refresh"))).toHaveLength(1);
     refresh.next({ accessToken: "refreshed-access", user: user("one") });
     refresh.complete();
-    await Promise.all([first, second]);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
 
     expect(http.calls.filter((call) => call.url.endsWith("/auth/refresh"))).toHaveLength(1);
-    expect(http.calls.filter((call) => call.url.endsWith("/staff/self/dashboard"))).toHaveLength(2);
+    expect(http.calls.filter((call) => call.url.endsWith("/staff/self/dashboard"))).toHaveLength(1);
+    expect(firstResult).toBe(secondResult);
+  });
+
+  it("restores an authenticated staff session from the refresh cookie", async () => {
+    const { service, http } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/refresh")) return of({ accessToken: "refreshed-access", user: user("one") });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+
+    await expect(service.restoreSession()).resolves.toBe(true);
+
+    expect(service.isAuthenticated()).toBe(true);
+    expect(http.calls.filter((call) => call.url.endsWith("/auth/refresh"))).toHaveLength(1);
+  });
+
+  it("does not publish background enterprise shell errors", async () => {
+    const { service } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of(loginSession("one"));
+      if (method === "GET" && url.endsWith("/staff-self/enterprise-os")) return throwError(() => new Error("shell unavailable"));
+      return of({});
+    });
+    await service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" });
+
+    await expect(service.enterpriseOs({}, false)).rejects.toThrow("shell unavailable");
+
+    expect(service.error()).toBe("");
   });
 
   it("clears all local auth state when backend logout fails", async () => {

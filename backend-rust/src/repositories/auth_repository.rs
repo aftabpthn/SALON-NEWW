@@ -191,6 +191,20 @@ pub async fn find_user_by_id(
     .await
 }
 
+pub async fn find_active_permission_version(
+    db: &PgPool,
+    tenant_id: &str,
+    user_id: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT permission_version FROM users WHERE tenant_id=$1 AND id=$2 AND active=TRUE LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn list_branch_access(
     db: &PgPool,
     user: &AuthUser,
@@ -508,7 +522,7 @@ fn permission_list(value: Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_auth_tenant_id, EXPLICIT_BRANCH_ACCESS_SQL};
+    use super::{find_branch_access, resolve_auth_tenant_id, AuthUser, EXPLICIT_BRANCH_ACCESS_SQL};
     use sqlx::PgPool;
 
     #[test]
@@ -567,5 +581,144 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn staff_security_cross_branch_access_requires_explicit_grant(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE tenants(id UUID PRIMARY KEY);
+            CREATE TABLE branches(
+              id UUID PRIMARY KEY,tenant_id UUID,active BOOLEAN,name TEXT,
+              region_name TEXT,zone_name TEXT,cluster_name TEXT
+            );
+            CREATE TABLE roles(
+              id TEXT,tenant_id TEXT,name TEXT,permissions_json JSONB,
+              denied_permissions_json JSONB,masked_fields_json JSONB,
+              max_discount_paise BIGINT,max_refund_paise BIGINT,max_cash_movement_paise BIGINT,
+              PRIMARY KEY(tenant_id,id)
+            );
+            CREATE TABLE user_branch_roles(
+              tenant_id TEXT,user_id TEXT,branch_id TEXT,role_id TEXT,role_name TEXT,
+              access_type TEXT,valid_from DATE,valid_until DATE,is_default BOOLEAN,active BOOLEAN
+            );
+            CREATE TABLE branch_id_aliases(
+              tenant_id UUID,branch_id UUID,alias TEXT
+            );
+            INSERT INTO tenants VALUES('11111111-1111-4111-8111-111111111111');
+            INSERT INTO branches VALUES
+              ('22222222-2222-4222-8222-222222222222','11111111-1111-4111-8111-111111111111',TRUE,'Granted','','',''),
+              ('33333333-3333-4333-8333-333333333333','11111111-1111-4111-8111-111111111111',TRUE,'Denied','','','');
+            INSERT INTO roles VALUES('manager','11111111-1111-4111-8111-111111111111','Manager','[]','[]','[]',NULL,NULL,NULL);
+            INSERT INTO user_branch_roles VALUES(
+              '11111111-1111-4111-8111-111111111111','user-1',
+              '22222222-2222-4222-8222-222222222222','manager','Manager',
+              'permanent',NULL,NULL,TRUE,TRUE
+            );
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let user = AuthUser {
+            id: "user-1".into(),
+            tenant_id: "11111111-1111-4111-8111-111111111111".into(),
+            branch_id: None,
+            role_id: None,
+            role_name: "Manager".into(),
+            login_id: None,
+            email: "manager@example.test".into(),
+            password_hash: String::new(),
+            locked_until: None,
+            permission_version: 1,
+            must_change_password: false,
+        };
+
+        assert!(
+            find_branch_access(&pool, &user, "22222222-2222-4222-8222-222222222222")
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            find_branch_access(&pool, &user, "33333333-3333-4333-8333-333333333333")
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn staff_security_role_changes_invalidate_affected_sessions(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE roles(
+              id TEXT,tenant_id TEXT,name TEXT,permissions_json JSONB,
+              denied_permissions_json JSONB,masked_fields_json JSONB,
+              max_discount_paise BIGINT,max_refund_paise BIGINT,max_cash_movement_paise BIGINT,
+              PRIMARY KEY(tenant_id,id)
+            );
+            CREATE TABLE users(
+              id TEXT,tenant_id TEXT,role_id TEXT,permission_version BIGINT,updated_at TIMESTAMPTZ,
+              PRIMARY KEY(tenant_id,id)
+            );
+            CREATE TABLE user_branch_roles(
+              tenant_id TEXT,user_id TEXT,role_id TEXT,active BOOLEAN
+            );
+            CREATE TABLE auth_refresh_tokens(
+              tenant_id TEXT,user_id TEXT,revoked_at TIMESTAMPTZ,revoke_reason TEXT
+            );
+            INSERT INTO roles VALUES('manager','tenant-1','Manager','[]','[]','[]',NULL,NULL,NULL);
+            INSERT INTO users VALUES
+              ('direct','tenant-1','manager',1,NULL),
+              ('branch','tenant-1',NULL,1,NULL),
+              ('unrelated','tenant-1',NULL,1,NULL);
+            INSERT INTO user_branch_roles VALUES('tenant-1','branch','manager',TRUE);
+            INSERT INTO auth_refresh_tokens(tenant_id,user_id) VALUES
+              ('tenant-1','direct'),('tenant-1','branch'),('tenant-1','unrelated');
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0272_role_authorization_session_invalidation.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query("UPDATE roles SET permissions_json='[\"staff.basic\"]' WHERE tenant_id='tenant-1' AND id='manager'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let versions: Vec<(String, i64)> =
+            sqlx::query_as("SELECT id,permission_version FROM users ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            versions,
+            vec![
+                ("branch".into(), 2),
+                ("direct".into(), 2),
+                ("unrelated".into(), 1),
+            ]
+        );
+        let sessions: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT user_id,revoke_reason FROM auth_refresh_tokens ORDER BY user_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            sessions,
+            vec![
+                ("branch".into(), Some("role_authorization_changed".into())),
+                ("direct".into(), Some("role_authorization_changed".into())),
+                ("unrelated".into(), None),
+            ]
+        );
     }
 }

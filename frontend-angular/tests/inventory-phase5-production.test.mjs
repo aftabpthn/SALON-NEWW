@@ -14,7 +14,27 @@ test('inventory production operations use real scoped APIs and reload after acti
   assert.match(component, /\/inventory\/operations-health/);
   assert.match(component, /\/supplier-governance\/communications\/\$\{id\}\/retry/);
   assert.match(component, /await this\.reload\(\)/);
+  assert.match(component, /async selectTab\(tab: Tab\)/);
+  assert.match(component, /async onBranchScopeChange\(\)[\s\S]*await this\.reload\(\)/);
   assert.match(template, /Autonomous Inventory Operations/);
+  assert.match(template, /\(click\)="selectTab\(tab\.id\)"/);
+  assert.match(template, /\(ngModelChange\)="onBranchScopeChange\(\)"/);
+  for (const label of [
+    'Export evidence', 'Review exception', 'Open action route',
+    'Create approval rule', 'Review pending approval',
+    'Open locked item', 'Resolve lock',
+    'Create expiry rescue action', 'Transfer near-expiry stock',
+    'Create clearance action', 'Create discount/offer',
+    'Save policy',
+    'Run automation', 'Save controls', 'Approve action', 'Reject action', 'Retry failed job',
+  ]) assert.ok(template.includes(label), `${label} command is missing`);
+  for (const method of [
+    'reviewException', 'openActionRoute', 'createApprovalRule', 'reviewPendingApproval',
+    'openLockedItem', 'resolveLock', 'createExpiryRescueAction', 'transferNearExpiryStock',
+    'createClearanceAction', 'createDiscountOffer',
+  ]) assert.match(component, new RegExp(`\\b${method}\\(`), `missing ${method}`);
+  assert.match(component, /navigate\(\['\/inventory\/transfers'\]\)/);
+  assert.match(component, /navigate\(\['\/marketing'\]/);
   assert.match(template, /ledgerStockMismatch/);
   assert.match(template, /terminalFailed/);
   assert.match(template, /retryCommunication\(row\.id\)/);

@@ -11,6 +11,7 @@ export type StaffOsAction = {
 export type StaffOsEndpoint = {
   title: string;
   path: string;
+  columns?: string[];
 };
 
 export type StaffOsViewConfig = {
@@ -50,9 +51,9 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     title: 'Staff heatmaps',
     icon: 'bi-grid-3x3-gap',
     endpoints: [
-      { title: 'Floor control', path: '/staff-enterprise/floor-control?date={today}' },
+      { title: 'Floor control', path: '/staff-enterprise/floor-control?date={today}', columns: ['staffId', 'staffName', 'scheduleStatus', 'shift1Start', 'shift1End', 'shift2Start', 'shift2End'] },
       { title: 'Roster coverage', path: '/staff/roster/coverage?{period}' },
-      { title: 'Attendance report', path: '/staff/reports/attendance?{period}' },
+      { title: 'Attendance report', path: '/staff/reports/attendance?{period}', columns: ['staffName', 'staffId', 'days', 'presentDays', 'workedMinutes', 'breakMinutes', 'lateMinutes', 'overtimeMinutes'] },
     ],
   },
   'salary-structure': {
@@ -74,6 +75,10 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Payroll adjustment rules', path: '/staff/payroll-adjustment-rules' },
       { title: 'Statutory payroll rules', path: '/staff/payroll-compliance/rules' },
     ],
+    actions: [
+      { label: 'Add adjustment rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=adjustments&create=1' },
+      { label: 'Add statutory rule', icon: 'bi-shield-plus', route: '/staff/payroll?tab=setup&section=statutory' },
+    ],
   },
   'salary-history': {
     key: 'salary-history',
@@ -91,7 +96,15 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     eyebrow: 'Payroll',
     title: 'Fines & deductions',
     icon: 'bi-receipt-cutoff',
-    endpoints: [{ title: 'Deduction rules', path: '/staff/payroll-adjustment-rules?kind=deduction' }],
+    endpoints: [
+      { title: 'Fine rules', path: '/staff/payroll-adjustment-rules?kind=fine' },
+      { title: 'Deduction rules', path: '/staff/payroll-adjustment-rules?kind=deduction' },
+    ],
+    actions: [
+      { label: 'Add fine rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=adjustments&kind=fine&create=1' },
+      { label: 'Add deduction rule', icon: 'bi-dash-circle', route: '/staff/payroll?tab=setup&section=adjustments&kind=deduction&create=1' },
+      { label: 'Apply staff fine', icon: 'bi-person-check', route: '/staff/attendance-summary' },
+    ],
   },
   'target-incentive': {
     key: 'target-incentive',
@@ -100,8 +113,9 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     icon: 'bi-bullseye',
     endpoints: [
       { title: 'Incentive rules', path: '/staff/incentive-rules' },
-      { title: 'Staff performance', path: '/staff/performance' },
+      { title: 'Staff performance', path: '/staff/performance?date_from={periodStart}&date_to={periodEnd}' },
     ],
+    actions: [{ label: 'Add incentive rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=incentives' }],
   },
   leaderboard: {
     key: 'leaderboard',
@@ -110,7 +124,7 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     icon: 'bi-trophy',
     endpoints: [
       { title: 'Command center ranking', path: '/staff-enterprise/command-center?{period}' },
-      { title: 'Staff performance', path: '/staff/performance' },
+      { title: 'Staff performance', path: '/staff/performance?date_from={periodStart}&date_to={periodEnd}' },
     ],
   },
   training: {
@@ -122,13 +136,29 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Training assignments', path: '/staff-enterprise/training' },
       { title: 'Coaching goals', path: '/staff/coach/goals' },
     ],
+    actions: [
+      { label: 'Assign training', icon: 'bi-plus-lg', postPath: '/staff-enterprise/training/assign', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'title', label: 'Training title' }, { key: 'priority', label: 'Priority', value: 'medium' }] },
+      { label: 'Add coaching goal', icon: 'bi-bullseye', postPath: '/staff/coach/goals', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'goalType', label: 'Goal type' }, { key: 'metricUnit', label: 'Metric unit' }, { key: 'targetValue', label: 'Target value' }, { key: 'dueDate', label: 'Due date YYYY-MM-DD', value: '{today}' }, { key: 'actionTitle', label: 'Action title' }, { key: 'priority', label: 'Priority', value: 'medium' }] },
+    ],
   },
   tasks: {
     key: 'tasks',
     eyebrow: 'Development',
     title: 'Tasks',
     icon: 'bi-list-check',
-    endpoints: [{ title: 'Staff tasks', path: '/staff/tasks' }],
+    endpoints: [
+      {
+        title: 'Service targets',
+        path: '/staff/service-targets',
+        columns: ['staffName', 'serviceName', 'targetCount', 'achievedCount', 'progressPercent', 'startsOn', 'endsOn', 'progressStatus', 'rewardType'],
+      },
+      {
+        title: 'Manual tasks',
+        path: '/staff/tasks',
+        columns: ['staffName', 'title', 'description', 'taskType', 'priority', 'dueAt', 'status', 'createdAt'],
+      },
+    ],
+    actions: [{ label: 'Add task', icon: 'bi-plus-lg', postPath: '/staff/tasks' }],
   },
   'mobile-preview': {
     key: 'mobile-preview',

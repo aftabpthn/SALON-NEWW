@@ -11,9 +11,15 @@ export class StaffOsStore {
     const period = new URLSearchParams({ periodStart, periodEnd }).toString();
     return Promise.all(view.endpoints.map(async (endpoint) => {
       try {
-        const value = await this.api.get<unknown>(endpoint.path.replace('{today}', today).replace('{period}', period));
+        const path = endpoint.path
+          .replace('{today}', today)
+          .replace('{periodStart}', periodStart)
+          .replace('{periodEnd}', periodEnd)
+          .replace('{period}', period);
+        const value = await this.api.get<unknown>(path);
         const rows = this.rows(value);
-        return { ...endpoint, rows, columns: this.columns(rows), summary: rows.length ? [] : this.summary(value) };
+        const columns = endpoint.columns?.filter((column) => rows.some((row) => column in row)) || this.columns(rows);
+        return { ...endpoint, rows, columns, summary: rows.length ? [] : this.summary(value) };
       } catch (error) {
         return { ...endpoint, rows: [], columns: [], summary: [], error: this.message(error) };
       }
@@ -23,6 +29,8 @@ export class StaffOsStore {
   post<T>(path: string, body: unknown) {
     return this.api.post<T>(path, body);
   }
+
+  get<T>(path: string) { return this.api.get<T>(path); }
 
   private rows(value: unknown): StaffOsRow[] {
     if (Array.isArray(value)) return value.filter((item) => item && typeof item === 'object') as StaffOsRow[];

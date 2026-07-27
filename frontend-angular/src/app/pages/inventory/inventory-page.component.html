@@ -41,7 +41,14 @@
         <select [attr.aria-label]="'inventory.ui.2dfbcefb7b' | translate" disabled><option>{{ 'inventory.ui.c74e4e7c5c' | translate }}</option></select>
         <button class="primary" type="button" (click)="reload()">{{ 'inventory.ui.cfea419c3b' | translate }}</button>
       }
-      @if (tab !== 'products' && tab !== 'ledger' && tab !== 'reorder' && tab !== 'valuation') {
+      @if (tab === 'reports') {
+        @if (reportView === 'expiry') {
+          <input type="number" min="1" max="3650" aria-label="Near-expiry window in days" [(ngModel)]="reportExpiryDays" (change)="refreshReportFilters()" />
+        }
+        <button type="button" (click)="reload()">Refresh</button>
+        <button class="primary" type="button" (click)="exportInventoryReport()">Export CSV</button>
+      }
+      @if (tab !== 'products' && tab !== 'ledger' && tab !== 'reorder' && tab !== 'valuation' && tab !== 'reports') {
         <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.cce7155371' | translate" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button>
       }
       @if (tab === 'suppliers') {
@@ -220,6 +227,81 @@
 </section>
 }
 
+@if (!loading && tab === 'reports') {
+  <nav class="report-tabs" aria-label="Inventory report type">
+    <button type="button" [class.active]="reportView === 'ageing'" (click)="selectReportView('ageing')">Inventory Ageing</button>
+    <button type="button" [class.active]="reportView === 'expiry'" (click)="selectReportView('expiry')">Near Expiry</button>
+    <button type="button" [class.active]="reportView === 'traceability'" (click)="selectReportView('traceability')">Batch Traceability</button>
+    <button type="button" [class.active]="reportView === 'variance'" (click)="selectReportView('variance')">Stock Variance</button>
+    <button type="button" [class.active]="reportView === 'suppliers'" (click)="selectReportView('suppliers')">Supplier Performance</button>
+  </nav>
+
+  @if (reportView === 'ageing') {
+    <section class="table-card">
+      <header class="register-head"><strong>Inventory Ageing</strong><span class="api-state">As of {{ date(reportAsOf) }}</span></header>
+      @if (reportAgeing.length) {
+        <table><thead><tr><th scope="col">Product</th><th scope="col">Batch</th><th scope="col">Received</th><th scope="col" class="numeric">Quantity</th><th scope="col" class="numeric">Age</th><th scope="col">Bucket</th><th scope="col" class="numeric">Stock value</th><th scope="col">Action</th></tr></thead>
+          <tbody>@for (row of reportAgeing; track row.inventoryItemId + row.batchNumber) {
+            <tr><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ date(row.receivedDate) }}</td><td class="numeric">{{ row.quantity }}</td><td class="numeric">{{ row.ageDays }} days</td><td><span class="status" [class.muted]="row.ageDays <= 30">{{ row.ageBucket }}</span></td><td class="numeric">{{ money(row.stockValuePaise) }}</td><td><button type="button" (click)="openProductById(row.inventoryItemId)">Product 360</button></td></tr>
+          }</tbody></table>
+      } @else { <div class="empty-state">No ageing stock found</div> }
+      <div class="register-count">Showing {{ reportAgeing.length }} active batches</div>
+    </section>
+  }
+
+  @if (reportView === 'expiry') {
+    <section class="table-card">
+      <header class="register-head"><strong>Near Expiry</strong><span class="api-state">{{ reportExpiryDays }} day window</span></header>
+      @if (reportNearExpiry.length) {
+        <table><thead><tr><th scope="col">Product</th><th scope="col">Batch</th><th scope="col">Expiry</th><th scope="col">Risk</th><th scope="col" class="numeric">Quantity</th><th scope="col" class="numeric">Risk value</th><th scope="col">Action</th></tr></thead>
+          <tbody>@for (row of reportNearExpiry; track row.inventoryItemId + row.batchNumber) {
+            <tr><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td>{{ date(row.expiryDate) }}</td><td><span class="status" [class.muted]="row.daysRemaining > 7">{{ row.daysRemaining < 0 ? 'Expired ' + (-row.daysRemaining) + ' days ago' : row.daysRemaining + ' days left' }}</span></td><td class="numeric">{{ row.quantity }}</td><td class="numeric">{{ money(row.riskValuePaise) }}</td><td><button type="button" (click)="openProductById(row.inventoryItemId)">Product 360</button></td></tr>
+          }</tbody></table>
+      } @else { <div class="empty-state">No expiring stock found</div> }
+      <div class="register-count">Expired batches are included</div>
+    </section>
+  }
+
+  @if (reportView === 'traceability') {
+    <section class="table-card">
+      <header class="register-head"><strong>Batch Traceability</strong><span class="api-state">Ledger evidence</span></header>
+      @if (reportTraceability.length) {
+        <table><thead><tr><th scope="col">Date</th><th scope="col">Product</th><th scope="col">Batch</th><th scope="col">Movement</th><th scope="col" class="numeric">Quantity</th><th scope="col">Source</th><th scope="col">Expiry</th><th scope="col">Action</th></tr></thead>
+          <tbody>@for (row of reportTraceability; track row.batchId + row.createdAt + row.sourceId) {
+            <tr><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.productName }}</strong></td><td>{{ row.batchNumber }}</td><td><span class="status">{{ row.movementType.replaceAll('_', ' ') }}</span></td><td class="numeric">{{ row.quantityDelta }}</td><td>{{ row.sourceType.replaceAll('_', ' ') }}<small>{{ row.sourceId || '—' }}</small></td><td>{{ date(row.expiryDate) }}</td><td><button type="button" (click)="openProductById(row.inventoryItemId)">Product 360</button></td></tr>
+          }</tbody></table>
+      } @else { <div class="empty-state">No batch-linked ledger evidence found</div> }
+      <div class="register-count">Showing {{ reportTraceability.length }} batch movements</div>
+    </section>
+  }
+
+  @if (reportView === 'variance') {
+    <section class="table-card">
+      <header class="register-head"><strong>Stock Variance</strong><span class="api-state">{{ reportAudit ? reportAudit.session.name + ' · ' + reportAudit.session.status : 'No audit' }}</span></header>
+      @if (reportVariance.length) {
+        <table><thead><tr><th scope="col">Product</th><th scope="col">SKU</th><th scope="col" class="numeric">Expected</th><th scope="col" class="numeric">Counted</th><th scope="col" class="numeric">Variance</th><th scope="col">Reason</th><th scope="col">Posted</th><th scope="col">Action</th></tr></thead>
+          <tbody>@for (row of reportVariance; track row.inventoryItemId) {
+            <tr><td><strong>{{ row.itemName }}</strong><small>{{ row.unit }}</small></td><td>{{ row.sku || '—' }}</td><td class="numeric">{{ row.expectedQuantity ?? '—' }}</td><td class="numeric">{{ row.approvedQuantity ?? '—' }}</td><td class="numeric"><strong>{{ row.varianceQuantity }}</strong></td><td>{{ row.varianceReason || '—' }}</td><td>{{ date(row.postedAt) }}</td><td><button type="button" (click)="openProductById(row.inventoryItemId)">Product 360</button></td></tr>
+          }</tbody></table>
+      } @else { <div class="empty-state">No variance in the latest stock audit</div> }
+      <div class="register-count">Latest audit only</div>
+    </section>
+  }
+
+  @if (reportView === 'suppliers') {
+    <section class="table-card">
+      <header class="register-head"><strong>Supplier Purchase / Return Performance</strong><span class="api-state">Live procurement data</span></header>
+      @if (reportSupplierPerformance.length) {
+        <table><thead><tr><th scope="col">Supplier</th><th scope="col" class="numeric">POs</th><th scope="col" class="numeric">Received</th><th scope="col" class="numeric">On-time</th><th scope="col" class="numeric">Fill rate</th><th scope="col" class="numeric">Returns</th><th scope="col" class="numeric">Return qty</th><th scope="col" class="numeric">Return value</th><th scope="col" class="numeric">Expiry risk</th><th scope="col">Last receipt</th></tr></thead>
+          <tbody>@for (row of reportSupplierPerformance; track row.supplierId) {
+            <tr><td><strong>{{ row.supplierName }}</strong><small>{{ row.returnReasons.join(', ') || 'No return reason' }}</small></td><td class="numeric">{{ row.purchaseOrders }}</td><td class="numeric">{{ row.receivedOrders }}</td><td class="numeric">{{ row.onTimeRateBps == null ? '—' : (row.onTimeRateBps / 100 | number:'1.0-2') + '%' }}</td><td class="numeric">{{ row.fillRateBps == null ? '—' : (row.fillRateBps / 100 | number:'1.0-2') + '%' }}</td><td class="numeric">{{ row.returnCount }}</td><td class="numeric">{{ row.returnedQuantity }}</td><td class="numeric">{{ money(row.returnedValuePaise) }}</td><td class="numeric">{{ money(row.expiryRiskValuePaise) }}</td><td>{{ date(row.lastReceiptDate) }}</td></tr>
+          }</tbody></table>
+      } @else { <div class="empty-state">No supplier records yet</div> }
+      <div class="register-count">Showing {{ reportSupplierPerformance.length }} suppliers</div>
+    </section>
+  }
+}
+
 @if (!loading && tab === 'suppliers') {
   <section class="table-card">
     @if (suppliers.length) {
@@ -279,9 +361,9 @@
 @if (!loading && tab === 'grn') {
   <section class="table-card">
     @if (filteredReceipts.length) {
-      <table><thead><tr><th>{{ 'inventory.ui.7917c7e686' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.da7751f5fa' | translate }}</th><th>{{ 'inventory.ui.254500c364' | translate }}</th><th>{{ 'inventory.ui.addd568c75' | translate }}</th><th>{{ 'inventory.ui.d6d11f54ee' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th></th></tr></thead>
+      <table><thead><tr><th>GRR</th><th>{{ 'inventory.ui.7917c7e686' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.254500c364' | translate }}</th><th>Invoice date</th><th>{{ 'inventory.ui.addd568c75' | translate }}</th><th>{{ 'inventory.ui.d6d11f54ee' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th></th></tr></thead>
       <tbody>@for (row of filteredReceipts; track row) {
-        <tr><td>{{ date(row.receivedDate) }}</td><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.supplierGstin || 'â€”' }}</td><td>{{ row.supplierInvoiceNumber }}</td><td>{{ money(row.taxablePaise) }}</td><td>{{ money(receiptGst(row)) }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td class="actions"><button type="button" (click)="openReturn(row)">{{ 'inventory.ui.24f096b221' | translate }}</button></td></tr>
+        <tr><td><strong>{{ row.grrNumber }}</strong></td><td>{{ date(row.receivedDate) }}</td><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.supplierInvoiceNumber }}</td><td>{{ date(row.supplierInvoiceDate) }}</td><td>{{ money(row.taxablePaise) }}</td><td>{{ money(receiptGst(row)) }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td class="actions"><button type="button" (click)="openReturn(row)">{{ 'inventory.ui.24f096b221' | translate }}</button></td></tr>
       }</tbody>
     </table>
   } @else {
@@ -364,6 +446,9 @@
             @if (!productEditing) {
               <div class="product-detail-grid">
                 <article><h3>{{ 'inventory.ui.d8e528cb29' | translate }}</h3><span>{{ 'inventory.ui.2ee762355b' | translate }}<b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>{{ 'inventory.ui.1e19570fd7' | translate }}<b>{{ detail.product.reorderPoint }}</b></span><span>{{ 'inventory.ui.b16e07e0bb' | translate }}<b>{{ money(detail.product.unitCostPaise) }}</b></span><span>{{ 'inventory.ui.8e54dc5331' | translate }}<b>{{ detail.product.barcode || 'â€”' }}</b></span><span>{{ 'inventory.ui.e81a151bd0' | translate }}<b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
+                @if (detail.product.dualUseStock) {
+                  <article><h3>Retail / Backbar stock</h3><span>Retail shelf<b>{{ detail.retailShelfQuantity }}</b></span><span>Sealed backbar<b>{{ detail.sealedBackbarQuantity }}</b></span><span>Open balance<b>{{ detail.openContainerBalance }} {{ detail.openContainerUnit || '' }}</b></span></article>
+                }
                 <article><h3>{{ 'inventory.ui.a15bee906f' | translate }}</h3><span>{{ 'inventory.ui.4ef0b969c5' | translate }}<b>{{ date(detail.lastMovementAt) }}</b></span><span>{{ 'inventory.ui.93aed629f5' | translate }}<b>{{ detail.stockInQuantity }}</b></span><span>{{ 'inventory.ui.5fab075b84' | translate }}<b>{{ detail.stockOutQuantity }}</b></span></article>
                 <article><h3>{{ 'inventory.ui.575453a8ed' | translate }}</h3><span>{{ 'inventory.ui.659441cf5b' | translate }}<b>{{ date(detail.lastReceiptDate) }}</b></span><span>{{ 'inventory.ui.55edd46287' | translate }}<b>{{ detail.lastSupplier || 'â€”' }}</b></span></article>
                 <article><h3>{{ 'inventory.ui.c4e5d383ad' | translate }}</h3><span>{{ 'inventory.ui.9fb1092f32' | translate }}<b>{{ detail.recipeCount }}</b></span><span>{{ 'inventory.ui.cf12704be3' | translate }}<b>{{ detail.consumedQuantity }}</b></span></article>
@@ -414,6 +499,7 @@
               <label>{{ 'inventory.ui.a24e739437' | translate }}<input maxlength="8" [(ngModel)]="productDraft.hsnCode" name="productHsn" /></label>
               <label>{{ 'inventory.ui.8e54dc5331' | translate }}<input maxlength="120" [(ngModel)]="productDraft.barcode" name="productBarcode" /></label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.batchTracked" name="productBatchTracked" />{{ 'inventory.ui.084c5a5702' | translate }}</label>
+              <label class="check span-2"><input type="checkbox" [(ngModel)]="productDraft.dualUseStock" name="productDualUseStock" />Same SKU is sold at retail and used in backbar</label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.active" name="productActive" />{{ 'inventory.ui.a733b809d2' | translate }}</label>
             </form>
           }
@@ -485,6 +571,8 @@
           <option [value]="row.id" [disabled]="!row.active">{{ row.name }}</option>
         }</select></label>
         <label>{{ 'inventory.ui.0b941ea96a' | translate }}<as-date-picker [(value)]="orderDraft.expectedDate" ariaLabel="Expected date"></as-date-picker></label>
+        <label>Shipping charges<input type="number" min="0" step="0.01" [(ngModel)]="orderDraft.shippingRupees" name="orderShipping" /></label>
+        <label>Handling charges<input type="number" min="0" step="0.01" [(ngModel)]="orderDraft.handlingRupees" name="orderHandling" /></label>
         <label class="span-2">{{ 'inventory.ui.70440046a3' | translate }}<textarea maxlength="500" [(ngModel)]="orderDraft.notes" name="notes"></textarea></label>
         <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: orderDraft.lines, kind: 'order' }"></ng-container>
         @if (orderOptimizations.length) {
@@ -512,8 +600,14 @@
         <option [value]="row.id">{{ row.name }}</option>
       }</select></label>
       <label>{{ 'inventory.ui.ba03aa8b94' | translate }}<input required maxlength="120" [(ngModel)]="grnDraft.invoiceNumber" name="invoice" /></label>
+      <label>Supplier invoice date<as-date-picker required [(value)]="grnDraft.invoiceDate" ariaLabel="Supplier invoice date"></as-date-picker></label>
       <label>{{ 'inventory.ui.846c9eede1' | translate }}<as-date-picker [(value)]="grnDraft.receivedDate" ariaLabel="Received date"></as-date-picker></label>
       <label>{{ 'inventory.ui.4c1aeebc43' | translate }}<as-date-picker [(value)]="grnDraft.dueDate" ariaLabel="Due date"></as-date-picker></label>
+      <label>Challan number<input maxlength="120" [(ngModel)]="grnDraft.challanNumber" name="challanNumber" /></label>
+      <label>Delivery reference<input maxlength="120" [(ngModel)]="grnDraft.deliveryReference" name="deliveryReference" /></label>
+      <label>Shipping charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.shippingRupees" name="grnShipping" /></label>
+      <label>Handling charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.handlingRupees" name="grnHandling" /></label>
+      <div class="receiving-scan span-2"><label>Scan product barcode<input maxlength="160" autocomplete="off" [(ngModel)]="grnScanCode" name="grnScanCode" (keyup.enter)="$event.preventDefault(); scanGrnBarcode()" /></label><button type="button" [disabled]="grnScanBusy || !grnScanCode.trim()" (click)="scanGrnBarcode()">{{ grnScanBusy ? 'Matching' : 'Receive scan' }}</button></div>
       <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: grnDraft.lines, kind: 'grn' }"></ng-container>
     </form>
   }
@@ -573,9 +667,20 @@
         <label>{{ 'inventory.ui.ecdda59aea' | translate }}<select required [(ngModel)]="line.inventoryItemId" (ngModelChange)="syncItem(line)" [name]="kind + 'Item' + i" [disabled]="!!grnDraft.purchaseOrderId && kind === 'grn'"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of items; track item) {
         <option [value]="item.id">{{ item.name }} Â· {{ item.sku }}</option>
       }</select></label>
-      <label>{{ 'inventory.ui.44f6af6945' | translate }}<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="kind + 'Qty' + i" /></label>
+      <label>{{ kind === 'grn' ? 'Delivered quantity' : ('inventory.ui.44f6af6945' | translate) }}<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="kind + 'Qty' + i" /></label>
       <label>{{ 'inventory.ui.6e51fd9150' | translate }}<input required type="number" min="0" step="0.01" [(ngModel)]="line.unitCostRupees" [name]="kind + 'Cost' + i" /></label>
+      <label>Line discount %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="line.discountPercent" [name]="kind + 'Discount' + i" /></label>
       <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input required type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="kind + 'Gst' + i" /></label>
+      @if (kind === 'grn') {
+        <label>Damaged quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.damagedQuantity" [name]="kind + 'Damaged' + i" /></label>
+        <label>Rejected quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.rejectedQuantity" [name]="kind + 'Rejected' + i" /></label>
+        @if (line.orderedRemaining !== undefined) {
+          <div class="receiving-variance">Ordered <b>{{ line.orderedRemaining }}</b> · Received <b>{{ line.quantity || 0 }}</b> · Accepted <b>{{ accepted(line) }}</b> · Rejected <b>{{ line.rejectedQuantity || 0 }}</b> · Quarantine <b>{{ line.damagedQuantity || 0 }}</b> · Short <b>{{ short(line) }}</b> · Excess <b>{{ excess(line) }}</b></div>
+        }
+        @if (short(line) || excess(line) || (line.damagedQuantity || 0) > 0 || (line.rejectedQuantity || 0) > 0) {
+          <label>Variance reason<input maxlength="500" [required]="excess(line) > 0 || (line.damagedQuantity || 0) > 0 || (line.rejectedQuantity || 0) > 0" [(ngModel)]="line.varianceReason" [name]="kind + 'VarianceReason' + i" /></label>
+        }
+      }
       @if (kind === 'grn' && isBatchTracked(line.inventoryItemId)) {
         <label>{{ 'inventory.ui.aa1adff3c6' | translate }}<input required maxlength="120" [(ngModel)]="line.batchNumber" [name]="kind + 'Batch' + i" /></label><label>{{ 'inventory.ui.857fd509fe' | translate }}<input maxlength="120" [(ngModel)]="line.batchBarcode" [name]="kind + 'Barcode' + i" /></label><label>{{ 'inventory.ui.6b440cd506' | translate }}<as-date-picker [(value)]="line.expiryDate" [ariaLabel]="'Expiry date line ' + (i + 1)"></as-date-picker></label>
       }

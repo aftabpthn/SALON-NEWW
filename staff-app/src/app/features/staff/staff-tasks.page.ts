@@ -1,20 +1,39 @@
 import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffToday } from "../../core/staff-app.service";
+import { PaiseInrPipe } from "../../core/paise-inr.pipe";
+import { isQueuedMutation, MutationResult, StaffAppService, StaffServiceTarget, StaffToday } from "../../core/staff-app.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [DatePipe, StaffPageStateComponent],
+  imports: [DatePipe, PaiseInrPipe, StaffPageStateComponent],
   template: `
     <section class="page">
-      <header class="page-head"><div><p class="eyebrow">Tasks</p><h1>Task management</h1><p>Assigned checklist and completion workspace.</p></div></header>
+      <header class="page-head"><div><p class="eyebrow">Tasks</p><h1>Tasks</h1></div></header>
       @if (!canReadTasks()) { <section staffPageState class="notice">You do not have permission to read staff tasks.</section> }
       @if (loading()) { <section staffPageState class="state" [loading]="true">Loading tasks...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
       @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (canReadTasks() && today(); as data) {
+        @if (serviceTargets().length) {
+          <section class="panel target-panel">
+            <div class="panel-title"><h2>Service targets</h2><span>{{ serviceTargets().length }}</span></div>
+            <div class="target-grid">
+              @for (target of serviceTargets(); track target.id) {
+                <article class="target-card">
+                  <div class="target-card-head"><div><strong>{{ target.serviceName }}</strong><small>{{ target.startsOn | date:'dd/MM/yyyy' }} - {{ target.endsOn | date:'dd/MM/yyyy' }}</small></div><span class="badge" [class.green]="target.progressStatus === 'completed'">{{ target.progressStatus }}</span></div>
+                  <div class="target-score"><strong>{{ target.achievedCount }}/{{ target.targetCount }}</strong><span>{{ target.progressPercent }}%</span></div>
+                  <div class="target-progress" role="progressbar" [attr.aria-valuenow]="target.progressPercent" aria-valuemin="0" aria-valuemax="100"><i [style.width.%]="target.progressPercent"></i></div>
+                  <div class="target-ticks" [attr.aria-label]="target.achievedCount + ' of ' + target.targetCount + ' completed'">
+                    @for (tick of targetTicks(target); track $index) { <span [class.done]="$index < target.achievedCount">{{ $index < target.achievedCount ? '✓' : '' }}</span> }
+                  </div>
+                  @if (target.rewardType !== 'none') { <p class="target-reward"><b>Reward:</b> {{ target.rewardType === 'bonus' ? (target.rewardAmountPaise | paiseInr) : target.rewardDescription }}</p> }
+                </article>
+              }
+            </div>
+          </section>
+        }
         <section class="grid four"><article class="kpi"><span>Today</span><strong>{{ data.tasks.length }}</strong></article><article class="kpi"><span>Open</span><strong>{{ taskCount('open') }}</strong></article><article class="kpi"><span>In progress</span><strong>{{ taskCount('in_progress') }}</strong></article><article class="kpi"><span>Done</span><strong>{{ taskCount('completed') }}</strong></article></section>
         <section class="kanban-board">
           @for (column of columns; track column.status) {
@@ -35,6 +54,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 })
 export class StaffTasksPage implements OnInit {
   readonly today = signal<StaffToday | null>(null);
+  readonly serviceTargets = signal<StaffServiceTarget[]>([]);
   readonly loading = signal(false);
   readonly message = signal("");
   readonly localError = signal("");
@@ -43,11 +63,12 @@ export class StaffTasksPage implements OnInit {
   readonly columns = [{ label: "Open", status: "open" }, { label: "In Progress", status: "in_progress" }, { label: "Done", status: "completed" }];
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadTasks()) void this.load(); }
-  async load() { this.loading.set(true); try { this.today.set(await this.staff.today()); } finally { this.loading.set(false); } }
-  canReadTasks(): boolean { return this.staff.hasPermission("read:staff"); }
-  canUpdateTasks(): boolean { return this.staff.hasAnyPermission(["write:staff", "update:staff"]); }
+  async load() { this.loading.set(true); try { const [today, targets] = await Promise.all([this.staff.today(), this.staff.serviceTargets()]); this.today.set(today); this.serviceTargets.set(targets); } finally { this.loading.set(false); } }
+  canReadTasks(): boolean { return this.staff.hasPermission("staff.app.tasks.read"); }
+  canUpdateTasks(): boolean { return this.staff.hasPermission("staff.app.tasks.manage"); }
   taskCount(status: string): number { return this.tasksByStatus(status).length; }
   tasksByStatus(status: string) { return (this.today()?.tasks || []).filter((task) => status === "open" ? !task.status || task.status === "open" : task.status === status); }
+  targetTicks(target: StaffServiceTarget): number[] { return Array.from({ length: Math.min(target.targetCount, 30) }); }
   dragTask(id: string, version: number) { this.draggedTask.set({ id, version }); }
   async dropTask(status: string) { const task = this.draggedTask(); if (!task || !this.canUpdateTasks()) return; await this.mutateTask(task.id, () => this.staff.moveTask(task.id, task.version, status), `Task moved to ${status.replace(/_/g, " ")}.`); this.draggedTask.set(null); }
   async moveTask(taskId: string, version: number, status: string) { await this.mutateTask(taskId, () => this.staff.moveTask(taskId, version, status), `Task moved to ${status.replace(/_/g, " ")}.`); }
@@ -62,6 +83,7 @@ export class StaffTasksPage implements OnInit {
       if (isQueuedMutation(result)) { this.message.set(`Offline task change queued for sync (${result.queueId}).`); return; }
       this.message.set(completedMessage);
       await this.load();
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:tasks-updated"));
     } catch { this.localError.set(this.staff.error() || "Unable to update the task."); }
     finally { this.pendingTaskId.set(""); }
   }

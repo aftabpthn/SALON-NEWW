@@ -16,12 +16,13 @@ use crate::{
             BiometricConsentRecord, BiometricDeviceRecord, BiometricEventRecord,
             BiometricGatewayRecord, BiometricMappingRecord, IncentiveRuleRecord,
             MobilePayrollSummary, PayrollAdjustmentRuleRecord, PayrollStructureRecord,
-            StaffMobileConflictRecord, StaffTaskCommentRecord, StaffTaskRecord,
+            StaffMobileConflictRecord, StaffServiceTargetRecord, StaffTaskCommentRecord,
+            StaffTaskRecord,
         },
     },
     routes::context::tenant_branch,
     services::{
-        auth_service::AuthClaims,
+        auth_service::{self, AuthClaims},
         staff_advanced_service::{
             self, BiometricConsentRequest, BiometricDeviceRequest, BiometricEventRequest,
             BiometricGatewayRegistration, BiometricGatewayRequest, BiometricMappingRequest,
@@ -29,7 +30,7 @@ use crate::{
             MobileDeviceRegistration, MobileDeviceRequest, MobilePushSubscriptionRequest,
             MobileSyncRequest, MobileSyncResponse, MobileTodayResponse,
             PayrollAdjustmentRuleRequest, PayrollStructureRequest, SelfPushSubscriptionRequest,
-            StaffPerformanceResponse, StaffTaskRequest,
+            StaffPerformanceResponse, StaffServiceTargetRequest, StaffTaskRequest,
         },
         staff_enterprise_service,
     },
@@ -60,6 +61,14 @@ pub fn router() -> Router<AppState> {
             get(get_payroll_structure).put(save_payroll_structure),
         )
         .route("/staff/tasks", get(list_tasks).post(create_task))
+        .route(
+            "/staff/service-targets",
+            get(list_service_targets).post(create_service_targets),
+        )
+        .route(
+            "/staff/self/service-targets",
+            get(list_self_service_targets),
+        )
         .route("/staff/tasks/:id", axum::routing::patch(update_task))
         .route("/staff/self/targets", get(get_self_targets))
         .route("/staff/self/mobile/push-config", get(get_self_push_config))
@@ -339,7 +348,7 @@ async fn list_adjustment_rules(
     headers: HeaderMap,
     Query(query): Query<AdjustmentQuery>,
 ) -> ApiResult<Vec<PayrollAdjustmentRuleRecord>> {
-    ensure_payroll_access(&claims)?;
+    ensure_payroll_read_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rows = staff_advanced_service::list_adjustment_rules(
         &state.db,
@@ -358,7 +367,7 @@ async fn create_adjustment_rule(
     headers: HeaderMap,
     Json(payload): Json<PayrollAdjustmentRuleRequest>,
 ) -> ApiResult<PayrollAdjustmentRuleRecord> {
-    ensure_payroll_access(&claims)?;
+    ensure_payroll_manage_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_advanced_service::create_adjustment_rule(
         &state.db,
@@ -386,7 +395,7 @@ async fn update_adjustment_rule(
     Path(id): Path<String>,
     Json(payload): Json<PayrollAdjustmentRuleRequest>,
 ) -> ApiResult<PayrollAdjustmentRuleRecord> {
-    ensure_payroll_access(&claims)?;
+    ensure_payroll_manage_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_advanced_service::update_adjustment_rule(
         &state.db, &tenant_id, &branch_id, &id, payload,
@@ -408,7 +417,7 @@ async fn get_payroll_structure(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Option<PayrollStructureRecord>> {
-    ensure_payroll_access(&claims)?;
+    ensure_payroll_read_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row =
         staff_advanced_service::get_payroll_structure(&state.db, &tenant_id, &branch_id).await?;
@@ -421,7 +430,7 @@ async fn save_payroll_structure(
     headers: HeaderMap,
     Json(payload): Json<PayrollStructureRequest>,
 ) -> ApiResult<PayrollStructureRecord> {
-    ensure_payroll_access(&claims)?;
+    ensure_payroll_manage_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_advanced_service::save_payroll_structure(
         &state.db,
@@ -943,6 +952,75 @@ async fn create_task(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn list_service_targets(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<TaskQuery>,
+) -> ApiResult<Vec<StaffServiceTargetRecord>> {
+    ensure_read_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_advanced_service::list_service_targets(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.staff_id.as_deref().unwrap_or(""),
+        query.status.as_deref().unwrap_or(""),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_service_targets(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffServiceTargetRequest>,
+) -> ApiResult<Vec<StaffServiceTargetRecord>> {
+    ensure_manager_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_advanced_service::create_service_targets(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    for row in &rows {
+        audit(
+            &state,
+            &claims,
+            &branch_id,
+            "staff.service_target.created",
+            &row.id,
+        )
+        .await;
+    }
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn list_self_service_targets(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<StaffServiceTargetRecord>> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.tasks.read",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let rows = staff_advanced_service::list_service_targets(
+        &state.db, &tenant_id, &branch_id, &staff_id, "",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
 async fn update_task(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -963,7 +1041,11 @@ async fn get_self_targets(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<IncentiveRuleRecord>> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.tasks.read",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -977,7 +1059,11 @@ async fn get_self_push_config(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
 ) -> ApiResult<SelfPushConfigResponse> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.notifications.read",
+        &["notifications.read", "staff.self_manage"],
+    )?;
     let public_key = state
         .settings
         .mobile_push_public_key
@@ -995,7 +1081,11 @@ async fn register_self_push_device(
     headers: HeaderMap,
     Json(payload): Json<SelfPushDeviceRequest>,
 ) -> ApiResult<crate::repositories::staff_advanced_repository::StaffMobileDeviceRecord> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.notifications.read",
+        &["notifications.read", "staff.self_manage"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -1018,7 +1108,11 @@ async fn save_self_push_subscription(
     headers: HeaderMap,
     Json(payload): Json<SelfPushSubscriptionRequest>,
 ) -> ApiResult<crate::repositories::staff_advanced_repository::MobilePushSubscriptionRecord> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.notifications.read",
+        &["notifications.read", "staff.self_manage"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -1042,7 +1136,11 @@ async fn update_self_task_status(
     Path(id): Path<String>,
     Json(payload): Json<SelfTaskStatusRequest>,
 ) -> ApiResult<StaffTaskRecord> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.tasks.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -1075,7 +1173,11 @@ async fn update_self_schedule(
     Path(schedule_id): Path<String>,
     Json(payload): Json<SelfScheduleUpdateRequest>,
 ) -> ApiResult<serde_json::Value> {
-    ensure_mobile_access(&claims)?;
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.calendar.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -1231,12 +1333,65 @@ fn ensure_manager_access(claims: &AuthClaims) -> Result<(), AppError> {
     ensure_role(claims, &["owner", "admin", "manager"])
 }
 
-fn ensure_payroll_access(claims: &AuthClaims) -> Result<(), AppError> {
-    ensure_role(claims, &["owner", "admin", "accountant"])
+fn ensure_payroll_read_access(claims: &AuthClaims) -> Result<(), AppError> {
+    ensure_payroll_permission(
+        claims,
+        &["owner", "admin", "accountant"],
+        &["staff.payroll.read", "staff.payroll.manage"],
+    )
+}
+
+fn ensure_payroll_manage_access(claims: &AuthClaims) -> Result<(), AppError> {
+    ensure_payroll_permission(
+        claims,
+        &["owner", "admin", "accountant"],
+        &["staff.payroll.manage"],
+    )
+}
+
+fn ensure_payroll_permission(
+    claims: &AuthClaims,
+    roles: &[&str],
+    permissions: &[&str],
+) -> Result<(), AppError> {
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|denied| permissions.iter().any(|permission| denied.as_str() == *permission));
+    if !denied
+        && (roles
+            .iter()
+            .any(|role| role.eq_ignore_ascii_case(&claims.role))
+            || claims
+                .permissions
+                .iter()
+                .any(|allowed| permissions.iter().any(|permission| allowed.as_str() == *permission)))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("staff advanced access is restricted"))
+    }
 }
 
 fn ensure_mobile_access(claims: &AuthClaims) -> Result<(), AppError> {
     ensure_role(claims, &["owner", "admin", "manager", "staff"])
+}
+
+fn ensure_staff_app_access(
+    claims: &AuthClaims,
+    permission: &str,
+    legacy_permissions: &[&str],
+) -> Result<(), AppError> {
+    if auth_service::staff_app_permission_allowed(
+        claims,
+        permission,
+        &["owner", "admin", "manager", "staff"],
+        legacy_permissions,
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("Staff App permission is required"))
+    }
 }
 
 fn ensure_role(claims: &AuthClaims, roles: &[&str]) -> Result<(), AppError> {

@@ -2834,8 +2834,7 @@ mod tests {
         automation_candidates, branch_return_tracker, bulk_import, create_form_definition,
         create_form_submission, create_note, delete_treatment_photo, get_clinical_profile,
         get_treatment_photo, list_communications, list_form_definitions, list_notes,
-        memory_relationships, save_clinical_profile, save_treatment_photo,
-        update_treatment_photo,
+        memory_relationships, save_clinical_profile, save_treatment_photo, update_treatment_photo,
     };
     use chrono::{DateTime, Utc};
     use serde_json::json;
@@ -3255,16 +3254,16 @@ mod tests {
         assert_eq!(type_only.caption, "After service, redone");
         assert_eq!(type_only.photo_type, "other");
 
-        assert!(
-            !delete_treatment_photo(&pool, "tenant-1", "branch-2", "client-1", &photo.id, "owner-1")
-                .await
-                .unwrap()
-        );
-        assert!(
-            delete_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id, "owner-1")
-                .await
-                .unwrap()
-        );
+        assert!(!delete_treatment_photo(
+            &pool, "tenant-1", "branch-2", "client-1", &photo.id, "owner-1"
+        )
+        .await
+        .unwrap());
+        assert!(delete_treatment_photo(
+            &pool, "tenant-1", "branch-1", "client-1", &photo.id, "owner-1"
+        )
+        .await
+        .unwrap());
         assert!(
             get_treatment_photo(&pool, "tenant-1", "branch-1", "client-1", &photo.id)
                 .await

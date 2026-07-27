@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
 import { AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
-import { LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
+import { LANGUAGE_OPTIONS, LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
 
@@ -37,6 +37,7 @@ export class AppHeaderComponent implements OnInit {
   languageMenuOpen = false;
   languageSaving = false;
   languageError = '';
+  readonly languageOptions = LANGUAGE_OPTIONS;
   assistantOpen = false;
   assistantBusy = false;
   assistantError = '';
@@ -59,8 +60,9 @@ export class AppHeaderComponent implements OnInit {
 
   get languageLabel(): string {
     const preferences = this.language.preferences();
-    if (preferences.mode === 'bilingual') return 'English + हिन्दी';
-    return preferences.primary === 'hi-IN' ? 'हिन्दी' : 'English';
+    const primary = this.languageName(preferences.primary);
+    if (preferences.mode !== 'bilingual' || !preferences.secondary) return primary;
+    return `${primary} + ${this.languageName(preferences.secondary)}`;
   }
 
   get filteredBranches(): AuthBranchAccess[] {
@@ -102,6 +104,10 @@ export class AppHeaderComponent implements OnInit {
     } finally {
       this.languageSaving = false;
     }
+  }
+
+  languageName(code: string): string {
+    return this.languageOptions.find((option) => option.code === code)?.label ?? code;
   }
 
   toggleBranchMenu(): void {

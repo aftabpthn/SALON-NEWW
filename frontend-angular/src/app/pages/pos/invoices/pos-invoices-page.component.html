@@ -29,6 +29,24 @@
   <main class="invoice-workspace" [class.full-invoice-workspace]="fullView && selected">
     @if (!fullView) {
       <section class="invoice-register">
+      <div class="register-filters" aria-label="Invoice filters">
+        <input type="search" [(ngModel)]="searchText" name="invoiceSearch" placeholder="Invoice, client or phone" (keyup.enter)="applyFilters()" />
+        <select [(ngModel)]="statusFilter" name="invoiceStatus" (change)="applyFilters()">
+          <option value="">All statuses</option>
+          <option value="finalized">Finalized</option>
+          <option value="open">Open</option>
+          <option value="voided">Voided</option>
+          <option value="refunded">Refunded</option>
+        </select>
+        <select [(ngModel)]="paymentMethodFilter" name="paymentMethod" (change)="applyFilters()">
+          <option value="">All payment modes</option>
+          @for (mode of paymentMethods; track mode.code) {
+            <option [value]="mode.code">{{ mode.label }}</option>
+          }
+        </select>
+        <button type="button" (click)="applyFilters()">Apply</button>
+        <button type="button" (click)="resetFilters()">Reset</button>
+      </div>
       <div class="table-head"><span>Invoice</span><span>Date</span><span>Client</span><span>Staff</span><span>Payment mode</span><span>Payment status</span><span>Total</span><span>{{ paidColumnLabel() }}</span><span>Due</span><span>Invoice status</span></div>
       @for (invoice of visibleInvoices; track trackByInvoice($index, invoice)) {
         <div class="invoice-row" [class.selected]="selected?.id === invoice.id">

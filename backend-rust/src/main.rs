@@ -31,16 +31,26 @@ async fn main() -> Result<()> {
         .await
         .context("Unable to initialize PostgreSQL pool")?;
 
+    services::staff_payroll_service::protect_legacy_statutory_pii(
+        &db,
+        settings.security_encryption_key.as_deref(),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("Unable to protect statutory PII: {}", error.message()))?;
+
     if std::env::args().any(|arg| arg == "--migrate-only") {
         tracing::info!("database migrations completed");
         db.close().await;
         return Ok(());
     }
 
-    tokio::time::timeout(Duration::from_secs(5), sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&db))
-        .await
-        .context("Database readiness check timed out")?
-        .context("Database readiness check failed")?;
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&db),
+    )
+    .await
+    .context("Database readiness check timed out")?
+    .context("Database readiness check failed")?;
 
     let redis = infrastructure::cache::create_client(&settings.redis_url)
         .await
@@ -357,5 +367,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-

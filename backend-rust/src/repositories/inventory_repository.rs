@@ -40,6 +40,7 @@ pub struct InventoryRecord {
     pub gst_percent: i32,
     pub barcode: String,
     pub batch_tracked: bool,
+    pub dual_use_stock: bool,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -131,6 +132,10 @@ pub struct InventoryProduct360Summary {
     pub last_supplier: Option<String>,
     pub recipe_count: i64,
     pub consumed_quantity: i64,
+    pub retail_shelf_quantity: i64,
+    pub sealed_backbar_quantity: i64,
+    pub open_container_balance: i64,
+    pub open_container_unit: Option<String>,
 }
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
@@ -168,6 +173,7 @@ pub struct BackbarUsageRecord {
     pub item_name: String,
     pub client_id: Option<String>,
     pub appointment_id: Option<String>,
+    pub client_name: String,
     pub service_id: Option<String>,
     pub service_name: String,
     pub staff_id: Option<String>,
@@ -192,6 +198,7 @@ pub struct BackbarUsageForReview {
     pub id: String,
     pub inventory_item_id: String,
     pub actual_quantity: i32,
+    pub actor_user_id: String,
     pub status: String,
 }
 
@@ -209,6 +216,7 @@ pub struct CreateInventory<'a> {
     pub gst_percent: i32,
     pub barcode: &'a str,
     pub batch_tracked: bool,
+    pub dual_use_stock: bool,
     pub active: bool,
 }
 
@@ -226,6 +234,7 @@ pub struct UpdateInventory<'a> {
     pub gst_percent: Option<i32>,
     pub barcode: Option<&'a str>,
     pub batch_tracked: Option<bool>,
+    pub dual_use_stock: Option<bool>,
     pub active: Option<bool>,
 }
 
@@ -704,7 +713,26 @@ pub async fn product_360_summary(
              AND line.tenant_id=ledger.tenant_id AND line.branch_id=ledger.branch_id
             WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
               AND ledger.inventory_item_id=$3 AND ledger.movement_type='sale'
-              AND line.line_type='service'), 0)::BIGINT AS consumed_quantity
+              AND line.line_type='service'), 0)::BIGINT AS consumed_quantity,
+          COALESCE((SELECT CASE WHEN item.dual_use_stock THEN GREATEST(item.stock_quantity-
+              (SELECT COUNT(*)::INTEGER FROM inventory_backbar_containers container
+               WHERE container.tenant_id=$1 AND container.branch_id=$2
+                 AND container.inventory_item_id=$3 AND container.status='sealed'),0)
+            ELSE item.stock_quantity END::BIGINT
+           FROM inventory_items item
+           WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$3),0)::BIGINT AS retail_shelf_quantity,
+          (SELECT COUNT(*)::BIGINT FROM inventory_backbar_containers container
+           WHERE container.tenant_id=$1 AND container.branch_id=$2
+             AND container.inventory_item_id=$3 AND container.status='sealed') AS sealed_backbar_quantity,
+          COALESCE((SELECT SUM(container.remaining_quantity)::BIGINT
+           FROM inventory_backbar_containers container
+           WHERE container.tenant_id=$1 AND container.branch_id=$2
+             AND container.inventory_item_id=$3 AND container.status='open'),0)::BIGINT AS open_container_balance,
+          (SELECT CASE WHEN COUNT(DISTINCT container.unit)=1 THEN MIN(container.unit)
+                  WHEN COUNT(*)=0 THEN NULL ELSE 'mixed' END
+           FROM inventory_backbar_containers container
+           WHERE container.tenant_id=$1 AND container.branch_id=$2
+             AND container.inventory_item_id=$3 AND container.status='open') AS open_container_unit
         "#,
     )
     .bind(tenant_id)
@@ -722,12 +750,12 @@ pub async fn create(
         r#"
         INSERT INTO inventory_items (
           tenant_id, branch_id, sku, name, category, unit,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, active
+          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING
           id, tenant_id, branch_id, sku, name, category, unit,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, active, created_at, updated_at
+          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -743,6 +771,7 @@ pub async fn create(
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
+    .bind(input.dual_use_stock)
     .bind(input.active)
     .fetch_one(db)
     .await
@@ -766,12 +795,13 @@ pub async fn update(
           gst_percent = COALESCE($11, gst_percent),
           barcode = COALESCE($12, barcode),
           batch_tracked = COALESCE($13, batch_tracked),
-          active = COALESCE($14, active),
+          dual_use_stock = COALESCE($14, dual_use_stock),
+          active = COALESCE($15, active),
           updated_at = NOW()
         WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
         RETURNING
           id, tenant_id, branch_id, sku, name, category, unit,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, active, created_at, updated_at
+          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -787,6 +817,7 @@ pub async fn update(
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
+    .bind(input.dual_use_stock)
     .bind(input.active)
     .fetch_optional(&mut **tx)
     .await
@@ -936,6 +967,8 @@ pub async fn list_backbar_usage(
     branch_id: &str,
     business_date: Option<NaiveDate>,
     staff_id: &str,
+    client_id: &str,
+    appointment_id: &str,
     limit: i64,
 ) -> Result<Vec<BackbarUsageRecord>, sqlx::Error> {
     sqlx::query_as(
@@ -943,6 +976,7 @@ pub async fn list_backbar_usage(
         WITH usage AS (
           SELECT usage.id, usage.inventory_item_id, item.name AS item_name,
                  usage.client_id, usage.appointment_id,
+                 COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                  usage.service_id, COALESCE(service.name, '') AS service_name,
                  usage.staff_id,
                  COALESCE(NULLIF(staff.appointment_display_name, ''),
@@ -956,6 +990,8 @@ pub async fn list_backbar_usage(
           FROM inventory_backbar_usage usage
           JOIN inventory_items item ON item.id=usage.inventory_item_id
             AND item.tenant_id=usage.tenant_id AND item.branch_id=usage.branch_id
+          LEFT JOIN clients client ON client.id=usage.client_id
+            AND client.tenant_id=usage.tenant_id AND client.branch_id=usage.branch_id
           LEFT JOIN services service ON service.id=usage.service_id
             AND service.tenant_id=usage.tenant_id AND service.branch_id=usage.branch_id
           LEFT JOIN staff ON staff.id=usage.staff_id
@@ -964,6 +1000,7 @@ pub async fn list_backbar_usage(
           UNION ALL
           SELECT ledger.id, ledger.inventory_item_id, item.name,
                  NULLIF(sale.client_id, '') AS client_id, NULL::TEXT AS appointment_id,
+                 COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                  NULLIF(line.item_id, ''), line.item_name,
                  NULLIF(line.staff_id, ''),
                  COALESCE(NULLIF(staff.appointment_display_name, ''),
@@ -979,25 +1016,31 @@ pub async fn list_backbar_usage(
             AND line.tenant_id=ledger.tenant_id AND line.branch_id=ledger.branch_id
           JOIN pos_sales sale ON sale.id=ledger.sale_id
             AND sale.tenant_id=ledger.tenant_id AND sale.branch_id=ledger.branch_id
+          LEFT JOIN clients client ON client.id=NULLIF(sale.client_id, '')
+            AND client.tenant_id=ledger.tenant_id AND client.branch_id=ledger.branch_id
           LEFT JOIN staff ON staff.id=NULLIF(line.staff_id, '')
             AND staff.tenant_id=ledger.tenant_id AND staff.branch_id=ledger.branch_id
           WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2 AND ledger.movement_type='sale'
         )
-        SELECT id, inventory_item_id, item_name, client_id, appointment_id, service_id, service_name, staff_id, staff_name,
+        SELECT id, inventory_item_id, item_name, client_id, appointment_id, client_name, service_id, service_name, staff_id, staff_name,
                source, expected_quantity, actual_quantity, variance_quantity, max_quantity,
                wastage_percent, approval_threshold_percent, unit, status, notes, review_note,
                reviewed_at, created_at
         FROM usage
         WHERE ($3::DATE IS NULL OR created_at::DATE=$3)
           AND ($4='' OR staff_id=$4)
+          AND ($5='' OR client_id=$5)
+          AND ($6='' OR appointment_id=$6)
         ORDER BY created_at DESC, id DESC
-        LIMIT $5
+        LIMIT $7
         "#,
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(business_date)
     .bind(staff_id)
+    .bind(client_id)
+    .bind(appointment_id)
     .bind(limit)
     .fetch_all(db)
     .await
@@ -1013,6 +1056,7 @@ pub async fn backbar_usage_by_key(
         r#"
         SELECT usage.id, usage.inventory_item_id, item.name AS item_name,
                usage.client_id, usage.appointment_id,
+               COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                usage.service_id, COALESCE(service.name, '') AS service_name,
                usage.staff_id,
                COALESCE(NULLIF(staff.appointment_display_name, ''),
@@ -1026,6 +1070,8 @@ pub async fn backbar_usage_by_key(
         FROM inventory_backbar_usage usage
         JOIN inventory_items item ON item.id=usage.inventory_item_id
           AND item.tenant_id=usage.tenant_id AND item.branch_id=usage.branch_id
+        LEFT JOIN clients client ON client.id=usage.client_id
+          AND client.tenant_id=usage.tenant_id AND client.branch_id=usage.branch_id
         LEFT JOIN services service ON service.id=usage.service_id
           AND service.tenant_id=usage.tenant_id AND service.branch_id=usage.branch_id
         LEFT JOIN staff ON staff.id=usage.staff_id
@@ -1062,22 +1108,26 @@ pub async fn client_attribution_exists(
     branch_id: &str,
     client_id: &str,
     appointment_id: Option<&str>,
+    service_id: Option<&str>,
 ) -> Result<bool, sqlx::Error> {
     if let Some(appointment_id) = appointment_id {
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND client_id=$4)")
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND client_id=$4 AND ($5='' OR COALESCE(NULLIF(service_ids_json,''),'[]')::JSONB ? $5))")
             .bind(tenant_id)
             .bind(branch_id)
             .bind(appointment_id)
             .bind(client_id)
+            .bind(service_id.unwrap_or_default())
             .fetch_one(&mut **tx)
             .await
     } else {
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)")
-            .bind(tenant_id)
-            .bind(branch_id)
-            .bind(client_id)
-            .fetch_one(&mut **tx)
-            .await
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(client_id)
+        .fetch_one(&mut **tx)
+        .await
     }
 }
 #[allow(clippy::too_many_arguments)]
@@ -1116,7 +1166,7 @@ pub async fn lock_backbar_usage_for_review(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<BackbarUsageForReview>, sqlx::Error> {
-    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,status FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,actor_user_id,status FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
 }
 
@@ -1141,7 +1191,8 @@ pub async fn backbar_usage_by_id(
     id: &str,
 ) -> Result<Option<BackbarUsageRecord>, sqlx::Error> {
     sqlx::query_as(
-        r#"SELECT usage.id,usage.inventory_item_id,item.name AS item_name,usage.client_id,usage.appointment_id,usage.service_id,
+        r#"SELECT usage.id,usage.inventory_item_id,item.name AS item_name,usage.client_id,usage.appointment_id,
+                  COALESCE(NULLIF(BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),'') AS client_name,usage.service_id,
                   COALESCE(service.name,'') AS service_name,usage.staff_id,
                   COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),'') AS staff_name,
                   'Manual'::TEXT AS source,usage.expected_quantity::BIGINT,usage.actual_quantity::BIGINT,
@@ -1150,6 +1201,7 @@ pub async fn backbar_usage_by_id(
                   usage.unit,usage.status,usage.notes,usage.review_note,usage.reviewed_at,usage.created_at
            FROM inventory_backbar_usage usage
            JOIN inventory_items item ON item.id=usage.inventory_item_id AND item.tenant_id=usage.tenant_id AND item.branch_id=usage.branch_id
+           LEFT JOIN clients client ON client.id=usage.client_id AND client.tenant_id=usage.tenant_id AND client.branch_id=usage.branch_id
            LEFT JOIN services service ON service.id=usage.service_id AND service.tenant_id=usage.tenant_id AND service.branch_id=usage.branch_id
            LEFT JOIN staff ON staff.id=usage.staff_id AND staff.tenant_id=usage.tenant_id AND staff.branch_id=usage.branch_id
            WHERE usage.tenant_id=$1 AND usage.branch_id=$2 AND usage.id=$3"#,
@@ -1484,13 +1536,12 @@ fn select_sql(where_clause: &str) -> String {
         r#"
         SELECT
           id, tenant_id, branch_id, sku, name, category, unit,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, active, created_at, updated_at
+          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
         FROM inventory_items
         {where_clause}
         "#,
     )
 }
-
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1810,18 +1861,38 @@ pub async fn inventory_category_commitments(
     Ok(Vec::new())
 }
 
-pub async fn touch_automation_policy(db: &PgPool, tenant_id: &str, branch_id: &str) -> Result<bool, sqlx::Error> {
+pub async fn touch_automation_policy(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<bool, sqlx::Error> {
     Ok(sqlx::query("UPDATE inventory_automation_policies SET last_run_at=NOW(),next_run_at=NOW()+(run_interval_minutes || ' minutes')::INTERVAL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND enabled=TRUE")
         .bind(tenant_id).bind(branch_id).execute(db).await?.rows_affected() == 1)
 }
 
-pub async fn recover_stale_automation_actions(_db: &PgPool) -> Result<u64, sqlx::Error> { Ok(0) }
+pub async fn recover_stale_automation_actions(_db: &PgPool) -> Result<u64, sqlx::Error> {
+    Ok(0)
+}
 
-pub async fn claim_due_automation_policies(_db: &PgPool, _limit: i64) -> Result<Vec<InventoryAutomationPolicy>, sqlx::Error> { Ok(Vec::new()) }
+pub async fn claim_due_automation_policies(
+    _db: &PgPool,
+    _limit: i64,
+) -> Result<Vec<InventoryAutomationPolicy>, sqlx::Error> {
+    Ok(Vec::new())
+}
 
-pub async fn escalate_due_automation_actions(_db: &PgPool) -> Result<u64, sqlx::Error> { Ok(0) }
+pub async fn escalate_due_automation_actions(_db: &PgPool) -> Result<u64, sqlx::Error> {
+    Ok(0)
+}
 
-pub async fn escalate_automation_actions(_db: &PgPool, _tenant_id: &str, _branch_id: &str, _minutes: i32) -> Result<u64, sqlx::Error> { Ok(0) }
+pub async fn escalate_automation_actions(
+    _db: &PgPool,
+    _tenant_id: &str,
+    _branch_id: &str,
+    _minutes: i32,
+) -> Result<u64, sqlx::Error> {
+    Ok(0)
+}
 
 pub async fn reject_automation_action(
     db: &PgPool,
@@ -1859,7 +1930,13 @@ pub async fn finish_automation_action(
         .bind(tenant_id).bind(branch_id).bind(id).bind(resource_type).bind(resource_id).fetch_optional(db).await
 }
 
-pub async fn fail_automation_action(db: &PgPool, tenant_id: &str, branch_id: &str, id: &str, error: &str) -> Result<(), sqlx::Error> {
+pub async fn fail_automation_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    error: &str,
+) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE inventory_automation_actions SET status='failed',last_error=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(tenant_id).bind(branch_id).bind(id).bind(error).execute(db).await?;
     Ok(())

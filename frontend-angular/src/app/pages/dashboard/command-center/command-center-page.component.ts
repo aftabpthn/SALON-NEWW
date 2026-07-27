@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'actions' | 'inventory-command' | 'security' | 'staff' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
+type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
 
 type DashboardSnapshot = {
   totalAppointments: number;
@@ -23,6 +23,10 @@ type DashboardSnapshot = {
 type DueRecovery = {
   invoiceId: string;
   balancePaise: number;
+};
+
+type AppointmentGroup = {
+  count: number;
 };
 
 type ProfitSummary = {
@@ -57,31 +61,6 @@ type AdvancedProfit = {
   serviceProfit: ProfitDimension[];
   staffProfit: ProfitDimension[];
   leaks: ProfitLeak[];
-};
-
-type StaffPerformance = {
-  staffId: string;
-  staffName: string;
-  score: number | null;
-  revenuePaise: number;
-  burnoutRisk?: { level: string };
-  retentionRisk?: { level: string };
-};
-
-type StaffCommandCenter = {
-  kpis: {
-    staffCount: number;
-    totalRevenuePaise: number;
-    highRiskSignals: number;
-    pendingApprovals: number;
-    trainingDue: number;
-  };
-  topStaff: StaffPerformance[];
-  attentionQueue: {
-    riskSignals: StaffPerformance[];
-    pendingApprovals: unknown[];
-    dueTraining: unknown[];
-  };
 };
 
 type ProfitAction = {
@@ -173,23 +152,6 @@ type InventoryCommandCenter = {
   recommendations: InventoryExceptionRecommendation[];
   transferOpportunities: InventoryTransferOptimization[];
   generatedAt: string;
-};
-
-type SecuritySummary = {
-  counts: {
-    openAlerts: number;
-    activeBlocks: number;
-    activeSessions: number;
-    auditEvents: number;
-  };
-  policy: {
-    persisted: boolean;
-    settings: {
-      auditRetentionDays: number;
-      auditPageSize: number;
-      sessionRevocationEnabled: boolean;
-    };
-  };
 };
 
 type PaymentMode = {
@@ -390,12 +352,11 @@ export class CommandCenterPageComponent implements OnInit {
   profit: ProfitSummary | null = null;
   advancedProfit: AdvancedProfit | null = null;
   dues: DueRecovery[] = [];
+  appointmentGroups: AppointmentGroup[] = [];
   actions: ProfitAction[] = [];
   inventoryCommand: InventoryCommandCenter | null = null;
   inventoryRecommendationBusy = '';
   inventoryRecommendationError = '';
-  security: SecuritySummary | null = null;
-  staff: StaffCommandCenter | null = null;
   paymentModes: PaymentMode[] = [];
   paymentRisk: PaymentRiskSummary | null = null;
   paymentProviders: PaymentProvider[] = [];
@@ -414,12 +375,10 @@ export class CommandCenterPageComponent implements OnInit {
   locationDrilldownKind = '';
   locationDrilldownRows: Array<Record<string, any>> = [];
   locationDrilldownLoading = false;
-  staffError = '';
   healthStatus = 'checking';
   snapshotLoading = true;
   financeLoading = true;
   controlsLoading = true;
-  staffLoading = true;
   paymentLoading = true;
   locationLoading = true;
   updatedAt: Date | null = null;
@@ -434,7 +393,6 @@ export class CommandCenterPageComponent implements OnInit {
     this.loadSnapshot();
     this.loadFinance();
     this.loadControls();
-    this.loadStaff();
     this.loadPayments();
     this.loadLocations();
   }
@@ -445,10 +403,6 @@ export class CommandCenterPageComponent implements OnInit {
 
   get workspaceLabel(): string {
     return this.auth.hasRole('owner') ? 'Owner workspace' : 'Management workspace';
-  }
-
-  get canReadStaff(): boolean {
-    return this.auth.hasRole('owner', 'admin', 'manager', 'accountant');
   }
 
   get canReadInventory(): boolean {
@@ -465,11 +419,6 @@ export class CommandCenterPageComponent implements OnInit {
       || this.auth.hasPermission('pos.read', 'pos.manage', 'tenant.read');
   }
 
-  get canReadSecurity(): boolean {
-    return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
-      || this.auth.hasPermission('security.read', 'security.manage');
-  }
-
   get canReadLocations(): boolean {
     return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin')
       || this.auth.hasPermission('settings.manage', 'tenant.read');
@@ -481,7 +430,7 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get loading(): boolean {
-    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.staffLoading || this.paymentLoading || this.locationLoading;
+    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.paymentLoading || this.locationLoading;
   }
 
   get liveState(): 'loading' | 'live' | 'partial' | 'unavailable' {
@@ -498,8 +447,8 @@ export class CommandCenterPageComponent implements OnInit {
     return this.dues.reduce((total, row) => total + Number(row.balancePaise || 0), 0);
   }
 
-  get openAlerts(): number {
-    return this.security?.counts.openAlerts ?? 0;
+  get appointmentCount30Days(): number {
+    return this.appointmentGroups.reduce((total, row) => total + Number(row.count || 0), 0);
   }
 
   get visibleActions(): ProfitAction[] {
@@ -516,10 +465,6 @@ export class CommandCenterPageComponent implements OnInit {
     return [...(this.advancedProfit?.leaks ?? [])]
       .sort((left, right) => right.impactPaise - left.impactPaise)
       .slice(0, 5);
-  }
-
-  get topStaff(): StaffPerformance[] {
-    return (this.staff?.topStaff ?? []).slice(0, 5);
   }
 
   get inventoryStockSignals(): InventoryCommandSignal[] {
@@ -870,11 +815,13 @@ export class CommandCenterPageComponent implements OnInit {
       profit: this.optional('profit', this.api.get<ApiEnvelope<ProfitSummary> | ProfitSummary>(`/api/v1/profit-intelligence/summary?${query}`)),
       advanced: this.optional('advanced', this.api.get<ApiEnvelope<AdvancedProfit> | AdvancedProfit>(`/api/v1/profit-intelligence/advanced?${query}`)),
       dues: this.optional('dues', this.api.get<ApiEnvelope<DueRecovery[]> | DueRecovery[]>('/api/v1/reports/due-recovery')),
-    }).pipe(finalize(() => (this.financeLoading = false))).subscribe(({ profit, advanced, dues }) => {
+      appointments: this.optional('appointments', this.api.get<ApiEnvelope<AppointmentGroup[]> | AppointmentGroup[]>(`/api/v1/reports/appointments?startDate=${this.dateOffset(-29)}&endDate=${this.dateOffset(0)}&pageSize=500`)),
+    }).pipe(finalize(() => (this.financeLoading = false))).subscribe(({ profit, advanced, dues, appointments }) => {
       this.profit = this.unwrap(profit) ?? null;
       this.advancedProfit = this.unwrap(advanced) ?? null;
       this.dues = this.unwrap(dues) ?? [];
-      if (profit || advanced || dues) this.touch();
+      this.appointmentGroups = this.unwrap(appointments) ?? [];
+      if (profit || advanced || dues || appointments) this.touch();
     });
   }
 
@@ -885,39 +832,11 @@ export class CommandCenterPageComponent implements OnInit {
       inventoryCommand: this.canReadInventory
         ? this.optional('inventory-command', this.api.get<ApiEnvelope<InventoryCommandCenter> | InventoryCommandCenter>('/api/v1/inventory/command-center'))
         : of(null),
-      security: this.canReadSecurity
-        ? this.optional('security', this.api.get<ApiEnvelope<SecuritySummary> | SecuritySummary>('/api/v1/security/summary'))
-        : of(null),
-    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventoryCommand, security }) => {
+    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventoryCommand }) => {
       this.actions = this.unwrap(actions) ?? [];
       this.inventoryCommand = this.unwrap(inventoryCommand) ?? null;
-      this.security = this.unwrap(security) ?? null;
-      if (actions || inventoryCommand || security) this.touch();
+      if (actions || inventoryCommand) this.touch();
     });
-  }
-
-  private loadStaff(): void {
-    if (!this.canReadStaff) {
-      this.staffLoading = false;
-      this.staff = null;
-      return;
-    }
-    this.staffLoading = true;
-    this.staffError = '';
-    const query = new URLSearchParams({ periodStart: this.dateOffset(-29), periodEnd: this.dateOffset(0) });
-    this.api.get<ApiEnvelope<StaffCommandCenter> | StaffCommandCenter>(`/api/v1/staff-enterprise/command-center?${query}`)
-      .pipe(finalize(() => (this.staffLoading = false)))
-      .subscribe({
-        next: (response) => {
-          this.staff = this.unwrap(response) ?? null;
-          this.touch();
-        },
-        error: (error) => {
-          this.errors.add('staff');
-          this.staff = null;
-          this.staffError = error?.error?.error?.message ?? error?.error?.message ?? 'Staff data unavailable';
-        },
-      });
   }
 
   private loadPayments(): void {

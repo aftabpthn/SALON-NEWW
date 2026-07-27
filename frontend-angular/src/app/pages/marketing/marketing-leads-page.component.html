@@ -159,10 +159,16 @@
 }
 @if (activeSection === 'offers') {
   <section class="tab-workspace"><header><h2>Offers</h2><button class="primary" type="button" (click)="openOffer()">Create offer</button></header><div class="offer-table"><header><span>Code</span><span>Benefit</span><span>Client</span><span>Validity</span><span>Usage</span><span>Status</span><span>Action</span></header>@for (offer of offers; track offer) {
-  <div><strong>{{ offer.code }}</strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.targetClientId || 'All eligible' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.approvalStatus === 'approved'">{{ offer.approvalStatus }}</b><button type="button" [disabled]="busy || offer.approvalStatus !== 'pending'" (click)="approveOffer(offer)">Approve</button></div>
+  <div><strong>{{ offer.title || offer.code }}<small>{{ offer.code }}</small></strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.showInStaffApp ? 'Staff' : '' }}{{ offer.showInStaffApp && offer.showInCustomerApp ? ' + ' : '' }}{{ offer.showInCustomerApp ? 'Customer' : '' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.lifecycleStatus === 'live'">{{ offer.lifecycleStatus }}</b><span class="offer-actions">@if (offer.approvalStatus === 'draft') {<button type="button" [disabled]="busy" (click)="submitOffer(offer)">Submit</button>} @if (offer.approvalStatus === 'pending') {<button type="button" [disabled]="busy" (click)="approveOffer(offer)">Approve</button>} @if (offer.lifecycleStatus === 'live') {<button type="button" [disabled]="busy" (click)="openOfferShare(offer)">Share</button>}</span></div>
   }@if (!offers.length) {
   <div class="empty">No offers yet</div>
-}</div></section>
+}</div>
+  <header class="offer-report-head"><h2>Offer performance</h2></header>
+  <div class="offer-performance-table"><header><span>Offer</span><span>Branch</span><span>Views</span><span>Clicks</span><span>Bookings</span><span>POS redemptions</span><span>Discount</span><span>Revenue after discount</span></header>@for (item of offerPerformance.offers; track item.offerId) {
+    <div><strong>{{ item.title }}<small>{{ item.code }} · {{ item.lifecycleStatus }}</small></strong><span>{{ item.branchName }}</span><span>{{ item.appViews }}</span><span>{{ item.linkClicks }}</span><span>{{ item.bookings }}</span><span>{{ item.posRedemptions }}</span><span>{{ money(item.discountPaise) }}</span><span>{{ money(item.revenueAfterDiscountPaise) }}</span></div>
+  }@if (!offerPerformance.offers.length) {<div class="empty">No offer performance yet</div>}</div>
+  @if (offerPerformance.branchResults.length) {<div class="branch-offer-results">@for (branch of offerPerformance.branchResults; track branch.branchId) {<article><strong>{{ branch.branchName }}</strong><span>{{ branch.appViews }} views · {{ branch.linkClicks }} clicks · {{ branch.bookings }} bookings · {{ branch.posRedemptions }} redemptions</span><b>{{ money(branch.revenueAfterDiscountPaise) }} revenue · {{ money(branch.discountPaise) }} discount</b></article>}</div>}
+</section>
 }
 @if (activeSection === 'templates') {
   <section class="tab-workspace"><header><h2>Template library</h2><button class="primary" type="button" (click)="openTemplate()">Create template</button></header><div class="template-filters"><select [(ngModel)]="templateChannel"><option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option><option value="email">Email</option></select><select [(ngModel)]="templateLanguage"><option value="all">All languages</option><option value="english">English</option><option value="hindi">Hindi</option></select></div><div class="template-grid">@for (template of filteredTemplates; track template) {
@@ -233,23 +239,49 @@
 </aside>
 }
 
+@if (drawer === 'offer-share' && offerShare) {
+  <aside class="drawer offer-share-drawer">
+    <header><h2>Share offer</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+    <div class="drawer-body">
+      <section class="share-caption"><strong>{{ offerShare.title }}</strong><p>{{ offerShare.caption }}</p></section>
+      <section class="share-actions">
+        <button type="button" [disabled]="!offerShare.creativeDownloadPath" (click)="downloadOfferCreative()">Download creative</button>
+        <button type="button" (click)="copyOfferCaption()">Copy caption</button>
+        <button type="button" (click)="shareOfferInstagram()">Instagram</button>
+        <button type="button" (click)="shareOfferWhatsApp()">WhatsApp</button>
+      </section>
+      <section class="consent-check"><strong>WhatsApp policy</strong><p>{{ offerShare.whatsappPolicy.eligibleClients }} eligible · {{ offerShare.whatsappPolicy.consentedClients }} consented · {{ offerShare.whatsappPolicy.frequencyCapDays }} day limit</p></section>
+      <section class="consent-check"><strong>Tracked bookings</strong><p>{{ offerShare.trackedBookings }}</p></section>
+      @if (offerShareStatus) {<p class="share-status">{{ offerShareStatus }}</p>}
+    </div>
+    <footer><button type="button" (click)="closeDrawer()">Close</button></footer>
+  </aside>
+}
+
 @if (drawer === 'offer') {
   <aside class="drawer">
     <header><h2>Create controlled offer</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
+      <label>Offer title<input [(ngModel)]="offerDraft.title" placeholder="Offer title" /></label>
       <label>Offer code<input [(ngModel)]="offerDraft.code" placeholder="Single-use code" /></label>
+      <label>Canva creative<input type="file" accept=".jpg,.jpeg,.png,.webp" (change)="selectOfferCreative($event)" /></label>
+      @if (offerCreativePreview) {<img class="offer-creative-preview" [src]="offerCreativePreview" alt="Selected offer creative" />}
+      <label>Customer description<textarea [(ngModel)]="offerDraft.customerDescription" rows="3" maxlength="1000"></textarea></label>
+      <label>Staff instructions<textarea [(ngModel)]="offerDraft.staffInstructions" rows="4" maxlength="2000"></textarea></label>
       <label>Benefit<select [(ngModel)]="offerDraft.benefitType"><option value="percentage_discount">Percentage discount (basis points)</option><option value="fixed_discount">Fixed discount (paise)</option><option value="complimentary_add_on">Complimentary add-on</option><option value="loyalty_points">Loyalty points</option><option value="wallet_credit">Wallet credit</option><option value="gift_card">Gift card</option><option value="package_upgrade">Package upgrade</option><option value="priority_appointment">Priority appointment</option><option value="off_peak_deal">Off-peak deal</option><option value="last_minute_slot">Last-minute slot</option></select></label>
       <label>Benefit value<input [(ngModel)]="offerDraft.benefitValue" type="number" min="0" placeholder="Enter value" /></label>
       <label>Client ID<input [(ngModel)]="offerDraft.targetClientId" placeholder="Optional personal offer" /></label>
-      <label>Valid service ID<input [(ngModel)]="offerDraft.targetServiceId" placeholder="Optional service restriction" /></label>
+      <label>Service IDs<input [(ngModel)]="offerDraft.serviceIds" placeholder="Comma separated" /></label>
+      <label>Package IDs<input [(ngModel)]="offerDraft.packageIds" placeholder="Comma separated" /></label>
       @if (offerDraft.benefitType === 'complimentary_add_on') {
         <label>Complimentary service ID<input [(ngModel)]="offerDraft.complimentaryServiceId" placeholder="Required" /></label>
       }
       <label>Start date<as-date-picker [(value)]="offerDraft.startsAt" ariaLabel="Offer start date" /></label><label>Expiry date<as-date-picker [(value)]="offerDraft.endsAt" ariaLabel="Offer expiry date" /></label>
       <label>Minimum bill (₹)<input [(ngModel)]="offerDraft.minimumBill" type="number" min="0" placeholder="Optional" /></label><label>Total usage limit<input [(ngModel)]="offerDraft.usageLimit" type="number" min="1" placeholder="Optional" /></label><label>Per-client limit<input [(ngModel)]="offerDraft.perClientLimit" type="number" min="1" /></label>
+      <label class="check"><input [(ngModel)]="offerDraft.showInStaffApp" type="checkbox" /> Show in Staff App</label><label class="check"><input [(ngModel)]="offerDraft.showInCustomerApp" type="checkbox" /> Show in Customer App</label>
       <label class="check"><input [(ngModel)]="offerDraft.allowMembershipStacking" type="checkbox" /> Allow membership stacking</label><label class="check"><input [(ngModel)]="offerDraft.allowPackageStacking" type="checkbox" /> Allow package stacking</label>
     </div>
-    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !offerDraft.code" (click)="saveOffer()">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button type="button" [disabled]="busy || !offerDraft.title || !offerDraft.code" (click)="saveOffer(false)">Save draft</button><button class="primary" type="button" [disabled]="busy || !offerDraft.title || !offerDraft.code" (click)="saveOffer(true)">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
   </aside>
 }
 

@@ -211,6 +211,7 @@ type ContextOfferDraft = {
   weatherCondition: string; temperatureCelsius: string; rainProbabilityPercent: string;
   eventType: string; eventName: string; expectedFootfall: string;
 };
+type OfferPreset = { key: 'demand' | 'winback' | 'firstVisit' | 'market' | 'adaptive'; title: string; metric: string; action: string };
 
 @Component({
     selector: 'app-happy-hours-page',
@@ -704,6 +705,43 @@ export class HappyHoursPageComponent implements OnInit {
     this.drawerOpen = true;
     this.message = '';
     this.error = '';
+  }
+
+  offerLaunchpad(): OfferPreset[] {
+    return [
+      { key: 'demand', title: 'Demand fill', metric: `${this.controlTower?.summary.collectingRules ?? 0} collecting`, action: 'Create off-peak rule' },
+      { key: 'winback', title: 'Win-back audience', metric: `${this.clientReturnTracker?.summary.atRiskCount ?? 0} at risk`, action: 'Build return campaign' },
+      { key: 'firstVisit', title: 'First-visit hook', metric: `${this.couponAnalytics.length} tracked coupons`, action: 'Create entry coupon' },
+      { key: 'market', title: 'Market match', metric: `${this.marketSuggestions.length} suggestions`, action: 'Evaluate price gap' },
+      { key: 'adaptive', title: 'Adaptive trigger', metric: `${this.contextOfferSuggestions.length} saved`, action: 'Evaluate context' },
+    ];
+  }
+
+  launchPreset(key: OfferPreset['key']): void {
+    this.message = '';
+    this.error = '';
+    if (key === 'demand') {
+      this.openCreate();
+      this.draft = { ...this.emptyDraft(), name: 'Demand Fill Happy Hour', startTime: '14:00', endTime: '17:00', weekdays: [1, 2, 3, 4], discountPercent: '15', minMarginPercent: '35' };
+      return;
+    }
+    if (key === 'winback') {
+      this.openAudience();
+      this.audienceDraft = { ...this.emptyAudienceDraft(), name: 'Win Back Happy Hours', inactiveDays: '45', visitCount: '1', status: 'ready' };
+      return;
+    }
+    if (key === 'firstVisit') {
+      this.openCoupon();
+      this.couponDraft = { ...this.emptyCouponDraft(), code: 'FIRST-VISIT', discountValue: '15', perClientLimit: '1', offerType: 'first_visit' };
+      return;
+    }
+    if (key === 'market') {
+      this.tab = 'marketAware';
+      this.marketDraft = { ...this.emptyMarketDraft(), hourSlot: '14', baseDiscount: '10', maxDiscount: '25' };
+      return;
+    }
+    this.tab = 'contextAware';
+    this.contextOfferDraft = { ...this.emptyContextOfferDraft(), offerType: 'lead_time', hourSlot: '14', baseDiscount: '10', maxDiscount: '25', bookingLeadMinutes: '1440' };
   }
 
   openEdit(rule: HappyHourRule): void {

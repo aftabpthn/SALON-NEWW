@@ -54,7 +54,9 @@
           <label>Currency<input [(ngModel)]="languageSettings.currency" maxlength="3" list="currency-codes" [disabled]="!canManageLanguageTenant" /></label>
           <label>Timezone<input [(ngModel)]="languageSettings.timeZone" maxlength="64" list="timezone-codes" [disabled]="!canManageLanguageTenant" /></label>
           <label>Date format<select [(ngModel)]="languageSettings.dateFormat" [disabled]="!canManageLanguageTenant"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></label>
-          <label>Number format<select [(ngModel)]="languageSettings.numberLocale" [disabled]="!canManageLanguageTenant"><option value="en-IN">1,23,456.78</option><option value="hi-IN">१,२३,४५६.७८</option></select></label>
+          <label>Number format<select [(ngModel)]="languageSettings.numberLocale" [disabled]="!canManageLanguageTenant">@for (option of languageOptions; track option) {
+            <option [value]="option.code">{{ option.label }}</option>
+          }</select></label>
         </div>
         <datalist id="region-codes">@for (option of regionOptions; track option) {
           <option [value]="option.code">{{ option.label }}</option>
@@ -72,7 +74,7 @@
       </label>
       <section class="language-preview" [attr.dir]="languagePreviewDirection">
         <span>Direction preview · {{ languagePreviewDirection | uppercase }}</span>
-        <strong>{{ languageSettings.displayMode === 'bilingual' ? 'Save / सहेजें' : (languageSettings.primaryLanguage === 'hi-IN' ? 'सहेजें' : 'Save') }}</strong>
+        <strong>{{ languageSettings.displayMode === 'bilingual' && languageSettings.secondaryLanguage ? languageName(languageSettings.primaryLanguage) + ' + ' + languageName(languageSettings.secondaryLanguage) : languageName(languageSettings.primaryLanguage) }}</strong>
       </section>
       <footer>
         <button class="primary" type="button" [disabled]="!canManageLanguageTenant || languageSaving" (click)="saveLanguageSettings()">{{ languageSaving ? 'Saving…' : 'Save tenant default' }}</button>

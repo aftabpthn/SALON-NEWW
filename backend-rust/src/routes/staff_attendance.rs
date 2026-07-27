@@ -122,18 +122,27 @@ struct AttendanceBreakRequest {
 
 async fn get_summary(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        query.staff_id.as_deref().unwrap_or("").trim(),
+    )
+    .await?;
     let rows = staff_attendance_service::summary(
         &state.db,
         &tenant_id,
         &branch_id,
         query.year,
         query.month,
-        query.staff_id.as_deref().unwrap_or("").trim(),
+        &staff_id,
     )
     .await?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -141,10 +150,11 @@ async fn get_summary(
 
 async fn recalculate_summary(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
-    get_summary(State(state), headers, Query(query)).await
+    get_summary(State(state), Extension(claims), headers, Query(query)).await
 }
 
 async fn save_summary(
@@ -176,12 +186,15 @@ async fn save_summary(
 
 async fn get_details(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(staff_id): Path<String>,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<crate::repositories::staff_attendance_repository::AttendanceDetailRecord>> {
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        self_scoped_staff_id(&state, &claims, &tenant_id, &branch_id, staff_id.trim()).await?;
     let rows = staff_attendance_service::details(
         &state.db,
         &tenant_id,
@@ -230,7 +243,7 @@ async fn clock_out(
     Json(payload): Json<ClockOutRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let self_service = claims.role.eq_ignore_ascii_case("staff");
+    let self_service = !is_attendance_manager(&claims);
     let staff_id = self_scoped_staff_id(
         &state,
         &claims,
@@ -317,11 +330,17 @@ async fn self_scoped_staff_id(
     branch_id: &str,
     requested_staff_id: &str,
 ) -> Result<String, AppError> {
-    if claims.role.eq_ignore_ascii_case("staff") {
+    if !is_attendance_manager(claims) {
         staff_enterprise_service::self_staff_id(&state.db, tenant_id, branch_id, &claims.sub).await
     } else {
         Ok(requested_staff_id.to_string())
     }
+}
+
+fn is_attendance_manager(claims: &AuthClaims) -> bool {
+    ["owner", "admin", "manager"]
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role))
 }
 
 async fn correct_attendance(
@@ -331,6 +350,9 @@ async fn correct_attendance(
     Path((staff_id, business_date)): Path<(String, NaiveDate)>,
     Json(payload): Json<AttendanceCorrectionRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    if !is_attendance_manager(&claims) {
+        return Err(AppError::forbidden("Attendance manager access is required"));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_attendance_service::correct_attendance(
         &state.db,
@@ -397,15 +419,25 @@ struct OvertimeDecisionRequest {
     approved_overtime_minutes: Option<i32>,
 }
 
-fn ensure_overtime_access(claims: &AuthClaims) -> Result<(), AppError> {
+fn ensure_overtime_access(claims: &AuthClaims, permissions: &[&str]) -> Result<(), AppError> {
     const ALLOWED_ROLES: &[&str] = &["owner", "admin", "accountant", "manager"];
-    if ALLOWED_ROLES
+    let denied = claims
+        .denied_permissions
         .iter()
-        .any(|role| role.eq_ignore_ascii_case(&claims.role))
-    {
+        .any(|denied| permissions.iter().any(|required| denied == required));
+    let role_allowed = ALLOWED_ROLES
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role));
+    let permission_allowed = claims
+        .permissions
+        .iter()
+        .any(|allowed| permissions.iter().any(|required| allowed == required));
+    if !denied && (role_allowed || permission_allowed) {
         Ok(())
     } else {
-        Err(AppError::forbidden("overtime approval access is restricted"))
+        Err(AppError::forbidden(
+            "overtime approval access is restricted",
+        ))
     }
 }
 
@@ -415,7 +447,15 @@ async fn list_overtime(
     headers: HeaderMap,
     Query(query): Query<OvertimeQuery>,
 ) -> ApiResult<Vec<crate::repositories::staff_attendance_repository::OvertimeApprovalRecord>> {
-    ensure_overtime_access(&claims)?;
+    ensure_overtime_access(
+        &claims,
+        &[
+            "staff.attendance.read",
+            "staff.attendance.manage",
+            "staff.payroll.read",
+            "staff.payroll.manage",
+        ],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rows = staff_attendance_service::list_overtime(
         &state.db,
@@ -437,7 +477,10 @@ async fn decide_overtime(
     Path(attendance_id): Path<String>,
     Json(payload): Json<OvertimeDecisionRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::OvertimeApprovalRecord> {
-    ensure_overtime_access(&claims)?;
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.payroll.manage"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_attendance_service::decide_overtime(
         &state.db,
@@ -479,12 +522,48 @@ fn validate_cycle(cycle: Option<&str>) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_cycle;
+    use super::{ensure_overtime_access, validate_cycle};
+    use crate::services::auth_service::AuthClaims;
 
     #[test]
     fn attendance_cycle_is_monthly() {
         assert!(validate_cycle(None).is_ok());
         assert!(validate_cycle(Some("Monthly")).is_ok());
         assert!(validate_cycle(Some("weekly")).is_err());
+    }
+
+    #[test]
+    fn overtime_guard_honours_custom_permissions_and_denies() {
+        let mut claims = claims("staff");
+        assert!(ensure_overtime_access(&claims, &["staff.payroll.manage"]).is_err());
+        claims.permissions.push("staff.payroll.manage".into());
+        assert!(ensure_overtime_access(&claims, &["staff.payroll.manage"]).is_ok());
+        claims
+            .denied_permissions
+            .push("staff.payroll.manage".into());
+        assert!(ensure_overtime_access(&claims, &["staff.payroll.manage"]).is_err());
+    }
+
+    fn claims(role: &str) -> AuthClaims {
+        AuthClaims {
+            sub: "user-1".into(),
+            tenant_id: "tenant-1".into(),
+            branch_id: Some("branch-1".into()),
+            role: role.into(),
+            role_id: None,
+            permissions: Vec::new(),
+            denied_permissions: Vec::new(),
+            masked_fields: Vec::new(),
+            max_discount_paise: None,
+            max_refund_paise: None,
+            max_cash_movement_paise: None,
+            permission_version: 1,
+            session_id: "session-1".into(),
+            mfa_enrollment_required: false,
+            token_type: "access".into(),
+            jti: "token-1".into(),
+            iat: 1,
+            exp: usize::MAX,
+        }
     }
 }

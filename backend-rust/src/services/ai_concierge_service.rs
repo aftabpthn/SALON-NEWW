@@ -619,7 +619,11 @@ async fn call_provider(
             "today_appointments":context.today_appointments,
             "open_appointments":context.open_appointments,
             "active_clients":context.active_clients,
+            "active_staff":context.active_staff,
             "active_services":context.active_services,
+            "top_service_name":context.top_service_name.as_deref(),
+            "top_service_quantity":context.top_service_quantity,
+            "top_service_sales_paise":financials_visible.then_some(context.top_service_sales_paise),
             "today_sales_paise":financials_visible.then_some(context.today_sales_paise),
             "open_sales":financials_visible.then_some(context.open_sales),
             "recent_completed_appointments":context.recent_completed_appointments,
@@ -803,11 +807,12 @@ fn operational_reply(
             String::new()
         };
         return format!(
-            "Branch overview for {}:\nAppointments today: {} | Open: {}\nActive clients: {} | Active services: {}\nCompleted in last 7 days: {} | Low-stock items: {}{}",
+            "Branch overview for {}:\nAppointments today: {} | Open: {}\nActive clients: {} | Active staff: {} | Active services: {}\nCompleted in last 7 days: {} | Low-stock items: {}{}",
             context.business_date,
             context.today_appointments,
             context.open_appointments,
             context.active_clients,
+            context.active_staff,
             context.active_services,
             context.recent_completed_appointments,
             context.low_stock_items,
@@ -822,6 +827,36 @@ fn operational_reply(
             context.open_appointments,
             context.recent_completed_appointments
         );
+    }
+    if contains_any(
+        message,
+        &[
+            "top service",
+            "best service",
+            "most sold",
+            "highest sold",
+            "sabse j",
+            "sabse z",
+            "sabse jyada",
+            "sabse zyada",
+            "sabse jaha",
+            "jaha seal",
+            "jyada sale",
+            "zyada sale",
+        ],
+    ) {
+        if let Some(name) = context.top_service_name.as_deref() {
+            let quantity = context.top_service_quantity.unwrap_or_default();
+            return if financials_visible {
+                format!(
+                    "Most sold service is {name}: {quantity} sold, total {}.",
+                    rupees(context.top_service_sales_paise.unwrap_or_default())
+                )
+            } else {
+                format!("Most sold service is {name}: {quantity} sold.")
+            };
+        }
+        return "No completed service sales are recorded for this branch yet.".into();
     }
     if contains_any(message, &["sale", "revenue", "payment", "collection"]) {
         return if financials_visible {
@@ -839,6 +874,9 @@ fn operational_reply(
             "This branch currently has {} active clients.",
             context.active_clients
         );
+    }
+    if contains_any(message, &["staff", "team", "employee", "kitne staff", "staff kitne"]) {
+        return format!("This branch currently has {} active staff.", context.active_staff);
     }
     if contains_any(message, &["inventory", "stock", "reorder"]) {
         return format!(
@@ -867,7 +905,7 @@ fn operational_reply(
             format!("Current services:\n{catalog}")
         };
     }
-    "I can use live branch data for appointments, sales, clients, services and low-stock counts. I can also explain service price/duration and prepare a booking draft. Ask for an overview or name the metric you need.".into()
+    "I can use live branch data for appointments, sales, clients, staff, services, top sold service and low-stock counts. Ask for an overview or name the metric you need.".into()
 }
 
 fn service_summary(service: &repository::AiServiceCandidate) -> String {
@@ -1064,7 +1102,11 @@ mod tests {
             today_appointments: 6,
             open_appointments: 2,
             active_clients: 48,
+            active_staff: 9,
             active_services: 12,
+            top_service_name: Some("Hair Cut".into()),
+            top_service_quantity: Some(14),
+            top_service_sales_paise: Some(560_000),
             today_sales_paise: 125_050,
             open_sales: 1,
             recent_completed_appointments: 17,
@@ -1079,5 +1121,24 @@ mod tests {
         );
         assert!(reply.reply_text.contains("₹1250.50"));
         assert!(reply.reply_text.contains("Open sales: 1"));
+
+        let staff = local_response(
+            "staff kitne hai",
+            &[],
+            Some(&context),
+            true,
+            &default_governance().prompt_version,
+        );
+        assert!(staff.reply_text.contains("9 active staff"));
+
+        let top = local_response(
+            "konsa service sabse jyada sale hua hai",
+            &[],
+            Some(&context),
+            true,
+            &default_governance().prompt_version,
+        );
+        assert!(top.reply_text.contains("Hair Cut"));
+        assert!(top.reply_text.contains("14 sold"));
     }
 }

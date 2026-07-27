@@ -61,9 +61,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         <section class="panel">
           <div class="panel-title"><h2>Performance trend</h2><span>daily to yearly</span></div>
           <div class="trend-grid">
-            @for (key of reportKeys(); track key) {
-              <article><span>{{ key }}</span><strong>{{ data.reports[key].productivityScore }}/100</strong><div class="timer-track"><span [style.width.%]="data.reports[key].productivityScore"></span></div><small>{{ data.reports[key].services }} services · {{ data.reports[key].rating || 0 }} rating</small></article>
-            }
+            @for (row of reportRows(data); track row.key) {
+              <article><span>{{ row.key }}</span><strong>{{ scoreLabel(row.value.productivityScore) }}</strong>@if (row.value.productivityScore !== null && row.value.productivityScore !== undefined) { <div class="timer-track"><span [style.width.%]="cap(row.value.productivityScore)"></span></div> }<small>{{ row.value.services }} services · {{ ratingLabel(row.value.rating) }}</small></article>
+            } @empty { <p class="empty">No records yet.</p> }
           </div>
         </section>
       }
@@ -125,13 +125,15 @@ export class StaffReportsPage implements OnInit {
     }
   }
 
-  reportKeys(): Array<"daily" | "weekly" | "monthly" | "yearly"> { return ["daily", "weekly", "monthly", "yearly"]; }
-
   canReadReports(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("staff.app.reports.read");
   }
 
-  canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }
+  canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["staff.app.business.service_amount.read", "read:finance", "read:sales", "read:payments", "read:invoices"]); }
+  reportRows(data: StaffEnterpriseOs) { return Object.entries(data.reports || {}).map(([key, value]) => ({ key, value })); }
+  scoreLabel(value: number | null): string { return value === null || value === undefined ? "No records yet" : `${value}/100`; }
+  ratingLabel(value: number | null): string { return value === null || value === undefined ? "No records yet" : `${value}/5`; }
+  cap(value: number): number { return Math.max(0, Math.min(100, Number(value || 0))); }
 
   averageSale(): number {
     const summary = this.dashboard()?.summary;

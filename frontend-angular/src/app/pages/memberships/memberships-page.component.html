@@ -1,8 +1,10 @@
 <section class="membership-workspace" [class.drawer-open]="drawerOpen || sellDrawerOpen || member360Open || workflowDrawer">
   <header class="workspace-toolbar">
     <nav class="catalog-tabs" aria-label="Membership catalog">
-      <a routerLink="/memberships" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Memberships</a>
+      <a routerLink="/memberships" [class.active]="activeDesk !== 'giftCards' && activeDesk !== 'coupons'">Memberships</a>
       <a routerLink="/packages" routerLinkActive="active">Packages</a>
+      <a routerLink="/memberships" [queryParams]="{ tab: 'giftCards' }" [class.active]="activeDesk === 'giftCards'" (click)="setDesk('giftCards')">Gift cards</a>
+      <a routerLink="/memberships" [queryParams]="{ tab: 'coupons' }" [class.active]="activeDesk === 'coupons'" (click)="setDesk('coupons')">Coupon codes</a>
     </nav>
     <button class="refresh-button" type="button" (click)="loadWorkspace()">Refresh</button>
   </header>
@@ -78,6 +80,38 @@
         <button type="button" [disabled]="!selectedMember" (click)="updateAutoRenew(selectedMember?.autoRenewStatus === 'active' ? 'paused' : 'active')">{{ selectedMember?.autoRenewStatus === 'active' ? 'Pause' : 'Enable' }} auto-renew</button>
         <button class="danger" type="button" [disabled]="!selectedMember" (click)="cancelSelected()">Cancel membership</button>
       </aside>
+    }
+    @if (activeDesk === 'giftCards') {
+      <section class="data-panel full-panel">
+        <header class="panel-toolbar">
+          <div class="panel-title"><h2>Gift Cards</h2><span>{{ filteredGiftCards.length }}</span></div>
+          <div class="panel-controls">
+            <input type="search" placeholder="Search gift card" [(ngModel)]="search" aria-label="Search gift cards" />
+            <button type="button" (click)="loadWorkspace()">Refresh</button>
+          </div>
+        </header>
+        <div class="table-wrap"><table><thead><tr><th>Code</th><th>Client</th><th class="numeric">Issued</th><th class="numeric">Balance</th><th>Expiry</th><th>Status</th><th>Source invoice</th><th>Created</th></tr></thead><tbody>@for (item of filteredGiftCards; track item) {
+          <tr><td><strong>{{ item.code }}</strong></td><td>{{ item.clientName || item.clientId || '—' }}</td><td class="numeric">{{ rupees(item.initialAmountPaise) }}</td><td class="numeric">{{ rupees(item.balancePaise) }}</td><td>{{ formatDate(item.expiresAt) }}</td><td><span class="status-pill" [class.inactive]="item.status !== 'active'">{{ item.status }}</span></td><td [title]="item.sourceSaleId">{{ shortId(item.sourceSaleId) }}</td><td>{{ formatDate(item.createdAt) }}</td></tr>
+        }</tbody></table>@if (filteredGiftCards.length === 0) {
+        <div class="empty-state"><strong>No gift cards yet</strong></div>
+      }</div>
+      </section>
+    }
+    @if (activeDesk === 'coupons') {
+      <section class="data-panel full-panel">
+        <header class="panel-toolbar">
+          <div class="panel-title"><h2>Coupon Codes</h2><span>{{ filteredCoupons.length }}</span></div>
+          <div class="panel-controls">
+            <input type="search" placeholder="Search coupon" [(ngModel)]="search" aria-label="Search coupons" />
+            <a class="table-action" routerLink="/pos/happy-hours">Manage coupons</a>
+          </div>
+        </header>
+        <div class="table-wrap"><table><thead><tr><th>Code</th><th>Type</th><th class="numeric">Discount</th><th class="numeric">Min subtotal</th><th class="numeric">Max discount</th><th class="numeric">Used</th><th>Starts</th><th>Ends</th><th>Status</th></tr></thead><tbody>@for (item of filteredCoupons; track item) {
+          <tr><td><strong>{{ item.code }}</strong></td><td>{{ item.offerType }}</td><td class="numeric">{{ item.discountType === 'percent' ? ((item.discountBps / 100) + '%') : rupees(item.discountValuePaise) }}</td><td class="numeric">{{ rupees(item.minSubtotalPaise) }}</td><td class="numeric">{{ rupees(item.maxDiscountPaise) }}</td><td class="numeric">{{ item.usedCount }}{{ item.usageLimit ? ' / ' + item.usageLimit : '' }}</td><td>{{ formatDate(item.startsAt || undefined) }}</td><td>{{ formatDate(item.endsAt || undefined) }}</td><td><span class="status-pill" [class.inactive]="!item.active">{{ item.active ? 'Active' : 'Inactive' }}</span></td></tr>
+        }</tbody></table>@if (filteredCoupons.length === 0) {
+        <div class="empty-state"><strong>No coupon codes yet</strong></div>
+      }</div>
+      </section>
     }
     @if (activeDesk === 'overview') {
       <section class="data-panel full-panel">

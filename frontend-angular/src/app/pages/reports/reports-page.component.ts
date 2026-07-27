@@ -182,6 +182,11 @@ export class ReportsPageComponent implements OnInit {
   readonly monthDays = Array.from({ length: 28 }, (_, index) => index + 1);
 
   ngOnInit(): void {
+    if (this.router.url.startsWith('/reports/profit-intelligence')) {
+      this.profitOpen = true;
+      void this.loadProfitWorkspace();
+      return;
+    }
     this.api.get<{ data?: ReportItem[] } | ReportItem[]>('/api/v1/reports').subscribe({
       next: (response) => {
         const reports = Array.isArray(response) ? response : response.data ?? [];
@@ -233,8 +238,7 @@ export class ReportsPageComponent implements OnInit {
     this.liveState = null;
     this.liveError = '';
     if (report.id === 'profit-intelligence') {
-      this.profitOpen = true;
-      void this.loadProfitWorkspace();
+      void this.router.navigateByUrl('/reports/profit-intelligence');
       return;
     }
 
@@ -454,6 +458,10 @@ export class ReportsPageComponent implements OnInit {
   }
 
   closeProfitWorkspace(): void {
+    if (this.router.url.startsWith('/reports/profit-intelligence')) {
+      void this.router.navigateByUrl('/reports');
+      return;
+    }
     this.profitOpen = false;
     this.actionDrawerOpen = false;
     this.closeProfitDrill();
@@ -473,13 +481,13 @@ export class ReportsPageComponent implements OnInit {
         firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/reconciliation/invoice-repair-queue?${query}&pageSize=100`)),
         firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/allocation-rules?${query}`)),
         firstValueFrom(this.api.get<any>('/api/v1/balance-sheet/accounts')).catch(() => null),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/actions?status=${this.actionStatus}&priority=${this.actionPriority}&limit=200`)),
+        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/actions?status=${this.actionStatus}&priority=${this.actionPriority}&limit=200`)).catch(() => null),
         firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/summary')).catch(() => null),
         firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/rules')).catch(() => null),
         this.canManageProfit ? firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/approvals?limit=200')).catch(() => null) : Promise.resolve(null),
         this.canManageProfit ? firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/audit?limit=200')).catch(() => null) : Promise.resolve(null),
         firstValueFrom(this.api.get<any>('/api/v1/reports/custom')).catch(() => null),
-        this.comparePrevious ? firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/advanced?${previousQuery}`)) : Promise.resolve(null),
+        this.comparePrevious ? firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/advanced?${previousQuery}`)).catch(() => null) : Promise.resolve(null),
       ]);
       this.profitSummary = this.data<ProfitSummary>(summary);
       this.advanced = this.data<AdvancedProfit>(advanced);
@@ -489,7 +497,7 @@ export class ReportsPageComponent implements OnInit {
       const excludedAccounts = new Set(['SALES_RETURNS', 'COST_OF_GOODS_SOLD', 'PAYROLL_EXPENSE', 'ROUNDING_EXPENSE']);
       this.allocationAccounts = (accounts ? this.data<AccountDefinition[]>(accounts) ?? [] : [])
         .filter((account) => account.group === 'expense' && !excludedAccounts.has(account.code));
-      this.actions = this.data<ProfitAction[]>(actions) ?? [];
+      this.actions = actions ? this.data<ProfitAction[]>(actions) ?? [] : [];
       this.governance = governance ? this.data<GovernanceSummary>(governance) : null;
       this.governanceRules = rules ? this.data<GovernanceRule[]>(rules) ?? [] : [];
       this.governanceApprovals = approvals ? this.data<GovernanceApproval[]>(approvals) ?? [] : [];
@@ -555,6 +563,41 @@ export class ReportsPageComponent implements OnInit {
     }
   }
 
+  addExpense(): void {
+    void this.router.navigateByUrl('/finance/outgoing-funds');
+  }
+
+  addCostOfGoods(): void {
+    void this.router.navigateByUrl('/purchase-orders');
+  }
+
+  addAdjustment(): void {
+    this.openActionDrawer({
+      actionType: 'manual_profit_adjustment',
+      title: 'Profit Adjustment',
+      message: 'Record and track a manual profit adjustment',
+      sourceType: 'manual',
+    });
+  }
+
+  createProfitLeakAction(): void {
+    const leak = this.advanced?.leaks?.[0];
+    if (leak) {
+      this.queueLeak(leak);
+      return;
+    }
+    this.openActionDrawer({
+      actionType: 'profit_leak_review',
+      title: 'Review Profit Leak',
+      message: 'Investigate and resolve a suspected profit leak',
+      sourceType: 'profit_leak',
+    });
+  }
+
+  openReconciliation(): void {
+    this.profitTab = 'reconciliation';
+  }
+
   async runPosMarginCheck(): Promise<void> {
     if (!this.canManageProfit || this.posGuardBusy) return;
     const grossAmountPaise = Number(this.posGuardDraft.grossAmountPaise);
@@ -607,6 +650,44 @@ export class ReportsPageComponent implements OnInit {
       sourceType: leak.sourceType,
       sourceId: leak.sourceId,
     });
+  }
+
+  async markLeakReviewed(leak: ProfitLeak): Promise<void> {
+    if (!this.canManageProfit || this.actionBusyId) return;
+    this.actionBusyId = `leak:${leak.sourceType}:${leak.sourceId}`;
+    this.profitError = '';
+    try {
+      const created = await firstValueFrom(this.api.post<any>('/api/v1/profit-intelligence/actions', {
+        actionType: 'profit_leak_review',
+        title: `Reviewed ${leak.title}`,
+        message: leak.message,
+        impactPaise: leak.impactPaise,
+        priority: leak.severity,
+        sourceType: leak.sourceType,
+        sourceId: leak.sourceId || crypto.randomUUID(),
+        periodStart: this.fromDate,
+        periodEnd: this.toDate,
+        ruleKey: 'profit_leak_review',
+        notes: 'Marked reviewed from Profit Intelligence',
+        evidence: { leakKind: leak.kind, reviewedFrom: 'profit-intelligence' },
+        baselineImpactPaise: leak.impactPaise,
+        expectedImpactPaise: 0,
+        payload: {},
+      }));
+      const action = this.data<ProfitAction>(created);
+      if (action?.id) {
+        await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/actions/${action.id}/dismiss`, {
+          note: 'Profit leak reviewed',
+          evidence: { leakKind: leak.kind, reviewedFrom: 'profit-intelligence' },
+        }));
+      }
+      await this.loadActions();
+      this.profitTab = 'actions';
+    } catch (error: any) {
+      this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to mark profit leak reviewed';
+    } finally {
+      this.actionBusyId = '';
+    }
   }
 
   queuePricing(row: PricingRecommendation): void {

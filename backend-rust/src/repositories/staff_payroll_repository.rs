@@ -142,6 +142,31 @@ pub struct PayrollRunRecord {
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct PayrollHistoryRunRecord {
+    pub id: String,
+    pub cycle: String,
+    pub period_start: NaiveDate,
+    pub period_end: NaiveDate,
+    pub status: String,
+    pub gross_paise: i64,
+    pub deductions_paise: i64,
+    pub net_paise: i64,
+    pub staff_count: i32,
+    pub invalid_count: i32,
+    pub created_by: String,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub finalized_at: Option<DateTime<Utc>>,
+    pub paid_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub branch_id: String,
+    pub branch_name: String,
+    pub payment_method: String,
+    pub payment_reference: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct PayrollItemRecord {
     pub id: String,
     pub staff_id: String,
@@ -181,14 +206,6 @@ pub struct PayrollEventRecord {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, FromRow)]
-pub struct LockedPayrollRun {
-    pub status: String,
-    pub gross_paise: i64,
-    pub net_paise: i64,
-    pub staff_count: i32,
-}
-
 pub struct AdjustmentInput {
     pub staff_id: String,
     pub adjustment_paise: i64,
@@ -220,6 +237,14 @@ pub struct StatutoryProfileRecord {
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct LegacyStatutoryPiiRecord {
+    pub id: String,
+    pub uan: String,
+    pub esic_number: String,
+    pub pan_number: String,
 }
 
 /// Per-staff PF/ESIC/PT/TDS contribution computed for one payroll item, threaded from the
@@ -315,7 +340,7 @@ pub async fn statutory_profiles(
     if staff_ids.is_empty() {
         return Ok(vec![]);
     }
-    sqlx::query_as("SELECT staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3)")
+    sqlx::query_as("SELECT staff_id,CASE WHEN uan_ciphertext='' THEN '' ELSE '********'||uan_last_four END uan,CASE WHEN esic_number_ciphertext='' THEN '' ELSE '********'||esic_number_last_four END esic_number,CASE WHEN pan_number_ciphertext='' THEN '' ELSE '******'||pan_number_last_four END pan_number,pt_state_code,pf_opt_in,esic_opt_in FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=ANY($3)")
         .bind(tenant_id).bind(branch_id).bind(staff_ids).fetch_all(db).await
 }
 
@@ -324,7 +349,7 @@ pub async fn list_statutory_profiles(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<StatutoryProfileRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 ORDER BY staff_id")
+    sqlx::query_as("SELECT id,staff_id,CASE WHEN uan_ciphertext='' THEN '' ELSE '********'||uan_last_four END uan,CASE WHEN esic_number_ciphertext='' THEN '' ELSE '********'||esic_number_last_four END esic_number,CASE WHEN pan_number_ciphertext='' THEN '' ELSE '******'||pan_number_last_four END pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at FROM staff_statutory_profiles WHERE tenant_id=$1 AND branch_id=$2 ORDER BY staff_id")
         .bind(tenant_id).bind(branch_id).fetch_all(db).await
 }
 
@@ -334,27 +359,65 @@ pub async fn upsert_statutory_profile(
     branch_id: &str,
     staff_id: &str,
     actor_user_id: &str,
-    uan: &str,
-    esic_number: &str,
-    pan_number: &str,
+    uan_ciphertext: &str,
+    uan_last_four: &str,
+    esic_number_ciphertext: &str,
+    esic_number_last_four: &str,
+    pan_number_ciphertext: &str,
+    pan_number_last_four: &str,
     pt_state_code: &str,
     pf_opt_in: bool,
     esic_opt_in: bool,
 ) -> Result<StatutoryProfileRecord, sqlx::Error> {
     sqlx::query_as(
         r#"
-        INSERT INTO staff_statutory_profiles(tenant_id,branch_id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,created_by)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        INSERT INTO staff_statutory_profiles(tenant_id,branch_id,staff_id,uan_ciphertext,uan_last_four,esic_number_ciphertext,esic_number_last_four,pan_number_ciphertext,pan_number_last_four,pt_state_code,pf_opt_in,esic_opt_in,created_by)
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
+        WHERE EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)
         ON CONFLICT(tenant_id,branch_id,staff_id) DO UPDATE SET
-          uan=EXCLUDED.uan,esic_number=EXCLUDED.esic_number,pan_number=EXCLUDED.pan_number,
+          uan='',esic_number='',pan_number='',
+          uan_ciphertext=EXCLUDED.uan_ciphertext,uan_last_four=EXCLUDED.uan_last_four,
+          esic_number_ciphertext=EXCLUDED.esic_number_ciphertext,esic_number_last_four=EXCLUDED.esic_number_last_four,
+          pan_number_ciphertext=EXCLUDED.pan_number_ciphertext,pan_number_last_four=EXCLUDED.pan_number_last_four,
           pt_state_code=EXCLUDED.pt_state_code,pf_opt_in=EXCLUDED.pf_opt_in,esic_opt_in=EXCLUDED.esic_opt_in,
           version=staff_statutory_profiles.version+1,updated_at=NOW()
-        RETURNING id,staff_id,uan,esic_number,pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at
+        RETURNING id,staff_id,CASE WHEN uan_ciphertext='' THEN '' ELSE '********'||uan_last_four END uan,CASE WHEN esic_number_ciphertext='' THEN '' ELSE '********'||esic_number_last_four END esic_number,CASE WHEN pan_number_ciphertext='' THEN '' ELSE '******'||pan_number_last_four END pan_number,pt_state_code,pf_opt_in,esic_opt_in,version,created_at,updated_at
         "#,
     )
-    .bind(tenant_id).bind(branch_id).bind(staff_id).bind(uan).bind(esic_number).bind(pan_number)
-    .bind(pt_state_code).bind(pf_opt_in).bind(esic_opt_in).bind(actor_user_id)
+    .bind(tenant_id).bind(branch_id).bind(staff_id).bind(uan_ciphertext).bind(uan_last_four)
+    .bind(esic_number_ciphertext).bind(esic_number_last_four).bind(pan_number_ciphertext)
+    .bind(pan_number_last_four).bind(pt_state_code).bind(pf_opt_in).bind(esic_opt_in).bind(actor_user_id)
     .fetch_one(db).await
+}
+
+pub async fn legacy_statutory_pii(
+    db: &PgPool,
+) -> Result<Vec<LegacyStatutoryPiiRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,uan,esic_number,pan_number FROM staff_statutory_profiles WHERE uan<>'' OR esic_number<>'' OR pan_number<>'' ORDER BY id")
+        .fetch_all(db).await
+}
+
+pub async fn protect_legacy_statutory_pii(
+    db: &PgPool,
+    id: &str,
+    uan_ciphertext: &str,
+    uan_last_four: &str,
+    esic_number_ciphertext: &str,
+    esic_number_last_four: &str,
+    pan_number_ciphertext: &str,
+    pan_number_last_four: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE staff_statutory_profiles SET uan='',esic_number='',pan_number='',uan_ciphertext=$2,uan_last_four=$3,esic_number_ciphertext=$4,esic_number_last_four=$5,pan_number_ciphertext=$6,pan_number_last_four=$7,updated_at=NOW() WHERE id=$1")
+        .bind(id).bind(uan_ciphertext).bind(uan_last_four).bind(esic_number_ciphertext)
+        .bind(esic_number_last_four).bind(pan_number_ciphertext).bind(pan_number_last_four)
+        .execute(db).await?;
+    Ok(())
+}
+
+pub async fn validate_statutory_plaintext_constraint(db: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query("ALTER TABLE staff_statutory_profiles VALIDATE CONSTRAINT staff_statutory_profiles_plaintext_empty")
+        .execute(db).await?;
+    Ok(())
 }
 
 pub async fn active_advances(
@@ -377,7 +440,12 @@ pub async fn active_advances(
          ORDER BY created_at ASC
         "#,
     )
-    .bind(tenant_id).bind(branch_id).bind(staff_ids).bind(as_of).fetch_all(db).await
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_ids)
+    .bind(as_of)
+    .fetch_all(db)
+    .await
 }
 
 pub async fn commission_rules(
@@ -636,11 +704,14 @@ pub async fn list_runs_filtered(
     filters: &PayrollHistoryFilters<'_>,
     page: i64,
     page_size: i64,
-) -> Result<Vec<PayrollRunRecord>, sqlx::Error> {
+) -> Result<Vec<PayrollHistoryRunRecord>, sqlx::Error> {
     let sql = format!(
         "SELECT r.id,r.cycle,r.period_start,r.period_end,r.status,r.gross_paise,r.deductions_paise,r.net_paise,\
-         r.staff_count,r.invalid_count,r.created_by,r.reviewed_at,r.finalized_at,r.paid_at,r.created_at,r.updated_at \
-         FROM staff_payroll_runs r WHERE {PAYROLL_HISTORY_WHERE} \
+         r.staff_count,r.invalid_count,r.created_by,r.reviewed_at,r.finalized_at,r.paid_at,r.created_at,r.updated_at,\
+         r.branch_id,COALESCE(b.name,'') AS branch_name,\
+         COALESCE((SELECT p.payment_method FROM staff_payroll_payouts p WHERE p.tenant_id=r.tenant_id AND p.branch_id=r.branch_id AND p.payroll_run_id=r.id ORDER BY p.paid_at DESC LIMIT 1),'') AS payment_method,\
+         COALESCE((SELECT p.reference FROM staff_payroll_payouts p WHERE p.tenant_id=r.tenant_id AND p.branch_id=r.branch_id AND p.payroll_run_id=r.id ORDER BY p.paid_at DESC LIMIT 1),'') AS payment_reference \
+         FROM staff_payroll_runs r LEFT JOIN branches b ON b.tenant_id=r.tenant_id AND b.id=r.branch_id WHERE {PAYROLL_HISTORY_WHERE} \
          ORDER BY r.period_start DESC,r.created_at DESC LIMIT $11 OFFSET $12"
     );
     sqlx::query_as(&sql)
@@ -735,7 +806,7 @@ pub async fn applied_advance_recoveries_for_run(
 ) -> Result<Vec<AdvanceRecoveryContribution>, sqlx::Error> {
     sqlx::query_as(
         "SELECT staff_id,advance_id,scheduled_paise,recovered_paise,carried_forward_paise,outstanding_after_paise \
-         FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND recovered_paise>0",
+         FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND applied=TRUE AND recovered_paise>0",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -1049,8 +1120,13 @@ pub async fn replace_selected_calculated_items(
             }
         })
         .collect();
-    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.selected_staff_regenerated',$4,$5)")
-        .bind(tenant_id).bind(branch_id).bind(&run.id).bind(actor_user_id)
+    let event_type = if before_snapshots.is_empty() {
+        "payroll.selected_staff_calculated"
+    } else {
+        "payroll.selected_staff_regenerated"
+    };
+    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,$6)")
+        .bind(tenant_id).bind(branch_id).bind(&run.id).bind(event_type).bind(actor_user_id)
         .bind(serde_json::json!({"staffIds":staff_ids,"staffCount":items.len(),"invalidCount":invalid_count,"reason":reason,"changes":changes})).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(run)
@@ -1192,10 +1268,10 @@ pub async fn update_adjustments(
     run_id: &str,
     actor_user_id: &str,
     entries: &[AdjustmentInput],
-) -> Result<(), sqlx::Error> {
+) -> Result<bool, sqlx::Error> {
     let mut tx = db.begin().await?;
     for entry in entries {
-        sqlx::query(
+        let updated = sqlx::query(
             r#"
             UPDATE staff_payroll_items SET adjustment_paise=COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4,notes=$5,
               gross_paise=earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+GREATEST($4,0),
@@ -1203,10 +1279,24 @@ pub async fn update_adjustments(
               net_paise=GREATEST(earned_salary_paise+overtime_paise+commission_paise+COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)+$4-penalty_paise-COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)-COALESCE((calculation_json->>'generatedStatutoryDeductionPaise')::BIGINT,0)-COALESCE((calculation_json->>'generatedAdvanceRecoveryPaise')::BIGINT,0),0),
               updated_at=NOW()
             WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$6
+              AND COALESCE((calculation_json->>'generatedAdvanceRecoveryPaise')::BIGINT,0)
+                  <= GREATEST(
+                    earned_salary_paise+overtime_paise+commission_paise
+                    +COALESCE((calculation_json->>'generatedPositiveAdjustmentPaise')::BIGINT,0)
+                    +GREATEST($4,0)-penalty_paise
+                    -COALESCE((calculation_json->>'generatedAutoDeductionPaise')::BIGINT,0)
+                    -COALESCE((calculation_json->>'generatedStatutoryDeductionPaise')::BIGINT,0)
+                    -GREATEST(-$4,0),
+                    0
+                  )
             "#,
         )
         .bind(tenant_id).bind(branch_id).bind(run_id).bind(entry.adjustment_paise).bind(&entry.notes).bind(&entry.staff_id)
         .execute(&mut *tx).await?;
+        if updated.rows_affected() != 1 {
+            tx.rollback().await?;
+            return Ok(false);
+        }
     }
     sqlx::query(
         r#"
@@ -1218,7 +1308,8 @@ pub async fn update_adjustments(
     ).bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.adjusted',$4,$5)")
         .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id).bind(serde_json::json!({"entryCount":entries.len()})).execute(&mut *tx).await?;
-    tx.commit().await
+    tx.commit().await?;
+    Ok(true)
 }
 
 pub async fn transition_run(
@@ -1231,9 +1322,9 @@ pub async fn transition_run(
 ) -> Result<Option<PayrollRunRecord>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let query = match status {
-        "reviewed" => "UPDATE staff_payroll_runs SET status='reviewed',reviewed_by=$4,reviewed_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
-        "finalized" => "UPDATE staff_payroll_runs SET status='finalized',finalized_by=$4,finalized_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
-        "paid" => "UPDATE staff_payroll_runs SET status='paid',paid_by=$4,paid_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
+        "reviewed" => "UPDATE staff_payroll_runs SET status='reviewed',reviewed_by=$4,reviewed_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='calculated' RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
+        "finalized" => "UPDATE staff_payroll_runs SET status='finalized',finalized_by=$4,finalized_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='reviewed' RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
+        "paid" => "UPDATE staff_payroll_runs SET status='paid',paid_by=$4,paid_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='finalized' RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at",
         _ => return Ok(None),
     };
     let run = sqlx::query_as(query)
@@ -1254,7 +1345,15 @@ pub async fn transition_run(
             // once, atomically with the finalize transition itself (finalize cannot run twice, so
             // this cannot double-apply). Recomputing the run before finalize never touches this —
             // only unapplied rows for this run are ever affected.
-            sqlx::query(
+            let expected_recoveries = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*)::BIGINT FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND applied=FALSE",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(run_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let applied_recoveries = sqlx::query(
                 r#"
                 UPDATE staff_salary_advances a SET
                   outstanding_paise = a.outstanding_paise - r.recovered_paise,
@@ -1263,11 +1362,31 @@ pub async fn transition_run(
                   closed_at = CASE WHEN a.outstanding_paise - r.recovered_paise <= 0 THEN NOW() ELSE a.closed_at END,
                   updated_at = NOW()
                 FROM staff_advance_recoveries r
-                WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.payroll_run_id=$3 AND r.applied=FALSE AND r.recovered_paise>0
+                WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.payroll_run_id=$3 AND r.applied=FALSE
                   AND a.tenant_id=r.tenant_id AND a.branch_id=r.branch_id AND a.id=r.advance_id
+                  AND a.status IN ('disbursed','recovering')
+                  AND a.outstanding_paise >= r.scheduled_paise
                 "#,
             )
             .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
+            if applied_recoveries.rows_affected() != expected_recoveries as u64 {
+                return Err(sqlx::Error::Protocol(
+                    "salary advance recovery snapshot is stale".to_string(),
+                ));
+            }
+            sqlx::query(
+                r#"
+                UPDATE staff_advance_recoveries r SET outstanding_after_paise=a.outstanding_paise
+                FROM staff_salary_advances a
+                WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.payroll_run_id=$3 AND r.applied=FALSE
+                  AND a.tenant_id=r.tenant_id AND a.branch_id=r.branch_id AND a.id=r.advance_id
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(run_id)
+            .execute(&mut *tx)
+            .await?;
             sqlx::query("UPDATE staff_advance_recoveries SET applied=TRUE WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND applied=FALSE")
                 .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut *tx).await?;
             // Finalizing a run locks its attendance period automatically — attendance can no
@@ -1292,32 +1411,301 @@ pub async fn transition_run(
     Ok(run)
 }
 
-pub async fn lock_run_for_payout(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-) -> Result<Option<LockedPayrollRun>, sqlx::Error> {
-    sqlx::query_as("SELECT status,gross_paise,net_paise,staff_count FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
-        .bind(tenant_id).bind(branch_id).bind(run_id).fetch_optional(&mut **tx).await
-}
-
-pub async fn payout_replay_exists(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    idempotency_key: &str,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM staff_payroll_payouts WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND idempotency_key=$4)")
-        .bind(tenant_id).bind(branch_id).bind(run_id).bind(idempotency_key).fetch_one(&mut **tx).await
-}
-
 #[derive(Debug, Clone, FromRow)]
 pub struct PayoutReference {
     pub payment_method: String,
     pub reference: String,
     pub paid_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPayoutStateRecord {
+    pub state_id: Option<String>,
+    pub payroll_item_id: String,
+    pub staff_id: String,
+    pub staff_name: String,
+    pub employee_code: Option<String>,
+    pub gross_paise: i64,
+    pub net_paise: i64,
+    pub status: String,
+    pub payment_method: String,
+    pub reference: String,
+    pub hold_reason: String,
+    pub last_error: String,
+    pub attempt_count: i32,
+    pub paid_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct LockedPayoutState {
+    pub staff_id: String,
+    pub status: String,
+}
+
+pub async fn list_payout_states(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<Vec<PayrollPayoutStateRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT state.id AS state_id,item.id AS payroll_item_id,item.staff_id,item.staff_name,
+          item.employee_code,item.gross_paise,item.net_paise,
+          COALESCE(state.status,CASE WHEN payout.id IS NULL THEN 'pending' ELSE 'paid' END) AS status,
+          COALESCE(payout.payment_method,state.payment_method,'') AS payment_method,
+          COALESCE(payout.reference,state.reference,'') AS reference,
+          COALESCE(state.hold_reason,'') AS hold_reason,COALESCE(state.last_error,'') AS last_error,
+          COALESCE(state.attempt_count,CASE WHEN payout.id IS NULL THEN 0 ELSE 1 END) AS attempt_count,
+          COALESCE(payout.paid_at,state.paid_at) AS paid_at
+        FROM staff_payroll_items item
+        LEFT JOIN staff_payroll_payout_states state
+          ON state.tenant_id=item.tenant_id AND state.branch_id=item.branch_id
+          AND state.payroll_run_id=item.payroll_run_id AND state.staff_id=item.staff_id
+        LEFT JOIN staff_payroll_payouts payout
+          ON payout.tenant_id=item.tenant_id AND payout.branch_id=item.branch_id
+          AND payout.payroll_run_id=item.payroll_run_id AND payout.staff_id=item.staff_id
+        WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3
+        ORDER BY item.staff_name,item.staff_id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn hold_payouts(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_ids: &[String],
+    reason: &str,
+    actor_user_id: &str,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let rows = sqlx::query(
+        r#"
+        INSERT INTO staff_payroll_payout_states(
+          tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,status,hold_reason,held_by,held_at
+        )
+        SELECT $1,$2,item.payroll_run_id,item.id,item.staff_id,'held',$5,$6,NOW()
+        FROM staff_payroll_items item
+        WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3 AND item.staff_id=ANY($4)
+        ON CONFLICT(payroll_run_id,staff_id) DO UPDATE SET
+          status='held',hold_reason=EXCLUDED.hold_reason,held_by=EXCLUDED.held_by,held_at=NOW(),
+          last_error='',updated_at=NOW()
+        WHERE staff_payroll_payout_states.status IN ('pending','failed','held')
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_ids)
+    .bind(reason)
+    .bind(actor_user_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if rows != staff_ids.len() as u64 {
+        tx.rollback().await?;
+        return Ok(0);
+    }
+    if rows > 0 {
+        sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.payout_held',$4,$5)")
+            .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
+            .bind(json!({"staffIds":staff_ids,"reason":reason})).execute(&mut *tx).await?;
+        reconcile_payout_run(&mut tx, tenant_id, branch_id, run_id, actor_user_id).await?;
+    }
+    tx.commit().await?;
+    Ok(rows)
+}
+
+pub async fn release_payout_holds(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_ids: &[String],
+    actor_user_id: &str,
+) -> Result<u64, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let rows = sqlx::query("UPDATE staff_payroll_payout_states SET status='pending',hold_reason='',held_by=NULL,held_at=NULL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=ANY($4) AND status='held'")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(staff_ids).execute(&mut *tx).await?.rows_affected();
+    if rows != staff_ids.len() as u64 {
+        tx.rollback().await?;
+        return Ok(0);
+    }
+    if rows > 0 {
+        sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.payout_hold_released',$4,$5)")
+            .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
+            .bind(json!({"staffIds":staff_ids})).execute(&mut *tx).await?;
+        reconcile_payout_run(&mut tx, tenant_id, branch_id, run_id, actor_user_id).await?;
+    }
+    tx.commit().await?;
+    Ok(rows)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn reserve_payout_attempt(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    method: &str,
+    reference: &str,
+    idempotency_key: &str,
+    actor_user_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let state_id = sqlx::query_scalar::<_, String>(
+        r#"
+        INSERT INTO staff_payroll_payout_states(
+          tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,status,payment_method,reference,attempt_count
+        )
+        SELECT $1,$2,item.payroll_run_id,item.id,item.staff_id,'processing',$5,$6,1
+        FROM staff_payroll_items item
+        WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3 AND item.staff_id=$4
+        ON CONFLICT(payroll_run_id,staff_id) DO UPDATE SET
+          status='processing',payment_method=EXCLUDED.payment_method,reference=EXCLUDED.reference,
+          last_error='',attempt_count=staff_payroll_payout_states.attempt_count+1,updated_at=NOW()
+        WHERE staff_payroll_payout_states.status IN ('pending','failed')
+          OR (staff_payroll_payout_states.status='processing' AND staff_payroll_payout_states.updated_at<NOW()-INTERVAL '2 minutes')
+        RETURNING id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(run_id)
+    .bind(staff_id)
+    .bind(method)
+    .bind(reference)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(state_id) = state_id else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let inserted = sqlx::query("INSERT INTO staff_payroll_payout_attempts(tenant_id,branch_id,payroll_run_id,payout_state_id,staff_id,idempotency_key,status,payment_method,reference,created_by) VALUES($1,$2,$3,$4,$5,$6,'processing',$7,$8,$9) ON CONFLICT DO NOTHING")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(&state_id).bind(staff_id)
+        .bind(idempotency_key).bind(method).bind(reference).bind(actor_user_id)
+        .execute(&mut *tx).await?.rows_affected() == 1;
+    if !inserted {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    tx.commit().await?;
+    Ok(Some(state_id))
+}
+
+pub async fn lock_payout_state(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    state_id: &str,
+) -> Result<Option<LockedPayoutState>, sqlx::Error> {
+    sqlx::query_as("SELECT staff_id,status FROM staff_payroll_payout_states WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(state_id).fetch_optional(&mut **tx).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_staff_payout(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    staff_id: &str,
+    method: &str,
+    reference: &str,
+    idempotency_key: &str,
+    actor_user_id: &str,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO staff_payroll_payouts(tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,base_pay_paise,commission_paise,adjustment_paise,deductions_paise,net_paise,payment_method,reference,idempotency_key,paid_by) SELECT $1,$2,item.payroll_run_id,item.id,item.staff_id,item.earned_salary_paise+item.overtime_paise,item.commission_paise,item.adjustment_paise,item.deductions_paise,item.net_paise,$5,$6,$7,$8 FROM staff_payroll_items item WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3 AND item.staff_id=$4 RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(staff_id).bind(method)
+        .bind(reference).bind(idempotency_key).bind(actor_user_id).fetch_one(&mut **tx).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn complete_staff_payout(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    state_id: &str,
+    staff_id: &str,
+    idempotency_key: &str,
+    reference: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE staff_payroll_payout_states SET status='paid',reference=$5,last_error='',paid_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND id=$4 AND status='processing'")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(state_id).bind(reference).execute(&mut **tx).await?;
+    sqlx::query("UPDATE staff_payroll_payout_attempts SET status='succeeded',reference=$6,completed_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND payout_state_id=$4 AND idempotency_key=$5 AND status='processing'")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(state_id).bind(idempotency_key).bind(reference).execute(&mut **tx).await?;
+    sqlx::query("UPDATE staff_payroll_items SET status='paid',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(staff_id).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.staff_paid',$4,$5)")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
+        .bind(json!({"staffId":staff_id,"reference":reference})).execute(&mut **tx).await?;
+    reconcile_payout_run(tx, tenant_id, branch_id, run_id, actor_user_id).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn fail_staff_payout(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    state_id: &str,
+    staff_id: &str,
+    idempotency_key: &str,
+    error: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("UPDATE staff_payroll_payout_states SET status='failed',last_error=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND id=$4 AND status='processing'")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(state_id).bind(error).execute(&mut *tx).await?;
+    sqlx::query("UPDATE staff_payroll_payout_attempts SET status='failed',error_message=$6,completed_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND payout_state_id=$4 AND idempotency_key=$5 AND status='processing'")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(state_id).bind(idempotency_key).bind(error).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.staff_payout_failed',$4,$5)")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
+        .bind(json!({"staffId":staff_id,"error":error})).execute(&mut *tx).await?;
+    reconcile_payout_run(&mut tx, tenant_id, branch_id, run_id, actor_user_id).await?;
+    tx.commit().await
+}
+
+pub async fn reconcile_payout_run(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    let (total, paid, active) = sqlx::query_as::<_, (i64, i64, i64)>(
+        "SELECT COUNT(*)::BIGINT,COUNT(payout.id)::BIGINT,COUNT(state.id) FILTER (WHERE state.status<>'pending')::BIGINT FROM staff_payroll_items item LEFT JOIN staff_payroll_payouts payout ON payout.tenant_id=item.tenant_id AND payout.branch_id=item.branch_id AND payout.payroll_run_id=item.payroll_run_id AND payout.staff_id=item.staff_id LEFT JOIN staff_payroll_payout_states state ON state.tenant_id=item.tenant_id AND state.branch_id=item.branch_id AND state.payroll_run_id=item.payroll_run_id AND state.staff_id=item.staff_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3",
+    )
+    .bind(tenant_id).bind(branch_id).bind(run_id).fetch_one(&mut **tx).await?;
+    let status = if total > 0 && paid == total {
+        "paid"
+    } else if paid > 0 || active > 0 {
+        "partially_paid"
+    } else {
+        "finalized"
+    };
+    let previous = sqlx::query_scalar::<_, String>("SELECT status FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(run_id).fetch_one(&mut **tx).await?;
+    sqlx::query("UPDATE staff_payroll_runs SET status=$4,paid_by=CASE WHEN $4='paid' THEN $5 ELSE paid_by END,paid_at=CASE WHEN $4='paid' THEN NOW() ELSE paid_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status IN ('finalized','partially_paid','paid')")
+        .bind(tenant_id).bind(branch_id).bind(run_id).bind(status).bind(actor_user_id).execute(&mut **tx).await?;
+    if previous != status {
+        sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,$4,$5,$6)")
+            .bind(tenant_id).bind(branch_id).bind(run_id)
+            .bind(if status == "paid" { "payroll.paid" } else { "payroll.partially_paid" })
+            .bind(actor_user_id).bind(json!({"paidCount":paid,"staffCount":total,"status":status})).execute(&mut **tx).await?;
+    }
+    Ok(())
 }
 
 pub async fn payout_for_staff(
@@ -1343,44 +1731,8 @@ pub async fn branch_name(
         .await
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn create_payouts(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    payment_method: &str,
-    reference: &str,
-    idempotency_key: &str,
-    actor_user_id: &str,
-) -> Result<u64, sqlx::Error> {
-    Ok(sqlx::query("INSERT INTO staff_payroll_payouts(tenant_id,branch_id,payroll_run_id,payroll_item_id,staff_id,base_pay_paise,commission_paise,adjustment_paise,deductions_paise,net_paise,payment_method,reference,idempotency_key,paid_by) SELECT $1,$2,item.payroll_run_id,item.id,item.staff_id,item.earned_salary_paise+item.overtime_paise,item.commission_paise,item.adjustment_paise,item.deductions_paise,item.net_paise,$4,$5,$6,$7 FROM staff_payroll_items item WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.payroll_run_id=$3")
-        .bind(tenant_id).bind(branch_id).bind(run_id).bind(payment_method).bind(reference).bind(idempotency_key).bind(actor_user_id).execute(&mut **tx).await?.rows_affected())
-}
-
-pub async fn complete_payout(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    actor_user_id: &str,
-    payment_method: &str,
-    reference: &str,
-) -> Result<bool, sqlx::Error> {
-    let updated = sqlx::query("UPDATE staff_payroll_runs SET status='paid',paid_by=$4,paid_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='finalized'")
-        .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id).execute(&mut **tx).await?.rows_affected() == 1;
-    if !updated {
-        return Ok(false);
-    }
-    sqlx::query("UPDATE staff_payroll_items SET status='paid',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3")
-        .bind(tenant_id).bind(branch_id).bind(run_id).execute(&mut **tx).await?;
-    sqlx::query("INSERT INTO staff_payroll_events(tenant_id,branch_id,payroll_run_id,event_type,actor_user_id,payload_json) VALUES($1,$2,$3,'payroll.paid',$4,$5)")
-        .bind(tenant_id).bind(branch_id).bind(run_id).bind(actor_user_id)
-        .bind(serde_json::json!({"paymentMethod":payment_method,"reference":reference})).execute(&mut **tx).await?;
-    Ok(true)
-}
-
-const PAYROLL_PERIOD_COLUMNS: &str = "id,period_month,cutoff_date,correction_deadline,status,lock_reason,\
+const PAYROLL_PERIOD_COLUMNS: &str =
+    "id,period_month,cutoff_date,correction_deadline,status,lock_reason,\
 locked_by,locked_at,reopen_reason,reopened_by,reopened_at,updated_at";
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -1691,6 +2043,7 @@ pub async fn decide_correction(
         UPDATE staff_payroll_corrections SET
           status=$5,decided_by=$6,decided_at=NOW(),decision_note=$7,version=version+1,updated_at=NOW()
         WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='pending'
+          AND ($5<>'approved' OR requested_by<>$6)
         RETURNING {CORRECTION_COLUMNS}
         "#
     ))

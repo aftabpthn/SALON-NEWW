@@ -1597,15 +1597,15 @@ async fn apply_purchase_bill_row(
         value_str(row, "supplier_gstin")?,
         value_str(row, "invoice_number")?
     );
-    let receipt_id:String=sqlx::query_scalar(r#"INSERT INTO purchase_receipts(tenant_id,branch_id,supplier_name,supplier_gstin,supplier_invoice_number,received_date,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,actor_user_id,idempotency_key)
-      VALUES($1,$2,$3,$4,$5,$6::DATE,0,0,0,0,0,$7,$8) ON CONFLICT(tenant_id,branch_id,idempotency_key) DO UPDATE SET supplier_name=EXCLUDED.supplier_name RETURNING id"#)
+    let receipt_id:String=sqlx::query_scalar(r#"INSERT INTO purchase_receipts(tenant_id,branch_id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,actor_user_id,idempotency_key)
+      VALUES($1,$2,'GRR-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),$3,$4,$5,$6::DATE,$6::DATE,0,0,0,0,0,$7,$8) ON CONFLICT(tenant_id,branch_id,idempotency_key) DO UPDATE SET supplier_name=EXCLUDED.supplier_name RETURNING id"#)
       .bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"supplier_name")?).bind(value_str(row,"supplier_gstin")?).bind(value_str(row,"invoice_number")?)
       .bind(value_str(row,"received_date")?).bind(&job.created_by).bind(&key).fetch_one(&mut **tx).await?;
     let item_id = value_str(row, "inventory_item_id")?;
     let (before,before_cost):(i32,i64)=sqlx::query_as("SELECT stock_quantity,unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
       .bind(&job.tenant_id).bind(&job.branch_id).bind(item_id).fetch_one(&mut **tx).await?;
-    let receipt_line:Option<String>=sqlx::query_scalar(r#"INSERT INTO purchase_receipt_lines(tenant_id,branch_id,purchase_receipt_id,inventory_item_id,quantity,unit_cost_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(purchase_receipt_id,inventory_item_id) DO NOTHING RETURNING id"#)
+    let receipt_line:Option<String>=sqlx::query_scalar(r#"INSERT INTO purchase_receipt_lines(tenant_id,branch_id,purchase_receipt_id,inventory_item_id,quantity,delivered_quantity,gross_unit_cost_paise,unit_cost_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise)
+      VALUES($1,$2,$3,$4,$5,$5,$6,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(purchase_receipt_id,inventory_item_id) DO NOTHING RETURNING id"#)
       .bind(&job.tenant_id).bind(&job.branch_id).bind(&receipt_id).bind(item_id).bind(value_i64(row,"quantity")? as i32).bind(value_i64(row,"unit_cost_paise")?)
       .bind(value_i64(row,"gst_percent")? as i32).bind(value_i64(row,"taxable_paise")?).bind(value_i64(row,"cgst_paise")?).bind(value_i64(row,"sgst_paise")?).bind(value_i64(row,"igst_paise")?).bind(value_i64(row,"total_paise")?).fetch_optional(&mut **tx).await?;
     let Some(receipt_line) = receipt_line else {

@@ -14,21 +14,49 @@ pub enum BranchCreationDecision {
 }
 
 pub async fn ensure_can_login(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
-    ensure_access(db, tenant_id).await
-}
-
-pub async fn ensure_can_write(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
-    ensure_access(db, tenant_id).await
-}
-
-async fn ensure_access(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
     if tenant_id.eq_ignore_ascii_case("platform") {
         return Ok(());
     }
-    let context = saas_repository::entitlement_context(db, tenant_id)
+    ensure_login_context(&load_context(db, tenant_id).await?)
+}
+
+pub async fn ensure_can_write(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
+    if tenant_id.eq_ignore_ascii_case("platform") {
+        return Ok(());
+    }
+    ensure_write_context(&load_context(db, tenant_id).await?)
+}
+
+pub async fn ensure_feature(
+    db: &PgPool,
+    tenant_id: &str,
+    feature_key: &str,
+) -> Result<(), AppError> {
+    if tenant_id.eq_ignore_ascii_case("platform") {
+        return Ok(());
+    }
+    ensure_feature_context(&load_context(db, tenant_id).await?, feature_key, false)
+}
+
+pub async fn ensure_write_feature(
+    db: &PgPool,
+    tenant_id: &str,
+    feature_key: &str,
+) -> Result<(), AppError> {
+    if tenant_id.eq_ignore_ascii_case("platform") {
+        return Ok(());
+    }
+    ensure_feature_context(&load_context(db, tenant_id).await?, feature_key, true)
+}
+
+async fn load_context(db: &PgPool, tenant_id: &str) -> Result<EntitlementContext, AppError> {
+    saas_repository::entitlement_context(db, tenant_id)
         .await
         .map_err(|_| AppError::internal("failed to validate salon entitlement"))?
-        .ok_or_else(|| AppError::unauthenticated("salon is not active"))?;
+        .ok_or_else(|| AppError::unauthenticated("salon is not active"))
+}
+
+fn ensure_login_context(context: &EntitlementContext) -> Result<(), AppError> {
     if context.tenant_status != "active" {
         return Err(AppError::forbidden("salon access is suspended"));
     }
@@ -38,6 +66,48 @@ async fn ensure_access(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
             AppError::forbidden("subscription does not allow salon access")
                 .with_details(json!({"subscriptionStatus": status})),
         ),
+    }
+}
+
+fn ensure_write_context(context: &EntitlementContext) -> Result<(), AppError> {
+    ensure_login_context(context)?;
+    if context.subscription_status.as_deref() == Some("past_due") {
+        return Err(AppError::forbidden("past-due subscription is read-only")
+            .with_details(json!({"subscriptionStatus": "past_due", "readOnly": true})));
+    }
+    Ok(())
+}
+
+fn ensure_feature_context(
+    context: &EntitlementContext,
+    feature_key: &str,
+    write: bool,
+) -> Result<(), AppError> {
+    if write {
+        ensure_write_context(context)?;
+    } else {
+        ensure_login_context(context)?;
+    }
+    if context.subscription_status.is_none() {
+        return Ok(());
+    }
+    let enabled = context
+        .features_json
+        .as_ref()
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|features| {
+            features
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .any(|feature| feature.eq_ignore_ascii_case(feature_key))
+        });
+    if enabled {
+        Ok(())
+    } else {
+        Err(
+            AppError::forbidden("subscription plan does not include this feature")
+                .with_details(json!({"featureKey": feature_key})),
+        )
     }
 }
 
@@ -130,6 +200,7 @@ mod tests {
         let mut context = EntitlementContext {
             tenant_status: "active".into(),
             subscription_status: Some("active".into()),
+            features_json: Some(serde_json::json!(["staff.basic"])),
             included_branches: Some(1),
             overage_branch_paise: Some(0),
             active_branch_count: 1,
@@ -150,5 +221,25 @@ mod tests {
         context.tenant_status = "active".into();
         context.subscription_status = Some("cancelled".into());
         assert!(branch_creation_decision(&context, 1).is_err());
+    }
+
+    #[test]
+    fn staff_security_login_write_and_feature_policies_are_distinct() {
+        let mut context = EntitlementContext {
+            tenant_status: "active".into(),
+            subscription_status: Some("past_due".into()),
+            features_json: Some(serde_json::json!(["staff.basic"])),
+            included_branches: Some(1),
+            overage_branch_paise: Some(0),
+            active_branch_count: 1,
+        };
+        assert!(super::ensure_login_context(&context).is_ok());
+        assert!(super::ensure_write_context(&context).is_err());
+        assert!(super::ensure_feature_context(&context, "staff.basic", false).is_ok());
+        assert!(super::ensure_feature_context(&context, "staff.payroll", false).is_err());
+
+        context.subscription_status = None;
+        context.features_json = None;
+        assert!(super::ensure_feature_context(&context, "staff.payroll", true).is_ok());
     }
 }

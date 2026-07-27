@@ -1,8 +1,8 @@
 import { DatePipe } from "@angular/common";
-import { Component, computed, OnInit, signal } from "@angular/core";
+import { Component, computed, HostListener, OnInit, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { StaffAppService, StaffAppointment, StaffDashboard } from "../../core/staff-app.service";
-import { businessDate } from "../../core/business-date";
+import { businessDate, businessDateOffset } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
@@ -13,12 +13,18 @@ const TERMINAL_STATUSES = new Set(["completed", "checked-out", "cancelled", "no-
 const COMPLETED_STATUSES = new Set(["completed", "checked-out"]);
 const CANCELLED_STATUSES = new Set(["cancelled", "no-show"]);
 const IST_DATE_FORMATTER = new Intl.DateTimeFormat("en", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
+const IST_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 function istDateKey(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const parts = Object.fromEntries(IST_DATE_FORMATTER.formatToParts(date).map((part) => [part.type, part.value]));
   return [parts["year"], parts["month"], parts["day"]].join("-");
+}
+
+function istDateTimeInput(value: string): { date: string; time: string } {
+  const parts = Object.fromEntries(IST_DATE_TIME_FORMATTER.formatToParts(new Date(value)).map((part) => [part.type, part.value]));
+  return { date: [parts["year"], parts["month"], parts["day"]].join("-"), time: `${parts["hour"]}:${parts["minute"]}` };
 }
 
 @Component({
@@ -87,6 +93,20 @@ function istDateKey(value: string | Date): string {
           <div class="panel-title"><h2 id="appointment-detail-title">Appointment detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
           <section class="grid two compact-grid"><article class="kpi"><span>Work item</span><strong>Assigned appointment</strong></article><article class="kpi"><span>Status</span><strong>{{ item.status }}</strong></article></section>
           <div class="list"><div class="row"><strong>Time</strong><span>{{ item.startAt | date:'short' }} - {{ item.endAt | date:'shortTime' }}</span></div><div class="row"><strong>Services</strong><span>{{ item.serviceNames.join(', ') || '-' }}</span></div><div class="row"><strong>Duration</strong><span>{{ item.durationMinutes || 0 }} min</span></div><div class="row"><strong>Chair</strong><span>{{ item.chair || '-' }}</span></div></div>
+          @if (canManageAppointment(item) && !actionMode()) {
+            <div class="drawer-actions"><button class="button" type="button" (click)="beginReschedule(item)">Reschedule</button><button class="link-button danger" type="button" (click)="beginCancel()">Cancel appointment</button></div>
+          }
+          @if (actionMode()) {
+            <section class="action-form">
+              <div class="panel-title"><h2>{{ actionMode() === 'reschedule' ? 'Reschedule appointment' : 'Cancel appointment' }}</h2></div>
+              @if (actionMode() === 'reschedule') {
+                <div class="action-fields"><label>Date<input type="date" [value]="actionDate()" (input)="actionDate.set($any($event.target).value)" /></label><label>Time<input type="time" [value]="actionTime()" (input)="actionTime.set($any($event.target).value)" /></label></div>
+              }
+              <label>Reason<textarea rows="3" maxlength="500" [value]="actionReason()" (input)="actionReason.set($any($event.target).value)"></textarea></label>
+              @if (actionError()) { <p class="action-error">{{ actionError() }}</p> }
+              <div class="drawer-actions"><button class="link-button" type="button" [disabled]="savingAction()" (click)="actionMode.set(null)">Back</button><button class="button" type="button" [disabled]="savingAction()" (click)="submitAction(item)">{{ savingAction() ? 'Saving...' : 'Confirm' }}</button></div>
+            </section>
+          }
         </aside>
       }
     </section>
@@ -107,6 +127,15 @@ function istDateKey(value: string | Date): string {
     .appointment-list-item[open] .expand-indicator::after { transform: none; }
     .appointment-list-expanded { padding: 8px 0 12px; border-top: 1px solid var(--staff-border); }
     .appointment-list-expanded .row-actions { justify-content: flex-start; }
+    .drawer-actions { display: flex; gap: 8px; margin-top: 14px; }
+    .drawer-actions > * { flex: 1; }
+    .danger { color: #b42318; }
+    .action-form { display: grid; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--staff-border); }
+    .action-form label { display: grid; gap: 5px; color: var(--staff-text-secondary); font-size: .72rem; font-weight: 700; }
+    .action-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .action-form input, .action-form textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--staff-border); border-radius: 7px; background: #fff; color: var(--staff-text); font: inherit; padding: 9px 10px; }
+    .action-form textarea { resize: vertical; }
+    .action-error { margin: 0; color: #b42318; font-size: .75rem; font-weight: 700; }
     @media (max-width: 900px) {
       .detail-drawer { top: var(--staff-header-height); padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
     }
@@ -144,11 +173,20 @@ export class StaffAppointmentsPage implements OnInit {
   });
   readonly loading = signal(false);
   readonly selectedAppointment = signal<StaffAppointment | null>(null);
+  readonly actionMode = signal<"reschedule" | "cancel" | null>(null);
+  readonly actionDate = signal("");
+  readonly actionTime = signal("");
+  readonly actionReason = signal("");
+  readonly actionError = signal("");
+  readonly savingAction = signal(false);
   private loadGeneration = 0;
 
   constructor(readonly staff: StaffAppService) {}
 
   ngOnInit() { void this.load(); }
+
+  @HostListener("window:aura:appointments-updated")
+  onAppointmentsUpdated() { void this.load(); }
 
   setView(view: AppointmentView) { this.activeView.set(view); }
 
@@ -165,12 +203,49 @@ export class StaffAppointmentsPage implements OnInit {
   async load() {
     const generation = ++this.loadGeneration;
     this.loading.set(true);
-    try { const dashboard = await this.staff.dashboard(); if (generation === this.loadGeneration) this.dashboard.set(dashboard); } finally { if (generation === this.loadGeneration) this.loading.set(false); }
+    try {
+      const today = businessDate();
+      const [dashboard, os] = await Promise.all([
+        this.staff.dashboard({ date: today }),
+        this.staff.enterpriseOs({ from: businessDateOffset(-30, today), to: businessDateOffset(32, today) })
+      ]);
+      const current = new Map(dashboard.appointments.map((item) => [item.id, item]));
+      const appointments = os.timeline.map((item) => ({
+        ...(current.get(item.id) || {}), id: item.id, staffId: current.get(item.id)?.staffId || this.staff.user()?.staffId || "",
+        branchId: current.get(item.id)?.branchId || this.staff.user()?.branchId || "", serviceIds: current.get(item.id)?.serviceIds || [],
+        serviceNames: item.serviceNames || [], durationMinutes: item.durationMinutes || 0, value: current.get(item.id)?.value || 0,
+        startAt: item.startAt, endAt: item.endAt, status: item.status, chair: current.get(item.id)?.chair || "", source: current.get(item.id)?.source || ""
+      } satisfies StaffAppointment));
+      if (generation === this.loadGeneration) this.dashboard.set({ ...dashboard, appointments });
+    } finally { if (generation === this.loadGeneration) this.loading.set(false); }
   }
 
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }
-  openAppointment(item: StaffAppointment) { this.selectedAppointment.set(item); }
-  closeDrawers() { this.selectedAppointment.set(null); }
+  canManageAppointment(item: StaffAppointment): boolean { return this.staff.hasPermission("staff.app.appointments.manage") && !TERMINAL_STATUSES.has(this.statusOf(item)); }
+  openAppointment(item: StaffAppointment) { this.actionMode.set(null); this.selectedAppointment.set(item); }
+  closeDrawers() { this.actionMode.set(null); this.selectedAppointment.set(null); }
+  beginReschedule(item: StaffAppointment) {
+    const value = istDateTimeInput(item.startAt);
+    this.actionDate.set(value.date); this.actionTime.set(value.time); this.actionReason.set(""); this.actionError.set(""); this.actionMode.set("reschedule");
+  }
+  beginCancel() { this.actionReason.set(""); this.actionError.set(""); this.actionMode.set("cancel"); }
+
+  async submitAction(item: StaffAppointment) {
+    const reason = this.actionReason().trim();
+    if (reason.length < 3) { this.actionError.set("Enter a reason of at least 3 characters."); return; }
+    this.savingAction.set(true); this.actionError.set("");
+    try {
+      if (this.actionMode() === "cancel") await this.staff.cancelAppointment(item.id, reason);
+      else {
+        const start = new Date(`${this.actionDate()}T${this.actionTime()}:00+05:30`);
+        if (Number.isNaN(start.getTime()) || start <= new Date()) { this.actionError.set("Choose a future date and time."); return; }
+        await this.staff.rescheduleAppointment(item.id, { startAt: start.toISOString(), reason });
+      }
+      this.closeDrawers();
+      await this.load();
+    } catch { this.actionError.set(this.staff.error() || "Unable to update appointment."); }
+    finally { this.savingAction.set(false); }
+  }
 
   private statusOf(item: StaffAppointment): string { return String(item.status || "").toLowerCase(); }
   private isCompleted(item: StaffAppointment, today: string): boolean {

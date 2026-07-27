@@ -434,14 +434,31 @@
     }
   </section>
 }
-@if (activeTab === 'Services' || activeTab === 'Products' || activeTab === 'Memberships' || activeTab === 'Packages') {
+@if (activeTab === 'Services') {
   <section class="configuration-panel">
-    @for (item of catalogFor(activeTab === 'Services' ? 'service' : activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package'); track item) {
+    <div class="service-assignment-toolbar">
+      <label class="service-all"><input type="checkbox" [checked]="allServicesAssigned" (change)="setServicesAssigned(serviceCatalog, $any($event.target).checked)" />All services</label>
+      <label>Category<select [(ngModel)]="serviceCategoryFilter"><option value="all">All categories</option>@for (category of serviceCategories; track category) { <option [value]="category">{{ category }}</option> }</select></label>
+    </div>
+    @for (group of serviceGroups; track group.category) {
+      <section class="service-category-group">
+        <header><div><h3>{{ group.category }}</h3><small>{{ group.items.length }} services</small></div><div><button type="button" (click)="setServicesAssigned(group.items, true)">Select all</button><button type="button" (click)="setServicesAssigned(group.items, false)">Clear</button></div></header>
+        @for (item of group.items; track item.id) {
+          <div class="assignment-row catalog-row"><label><input type="checkbox" [(ngModel)]="item.assigned" /> <span>{{ item.name }}</span></label><label class="mini-field">{{ 'staff.ui.b26786b048' | translate }}<input type="number" min="0" max="100" [(ngModel)]="item.commissionPercent" [disabled]="!item.assigned" /></label></div>
+        }
+      </section>
+    }
+    @if (!configurationLoading && serviceCatalog.length === 0) { <div class="config-empty">No services yet</div> }
+  </section>
+}
+@if (activeTab === 'Products' || activeTab === 'Memberships' || activeTab === 'Packages') {
+  <section class="configuration-panel">
+    @for (item of catalogFor(activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package'); track item) {
       <div class="assignment-row catalog-row"><label><input type="checkbox" [(ngModel)]="item.assigned" /> <span>{{ item.name }}@if (item.category) {
         <small>{{ item.category }}</small>
         }</span></label><label class="mini-field">{{ 'staff.ui.b26786b048' | translate }}<input type="number" min="0" max="100" [(ngModel)]="item.commissionPercent" [disabled]="!item.assigned" /></label></div>
       }
-      @if (!configurationLoading && catalogFor(activeTab === 'Services' ? 'service' : activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package').length === 0) {
+      @if (!configurationLoading && catalogFor(activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package').length === 0) {
         <div class="config-empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
       }
     </section>

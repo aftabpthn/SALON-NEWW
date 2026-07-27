@@ -30,10 +30,6 @@ export class AppSidebarComponent {
     ] },
     { label: 'Command Center', icon: 'bi-command', route: '/command-center', exact: false, links: [
       { label: 'Executive Overview', icon: 'bi-speedometer2', route: '/command-center', exact: true },
-      { label: 'Profit Intelligence', icon: 'bi-graph-up-arrow', route: '/reports', exact: false },
-      { label: 'Staff Control', icon: 'bi-person-gear', route: '/staff/control-center', exact: false },
-      { label: 'Inventory Autopilot', icon: 'bi-box-seam', route: '/inventory/advanced-controls', exact: false },
-      { label: 'Security Center', icon: 'bi-shield-lock', route: '/security', exact: false },
     ] },
     { label: 'Clients', icon: 'bi-people', route: '/clients', exact: false, links: [
       { label: 'Clients', icon: 'bi-people', route: '/clients', exact: false },
@@ -67,6 +63,7 @@ export class AppSidebarComponent {
       { label: 'POS Billing', icon: 'bi-receipt', route: '/pos', exact: true },
       { label: 'Invoices & Refunds', icon: 'bi-receipt-cutoff', route: '/pos/invoices', exact: false },
       { label: 'Held Invoices', icon: 'bi-pause-circle', route: '/pos/holds', exact: false },
+      { label: 'Payments Integrations', icon: 'bi-plug', route: '/payments/integrations', exact: false },
       { label: 'Payment Modes', icon: 'bi-credit-card', route: '/pos/payment-modes', exact: false },
       { label: 'Tips', icon: 'bi-cash-coin', route: '/pos/tips', exact: false },
       { label: 'Cash Drawer & Reconciliation', icon: 'bi-cash-stack', route: '/pos/cash-drawer', exact: false },

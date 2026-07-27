@@ -270,7 +270,27 @@ pub async fn list_movements(
     branch_id: &str,
     drawer_session_id: &str,
 ) -> Result<Vec<CashDrawerMovement>, sqlx::Error> {
-    sqlx::query_as("SELECT m.id,m.drawer_session_id,m.cash_drawer_till_id,m.movement_type,m.amount_paise,m.reference_type,m.reference_id,m.actor_user_id,m.notes,m.reverses_movement_id,(SELECT reversal.id FROM cash_drawer_movements reversal WHERE reversal.tenant_id=m.tenant_id AND reversal.branch_id=m.branch_id AND reversal.reverses_movement_id=m.id LIMIT 1) reversed_by_id,m.correction_reason,m.created_at FROM cash_drawer_movements m WHERE m.tenant_id=$1 AND m.branch_id=$2 AND m.drawer_session_id=$3 ORDER BY m.created_at DESC")
+    sqlx::query_as(
+        "WITH drawer AS (
+             SELECT id,business_date FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+         ),
+         manual AS (
+             SELECT m.id,m.drawer_session_id,m.cash_drawer_till_id,m.movement_type,m.amount_paise,m.reference_type,m.reference_id,m.actor_user_id,m.notes,m.reverses_movement_id,(SELECT reversal.id FROM cash_drawer_movements reversal WHERE reversal.tenant_id=m.tenant_id AND reversal.branch_id=m.branch_id AND reversal.reverses_movement_id=m.id LIMIT 1) reversed_by_id,m.correction_reason,m.created_at
+             FROM cash_drawer_movements m
+             WHERE m.tenant_id=$1 AND m.branch_id=$2 AND m.drawer_session_id=$3
+         ),
+         sale_cash AS (
+             SELECT 'sale_cash:' || pp.id AS id,d.id AS drawer_session_id,ps.cash_drawer_till_id,'sale_cash' AS movement_type,pp.amount_paise,'invoice_payment' AS reference_type,ps.invoice_number AS reference_id,'' AS actor_user_id,'Invoice ' || ps.invoice_number AS notes,NULL::TEXT AS reverses_movement_id,NULL::TEXT AS reversed_by_id,'' AS correction_reason,pp.paid_at AS created_at
+             FROM drawer d
+             JOIN pos_sales ps ON ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.business_date=d.business_date
+             JOIN pos_payments pp ON pp.tenant_id=ps.tenant_id AND pp.branch_id=ps.branch_id AND pp.sale_id=ps.id
+             WHERE pp.method='cash'
+         )
+         SELECT * FROM manual
+         UNION ALL
+         SELECT * FROM sale_cash
+         ORDER BY created_at DESC",
+    )
         .bind(tenant_id).bind(branch_id).bind(drawer_session_id).fetch_all(db).await
 }
 

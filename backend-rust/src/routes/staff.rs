@@ -334,6 +334,7 @@ pub struct AttendanceRuleRequest {
 #[serde(rename_all = "camelCase")]
 pub struct StaffPasswordRequest {
     pub new_password: String,
+    pub must_change_password: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1007,7 +1008,9 @@ async fn upload_staff_file(
         return Err(AppError::validation("invalid staff file"));
     }
     if kind == "photo" && !is_supported_staff_photo(file_name, &content_type, &bytes) {
-        return Err(AppError::validation("staff photo must be a valid JPG or PNG image"));
+        return Err(AppError::validation(
+            "staff photo must be a valid JPG or PNG image",
+        ));
     }
     let row = staff_hr_repository::save_file(
         &state.db,
@@ -1547,12 +1550,14 @@ async fn set_staff_password(
 ) -> ApiResult<StaffPasswordResponse> {
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let must_change_password = payload.must_change_password.unwrap_or(true);
     staff_service::set_password(
         &state.db,
         &tenant_id,
         &branch_id,
         &id,
         payload.new_password.trim(),
+        must_change_password,
     )
     .await?;
     let _ = auth_repository::audit(
@@ -1563,11 +1568,15 @@ async fn set_staff_password(
             session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
             branch_id: Some(&branch_id),
             identity: None,
-            event_type: "staff.password.reset",
+            event_type: if must_change_password {
+                "staff.password.reset"
+            } else {
+                "staff.password.updated"
+            },
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({ "staffId": id, "mustChangePassword": true }),
+            details: json!({ "staffId": id, "mustChangePassword": must_change_password }),
         },
     )
     .await;
@@ -1917,7 +1926,9 @@ mod tests {
         assert!(staff_service::is_supported_photo_url(
             "https://cdn.example.com/profile.JPG?size=200"
         ));
-        assert!(staff_service::is_supported_photo_url("/staff/files/file_123"));
+        assert!(staff_service::is_supported_photo_url(
+            "/staff/files/file_123"
+        ));
         assert!(!staff_service::is_supported_photo_url(
             "https://example.com/profile.webp"
         ));

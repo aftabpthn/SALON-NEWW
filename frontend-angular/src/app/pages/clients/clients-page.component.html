@@ -31,17 +31,17 @@
     </div>
 
     <span></span>
-    <button class="primary-button" type="button" (click)="showCreate()"><i class="bi bi-plus-circle"></i>Add client</button>
+        <button class="primary-button" type="button" [disabled]="!canManageClients" (click)="showCreate()"><i class="bi bi-plus-circle"></i>Add client</button>
     <details class="more-actions">
       <summary><i class="bi bi-three-dots"></i>More</summary>
       <div>
-        <button type="button" [disabled]="!selectedClient" (click)="showEdit()"><i class="bi bi-pencil"></i>Edit client</button>
-        <button type="button" [disabled]="!selectedClient" (click)="blockSelectedClient()"><i class="bi bi-slash-circle"></i>{{ selectedClient?.active ? 'Block client' : 'Unblock client' }}</button>
-        <button type="button" [disabled]="!selectedClient" (click)="deleteSelectedClient()"><i class="bi bi-trash"></i>Delete client</button>
+          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showEdit()"><i class="bi bi-pencil"></i>Edit client</button>
+          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="blockSelectedClient()"><i class="bi bi-slash-circle"></i>{{ selectedClient?.active ? 'Block client' : 'Unblock client' }}</button>
+          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="deleteSelectedClient()"><i class="bi bi-trash"></i>Delete client</button>
         <button type="button" (click)="selectTab('Reports')"><i class="bi bi-bar-chart"></i>Client reports</button>
         <button type="button" (click)="openGiftCardRegister()"><i class="bi bi-gift"></i>Gift card register</button>
         <button type="button" (click)="exportClients()"><i class="bi bi-download"></i>Export clients</button>
-        <button type="button" (click)="bulkImportFile.click()"><i class="bi bi-upload"></i>Import clients</button>
+        <button type="button" [disabled]="!canManageClients" (click)="bulkImportFile.click()"><i class="bi bi-upload"></i>Import clients</button>
         <input #bulkImportFile type="file" accept="application/json,.json" hidden (change)="importClients($event)" />
         <button type="button" (click)="refreshClients()"><i class="bi bi-arrow-clockwise"></i>Refresh</button>
       </div>
@@ -115,14 +115,14 @@
       <div class="profile-actions">
         <button type="button" [disabled]="!selectedClient" (click)="bookAppointment()"><i class="bi bi-calendar2-week"></i>Book appointment</button>
         <button type="button" [disabled]="!selectedClient" (click)="newSale()"><i class="bi bi-cart3"></i>New sale</button>
-        <button type="button" [disabled]="!selectedClient" (click)="showNote()"><i class="bi bi-journal-text"></i>Add note</button>
+          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showNote()"><i class="bi bi-journal-text"></i>Add note</button>
         <button type="button" [disabled]="!selectedClient" (click)="messageClient()"><i class="bi bi-whatsapp"></i>Message</button>
       </div>
     </section>
     @if (selectedClient && duplicates.length) {
       <section class="duplicate-warning">
         <span><i class="bi bi-people"></i><strong>{{ duplicates.length }} possible duplicate{{ duplicates.length === 1 ? '' : 's' }}</strong><small>{{ selectedClient.normalizedPhone }}</small></span>
-        <button type="button" (click)="showMerge()">Review &amp; merge</button>
+          <button type="button" [disabled]="!canMergeClients" (click)="showMerge()">Review &amp; merge</button>
       </section>
     }
     <section class="client-workspace-grid">
@@ -240,7 +240,7 @@
         }
         @if (activeTab === 'Profile') {
           <section class="profile-tab">
-            <header class="tab-toolbar"><h2>Profile</h2><div><button type="button" (click)="showFamilyLink()">Link family</button></div></header>
+        <header class="tab-toolbar"><h2>Profile</h2><div><button type="button" [disabled]="!canManageClients" (click)="showFamilyLink()">Link family</button></div></header>
             <div class="detail-grid">
               <span><small>Client code</small><b>{{ selectedClient.code || '—' }}</b></span><span><small>Branch</small><b>{{ selectedClient.center | branchName }}</b></span>
               <span><small>Birthday</small><b>{{ formatDate(selectedClient.birthday) }}</b></span><span><small>Anniversary</small><b>{{ formatDate(selectedClient.anniversary) }}</b></span>
@@ -276,25 +276,25 @@
           <span><small>Opportunity</small><b>{{ clientSummary.occasionOpportunity || '—' }}</b></span><span><small>Action reason</small><b>{{ clientSummary.nextBestActionReason || '—' }}</b></span>
         </div>
         <div class="forms-consent-grid retention-grid">
-          <article><header><strong>Wallet &amp; prepaid credit</strong></header><div class="form-card-body"><span><small>Wallet balance</small><b>{{ money(walletBalancePaise) }}</b></span><span><small>Store credits</small><b>{{ storeCredits.length }}</b></span></div><div class="card-actions"><button type="button" (click)="openRetention('wallet-credit')">Credit</button><button type="button" [disabled]="walletBalancePaise <= 0" (click)="openRetention('wallet-debit')">Debit</button></div></article>
+          <article><header><strong>Wallet &amp; prepaid credit</strong></header><div class="form-card-body"><span><small>Wallet balance</small><b>{{ money(walletBalancePaise) }}</b></span><span><small>Store credits</small><b>{{ storeCredits.length }}</b></span></div><div class="card-actions"><button type="button" [disabled]="!canManageClients" (click)="openRetention('wallet-credit')">Credit</button><button type="button" [disabled]="walletBalancePaise <= 0 || !canManageClients" (click)="openRetention('wallet-debit')">Debit</button></div></article>
           <article><header><strong>Loyalty tier</strong></header><div class="form-card-body"><span><small>Current tier</small><b>{{ retention.loyalty.currentTier?.name || 'No tier' }}</b></span><span><small>Next tier</small><b>{{ retention.loyalty.nextTier?.name || '—' }}@if (retention.loyalty.pointsToNextTier !== null) {
           · {{ retention.loyalty.pointsToNextTier }} points
-          }</b></span></div><div class="card-actions"><button type="button" (click)="openRetention('loyalty-adjust')">Adjust points</button></div></article>
+          }</b></span></div><div class="card-actions"><button type="button" [disabled]="!canManageClients" (click)="openRetention('loyalty-adjust')">Adjust points</button></div></article>
           <article class="wide-card"><header><strong>Gift cards</strong><span>{{ money(activeGiftCardBalancePaise) }} active</span></header>@if (retention.giftCards.length) {
           <div class="record-list">@for (card of retention.giftCards; track card) {
             <div><span><b>{{ card.code }}</b><small>{{ card.status }} · {{ money(card.balancePaise) }} · {{ formatDate(card.expiresAt) }}</small></span><span class="row-actions"><button type="button" (click)="openGiftCardDetail(card)">Details</button>@if (card.status === 'active') {
-            <button type="button" (click)="openRetention('gift-reissue', card)">Reissue</button><button type="button" (click)="openRetention('gift-void', card)">Void</button>
+              <button type="button" [disabled]="!canManageClients" (click)="openRetention('gift-reissue', card)">Reissue</button><button type="button" [disabled]="!canManageClients" (click)="openRetention('gift-void', card)">Void</button>
           }</span></div>
         }</div>
       } @else {
         <div class="small-empty">No records yet</div>
       }</article>
       <article class="wide-card"><header><strong>Referrals</strong><span>{{ completedReferralCount }} completed</span></header><div class="referral-code"><span><small>Referral code</small><b>{{ retention.referralCode?.code || '—' }}</b></span>@if (!retention.referralCode) {
-      <button type="button" (click)="generateReferralCode()">Generate code</button>
-      }<button type="button" (click)="openRetention('referral-link')">Link client</button></div>@if (retention.referrals.length) {
+          <button type="button" [disabled]="!canManageClients" (click)="generateReferralCode()">Generate code</button>
+          }<button type="button" [disabled]="!canManageClients" (click)="openRetention('referral-link')">Link client</button></div>@if (retention.referrals.length) {
       <div class="record-list">@for (referral of retention.referrals; track referral) {
         <div><span><b>{{ referral.referredName }}</b><small>{{ referral.code }} · {{ referral.status }} · {{ formatDate(referral.createdAt) }}</small></span>@if (referral.status === 'pending') {
-        <button type="button" (click)="completeReferral(referral)">Complete</button>
+            <button type="button" [disabled]="!canManageClients" (click)="completeReferral(referral)">Complete</button>
       }</div>
     }</div>
   } @else {
@@ -305,7 +305,7 @@
 }
 @if (activeTab === 'Growth') {
   <section class="profile-tab forms-consent-tab">
-    <header class="tab-toolbar"><h2>Growth &amp; win-back</h2><div><button type="button" [disabled]="!selectedClient" (click)="showDiscountDecision()">Evaluate discount</button><button type="button" [disabled]="!selectedClient" (click)="showWinBackOffer()">Issue offer</button><button type="button" [disabled]="!selectedClient || savingWorkspace" (click)="rebuildMemoryGraph()">Rebuild memory</button><button type="button" [disabled]="!selectedClient" (click)="loadGrowth()">Refresh</button></div></header>
+        <header class="tab-toolbar"><h2>Growth &amp; win-back</h2><div><button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showDiscountDecision()">Evaluate discount</button><button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showWinBackOffer()">Issue offer</button><button type="button" [disabled]="!selectedClient || savingWorkspace || !canManageClients" (click)="rebuildMemoryGraph()">Rebuild memory</button><button type="button" [disabled]="!selectedClient" (click)="loadGrowth()">Refresh</button></div></header>
     @if (growthError) {
       <p class="form-error">{{ growthError }}</p>
     }
@@ -322,9 +322,9 @@
         <article class="wide-card"><header><strong>Discount decisions</strong></header>@if (growth.discountDecisions?.length) {
         <div class="record-list">@for (decision of growth.discountDecisions; track decision) {
           <div><span><b>{{ decision.ruleName || 'No matching rule' }} · {{ decision.status }}</b><small>{{ decision.serviceCategory }} · {{ (decision.approvedDiscountBps / 100) | number:'1.0-2' }}% · {{ money(decision.discountPaise) }}</small></span><span class="row-actions">@if (decision.status === 'approval_required') {
-          <button type="button" (click)="approveDiscountDecision(decision)">Approve</button>
+              <button type="button" [disabled]="!canManageClients" (click)="approveDiscountDecision(decision)">Approve</button>
           }@if (decision.status === 'approved') {
-          <button type="button" (click)="showWinBackOffer(decision)">Create offer</button>
+            <button type="button" [disabled]="!canManageClients" (click)="showWinBackOffer(decision)">Create offer</button>
         }</span></div>
       }</div>
     } @else {
@@ -333,7 +333,7 @@
     <article class="wide-card"><header><strong>Win-back offers</strong><span>{{ money(growth.winBack?.revenueAfterReturnPaise || 0) }} return revenue</span></header>@if (growth.offers?.length) {
     <div class="record-list">@for (offer of growth.offers; track offer) {
       <div><span><b>{{ offer.offerCode }} · {{ offer.title }}</b><small>{{ offer.status }} · {{ (offer.offeredDiscountBps / 100) | number:'1.0-2' }}% · {{ offer.returnWindowDays }} days · {{ money(offer.revenueAfterReturnPaise) }}</small></span>@if (offer.status === 'issued') {
-      <button type="button" (click)="redeemWinBackOffer(offer)">Redeem</button>
+            <button type="button" [disabled]="!canManageClients" (click)="redeemWinBackOffer(offer)">Redeem</button>
     }</div>
   }</div>
 } @else {
@@ -363,7 +363,7 @@
   <section class="profile-tab forms-consent-tab">
     <header class="tab-toolbar">
       <h2>Clinical profile</h2>
-      <div><button type="button" [disabled]="!selectedClient" (click)="showClinicalProfile()">Edit profile</button><button type="button" [disabled]="!selectedClient" (click)="showSoapNote()">Add SOAP note</button><button type="button" [disabled]="!selectedClient" (click)="showPhotoUpload()">Upload photo</button></div>
+      <div><button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showClinicalProfile()">Edit profile</button><button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showSoapNote()">Add SOAP note</button><button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showPhotoUpload()">Upload photo</button></div>
     </header>
     <div class="forms-consent-grid">
       <article><header><strong>Clinical profile</strong></header><div class="form-card-body"><span><small>Allergies</small><b>{{ clinicalProfile?.allergies || '—' }}</b></span><span><small>Preferences</small><b>{{ clinicalProfile?.preferences || '—' }}</b></span></div></article>
@@ -377,7 +377,7 @@
     <article class="wide-card"><header><strong>SOAP notes</strong></header>@if (soapNotes.length) {
     <div class="record-list">@for (note of soapNotes; track note) {
       <div><span><b>{{ note.status }} · v{{ note.version }}</b><small>{{ note.assessment || note.subjective || note.objective || note.plan }} · {{ formatDateTime(note.updatedAt) }}</small></span>@if (note.status === 'draft') {
-      <button type="button" (click)="showSoapNote(note)">Edit</button>
+            <button type="button" [disabled]="!canManageClients" (click)="showSoapNote(note)">Edit</button>
     }</div>
   }</div>
 } @else {
@@ -398,7 +398,7 @@
 }
 @if (activeTab === 'Consent') {
   <section class="profile-tab forms-consent-tab">
-    <header class="tab-toolbar"><h2>Consent</h2><div><button type="button" [disabled]="!selectedClient" (click)="showContactPreferences()">Edit consent</button></div></header>
+        <header class="tab-toolbar"><h2>Consent</h2><div><button type="button" [disabled]="!selectedClient || !canManageClientConsent" (click)="showContactPreferences()">Edit consent</button></div></header>
     <div class="forms-consent-grid">
       <article><header><strong>Communication preferences</strong></header><div class="form-card-body"><span><small>Preferred staff</small><b>{{ selectedClient.preferredStaffName || '—' }}</b></span><span><small>Preferred channel</small><b>{{ selectedClient.preferredCommunicationChannel || 'none' }}</b></span><span><small>WhatsApp</small><b>{{ selectedClient.whatsappOptIn === true ? 'Opted in' : selectedClient.whatsappOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span><span><small>SMS</small><b>{{ selectedClient.smsOptIn === true ? 'Opted in' : selectedClient.smsOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span><span><small>Email</small><b>{{ selectedClient.emailOptIn === true ? 'Opted in' : selectedClient.emailOptIn === false ? 'Opted out' : 'Not recorded' }}</b></span></div></article>
       <article><header><strong>Consent history</strong></header>@if (consentHistory.length) {
@@ -413,11 +413,11 @@
 }
 @if (activeTab === 'Forms') {
   <section class="profile-tab forms-consent-tab">
-    <header class="tab-toolbar"><h2>Consultation forms</h2><div><button type="button" (click)="showFormDefinition()">Add form</button><button type="button" [disabled]="!selectedClient || !formDefinitions.length" (click)="showFormSubmission()">Complete form</button></div></header>
+        <header class="tab-toolbar"><h2>Consultation forms</h2><div><button type="button" [disabled]="!canManageClientForms" (click)="showFormDefinition()">Add form</button><button type="button" [disabled]="!selectedClient || !formDefinitions.length || !canManageClientForms" (click)="showFormSubmission()">Complete form</button></div></header>
     <div class="forms-consent-grid">
       <article><header><strong>Form definitions</strong></header>@if (formDefinitions.length) {
       <div class="record-list">@for (form of formDefinitions; track form) {
-        <div><span><b>{{ form.name }}</b><small>{{ form.formType }} · v{{ form.version }}</small></span><span class="row-actions"><button type="button" (click)="startKiosk(form)">Kiosk</button><button type="button" (click)="showFormDefinition(form)">New version</button></span></div>
+            <div><span><b>{{ form.name }}</b><small>{{ form.formType }} · v{{ form.version }}</small></span><span class="row-actions"><button type="button" (click)="startKiosk(form)">Kiosk</button><button type="button" [disabled]="!canManageClientForms" (click)="showFormDefinition(form)">New version</button></span></div>
       }</div>
     } @else {
       <div class="small-empty">No records yet</div>
@@ -436,7 +436,7 @@
 }
 @if (activeTab === 'Communications') {
   <section class="profile-tab forms-consent-tab">
-    <header class="tab-toolbar"><h2>Communications</h2><div><button type="button" [disabled]="!selectedClient" (click)="showReviewLink()">Link review</button></div></header>
+        <header class="tab-toolbar"><h2>Communications</h2><div><button type="button" [disabled]="!selectedClient || !canLinkClientReviews" (click)="showReviewLink()">Link review</button></div></header>
     <div class="forms-consent-grid">
       <article><header><strong>WhatsApp activity</strong></header>@if (communications.length) {
       <div class="record-list">@for (event of communications; track event) {
@@ -544,7 +544,7 @@
   <section class="profile-tab forms-consent-tab">
     <header class="tab-toolbar"><h2>Client masters</h2><div><select [(ngModel)]="selectedMasterType" (change)="loadClientMasters()">@for (type of clientMasterTypes; track type) {
     <option [value]="type.key">{{ type.label }}</option>
-    }</select><button type="button" (click)="showClientMaster()">Add master</button><button type="button" (click)="showDiscountRule()">Add discount rule</button></div></header>
+        }</select><button type="button" [disabled]="!canManageClients" (click)="showClientMaster()">Add master</button><button type="button" [disabled]="!canManageClients" (click)="showDiscountRule()">Add discount rule</button></div></header>
     @if (mastersError) {
       <p class="form-error">{{ mastersError }}</p>
     }
@@ -556,14 +556,14 @@
         <article><header><strong>{{ selectedMasterLabel }}</strong></header><div class="form-card-body"><span><small>Total</small><b>{{ selectedMasterSummary?.total || 0 }}</b></span><span><small>Active</small><b>{{ selectedMasterSummary?.active || 0 }}</b></span><span><small>Draft</small><b>{{ selectedMasterSummary?.draft || 0 }}</b></span><span><small>Archived</small><b>{{ selectedMasterSummary?.archived || 0 }}</b></span></div></article>
         <article class="wide-card"><header><strong>{{ selectedMasterLabel }}</strong></header>@if (clientMasters.length) {
         <div class="record-list">@for (master of clientMasters; track master) {
-          <div><span><b>{{ master.name }}</b><small>{{ master.code }} · {{ master.status }} · v{{ master.version }}</small></span><button type="button" (click)="showClientMaster(master)">Edit</button></div>
+            <div><span><b>{{ master.name }}</b><small>{{ master.code }} · {{ master.status }} · v{{ master.version }}</small></span><button type="button" [disabled]="!canManageClients" (click)="showClientMaster(master)">Edit</button></div>
         }</div>
       } @else {
         <div class="small-empty">No records yet</div>
       }</article>
       <article class="wide-card"><header><strong>Discount rules</strong></header>@if (discountRules.length) {
       <div class="record-list">@for (rule of discountRules; track rule) {
-        <div><span><b>{{ rule.name }}</b><small>{{ rule.active ? 'active' : 'inactive' }} · max {{ (rule.maxDiscountBps / 100) | number:'1.0-2' }}% · approval {{ (rule.approvalAboveBps / 100) | number:'1.0-2' }}% · v{{ rule.version }}</small></span><button type="button" (click)="showDiscountRule(rule)">Edit</button></div>
+            <div><span><b>{{ rule.name }}</b><small>{{ rule.active ? 'active' : 'inactive' }} · max {{ (rule.maxDiscountBps / 100) | number:'1.0-2' }}% · approval {{ (rule.approvalAboveBps / 100) | number:'1.0-2' }}% · v{{ rule.version }}</small></span><button type="button" [disabled]="!canManageClients" (click)="showDiscountRule(rule)">Edit</button></div>
       }</div>
     } @else {
       <div class="small-empty">No records yet</div>

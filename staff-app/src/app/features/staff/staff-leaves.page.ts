@@ -87,6 +87,7 @@ export class StaffLeavesPage implements OnInit {
       }
       this.message.set(result?.duplicate ? "This leave request is already pending." : "Leave request sent.");
       await this.load();
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:leaves-updated"));
     } catch {
       // StaffAppService exposes the API error through staff.error().
     } finally {
@@ -95,10 +96,10 @@ export class StaffLeavesPage implements OnInit {
   }
 
   canReadLeaves(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("staff.app.leaves.read");
   }
 
   canRequestLeave(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("staff.app.leaves.manage");
   }
 }

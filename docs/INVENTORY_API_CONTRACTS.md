@@ -21,6 +21,8 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 
 - `GET /inventory/backbar-containers` returns containers and immutable lifecycle events.
 - `POST /inventory/backbar-containers` registers a sealed bottle/package. Body: product, barcode, optional batch, capacity, unit, and idempotency key.
+- `dualUseStock=true` is enabled only when the same SKU is both sold at retail and used in backbar. Its buckets are retail shelf (unopened stock minus sealed containers), sealed backbar (sealed container count), and open balance (remaining quantity in the active container). Products without this flag keep the existing unified stock behavior.
+- For dual-use SKUs, sealed containers reserve unopened units. A database guard rejects registration or any sale, transfer, adjustment, or other deduction that would consume reserved sealed stock.
 - `POST /inventory/backbar-containers/{id}/open` opens a sealed container. It decrements package stock and writes exactly one immutable stock-ledger consumption movement in the same transaction.
 - A product can have only one `open` container in a branch. Opening another sealed container is rejected until the active container is empty; an approved correction may close or restore the current lifecycle state before a different container is opened.
 - `POST /inventory/backbar-containers/{id}/consume` decrements remaining container quantity only; package inventory was already posted when opened.
@@ -35,17 +37,25 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 - The AI service supports configured local OCR, OpenAI Responses, Anthropic Messages, and optional OpenAI-to-Anthropic fallback. Provider output never posts stock directly.
 - Confirmed human item mappings update tenant/branch/supplier-scoped aliases. Later bills consult learned supplier aliases before exact SKU/barcode/name matching; the mapped inventory item remains the source of category truth.
 
+## PO and GRN commercial fields
+
+- Purchase order lines accept `discountBps`; headers accept non-negative `shippingPaise` and `handlingPaise`. Product tax and inventory value use the discounted unit cost, while order totals include both charges.
+- GRNs accept `supplierInvoiceDate`, `challanNumber`, `deliveryReference`, the same commercial charges, line discount, `damagedQuantity`, `rejectedQuantity`, and `varianceReason`. The server generates the branch-unique `grrNumber`.
+- GRN `quantity` is delivered quantity. Accepted stock is delivered minus damaged and rejected; only accepted quantity updates available stock and PO progress. Damaged units create a durable quarantine row, while rejected units remain outside inventory. Ordered, delivered, accepted, short, excess, damaged, and rejected quantities remain on the immutable receipt line.
+- Shipping and handling are allocated across accepted lines in proportion to discounted taxable value using integer-paise largest-remainder allocation. The exact line allocation and landed unit cost are persisted; stock ledger, batches, weighted-average value, and later return valuation use the landed unit cost.
+
 ## Product and service 360
 
 - `GET /inventory/{id}/360` returns the current product plus same-SKU all-branch stock/value, active expiry timeline, client retail usage, margin evidence and the latest 200 immutable entity-ledger rows.
 - `GET /inventory/service-recipes/{serviceId}/versions` returns persisted recipe versions captured whenever `services.product_consumption_json` changes.
-- Manual backbar usage accepts optional `clientId` and `appointmentId`; appointment attribution is rejected unless it belongs to the supplied active client in the same tenant/branch.
+- Manual backbar usage accepts optional `clientId` and `appointmentId`; appointment formula attribution requires its client, booked service and stylist, and is rejected unless the appointment belongs to that client and service in the same tenant/branch.
+- `GET /inventory/backbar-usage` accepts optional `clientId` and `appointmentId` filters for formula history. The saved recipe expectation is compared with the stylist's actual mixed quantity; positive variance above the saved `ownerApprovalPercent` remains pending until a different owner or `inventory.approve` user reviews it.
 - POS product and service consumption plus product-return restocking use the shared inventory adjustment service. When Service Settings enables `recipeInventory.requireRecipeForService`, checkout/finalization is blocked before stock or accounting writes if a service recipe is missing. Sale deductions and returns remain idempotent and preserve FEFO batch evidence.
 
 ## Stock audit and scanner
 
 - `/inventory/stock-audits` owns blind/multi-counter counts, recount, review, approval, immutable adjustment and evidence workflows.
-- `/inventory/scanner/events` persists scanner results and idempotency. `/inventory/scanner/replay` replays offline events with replay protection.
+- `/inventory/scanner-events` persists scanner results and idempotency. The GRN drawer reuses its `receive` workflow to resolve product, alias, SKU, and batch barcodes into received quantities.
 - `/inventory/barcode-aliases` owns product, batch, package and location aliases.
 
 ## Laundry reporting

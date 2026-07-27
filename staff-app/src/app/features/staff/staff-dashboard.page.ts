@@ -100,18 +100,24 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   });
 
   private loadGeneration = 0;
-  private readonly attendanceUpdated = () => void this.load();
+  private readonly staffDataUpdated = () => void this.load();
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
   ngOnInit() {
     this.dismissedRecommendation.set(this.readRecommendationDismissal());
-    window.addEventListener("aura:attendance-updated", this.attendanceUpdated);
+    window.addEventListener("aura:attendance-updated", this.staffDataUpdated);
+    window.addEventListener("aura:tasks-updated", this.staffDataUpdated);
+    window.addEventListener("aura:leaves-updated", this.staffDataUpdated);
     this.queuedActions.set(this.staff.offlineQueueSize());
     void this.load();
   }
 
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
+  ngOnDestroy() {
+    window.removeEventListener("aura:attendance-updated", this.staffDataUpdated);
+    window.removeEventListener("aura:tasks-updated", this.staffDataUpdated);
+    window.removeEventListener("aura:leaves-updated", this.staffDataUpdated);
+  }
   @HostListener("window:online") onOnline() { this.online.set(true); this.queuedActions.set(this.staff.offlineQueueSize()); void this.load(); }
   @HostListener("window:offline") onOffline() { this.online.set(false); }
 
@@ -126,6 +132,8 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       const dashboard = await this.staff.dashboard();
       if (generation !== this.loadGeneration) return;
       this.data.set(dashboard);
+      this.initialLoading.set(false);
+      this.refreshing.set(false);
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
@@ -138,8 +146,8 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       if (generation === this.loadGeneration && !this.data()) { this.initialLoading.set(false); this.refreshing.set(false); }
     }
 
-    const canReadStaff = this.staff.hasPermission("read:staff");
-    const canUseAttendance = this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"]);
+    const canReadLeave = this.staff.hasPermission("staff.app.leaves.read");
+    const canUseAttendance = this.staff.hasPermission("staff.app.attendance.read");
     const modules: Array<{ name: DashboardModule; request: Promise<unknown> }> = [
       { name: "enterprise", request: this.staff.enterpriseOs() },
       { name: "preferences", request: this.staff.workspacePreferences() }
@@ -148,7 +156,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       { name: "today", request: this.staff.today() },
       { name: "overtime", request: this.staff.overtimeSummary() }
     );
-    if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances() });
+    if (canReadLeave) modules.push({ name: "leave", request: this.staff.leaveBalances() });
     const results = await Promise.allSettled(modules.map((module) => module.request));
     if (generation !== this.loadGeneration) return;
     const errors: string[] = [];
@@ -185,7 +193,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   async signOut() { await this.staff.logout(); await this.router.navigateByUrl("/staff/login"); }
 
   private async clockAction() {
-    if (!this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"])) return;
+    if (!this.staff.hasPermission("staff.app.attendance.manage")) return;
     const open = this.openAttendance();
     await this.runMutation("attendance", () => open ? this.staff.clockOut(open.id) : this.staff.clockIn(), open ? "Clocked out." : "Clocked in.");
   }

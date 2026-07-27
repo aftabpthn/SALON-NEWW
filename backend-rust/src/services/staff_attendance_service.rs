@@ -6,11 +6,10 @@ use crate::{
     models::common::AppError,
     repositories::{
         staff_attendance_repository::{
-            self, AttendanceAdjustmentInput, AttendanceCorrectionInput, AttendanceSummaryBaseRecord,
-            OvertimeApprovalRecord,
+            self, AttendanceAdjustmentInput, AttendanceCorrectionInput,
+            AttendanceSummaryBaseRecord, OvertimeApprovalRecord,
         },
-        staff_payroll_repository,
-        staff_repository,
+        staff_payroll_repository, staff_repository,
     },
 };
 
@@ -282,9 +281,10 @@ async fn ensure_attendance_editable(
     let period_month = business_date
         .with_day(1)
         .ok_or_else(|| AppError::internal("invalid business date"))?;
-    let period = staff_payroll_repository::payroll_period_for_month(db, tenant_id, branch_id, period_month)
-        .await
-        .map_err(|_| AppError::internal("failed to load payroll period status"))?;
+    let period =
+        staff_payroll_repository::payroll_period_for_month(db, tenant_id, branch_id, period_month)
+            .await
+            .map_err(|_| AppError::internal("failed to load payroll period status"))?;
     if let Some(period) = period {
         if period.status == "locked" {
             return Err(AppError::conflict(
@@ -463,17 +463,29 @@ pub async fn decide_overtime(
 ) -> Result<OvertimeApprovalRecord, AppError> {
     let decision = decision.trim().to_ascii_lowercase();
     if !matches!(decision.as_str(), "approved" | "rejected") {
-        return Err(AppError::validation("decision must be approved or rejected"));
+        return Err(AppError::validation(
+            "decision must be approved or rejected",
+        ));
     }
     let approved_minutes = if decision == "approved" {
         let minutes = approved_overtime_minutes.unwrap_or(i32::MAX);
-        if minutes < 0 {
+        if minutes <= 0 {
             return Err(AppError::validation("approved overtime minutes is invalid"));
         }
         minutes
     } else {
         0
     };
+    let business_date = staff_attendance_repository::overtime_business_date(
+        db,
+        tenant_id,
+        branch_id,
+        attendance_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load overtime attendance"))?
+    .ok_or_else(|| AppError::not_found("attendance record with overtime not found"))?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     // `approved_minutes` may exceed the actual overtime_minutes when the caller didn't specify a
     // partial amount (defaults to "approve in full") — the repository's LEAST(...) clamp ensures
     // approval can never authorize more than what was actually worked.

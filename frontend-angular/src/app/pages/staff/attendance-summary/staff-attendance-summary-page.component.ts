@@ -3,6 +3,7 @@ import { LanguageService } from '../../../core/i18n/language.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
@@ -10,7 +11,8 @@ type AttendanceColumn =
   | 'name' | 'code' | 'salary' | 'workingDays' | 'leaveBalance' | 'specialLeaveBalance'
   | 'leaveAvailed' | 'specialLeaveAvailed' | 'operationMeetings' | 'operationTasks' | 'penalty' | 'leavesAccrued'
   | 'weeklyOffAdjustment' | 'specialLeaveAdjustment' | 'revisedLeaveBalance'
-  | 'revisedSpecialLeaveBalance' | 'comments';
+  | 'revisedSpecialLeaveBalance' | 'earnedSalary' | 'overtimePay' | 'commission' | 'grossPay'
+  | 'deductions' | 'advanceRecovery' | 'netPay' | 'payrollStatus' | 'comments';
 
 type AttendanceSummaryRow = {
   staffId: string;
@@ -59,6 +61,8 @@ type AttendanceDetail = {
 
 type AttendanceBreak = { id?: string; startedAt: string; endedAt: string; comments: string };
 type AttendanceOperation = { id: string; title: string; operationType: string; status: string; attendanceStatus?: string; taskStatus?: string };
+type PayrollPreview = { salaryRows?: PayrollSalaryRow[]; items?: Array<{ staffId: string; validationErrors?: string[]; validationWarnings?: string[] }> };
+type PayrollSalaryRow = Record<string, unknown> & { staffId?: string; employeeCode?: string | null };
 type CorrectionForm = {
   clockInAt: string; clockOutAt: string; manualStatus: string; penaltyRupees: number | null;
   comments: string; correctionReason: string;
@@ -74,6 +78,7 @@ type CorrectionForm = {
 export class StaffAttendanceSummaryPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   private readonly today = new Date();
 
   readonly months = [
@@ -89,7 +94,10 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     { key: 'operationTasks', label: 'Cleaning Tasks' }, { key: 'penalty', label: 'Penalty' },
     { key: 'leavesAccrued', label: 'Leaves Accrued' }, { key: 'weeklyOffAdjustment', label: 'Weekly Off Adjustment' },
     { key: 'specialLeaveAdjustment', label: 'Special Leave Adjustment' }, { key: 'revisedLeaveBalance', label: 'Revised Leave Balance' },
-    { key: 'revisedSpecialLeaveBalance', label: 'Revised Special Leave Balance' }, { key: 'comments', label: 'Comments' },
+    { key: 'revisedSpecialLeaveBalance', label: 'Revised Special Leave Balance' }, { key: 'earnedSalary', label: 'Earned Salary' },
+    { key: 'overtimePay', label: 'OT Pay' }, { key: 'commission', label: 'Commission' }, { key: 'grossPay', label: 'Gross Pay' },
+    { key: 'deductions', label: 'Deductions' }, { key: 'advanceRecovery', label: 'Advance Recovery' },
+    { key: 'netPay', label: 'Net Pay' }, { key: 'payrollStatus', label: 'Payroll Status' }, { key: 'comments', label: 'Comments' },
   ];
   readonly visibleColumns = Object.fromEntries(this.columns.map((column) => [column.key, true])) as Record<AttendanceColumn, boolean>;
 
@@ -99,6 +107,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   staffId = '';
   staffOptions: Array<{ id: string; name: string }> = [];
   rows: AttendanceSummaryRow[] = [];
+  payrollRows = new Map<string, PayrollSalaryRow>();
   details: AttendanceDetail[] = [];
   selectedRow: AttendanceSummaryRow | null = null;
   loading = false;
@@ -127,11 +136,32 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       const result = await firstValueFrom(this.api.get<ApiEnvelope<AttendanceSummaryRow[]>>(`/staff-attendance/summary?${this.query()}`));
       this.rows = result.data || [];
       if (!this.staffId) this.staffOptions = this.rows.map(({ staffId: id, name }) => ({ id, name }));
+      await this.loadPayrollPreview();
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.9106518826'));
       this.rows = [];
+      this.payrollRows.clear();
     } finally {
       this.loading = false;
+    }
+  }
+
+  async loadPayrollPreview() {
+    try {
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollPreview>>(`/staff-payroll/preview?${this.query()}`));
+      const itemStatus = new Map((result.data?.items || []).map((item) => [
+        item.staffId,
+        {
+          validationErrorCount: item.validationErrors?.length || 0,
+          validationWarningCount: item.validationWarnings?.length || 0,
+        },
+      ]));
+      this.payrollRows = new Map((result.data?.salaryRows || []).map((row) => [
+        String(row.staffId || ''),
+        { ...row, ...(itemStatus.get(String(row.staffId || '')) || {}) },
+      ]));
+    } catch {
+      this.payrollRows.clear();
     }
   }
 
@@ -141,6 +171,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     try {
       const result = await firstValueFrom(this.api.post<ApiEnvelope<AttendanceSummaryRow[]>>(`/staff-attendance/summary/recalculate?${this.query()}`, {}));
       this.rows = result.data || [];
+      await this.loadPayrollPreview();
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.27f3e64dcf'));
     } finally {
@@ -164,6 +195,7 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
         })),
       }));
       this.rows = result.data || [];
+      await this.loadPayrollPreview();
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.1ceeaacac7'));
     } finally {
@@ -249,7 +281,10 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       row.leaveBalance, row.specialLeaveBalance, row.leaveAvailed, row.specialLeaveAvailed,
       `${row.operationMeetingPresent}/${row.operationMeetingAbsent}`, `${row.operationTaskCompleted}/${row.operationTaskMissed}`,
       this.money(row.penaltyPaise), row.leavesAccrued, row.weeklyOffAdjustment,
-      row.specialLeaveAdjustment, row.revisedLeaveBalance, row.revisedSpecialLeaveBalance, row.comments,
+      row.specialLeaveAdjustment, row.revisedLeaveBalance, row.revisedSpecialLeaveBalance,
+      this.payrollMoney(row, 'earnedSalaryPaise'), this.payrollMoney(row, 'overtimePaise'), this.payrollMoney(row, 'commissionPaise'),
+      this.payrollMoney(row, 'grossPaise'), this.payrollMoney(row, 'deductionsPaise'), this.payrollMoney(row, 'advanceRecoveryPaise'),
+      this.payrollMoney(row, 'netPaise'), this.payrollStatus(row), row.comments,
     ].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','));
     const blob = new Blob([[headers.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a');
@@ -261,8 +296,27 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
 
   printPdf() { window.print(); }
 
+  openPayroll() {
+    void this.router.navigate(['/staff/payroll'], { queryParams: { cycle: this.cycle, year: this.year, month: this.month, staffId: this.staffId || null } });
+  }
+
   money(value: number | null) {
     return value === null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value / 100);
+  }
+
+  payrollRow(row: AttendanceSummaryRow) { return this.payrollRows.get(row.staffId) || null; }
+  payrollMoney(row: AttendanceSummaryRow, key: string) {
+    const value = Number(this.payrollRow(row)?.[key]);
+    return Number.isFinite(value) ? this.money(value) : '—';
+  }
+  payrollStatus(row: AttendanceSummaryRow) {
+    const source = this.payrollRow(row);
+    const errors = Number(source?.['validationErrorCount'] || 0);
+    const warnings = Number(source?.['validationWarningCount'] || 0);
+    if (!source) return '—';
+    if (errors) return `${errors} error${errors === 1 ? '' : 's'}`;
+    if (warnings) return `${warnings} warning${warnings === 1 ? '' : 's'}`;
+    return 'Ready';
   }
 
   displayDate(value: string) {

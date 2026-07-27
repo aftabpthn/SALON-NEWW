@@ -1,0 +1,193 @@
+<section class="payments-integrations-page">
+  <header class="page-head">
+    <div>
+      <p class="eyebrow">Payments</p>
+      <h1>Payments Integrations</h1>
+      <p class="summary">{{ connectedCount }} of {{ availableCount }} available providers connected in {{ countryLabel(country) }}</p>
+    </div>
+
+    <button type="button" class="reload-button" (click)="load()" [disabled]="loading">
+      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+      <span>{{ loading ? 'Loading…' : 'Reload' }}</span>
+    </button>
+  </header>
+
+  @if (error) {
+    <p class="message error" role="alert">{{ error }}</p>
+  }
+
+  <section class="stats-card" aria-label="Payment integration summary">
+    <div>
+      <span>Global catalog</span>
+      <strong>{{ providers.length }}</strong>
+    </div>
+    <div>
+      <span>Available now</span>
+      <strong>{{ availableCount }}</strong>
+    </div>
+    <div>
+      <span>Connected</span>
+      <strong>{{ connectedCount }}</strong>
+    </div>
+    <div>
+      <span>Pending ops</span>
+      <strong>{{ operations.pending }}</strong>
+    </div>
+    <div>
+      <span>Failed ops</span>
+      <strong>{{ operations.failed }}</strong>
+    </div>
+    <div>
+      <span>Open disputes</span>
+      <strong>{{ openDisputes }}</strong>
+    </div>
+  </section>
+
+  @if (!loading && providers.length) {
+    <section class="catalog-controls" aria-label="Filter payment providers">
+      <label class="search-control">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <span class="visually-hidden">Search providers</span>
+        <input type="search" placeholder="Search provider or currency" [value]="search" (input)="updateSearch($event)" />
+      </label>
+      <label class="country-control">
+        <span class="visually-hidden">Business country</span>
+        <select [value]="country" (change)="updateCountry($event)" aria-label="Business country">
+          @for (item of countryOptions; track item) {
+            <option [value]="item" [selected]="item === country">{{ countryLabel(item) }}</option>
+          }
+        </select>
+      </label>
+    </section>
+  }
+
+  @if (loading) {
+    <div class="state-card">Loading payment integrations…</div>
+  } @else if (filteredProviders.length) {
+    <section class="providers-grid">
+      @for (provider of filteredProviders; track provider.provider) {
+        <article class="provider-card" [class.recommended-provider]="isRecommended(provider)">
+          <header class="provider-head">
+            <div class="brand">
+              <span class="brand-mark">{{ initials(provider) }}</span>
+              <div>
+                <h2>{{ providerLabel(provider) }}</h2>
+                <p>{{ provider.regions.join(' · ') }}</p>
+              </div>
+            </div>
+            <span class="status-pill" [ngClass]="statusClass(provider)">{{ statusLabel(provider) }}</span>
+          </header>
+
+          <dl class="provider-meta">
+            <div>
+              <dt>Coverage</dt>
+              <dd>{{ provider.regions.join(', ') }}</dd>
+            </div>
+            <div>
+              <dt>Currencies</dt>
+              <dd>{{ provider.currencies.join(', ') }}</dd>
+            </div>
+            @if (isAvailable(provider)) {
+              <div>
+                <dt>Environment</dt>
+                <dd>{{ environmentLabel(provider.environment) }}</dd>
+              </div>
+              <div>
+                <dt>Webhook</dt>
+                <dd>{{ provider.webhookConfigured ? 'Configured' : 'Pending' }}</dd>
+              </div>
+            } @else {
+              <div>
+                <dt>Integration</dt>
+                <dd>{{ isRecommended(provider) ? 'Unified checkout' : 'Roadmap' }}</dd>
+              </div>
+            }
+          </dl>
+
+          @if (isAvailable(provider)) {
+            <button type="button" class="provider-action" (click)="openProvider(provider)">{{ actionLabel(provider) }}</button>
+          } @else if (isRecommended(provider)) {
+            <button type="button" class="provider-action recommended-action" disabled>Coming soon</button>
+          } @else {
+            <a class="provider-action planned-action" [href]="provider.documentationUrl" target="_blank" rel="noopener noreferrer">Provider docs</a>
+          }
+        </article>
+      }
+    </section>
+  } @else if (providers.length) {
+    <p class="empty-state">No payment providers match {{ countryLabel(country) }} and the current search.</p>
+  } @else {
+    <p class="empty-state">No payment providers found.</p>
+  }
+
+
+  @if (selectedProvider) {
+    <button type="button" class="drawer-backdrop" aria-label="Close payment provider" (click)="closeProvider()"></button>
+    <aside class="provider-drawer" role="dialog" aria-modal="true" aria-labelledby="provider-drawer-title">
+      <header class="drawer-head">
+        <div>
+          <span>Payment provider</span>
+          <h2 id="provider-drawer-title">{{ providerLabel(selectedProvider) }}</h2>
+        </div>
+        <button type="button" class="drawer-close" aria-label="Close" (click)="closeProvider()">×</button>
+      </header>
+
+      <div class="drawer-body">
+        @if (actionError) {
+          <p class="message error" role="alert">{{ actionError }}</p>
+        }
+
+        @if (accountFor(selectedProvider); as account) {
+          <dl class="account-status">
+            <div><dt>KYC/KYB</dt><dd>{{ account.kycStatus }}</dd></div>
+            <div><dt>Charges</dt><dd>{{ account.chargesEnabled ? 'Enabled' : 'Pending' }}</dd></div>
+            <div><dt>Payouts</dt><dd>{{ account.payoutsEnabled ? 'Enabled' : 'Pending' }}</dd></div>
+            <div><dt>PCI</dt><dd>{{ account.pciStatus }}</dd></div>
+          </dl>
+        }
+
+        <section class="setup-checklist" aria-label="Provider setup health">
+          @for (row of setupRows(selectedProvider); track row.label) {
+            <div [class.ready]="row.ready">
+              <span>{{ row.ready ? 'Ready' : 'Missing' }}</span>
+              <strong>{{ row.label }}</strong>
+            </div>
+          }
+          <p>{{ setupHint(selectedProvider) }}</p>
+        </section>
+
+        @if (canStartHostedOnboarding(selectedProvider)) {
+          <label class="drawer-field">
+            <span>Legal business name</span>
+            <input type="text" maxlength="160" [(ngModel)]="businessName" autocomplete="organization" />
+          </label>
+          <label class="drawer-field">
+            <span>Business type</span>
+            <select [(ngModel)]="businessType">
+              <option value="company">Company</option>
+              <option value="individual">Individual</option>
+              <option value="non_profit">Non-profit</option>
+            </select>
+          </label>
+          <div class="drawer-row">
+            <label class="drawer-field"><span>Country</span><input [value]="country" disabled /></label>
+            <label class="drawer-field"><span>Currency</span><input maxlength="3" [(ngModel)]="onboardingCurrency" /></label>
+          </div>
+        }
+      </div>
+
+      <footer class="drawer-actions">
+        <button type="button" class="secondary-action" (click)="closeProvider()" [disabled]="actionLoading">Cancel</button>
+        @if (accountFor(selectedProvider)) {
+          <button type="button" class="secondary-action" (click)="refreshSelectedAccount()" [disabled]="actionLoading">Refresh status</button>
+        }
+        @if (selectedProvider.documentationUrl) {
+          <a class="secondary-action" [href]="selectedProvider.documentationUrl" target="_blank" rel="noopener noreferrer">Provider docs</a>
+        }
+        @if (canStartHostedOnboarding(selectedProvider)) {
+          <button type="button" class="primary-action" (click)="beginOnboarding()" [disabled]="actionLoading">{{ actionLoading ? 'Opening…' : 'Continue onboarding' }}</button>
+        }
+      </footer>
+    </aside>
+  }
+</section>

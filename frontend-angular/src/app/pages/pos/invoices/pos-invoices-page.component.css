@@ -166,6 +166,50 @@
   overflow: auto;
 }
 
+.register-filters {
+  position: sticky;
+  left: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 180px auto auto;
+  gap: 10px;
+  min-width: 820px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line, #d8e0ea);
+  background: #fff;
+}
+
+.register-filters input,
+.register-filters select,
+.register-filters button {
+  min-height: 38px;
+  border: 1px solid #c8d7ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #102346;
+  font: inherit;
+  font-weight: 600;
+}
+
+.register-filters input,
+.register-filters select {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.register-filters button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.register-filters button:hover,
+.register-filters button:focus-visible,
+.register-filters input:focus,
+.register-filters select:focus {
+  border-color: #155ee8;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(21, 94, 232, .12);
+}
+
 .table-head,
 .invoice-row {
   display: grid;

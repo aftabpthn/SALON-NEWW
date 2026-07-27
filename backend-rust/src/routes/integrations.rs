@@ -209,6 +209,7 @@ pub fn public_router() -> Router<AppState> {
         .route("/integrations/v1/clients", get(api_clients))
         .route("/integrations/v1/appointments", get(api_appointments))
         .route("/integrations/v1/sales", get(api_sales))
+        .route("/integrations/v1/staff", get(api_staff))
         .route(
             "/integrations/oauth/:provider/callback",
             get(connector_oauth_callback),
@@ -220,6 +221,9 @@ pub fn public_router() -> Router<AppState> {
 struct ApiKeyWrite {
     name: String,
     scopes: Vec<String>,
+    #[serde(default)]
+    ip_allowlist: Vec<String>,
+    rate_limit_per_minute: Option<i32>,
     expires_at: Option<DateTime<Utc>>,
 }
 #[derive(Deserialize)]
@@ -385,6 +389,8 @@ async fn create_api_key(
             &c.sub,
             &p.name,
             p.scopes,
+            p.ip_allowlist,
+            p.rate_limit_per_minute,
             p.expires_at,
             None,
         )
@@ -848,14 +854,7 @@ async fn api_clients(
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
-    let key = headers
-        .get("x-api-key")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if key.is_empty() {
-        return Err(AppError::unauthenticated("x-api-key is required"));
-    }
-    let credential = integration_service::authenticate_api_key(&s.db, key, "clients.read").await?;
+    let credential = authenticate_api_request(&s, &headers, "clients.read").await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_clients(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
@@ -865,9 +864,7 @@ async fn api_appointments(
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
-    let key = api_key_header(&headers)?;
-    let credential =
-        integration_service::authenticate_api_key(&s.db, key, "appointments.read").await?;
+    let credential = authenticate_api_request(&s, &headers, "appointments.read").await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_appointments(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
@@ -877,11 +874,36 @@ async fn api_sales(
     headers: HeaderMap,
     Query(q): Query<LimitQuery>,
 ) -> ApiResult<Vec<Value>> {
-    let key = api_key_header(&headers)?;
-    let credential = integration_service::authenticate_api_key(&s.db, key, "sales.read").await?;
+    let credential = authenticate_api_request(&s, &headers, "sales.read").await?;
     Ok(Json(ApiResponse::ok(
         integration_service::api_sales(&s.db, &credential, q.limit.unwrap_or(100)).await?,
     )))
+}
+async fn api_staff(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<LimitQuery>,
+) -> ApiResult<Vec<Value>> {
+    let credential = authenticate_api_request(&s, &headers, "staff.read").await?;
+    Ok(Json(ApiResponse::ok(
+        integration_service::api_staff(&s.db, &credential, q.limit.unwrap_or(100)).await?,
+    )))
+}
+async fn authenticate_api_request(
+    state: &AppState,
+    headers: &HeaderMap,
+    scope: &str,
+) -> Result<crate::repositories::integration_repository::ApiKeyCredential, AppError> {
+    integration_service::authenticate_api_key(
+        &state.db,
+        &state.redis,
+        api_key_header(headers)?,
+        scope,
+        headers
+            .get("x-aurashine-source-ip")
+            .and_then(|value| value.to_str().ok()),
+    )
+    .await
 }
 fn api_key_header(headers: &HeaderMap) -> Result<&str, AppError> {
     headers
@@ -900,6 +922,7 @@ async fn openapi() -> Json<Value> {
         "/integrations/v1/clients":{"get":{"security":[{"apiKey":[]}],"summary":"List clients using clients.read scope","parameters":[{"name":"limit","in":"query","schema":{"type":"integer","minimum":1,"maximum":500}}],"responses":{"200":{"description":"Client list"}}}},
         "/integrations/v1/appointments":{"get":{"security":[{"apiKey":[]}],"summary":"List appointments using appointments.read scope","responses":{"200":{"description":"Appointment list"}}}},
         "/integrations/v1/sales":{"get":{"security":[{"apiKey":[]}],"summary":"List sales using sales.read scope","responses":{"200":{"description":"Sale list"}}}},
+        "/integrations/v1/staff":{"get":{"security":[{"apiKey":[]}],"summary":"List staff directory using staff.read scope","responses":{"200":{"description":"Staff list"}}}},
         "/settings/integrations/api-keys":{"get":{"security":[{"bearerAuth":[]}],"summary":"List scoped API keys","responses":{"200":{"description":"API key list"}}},"post":{"security":[{"bearerAuth":[]}],"summary":"Create scoped API key","responses":{"200":{"description":"Secret returned once"}}}},
         "/settings/integrations/webhooks":{"get":{"security":[{"bearerAuth":[]}],"summary":"List webhook subscriptions","responses":{"200":{"description":"Webhook list"}}},"post":{"security":[{"bearerAuth":[]}],"summary":"Create signed webhook subscription","responses":{"200":{"description":"Signing secret returned once"}}}},
         "/settings/integrations/connectors":{"get":{"security":[{"bearerAuth":[]}],"summary":"List accounting and automation connector status","responses":{"200":{"description":"Connector list without secret material"}}}},

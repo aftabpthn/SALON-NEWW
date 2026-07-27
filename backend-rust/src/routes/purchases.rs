@@ -14,7 +14,8 @@ use crate::{
         auth_service::AuthClaims,
         purchase_service::{
             self, OrderDetails, OrderInput, OrderLineInput, ReceiptDetails, ReceiptInput,
-            ReceiptLineInput, ReturnInput, ReturnLineInput, SupplierPaymentInput,
+            ReceiptLineInput, ReturnInput, ReturnLineInput, SupplierAdvanceInput,
+            SupplierPaymentInput,
         },
     },
     state::AppState,
@@ -65,7 +66,12 @@ pub fn router() -> Router<AppState> {
         .route("/purchases/grn/:id", get(get_receipt))
         .route("/purchases/returns", get(list_returns).post(create_return))
         .route("/purchases/payables", get(list_payables))
+        .route("/purchases/payment-summary", get(payment_summary))
         .route("/purchases/payments", axum::routing::post(create_payment))
+        .route(
+            "/purchases/supplier-advances",
+            axum::routing::post(create_supplier_advance),
+        )
 }
 
 #[derive(Deserialize)]
@@ -89,6 +95,10 @@ struct OrderRequest {
     supplier_id: String,
     expected_date: Option<String>,
     notes: Option<String>,
+    #[serde(default)]
+    shipping_paise: i64,
+    #[serde(default)]
+    handling_paise: i64,
     lines: Vec<OrderLineRequest>,
 }
 
@@ -98,6 +108,8 @@ struct OrderLineRequest {
     inventory_item_id: String,
     quantity: i32,
     unit_cost_paise: i64,
+    #[serde(default)]
+    discount_bps: i32,
     gst_percent: i32,
 }
 
@@ -115,8 +127,17 @@ struct ReceiptRequest {
     supplier_name: String,
     supplier_gstin: String,
     supplier_invoice_number: String,
+    supplier_invoice_date: Option<String>,
     received_date: Option<String>,
     due_date: Option<String>,
+    #[serde(default)]
+    challan_number: String,
+    #[serde(default)]
+    delivery_reference: String,
+    #[serde(default)]
+    shipping_paise: i64,
+    #[serde(default)]
+    handling_paise: i64,
     idempotency_key: String,
     lines: Vec<ReceiptLineRequest>,
 }
@@ -127,7 +148,15 @@ struct ReceiptLineRequest {
     inventory_item_id: String,
     quantity: i32,
     unit_cost_paise: i64,
+    #[serde(default)]
+    discount_bps: i32,
     gst_percent: Option<i32>,
+    #[serde(default)]
+    damaged_quantity: i32,
+    #[serde(default)]
+    rejected_quantity: i32,
+    #[serde(default)]
+    variance_reason: String,
     batch_number: Option<String>,
     batch_barcode: Option<String>,
     expiry_date: Option<String>,
@@ -160,10 +189,20 @@ struct PaymentRequest {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SupplierAdvanceRequest {
+    supplier_id: String,
+    amount_paise: i64,
+    payment_method: String,
+    reference: Option<String>,
+    idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PurchaseListQuery {
     page: Option<i64>,
     page_size: Option<i64>,
     with_count: Option<bool>,
+    supplier_id: Option<String>,
 }
 
 async fn list_suppliers(
@@ -201,11 +240,7 @@ async fn save_supplier(
     payload: SupplierRequest,
 ) -> ApiResult<purchase_repository::SupplierRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let code = if id.is_some() {
-        required(&payload.code, "code is required", 80)?
-    } else {
-        String::new()
-    };
+    let code = limited(Some(payload.code), 80)?;
     let name = required(&payload.name, "name is required", 160)?;
     let gstin = payload
         .gstin
@@ -281,6 +316,8 @@ async fn create_order(
         supplier_id: payload.supplier_id,
         expected_date: payload.expected_date,
         notes: payload.notes.unwrap_or_default(),
+        shipping_paise: payload.shipping_paise,
+        handling_paise: payload.handling_paise,
         lines: payload
             .lines
             .into_iter()
@@ -288,6 +325,7 @@ async fn create_order(
                 inventory_item_id: line.inventory_item_id,
                 quantity: line.quantity,
                 unit_cost_paise: line.unit_cost_paise,
+                discount_bps: line.discount_bps,
                 gst_percent: line.gst_percent,
             })
             .collect(),
@@ -438,8 +476,13 @@ async fn receive(
         supplier_name: payload.supplier_name,
         supplier_gstin: payload.supplier_gstin,
         supplier_invoice_number: payload.supplier_invoice_number,
+        supplier_invoice_date: payload.supplier_invoice_date,
         received_date: payload.received_date,
         due_date: payload.due_date,
+        challan_number: payload.challan_number,
+        delivery_reference: payload.delivery_reference,
+        shipping_paise: payload.shipping_paise,
+        handling_paise: payload.handling_paise,
         idempotency_key: payload.idempotency_key,
         lines: payload
             .lines
@@ -448,7 +491,11 @@ async fn receive(
                 inventory_item_id: line.inventory_item_id,
                 quantity: line.quantity,
                 unit_cost_paise: line.unit_cost_paise,
+                discount_bps: line.discount_bps,
                 gst_percent: line.gst_percent,
+                damaged_quantity: line.damaged_quantity,
+                rejected_quantity: line.rejected_quantity,
+                variance_reason: line.variance_reason,
                 batch_number: line.batch_number,
                 batch_barcode: line.batch_barcode,
                 expiry_date: line.expiry_date,
@@ -505,10 +552,28 @@ async fn list_payables(
 ) -> ApiResult<Vec<purchase_repository::PayableRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let (limit, offset) = resolve_purchase_pagination(&query, None);
-    let rows = purchase_repository::list_payables(&state.db, &tenant_id, &branch_id, limit, offset)
-        .await
-        .map_err(|_| AppError::internal("failed to list supplier payables"))?;
+    let rows = purchase_repository::list_payables(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.supplier_id.as_deref(),
+        limit,
+        offset,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to list supplier payables"))?;
     Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn payment_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<purchase_repository::SupplierPaymentSummary> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let summary = purchase_repository::supplier_payment_summary(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load supplier payment summary"))?;
+    Ok(Json(ApiResponse::ok(summary)))
 }
 
 async fn create_payment(
@@ -517,6 +582,7 @@ async fn create_payment(
     headers: HeaderMap,
     Json(payload): Json<PaymentRequest>,
 ) -> ApiResult<purchase_repository::SupplierPaymentRecord> {
+    require_supplier_payment_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = SupplierPaymentInput {
         purchase_receipt_id: payload.purchase_receipt_id,
@@ -527,6 +593,33 @@ async fn create_payment(
     };
     Ok(Json(ApiResponse::ok(
         purchase_service::pay_supplier(&state, &tenant_id, &branch_id, &claims.sub, input).await?,
+    )))
+}
+
+async fn create_supplier_advance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<SupplierAdvanceRequest>,
+) -> ApiResult<purchase_repository::SupplierAdvanceRecord> {
+    require_supplier_payment_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let input = SupplierAdvanceInput {
+        supplier_id: payload.supplier_id,
+        amount_paise: payload.amount_paise,
+        payment_method: payload.payment_method,
+        reference: payload.reference.unwrap_or_default(),
+        idempotency_key: payload.idempotency_key,
+    };
+    Ok(Json(ApiResponse::ok(
+        purchase_service::record_supplier_advance(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            input,
+        )
+        .await?,
     )))
 }
 
@@ -560,6 +653,25 @@ fn require_approver(claims: &AuthClaims) -> Result<(), AppError> {
     } else {
         Err(AppError::forbidden(
             "purchase order approval permission is required",
+        ))
+    }
+}
+
+fn require_supplier_payment_access(claims: &AuthClaims) -> Result<(), AppError> {
+    let role = claims.role.trim().to_ascii_lowercase();
+    if matches!(
+        role.as_str(),
+        "owner" | "admin" | "manager" | "accountant" | "inventory manager"
+    ) || claims.permissions.iter().any(|value| {
+        matches!(
+            value.as_str(),
+            "finance.write" | "inventory.manage" | "purchases.pay"
+        )
+    }) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "supplier payment permission is required",
         ))
     }
 }

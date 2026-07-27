@@ -1,12 +1,16 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
+    body::{Body, Bytes},
+    extract::{DefaultBodyLimit, Path, Query, State},
+    http::{header, HeaderMap, HeaderValue},
+    response::Response,
     routing::{get, post},
     Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -34,6 +38,21 @@ pub fn router() -> Router<AppState> {
         .route(
             "/marketing/offers/:id/approve",
             post(approve_marketing_offer),
+        )
+        .route("/marketing/offers/:id/submit", post(submit_marketing_offer))
+        .route(
+            "/marketing/offers/:id/share-pack",
+            get(marketing_offer_share_pack),
+        )
+        .route(
+            "/marketing/offers/performance",
+            get(marketing_offer_performance),
+        )
+        .route(
+            "/marketing/offers/:id/creative",
+            get(get_marketing_offer_creative)
+                .put(upload_marketing_offer_creative)
+                .layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
         .route("/marketing/automations", get(list_automations))
         .route(
@@ -113,11 +132,15 @@ struct MarketingAdvisorReviewRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MarketingOfferRequest {
     code: String,
+    title: Option<String>,
+    customer_description: Option<String>,
+    staff_instructions: Option<String>,
     benefit_type: String,
     benefit_value: Option<i64>,
     target_client_id: Option<String>,
     complimentary_service_id: Option<String>,
     target_service_ids: Option<Vec<String>>,
+    target_package_ids: Option<Vec<String>>,
     starts_at: Option<DateTime<Utc>>,
     ends_at: Option<DateTime<Utc>>,
     minimum_bill_paise: Option<i64>,
@@ -125,6 +148,15 @@ struct MarketingOfferRequest {
     per_client_limit: Option<i64>,
     allow_membership_stacking: Option<bool>,
     allow_package_stacking: Option<bool>,
+    show_in_staff_app: Option<bool>,
+    show_in_customer_app: Option<bool>,
+    submit_for_approval: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OfferCreativeQuery {
+    file_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -351,17 +383,176 @@ async fn list_marketing_offers(
     require_permission(&claims, false)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rows = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
-      'id',id,'code',code,'benefitType',marketing_benefit_type,'benefitValue',benefit_value,
+      'id',id,'code',code,'title',COALESCE(NULLIF(title,''),code),
+      'customerDescription',customer_description,'staffInstructions',staff_instructions,
+      'benefitType',marketing_benefit_type,'benefitValue',benefit_value,
       'targetClientId',target_client_id,'complimentaryServiceId',complimentary_service_id,
-      'targetServiceIds',target_service_ids,'startsAt',starts_at,'endsAt',ends_at,
+      'targetServiceIds',target_service_ids,'targetPackageIds',target_package_ids,
+      'startsAt',starts_at,'endsAt',ends_at,
       'minimumBillPaise',min_subtotal_paise,'usageLimit',usage_limit,'usedCount',used_count,
       'perClientLimit',per_client_limit,'approvalStatus',approval_status,'active',active,
+      'showInStaffApp',show_in_staff_app,'showInCustomerApp',show_in_customer_app,
+      'hasCreative',EXISTS(SELECT 1 FROM marketing_offer_creatives creative WHERE creative.tenant_id=pos_coupons.tenant_id AND creative.branch_id=pos_coupons.branch_id AND creative.offer_id=pos_coupons.id),
+      'creativePath',CASE WHEN EXISTS(SELECT 1 FROM marketing_offer_creatives creative WHERE creative.tenant_id=pos_coupons.tenant_id AND creative.branch_id=pos_coupons.branch_id AND creative.offer_id=pos_coupons.id) THEN '/api/v1/marketing/offers/'||id||'/creative' ELSE NULL END,
+      'lifecycleStatus',CASE WHEN approval_status='rejected' THEN 'rejected' WHEN approval_status='draft' THEN 'draft' WHEN approval_status='pending' THEN 'pending' WHEN active=FALSE THEN 'inactive' WHEN starts_at>NOW() THEN 'scheduled' WHEN ends_at<NOW() THEN 'expired' ELSE 'live' END,
       'allowMembershipStacking',allow_membership_stacking,'allowPackageStacking',allow_package_stacking,
       'createdAt',created_at,'approvedAt',approved_at) ORDER BY created_at DESC),'[]'::JSONB)
       FROM pos_coupons WHERE tenant_id=$1 AND branch_id=$2 AND created_by<>''"#)
         .bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await
         .map_err(|_| AppError::internal("failed to load marketing offers"))?;
     Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn marketing_offer_performance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_named_permission(&claims, "analytics.read")?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let tenant_wide = matches!(claims.role.to_ascii_lowercase().as_str(), "owner" | "admin");
+    let rows = sqlx::query_scalar::<_, Value>(r#"WITH scoped_offers AS (
+      SELECT offer.*,branch.id::TEXT AS resolved_branch_id,branch.name AS branch_name
+      FROM pos_coupons offer
+      JOIN branches branch ON offer.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name)
+      JOIN tenants tenant ON tenant.id=branch.tenant_id AND offer.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name)
+      WHERE offer.created_by<>'' AND offer.tenant_id=$1 AND ($3 OR offer.branch_id=$2)
+    ), event_totals AS (
+      SELECT event.offer_id,
+        COUNT(*) FILTER (WHERE event.event_type='view')::BIGINT AS app_views,
+        COUNT(*) FILTER (WHERE event.event_type='click')::BIGINT AS link_clicks
+      FROM marketing_offer_events event JOIN scoped_offers offer ON offer.id=event.offer_id
+      WHERE event.tenant_id=$1 GROUP BY event.offer_id
+    ), booking_totals AS (
+      SELECT offer.id AS offer_id,COUNT(appointment.id)::BIGINT AS bookings
+      FROM scoped_offers offer LEFT JOIN appointments appointment
+        ON appointment.tenant_id=offer.tenant_id AND appointment.branch_id=offer.branch_id
+       AND appointment.source LIKE 'marketing_offer:'||offer.id||':%'
+       AND appointment.status NOT IN ('cancelled','no_show')
+      GROUP BY offer.id
+    ), sale_totals AS (
+      SELECT offer.id AS offer_id,COUNT(sale.id)::BIGINT AS redemptions,
+        COALESCE(SUM(sale.coupon_discount_paise),0)::BIGINT AS discount_paise,
+        COALESCE(SUM(GREATEST(sale.subtotal_paise-sale.discount_paise,0)),0)::BIGINT AS revenue_after_discount_paise
+      FROM scoped_offers offer LEFT JOIN pos_sales sale
+        ON sale.tenant_id=offer.tenant_id AND sale.branch_id=offer.branch_id AND sale.coupon_code=offer.code
+       AND sale.finalized_at IS NOT NULL AND sale.status NOT IN ('draft','voided','cancelled','refunded')
+      GROUP BY offer.id
+    ), performance AS (
+      SELECT offer.id,offer.code,COALESCE(NULLIF(offer.title,''),offer.code) AS title,
+        offer.resolved_branch_id AS branch_id,offer.branch_name,offer.ends_at,
+        CASE WHEN offer.approval_status='rejected' THEN 'rejected' WHEN offer.approval_status='draft' THEN 'draft'
+          WHEN offer.approval_status='pending' THEN 'pending' WHEN offer.active=FALSE THEN 'inactive'
+          WHEN offer.starts_at>NOW() THEN 'scheduled' WHEN offer.ends_at<NOW() THEN 'expired' ELSE 'live' END AS lifecycle_status,
+        COALESCE(event.app_views,0) AS app_views,COALESCE(event.link_clicks,0) AS link_clicks,
+        COALESCE(booking.bookings,0) AS bookings,COALESCE(sale.redemptions,0) AS pos_redemptions,
+        COALESCE(sale.discount_paise,0) AS discount_paise,
+        COALESCE(sale.revenue_after_discount_paise,0) AS revenue_after_discount_paise
+      FROM scoped_offers offer
+      LEFT JOIN event_totals event ON event.offer_id=offer.id
+      LEFT JOIN booking_totals booking ON booking.offer_id=offer.id
+      LEFT JOIN sale_totals sale ON sale.offer_id=offer.id
+    ) SELECT JSONB_BUILD_OBJECT(
+      'offers',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+        'offerId',id,'code',code,'title',title,'branchId',branch_id,'branchName',branch_name,
+        'lifecycleStatus',lifecycle_status,'endsAt',ends_at,'appViews',app_views,'linkClicks',link_clicks,
+        'bookings',bookings,'posRedemptions',pos_redemptions,'discountPaise',discount_paise,
+        'revenueAfterDiscountPaise',revenue_after_discount_paise) ORDER BY ends_at DESC NULLS FIRST,title) FROM performance),'[]'::JSONB),
+      'branchResults',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+        'branchId',branch_id,'branchName',branch_name,'appViews',app_views,'linkClicks',link_clicks,
+        'bookings',bookings,'posRedemptions',pos_redemptions,'discountPaise',discount_paise,
+        'revenueAfterDiscountPaise',revenue_after_discount_paise) ORDER BY branch_name) FROM (
+          SELECT branch_id,branch_name,SUM(app_views)::BIGINT app_views,SUM(link_clicks)::BIGINT link_clicks,
+            SUM(bookings)::BIGINT bookings,SUM(pos_redemptions)::BIGINT pos_redemptions,
+            SUM(discount_paise)::BIGINT discount_paise,SUM(revenue_after_discount_paise)::BIGINT revenue_after_discount_paise
+          FROM performance GROUP BY branch_id,branch_name
+        ) branch_performance),'[]'::JSONB)
+    )"#)
+        .bind(&tenant_id).bind(&branch_id).bind(tenant_wide).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load offer performance"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn marketing_offer_share_pack(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_permission(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let offer = sqlx::query_scalar::<_, Value>(r#"SELECT JSONB_BUILD_OBJECT(
+      'id',offer.id,'code',offer.code,'title',COALESCE(NULLIF(offer.title,''),offer.code),
+      'customerDescription',offer.customer_description,'endsAt',offer.ends_at,
+      'targetServiceIds',offer.target_service_ids,'branchId',branch.id::TEXT,
+      'hasCreative',EXISTS(SELECT 1 FROM marketing_offer_creatives creative
+        WHERE creative.tenant_id=offer.tenant_id AND creative.branch_id=offer.branch_id AND creative.offer_id=offer.id),
+      'trackedBookings',(SELECT COUNT(*) FROM appointments appointment
+        WHERE appointment.tenant_id=offer.tenant_id AND appointment.branch_id=offer.branch_id
+          AND appointment.source LIKE 'marketing_offer:'||offer.id||':%'
+          AND appointment.status NOT IN ('cancelled','no_show'))
+    ) FROM pos_coupons offer
+    JOIN branches branch ON offer.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name)
+    WHERE offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=$3 AND branch.active=TRUE
+      AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+      AND (offer.starts_at IS NULL OR offer.starts_at<=NOW())
+      AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())"#)
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to load offer sharing details"))?
+        .ok_or_else(|| AppError::not_found("active approved offer was not found"))?;
+    let policy = sqlx::query_scalar::<_, Value>(r#"SELECT JSONB_BUILD_OBJECT(
+      'consentRequired',TRUE,
+      'frequencyCapDays',COALESCE((SELECT frequency_cap_days FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2),7),
+      'consentedClients',COUNT(*) FILTER(WHERE client.whatsapp_opt_in IS TRUE AND COALESCE(client.phone,'')<>''),
+      'eligibleClients',COUNT(*) FILTER(WHERE client.whatsapp_opt_in IS TRUE AND COALESCE(client.phone,'')<>'' AND NOT EXISTS(
+        SELECT 1 FROM benefit_notification_outbox prior
+        WHERE prior.tenant_id=client.tenant_id AND prior.branch_id=client.branch_id AND prior.client_id=client.id
+          AND prior.source_type='marketing_campaign' AND prior.status IN ('queued','processing','sent')
+          AND prior.created_at>=NOW()-MAKE_INTERVAL(days=>COALESCE((SELECT frequency_cap_days FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2),7))))
+    ) FROM clients client WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.active=TRUE
+      AND client.merged_into_client_id IS NULL AND client.marketing_sensitive_excluded=FALSE"#)
+        .bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load WhatsApp sharing policy"))?;
+    let offer_id = offer["id"].as_str().unwrap_or_default();
+    let code = offer["code"].as_str().unwrap_or_default();
+    let title = offer["title"].as_str().unwrap_or(code);
+    let description = offer["customerDescription"].as_str().unwrap_or_default();
+    let services = offer["targetServiceIds"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .unwrap_or_default();
+    let booking_url = |channel: &str| {
+        format!(
+            "{}/business/{}/book?serviceIds={}&offer={}&source=marketing_offer:{}:{}",
+            state.settings.customer_app_base_url,
+            utf8_percent_encode(
+                offer["branchId"].as_str().unwrap_or_default(),
+                NON_ALPHANUMERIC,
+            ),
+            utf8_percent_encode(&services, NON_ALPHANUMERIC),
+            utf8_percent_encode(code, NON_ALPHANUMERIC),
+            utf8_percent_encode(offer_id, NON_ALPHANUMERIC),
+            channel,
+        )
+    };
+    let caption = if description.is_empty() {
+        format!("{title}\nUse code {code}")
+    } else {
+        format!("{title}\n{description}\nUse code {code}")
+    };
+    Ok(Json(ApiResponse::ok(json!({
+        "offerId":offer_id,"title":title,"caption":caption,
+        "instagramBookingUrl":booking_url("instagram"),
+        "whatsappBookingUrl":booking_url("whatsapp"),
+        "creativeDownloadPath":if offer["hasCreative"].as_bool().unwrap_or(false) { Value::String(format!("/api/v1/marketing/offers/{offer_id}/creative")) } else { Value::Null },
+        "whatsappPolicy":policy,"trackedBookings":offer["trackedBookings"]
+    }))))
 }
 
 async fn create_marketing_offer(
@@ -373,6 +564,17 @@ async fn create_marketing_offer(
     require_permission(&claims, true)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let code = body.code.trim().to_ascii_uppercase();
+    let title = clean_offer_text(body.title.as_deref().unwrap_or(&code), 120, "offer title")?;
+    let customer_description = clean_offer_text(
+        body.customer_description.as_deref().unwrap_or(""),
+        1000,
+        "customer description",
+    )?;
+    let staff_instructions = clean_offer_text(
+        body.staff_instructions.as_deref().unwrap_or(""),
+        2000,
+        "staff instructions",
+    )?;
     let benefit_type = body.benefit_type.trim().to_ascii_lowercase();
     let allowed = [
         "percentage_discount",
@@ -434,13 +636,9 @@ async fn create_marketing_offer(
             ));
         }
     }
-    let service_ids = body
-        .target_service_ids
-        .unwrap_or_default()
-        .into_iter()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .collect::<Vec<_>>();
+    let service_ids = clean_offer_ids(body.target_service_ids.unwrap_or_default());
+    let package_ids = clean_offer_ids(body.target_package_ids.unwrap_or_default());
+    validate_offer_scope_ids(&state, &tenant_id, &branch_id, &service_ids, &package_ids).await?;
     let discount_type = if benefit_type == "percentage_discount" {
         "percent"
     } else {
@@ -462,16 +660,24 @@ async fn create_marketing_offer(
         ));
     }
     let id = uuid::Uuid::new_v4().to_string();
+    let approval_status = if body.submit_for_approval.unwrap_or(true) {
+        "pending"
+    } else {
+        "draft"
+    };
     sqlx::query(r#"INSERT INTO pos_coupons(id,tenant_id,branch_id,code,discount_type,discount_value_paise,discount_bps,
       min_subtotal_paise,active,starts_at,ends_at,usage_limit,per_client_limit,offer_type,target_service_ids,
       marketing_benefit_type,benefit_value,target_client_id,complimentary_service_id,approval_status,created_by,
-      allow_membership_stacking,allow_package_stacking)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'pending',$19,$20,$21)"#)
+      allow_membership_stacking,allow_package_stacking,title,customer_description,staff_instructions,
+      target_package_ids,show_in_staff_app,show_in_customer_app)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)"#)
       .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&code).bind(discount_type).bind(discount_value).bind(discount_bps)
       .bind(body.minimum_bill_paise.unwrap_or(0).max(0)).bind(body.starts_at).bind(body.ends_at).bind(body.usage_limit)
       .bind(body.per_client_limit.unwrap_or(1)).bind(if service_ids.is_empty() { "generic" } else { "service_specific" }).bind(service_ids)
       .bind(&benefit_type).bind(value).bind(target_client).bind(body.complimentary_service_id.as_deref().map(str::trim).filter(|v| !v.is_empty()))
-      .bind(&claims.sub).bind(body.allow_membership_stacking.unwrap_or(false)).bind(body.allow_package_stacking.unwrap_or(false))
+      .bind(approval_status).bind(&claims.sub).bind(body.allow_membership_stacking.unwrap_or(false)).bind(body.allow_package_stacking.unwrap_or(false))
+      .bind(&title).bind(&customer_description).bind(&staff_instructions).bind(package_ids)
+      .bind(body.show_in_staff_app.unwrap_or(true)).bind(body.show_in_customer_app.unwrap_or(false))
       .execute(&state.db).await.map_err(|_| AppError::validation("offer code already exists or offer is invalid"))?;
     security_service::record_audit(
         &state.db,
@@ -479,12 +685,194 @@ async fn create_marketing_offer(
         &branch_id,
         &claims.sub,
         "marketing.offer.created",
-        json!({"offerId":id,"code":code,"benefitType":benefit_type}),
+        json!({"offerId":id,"code":code,"benefitType":benefit_type,"approvalStatus":approval_status}),
     )
     .await?;
     Ok(Json(ApiResponse::ok(
-        json!({"id":id,"approvalStatus":"pending"}),
+        json!({"id":id,"approvalStatus":approval_status}),
     )))
+}
+
+async fn submit_marketing_offer(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let updated = sqlx::query_scalar::<_, String>("UPDATE pos_coupons SET approval_status='pending',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND approval_status='draft' RETURNING id")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to submit offer"))?
+        .ok_or_else(|| AppError::not_found("draft offer was not found"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.offer.submitted",
+        json!({"offerId":updated}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        json!({"id":updated,"approvalStatus":"pending"}),
+    )))
+}
+
+async fn upload_marketing_offer_creative(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<OfferCreativeQuery>,
+    bytes: Bytes,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if query.file_name.trim().is_empty()
+        || query.file_name.trim().chars().count() > 255
+        || bytes.is_empty()
+        || bytes.len() > 5 * 1024 * 1024
+        || !offer_media_content_matches_type(&bytes, &content_type)
+    {
+        return Err(AppError::validation(
+            "offer creative must be a JPG, PNG or WebP file up to 5 MB",
+        ));
+    }
+    let editable = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pos_coupons WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND approval_status IN ('draft','pending'))")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to validate offer"))?;
+    if !editable {
+        return Err(AppError::validation(
+            "only draft or pending offers can change their creative",
+        ));
+    }
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    let creative_id: String = sqlx::query_scalar("INSERT INTO marketing_offer_creatives(tenant_id,branch_id,offer_id,file_name,content_type,content_sha256,content_bytes,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,branch_id,offer_id) DO UPDATE SET file_name=EXCLUDED.file_name,content_type=EXCLUDED.content_type,content_sha256=EXCLUDED.content_sha256,content_bytes=EXCLUDED.content_bytes,uploaded_by=EXCLUDED.uploaded_by,updated_at=NOW() RETURNING id")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).bind(query.file_name.trim())
+        .bind(&content_type).bind(&digest).bind(bytes.to_vec()).bind(&claims.sub)
+        .fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to store offer creative"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.offer.creative_uploaded",
+        json!({"offerId":id.trim(),"creativeId":creative_id,"sha256":digest}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(json!({
+        "id":creative_id,
+        "offerId":id.trim(),
+        "fileName":query.file_name.trim(),
+        "contentType":content_type,
+        "contentPath":format!("/api/v1/marketing/offers/{}/creative", id.trim())
+    }))))
+}
+
+async fn get_marketing_offer_creative(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    require_permission(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row: Option<(String, String, Vec<u8>)> = sqlx::query_as("SELECT file_name,content_type,content_bytes FROM marketing_offer_creatives WHERE tenant_id=$1 AND branch_id=$2 AND offer_id=$3")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to load offer creative"))?;
+    let (file_name, content_type, content) =
+        row.ok_or_else(|| AppError::not_found("offer creative was not found"))?;
+    let safe_name = file_name
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-') {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    Response::builder()
+        .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(&content_type)
+                .map_err(|_| AppError::internal("invalid stored media type"))?,
+        )
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("inline; filename=\"{safe_name}\""),
+        )
+        .body(Body::from(content))
+        .map_err(|_| AppError::internal("failed to stream offer creative"))
+}
+
+fn clean_offer_text(value: &str, max_chars: usize, field: &str) -> Result<String, AppError> {
+    let cleaned = value.trim().to_string();
+    if cleaned.chars().count() > max_chars {
+        return Err(AppError::validation(format!(
+            "{field} cannot exceed {max_chars} characters"
+        )));
+    }
+    Ok(cleaned)
+}
+
+fn clean_offer_ids(values: Vec<String>) -> Vec<String> {
+    let mut values = values
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    values.sort();
+    values.dedup();
+    values
+}
+
+async fn validate_offer_scope_ids(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    service_ids: &[String],
+    package_ids: &[String],
+) -> Result<(), AppError> {
+    if !service_ids.is_empty() {
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND id=ANY($3)")
+            .bind(tenant_id).bind(branch_id).bind(service_ids).fetch_one(&state.db).await
+            .map_err(|_| AppError::internal("failed to validate offer services"))?;
+        if count != service_ids.len() as i64 {
+            return Err(AppError::validation(
+                "one or more offer services are invalid for this branch",
+            ));
+        }
+    }
+    if !package_ids.is_empty() {
+        let count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM packages WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND id=ANY($3)")
+            .bind(tenant_id).bind(branch_id).bind(package_ids).fetch_one(&state.db).await
+            .map_err(|_| AppError::internal("failed to validate offer packages"))?;
+        if count != package_ids.len() as i64 {
+            return Err(AppError::validation(
+                "one or more offer packages are invalid for this branch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn offer_media_content_matches_type(bytes: &[u8], content_type: &str) -> bool {
+    match content_type {
+        "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/webp" => bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP"),
+        _ => false,
+    }
 }
 
 async fn approve_marketing_offer(
@@ -531,6 +919,13 @@ async fn approve_marketing_offer(
         json!({"offerId":id}),
     )
     .await?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "offer",
+        id.trim(),
+        "marketing.offer.approved",
+    );
     Ok(Json(ApiResponse::ok(
         json!({"id":id,"approvalStatus":"approved"}),
     )))

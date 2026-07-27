@@ -24,7 +24,7 @@ type RecipeLine = {
 type RecipeDraftLine = { productId: string; productName: string; unit: string; minQty: number | null; standardQty: number | null; maxQty: number | null; wastePercent: number | null; ownerApprovalPercent: number | null; hitLimit: number | null };
 type Service = { id: string; name: string; category: string; pricePaise: number; active: boolean; productConsumption: RecipeLine[] };
 type Item = { id: string; name: string; sku: string; unit: string; unitCostPaise: number; active: boolean };
-type Usage = { id: string; inventoryItemId: string; itemName: string; serviceId?: string; serviceName: string; staffName: string; expectedQuantity: number; actualQuantity: number; varianceQuantity: number; unit: string; createdAt: string };
+type Usage = { id: string; inventoryItemId: string; itemName: string; serviceId?: string; serviceName: string; staffName: string; expectedQuantity: number; actualQuantity: number; varianceQuantity: number; approvalThresholdPercent: number; status: string; unit: string; createdAt: string };
 type Appointment = { serviceIds: string[]; startAt: string; status: string };
 type DemandRow = { serviceName: string; appointmentCount: number; productName: string; requiredQuantity: number; unit: string };
 type RecipeVersion = { id:string; versionNumber:number; recipe:RecipeLine[]; changedBy?:string; changeSource:string; createdAt:string };
@@ -65,7 +65,7 @@ export class ServiceRecipesPageComponent implements OnInit {
   get withRecipeCount() { return this.services.filter((service) => service.productConsumption.length > 0).length; }
   get selectedService() { return this.services.find((service) => service.id === this.selectedServiceId); }
   get varianceRows() { return this.usage.filter((row) => row.varianceQuantity !== 0); }
-  get approvalRows() { return this.usage.filter((row) => this.approvalThreshold(row) > 0 && this.variancePercent(row) >= this.approvalThreshold(row)); }
+  get approvalRows() { return this.usage.filter((row) => row.status === 'pending_approval'); }
   get demandRows(): DemandRow[] {
     const now = Date.now();
     const horizon = now + 15 * 24 * 60 * 60 * 1000;
@@ -158,11 +158,7 @@ export class ServiceRecipesPageComponent implements OnInit {
   date(value: string) { return new Intl.DateTimeFormat('en-GB').format(new Date(value)); }
   quantity(value: number, unit = '') { return `${Number(value || 0).toLocaleString('en-IN')} ${unit}`.trim(); }
   variancePercent(row: Usage) { return row.expectedQuantity > 0 ? Math.max(0, row.varianceQuantity / row.expectedQuantity * 100) : (row.varianceQuantity > 0 ? 100 : 0); }
-  approvalThreshold(row: Usage) {
-    const service = this.services.find((entry) => entry.id === row.serviceId);
-    const line = service?.productConsumption.find((entry) => String(entry.productId ?? entry.itemId ?? entry.inventoryItemId ?? '') === row.inventoryItemId);
-    return Number(line?.ownerApprovalPercent ?? 0);
-  }
+  approvalThreshold(row: Usage) { return Number(row.approvalThresholdPercent || 0); }
 
   async saveRecipe() {
     const service = this.selectedService;
@@ -192,7 +188,12 @@ export class ServiceRecipesPageComponent implements OnInit {
   private number(value: number | null) { const next = Number(value); return Number.isFinite(next) && next > 0 ? next : 0; }
   private savedNumber(value: unknown) { const next = Number(value); return Number.isFinite(next) ? next : null; }
   private async get<T>(path: string) { const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
-  private async optional<T>(path: string) { try { return await this.get<T>(path); } catch { return [] as T; } }
+  private async optional<T>(path: string) {
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<T> | T>(path));
+      return (response as ApiEnvelope<T>).data ?? response as T;
+    } catch { return [] as T; }
+  }
   private message(error: any, fallback: string) { return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback; }
   private clearFeedback() { this.error = ''; this.notice = ''; }
 }

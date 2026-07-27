@@ -17,17 +17,44 @@
 
   @if (open) {
     <section class="calendar-popover" role="dialog" aria-modal="false" [attr.aria-label]="'datePicker.calendar' | translate">
-      <div class="shortcut-rail">
-        <button type="button" (click)="today()">{{ 'datePicker.today' | translate }}</button>
-        <button type="button" (click)="tomorrow()">{{ 'datePicker.tomorrow' | translate }}</button>
-        <button type="button" (click)="thisWeek()">{{ 'datePicker.thisWeek' | translate }}</button>
-      </div>
       <div class="calendar-main">
         <header>
           <button type="button" [attr.aria-label]="'datePicker.previousMonth' | translate" (click)="shiftMonth(-1)">‹</button>
-          <strong>{{ monthLabel }}</strong>
+          <div class="calendar-jump" [attr.aria-label]="monthLabel">
+            <select [attr.aria-label]="'datePicker.month' | translate" [ngModel]="selectedMonth" (ngModelChange)="setViewMonth($event)">
+              @for (month of months; track month.value) {
+                <option [ngValue]="month.value">{{ month.label }}</option>
+              }
+            </select>
+            <select [attr.aria-label]="'datePicker.year' | translate" [ngModel]="selectedYear" (ngModelChange)="setViewYear($event)">
+              @for (year of yearOptions; track year) {
+                <option [ngValue]="year">{{ year }}</option>
+              }
+            </select>
+          </div>
           <button type="button" [attr.aria-label]="'datePicker.nextMonth' | translate" (click)="shiftMonth(1)">›</button>
         </header>
+        @if (rangeMode) {
+          <div class="range-fields">
+            <label>
+              <span>{{ 'datePicker.from' | translate }}</span>
+              <input type="text" inputmode="numeric" [placeholder]="datePlaceholder" [value]="rangeStartInput" (input)="setRangeDraft('start', $any($event.target).value)" />
+            </label>
+            <label>
+              <span>{{ 'datePicker.to' | translate }}</span>
+              <input type="text" inputmode="numeric" [placeholder]="datePlaceholder" [value]="rangeEndInput" (input)="setRangeDraft('end', $any($event.target).value)" />
+            </label>
+          </div>
+        }
+        @if (rangeMode && reportPresets) {
+          <div class="preset-row" aria-label="Report range presets">
+            <button type="button" (click)="selectQuarter(1)">Q1</button>
+            <button type="button" (click)="selectQuarter(2)">Q2</button>
+            <button type="button" (click)="selectQuarter(3)">Q3</button>
+            <button type="button" (click)="selectQuarter(4)">Q4</button>
+            <button type="button" (click)="selectViewYear()">{{ 'datePicker.year' | translate }}</button>
+          </div>
+        }
         <div class="weekday-row">
           @for (day of weekDays; track day) {
             <span>{{ day }}</span>

@@ -131,11 +131,11 @@ export class StaffCalendarPage implements OnInit {
   }
 
   canReadCalendar(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("staff.app.calendar.read");
   }
 
   canUpdateCalendar(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("staff.app.calendar.manage");
   }
 
   setView(value: "day" | "week") {

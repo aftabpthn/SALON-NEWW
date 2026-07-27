@@ -1,0 +1,281 @@
+<section class="setup-shell">
+  <header class="setup-header">
+    <div>
+      <span class="eyebrow">PAYROLL CONFIGURATION</span>
+      <h2>Payroll Setup</h2>
+    </div>
+    <button type="button" class="secondary" (click)="refresh()" [disabled]="loading">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+  </header>
+
+  <nav class="setup-nav" aria-label="Payroll setup sections">
+    @for (section of sections; track section.key) {
+      <button type="button" [class.active]="activeSection === section.key" (click)="selectSection(section.key)">{{ section.label }}</button>
+    }
+  </nav>
+
+  @if (error) { <div class="notice error" role="alert">{{ error }}</div> }
+  @if (success) { <div class="notice success" role="status">{{ success }}</div> }
+
+  @if (activeSection === 'overtime' || activeSection === 'period') {
+    <div class="period-selector">
+      <label class="field"><span>Month</span><select [(ngModel)]="selectedMonth" (ngModelChange)="changeSetupPeriod()">@for (name of months; track name; let index = $index) { <option [ngValue]="index + 1">{{ name }}</option> }</select></label>
+      <label class="field"><span>Year</span><select [(ngModel)]="selectedYear" (ngModelChange)="changeSetupPeriod()">@for (option of years; track option) { <option [ngValue]="option">{{ option }}</option> }</select></label>
+    </div>
+  }
+
+  <div class="setup-panel" [class.loading]="loading">
+    @if (activeSection === 'structure') {
+      <div class="section-title">
+        <div><h3>Payroll Structure</h3></div>
+        <button type="button" class="primary" (click)="openStructure()">{{ structure ? 'Edit structure' : 'Create structure' }}</button>
+      </div>
+      @if (structure) {
+        <article class="summary-card">
+          <div><span>Name</span><strong>{{ structure.name }}</strong></div>
+          <div><span>Status</span><strong>{{ structure.active ? 'Active' : 'Inactive' }}</strong></div>
+          <div><span>Version</span><strong>{{ structure.version }}</strong></div>
+          <div class="wide"><span>Notes</span><strong>{{ structure.notes || '-' }}</strong></div>
+        </article>
+      } @else if (!loading) { <div class="empty">No payroll structure yet</div> }
+    }
+
+    @if (activeSection === 'adjustments') {
+      <div class="section-title">
+        <div><h3>Fine, Allowance & Deduction Rules</h3></div>
+        <button type="button" class="primary" (click)="openAdjustment()">New rule</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Type</th><th>Amount</th><th>Trigger</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          @for (rule of adjustments; track rule.id) {
+            <tr><td><strong>{{ rule.name }}</strong></td><td>{{ label(rule.kind) }}</td><td>{{ formatMoney(rule.amountPaise) }}</td><td>{{ label(rule.triggerType) }}</td><td><span class="status" [class.off]="!rule.active">{{ rule.active ? 'Active' : 'Inactive' }}</span></td><td><button type="button" class="link" (click)="openAdjustment(rule)">Edit</button></td></tr>
+          } @empty { <tr><td colspan="6" class="empty-row">No adjustment rules yet</td></tr> }
+        </tbody></table></div>
+    }
+
+    @if (activeSection === 'incentives') {
+      <div class="section-title">
+        <div><h3>Incentive Slabs</h3></div>
+        <button type="button" class="primary" (click)="openIncentive()">New incentive</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Target</th><th>Assigned to</th><th>Role scope</th><th>Slabs</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          @for (rule of incentives; track rule.id) {
+            <tr><td>{{ label(rule.targetType) }}</td><td>{{ rule.assigneeName || label(rule.assigneeType) }}</td><td>{{ label(rule.roleScope) }}</td><td>{{ rule.slabs.length }}</td><td><span class="status" [class.off]="!rule.active">{{ rule.active ? 'Active' : 'Inactive' }}</span></td><td><button type="button" class="link" (click)="openIncentive(rule)">Edit</button></td></tr>
+          } @empty { <tr><td colspan="6" class="empty-row">No incentive rules yet</td></tr> }
+        </tbody></table></div>
+    }
+
+    @if (activeSection === 'statutory') {
+      <div class="section-title">
+        <div><h3>Statutory Rules</h3></div>
+        <button type="button" class="primary" (click)="openStatutory()">New statutory rule</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Jurisdiction</th><th>Effective period</th><th>Official reference</th><th>Configuration</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          @for (rule of statutoryRules; track rule.id) {
+            <tr><td><strong>{{ label(rule.ruleType) }}</strong><small class="cell-subtext">{{ label(rule.roundingMethod) }}</small></td><td>{{ rule.jurisdictionCode }}</td><td>{{ formatDate(rule.effectiveFrom) }} - {{ rule.effectiveTo ? formatDate(rule.effectiveTo) : 'Open' }}</td><td>{{ rule.officialReference }}</td><td class="rule-summary">{{ ruleSummary(rule) }}</td><td><span class="status" [class.off]="rule.approvalStatus !== 'approved'">{{ label(rule.approvalStatus) }}</span></td><td class="row-actions">@if (rule.approvalStatus === 'pending') { <button type="button" class="link" (click)="decideStatutory(rule, 'approved')">Approve</button><button type="button" class="link danger-link" (click)="decideStatutory(rule, 'rejected')">Reject</button> }</td></tr>
+          } @empty { <tr><td colspan="7" class="empty-row">No statutory rules yet</td></tr> }
+        </tbody></table></div>
+    }
+
+    @if (activeSection === 'revisions') {
+      <div class="section-title">
+        <div><h3>Salary Revisions</h3></div>
+        <button type="button" class="primary" (click)="openRevision()">New revision</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Rate type</th><th>Old amount</th><th>New amount</th><th>Effective</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          @for (revision of revisions; track revision.id) {
+            <tr><td><strong>{{ nameForStaff(revision.staffId) }}</strong></td><td>{{ label(revision.rateType) }}</td><td>{{ formatMoney(revision.oldAmountPaise) }}</td><td>{{ formatMoney(revision.newAmountPaise) }}</td><td>{{ formatDate(revision.effectiveDate) }}</td><td><span class="status" [class.off]="revision.status === 'rejected'">{{ label(revision.status) }}</span></td><td>@if (revision.status === 'pending') { <button type="button" class="link" (click)="openRevisionDecision(revision)">Review</button> }</td></tr>
+          } @empty { <tr><td colspan="7" class="empty-row">No salary revisions yet</td></tr> }
+        </tbody></table></div>
+    }
+
+    @if (activeSection === 'advances') {
+      <div class="section-title">
+        <div><h3>Salary Advances</h3></div>
+        <button type="button" class="primary" (click)="openAdvance()">New advance</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Staff</th><th>Requested</th><th>Outstanding</th><th>Installments</th><th>Recovery starts</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          @for (advance of advances; track advance.id) {
+            <tr><td><strong>{{ nameForStaff(advance.staffId) }}</strong></td><td>{{ formatMoney(advance.requestedAmountPaise) }}</td><td>{{ formatMoney(advance.outstandingPaise) }}</td><td>{{ advance.installmentCount }}</td><td>{{ formatDate(advance.recoveryStartPeriod) }}</td><td><span class="status">{{ label(advance.status) }}</span></td><td class="row-actions">
+              @if (advance.status === 'pending') { <button type="button" class="link" (click)="openAdvanceAction(advance, 'decision')">Review</button> }
+              @if (advance.status === 'approved') { <button type="button" class="link" (click)="openAdvanceAction(advance, 'disburse')">Disburse</button> }
+              @if (['pending', 'approved'].includes(advance.status)) { <button type="button" class="link danger-link" (click)="openAdvanceAction(advance, 'cancel')">Cancel</button> }
+              @if (['disbursed', 'recovering', 'closed', 'waived'].includes(advance.status)) { <button type="button" class="link" (click)="openRecoveries(advance)">Ledger</button> }
+              @if (['disbursed', 'recovering'].includes(advance.status)) { <button type="button" class="link danger-link" (click)="openAdvanceAction(advance, 'waive')">Waive</button> }
+            </td></tr>
+          } @empty { <tr><td colspan="7" class="empty-row">No salary advances yet</td></tr> }
+        </tbody></table></div>
+    }
+
+    @if (activeSection === 'overtime') {
+      <div class="section-title"><div><h3>Overtime Approvals</h3></div></div>
+      <div class="filter-row">
+        <label class="field"><span>Status</span><select [(ngModel)]="overtimeStatus" (ngModelChange)="loadOvertime()"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
+        <label class="field"><span>Staff</span><select [(ngModel)]="overtimeStaffId" (ngModelChange)="loadOvertime()"><option value="">All staff</option>@for (employee of staff; track employee.id) { <option [value]="employee.id">{{ staffName(employee) }}</option> }</select></label>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Staff</th><th>Worked OT</th><th>Approved OT</th><th>Status</th><th>Approver / time</th><th></th></tr></thead><tbody>
+        @for (row of overtimeApprovals; track row.id) {
+          <tr><td>{{ formatDate(row.businessDate) }}</td><td><strong>{{ nameForStaff(row.staffId) }}</strong></td><td>{{ row.overtimeMinutes }} min</td><td>{{ row.approvedOvertimeMinutes }} min</td><td><span class="status" [class.off]="row.otApprovalStatus !== 'approved'">{{ label(row.otApprovalStatus) }}</span></td><td>{{ row.otApprovedBy || '-' }}<small class="cell-subtext">{{ formatDateTime(row.otApprovedAt) }}</small></td><td>@if (row.otApprovalStatus === 'pending') { <button type="button" class="link" [disabled]="currentPeriod?.status === 'locked'" (click)="openOvertime(row)">Review</button> }</td></tr>
+        } @empty { <tr><td colspan="7" class="empty-row">No overtime records yet</td></tr> }
+      </tbody></table></div>
+    }
+
+    @if (activeSection === 'period') {
+      <div class="section-title">
+        <div><h3>Payroll Period Controls</h3></div>
+        <div class="row-actions"><button type="button" class="secondary" (click)="openPeriod('schedule')">Set dates</button>@if (currentPeriod?.status === 'locked') { <button type="button" class="primary" (click)="openPeriod('reopen')">Reopen</button> } @else { <button type="button" class="primary" (click)="openPeriod('lock')">Lock period</button> }</div>
+      </div>
+      @if (currentPeriod; as period) {
+        <article class="summary-card">
+          <div><span>Status</span><strong>{{ label(period.status) }}</strong></div><div><span>Cutoff date</span><strong>{{ formatDate(period.cutoffDate) }}</strong></div><div><span>Correction deadline</span><strong>{{ formatDate(period.correctionDeadline) }}</strong></div>
+          <div><span>Locked by</span><strong>{{ period.lockedBy || '-' }}</strong></div><div><span>Locked at</span><strong>{{ formatDateTime(period.lockedAt) }}</strong></div><div><span>Lock reason</span><strong>{{ period.lockReason || '-' }}</strong></div>
+          <div><span>Reopened by</span><strong>{{ period.reopenedBy || '-' }}</strong></div><div><span>Reopened at</span><strong>{{ formatDateTime(period.reopenedAt) }}</strong></div><div><span>Reopen reason</span><strong>{{ period.reopenReason || '-' }}</strong></div>
+        </article>
+      } @else if (!loading) { <div class="empty">No payroll period controls yet</div> }
+    }
+
+    @if (activeSection === 'notifications') {
+      <div class="section-title"><div><h3>Notification Preferences</h3></div></div>
+      <div class="preference-form">
+        <label class="field wide"><span>Staff</span><select [(ngModel)]="notificationStaffId" (ngModelChange)="loadNotificationPreference()"><option value="">Select staff</option>@for (employee of staff; track employee.id) { <option [value]="employee.id">{{ staffName(employee) }}</option> }</select></label>
+        @if (notificationStaffId) {
+          <label class="check"><input type="checkbox" [(ngModel)]="notificationForm.whatsappOptIn"> WhatsApp opt-in</label>
+          <label class="check"><input type="checkbox" [(ngModel)]="notificationForm.allowPayrollAmounts"> Allow payroll amounts in messages</label>
+          <label class="field"><span>Language</span><select [(ngModel)]="notificationForm.languageCode"><option value="en-IN">English</option><option value="hi-IN">Hindi</option><option value="hi-Latn-IN">Hindi (Roman)</option></select></label>
+          <label class="field"><span>Quiet hours start</span><input type="time" [(ngModel)]="notificationForm.quietHoursStart"></label>
+          <label class="field"><span>Quiet hours end</span><input type="time" [(ngModel)]="notificationForm.quietHoursEnd"></label>
+          <div class="preference-actions"><button type="button" class="primary" (click)="saveNotificationPreference()" [disabled]="saving">{{ saving ? 'Saving...' : 'Save preferences' }}</button></div>
+        }
+      </div>
+    }
+  </div>
+</section>
+
+@if (drawer) {
+  <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+  <aside class="setup-drawer" role="dialog" aria-modal="true" aria-labelledby="setup-drawer-title">
+    <header><div><span class="eyebrow">PAYROLL SETUP</span><h2 id="setup-drawer-title">{{ label(drawer) }}</h2></div><button type="button" class="icon-button" aria-label="Close" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      @if (drawer === 'structure') {
+        <label class="field"><span>Structure name *</span><input [ngModel]="structureForm.name" (ngModelChange)="structureForm.name = titleCase($event)" autocomplete="off"></label>
+        <label class="field"><span>Notes</span><textarea rows="5" [(ngModel)]="structureForm.notes"></textarea></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="structureForm.active"> Active</label>
+      }
+
+      @if (drawer === 'adjustments') {
+        <div class="form-grid">
+          <label class="field"><span>Rule type *</span><select [(ngModel)]="adjustmentForm.kind" [disabled]="adjustmentForm.triggerType === 'weekly_off_worked'"><option value="fine">Fine</option><option value="allowance">Allowance</option><option value="deduction">Deduction</option></select></label>
+          <label class="field"><span>Rule name *</span><input [ngModel]="adjustmentForm.name" (ngModelChange)="adjustmentForm.name = titleCase($event)" autocomplete="off"></label>
+          <label class="field"><span>Amount (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="adjustmentForm.amount" placeholder="Enter amount"></label>
+          <label class="field"><span>Trigger</span><select [ngModel]="adjustmentForm.triggerType" (ngModelChange)="adjustmentTriggerChanged($event)">@for (trigger of triggerTypes; track trigger) { <option [value]="trigger">{{ label(trigger) }}</option> }</select></label>
+          <label class="field"><span>Trigger count</span><input type="number" min="1" [(ngModel)]="adjustmentForm.triggerCount" placeholder="Enter count"></label>
+          <label class="field"><span>Application mode</span><select [(ngModel)]="adjustmentForm.applicationMode"><option value="fixed">Fixed</option><option value="per_occurrence">Per occurrence</option></select></label>
+        </div>
+        <label class="field"><span>Notes</span><textarea rows="4" [(ngModel)]="adjustmentForm.notes"></textarea></label>
+        <div class="check-row"><label class="check"><input type="checkbox" [(ngModel)]="adjustmentForm.autoApply"> Auto apply</label><label class="check"><input type="checkbox" [(ngModel)]="adjustmentForm.active"> Active</label></div>
+      }
+
+      @if (drawer === 'incentives') {
+        <div class="form-grid">
+          <label class="field"><span>Target type *</span><select [(ngModel)]="incentiveForm.targetType"><option value="service">Service</option><option value="product">Product</option><option value="membership">Membership</option><option value="branch_admin">Branch admin</option><option value="admin">Admin</option><option value="all_transaction">All transactions</option></select></label>
+          <label class="field"><span>Assignee type *</span><select [(ngModel)]="incentiveForm.assigneeType"><option value="standard">Standard</option><option value="staff">Staff</option><option value="branch">Branch</option></select></label>
+          @if (incentiveForm.assigneeType === 'staff') { <label class="field"><span>Staff *</span><select [(ngModel)]="incentiveForm.assigneeId"><option value="">Select staff</option>@for (employee of staff; track employee.id) { <option [value]="employee.id">{{ staffName(employee) }}</option> }</select></label> }
+          <label class="field"><span>Role scope</span><select [(ngModel)]="incentiveForm.roleScope"><option value="all">All</option><option value="operator">Operator</option><option value="admin">Admin</option></select></label>
+        </div>
+        <div class="slab-title"><strong>Slabs</strong><button type="button" class="secondary compact" (click)="addSlab()">Add slab</button></div>
+        @for (slab of incentiveForm.slabs; track $index; let index = $index) {
+          <article class="slab-card"><div class="slab-head"><strong>Slab {{ index + 1 }}</strong><button type="button" class="link danger-link" (click)="removeSlab(index)" [disabled]="incentiveForm.slabs.length === 1">Remove</button></div>
+            <div class="form-grid three"><label class="field"><span>From (INR) *</span><input type="number" min="0" [(ngModel)]="slab.from" placeholder="Enter amount"></label><label class="field"><span>To (INR)</span><input type="number" min="0" [(ngModel)]="slab.to" placeholder="No upper limit"></label><label class="field"><span>Incentive %</span><input type="number" min="0" step="0.01" [(ngModel)]="slab.percent" placeholder="Enter percent"></label><label class="field"><span>Fixed incentive (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="slab.fixed" placeholder="Enter amount"></label><label class="field"><span>Employee %</span><input type="number" min="0" step="0.01" [(ngModel)]="slab.employeePercent" placeholder="Optional"></label><label class="field"><span>Employee fixed (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="slab.employeeFixed" placeholder="Optional"></label></div>
+          </article>
+        }
+        <label class="field"><span>Notes</span><textarea rows="3" [(ngModel)]="incentiveForm.notes"></textarea></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="incentiveForm.active"> Active</label>
+      }
+
+      @if (drawer === 'statutory') {
+        <div class="form-grid">
+          <label class="field"><span>Rule type *</span><select [(ngModel)]="statutoryForm.ruleType">@for (type of statutoryTypes; track type) { <option [value]="type">{{ label(type) }}</option> }</select></label>
+          <label class="field"><span>Jurisdiction code *</span><input [(ngModel)]="statutoryForm.jurisdictionCode" maxlength="32" placeholder="Example: IN or IN-TG"></label>
+          <label class="field"><span>State code</span><input [(ngModel)]="statutoryForm.stateCode" maxlength="16" placeholder="Optional"></label>
+          <label class="field"><span>Rounding method *</span><select [(ngModel)]="statutoryForm.roundingMethod"><option value="">Select rounding</option><option value="floor_paisa">Floor to paisa</option><option value="nearest_paisa">Nearest paisa</option><option value="ceil_paisa">Ceil to paisa</option><option value="nearest_rupee">Nearest rupee</option></select></label>
+          <label class="field wide"><span>Official reference *</span><input [(ngModel)]="statutoryForm.officialReference" maxlength="500" placeholder="Notification, circular or official URL"></label>
+          <label class="field"><span>Effective from *</span><as-date-picker [value]="statutoryForm.effectiveFrom" (valueChange)="statutoryForm.effectiveFrom = $event" ariaLabel="Effective from"></as-date-picker></label>
+          <label class="field"><span>Effective to</span><as-date-picker [value]="statutoryForm.effectiveTo" (valueChange)="statutoryForm.effectiveTo = $event" ariaLabel="Effective to"></as-date-picker></label>
+          <label class="field"><span>Employee rate %</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.employeePercent" placeholder="Optional"></label>
+          <label class="field"><span>Employer rate %</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.employerPercent" placeholder="Optional"></label>
+          <label class="field"><span>Accrual rate %</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.accrualPercent" placeholder="Optional"></label>
+          <label class="field"><span>Employee fixed (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.employeeFixed" placeholder="Optional"></label>
+          <label class="field"><span>Employer fixed (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.employerFixed" placeholder="Optional"></label>
+          <label class="field"><span>Accrual fixed (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.accrualFixed" placeholder="Optional"></label>
+          <label class="field"><span>Wage cap (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.wageCap" placeholder="Optional"></label>
+          <label class="field"><span>Eligibility cap (INR)</span><input type="number" min="0" step="0.01" [(ngModel)]="statutoryForm.eligibilityCap" placeholder="Optional"></label>
+        </div>
+      }
+
+      @if (drawer === 'revisions') {
+        <label class="field"><span>Staff *</span><select [(ngModel)]="revisionForm.staffId"><option value="">Select staff</option>@for (employee of staff; track employee.id) { <option [value]="employee.id">{{ staffName(employee) }}</option> }</select></label>
+        <div class="form-grid"><label class="field"><span>Rate type *</span><select [(ngModel)]="revisionForm.rateType"><option value="hourly">Hourly</option><option value="daily">Daily</option><option value="monthly">Monthly</option></select></label><label class="field"><span>New amount (INR) *</span><input type="number" min="0.01" step="0.01" [(ngModel)]="revisionForm.amount" placeholder="Enter amount"></label></div>
+        <label class="field"><span>Effective date *</span><as-date-picker [value]="revisionForm.effectiveDate" (valueChange)="revisionForm.effectiveDate = $event" ariaLabel="Effective date"></as-date-picker></label>
+        <label class="field"><span>Reason</span><textarea rows="4" [(ngModel)]="revisionForm.reason"></textarea></label>
+      }
+
+      @if (drawer === 'revisionDecision') {
+        <div class="context-card"><span>Staff</span><strong>{{ nameForStaff(selectedRevision?.staffId || '') }}</strong><span>Requested amount</span><strong>{{ formatMoney(selectedRevision?.newAmountPaise) }}</strong></div>
+        <label class="field"><span>Decision *</span><select [(ngModel)]="revisionDecisionForm.decision"><option value="approved">Approve</option><option value="rejected">Reject</option></select></label>
+        <label class="field"><span>Comments</span><textarea rows="4" [(ngModel)]="revisionDecisionForm.comments"></textarea></label>
+      }
+
+      @if (drawer === 'advances') {
+        <label class="field"><span>Staff *</span><select [(ngModel)]="advanceForm.staffId"><option value="">Select staff</option>@for (employee of staff; track employee.id) { <option [value]="employee.id">{{ staffName(employee) }}</option> }</select></label>
+        <div class="form-grid"><label class="field"><span>Requested amount (INR) *</span><input type="number" min="0.01" step="0.01" [(ngModel)]="advanceForm.amount" placeholder="Enter amount"></label><label class="field"><span>Installments *</span><input type="number" min="1" [(ngModel)]="advanceForm.installmentCount" placeholder="Enter count"></label></div>
+        <label class="field"><span>Recovery start period *</span><as-date-picker [value]="advanceForm.recoveryStartPeriod" (valueChange)="advanceForm.recoveryStartPeriod = $event" ariaLabel="Recovery start period"></as-date-picker></label>
+        <label class="field"><span>Reason *</span><textarea rows="4" [(ngModel)]="advanceForm.reason"></textarea></label>
+      }
+
+      @if (drawer === 'overtime') {
+        <div class="context-card"><span>Staff</span><strong>{{ nameForStaff(selectedOvertime?.staffId || '') }}</strong><span>Worked overtime</span><strong>{{ selectedOvertime?.overtimeMinutes }} minutes</strong></div>
+        <label class="field"><span>Decision *</span><select [(ngModel)]="overtimeForm.decision"><option value="approved">Approve</option><option value="rejected">Reject</option></select></label>
+        @if (overtimeForm.decision === 'approved') { <label class="field"><span>Approved minutes *</span><input type="number" min="1" [max]="selectedOvertime?.overtimeMinutes ?? null" [(ngModel)]="overtimeForm.approvedMinutes" placeholder="Enter minutes"></label> }
+      }
+
+      @if (drawer === 'period') {
+        @if (periodForm.action === 'schedule') {
+          <label class="field"><span>Cutoff date</span><as-date-picker [value]="periodForm.cutoffDate" (valueChange)="periodForm.cutoffDate = $event" ariaLabel="Payroll cutoff date"></as-date-picker></label>
+          <label class="field"><span>Attendance correction deadline</span><as-date-picker [value]="periodForm.correctionDeadline" (valueChange)="periodForm.correctionDeadline = $event" ariaLabel="Attendance correction deadline"></as-date-picker></label>
+        } @else {
+          <label class="field"><span>{{ periodForm.action === 'lock' ? 'Lock reason' : 'Reopen reason' }} *</span><textarea rows="4" maxlength="500" [(ngModel)]="periodForm.reason"></textarea></label>
+        }
+      }
+
+      @if (drawer === 'advanceAction') {
+        <div class="context-card"><span>Staff</span><strong>{{ nameForStaff(selectedAdvance?.staffId || '') }}</strong><span>Requested</span><strong>{{ formatMoney(selectedAdvance?.requestedAmountPaise) }}</strong></div>
+        @if (advanceActionForm.action === 'decision') { <label class="field"><span>Decision *</span><select [(ngModel)]="advanceActionForm.decision"><option value="approved">Approve</option><option value="rejected">Reject</option></select></label>@if (advanceActionForm.decision === 'approved') { <label class="field"><span>Approved amount (INR) *</span><input type="number" min="0.01" step="0.01" [(ngModel)]="advanceActionForm.approvedAmount"></label> }<label class="field"><span>Note</span><textarea rows="3" [(ngModel)]="advanceActionForm.note"></textarea></label> }
+        @if (advanceActionForm.action === 'disburse') { <label class="field"><span>Payment method *</span><select [(ngModel)]="advanceActionForm.paymentMethod"><option value="bank_transfer">Bank transfer</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="cheque">Cheque</option></select></label><label class="field"><span>Reference</span><input [(ngModel)]="advanceActionForm.reference"></label><label class="field"><span>MFA code</span><input inputmode="numeric" autocomplete="one-time-code" [(ngModel)]="advanceActionForm.mfaCode"></label> }
+        @if (advanceActionForm.action === 'cancel' || advanceActionForm.action === 'waive') { <label class="field"><span>Reason {{ advanceActionForm.action === 'waive' ? '*' : '' }}</span><textarea rows="4" [(ngModel)]="advanceActionForm.reason"></textarea></label> }
+        @if (advanceActionForm.action === 'waive') { <label class="field"><span>MFA code</span><input inputmode="numeric" autocomplete="one-time-code" [(ngModel)]="advanceActionForm.mfaCode"></label> }
+      }
+
+      @if (drawer === 'recoveries') {
+        <div class="table-wrap"><table><thead><tr><th>Period</th><th>Scheduled</th><th>Recovered</th><th>Carried</th><th>Outstanding</th></tr></thead><tbody>@for (row of recoveries; track row.id) { <tr><td>{{ formatDate(row.periodStart) }} - {{ formatDate(row.periodEnd) }}</td><td>{{ formatMoney(row.scheduledPaise) }}</td><td>{{ formatMoney(row.recoveredPaise) }}</td><td>{{ formatMoney(row.carriedForwardPaise) }}</td><td>{{ formatMoney(row.outstandingAfterPaise) }}</td></tr> } @empty { <tr><td colspan="5" class="empty-row">No recovery entries yet</td></tr> }</tbody></table></div>
+      }
+    </div>
+    <footer>
+      <button type="button" class="secondary" (click)="closeDrawer()">Close</button>
+      @if (drawer === 'structure') { <button type="button" class="primary" [disabled]="saving" (click)="saveStructure()">{{ saving ? 'Saving...' : 'Save' }}</button> }
+      @if (drawer === 'adjustments') { <button type="button" class="primary" [disabled]="saving" (click)="saveAdjustment()">{{ saving ? 'Saving...' : 'Save rule' }}</button> }
+      @if (drawer === 'incentives') { <button type="button" class="primary" [disabled]="saving" (click)="saveIncentive()">{{ saving ? 'Saving...' : 'Save incentive' }}</button> }
+      @if (drawer === 'statutory') { <button type="button" class="primary" [disabled]="saving" (click)="saveStatutory()">{{ saving ? 'Saving...' : 'Create rule' }}</button> }
+      @if (drawer === 'revisions') { <button type="button" class="primary" [disabled]="saving" (click)="saveRevision()">{{ saving ? 'Saving...' : 'Request revision' }}</button> }
+      @if (drawer === 'revisionDecision') { <button type="button" class="primary" [disabled]="saving" (click)="saveRevisionDecision()">{{ saving ? 'Saving...' : 'Submit decision' }}</button> }
+      @if (drawer === 'advances') { <button type="button" class="primary" [disabled]="saving" (click)="saveAdvance()">{{ saving ? 'Saving...' : 'Request advance' }}</button> }
+      @if (drawer === 'overtime') { <button type="button" class="primary" [disabled]="saving" (click)="saveOvertime()">{{ saving ? 'Saving...' : 'Save decision' }}</button> }
+      @if (drawer === 'period') { <button type="button" class="primary" [disabled]="saving" (click)="savePeriod()">{{ saving ? 'Saving...' : periodForm.action === 'schedule' ? 'Save dates' : periodForm.action === 'lock' ? 'Lock period' : 'Reopen period' }}</button> }
+      @if (drawer === 'advanceAction') { <button type="button" class="primary" [disabled]="saving" (click)="saveAdvanceAction()">{{ saving ? 'Saving...' : 'Confirm action' }}</button> }
+    </footer>
+  </aside>
+}

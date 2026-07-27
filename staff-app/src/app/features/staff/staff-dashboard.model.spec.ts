@@ -18,9 +18,18 @@ const enterprise: StaffEnterpriseOs = {
 
 function input(permissions: string[], overrides: Partial<DashboardViewModelInput> = {}): DashboardViewModelInput {
   const grants = new Set(permissions);
+  const hasPermission = (permission: string) => {
+    if (grants.has(permission)) return true;
+    if (!permission.startsWith("staff.app.")) return false;
+    if (["staff.app.dashboard.read", "staff.app.appointments.read", "staff.app.business.read", "staff.app.offers.read", "staff.app.queue.read"].includes(permission)) return grants.has("read:appointments");
+    if (permission === "staff.app.attendance.read") return grants.has("read:staff") || grants.has("allow:staff-checkin-checkout");
+    if (permission === "staff.app.attendance.manage") return grants.has("allow:staff-checkin-checkout") || grants.has("write:staff");
+    if (permission === "staff.app.payroll.read") return grants.has("read:payroll") || grants.has("read:finance");
+    return grants.has("read:staff");
+  };
   return {
     user: { ...user, permissions }, dashboard, enterprise, today, overtime: null, leaveBalances: [], now: new Date("2026-07-14T11:30:00.000Z"),
-    hasPermission: (permission) => grants.has(permission),
+    hasPermission,
     ...overrides
   };
 }
@@ -68,7 +77,7 @@ describe("staff dashboard permission-first view model", () => {
     expect(vm.work.mode).toBe("active");
     expect(vm.hero).toMatchObject({ title: "You’re clocked in", detail: expect.stringContaining("Clocked in at"), shift: "09:00–18:00" });
     expect(vm.hero.actions).toMatchObject([{ id: "queue", route: "/staff/queue", primary: true }, { id: "attendance-details", route: "/staff/attendance" }]);
-    expect(vm.work.actions).toEqual([{ id: "open-appointment", label: "Open appointment", route: "/staff/appointments", primary: true }]);
+    expect(vm.work.actions).toEqual([{ id: "open-service", label: "Open service", route: "/staff/queue", primary: true }]);
   });
 
   it("puts permitted critical floor alerts ahead of attendance and service work", () => {
@@ -147,7 +156,7 @@ describe("staff dashboard permission-first view model", () => {
   });
 
   it("supports a custom restricted role using permissions rather than role defaults", () => {
-    const vm = buildStaffDashboardViewModel(input([], { user: { ...user, role: "owner" } }));
+    const vm = buildStaffDashboardViewModel(input(["staff.app.settings.read"]));
     expect(vm.quickActions).toEqual([]);
     expect(vm.tools.map((tool) => tool.id)).toEqual(["settings"]);
   });
@@ -155,9 +164,9 @@ describe("staff dashboard permission-first view model", () => {
   it("orders authorized content by role profile without granting missing permissions", () => {
     const receptionist = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "receptionist" } }));
     const inventory = buildStaffDashboardViewModel(input(["read:appointments", "read:staff", "allow:staff-checkin-checkout"], { user: { ...user, role: "inventory-manager" } }));
-    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["appointments", "queue", "tasks", "calendar"]);
+    expect(receptionist.quickActions.map((action) => action.id)).toEqual(["calendar", "appointments", "tasks", "queue"]);
     expect(receptionist.tools[0].id).toBe("settings");
-    expect(inventory.quickActions.map((action) => action.id)).toEqual(["queue", "appointments", "tasks", "calendar"]);
+    expect(inventory.quickActions.map((action) => action.id)).toEqual(["calendar", "queue", "appointments", "tasks"]);
   });
 
   it("adds compact live metadata with meaningful zero language to quick actions", () => {

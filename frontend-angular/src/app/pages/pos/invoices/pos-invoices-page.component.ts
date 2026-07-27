@@ -189,6 +189,9 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   receivePaymentLoading = false;
   paymentMethodsLoading = false;
   activeKpiFilter: InvoiceKpiFilter | null = null;
+  searchText = '';
+  statusFilter = '';
+  paymentMethodFilter = '';
   error = '';
   message = '';
   private liveUpdates?: Subscription;
@@ -228,7 +231,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
 
   load(afterLoad?: () => void): void {
     this.error = '';
-    this.api.get<any>('/api/v1/pos/sales-register?page=1&pageSize=100').subscribe({
+    this.api.get<any>(`/api/v1/pos/sales-register?${this.registerQuery()}`).subscribe({
       next: (res) => {
         const data = res?.data ?? res;
         this.invoices = this.rows(data?.rows ?? data).map((row) => this.invoice(row));
@@ -238,6 +241,19 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       },
       error: (err: any) => this.error = this.messageFor(err),
     });
+  }
+
+  applyFilters(): void {
+    this.selected = null;
+    this.load();
+  }
+
+  resetFilters(): void {
+    this.searchText = '';
+    this.statusFilter = '';
+    this.paymentMethodFilter = '';
+    this.activeKpiFilter = null;
+    this.applyFilters();
   }
 
   get visibleInvoices(): InvoiceRow[] {
@@ -966,11 +982,12 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   }
 
   lifecycleLabel(invoice: InvoiceRow): string {
+    if (invoice.totalPaise === 0 && invoice.paidPaise === 0 && invoice.balancePaise === 0) return 'No charge';
     if (invoice.receivedDuePaise > 0 && invoice.balancePaise === 0) return 'Unpaid → Paid';
     if (invoice.receivedDuePaise > 0) return 'Partially recovered';
     if (invoice.balancePaise > 0 && invoice.paidPaise === 0) return 'Unpaid';
     if (invoice.balancePaise > 0) return 'Partially paid';
-    return 'Paid at invoice';
+    return invoice.paidPaise > 0 ? 'Paid at invoice' : 'No payment';
   }
 
   statusTone(value: string): string {
@@ -997,7 +1014,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   lineTypeTotal(type: string): number { return this.invoiceLines.filter((line) => line.lineType === type).reduce((sum, line) => sum + line.lineTotalPaise, 0); }
 
   money(value: number): string { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format((value || 0) / 100); }
-  paymentSummary(row: InvoiceRow): string { return row.paymentMode ? row.paymentMode : row.paidPaise > 0 ? 'Paid' : 'Unpaid'; }
+  paymentSummary(row: InvoiceRow): string { return row.paymentMode ? row.paymentMode : row.totalPaise === 0 ? 'No charge' : row.paidPaise > 0 ? 'Paid' : 'Unpaid'; }
   trackByInvoice(_: number, row: InvoiceRow): string { return row.id; }
   trackByHistory(_: number, row: InvoiceAction): string { return row.id; }
   trackByPaymentTimeline(_: number, row: InvoicePayment): string { return row.id; }
@@ -1032,6 +1049,14 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       createdAt: String(row.createdAt ?? row.created_at ?? ''),
       lastPaymentAt: String(row.lastPaymentAt ?? row.last_payment_at ?? ''),
     };
+  }
+
+  private registerQuery(): string {
+    const params = new URLSearchParams({ page: '1', pageSize: '100' });
+    if (this.searchText.trim()) params.set('q', this.searchText.trim().toLowerCase());
+    if (this.statusFilter) params.set('status', this.statusFilter);
+    if (this.paymentMethodFilter) params.set('payment_method', this.paymentMethodFilter);
+    return params.toString();
   }
 
   private registerPaymentModes(row: any): string {

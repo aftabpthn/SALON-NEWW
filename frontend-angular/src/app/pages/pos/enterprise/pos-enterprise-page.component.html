@@ -1,7 +1,7 @@
 <section class="enterprise-page">
   <header class="command-strip">
     <div><span>MANAGEMENT CONTROL</span><h1>Enterprise POS operations</h1></div>
-    <div class="command-actions"><label><span>Business date</span><input type="text" [(ngModel)]="businessDate" placeholder="DD/MM/YYYY" /></label><button type="button" (click)="load()" [disabled]="loading || busy">Refresh</button><a routerLink="/pos/cash-drawer">Branch cash drawer</a><a routerLink="/pos">Checkout</a></div>
+    <div class="command-actions"><label><span>Business date</span><as-date-picker [value]="businessDate" (valueChange)="onBusinessDateChange($event)" ariaLabel="Business date" [disabled]="loading || busy"></as-date-picker></label><button type="button" (click)="load()" [disabled]="loading || busy">Refresh</button><a routerLink="/pos/cash-drawer">Branch cash drawer</a><a routerLink="/pos">Checkout</a></div>
   </header>
 
   <nav class="tabs">
@@ -22,12 +22,15 @@
       @if (tab === 'eod') {
         <section class="two-column">
           <article class="card">
-            <header><div><span>DAY CONTROL</span><h2>{{ dayClose?.dayLock?.status || 'Open' }}</h2></div><strong>{{ businessDate }}</strong></header>
-            <dl class="summary"><div><dt>Z-report</dt><dd>{{ dayClose?.zReport ? 'v' + dayClose.zReport.version : 'Not generated' }}</dd></div><div><dt>Opening float</dt><dd>{{ money(float?.suggestedOpeningCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div><div><dt>Float basis</dt><dd>{{ float?.sampleDays || 0 }} day(s)</dd></div><div><dt>Current branch drawer</dt><dd>{{ drawer?.status || 'Not opened' }}</dd></div></dl>
+            <header><div><span>DAY CONTROL</span><h2>{{ dayClose?.dayLock?.status || 'Open' }}</h2></div><strong>{{ displayBusinessDate }}</strong></header>
+            <dl class="summary"><div><dt>Z-report</dt><dd>{{ dayClose?.zReport ? 'v' + dayClose.zReport.version : 'Not generated' }}</dd></div><div><dt>Opening float</dt><dd>{{ money(float?.suggestedOpeningCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div><div><dt>Float basis</dt><dd>{{ float?.sampleDays || 0 }} day(s)</dd></div><div><dt>Current branch drawer</dt><dd>{{ drawerStatus }}</dd></div></dl>
+            @if (!drawerReadyForLock) {
+              <section class="block warning-block"><h3>Close prerequisite</h3><p>Branch cash drawer must be closed and approved before lock/Z-report.</p><a routerLink="/pos/cash-drawer">Open branch drawer</a></section>
+            }
             <section class="block"><h3>Single-drawer control</h3><p>This is the management view of the same branch drawer. Opening cash, till movements and physical counting stay in Branch cash drawer.</p></section>
             <section class="block"><h3>Accounting preview</h3><dl class="summary compact-summary"><div><dt>Net sales</dt><dd>{{ money(accountingPreview?.netSalesPaise) | currency:'INR' }}</dd></div><div><dt>Output tax</dt><dd>{{ money(accountingPreview?.outputTaxPaise) | currency:'INR' }}</dd></div><div><dt>Receivable</dt><dd>{{ money(accountingPreview?.receivablePaise) | currency:'INR' }}</dd></div><div><dt>Tax rows</dt><dd>{{ taxRegister?.rows?.length || 0 }}</dd></div></dl></section>
             @if (dayClose?.dayLock?.status !== 'locked') {
-              <section class="block"><h3>Lock business day</h3><div class="inline-form"><input type="text" [(ngModel)]="dayReason" placeholder="Lock reason" /><button class="primary" type="button" (click)="lockDay()" [disabled]="busy">Lock day</button></div></section>
+              <section class="block"><h3>Lock business day</h3><div class="inline-form"><input type="text" [(ngModel)]="dayReason" placeholder="Lock reason" /><button class="primary" type="button" (click)="lockDay()" [disabled]="busy || !drawerReadyForLock">Lock day</button></div></section>
             }
             @if (dayClose?.dayLock?.status === 'locked') {
               <section class="block"><h3>Immutable close</h3><div class="actions"><button type="button" (click)="generateZ()" [disabled]="busy">Generate Z-report</button><button type="button" (click)="postAccounting()" [disabled]="busy || !dayClose?.zReport">Post accounting</button><button type="button" (click)="exportZ('json')" [disabled]="busy || !dayClose?.zReport">JSON</button><button type="button" (click)="exportZ('csv')" [disabled]="busy || !dayClose?.zReport">CSV</button><button type="button" (click)="exportZ('tally')" [disabled]="busy || !dayClose?.zReport">Tally XML</button></div><div class="inline-form"><input type="text" [(ngModel)]="reopenReason" placeholder="Reopen reason" /><button type="button" (click)="reopenDay()" [disabled]="busy">Reopen</button></div></section>
@@ -51,7 +54,7 @@
     }@if (!terminals.length) {
     <tr><td colspan="6" class="empty">No terminals yet</td></tr>
   }</tbody></table></div>@if (terminalSales; as sales) {
-  <section class="block"><h3>{{ terminalNameFor(sales.terminalId) }} sales · {{ businessDate }}</h3><dl class="summary compact-summary"><div><dt>Invoices</dt><dd>{{ sales.invoiceCount }}</dd></div><div><dt>Total</dt><dd>{{ money(sales.totalPaise) | currency:'INR' }}</dd></div><div><dt>Paid</dt><dd>{{ money(sales.paidPaise) | currency:'INR' }}</dd></div><div><dt>Balance</dt><dd>{{ money(sales.totalPaise - sales.paidPaise) | currency:'INR' }}</dd></div></dl></section>
+  <section class="block"><h3>{{ terminalNameFor(sales.terminalId) }} sales · {{ displayBusinessDate }}</h3><dl class="summary compact-summary"><div><dt>Invoices</dt><dd>{{ sales.invoiceCount }}</dd></div><div><dt>Total</dt><dd>{{ money(sales.totalPaise) | currency:'INR' }}</dd></div><div><dt>Paid</dt><dd>{{ money(sales.paidPaise) | currency:'INR' }}</dd></div><div><dt>Balance</dt><dd>{{ money(sales.totalPaise - sales.paidPaise) | currency:'INR' }}</dd></div></dl></section>
 }</section>
 }
 @if (tab === 'print') {
@@ -79,7 +82,7 @@
 </section>
 }
 @if (tab === 'risk') {
-  <section class="card"><header><div><span>OWNER CONTROL</span><h2>Financial risk inbox</h2></div><button type="button" (click)="scanRisks()" [disabled]="busy">Run scan</button></header><dl class="summary"><div><dt>Open cases</dt><dd>{{ fraudSummary?.openCount || 0 }}</dd></div><div><dt>High risk</dt><dd>{{ fraudSummary?.highRiskCount || 0 }}</dd></div><div><dt>Amount at risk</dt><dd>{{ money(fraudSummary?.amountAtRiskPaise) | currency:'INR' }}</dd></div><div><dt>Scan date</dt><dd>{{ businessDate }}</dd></div></dl><div class="list risks">@for (row of risks; track row) {
+  <section class="card"><header><div><span>OWNER CONTROL</span><h2>Financial risk inbox</h2></div><button type="button" (click)="scanRisks()" [disabled]="busy">Run scan</button></header><dl class="summary"><div><dt>Open cases</dt><dd>{{ fraudSummary?.openCount || 0 }}</dd></div><div><dt>High risk</dt><dd>{{ fraudSummary?.highRiskCount || 0 }}</dd></div><div><dt>Amount at risk</dt><dd>{{ money(fraudSummary?.amountAtRiskPaise) | currency:'INR' }}</dd></div><div><dt>Scan date</dt><dd>{{ displayBusinessDate }}</dd></div></dl><div class="list risks">@for (row of risks; track row) {
   <article><div><strong>{{ row.riskCode.replaceAll('_',' ') }}</strong><span>{{ row.entityType.replaceAll('_',' ') }} · Score {{ row.riskScore }} · {{ money(row.amountAtRiskPaise) | currency:'INR' }} · {{ row.businessDate | date:'dd/MM/yyyy' }}</span></div><b [class.high]="row.severity === 'high' || row.severity === 'critical'">{{ row.severity }}</b><input type="text" [(ngModel)]="riskNotes[row.id]" placeholder="Resolution note" /><button type="button" (click)="resolveRisk(row,'resolved')">Resolve</button><button type="button" (click)="resolveRisk(row,'dismissed')">Dismiss</button></article>
   }@if (!risks.length) {
   <p class="empty">No open risk cases</p>

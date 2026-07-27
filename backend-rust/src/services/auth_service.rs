@@ -15,6 +15,111 @@ pub struct PermissionDefinition {
     pub group: &'static str,
 }
 
+impl PermissionDefinition {
+    pub fn module(&self) -> &str {
+        self.code.split('.').next().unwrap_or("unknown")
+    }
+
+    pub fn action(&self) -> &'static str {
+        if self.code.ends_with(".read") {
+            "read"
+        } else if self.code.ends_with(".approve") {
+            "approve"
+        } else if self.code.ends_with(".export") {
+            "export"
+        } else {
+            "write"
+        }
+    }
+
+    pub fn scope(&self) -> &'static str {
+        if self.code.starts_with("staff.app.")
+            || self.code == "staff.self_manage"
+            || self.code == "staff_self.write"
+        {
+            "self"
+        } else if self.code.starts_with("settings.")
+            || self.code.starts_with("security.")
+            || self.code.starts_with("tenant.")
+            || self.code.starts_with("data_migration.")
+        {
+            "tenant"
+        } else {
+            "branch"
+        }
+    }
+
+    pub fn sensitive(&self) -> bool {
+        self.action() == "approve"
+            || self.action() == "export"
+            || self.code.starts_with("finance.")
+            || self.code.starts_with("security.")
+            || self.code.contains("payroll")
+            || self.code.contains("refund")
+            || self.code.contains("void")
+            || self.code == "clients.merge"
+            || self.code == "data_migration.manage"
+    }
+
+    pub fn feature_key(&self) -> Option<&'static str> {
+        if self.code == "reports.export" {
+            Some("reports.export")
+        } else if self.code.contains("payroll") {
+            Some("staff.payroll")
+        } else if self.code == "staff.analytics.read"
+            || self.code.starts_with("staff.app.performance.")
+            || self.code.starts_with("staff.app.leaderboard.")
+            || self.code.starts_with("staff.app.reports.")
+            || self.code.starts_with("staff.app.roster.")
+        {
+            Some("staff.advanced")
+        } else if self.code.starts_with("staff.") || self.code == "staff_self.write" {
+            Some("staff.basic")
+        } else if self.code.starts_with("ai.") {
+            Some("staff.ai")
+        } else {
+            None
+        }
+    }
+
+    pub fn route_mapping(&self) -> &'static str {
+        if self.group == "Compatibility" {
+            "compatibility_alias"
+        } else if matches!(
+            self.code,
+            "staff.app.business.client_name.read"
+                | "staff.app.business.invoice_number.read"
+                | "staff.app.business.discount.read"
+                | "staff.app.business.tax.read"
+                | "staff.app.business.service_amount.read"
+                | "staff.app.business.commission.read"
+        ) {
+            "handler_field_policy"
+        } else {
+            "tenant_route_access"
+        }
+    }
+}
+
+pub fn permission_definition(code: &str) -> Option<&'static PermissionDefinition> {
+    TENANT_PERMISSION_CATALOG
+        .iter()
+        .find(|permission| permission.code == code)
+}
+
+pub fn route_permissions_registered(permissions: &[&str]) -> bool {
+    !permissions.is_empty()
+        && permissions
+            .iter()
+            .all(|permission| permission_definition(permission).is_some())
+}
+
+pub fn feature_key_for_permissions(permissions: &[&str]) -> Option<&'static str> {
+    permissions
+        .iter()
+        .find_map(|permission| permission_definition(permission)?.feature_key())
+}
+
 pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "appointments.read",
@@ -217,6 +322,176 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff",
     },
     PermissionDefinition {
+        code: "staff.app.dashboard.read",
+        label: "Show Staff App dashboard",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.appointments.read",
+        label: "Show Staff App appointments",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.appointments.manage",
+        label: "Manage Staff App appointments",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.read",
+        label: "Show Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.client_name.read",
+        label: "Show client names in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.invoice_number.read",
+        label: "Show invoice numbers in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.discount.read",
+        label: "Show discounts in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.tax.read",
+        label: "Show GST in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.service_amount.read",
+        label: "Show service amounts in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.business.commission.read",
+        label: "Show commission in Staff App business",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.offers.read",
+        label: "Show Staff App offers",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.queue.read",
+        label: "Show Staff App queue",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.tasks.read",
+        label: "Show Staff App tasks",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.tasks.manage",
+        label: "Update Staff App tasks",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.attendance.read",
+        label: "Show Staff App attendance",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.attendance.manage",
+        label: "Use Staff App attendance actions",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.roster.read",
+        label: "Show Staff App roster",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.roster.manage",
+        label: "Update Staff App roster",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.calendar.read",
+        label: "Show Staff App calendar",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.calendar.manage",
+        label: "Update Staff App calendar",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.performance.read",
+        label: "Show Staff App performance",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.leaderboard.read",
+        label: "Show Staff App leaderboard",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.notifications.read",
+        label: "Show Staff App notifications",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.notifications.manage",
+        label: "Update Staff App notifications",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.reports.read",
+        label: "Show Staff App reports",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.chat.read",
+        label: "Show Staff App chat",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.chat.manage",
+        label: "Send Staff App chat messages",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.payroll.read",
+        label: "Show Staff App payroll and payslips",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.leaves.read",
+        label: "Show Staff App leaves",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.leaves.manage",
+        label: "Request leave in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.feedback.read",
+        label: "Show Staff App feedback",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.feedback.manage",
+        label: "Submit Staff App feedback",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.profile.read",
+        label: "Show Staff App profile",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.settings.read",
+        label: "Show Staff App settings",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "reports.read",
         label: "View reports",
         group: "Finance & reports",
@@ -282,6 +557,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Marketing",
     },
     PermissionDefinition {
+        code: "ai.read",
+        label: "View AI recommendations",
+        group: "AI",
+    },
+    PermissionDefinition {
+        code: "ai.manage",
+        label: "Manage AI workflows",
+        group: "AI",
+    },
+    PermissionDefinition {
         code: "settings.read",
         label: "View operational settings",
         group: "Settings",
@@ -342,6 +627,24 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Compatibility",
     },
 ];
+
+pub fn staff_app_permission_allowed(
+    claims: &AuthClaims,
+    permission: &str,
+    default_roles: &[&str],
+    legacy_permissions: &[&str],
+) -> bool {
+    let denied = claims.denied_permissions.iter().any(|denied| {
+        denied == permission || legacy_permissions.iter().any(|legacy| denied == legacy)
+    });
+    !denied
+        && (default_roles
+            .iter()
+            .any(|role| role.eq_ignore_ascii_case(&claims.role))
+            || claims.permissions.iter().any(|allowed| {
+                allowed == permission || legacy_permissions.iter().any(|legacy| allowed == legacy)
+            }))
+}
 
 #[allow(dead_code)]
 pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
@@ -584,7 +887,10 @@ fn claims(
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_access_token, issue_scoped_token_pair, password_meets_policy, TokenScope};
+    use super::{
+        decode_access_token, issue_scoped_token_pair, password_meets_policy,
+        staff_app_permission_allowed, TokenScope,
+    };
 
     #[test]
     fn scoped_token_round_trip_preserves_branch_role_and_permissions() {
@@ -609,14 +915,28 @@ mod tests {
         )
         .expect("token pair");
 
-        let claims = decode_access_token(&tokens.access_token, "access-secret-with-enough-entropy")
-            .expect("access claims");
+        let mut claims =
+            decode_access_token(&tokens.access_token, "access-secret-with-enough-entropy")
+                .expect("access claims");
         assert_eq!(claims.branch_id.as_deref(), Some("branch-2"));
         assert_eq!(claims.role, "manager");
         assert_eq!(claims.permissions, permissions);
         assert_eq!(claims.permission_version, 4);
         assert_eq!(claims.session_id, "session-1");
         assert!(claims.mfa_enrollment_required);
+        assert!(staff_app_permission_allowed(
+            &claims,
+            "staff.app.appointments.read",
+            &["staff"],
+            &["read:appointments"],
+        ));
+        claims.denied_permissions = vec!["staff.app.appointments.read".into()];
+        assert!(!staff_app_permission_allowed(
+            &claims,
+            "staff.app.appointments.read",
+            &["staff"],
+            &["read:appointments"],
+        ));
     }
 
     #[test]

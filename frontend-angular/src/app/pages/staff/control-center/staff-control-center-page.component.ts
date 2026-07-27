@@ -7,9 +7,11 @@ import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { AuthService } from '../../../core/services/auth.service';
 
-type WorkspaceTab = 'command' | 'workforce' | 'development' | 'systems' | 'governance';
+type WorkspaceTab = 'command' | 'workforce' | 'development' | 'systems' | 'governance' | 'content';
 type Row = Record<string, any>;
+type SectionRequest = { label: string; run: Promise<void> };
 
 @Component({
     selector: 'page-staff-control-center',
@@ -21,6 +23,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
 
   readonly tabs: Array<{ key: WorkspaceTab; label: string; icon: string }> = [
     { key: 'command', label: 'Command center', icon: 'bi-speedometer2' },
@@ -28,6 +31,7 @@ export class StaffControlCenterPageComponent implements OnInit {
     { key: 'development', label: 'Development', icon: 'bi-mortarboard' },
     { key: 'systems', label: 'Systems', icon: 'bi-fingerprint' },
     { key: 'governance', label: 'Governance', icon: 'bi-shield-check' },
+    { key: 'content', label: 'Content', icon: 'bi-plus-square-dotted' },
   ];
 
   activeTab: WorkspaceTab = 'command';
@@ -55,6 +59,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   biometricExceptions: Row[] = [];
   mobileConflicts: Row[] = [];
   approvals: Row[] = [];
+  feedbackRows: Row[] = [];
   auditRows: Row[] = [];
   notifications: Row[] = [];
   notificationLogs: Row[] = [];
@@ -62,6 +67,10 @@ export class StaffControlCenterPageComponent implements OnInit {
   compliance: Row | null = null;
   selfService: Row | null = null;
   rosterDraft: Row | null = null;
+  staffAi: Row | null = null;
+  contentTasks: Row[] = [];
+  contentOffers: Row[] = [];
+  penaltyRules: Row[] = [];
 
   async ngOnInit() {
     await this.refresh();
@@ -70,53 +79,67 @@ export class StaffControlCenterPageComponent implements OnInit {
   async refresh() {
     this.loading = true;
     this.error = '';
-    const results = await Promise.allSettled(this.tabRequests(this.activeTab));
-    const failures = results.filter((result) => result.status === 'rejected');
-    if (failures.length) this.error = `${failures.length} section${failures.length === 1 ? '' : 's'} could not be loaded`;
+    const sections = this.tabRequests(this.activeTab);
+    const results = await Promise.allSettled(sections.map((section) => section.run));
+    const failures = sections.filter((_, index) => results[index].status === 'rejected').map((section) => section.label);
+    if (failures.length) this.error = `Could not load: ${failures.join(', ')}`;
     this.lastLoaded = new Date().toISOString();
     this.loading = false;
   }
 
-  private tabRequests(tab: WorkspaceTab): Array<Promise<void>> {
+  private tabRequests(tab: WorkspaceTab): SectionRequest[] {
     const period = this.periodQuery();
     const today = this.periodEnd;
     if (tab === 'command') return [
-      this.loadOne(`/staff-enterprise/command-center?${period}`, (value) => this.command = value),
-      this.loadList(`/staff-enterprise/floor-control?date=${today}`, (value) => this.floor = value),
+      this.section('command center', this.loadOne(`/staff-enterprise/command-center?${period}`, (value) => this.command = value)),
+      this.section('floor control', this.loadList(`/staff-enterprise/floor-control?date=${today}`, (value) => this.floor = value)),
     ];
     if (tab === 'workforce') return [
-      this.loadList('/staff/shift-swaps', (value) => this.swaps = value),
-      this.loadList('/staff/branch-transfers', (value) => this.transfers = value),
-      this.loadOne(`/staff/roster/coverage?${period}`, (value) => this.coverage = value),
-      this.loadOne(`/staff/manpower/forecast?${period}`, (value) => this.manpower = value),
+      this.section('shift swaps', this.loadList('/staff/shift-swaps', (value) => this.swaps = value)),
+      this.section('branch transfers', this.loadList('/staff/branch-transfers', (value) => this.transfers = value)),
+      this.section('roster coverage', this.loadOne(`/staff/roster/coverage?${period}`, (value) => this.coverage = value)),
+      this.section('manpower forecast', this.loadOne(`/staff/manpower/forecast?${period}`, (value) => this.manpower = value)),
+      this.section('staff AI', this.loadOne(`/staff/intelligence/ai-analysis?${period}`, (value) => this.staffAi = value)),
     ];
     if (tab === 'development') return [
-      this.loadList('/staff-enterprise/skill-matrix', (value) => this.skillMatrix = value),
-      this.loadList('/staff/skill-licenses', (value) => this.licenses = value),
-      this.loadList('/staff/performance-reviews', (value) => this.reviews = value),
-      this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value),
-      this.loadList('/staff-enterprise/training', (value) => this.training = value),
+      this.section('skill matrix', this.loadList('/staff-enterprise/skill-matrix', (value) => this.skillMatrix = value)),
+      this.section('skill licenses', this.loadList('/staff/skill-licenses', (value) => this.licenses = value)),
+      this.section('performance reviews', this.loadList('/staff/performance-reviews', (value) => this.reviews = value)),
+      this.section('coaching goals', this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value)),
+      this.section('training', this.loadList('/staff-enterprise/training', (value) => this.training = value)),
     ];
     if (tab === 'systems') return [
-      this.loadList('/staff/biometric/devices', (value) => this.devices = value),
-      this.loadList('/staff/biometric/gateways', (value) => this.gateways = value),
-      this.loadList('/staff/biometric/mappings', (value) => this.mappings = value),
-      this.loadList('/staff/biometric/consents', (value) => this.consents = value),
-      this.loadList('/staff/biometric/exceptions', (value) => this.biometricExceptions = value),
-      this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value),
-      this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value).catch((error) => {
+      this.section('biometric devices', this.loadList('/staff/biometric/devices', (value) => this.devices = value)),
+      this.section('biometric gateways', this.loadList('/staff/biometric/gateways', (value) => this.gateways = value)),
+      this.section('biometric mappings', this.loadList('/staff/biometric/mappings', (value) => this.mappings = value)),
+      this.section('biometric consents', this.loadList('/staff/biometric/consents', (value) => this.consents = value)),
+      this.section('biometric exceptions', this.loadList('/staff/biometric/exceptions', (value) => this.biometricExceptions = value)),
+      this.section('mobile conflicts', this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value)),
+      this.section('staff self dashboard', this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value).catch((error) => {
         if ((error as { status?: number }).status === 404) this.selfService = null;
         else throw error;
-      }),
+      })),
+    ];
+    if (tab === 'content') return [
+      this.section('tasks', this.loadList('/staff/tasks', (value) => this.contentTasks = value)),
+      this.section('offers', this.loadList('/marketing/offers', (value) => this.contentOffers = value)),
+      this.section('payroll rules', this.loadList('/staff/payroll-adjustment-rules', (value) => this.penaltyRules = value)),
     ];
     return [
-      this.loadList('/staff/approvals?status=pending', (value) => this.approvals = value),
-      this.loadList('/staff/audit?eventPrefix=staff.', (value) => this.auditRows = value),
-      this.loadList('/staff/notifications', (value) => this.notifications = value),
-      this.loadList('/staff/notification-delivery-logs', (value) => this.notificationLogs = value),
-      this.loadList(`/staff/tips/summary?${period}`, (value) => this.tips = value),
-      this.loadOne(`/staff/payroll-compliance/summary?${period}`, (value) => this.compliance = value),
+      this.section('approvals', this.loadList('/staff/approvals?status=pending', (value) => this.approvals = value)),
+      this.section('feedback', this.loadList('/staff/feedback', (value) => this.feedbackRows = value.map((row) => ({ ...row, nextStatus: row['status'], managerNoteDraft: row['managerNote'] || '' })))),
+      this.section('audit', this.loadList('/staff/audit?eventPrefix=staff.', (value) => this.auditRows = value)),
+      this.section('notifications', this.loadList('/staff/notifications', (value) => this.notifications = value)),
+      this.section('notification logs', this.loadList('/staff/notification-delivery-logs', (value) => this.notificationLogs = value)),
+      this.section('tips', this.loadList(`/staff/tips/summary?${period}`, (value) => this.tips = value)),
+      this.section('payroll compliance', this.loadOne(`/staff/payroll-compliance/summary?${period}`, (value) => this.compliance = value)),
     ];
+  }
+
+  private section(label: string, run: Promise<void>): SectionRequest { return { label, run }; }
+
+  canManage(...permissions: string[]) {
+    return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission(...permissions);
   }
 
   async decideSwap(row: Row, decision: 'approved' | 'rejected') {
@@ -129,6 +152,38 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   async decideApproval(row: Row, decision: 'approved' | 'rejected') {
     await this.action(`/staff/approvals/${row['id']}/decision`, { decision, version: row['version'], comments: '' });
+  }
+
+  async createApproval() {
+    const requestType = this.ask('Request type');
+    const entityType = this.ask('Entity type');
+    const entityId = this.ask('Entity ID');
+    if (!requestType || !entityType || !entityId) return;
+    await this.action('/staff/approvals', {
+      requestType,
+      entityType,
+      entityId,
+      amountPaise: this.contentRupeesToPaise(this.askOptional('Amount INR')) || 0,
+      payload: {},
+    });
+  }
+
+  async addFeedbackResolution() {
+    const feedbackId = this.ask('Feedback ID');
+    const status = this.askChoice('Status', ['in_review', 'resolved', 'closed']) || 'resolved';
+    const managerNote = this.ask('Manager note');
+    if (!feedbackId || !managerNote) return;
+    await this.action(`/staff/feedback/${feedbackId}`, { status, managerNote }, true, 'patch');
+  }
+
+  async resolveFeedback(row: Row) {
+    const status = String(row['nextStatus'] || row['status'] || '').trim();
+    const managerNote = String(row['managerNoteDraft'] || '').trim();
+    if (['resolved', 'closed'].includes(status) && !managerNote) {
+      this.error = 'Manager note is required to resolve or close feedback';
+      return;
+    }
+    await this.action(`/staff/feedback/${row['id']}`, { status, managerNote }, true, 'patch');
   }
 
   async createShiftSwap(row?: Row) {
@@ -344,11 +399,17 @@ export class StaffControlCenterPageComponent implements OnInit {
   }
 
   async createTemplate() {
-    const notificationType = this.askChoice('Notification type', ['training', 'compliance', 'payroll', 'leave', 'schedule', 'approval']);
+    const notificationType = this.askChoice('Notification type', [
+      'schedule', 'attendance', 'leave', 'task', 'training', 'payroll',
+      'payroll_finalized', 'payroll_paid', 'payroll_payslip_available',
+      'payroll_fine_applied', 'payroll_advance_recovered', 'payroll_corrected',
+      'compliance', 'announcement',
+    ]);
+    const languageCode = this.askChoice('Language', ['en-IN', 'hi-IN', 'hi-Latn-IN']) || 'en-IN';
     const title = this.ask('Title');
     const bodyTemplate = this.ask('Body template');
     if (!notificationType || !title || !bodyTemplate) return;
-    await this.action('/staff/notification-templates', { notificationType, title, bodyTemplate, languageCode: 'en', sensitive: ['payroll', 'compliance'].includes(notificationType) });
+    await this.action('/staff/notification-templates', { notificationType, title, bodyTemplate, languageCode, sensitive: notificationType.startsWith('payroll') || notificationType === 'compliance' });
   }
 
   async savePreference() {
@@ -357,8 +418,105 @@ export class StaffControlCenterPageComponent implements OnInit {
     await this.action(`/staff/${staffId}/notification-preferences`, {
       whatsappOptIn: this.askChoice('WhatsApp opt-in', ['true', 'false']) !== 'false',
       allowPayrollAmounts: this.askChoice('Allow payroll amounts', ['false', 'true']) === 'true',
-      languageCode: this.askOptional('Language code') || 'en',
+      languageCode: this.askOptional('Language code') || 'en-IN',
     }, true, 'put');
+  }
+
+  async createContentTask() {
+    await this.router.navigate(['/staff-os/tasks'], { queryParams: { create: 1 } });
+  }
+
+  async createContentOffer() {
+    const code = this.ask('Offer code');
+    const benefitType = this.askChoice('Benefit type', [
+      'percentage_discount',
+      'fixed_discount',
+      'complimentary_add_on',
+      'loyalty_points',
+      'wallet_credit',
+      'gift_card',
+      'package_upgrade',
+      'priority_appointment',
+      'off_peak_deal',
+      'last_minute_slot',
+    ]);
+    if (!code || !benefitType) return;
+    const needsValue = !['priority_appointment', 'package_upgrade'].includes(benefitType);
+    const benefitValueInput = needsValue ? this.ask('Benefit value') : this.askOptional('Benefit value');
+    const benefitValue = benefitValueInput ? Number(benefitValueInput) : undefined;
+    if (needsValue && (!Number.isFinite(benefitValue as number) || Number(benefitValue) <= 0)) return;
+    const complimentaryServiceId = benefitType === 'complimentary_add_on' ? this.ask('Complimentary service ID') : this.askOptional('Complimentary service ID');
+    if (benefitType === 'complimentary_add_on' && !complimentaryServiceId) return;
+    const targetServiceIds = this.askOptional('Target service IDs comma separated') || '';
+    await this.action('/marketing/offers', {
+      code: code.trim().toUpperCase(),
+      benefitType,
+      benefitValue: benefitValue ? Number(benefitValue) : undefined,
+      targetClientId: this.askOptional('Client ID') || undefined,
+      complimentaryServiceId: complimentaryServiceId || undefined,
+      targetServiceIds: targetServiceIds.split(',').map((item) => item.trim()).filter(Boolean),
+      startsAt: this.contentOfferDate(this.askOptional('Start date YYYY-MM-DD')),
+      endsAt: this.contentOfferDate(this.askOptional('Expiry date YYYY-MM-DD'), true),
+      minimumBillPaise: this.contentRupeesToPaise(this.askOptional('Minimum bill INR')),
+      usageLimit: this.contentInteger(this.askOptional('Usage limit')),
+      perClientLimit: this.contentInteger(this.askOptional('Per-client limit')) || 1,
+      allowMembershipStacking: this.askChoice('Allow membership stacking', ['false', 'true']) === 'true',
+      allowPackageStacking: this.askChoice('Allow package stacking', ['false', 'true']) === 'true',
+    });
+  }
+
+  async createCoachingGoal() {
+    const staffId = this.ask('Staff ID');
+    const goalType = this.ask('Goal type');
+    const metricUnit = this.ask('Metric unit');
+    const targetValue = this.contentInteger(this.ask('Target value'));
+    const dueDate = this.toIsoDate(this.ask('Due date YYYY-MM-DD') || '');
+    const actionTitle = this.ask('Action title');
+    if (!staffId || !goalType || !metricUnit || !targetValue || !dueDate || !actionTitle) return;
+    await this.action('/staff/coach/goals', {
+      staffId,
+      goalType,
+      metricUnit,
+      targetValue,
+      currentValue: this.contentInteger(this.askOptional('Current value')) || 0,
+      dueDate,
+      actionTitle,
+      actionDescription: this.askOptional('Action description') || undefined,
+      priority: this.askChoice('Priority', ['medium', 'low', 'high', 'urgent']) || 'medium',
+    });
+  }
+
+  async createPenaltyRule() {
+    let kind = this.askChoice('Rule kind', ['fine', 'allowance', 'deduction']) || 'deduction';
+    const triggerType = this.askChoice('Trigger type', [
+      'manual',
+      'late_count',
+      'absent_day',
+      'half_day',
+      'short_hours',
+      'no_clock_out',
+      'weekend_penalty',
+      'sandwich_penalty',
+      'unpaid_week_off',
+      'fixed',
+      'weekly_off_worked',
+    ]) || 'manual';
+    if (triggerType === 'weekly_off_worked') kind = 'allowance';
+    if (['weekend_penalty', 'sandwich_penalty', 'unpaid_week_off'].includes(triggerType) && kind === 'allowance') kind = 'deduction';
+    const amount = this.ask('Amount INR');
+    const name = this.ask('Rule name');
+    if (!amount || !name) return;
+    await this.action('/staff/payroll-adjustment-rules', {
+      kind,
+      name,
+      amountPaise: this.contentRupeesToPaise(amount),
+      triggerType,
+      triggerCount: this.contentInteger(this.askOptional('Trigger count')) || 1,
+      applicationMode: this.askChoice('Application mode', ['fixed', 'per_occurrence']) || 'per_occurrence',
+      autoApply: this.askChoice('Auto apply', ['false', 'true']) === 'true',
+      notes: this.askOptional('Notes') || undefined,
+      active: this.askChoice('Active', ['true', 'false']) !== 'false',
+    });
   }
 
   async approveNotification(row: Row) {
@@ -398,6 +556,16 @@ export class StaffControlCenterPageComponent implements OnInit {
   }
 
   arrayValue(value: unknown): Row[] { return Array.isArray(value) ? value : []; }
+  staffAiSections(): Row[] {
+    if (!this.staffAi) return [];
+    return [
+      ['Attendance anomalies', 'attendanceAnomalies'],
+      ['Buddy punching signals', 'buddyPunchingSignals'],
+      ['Attrition risk', 'attritionRisk'],
+      ['Commission anomalies', 'commissionAnomalies'],
+      ['Roster recommendations', 'rosterRecommendations'],
+    ].map(([label, key]) => ({ key, label, result: this.staffAi?.[key] || {} }));
+  }
   text(value: unknown) { return value === null || value === undefined || value === '' ? '—' : String(value); }
   label(value: string) { return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   money(value: unknown) {
@@ -470,6 +638,28 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   private periodQuery() {
     return new URLSearchParams({ periodStart: this.periodStart, periodEnd: this.periodEnd }).toString();
+  }
+
+  private toIsoDate(value: string) {
+    const match = String(value || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+  }
+
+  private contentOfferDate(value: string, end = false) {
+    const iso = this.toIsoDate(value);
+    return iso ? new Date(`${iso}T${end ? '23:59:59' : '00:00:00'}+05:30`).toISOString() : undefined;
+  }
+
+  private contentRupeesToPaise(value: string | null) {
+    if (!value) return undefined;
+    const amount = Number(value);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : undefined;
+  }
+
+  private contentInteger(value: string | null) {
+    if (!value) return undefined;
+    const amount = Number(value);
+    return Number.isInteger(amount) && amount > 0 ? amount : undefined;
   }
 
   private isoDate(value: Date) { return value.toISOString().slice(0, 10); }

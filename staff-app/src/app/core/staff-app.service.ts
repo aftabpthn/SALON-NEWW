@@ -56,6 +56,37 @@ function stableQueryKey(params: Record<string, string> = {}): string {
   );
 }
 
+const STAFF_APP_PERMISSION_FALLBACKS: Record<string, string[]> = {
+  "staff.app.dashboard.read": ["staff.self_manage", "staff_self.write", "read:appointments"],
+  "staff.app.appointments.read": ["appointments.read", "read:appointments"],
+  "staff.app.appointments.manage": ["appointments.manage", "write:appointments"],
+  "staff.app.business.read": ["appointments.read", "read:appointments"],
+  "staff.app.offers.read": ["marketing.read", "appointments.read", "read:appointments"],
+  "staff.app.queue.read": ["appointments.read", "read:appointments"],
+  "staff.app.tasks.read": ["staff.self_manage", "staff_self.write", "read:staff"],
+  "staff.app.tasks.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.attendance.read": ["staff.app.attendance.manage", "staff.attendance.read", "staff.self_manage", "allow:staff-checkin-checkout", "read:staff"],
+  "staff.app.attendance.manage": ["staff.self_manage", "staff_self.write", "allow:staff-checkin-checkout", "write:staff"],
+  "staff.app.roster.read": ["staff.schedule.read", "staff.self_manage", "read:staff"],
+  "staff.app.roster.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.calendar.read": ["staff.schedule.read", "staff.self_manage", "read:staff"],
+  "staff.app.calendar.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.performance.read": ["staff.analytics.read", "staff.self_manage", "read:staff"],
+  "staff.app.leaderboard.read": ["staff.analytics.read", "staff.self_manage", "read:staff"],
+  "staff.app.notifications.read": ["notifications.read", "staff.self_manage", "read:staff"],
+  "staff.app.notifications.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.reports.read": ["reports.read", "staff.self_manage", "read:staff"],
+  "staff.app.chat.read": ["staff.self_manage", "staff_self.write", "read:staff"],
+  "staff.app.chat.manage": ["staff.self_manage", "staff_self.write", "write:staff"],
+  "staff.app.payroll.read": ["staff.payroll.read", "finance.read", "read:payroll", "read:finance"],
+  "staff.app.leaves.read": ["staff.leave.read", "staff.self_manage", "read:staff"],
+  "staff.app.leaves.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.feedback.read": ["staff.self_manage", "staff_self.write", "read:staff"],
+  "staff.app.feedback.manage": ["staff.self_manage", "staff_self.write", "write:staff"],
+  "staff.app.profile.read": ["staff.self_manage", "staff_self.write", "read:staff"],
+  "staff.app.settings.read": ["staff.self_manage", "staff_self.write", "read:staff"]
+};
+
 export type StaffUser = {
   id: string;
   name: string;
@@ -69,6 +100,7 @@ export type StaffUser = {
   branchName?: string;
   branchIds: string[];
   permissions?: string[];
+  deniedPermissions?: string[];
 };
 
 export type StaffAppointment = {
@@ -125,32 +157,32 @@ export type StaffEnterpriseOs = {
     tasks: number;
     pendingPayments: number;
     recentNotifications: number;
-    targetProgress: { label: string; targetValue: number; achievedValue: number; percentage: number; remaining: number };
+    targetProgress: { label: string; targetValue: number; achievedValue: number; percentage: number; remaining: number } | null;
   };
   timeline: Array<{ id: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number }>;
   serviceTimers: Array<{ appointmentId: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
-  performance: { revenue: number; completedServices: number; avgUtilization: number; avgRating: number; productivityScore: number; strengths: string[]; opportunities: string[] };
+  performance: { revenue: number | null; completedServices: number; avgUtilization: number | null; avgRating: number | null; productivityScore: number | null; strengths: string[]; opportunities: string[] };
   leaderboard: Array<{ rank: number; staffId: string; staffName: string; revenue: number; score: number; rating: number; days: number; isMe: boolean }>;
   gamification: { points: number; level: number; stars: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }> };
   notifications: Array<{ id: string; title: string; body: string; status: string; createdAt: string }>;
   tasks: Array<{ id: string; title: string; priority: string; status: string; dueAt: string; assignedBy: string; checklist: unknown[] }>;
   calendar: Array<{ id: string; date: string; startTime: string; endTime: string; type: string; status: string; version?: number }>;
-  reports: Record<string, { days: number; revenue: number; services: number; productivityScore: number; rating: number }>;
+  reports: Record<string, { days: number; revenue: number | null; services: number; productivityScore: number | null; rating: number | null }>;
 };
 
 export type StaffBusinessBilling = {
   saleId: string;
   invoiceId: string;
-  invoiceNumber: string;
+  invoiceNumber: string | null;
   invoiceStatus: string;
-  subtotalPaise: number;
-  discountPaise: number;
-  couponDiscountPaise: number;
-  afterDiscountPaise: number;
-  gstPaise: number;
-  totalPaise: number;
-  paidPaise: number;
-  duePaise: number;
+  subtotalPaise: number | null;
+  discountPaise: number | null;
+  couponDiscountPaise: number | null;
+  afterDiscountPaise: number | null;
+  gstPaise: number | null;
+  totalPaise: number | null;
+  paidPaise: number | null;
+  duePaise: number | null;
 };
 
 export type StaffBusinessAttribution = {
@@ -176,6 +208,12 @@ export type StaffBusinessPermissions = {
   earnings: boolean;
   targets: boolean;
   invoiceDetail: boolean;
+  clientName: boolean;
+  invoiceNumber: boolean;
+  discount: boolean;
+  tax: boolean;
+  serviceAmount: boolean;
+  commission: boolean;
 };
 
 export type StaffBusinessPerformance = {
@@ -245,14 +283,44 @@ export type StaffBusinessSummary = {
   completedMinutes: number;
   workedMinutes: number;
   bills: number;
-  subtotalPaise: number;
-  discountPaise: number;
-  couponDiscountPaise: number;
-  afterDiscountPaise: number;
-  gstPaise: number;
-  totalPaise: number;
-  paidPaise: number;
-  duePaise: number;
+  subtotalPaise: number | null;
+  discountPaise: number | null;
+  couponDiscountPaise: number | null;
+  afterDiscountPaise: number | null;
+  gstPaise: number | null;
+  totalPaise: number | null;
+  paidPaise: number | null;
+  duePaise: number | null;
+};
+
+export type StaffBusinessServiceInvoice = {
+  id: string;
+  saleId: string;
+  invoiceId: string;
+  invoiceNumber: string | null;
+  appointmentId: string | null;
+  businessDate: string;
+  createdAt: string;
+  status: string;
+  refundStatus: string;
+  clientName: string | null;
+  serviceName: string;
+  quantity: number;
+  splitPercent: number;
+  grossPaise: number | null;
+  discountPaise: number | null;
+  taxablePaise: number | null;
+  gstPercent: number | null;
+  gstPaise: number | null;
+  cgstPaise: number | null;
+  sgstPaise: number | null;
+  igstPaise: number | null;
+  totalPaise: number | null;
+  refundedPaise: number | null;
+  netTotalPaise: number | null;
+  taxInclusive: boolean | null;
+  taxMode: "inclusive" | "exclusive" | null;
+  commissionPaise: number | null;
 };
 
 export type StaffBusinessAppointment = StaffAppointment & {
@@ -290,28 +358,37 @@ export type StaffBusiness = {
   dailyBreakdown: Array<{ date: string; performance: StaffBusinessPerformance } & StaffBusinessSummary>;
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean };
   appointments: StaffBusinessAppointment[];
+  serviceInvoices: StaffBusinessServiceInvoice[];
 };
 
 export type StaffBusinessInvoiceDetail = {
   id: string;
-  invoiceNumber: string;
+  invoiceNumber: string | null;
   clientName?: string;
   status: string;
   appointmentId: string;
   createdAt: string;
   totals: StaffBusinessBilling;
-  items: Array<{ id: string; name: string; type: string; quantity: number; amountPaise: number }>;
+  items: StaffBusinessServiceInvoice[];
   payments: Array<{ id: string; mode: string; amount: number; amountPaise: number; createdAt: string }>;
 };
 
-export type StaffChatThread = { id: string; tenantId: string; branchId: string; title: string; channel: string; messageCount?: number; lastMessageAt?: string };
-export type StaffChatMessage = { id: string; threadId: string; senderStaffId: string; senderName: string; body: string; createdAt: string; readByJson?: string };
 export type StaffWorkspacePreferences = {
   workspace: { workspaceName: string };
   localization: { timezone: string; locale: string };
   dateTime: { dateFormat: string; timeFormat: string; businessDayStartHour: number; weekStartsOn: string };
   interface: { compactMode: boolean };
   defaults: { staffHints: boolean };
+};
+
+export type StaffWorkspacePreferenceUpdate = {
+  workspaceName?: string;
+  timezone?: string;
+  locale?: string;
+  dateFormat?: string;
+  timeFormat?: string;
+  compactMode?: boolean;
+  staffHints?: boolean;
 };
 
 export type StaffAttendance = {
@@ -355,9 +432,57 @@ export type StaffPayrollItem = {
   periodStart: string;
   periodEnd: string;
   grossPay: number;
+  deductionsPay: number;
   netPay: number;
   status: string;
   createdAt: string;
+  payslipPath: string;
+};
+
+export type StaffPayrollRule = {
+  id: string;
+  name: string;
+  kind: string;
+  amountPaise: number;
+  triggerType: string;
+  triggerCount: number;
+  applicationMode: string;
+  autoApply: boolean;
+  notes: string;
+};
+
+export type StaffOffer = {
+  id: string;
+  code: string;
+  title: string;
+  customerDescription: string;
+  staffInstructions: string;
+  benefitType: string;
+  benefitValue: number;
+  targetServiceIds: string[];
+  targetPackageIds: string[];
+  applicableServices: { id: string; name: string }[];
+  applicablePackages: { id: string; name: string }[];
+  startsAt: string;
+  endsAt: string;
+  minimumBillPaise: number;
+  usageLimit: number | null;
+  usedCount: number;
+  perClientLimit: number;
+  active: boolean;
+  approvalStatus: string;
+  hasCreative: boolean;
+};
+
+export type StaffFeedback = {
+  id: string;
+  category: string;
+  title: string;
+  body: string;
+  status: string;
+  managerNote: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type StaffTarget = {
@@ -397,6 +522,10 @@ type StaffLoginResponse = {
   access_token?: string;
   refreshToken?: string;
   refresh_token?: string;
+  mustChangePassword?: boolean;
+  must_change_password?: boolean;
+  mfaEnrollmentRequired?: boolean;
+  mfa_enrollment_required?: boolean;
   user?: StaffUser;
   requiresBranchSelection?: boolean;
   selectionToken?: string;
@@ -409,7 +538,8 @@ type RustAuthMe = {
   branchId?: string;
   role?: string;
   permissions?: string[];
-  branches?: Array<{ branchId: string; branchName?: string; roleName?: string; permissions?: string[] }>;
+  deniedPermissions?: string[];
+  branches?: Array<{ branchId: string; branchName?: string; roleName?: string; permissions?: string[]; deniedPermissions?: string[] }>;
 };
 
 export type StaffChatConversation = {
@@ -434,8 +564,24 @@ export type StaffConversationMessage = {
   createdAt: string;
 };
 
+export type StaffServiceTarget = {
+  id: string;
+  serviceName: string;
+  targetCount: number;
+  achievedCount: number;
+  progressPercent: number;
+  startsOn: string;
+  endsOn: string;
+  rewardType: "none" | "bonus" | "gift" | "other";
+  rewardAmountPaise: number;
+  rewardDescription: string;
+  progressStatus: "active" | "completed" | "expired" | "cancelled";
+};
+
 export type StaffPushDevice = { id: string };
 export type StaffPushConfig = { configured: boolean; publicKey: string };
+export type StaffMfaSetup = { secret: string; otpAuthUri: string; algorithm: string; digits: number; period: number };
+type StaffMfaEnableResult = { enabled: boolean; recoveryCodes: string[] };
 
 type StaffRefreshResponse = {
   accessToken?: string;
@@ -453,8 +599,10 @@ type RustStaffSelfDashboard = {
   attendance?: Record<string, unknown> | null;
   tasks?: unknown[];
   appointments?: unknown[];
+  sales?: unknown[];
   leaveRequests?: unknown[];
   payroll?: unknown[];
+  payrollRules?: unknown[];
 };
 type RustAttendanceDetail = Record<string, unknown> & { breaks?: unknown[] };
 
@@ -495,6 +643,9 @@ export class StaffAppService {
   readonly profile = signal<StaffDashboard["staff"] | null>(null);
   readonly biometricEnabled = signal(!!this.readBiometricHint());
   readonly biometricLocked = signal(false);
+  readonly passwordChangeRequired = signal(false);
+  readonly mfaEnrollmentRequired = signal(false);
+  readonly mfaSetup = signal<StaffMfaSetup | null>(null);
 
   constructor(private readonly http: HttpClient) {
     this.purgeLegacyAuthStorage();
@@ -508,7 +659,20 @@ export class StaffAppService {
     return this.isAuthenticated();
   }
 
+  async restoreSession(): Promise<boolean> {
+    if (this.isAuthenticated()) return true;
+    try {
+      await this.refreshSession();
+      return this.isAuthenticated();
+    } catch {
+      return false;
+    }
+  }
+
   hasPermission(permission: string): boolean {
+    const currentUser = this.user();
+    const denied = currentUser?.deniedPermissions || [];
+    if (denied.includes(permission)) return false;
     const grants = (this.user()?.permissions || []).flatMap((grant) => {
       if (!grant.includes(".")) return [grant];
       const parts = grant.split(".").filter(Boolean);
@@ -518,15 +682,20 @@ export class StaffAppService {
       if (resource === "staff" && parts.includes("attendance")) aliases.push("read:staff", "allow:staff-checkin-checkout");
       return [grant, ...aliases];
     });
+    const matches = (required: string) => {
+      if (denied.includes(required)) return false;
+      if (grants.includes("*") || grants.includes(required)) return true;
+      const [action, resource] = required.split(":");
+      const writeAliases = new Set(["create", "update", "delete", "back", "print", "export"]);
+      return grants.includes(`${action}:*`) || grants.includes("admin:*") ||
+        (resource ? grants.includes(`admin:${resource}`) : false) ||
+        (resource && writeAliases.has(action) ? grants.includes(`write:${resource}`) || grants.includes("write:*") : false);
+    };
     if (!permission) return true;
-    if (grants.includes("*")) return true;
-    if (grants.includes(permission)) return true;
-    const [action, resource] = permission.split(":");
-    const writeAliases = new Set(["create", "update", "delete", "back", "print", "export"]);
-    return grants.includes(`${action}:*`) ||
-      grants.includes("admin:*") ||
-      (resource ? grants.includes(`admin:${resource}`) : false) ||
-      (resource && writeAliases.has(action) ? grants.includes(`write:${resource}`) || grants.includes("write:*") : false);
+    if (permission.startsWith("staff.app.")) {
+      return matches(permission) || (STAFF_APP_PERMISSION_FALLBACKS[permission] || []).some(matches);
+    }
+    return matches(permission);
   }
 
   hasAnyPermission(permissions: string[]): boolean {
@@ -537,17 +706,18 @@ export class StaffAppService {
     return permissions.every((permission) => this.hasPermission(permission));
   }
 
-  async login(payload: { tenantId: string; loginId: string; password: string; branchId?: string }): Promise<StaffUser> {
+  async login(payload: { tenantId: string; loginId: string; password: string; branchId?: string; mfaCode?: string }): Promise<StaffUser> {
     this.loading.set(true);
     this.error.set("");
     try {
       const tenantId = payload.tenantId.trim();
-      if (!tenantId) throw new Error("Tenant ID is required.");
+      if (!tenantId) throw new Error("Salon code is required.");
       const response = await firstValueFrom(this.http.post<StaffLoginResponse | ApiEnvelope<StaffLoginResponse>>(`${this.baseUrl}/auth/login`, {
         tenantId,
         loginId: payload.loginId.trim(),
         password: payload.password,
         branchId: payload.branchId?.trim() || undefined,
+        mfaCode: payload.mfaCode?.trim() || undefined,
         deviceId: this.tabId,
         device: { type: "staff-app", name: "Aura Staff App", platform: "web" }
       }, { headers: new HttpHeaders({ "X-Tenant-Id": tenantId }), withCredentials: true }));
@@ -559,10 +729,21 @@ export class StaffAppService {
       const session = this.normalizeSession(raw);
       if (!session.accessToken) throw new Error("Staff session token was not returned.");
       this.accessTokenValue = session.accessToken;
-      this.tenantIdValue = tenantId;
+      const sessionTenantId = this.tenantIdFromAccessToken(session.accessToken) || tenantId;
+      this.tenantIdValue = sessionTenantId;
+      if (raw.mustChangePassword || raw.must_change_password) {
+        this.passwordChangeRequired.set(true);
+        throw new Error("Create a new password before opening the Staff App.");
+      }
+      if (raw.mfaEnrollmentRequired || raw.mfa_enrollment_required) {
+        this.mfaEnrollmentRequired.set(true);
+        this.mfaSetup.set(await this.startRequiredMfaSetup());
+        throw new Error("Set up an authenticator before opening the Staff App.");
+      }
       const user = session.user?.staffId ? session.user : await this.loadUserContext(payload.loginId.trim());
-      if (!this.isStaffRole(user.role)) throw new Error("Use a staff or manager login.");
-      this.saveSession({ ...session, user }, tenantId);
+      this.assertEmployeeRole(user.role);
+      if (!user.staffId) throw new Error("This login is not linked with a staff profile.");
+      this.saveSession({ ...session, user }, sessionTenantId);
       return user;
     } catch (error) {
       const message = this.errorMessage(error, "Unable to login staff.");
@@ -600,12 +781,16 @@ export class StaffAppService {
     );
   }
 
-  async enterpriseOs(query: Record<string, string> = {}): Promise<StaffEnterpriseOs> {
-    return this.cachedRead(`enterprise-os:${stableQueryKey(query)}`, 10_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query));
+  async enterpriseOs(query: Record<string, string> = {}, reportError = true): Promise<StaffEnterpriseOs> {
+    return this.cachedRead(`enterprise-os:${stableQueryKey(query)}`, 10_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query, reportError));
   }
 
   async workspacePreferences(): Promise<StaffWorkspacePreferences> {
     return this.cachedRead("workspace-preferences", 60_000, () => this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences"));
+  }
+
+  async saveWorkspacePreferences(input: StaffWorkspacePreferenceUpdate): Promise<StaffWorkspacePreferences> {
+    return this.put<StaffWorkspacePreferences>("/staff-self/workspace-preferences", { ...input });
   }
 
   async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
@@ -641,18 +826,6 @@ export class StaffAppService {
 
   async updateSchedule(scheduleId: string, payload: { version: number; scheduleDate?: string; startTime?: string; endTime?: string; status?: string; notes?: string }): Promise<unknown> {
     return this.patch(`/staff-self/calendar/${encodeURIComponent(scheduleId)}`, payload);
-  }
-
-  async chatThreads(): Promise<StaffChatThread[]> {
-    return this.get<StaffChatThread[]>("/staff-self/chat/threads");
-  }
-
-  async chatMessages(threadId: string): Promise<StaffChatMessage[]> {
-    return this.get<StaffChatMessage[]>(`/staff-self/chat/threads/${encodeURIComponent(threadId)}/messages`);
-  }
-
-  async sendChatMessage(threadId: string, body: string): Promise<StaffChatMessage> {
-    return this.post<StaffChatMessage>("/staff-self/chat/messages", { threadId, body });
   }
 
   async staffChatConversations(): Promise<StaffChatConversation[]> {
@@ -707,6 +880,43 @@ export class StaffAppService {
     };
   }
 
+  async changeRequiredPassword(newPassword: string): Promise<void> {
+    if (!this.accessTokenValue || !this.passwordChangeRequired()) throw new Error("Sign in with the temporary password first.");
+    await firstValueFrom(this.http.post<ApiEnvelope<unknown>>(`${this.baseUrl}/auth/change-password`, { newPassword }, {
+      headers: this.tokenHeaders(),
+      withCredentials: true
+    }));
+    this.clearLocalAuthState(false);
+    this.passwordChangeRequired.set(false);
+    this.error.set("");
+  }
+
+  async enableRequiredMfa(code: string): Promise<string[]> {
+    if (!this.accessTokenValue || !this.mfaEnrollmentRequired()) throw new Error("Sign in before setting up MFA.");
+    const response = await firstValueFrom(this.http.post<ApiEnvelope<StaffMfaEnableResult>>(`${this.baseUrl}/auth/mfa/enable`, { code }, {
+      headers: this.tokenHeaders(),
+      withCredentials: true
+    }));
+    const result = this.unwrap(response);
+    this.clearLocalAuthState(false);
+    this.mfaEnrollmentRequired.set(false);
+    this.mfaSetup.set(null);
+    this.error.set("");
+    return result.recoveryCodes;
+  }
+
+  private async startRequiredMfaSetup(): Promise<StaffMfaSetup> {
+    const response = await firstValueFrom(this.http.post<ApiEnvelope<StaffMfaSetup>>(`${this.baseUrl}/auth/mfa/setup`, {}, {
+      headers: this.tokenHeaders(),
+      withCredentials: true
+    }));
+    return this.unwrap(response);
+  }
+
+  async serviceTargets(): Promise<StaffServiceTarget[]> {
+    return this.get<StaffServiceTarget[]>("/staff/self/service-targets");
+  }
+
   async attendanceHistory(days = 30): Promise<StaffAttendance[]> {
     const to = staffBusinessDate();
     const start = new Date(`${to}T00:00:00.000Z`);
@@ -748,8 +958,62 @@ export class StaffAppService {
       return {
         id: stringValue(row, "id", "runId", "run_id"), periodStart: stringValue(row, "periodStart", "period_start"),
         periodEnd: stringValue(row, "periodEnd", "period_end"), grossPay: numberValue(row, "grossPaise", "gross_paise"),
+        deductionsPay: numberValue(row, "deductionsPaise", "deductions_paise"),
         netPay: numberValue(row, "netPaise", "net_paise"), status: stringValue(row, "status"),
-        createdAt: stringValue(row, "paidAt", "paid_at")
+        createdAt: stringValue(row, "paidAt", "paid_at"), payslipPath: stringValue(row, "payslipPath", "payslip_path")
+      };
+    });
+  }
+
+  async downloadPayslip(path: string): Promise<void> {
+    const blob = await this.withRefreshRetry(async () => firstValueFrom(this.http.get(`${this.baseUrl}${path}`, {
+      headers: this.authHeaders(),
+      responseType: "blob"
+    })));
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  async offers(): Promise<StaffOffer[]> {
+    return this.get<StaffOffer[]>("/staff-self/offers");
+  }
+
+  async offerCreative(id: string): Promise<Blob> {
+    return this.withRefreshRetry(() => firstValueFrom(this.http.get(
+      `${this.baseUrl}/staff-self/offers/${encodeURIComponent(id)}/creative`,
+      { headers: this.authHeaders(), responseType: "blob" }
+    )));
+  }
+
+  async feedback(): Promise<StaffFeedback[]> {
+    return this.get<StaffFeedback[]>("/staff-self/feedback");
+  }
+
+  async submitFeedback(payload: { category: string; title: string; body: string }): Promise<StaffFeedback> {
+    return this.post<StaffFeedback>("/staff-self/feedback", payload);
+  }
+
+  async cancelAppointment(id: string, reason: string): Promise<unknown> {
+    return this.post(`/staff-self/appointments/${encodeURIComponent(id)}/cancel`, { reason });
+  }
+
+  async rescheduleAppointment(id: string, payload: { startAt: string; reason: string }): Promise<unknown> {
+    return this.post(`/staff-self/appointments/${encodeURIComponent(id)}/reschedule`, {
+      start_at: payload.startAt,
+      reason: payload.reason
+    });
+  }
+
+  async payrollRules(): Promise<StaffPayrollRule[]> {
+    const dashboard = await this.get<RustStaffSelfDashboard>("/staff/self/dashboard", { date: staffBusinessDate() });
+    return arrayValue(dashboard.payrollRules).map((value) => {
+      const row = objectValue(value);
+      return {
+        id: stringValue(row, "id"), name: stringValue(row, "name"), kind: stringValue(row, "kind"),
+        amountPaise: numberValue(row, "amountPaise", "amount_paise"), triggerType: stringValue(row, "triggerType", "trigger_type"),
+        triggerCount: numberValue(row, "triggerCount", "trigger_count"), applicationMode: stringValue(row, "applicationMode", "application_mode"),
+        autoApply: Boolean(row["autoApply"] ?? row["auto_apply"]), notes: stringValue(row, "notes")
       };
     });
   }
@@ -866,10 +1130,12 @@ export class StaffAppService {
     }, hint.tenantId));
     if (!response.accessToken) throw new Error("Passkey session token was not returned.");
     this.accessTokenValue = response.accessToken;
-    this.tenantIdValue = hint.tenantId;
+    const sessionTenantId = this.tenantIdFromAccessToken(response.accessToken) || hint.tenantId;
+    this.tenantIdValue = sessionTenantId;
     const user = response.user?.staffId ? response.user : await this.loadUserContext(hint.loginId);
-    if (!this.isStaffRole(user.role)) throw new Error("Passkey is not linked to a staff profile.");
-    this.saveSession({ ...response, user }, hint.tenantId);
+    this.assertEmployeeRole(user.role);
+    if (!user.staffId) throw new Error("Passkey is not linked to a staff profile.");
+    this.saveSession({ ...response, user }, sessionTenantId);
   }
 
   realtimeSocketUrl(): string {
@@ -882,16 +1148,27 @@ export class StaffAppService {
     return this.buildRealtimeSocketUrl();
   }
 
+  appointmentRealtimeSocketUrl(): string {
+    return this.isAuthenticated() ? this.buildRealtimeSocketUrl("appointments") : "";
+  }
+
+  posRealtimeSocketUrl(): string {
+    return this.isAuthenticated() ? this.buildRealtimeSocketUrl("pos") : "";
+  }
+
+  invalidateCachedReads(): void { this.clearGetCache(); }
+
   realtimeSocketProtocols(): string[] {
     return this.accessTokenValue ? ["aurashine-v1", this.accessTokenValue] : ["aurashine-v1"];
   }
 
-  private buildRealtimeSocketUrl(): string {
-    const base = this.baseUrl.startsWith("http")
-      ? new URL(this.baseUrl)
-      : new URL(this.baseUrl, window.location.origin);
+  private buildRealtimeSocketUrl(channel = "team-chat"): string {
+    const configuredBase = environment.realtimeWsBaseUrl.trim() || this.baseUrl;
+    const base = configuredBase.startsWith("http") || configuredBase.startsWith("ws")
+      ? new URL(configuredBase)
+      : new URL(configuredBase, window.location.origin);
     base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
-    base.pathname = `${base.pathname.replace(/\/$/, "")}/realtime/team-chat`;
+    base.pathname = `${base.pathname.replace(/\/$/, "")}/realtime/${channel}`;
     return base.toString();
   }
 
@@ -991,6 +1268,16 @@ export class StaffAppService {
     const completed = appointments.filter((row) => /completed|done/i.test(row.status));
     const cancelled = appointments.filter((row) => /cancel/i.test(row.status));
     const live = appointments.filter((row) => /in.?service|in.?progress|running|started|active/i.test(row.status));
+    const sales = arrayValue(source.sales).map((value) => {
+      const row = objectValue(value);
+      return {
+        id: stringValue(row, "id"),
+        total: numberValue(row, "totalPaise", "total_paise", "total"),
+        commissionTotal: numberValue(row, "commissionPaise", "commission_paise", "commissionTotal"),
+        status: stringValue(row, "status"),
+        createdAt: stringValue(row, "createdAt", "created_at")
+      };
+    });
     const name = stringValue(staff, "fullName", "displayName", "display_name") || this.user()?.name || "";
     const names = name.trim().split(/\s+/).filter(Boolean);
     return {
@@ -998,14 +1285,14 @@ export class StaffAppService {
         id: stringValue(staff, "id") || this.staffId(), fullName: name, firstName: names[0] || "", lastName: names.slice(1).join(" "),
         mobile: stringValue(staff, "mobile"), email: stringValue(staff, "email") || this.user()?.email || "",
         roleId: this.user()?.role || "", department: stringValue(staff, "department"),
-        designation: stringValue(staff, "jobTitle", "job_title", "designation"), status: stringValue(staff, "status") || "active"
+        designation: stringValue(staff, "designation", "jobTitle", "job_title"), status: stringValue(staff, "status") || "active"
       },
       summary: {
         appointments: appointments.length, todayAppointments: appointments.length, liveAppointments: live.length,
-        completedAppointments: completed.length, cancelledAppointments: cancelled.length, salesCount: 0,
-        revenue: 0, appointmentValue: appointments.reduce((total, row) => total + Number(row.value || 0), 0)
+        completedAppointments: completed.length, cancelledAppointments: cancelled.length, salesCount: sales.length,
+        revenue: sales.reduce((total, row) => total + Number(row.total || 0), 0), appointmentValue: appointments.reduce((total, row) => total + Number(row.value || 0), 0)
       },
-      todayAppointments: appointments, liveAppointments: live, workReport: completed, appointments, sales: []
+      todayAppointments: appointments, liveAppointments: live, workReport: completed, appointments, sales
     };
   }
 
@@ -1065,9 +1352,9 @@ export class StaffAppService {
       .forEach((key) => this.getCache.delete(key));
   }
 
-  private async get<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+  private async get<T>(path: string, params: Record<string, string> = {}, reportError = true): Promise<T> {
     this.loading.set(true);
-    this.error.set("");
+    if (reportError) this.error.set("");
     try {
       return await this.withRefreshRetry(async () => {
         const response = await firstValueFrom(this.http.get<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, { headers: this.authHeaders(), params }));
@@ -1075,7 +1362,7 @@ export class StaffAppService {
       });
     } catch (error) {
       const message = this.errorMessage(error, "Unable to load staff data.");
-      this.error.set(message);
+      if (reportError) this.error.set(message);
       throw error;
     } finally {
       this.loading.set(false);
@@ -1122,6 +1409,26 @@ export class StaffAppService {
     }
   }
 
+  private async put<T = unknown>(path: string, body: Record<string, unknown>): Promise<T> {
+    this.loading.set(true);
+    this.error.set("");
+    if (!this.isOnline()) { this.loading.set(false); throw new Error("This action requires an internet connection."); }
+    try {
+      const result = await this.withRefreshRetry(async () => {
+        const response = await firstValueFrom(this.http.put<T | ApiEnvelope<T>>(`${this.baseUrl}${path}`, body, { headers: this.authHeaders() }));
+        return this.unwrap(response);
+      });
+      this.clearGetCache();
+      return result;
+    } catch (error) {
+      const message = this.errorMessage(error, "Unable to update staff data.");
+      this.error.set(message);
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   private saveSession(session: StaffLoginResponse, tenantId: string) {
     resetCsrfState();
     this.clearOfflineState();
@@ -1144,13 +1451,15 @@ export class StaffAppService {
     if (!branch) throw new Error("This login has no active branch access.");
     const branchAccess = me.branches?.find((item) => item.branchId === branch);
     const role = me.role || branchAccess?.roleName || "staff";
+    this.assertEmployeeRole(role);
     const permissions = me.permissions || branchAccess?.permissions || [];
-    this.user.set({ id: me.userId, name: loginId, loginId, email: loginId.includes("@") ? loginId : "", role, staffId: "", branchId: branch, branchName: branchAccess?.branchName, branchIds: (me.branches || []).map((item) => item.branchId), permissions });
+    const deniedPermissions = me.deniedPermissions || branchAccess?.deniedPermissions || [];
+    this.user.set({ id: me.userId, name: loginId, loginId, email: loginId.includes("@") ? loginId : "", role, staffId: "", branchId: branch, branchName: branchAccess?.branchName, branchIds: (me.branches || []).map((item) => item.branchId), permissions, deniedPermissions });
     const dashboardResponse = await firstValueFrom(this.http.get<RustStaffSelfDashboard | ApiEnvelope<RustStaffSelfDashboard>>(`${this.baseUrl}/staff/self/dashboard`, { headers: this.authHeaders() }));
     const staff = objectValue(this.unwrap(dashboardResponse).staff);
     const staffId = stringValue(staff, "id");
     if (!staffId) throw new Error("This login is not linked with a staff profile.");
-    const user: StaffUser = { id: me.userId, name: stringValue(staff, "displayName", "fullName") || loginId, loginId, email: stringValue(staff, "email") || (loginId.includes("@") ? loginId : ""), role, staffId, branchId: branch, branchName: branchAccess?.branchName, branchIds: (me.branches || []).map((item) => item.branchId), permissions };
+    const user: StaffUser = { id: me.userId, name: stringValue(staff, "displayName", "fullName") || loginId, loginId, email: stringValue(staff, "email") || (loginId.includes("@") ? loginId : ""), role, staffId, branchId: branch, branchName: branchAccess?.branchName, branchIds: (me.branches || []).map((item) => item.branchId), permissions, deniedPermissions };
     this.user.set(user);
     return user;
   }
@@ -1178,8 +1487,9 @@ export class StaffAppService {
         const session = this.normalizeSession(this.unwrap(response));
         if (!session.accessToken) throw new Error("Staff session refresh failed.");
         this.accessTokenValue = session.accessToken;
-        this.tenantIdValue ||= this.readBiometricHint()?.tenantId || "";
+        this.tenantIdValue = this.tenantIdFromAccessToken(session.accessToken) || this.tenantIdValue || this.readBiometricHint()?.tenantId || "";
         if (session.user?.staffId) {
+          this.assertEmployeeRole(session.user.role);
           if (this.user()?.id && this.user()?.id !== session.user.id) this.clearOfflineState();
           this.profile.set(null);
           this.user.set(session.user);
@@ -1196,6 +1506,13 @@ export class StaffAppService {
     return this.refreshPromise;
   }
 
+  private assertEmployeeRole(role: string): void {
+    const normalized = String(role || "").trim().toLowerCase().replace(/[-_\s]/g, "");
+    if (!["owner", "admin", "superadmin"].includes(normalized)) return;
+    this.clearLocalAuthState(false);
+    throw new Error("Owner and administrator accounts cannot use Staff App.");
+  }
+
   private isUnauthorized(error: unknown): boolean {
     return error instanceof HttpErrorResponse && error.status === 401;
   }
@@ -1209,8 +1526,14 @@ export class StaffAppService {
     return bytes.buffer;
   }
 
-  private isStaffRole(role: string): boolean {
-    return ["owner", "admin", "manager", "staff"].includes(String(role || "").toLowerCase());
+  private tenantIdFromAccessToken(token: string): string {
+    try {
+      const payload = token.split(".")[1];
+      if (!payload) return "";
+      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = objectValue(JSON.parse(atob(normalized.padEnd(normalized.length + ((4 - normalized.length % 4) % 4), "="))));
+      return stringValue(decoded, "tenant_id", "tenantId");
+    } catch { return ""; }
   }
 
   private isOnline(): boolean {

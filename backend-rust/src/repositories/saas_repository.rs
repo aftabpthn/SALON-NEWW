@@ -120,6 +120,7 @@ pub struct UsageSnapshot {
 pub struct EntitlementContext {
     pub tenant_status: String,
     pub subscription_status: Option<String>,
+    pub features_json: Option<Value>,
     pub included_branches: Option<i32>,
     pub overage_branch_paise: Option<i64>,
     pub active_branch_count: i64,
@@ -128,13 +129,14 @@ pub struct EntitlementContext {
 const ENTITLEMENT_CONTEXT_SQL: &str = r#"
     SELECT tenant.status AS tenant_status,
            subscription.status AS subscription_status,
+           subscription.features_json,
            subscription.included_branches,
            subscription.overage_branch_paise,
            (SELECT COUNT(*) FROM branches branch
              WHERE branch.tenant_id=tenant.id AND branch.active=TRUE) AS active_branch_count
       FROM tenants tenant
       LEFT JOIN LATERAL (
-        SELECT current.status,plan.included_branches,plan.overage_branch_paise
+        SELECT current.status,plan.features_json,plan.included_branches,plan.overage_branch_paise
           FROM saas_subscriptions current
           JOIN saas_plans plan ON plan.id=current.plan_id
          WHERE current.tenant_id=tenant.id::text

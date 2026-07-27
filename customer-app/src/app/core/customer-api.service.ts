@@ -29,6 +29,7 @@ import {
   CustomerMembership,
   CustomerMembershipActionResponse,
   CustomerMembershipPlan,
+  CustomerMarketingOffer,
   CustomerNotification,
   CustomerPackage,
   CustomerPackagePlan,
@@ -163,6 +164,20 @@ export class CustomerApiService {
     return this.http.post<ApiResponse<AuthSession>>(`${this.baseUrl}/customer/auth/firebase`, { ...payload, device: this.devicePayload(payload.device) }).pipe(
       map((response) => this.unwrap<AuthSession>(response))
     );
+  }
+
+  listPublicOffers(branchId?: string): Observable<CustomerMarketingOffer[]> {
+    return this.http.get<ApiResponse<CustomerMarketingOffer[] | ApiList<CustomerMarketingOffer>>>(`${this.baseUrl}/marketplace/offers`, {
+      params: this.toParams({ branchId })
+    }).pipe(map((response) => this.unwrapList<CustomerMarketingOffer>(response)));
+  }
+
+  publicOfferCreativeUrl(offerId: string): string {
+    return `${this.baseUrl}/marketplace/offers/${encodeURIComponent(offerId)}/creative`;
+  }
+
+  trackPublicOfferClick(offerId: string, channel: string): Observable<void> {
+    return this.http.post<ApiResponse<unknown>>(`${this.baseUrl}/marketplace/offers/events`, { offerId, channel }).pipe(map(() => undefined));
   }
 
   issueDevSession(payload: CustomerDevSessionPayload, secret: string): Observable<AuthSession> {

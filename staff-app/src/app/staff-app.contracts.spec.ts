@@ -1,9 +1,11 @@
 import "@angular/compiler";
 import { describe, expect, it } from "vitest";
 import { environment as productionEnvironment } from "../environments/environment.prod";
+import { environment as developmentEnvironment } from "../environments/environment";
 import { routes } from "./app.routes";
 import { addBusinessDays, businessDate } from "./core/business-date";
 import { formatPaiseInr, PaiseInrPipe } from "./core/paise-inr.pipe";
+import { StaffLayoutPage } from "./features/staff/staff-layout.page";
 
 describe("staff presentation contracts", () => {
   it.each([
@@ -37,14 +39,38 @@ describe("staff presentation contracts", () => {
 });
 
 describe("staff routing and production configuration", () => {
+  it("bypasses the Vite WebSocket proxy only in local development", () => {
+    expect(developmentEnvironment.realtimeWsBaseUrl).toBe("ws://127.0.0.1:8082/api/v1");
+    expect(productionEnvironment.realtimeWsBaseUrl).toBe("");
+  });
+  it.each([
+    ["/staff/dashboard", false],
+    ["/staff/appointments?date=today", false],
+    ["/staff/payroll", true]
+  ])("marks More active for secondary route %s", (url, expected) => {
+    const layout = new StaffLayoutPage({} as never, {} as never, { url } as never);
+    expect(layout.isMoreActive()).toBe(expected);
+  });
+
   it("configures the guarded standalone queue page", () => {
     const staffRoute = routes.find((route) => route.path === "staff");
     const queueRoute = staffRoute?.children?.find((route) => route.path === "queue");
 
-    expect(queueRoute).toMatchObject({ data: { permissions: "read:appointments" } });
+    expect(queueRoute).toMatchObject({ data: { permissions: "staff.app.queue.read" } });
     expect(queueRoute?.canActivate).toHaveLength(1);
     expect(queueRoute?.loadComponent).toEqual(expect.any(Function));
     expect(queueRoute?.redirectTo).toBeUndefined();
+  });
+
+  it("exposes staff offers and feedback inside the guarded staff app", () => {
+    const staffRoute = routes.find((route) => route.path === "staff");
+    const offersRoute = staffRoute?.children?.find((route) => route.path === "offers");
+    const feedbackRoute = staffRoute?.children?.find((route) => route.path === "feedback");
+
+    expect(offersRoute).toMatchObject({ data: { permissions: "staff.app.offers.read" } });
+    expect(feedbackRoute).toMatchObject({ data: { permissions: "staff.app.feedback.read" } });
+    expect(offersRoute?.canActivate).toHaveLength(1);
+    expect(feedbackRoute?.canActivate).toHaveLength(1);
   });
 
   it("does not ship an insecure absolute production API URL", () => {

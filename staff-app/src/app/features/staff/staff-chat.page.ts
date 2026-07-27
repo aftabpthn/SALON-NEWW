@@ -146,8 +146,8 @@ export class StaffChatPage implements OnInit, OnDestroy {
     this.socket?.close();
   }
 
-  canReadChat(): boolean { return this.staff.hasPermission("read:staff"); }
-  canSendChat(): boolean { return this.staff.hasPermission("write:appointments"); }
+  canReadChat(): boolean { return this.staff.hasPermission("staff.app.chat.read"); }
+  canSendChat(): boolean { return this.staff.hasPermission("staff.app.chat.manage"); }
   isOwner(): boolean { return ["owner", "admin", "superadmin"].includes(String(this.staff.user()?.role || "").trim().toLowerCase()); }
   canStartPrivateChat(): boolean { return this.canSendChat() && !this.isOwner() && !this.conversations().some((item) => item.type === "private-owner"); }
   canSubmit(): boolean { return this.canSendChat() && this.online() && !this.sending() && !!this.draft.trim() && this.draft.length <= 4000 && !!this.activeConversationId(); }

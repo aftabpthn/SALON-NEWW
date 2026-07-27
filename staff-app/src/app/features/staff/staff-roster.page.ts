@@ -118,11 +118,11 @@ export class StaffRosterPage implements OnInit {
   }
 
   canReadRoster(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("staff.app.roster.read");
   }
 
   canUpdateRoster(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("staff.app.roster.manage");
   }
 
   upcomingSchedules() {

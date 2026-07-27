@@ -6,7 +6,7 @@
 
   <nav class="tabs" [attr.aria-label]="'staff.ui.3089d914b4' | translate">
     @for (tab of tabs; track tab) {
-      <button type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
+      <button type="button" [class.active]="activeTab === tab.key" (click)="selectTab(tab.key)"><i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}</button>
     }
   </nav>
 
@@ -24,7 +24,7 @@
   <button type="button" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise"></i>{{ 'staff.ui.56e3badc4e' | translate }}</button>
   <span class="filter-spacer"></span>
   <span class="count-pill pending">{{ pendingCount }} pending</span><span class="count-pill approved">{{ approvedCount }} approved</span>
-  <button type="button" [disabled]="!requests.length" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
+  <button type="button" [disabled]="!canExport" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
 </section>
 
 @if (error) {

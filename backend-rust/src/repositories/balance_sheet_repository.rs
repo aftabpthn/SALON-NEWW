@@ -444,7 +444,8 @@ pub async fn create_fixed_asset(
     idempotency_key: &str,
     created_by_user_id: &str,
 ) -> Result<FixedAssetRecord, sqlx::Error> {
-    let asset_code = next_branch_code(tx, tenant_id, branch_id, BusinessCodeKind::FixedAsset).await?;
+    let asset_code =
+        next_branch_code(tx, tenant_id, branch_id, BusinessCodeKind::FixedAsset).await?;
     sqlx::query_as(
         r#"
         INSERT INTO accounting_fixed_assets (

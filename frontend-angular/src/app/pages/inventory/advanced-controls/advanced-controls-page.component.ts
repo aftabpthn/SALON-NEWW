@@ -2,7 +2,7 @@ import { LanguageService } from '../../../core/i18n/language.service';
 
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
@@ -46,6 +46,7 @@ export class AdvancedControlsPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
 
   readonly tabs: Array<{ id: Tab; label: string }> = [
     { id: 'exceptions', label: 'Exceptions' },
@@ -116,6 +117,15 @@ export class AdvancedControlsPageComponent implements OnInit {
     }
   }
 
+  async selectTab(tab: Tab) {
+    this.activeTab = tab;
+    if (tab === 'policy' || tab === 'operations') await this.loadSupportingData();
+  }
+
+  async onBranchScopeChange() {
+    await this.reload();
+  }
+
   private async loadSupportingData() {
     const [policy, negativeRequests, operations, autonomous] = await Promise.allSettled([
       firstValueFrom(this.api.get<ApiEnvelope<InventoryPolicy>>('/inventory/policy')),
@@ -159,6 +169,27 @@ export class AdvancedControlsPageComponent implements OnInit {
     if (decision === 'reject' && !reviewNote) return;
     this.savingPolicy = true; this.error = ''; try { await firstValueFrom(this.api.post(`/inventory/negative-stock-requests/${row.id}/review`, { decision, reviewNote: reviewNote || '' })); await this.reload(); this.notice = `Negative stock request ${decision}d`; } catch (error: any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Request could not be reviewed'; } finally { this.savingPolicy = false; }
   }
+  reviewException(row = this.filteredExceptions[0]) { this.openActionRoute(row); }
+  openActionRoute(row?: { route?: string }) {
+    if (!row?.route) { this.notice = ''; this.error = 'No action route available'; return; }
+    void this.router.navigateByUrl(row.route);
+  }
+  async createApprovalRule() {
+    const control = window.prompt('Approval control key', 'negativeStock')?.trim();
+    const role = window.prompt('Required role', this.policy.approvalMatrix[control || ''] || 'owner')?.trim();
+    if (!control || !role) return;
+    this.policy.approvalMatrix = { ...this.policy.approvalMatrix, [control]: role };
+    await this.savePolicy();
+  }
+  reviewPendingApproval(row = this.controls.approvalMatrix.find((item) => item.pending > 0)) {
+    this.openActionRoute(row);
+  }
+  openLockedItem(row = this.controls.auditLocks[0]) { this.openActionRoute(row); }
+  resolveLock(row = this.controls.auditLocks[0]) { this.openActionRoute(row); }
+  async createExpiryRescueAction() { await this.runAutomation(); }
+  transferNearExpiryStock() { void this.router.navigate(['/inventory/transfers']); }
+  async createClearanceAction() { await this.runAutomation(); }
+  createDiscountOffer() { void this.router.navigate(['/marketing'], { queryParams: { section: 'offers', create: 1, source: 'dead-stock' } }); }
   async retryCommunication(id: string) {
     this.retryingJobId = id; this.error = ''; this.notice = '';
     try {

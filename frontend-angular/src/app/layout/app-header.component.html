@@ -86,8 +86,9 @@
         </button>
         @if (languageMenuOpen) {
           <div class="language-menu" role="menu">
-            <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'en-IN', displayMode: 'single' })">English</button>
-            <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'hi-IN', displayMode: 'single' })">हिन्दी</button>
+            @for (option of languageOptions; track option) {
+              <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: option.code, displayMode: 'single' })">{{ option.label }}</button>
+            }
             <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'en-IN', secondaryLanguage: 'hi-IN', displayMode: 'bilingual' })">English + हिन्दी</button>
           </div>
         }

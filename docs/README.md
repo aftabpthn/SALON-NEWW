@@ -10,10 +10,15 @@
 
 ## Top 5 Start Docs
 
+- [PRD.md](./PRD.md) — product scope, users, core features, and non-negotiables.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system architecture, layering, and folder map.
 - [PROJECT_RULES.md](./PROJECT_RULES.md) — coding guardrails, roles, and workflow for contributions.
+- [RULES.md](./RULES.md) — compact Rust/Angular build rules for fast tasks.
+- [PHASES.md](./PHASES.md) — delivery phases and completion boundaries.
 - [DATABASE.md](./DATABASE.md) — tenant data model, isolation, and migration assumptions.
 - [API_GUIDELINES.md](./API_GUIDELINES.md) — endpoint patterns, validation, error, and response contracts.
+- [SECURITY_HARDENING_ROADMAP.md](./SECURITY_HARDENING_ROADMAP.md) — Rust-specific security gap tracker.
+- [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — compact UI tokens referenced by UI/UX guidelines.
 - [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) — current Rust inventory, audit, supplier, backbar, laundry and forecast contracts.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
 - [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.

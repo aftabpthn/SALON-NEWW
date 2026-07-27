@@ -10,6 +10,8 @@ pub struct ApiKeyRecord {
     pub name: String,
     pub key_prefix: String,
     pub scopes_json: Value,
+    pub ip_allowlist_json: Value,
+    pub rate_limit_per_minute: i32,
     pub status: String,
     pub expires_at: Option<DateTime<Utc>>,
     pub last_used_at: Option<DateTime<Utc>>,
@@ -23,6 +25,8 @@ pub struct ApiKeyCredential {
     pub branch_id: String,
     pub secret_hash: String,
     pub scopes_json: Value,
+    pub ip_allowlist_json: Value,
+    pub rate_limit_per_minute: i32,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -126,7 +130,7 @@ pub struct ClaimedConnectorSyncJob {
 }
 
 const API_KEY_COLUMNS: &str =
-    "id,name,key_prefix,scopes_json,status,expires_at,last_used_at,created_at";
+    "id,name,key_prefix,scopes_json,ip_allowlist_json,rate_limit_per_minute,status,expires_at,last_used_at,created_at";
 
 pub async fn list_api_keys(
     db: &PgPool,
@@ -145,12 +149,14 @@ pub async fn insert_api_key(
     prefix: &str,
     secret_hash: &str,
     scopes: &Value,
+    ip_allowlist: &Value,
+    rate_limit_per_minute: i32,
     expires_at: Option<DateTime<Utc>>,
     actor: &str,
     rotated_from: Option<&str>,
 ) -> Result<ApiKeyRecord, sqlx::Error> {
-    sqlx::query_as(&format!("INSERT INTO integration_api_keys(tenant_id,branch_id,name,key_prefix,secret_hash,scopes_json,expires_at,created_by,rotated_from_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING {API_KEY_COLUMNS}"))
-        .bind(tenant_id).bind(branch_id).bind(name).bind(prefix).bind(secret_hash).bind(scopes).bind(expires_at).bind(actor).bind(rotated_from).fetch_one(db).await
+    sqlx::query_as(&format!("INSERT INTO integration_api_keys(tenant_id,branch_id,name,key_prefix,secret_hash,scopes_json,ip_allowlist_json,rate_limit_per_minute,expires_at,created_by,rotated_from_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING {API_KEY_COLUMNS}"))
+        .bind(tenant_id).bind(branch_id).bind(name).bind(prefix).bind(secret_hash).bind(scopes).bind(ip_allowlist).bind(rate_limit_per_minute).bind(expires_at).bind(actor).bind(rotated_from).fetch_one(db).await
 }
 
 pub async fn rotate_api_key(
@@ -162,20 +168,22 @@ pub async fn rotate_api_key(
     prefix: &str,
     secret_hash: &str,
     scopes: &Value,
+    ip_allowlist: &Value,
+    rate_limit_per_minute: i32,
     expires_at: Option<DateTime<Utc>>,
     actor: &str,
 ) -> Result<Option<ApiKeyRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
         "WITH revoked AS (\
            UPDATE integration_api_keys \
-              SET status='revoked',revoked_by=$9,revoked_at=NOW() \
+              SET status='revoked',revoked_by=$11,revoked_at=NOW() \
             WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='active' \
             RETURNING id\
          ) \
          INSERT INTO integration_api_keys(\
-           tenant_id,branch_id,name,key_prefix,secret_hash,scopes_json,expires_at,created_by,rotated_from_id\
+           tenant_id,branch_id,name,key_prefix,secret_hash,scopes_json,ip_allowlist_json,rate_limit_per_minute,expires_at,created_by,rotated_from_id\
          ) \
-         SELECT $1,$2,$4,$5,$6,$7,$8,$9,id FROM revoked \
+         SELECT $1,$2,$4,$5,$6,$7,$8,$9,$10,$11,id FROM revoked \
          RETURNING {API_KEY_COLUMNS}"
     ))
     .bind(tenant_id)
@@ -185,6 +193,8 @@ pub async fn rotate_api_key(
     .bind(prefix)
     .bind(secret_hash)
     .bind(scopes)
+    .bind(ip_allowlist)
+    .bind(rate_limit_per_minute)
     .bind(expires_at)
     .bind(actor)
     .fetch_optional(db)
@@ -206,7 +216,7 @@ pub async fn active_api_key(
     db: &PgPool,
     prefix: &str,
 ) -> Result<Option<ApiKeyCredential>, sqlx::Error> {
-    sqlx::query_as("SELECT id,tenant_id,branch_id,secret_hash,scopes_json FROM integration_api_keys WHERE key_prefix=$1 AND status='active' AND (expires_at IS NULL OR expires_at>NOW())")
+    sqlx::query_as("SELECT id,tenant_id,branch_id,secret_hash,scopes_json,ip_allowlist_json,rate_limit_per_minute FROM integration_api_keys WHERE key_prefix=$1 AND status='active' AND (expires_at IS NULL OR expires_at>NOW())")
         .bind(prefix).fetch_optional(db).await
 }
 
@@ -242,6 +252,16 @@ pub async fn api_sales(
     limit: i64,
 ) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar("SELECT jsonb_build_object('id',id,'invoiceNumber',invoice_number,'clientId',client_id,'totalPaise',total_paise,'paidPaise',paid_paise,'status',status,'createdAt',created_at,'updatedAt',updated_at) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3").bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
+}
+
+pub async fn api_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    limit: i64,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'employeeCode',employee_code,'firstName',first_name,'middleName',middle_name,'lastName',last_name,'appointmentDisplayName',appointment_display_name,'jobTitle',job_title,'active',active,'createdAt',created_at,'updatedAt',updated_at) FROM staff WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3")
+        .bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
 }
 
 pub async fn list_webhooks(

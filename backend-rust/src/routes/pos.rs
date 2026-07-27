@@ -1527,6 +1527,7 @@ struct PosCouponRow {
     pub per_client_limit: i64,
     pub target_service_ids: Vec<String>,
     pub target_service_categories: Vec<String>,
+    pub target_package_ids: Vec<String>,
     pub target_client_segments: Vec<String>,
     pub first_visit_only: bool,
     pub referral_required: bool,
@@ -3068,7 +3069,8 @@ async fn resolve_coupon_discount(
         SELECT code, discount_type, discount_value_paise, discount_bps,
                min_subtotal_paise, max_discount_paise, active,
                starts_at, ends_at, usage_limit, used_count, per_client_limit,
-               target_service_ids, target_service_categories, target_client_segments,
+               target_service_ids, target_service_categories, target_package_ids,
+               target_client_segments,
                first_visit_only, referral_required, target_client_id, approval_status,
                allow_membership_stacking, allow_package_stacking
         FROM pos_coupons
@@ -3208,7 +3210,10 @@ async fn resolve_coupon_discount(
             "coupon cannot be stacked with package benefits",
         ));
     }
-    if !row.target_service_ids.is_empty() || !row.target_service_categories.is_empty() {
+    if !row.target_service_ids.is_empty()
+        || !row.target_service_categories.is_empty()
+        || !row.target_package_ids.is_empty()
+    {
         let service_ids = payload
             .lines
             .as_ref()
@@ -3248,9 +3253,68 @@ async fn resolve_coupon_discount(
                 .iter()
                 .any(|target| target.eq_ignore_ascii_case(category))
         });
-        if !id_match && !category_match {
+        let mut package_ids = payload
+            .lines
+            .as_ref()
+            .or(payload.items.as_ref())
+            .into_iter()
+            .flatten()
+            .filter(|line| {
+                line.line_type
+                    .as_deref()
+                    .or(line.item_type.as_deref())
+                    .or(line.kind.as_deref())
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("package"))
+            })
+            .filter_map(|line| {
+                line.item_id
+                    .as_ref()
+                    .or(line.id.as_ref())
+                    .map(|id| id.trim().to_string())
+            })
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        let credit_ids = payload
+            .package_redemptions
+            .as_ref()
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|item| {
+                package_redemption_string(
+                    item,
+                    &[
+                        "clientPackageCreditId",
+                        "client_package_credit_id",
+                        "creditId",
+                        "credit_id",
+                        "id",
+                    ],
+                )
+            })
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        if !credit_ids.is_empty() {
+            let redeemed_package_ids = sqlx::query_scalar::<_, String>(
+                "SELECT DISTINCT package_id FROM client_package_credits WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND id=ANY($4) AND active=TRUE AND remaining_qty>0",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(client_id)
+            .bind(&credit_ids)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| AppError::internal("failed to evaluate coupon package targeting"))?;
+            package_ids.extend(redeemed_package_ids);
+        }
+        let package_match = package_ids.iter().any(|id| {
+            row.target_package_ids
+                .iter()
+                .any(|target| target.eq_ignore_ascii_case(id))
+        });
+        if !id_match && !category_match && !package_match {
             return Err(AppError::validation(
-                "coupon is not valid for the selected services",
+                "coupon is not valid for the selected services or packages",
             ));
         }
     }

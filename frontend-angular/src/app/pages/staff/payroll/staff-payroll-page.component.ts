@@ -8,8 +8,10 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
+import { StaffPayrollSetupComponent } from './staff-payroll-setup.component';
 
-type PayrollTab = 'summary' | 'detail' | 'history';
+type PayrollTab = 'summary' | 'detail' | 'history' | 'setup';
+type SetupSection = 'structure' | 'adjustments' | 'incentives' | 'statutory' | 'revisions' | 'advances' | 'overtime' | 'period' | 'notifications';
 type PayrollColumn = 'attendance' | 'payrate' | 'commission' | 'adjustments' | 'gross' | 'net' | 'validation' | 'status';
 type SalaryMode = 'preview' | 'generate' | 'history';
 type StaffOption = { id: string; firstName: string; lastName: string; appointmentDisplayName: string; jobTitle?: string | null; branchId?: string | null };
@@ -59,11 +61,69 @@ type PayrollRun = {
   reviewedAt?: string | null;
   finalizedAt?: string | null;
   paidAt?: string | null;
+  branchId?: string;
+  branchName?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
 };
+type PayrollHistoryPage = { items: PayrollRun[]; total: number; page: number; pageSize: number };
 
 type PayrollEvent = { id: string; eventType: string; actorUserId: string; payloadJson: unknown; createdAt: string };
 type PayrollRunDetail = { run: PayrollRun; items: PayrollItem[]; events: PayrollEvent[]; salaryRows?: Record<string, unknown>[] };
+type PayrollCorrection = {
+  id: string;
+  originalRunId: string;
+  staffId: string;
+  correctionType: 'arrear' | 'recovery';
+  amountPaise: number;
+  reason: string;
+  status: 'pending' | 'rejected' | 'approved' | 'posted' | 'cancelled';
+  requestedBy: string;
+  decidedBy?: string | null;
+  decidedAt?: string | null;
+  decisionNote: string;
+  paymentMethod?: string | null;
+  paymentReference: string;
+  postedBy?: string | null;
+  postedAt?: string | null;
+  version: number;
+  createdAt: string;
+};
+type PayrollCorrectionEvent = { id: string; eventType: string; actorUserId: string; payloadJson: unknown; createdAt: string };
+type PayrollCorrectionDetail = { correction: PayrollCorrection; events: PayrollCorrectionEvent[] };
+type PayrollPayoutState = {
+  stateId?: string | null;
+  payrollItemId: string;
+  staffId: string;
+  staffName: string;
+  employeeCode?: string | null;
+  grossPaise: number;
+  netPaise: number;
+  status: 'pending' | 'held' | 'processing' | 'failed' | 'paid';
+  paymentMethod: string;
+  reference: string;
+  holdReason: string;
+  lastError: string;
+  attemptCount: number;
+  paidAt?: string | null;
+};
+type PayrollPayoutReconciliation = {
+  runStatus: string;
+  staffCount: number;
+  paidCount: number;
+  heldCount: number;
+  failedCount: number;
+  processingCount: number;
+  pendingCount: number;
+  totalPaise: number;
+  paidPaise: number;
+  outstandingPaise: number;
+  balanced: boolean;
+  items: PayrollPayoutState[];
+};
 type StaffHoliday = { id: string; holidayDate: string; name: string; isPaid: boolean; active: boolean };
+type WeekendRuleEvent = { date?: string; rule?: string; beforeDate?: string; afterDate?: string; triggeringDate?: string };
+type AutoAdjustmentRow = { name?: string; triggerType?: string; occurrences?: number; amountPaise?: number; kind?: string };
 type PayrollPreview = {
   cycle: string;
   periodStart: string;
@@ -79,7 +139,7 @@ type PayrollPreview = {
 
 @Component({
     selector: 'page-staff-payroll',
-    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe],
+    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe, StaffPayrollSetupComponent],
     templateUrl: './staff-payroll-page.component.html',
     styleUrls: ['./staff-payroll-page.component.css']
 })
@@ -94,7 +154,9 @@ export class StaffPayrollPageComponent implements OnInit {
     { key: 'summary', label: 'Summary', icon: 'bi-layout-text-window-reverse' },
     { key: 'detail', label: 'Detail', icon: 'bi-table' },
     { key: 'history', label: 'History', icon: 'bi-clock-history' },
+    { key: 'setup', label: 'Setup', icon: 'bi-sliders' },
   ];
+  private readonly setupSections: SetupSection[] = ['structure', 'adjustments', 'incentives', 'statutory', 'revisions', 'advances', 'overtime', 'period', 'notifications'];
   readonly columns: Array<{ key: PayrollColumn; label: string }> = [
     { key: 'attendance', label: 'Attendance' }, { key: 'payrate', label: 'Payrate' },
     { key: 'commission', label: 'Commission' }, { key: 'adjustments', label: 'Adjustments' },
@@ -112,6 +174,9 @@ export class StaffPayrollPageComponent implements OnInit {
   readonly years: number[];
 
   activeTab: PayrollTab = 'summary';
+  setupSection: SetupSection = 'structure';
+  setupCreateAdjustment = false;
+  setupAdjustmentKind: 'fine' | 'allowance' | 'deduction' = 'deduction';
   cycle = 'monthly';
   salaryMode: SalaryMode = 'preview';
   month = new Date().getMonth() + 1;
@@ -120,11 +185,41 @@ export class StaffPayrollPageComponent implements OnInit {
   category = '';
   staff: StaffOption[] = [];
   history: PayrollRun[] = [];
+  private periodRuns: PayrollRun[] = [];
+  historyTotal = 0;
+  historyPage = 1;
+  readonly historyPageSize = 25;
+  historyPeriod: 'all' | 'month' | 'range' = 'all';
+  historyMonth = new Date().getMonth() + 1;
+  historyYear = new Date().getFullYear();
+  historyFrom = '';
+  historyTo = '';
+  historyStaffId = '';
+  historyCategory = '';
+  historyStatus = '';
+  historyValidationState = '';
+  historyPaymentMethod = '';
+  historySearch = '';
+  historyScope: 'branch' | 'tenant' = 'branch';
+  private runBranchId = '';
   run: PayrollRun | null = null;
   items: PayrollItem[] = [];
   salaryRows: Record<string, unknown>[] = [];
   events: PayrollEvent[] = [];
   selectedItem: PayrollItem | null = null;
+  correctionDrawerOpen = false;
+  corrections: PayrollCorrection[] = [];
+  selectedCorrection: PayrollCorrection | null = null;
+  correctionEvents: PayrollCorrectionEvent[] = [];
+  correctionStaffId = '';
+  correctionType: 'arrear' | 'recovery' = 'arrear';
+  correctionAmount = '';
+  correctionReason = '';
+  correctionDecisionNote = '';
+  correctionPaymentMethod = '';
+  correctionPaymentReference = '';
+  correctionMfaCode = '';
+  correctionPostingKey = crypto.randomUUID();
   adjustmentInputs: Record<string, string> = {};
   noteInputs: Record<string, string> = {};
   loading = false;
@@ -138,6 +233,11 @@ export class StaffPayrollPageComponent implements OnInit {
   payoutReference = '';
   actionMfaCode = '';
   payoutKey = crypto.randomUUID();
+  payoutDrawerOpen = false;
+  payoutReconciliation: PayrollPayoutReconciliation | null = null;
+  payoutSelected: Record<string, boolean> = {};
+  payoutReferences: Record<string, string> = {};
+  payoutHoldReason = '';
   holidays: StaffHoliday[] = [];
   holidayOpen = false;
   holidayDate = '';
@@ -149,6 +249,9 @@ export class StaffPayrollPageComponent implements OnInit {
   regenerateBefore: PayrollItem | null = null;
   regenerateAfter: PayrollItem | null = null;
   private regenerateAfterSalaryRows: Record<string, unknown>[] = [];
+  private existingPeriodRun: PayrollRun | null = null;
+  private existingPeriodItems: PayrollItem[] = [];
+  private existingPeriodSalaryRows: Record<string, unknown>[] = [];
 
   constructor() {
     const currentYear = new Date().getFullYear();
@@ -156,8 +259,29 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   async ngOnInit() {
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    const section = this.route.snapshot.queryParamMap.get('section');
+    if (this.tabs.some((item) => item.key === tab)) this.activeTab = tab as PayrollTab;
+    if (this.isSetupSection(section)) this.setupSection = section;
+    if (this.route.snapshot.queryParamMap.get('kind') === 'fine') this.setupAdjustmentKind = 'fine';
+    this.setupCreateAdjustment = this.route.snapshot.queryParamMap.has('create');
     await Promise.all([this.loadStaff(), this.loadHistory(), this.loadHolidays()]);
     await this.loadPeriod();
+  }
+
+  async selectTab(tab: PayrollTab) {
+    this.activeTab = tab;
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab, ...(tab === 'setup' ? { section: this.setupSection } : {}) },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+    if (tab === 'history') await this.loadHistory();
+  }
+
+  private isSetupSection(section: string | null): section is SetupSection {
+    return this.setupSections.includes(section as SetupSection);
   }
 
   get invalidCount() { return this.items.filter((item) => item.validationErrors.length > 0).length; }
@@ -165,16 +289,33 @@ export class StaffPayrollPageComponent implements OnInit {
   get grossTotal() { return this.run?.grossPaise ?? this.items.reduce((sum, item) => sum + item.grossPaise, 0); }
   get deductionTotal() { return this.run?.deductionsPaise ?? this.items.reduce((sum, item) => sum + item.deductionsPaise, 0); }
   get netTotal() { return this.run?.netPaise ?? this.items.reduce((sum, item) => sum + item.netPaise, 0); }
-  get canPrintPayslips() { return Boolean(this.run && ['finalized', 'paid'].includes(this.run.status)); }
+  get canPrintPayslips() { return Boolean(this.run && ['finalized', 'partially_paid', 'paid'].includes(this.run.status)); }
+  get currentUserId() { return this.auth.userId; }
+  get canViewPayouts() { return Boolean(this.run && ['finalized', 'partially_paid', 'paid'].includes(this.run.status) && this.runBranchId === this.auth.branchId); }
+  get canManageCorrections() { return this.run?.status === 'paid' && this.runBranchId === this.auth.branchId; }
+  get canRequestCorrection() {
+    return this.canManageCorrections && Boolean(this.correctionStaffId && this.toPaise(this.correctionAmount) > 0 && this.correctionReason.trim()) && !this.loading;
+  }
+  get canApproveCorrection() {
+    return this.selectedCorrection?.status === 'pending'
+      && this.selectedCorrection.requestedBy !== this.auth.userId
+      && Boolean(this.correctionMfaCode.trim())
+      && !this.loading;
+  }
+  get canPostCorrection() {
+    if (this.selectedCorrection?.status !== 'approved' || !this.correctionMfaCode.trim() || this.loading) return false;
+    return this.selectedCorrection.correctionType !== 'arrear' || Boolean(this.correctionPaymentMethod);
+  }
   get currentStep() {
     if (!this.run) return this.items.length ? 1 : 0;
-    return ({ calculated: 1, reviewed: 2, finalized: 3, paid: 4 } as Record<string, number>)[this.run.status] ?? 0;
+    return ({ calculated: 1, reviewed: 2, finalized: 3, partially_paid: 3, paid: 4 } as Record<string, number>)[this.run.status] ?? 0;
   }
   get workflowLabel() {
     if (!this.run) return 'Review & finalize';
     if (this.run.status === 'calculated') return 'Send for review';
     if (this.run.status === 'reviewed') return 'Finalize payroll';
     if (this.run.status === 'finalized') return 'Record payout';
+    if (this.run.status === 'partially_paid') return 'Continue payout';
     return 'Payroll paid';
   }
   get workflowIcon() {
@@ -187,45 +328,72 @@ export class StaffPayrollPageComponent implements OnInit {
   get categoryOptions() {
     return [...new Set(this.staff.map((row) => (row.jobTitle || '').trim()).filter(Boolean))].sort();
   }
+  get historyPageCount() { return Math.max(1, Math.ceil(this.historyTotal / this.historyPageSize)); }
   get filteredItems() {
     if (!this.category) return this.items;
     return this.items.filter((item) => this.itemCategory(item) === this.category);
   }
   get selectedSalaryRow() { return this.selectedItem ? this.salaryRow(this.selectedItem) : null; }
-  get canSaveDraft() { return this.run?.status === 'calculated' && !this.loading; }
+  get canSaveDraft() { return this.run?.status === 'calculated' && this.runBranchId === this.auth.branchId && !this.loading; }
   get canRegenerateSelected() {
-    return Boolean(this.staffId) && !this.loading && (!this.run || !['finalized', 'paid'].includes(this.run.status));
+    return Boolean(this.staffId && this.existingPeriodRun)
+      && !this.loading
+      && ['calculated', 'reviewed'].includes(this.existingPeriodRun!.status);
   }
-  get canConfirmRegenerate() { return Boolean(this.regenerateReason.trim()) && !this.loading; }
+  get generationLocked() {
+    return Boolean(this.staffId && this.existingPeriodRun && ['finalized', 'partially_paid', 'paid'].includes(this.existingPeriodRun.status));
+  }
+  get runActionDisabled() { return this.loading || (this.salaryMode === 'generate' && this.generationLocked); }
+  get primaryActionLabel() {
+    if (this.action === 'run' || this.action === 'regenerate') return 'Running...';
+    if (this.salaryMode === 'history') return 'Load list';
+    if (this.salaryMode === 'preview') return 'Preview salary';
+    if (this.generationLocked) return 'Payroll locked';
+    if (this.staffId && this.existingPeriodRun) return 'Regenerate selected staff';
+    if (this.staffId) return 'Generate selected staff';
+    return 'Generate salary';
+  }
+  get canConfirmRegenerate() { return this.canRegenerateSelected && Boolean(this.regenerateReason.trim()) && !this.loading; }
   get regenerateRows() {
-    if (!this.regenerateBefore || !this.regenerateAfter) return [];
+    if (!this.regenerateAfter) return [];
     const before = this.regenerateBefore;
     const after = this.regenerateAfter;
-    const beforeTips = this.tipsPaiseOf(before, this.salaryRows);
+    const beforeTips = before ? this.tipsPaiseOf(before, this.existingPeriodSalaryRows) : null;
     const afterTips = this.tipsPaiseOf(after, this.regenerateAfterSalaryRows);
     return [
-      this.diffRow('Attendance days', before.attendanceDaysX2, after.attendanceDaysX2, 'days'),
-      this.diffRow('Paid leave days', before.paidLeaveDaysX2, after.paidLeaveDaysX2, 'days'),
-      this.diffRow('Weekly off days', before.weeklyOffDaysX2, after.weeklyOffDaysX2, 'days'),
-      this.diffRow('Holiday days', before.holidayDaysX2, after.holidayDaysX2, 'days'),
-      this.diffRow('Worked minutes', before.workedMinutes, after.workedMinutes, 'minutes'),
-      this.diffRow('Overtime minutes', before.overtimeMinutes, after.overtimeMinutes, 'minutes'),
-      this.diffRow('Earned salary', before.earnedSalaryPaise, after.earnedSalaryPaise, 'money'),
-      this.diffRow('Overtime pay', before.overtimePaise, after.overtimePaise, 'money'),
-      this.diffRow('Commission', before.commissionPaise, after.commissionPaise, 'money'),
+      this.diffRow('Attendance days', before?.attendanceDaysX2 ?? null, after.attendanceDaysX2, 'days'),
+      this.diffRow('Paid leave days', before?.paidLeaveDaysX2 ?? null, after.paidLeaveDaysX2, 'days'),
+      this.diffRow('Weekly off days', before?.weeklyOffDaysX2 ?? null, after.weeklyOffDaysX2, 'days'),
+      this.diffRow('Holiday days', before?.holidayDaysX2 ?? null, after.holidayDaysX2, 'days'),
+      this.diffRow('Worked minutes', before?.workedMinutes ?? null, after.workedMinutes, 'minutes'),
+      this.diffRow('Overtime minutes', before?.overtimeMinutes ?? null, after.overtimeMinutes, 'minutes'),
+      this.diffRow('Earned salary', before?.earnedSalaryPaise ?? null, after.earnedSalaryPaise, 'money'),
+      this.diffRow('Overtime pay', before?.overtimePaise ?? null, after.overtimePaise, 'money'),
+      this.diffRow('Commission', before?.commissionPaise ?? null, after.commissionPaise, 'money'),
       this.diffRow('Tips', beforeTips, afterTips, 'money'),
-      this.diffRow('Adjustment', before.adjustmentPaise, after.adjustmentPaise, 'money'),
-      this.diffRow('Deductions', before.deductionsPaise, after.deductionsPaise, 'money'),
-      this.diffRow('Gross pay', before.grossPaise, after.grossPaise, 'money'),
-      this.diffRow('Net pay', before.netPaise, after.netPaise, 'money'),
+      this.diffRow('Adjustment', before?.adjustmentPaise ?? null, after.adjustmentPaise, 'money'),
+      this.diffRow('Deductions', before?.deductionsPaise ?? null, after.deductionsPaise, 'money'),
+      this.diffRow('Gross pay', before?.grossPaise ?? null, after.grossPaise, 'money'),
+      this.diffRow('Net pay', before?.netPaise ?? null, after.netPaise, 'money'),
     ];
   }
   get canAdvance() {
-    if (!this.run || this.invalidCount > 0 || !['calculated', 'reviewed', 'finalized'].includes(this.run.status) || this.loading) return false;
+    if (!this.run || this.runBranchId !== this.auth.branchId || this.invalidCount > 0 || !['calculated', 'reviewed', 'finalized', 'partially_paid'].includes(this.run.status) || this.loading) return false;
     if (this.run.status === 'calculated') return true;
-    if (!this.actionMfaCode.trim()) return false;
-    return this.run.status !== 'finalized' || Boolean(this.payoutMethod && (['cash', 'bank'].includes(this.payoutMethod) || this.payoutReference.trim()));
+    if (['finalized', 'partially_paid'].includes(this.run.status)) return true;
+    return Boolean(this.actionMfaCode.trim());
   }
+  get selectedPayoutItems() { return (this.payoutReconciliation?.items || []).filter((item) => this.payoutSelected[item.staffId]); }
+  get payoutPayStaffIds() { return this.selectedPayoutItems.filter((item) => ['pending', 'failed'].includes(item.status)).map((item) => item.staffId); }
+  get payoutHoldStaffIds() { return this.selectedPayoutItems.filter((item) => ['pending', 'failed'].includes(item.status)).map((item) => item.staffId); }
+  get payoutReleaseStaffIds() { return this.selectedPayoutItems.filter((item) => item.status === 'held').map((item) => item.staffId); }
+  get canPaySelected() {
+    if (!this.payoutPayStaffIds.length || !this.payoutMethod || !this.actionMfaCode.trim() || this.loading) return false;
+    return !['upi', 'other'].includes(this.payoutMethod)
+      || this.payoutPayStaffIds.every((id) => Boolean((this.payoutReferences[id] || this.payoutReference).trim()));
+  }
+  get canHoldSelected() { return Boolean(this.payoutHoldStaffIds.length && this.payoutHoldReason.trim() && this.actionMfaCode.trim() && !this.loading); }
+  get canReleaseSelected() { return Boolean(this.payoutReleaseStaffIds.length && this.actionMfaCode.trim() && !this.loading); }
 
   isVisible(column: PayrollColumn) { return this.visibleColumns[column]; }
   toggleColumn(column: PayrollColumn) {
@@ -278,7 +446,8 @@ export class StaffPayrollPageComponent implements OnInit {
   async runSelectedMode() {
     if (this.salaryMode === 'history') { this.activeTab = 'history'; await this.loadHistory(); return; }
     if (this.salaryMode === 'generate') {
-      if (this.staffId) { await this.openRegenerateDialog(); return; }
+      if (this.generationLocked) { this.error = 'Finalized or paid payroll cannot be regenerated'; return; }
+      if (this.staffId && this.existingPeriodRun) { await this.openRegenerateDialog(); return; }
       await this.runPayroll();
       return;
     }
@@ -295,7 +464,7 @@ export class StaffPayrollPageComponent implements OnInit {
       if (!after) { this.error = 'No source data found for the selected employee'; return; }
       this.regenerateAfter = after;
       this.regenerateAfterSalaryRows = preview.salaryRows || [];
-      this.regenerateBefore = this.items.find((item) => item.staffId === this.staffId) || after;
+      this.regenerateBefore = this.existingPeriodItems.find((item) => item.staffId === this.staffId) || null;
       this.regenerateDialogOpen = true;
     });
   }
@@ -328,14 +497,15 @@ export class StaffPayrollPageComponent implements OnInit {
     return Number(row['tipsPaise'] || 0);
   }
 
-  private diffRow(label: string, before: number, after: number, kind: 'money' | 'minutes' | 'days'): [string, string, string, string] {
+  private diffRow(label: string, before: number | null, after: number, kind: 'money' | 'minutes' | 'days'): [string, string, string, string] {
     const format = (value: number) => kind === 'money' ? this.formatMoney(value) : kind === 'days' ? this.days(value) : String(value);
-    const rawDelta = kind === 'days' ? (after - before) / 2 : after - before;
+    const beforeValue = before ?? 0;
+    const rawDelta = kind === 'days' ? (after - beforeValue) / 2 : after - beforeValue;
     const sign = rawDelta > 0 ? '+' : '';
     const deltaText = kind === 'money'
-      ? `${sign}${this.formatMoney(after - before)}`
+      ? `${sign}${this.formatMoney(after - beforeValue)}`
       : `${sign}${kind === 'days' ? rawDelta.toFixed(1).replace(/\.0$/, '') : rawDelta}`;
-    return [label, format(before), format(after), deltaText];
+    return [label, before === null ? 'Not in run' : format(before), format(after), deltaText];
   }
 
   async saveDraft() {
@@ -355,6 +525,7 @@ export class StaffPayrollPageComponent implements OnInit {
 
   async advanceWorkflow() {
     if (!this.run || !this.canAdvance) return;
+    if (['finalized', 'partially_paid'].includes(this.run.status)) { await this.openPayouts(); return; }
     const action = this.run.status === 'calculated' ? 'review' : this.run.status === 'reviewed' ? 'finalize' : 'payout';
     await this.perform(action, async () => {
       const payload = action === 'payout'
@@ -372,8 +543,37 @@ export class StaffPayrollPageComponent implements OnInit {
     this.month = Number(run.periodStart.slice(5, 7));
     this.year = Number(run.periodStart.slice(0, 4));
     this.staffId = '';
-    await this.loadRun(run.id);
+    await this.loadRun(run.id, run.branchId || this.auth.branchId || '');
     this.activeTab = 'summary';
+  }
+
+  async applyHistoryFilters() {
+    this.historyPage = 1;
+    await this.loadHistory();
+  }
+
+  async clearHistoryFilters() {
+    this.historyPeriod = 'all';
+    this.historyFrom = '';
+    this.historyTo = '';
+    this.historyStaffId = '';
+    this.historyCategory = '';
+    this.historyStatus = '';
+    this.historyValidationState = '';
+    this.historyPaymentMethod = '';
+    this.historySearch = '';
+    this.historyScope = 'branch';
+    await this.applyHistoryFilters();
+  }
+
+  async changeHistoryPage(page: number) {
+    if (page < 1 || page > this.historyPageCount || page === this.historyPage) return;
+    this.historyPage = page;
+    await this.loadHistory();
+  }
+
+  async exportHistory() {
+    await this.download(`/staff-payroll/history/export?${this.historyParams(false)}`, 'payroll-history.csv');
   }
 
   async exportCsv() {
@@ -382,12 +582,188 @@ export class StaffPayrollPageComponent implements OnInit {
       this.downloadText(this.previewCsv(), `salary-preview-${this.year}-${String(this.month).padStart(2, '0')}.csv`);
       return;
     }
-    await this.download(`/staff-payroll/runs/${this.run.id}/export`, `payroll-${this.run.periodStart}-${this.run.periodEnd}.csv`);
+    await this.download(`/staff-payroll/runs/${this.run.id}/export?${this.runBranchParams()}`, `payroll-${this.run.periodStart}-${this.run.periodEnd}.csv`);
   }
 
   async printPayslip(item: PayrollItem) {
-    if (!this.run || !['finalized', 'paid'].includes(this.run.status)) return;
-    await this.download(`/staff-payroll/runs/${this.run.id}/payslips/${item.staffId}`, `payslip-${item.staffName}.pdf`);
+    if (!this.run || !['finalized', 'partially_paid', 'paid'].includes(this.run.status)) return;
+    await this.download(`/staff-payroll/runs/${this.run.id}/payslips/${item.staffId}?${this.runBranchParams()}`, `payslip-${item.staffName}.pdf`);
+  }
+
+  async openPayouts() {
+    if (!this.canViewPayouts) return;
+    this.closeStaffDetail();
+    this.closeCorrections();
+    this.payoutDrawerOpen = true;
+    await this.perform('payout-load', () => this.loadPayouts());
+  }
+
+  closePayouts() {
+    this.payoutDrawerOpen = false;
+    this.payoutReconciliation = null;
+    this.payoutSelected = {};
+    this.payoutReferences = {};
+    this.payoutHoldReason = '';
+    this.payoutMethod = '';
+    this.payoutReference = '';
+    this.actionMfaCode = '';
+  }
+
+  toggleAllPayouts(checked: boolean) {
+    for (const item of this.payoutReconciliation?.items || []) this.payoutSelected[item.staffId] = checked && item.status !== 'paid' && item.status !== 'processing';
+  }
+
+  async paySelectedStaff() {
+    if (!this.run || !this.canPaySelected) return;
+    await this.perform('payout-staff', async () => {
+      const references = Object.fromEntries(this.payoutPayStaffIds.map((id) => [id, (this.payoutReferences[id] || '').trim()]).filter(([, value]) => value));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollRunDetail>>(`/staff-payroll/runs/${this.run!.id}/payout`, {
+        paymentMethod: this.payoutMethod,
+        reference: this.payoutReference.trim() || null,
+        idempotencyKey: this.payoutKey,
+        mfaCode: this.actionMfaCode.trim(),
+        staffIds: this.payoutPayStaffIds,
+        staffReferences: references,
+      }));
+      this.applyDetail(this.unwrap(result, 'Unable to record staff payouts'));
+      this.payoutKey = crypto.randomUUID();
+      this.actionMfaCode = '';
+      await Promise.all([this.loadPayouts(), this.loadHistory()]);
+      this.success = this.payoutReconciliation?.failedCount ? 'Payout completed with failed staff payments' : 'Selected staff payouts recorded';
+    });
+  }
+
+  async holdSelectedPayouts() {
+    if (!this.run || !this.canHoldSelected) return;
+    await this.perform('payout-hold', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollPayoutReconciliation>>(`/staff-payroll/runs/${this.run!.id}/payouts/hold`, {
+        staffIds: this.payoutHoldStaffIds,
+        reason: this.payoutHoldReason.trim(),
+        mfaCode: this.actionMfaCode.trim(),
+      }));
+      this.payoutReconciliation = this.unwrap(result, 'Unable to hold staff payouts');
+      this.applyDetail(await this.fetchRunDetail(this.run!.id, this.runBranchId));
+      this.payoutHoldReason = '';
+      this.actionMfaCode = '';
+      this.payoutSelected = {};
+      await this.loadHistory();
+      this.success = 'Selected staff payouts held';
+    });
+  }
+
+  async releaseSelectedPayouts() {
+    if (!this.run || !this.canReleaseSelected) return;
+    await this.perform('payout-release', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollPayoutReconciliation>>(`/staff-payroll/runs/${this.run!.id}/payouts/release`, {
+        staffIds: this.payoutReleaseStaffIds,
+        mfaCode: this.actionMfaCode.trim(),
+      }));
+      this.payoutReconciliation = this.unwrap(result, 'Unable to release payout holds');
+      this.applyDetail(await this.fetchRunDetail(this.run!.id, this.runBranchId));
+      this.actionMfaCode = '';
+      this.payoutSelected = {};
+      await this.loadHistory();
+      this.success = 'Selected payout holds released';
+    });
+  }
+
+  async printCorrectedPayslip(correction: PayrollCorrection | null) {
+    if (!this.run || !correction || correction.status !== 'posted') return;
+    await this.download(
+      `/staff-payroll/runs/${this.run.id}/payslips/${correction.staffId}?${this.runBranchParams()}&corrected=true`,
+      `corrected-payslip-${this.correctionStaffName(correction.staffId)}.pdf`,
+    );
+  }
+
+  async openCorrections() {
+    if (!this.canManageCorrections || !this.run) return;
+    this.closeStaffDetail();
+    this.closePayouts();
+    this.correctionDrawerOpen = true;
+    this.selectedCorrection = null;
+    this.correctionEvents = [];
+    await this.perform('correction-load', () => this.refreshCorrections());
+  }
+
+  closeCorrections() {
+    this.correctionDrawerOpen = false;
+    this.corrections = [];
+    this.selectedCorrection = null;
+    this.correctionEvents = [];
+    this.resetCorrectionAction();
+  }
+
+  async requestCorrection() {
+    if (!this.run || !this.canRequestCorrection) return;
+    await this.perform('correction-request', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollCorrection>>(`/staff-payroll/runs/${this.run!.id}/corrections`, {
+        staffId: this.correctionStaffId,
+        correctionType: this.correctionType,
+        amountPaise: this.toPaise(this.correctionAmount),
+        reason: this.correctionReason.trim(),
+      }));
+      const created = this.unwrap(result, 'Unable to request payroll correction');
+      this.correctionAmount = '';
+      this.correctionReason = '';
+      await this.refreshCorrections(created.id);
+      this.success = 'Payroll correction requested';
+    });
+  }
+
+  async selectCorrection(correction: PayrollCorrection) {
+    await this.perform('correction-load', () => this.refreshCorrections(correction.id));
+  }
+
+  async decideCorrection(decision: 'approved' | 'rejected') {
+    if (!this.selectedCorrection || (decision === 'approved' && !this.canApproveCorrection)) return;
+    await this.perform(`correction-${decision}`, async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollCorrection>>(`/staff-payroll/corrections/${this.selectedCorrection!.id}/decision`, {
+        version: this.selectedCorrection!.version,
+        decision,
+        note: this.correctionDecisionNote.trim() || null,
+        mfaCode: decision === 'approved' ? this.correctionMfaCode.trim() : null,
+      }));
+      const updated = this.unwrap(result, 'Unable to decide payroll correction');
+      this.resetCorrectionAction();
+      await this.refreshCorrections(updated.id);
+      this.success = `Payroll correction ${decision}`;
+    });
+  }
+
+  async cancelCorrection() {
+    if (!this.selectedCorrection || !['pending', 'approved'].includes(this.selectedCorrection.status)) return;
+    await this.perform('correction-cancel', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollCorrection>>(`/staff-payroll/corrections/${this.selectedCorrection!.id}/cancel`, {
+        version: this.selectedCorrection!.version,
+      }));
+      const updated = this.unwrap(result, 'Unable to cancel payroll correction');
+      this.resetCorrectionAction();
+      await this.refreshCorrections(updated.id);
+      this.success = 'Payroll correction cancelled';
+    });
+  }
+
+  async postCorrection() {
+    if (!this.selectedCorrection || !this.canPostCorrection) return;
+    await this.perform('correction-post', async () => {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollCorrection>>(`/staff-payroll/corrections/${this.selectedCorrection!.id}/post`, {
+        version: this.selectedCorrection!.version,
+        paymentMethod: this.selectedCorrection!.correctionType === 'arrear' ? this.correctionPaymentMethod : null,
+        reference: this.correctionPaymentReference.trim() || null,
+        idempotencyKey: this.correctionPostingKey,
+        mfaCode: this.correctionMfaCode.trim(),
+      }));
+      const updated = this.unwrap(result, 'Unable to post payroll correction');
+      this.resetCorrectionAction();
+      await this.refreshCorrections(updated.id);
+      this.success = 'Payroll correction posted';
+    });
+  }
+
+  correctionStaffName(staffId: string) {
+    return this.items.find((item) => item.staffId === staffId)?.staffName
+      || this.staff.find((item) => item.id === staffId)?.appointmentDisplayName
+      || 'Employee';
   }
 
   async saveHoliday() {
@@ -444,6 +820,8 @@ export class StaffPayrollPageComponent implements OnInit {
     const row = this.salaryRow(item);
     return [
       ['Payable days', this.days(Number(row['payableDaysX2'] || item.attendanceDaysX2 + item.paidLeaveDaysX2 + item.weeklyOffDaysX2 + item.holidayDaysX2))],
+      ['Paid weekly off', this.days(Number(row['paidWeeklyOffDaysX2'] || 0))],
+      ['Unpaid weekly off', this.days(Number(row['unpaidWeeklyOffDaysX2'] || 0))],
       ['Worked minutes', row['workedMinutes'] ?? item.workedMinutes],
       ['Overtime', `${row['overtimeMinutes'] ?? item.overtimeMinutes} min · ${this.formatMoney(item.overtimePaise)}`],
       ['Commission', this.formatMoney(Number(row['commissionPaise'] ?? item.commissionPaise))],
@@ -452,6 +830,24 @@ export class StaffPayrollPageComponent implements OnInit {
       ['Deductions', this.formatMoney(item.deductionsPaise)],
       ['Net salary', this.formatMoney(item.netPaise)],
     ];
+  }
+
+  weekendRuleEvents(item: PayrollItem | null): WeekendRuleEvent[] {
+    const value = item ? this.salaryRow(item)['weekendSandwichBreakdown'] : null;
+    return Array.isArray(value) ? value as WeekendRuleEvent[] : [];
+  }
+
+  weekendAdjustmentRows(item: PayrollItem | null): AutoAdjustmentRow[] {
+    const value = item ? this.salaryRow(item)['autoAdjustmentRules'] : null;
+    if (!Array.isArray(value)) return [];
+    const triggers = new Set(['weekend_penalty', 'sandwich_penalty', 'unpaid_week_off', 'weekly_off_worked']);
+    return (value as AutoAdjustmentRow[]).filter((row) => triggers.has(row.triggerType || ''));
+  }
+
+  weekendEventDetail(event: WeekendRuleEvent) {
+    if (event.beforeDate && event.afterDate) return `${this.formatDate(event.beforeDate)} and ${this.formatDate(event.afterDate)}`;
+    if (event.triggeringDate) return this.formatDate(event.triggeringDate);
+    return '';
   }
 
   private async loadStaff() {
@@ -465,8 +861,15 @@ export class StaffPayrollPageComponent implements OnInit {
 
   async loadHistory() {
     try {
-      const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollRun[]>>('/staff-payroll/runs'));
-      this.history = this.unwrap(result, 'Unable to load payroll history');
+      const [historyResult, periodResult] = await Promise.all([
+        firstValueFrom(this.api.get<ApiEnvelope<PayrollHistoryPage>>(`/staff-payroll/history?${this.historyParams(true)}`)),
+        firstValueFrom(this.api.get<ApiEnvelope<PayrollRun[]>>('/staff-payroll/runs')),
+      ]);
+      const page = this.unwrap(historyResult, 'Unable to load payroll history');
+      this.history = page.items;
+      this.historyTotal = page.total;
+      this.historyPage = page.page;
+      this.periodRuns = this.unwrap(periodResult, 'Unable to load payroll periods');
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.dd84d916e8'));
     }
@@ -483,23 +886,47 @@ export class StaffPayrollPageComponent implements OnInit {
 
   private async loadPeriod() {
     const prefix = `${this.year}-${String(this.month).padStart(2, '0')}-`;
-    const existing = this.history.find((run) => run.periodStart.startsWith(prefix));
-    if (existing && !this.staffId) await this.loadRun(existing.id);
-    else {
-      this.run = null;
-      this.events = [];
-      await this.checkSourceData(false);
+    const existing = this.periodRuns.find((run) => run.periodStart.startsWith(prefix));
+    this.closeRegenerateDialog();
+    this.existingPeriodRun = existing || null;
+    this.runBranchId = this.auth.branchId || '';
+    this.existingPeriodItems = [];
+    this.existingPeriodSalaryRows = [];
+    if (existing) {
+      try {
+        const detail = await this.fetchRunDetail(existing.id);
+        this.existingPeriodRun = detail.run;
+        this.existingPeriodItems = detail.items;
+        this.existingPeriodSalaryRows = detail.salaryRows || [];
+        if (!this.staffId) {
+          this.applyDetail(detail);
+          return;
+        }
+      } catch (error) {
+        this.error = this.message(error, 'Unable to load existing payroll run');
+        return;
+      }
     }
+    this.run = null;
+    this.events = [];
+    await this.checkSourceData(false);
   }
 
-  private async loadRun(runId: string) {
+  private async loadRun(runId: string, branchId = this.auth.branchId || '') {
+    this.runBranchId = branchId;
     await this.perform('loading', async () => {
-      const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollRunDetail>>(`/staff-payroll/runs/${runId}`));
-      this.applyDetail(this.unwrap(result, 'Unable to load payroll run'));
+      this.applyDetail(await this.fetchRunDetail(runId, branchId));
     });
   }
 
+  private async fetchRunDetail(runId: string, branchId = '') {
+    const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollRunDetail>>(`/staff-payroll/runs/${runId}${query}`));
+    return this.unwrap(result, 'Unable to load payroll run');
+  }
+
   private applyPreview(preview: PayrollPreview) {
+    this.runBranchId = this.auth.branchId || '';
     this.run = null;
     this.items = preview.items;
     this.salaryRows = preview.salaryRows || [];
@@ -508,7 +935,14 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   private applyDetail(detail: PayrollRunDetail) {
+    if (this.run?.id !== detail.run.id) {
+      this.closeCorrections();
+      this.closePayouts();
+    }
     this.run = detail.run;
+    this.existingPeriodRun = detail.run;
+    this.existingPeriodItems = detail.items;
+    this.existingPeriodSalaryRows = detail.salaryRows || [];
     this.items = detail.items;
     this.salaryRows = detail.salaryRows || [];
     this.events = detail.events;
@@ -529,6 +963,60 @@ export class StaffPayrollPageComponent implements OnInit {
     const params = new URLSearchParams({ cycle: this.cycle, year: String(this.year), month: String(this.month) });
     if (this.staffId) params.set('staffId', this.staffId);
     return params.toString();
+  }
+
+  private async loadPayouts() {
+    if (!this.run) return;
+    const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollPayoutReconciliation>>(`/staff-payroll/runs/${this.run.id}/payouts`));
+    this.payoutReconciliation = this.unwrap(result, 'Unable to load payout reconciliation');
+    this.payoutSelected = {};
+    this.payoutReferences = Object.fromEntries(this.payoutReconciliation.items.map((item) => [item.staffId, item.reference || '']));
+  }
+
+  private async refreshCorrections(selectedId = '') {
+    if (!this.run) return;
+    const result = await firstValueFrom(this.api.get<ApiEnvelope<PayrollCorrection[]>>(`/staff-payroll/runs/${this.run.id}/corrections`));
+    this.corrections = this.unwrap(result, 'Unable to load payroll corrections');
+    const id = selectedId || this.selectedCorrection?.id;
+    if (!id) return;
+    const detailResult = await firstValueFrom(this.api.get<ApiEnvelope<PayrollCorrectionDetail>>(`/staff-payroll/corrections/${id}`));
+    const detail = this.unwrap(detailResult, 'Unable to load payroll correction history');
+    this.selectedCorrection = detail.correction;
+    this.correctionEvents = detail.events;
+  }
+
+  private resetCorrectionAction() {
+    this.correctionDecisionNote = '';
+    this.correctionPaymentMethod = '';
+    this.correctionPaymentReference = '';
+    this.correctionMfaCode = '';
+    this.correctionPostingKey = crypto.randomUUID();
+  }
+
+  private historyParams(includePage: boolean) {
+    const params = new URLSearchParams({ scope: this.historyScope });
+    if (this.historyPeriod === 'month') {
+      params.set('year', String(this.historyYear));
+      params.set('month', String(this.historyMonth));
+    } else if (this.historyPeriod === 'range') {
+      if (this.historyFrom) params.set('from', this.historyFrom);
+      if (this.historyTo) params.set('to', this.historyTo);
+    }
+    if (this.historyStaffId) params.set('staffId', this.historyStaffId);
+    if (this.historyCategory) params.set('category', this.historyCategory);
+    if (this.historyStatus) params.set('status', this.historyStatus);
+    if (this.historyValidationState) params.set('validationState', this.historyValidationState);
+    if (this.historyPaymentMethod) params.set('paymentMethod', this.historyPaymentMethod);
+    if (this.historySearch.trim()) params.set('search', this.historySearch.trim());
+    if (includePage) {
+      params.set('page', String(this.historyPage));
+      params.set('pageSize', String(this.historyPageSize));
+    }
+    return params.toString();
+  }
+
+  private runBranchParams() {
+    return new URLSearchParams({ branchId: this.runBranchId || this.auth.branchId || '' }).toString();
   }
 
   private itemCategory(item: PayrollItem) {

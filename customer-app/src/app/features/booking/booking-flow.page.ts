@@ -5,6 +5,7 @@ import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AvailabilityDay, ServiceItem } from "../../core/api.types";
+import { CustomerApiService } from "../../core/customer-api.service";
 
 const PENDING_BOOKING_INTENT_KEY = "auraCustomerPendingBookingIntent";
 const BOOKING_CONTEXT_KEY = "auraCustomerBookingContext";
@@ -451,11 +452,15 @@ export class BookingFlowPage implements OnInit {
   readonly depositAmountPaise = computed(() => Math.ceil(this.bookingTotalPaise() * (this.business()?.bookingDepositPercent || 0) / 100));
   readonly paymentModeLabel = computed(() => this.paymentMode() === "online" ? `Online deposit ${this.depositAmountLabel()} (${this.business()?.bookingDepositPercent || 0}%)` : "Pay at salon");
 
-  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
+  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly api: CustomerApiService) {
     addIcons({ calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline });
   }
 
   ngOnInit() {
+    const source = this.route.snapshot.queryParamMap.get("source")?.split(":") ?? [];
+    if (source.length === 3 && source[0] === "marketing_offer") {
+      this.api.trackPublicOfferClick(source[1], source[2]).subscribe({ error: () => undefined });
+    }
     this.reload();
   }
 
@@ -623,6 +628,7 @@ export class BookingFlowPage implements OnInit {
       startAt,
       endAt,
       rebookFromBookingId: this.rebookFromBookingId() || undefined,
+      source: this.route.snapshot.queryParamMap.get("source") || undefined,
       paymentMode: this.onlinePaymentAvailable() ? this.paymentMode() : "pay_at_venue",
       cardGuaranteeAccepted: this.paymentMode() === "online" && this.cardGuaranteeAccepted()
     });

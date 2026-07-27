@@ -31,6 +31,7 @@ interface CashTill { id: string; tillCode: string; tillName: string; openingCash
 interface CashMovement { id: string; cashDrawerTillId: string | null; movementType: string; amountPaise: number; referenceId: string; notes: string; reversesMovementId: string | null; reversedById: string | null; correctionReason: string; createdAt: string; }
 
 interface CashDrawerReport {
+  status: string;
   openingCashPaise: number;
   cashSalesPaise: number;
   cashRefundsPaise: number;
@@ -39,7 +40,6 @@ interface CashDrawerReport {
   expectedCashPaise: number | null;
   countedCashPaise: number | null;
   variancePaise: number | null;
-  status: string;
   paymentModes: Array<{ method: string; paymentCount: number; amountPaise: number; invoiceCount: number }>;
   bankDepositPaise: number;
   pendingDepositPaise: number;
@@ -383,6 +383,7 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
   }
 
   money(paise: number | null | undefined): number { return (paise ?? 0) / 100; }
+  get reportCanShowCloseTotals(): boolean { return !!this.report && !['open', 'not_opened'].includes(this.report.status); }
   displayDate(value: string): string {
     const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return match ? `${match[3]}/${match[2]}/${match[1]}` : value;

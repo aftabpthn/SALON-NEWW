@@ -10,7 +10,10 @@ use axum::{
 use crate::{
     models::common::AppError,
     repositories::auth_repository::{self, AuthAuditInput},
-    services::auth_service::AuthClaims,
+    services::{
+        auth_service::{self, AuthClaims},
+        entitlement_service,
+    },
     state::AppState,
 };
 
@@ -254,7 +257,25 @@ pub async fn require_route_role(
     } else if path_starts_with(path, "/auth") {
         require_authenticated_user(req, next).await
     } else if let Some(access) = route_access(path, method) {
-        require_role_or_permissions(req, next, access.roles, access.permissions).await
+        if auth_service::route_permissions_registered(access.permissions) {
+            let feature_result = match (route_feature_key(path, access.permissions), &audit_claims)
+            {
+                (Some(feature_key), Some(claims)) => {
+                    entitlement_service::ensure_feature(&state.db, &claims.tenant_id, feature_key)
+                        .await
+                }
+                (Some(_), None) => Err(AppError::unauthenticated("missing auth claims")),
+                (None, _) => Ok(()),
+            };
+            match feature_result {
+                Ok(()) => {
+                    require_role_or_permissions(req, next, access.roles, access.permissions).await
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            Err(AppError::internal("route permission registry is invalid"))
+        }
     } else {
         Err(AppError::forbidden(
             "no permission mapping for this endpoint",
@@ -347,7 +368,175 @@ fn matches_route_prefix(path: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|prefix| path_starts_with(path, prefix))
 }
 
+fn route_feature_key(path: &str, permissions: &[&str]) -> Option<&'static str> {
+    if path_starts_with(path, "/staff/biometric") {
+        Some("staff.biometric")
+    } else if path_starts_with(path, "/settings/integrations/api-keys") {
+        Some("staff.api")
+    } else if path_starts_with(path, "/staff-payroll")
+        || path_starts_with(path, "/staff/payroll")
+        || path_starts_with(path, "/staff/tips")
+        || path_starts_with(path, "/staff/self/payslips")
+        || path == "/staff/mobile/payroll"
+        || path.contains("/salary-revisions")
+    {
+        Some("staff.payroll")
+    } else if path_starts_with(path, "/staff/intelligence")
+        || path_starts_with(path, "/staff/coach")
+        || path_starts_with(path, "/staff-os/coach")
+    {
+        Some("staff.ai")
+    } else {
+        auth_service::feature_key_for_permissions(permissions)
+    }
+}
+
 fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
+    if path == "/staff/self/dashboard" || path == "/staff-self/enterprise-os" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.dashboard.read",
+                "staff.app.appointments.read",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff-self/appointments") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.appointments.manage",
+                "appointments.manage",
+                "write:appointments",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff-self/business") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.business.read",
+                "appointments.read",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff-self/offers") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.offers.read",
+                "marketing.read",
+                "appointments.read",
+            ],
+        ));
+    }
+    if path == "/staff-self/feedback" {
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &["staff.app.feedback.read", "staff.self_manage"],
+            )
+        } else {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.feedback.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        });
+    }
+    if path == "/staff-self/workspace-preferences" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.settings.read",
+                "staff.app.settings.manage",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff/self/payslips") {
+        return Some(access(
+            PAYROLL_ROLES,
+            &[
+                "staff.app.payroll.read",
+                "staff.payroll.read",
+                "staff.payroll.manage",
+            ],
+        ));
+    }
+    if path == "/staff/self/targets" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &["staff.app.tasks.read", "staff.self_manage"],
+        ));
+    }
+    if path_starts_with(path, "/staff/self/tasks") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.tasks.manage",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff-self/calendar") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.calendar.manage",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff-self/notifications") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.notifications.manage",
+                "notifications.read",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff/self/mobile") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.notifications.read",
+                "notifications.read",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/team-chat") {
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.chat.read",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        } else {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.chat.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        });
+    }
     if path_starts_with(path, "/finance/outgoing-funds") {
         return Some(if path == "/finance/outgoing-funds/export" {
             access(FINANCE_WRITE_ROLES, &["reports.export", "finance.write"])
@@ -425,12 +614,19 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         });
     }
     if path_starts_with(path, "/staff-attendance") {
-        let self_action =
-            path == "/staff-attendance/clock-in" || path == "/staff-attendance/clock-out";
+        let self_action = matches!(
+            path,
+            "/staff-attendance/clock-in"
+                | "/staff-attendance/clock-out"
+                | "/staff-attendance/break-start"
+                | "/staff-attendance/break-end"
+        );
         return Some(if is_read_method(method) {
             access(
                 TENANT_ROLES,
                 &[
+                    "staff.app.attendance.read",
+                    "staff.app.attendance.manage",
                     "staff.attendance.read",
                     "staff.attendance.manage",
                     "staff.read",
@@ -440,7 +636,11 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         } else if self_action {
             access(
                 STAFF_SELF_WRITE_ROLES,
-                &["staff.self_manage", "staff_self.write"],
+                &[
+                    "staff.app.attendance.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
             )
         } else {
             access(
@@ -455,6 +655,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             access(
                 TENANT_ROLES,
                 &[
+                    "staff.app.leaves.read",
                     "staff.leave.read",
                     "staff.leave.manage",
                     "staff.read",
@@ -464,7 +665,11 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         } else if self_action {
             access(
                 STAFF_SELF_WRITE_ROLES,
-                &["staff.self_manage", "staff_self.write"],
+                &[
+                    "staff.app.leaves.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
             )
         } else {
             access(
@@ -761,6 +966,21 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         return Some(client_access(path, method));
     }
     if matches_route_prefix(path, POS_PREFIXES) {
+        if path_starts_with(path, "/pos/payment-platform") {
+            if is_read_method(method) {
+                return Some(access(
+                    FINANCE_WRITE_ROLES,
+                    &["finance.read", "pos.manage", "tenant.read"],
+                ));
+            }
+            if path_starts_with(path, "/pos/payment-platform/payouts") {
+                return Some(access(PAYROLL_ROLES, &["finance.write", "pos.manage"]));
+            }
+            return Some(access(
+                MANAGEMENT_ROLES,
+                &["finance.write", "pos.manage", "management.write"],
+            ));
+        }
         if path_starts_with(path, "/appointment-deposits")
             || path_starts_with(path, "/booking-payments")
             || path_starts_with(path, "/billing")

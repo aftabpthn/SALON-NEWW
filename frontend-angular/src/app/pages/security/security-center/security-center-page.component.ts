@@ -494,6 +494,40 @@ export class SecurityCenterPageComponent implements OnInit {
     });
   }
 
+  selectTab(tab: Tab): void {
+    this.activeTab = tab;
+    this.errorMessage = '';
+    if (tab === 'overview') this.reloadSummary();
+    else if (tab === 'mfa') this.reloadMfa();
+    else if (tab === 'passkeys') this.reloadPasskeys();
+    else if (tab === 'privileged') this.reloadPrivilegedSession();
+    else if (tab === 'provisioning') this.reloadProvisioning();
+    else if (tab === 'audit') this.reloadAudit();
+    else if (tab === 'fieldAudit') this.reloadFieldAudit();
+    else if (tab === 'sessions') this.reloadSessions();
+    else if (tab === 'devices') this.reloadDevices();
+    else if (tab === 'permissions') this.reloadPermissions();
+    else if (tab === 'governance') this.reloadSecurityGovernance();
+    else if (tab === 'playbooks') this.reloadPlaybooks();
+    else if (tab === 'privacy') this.reloadPrivacyDisclosure();
+    else if (tab === 'alerts') this.reloadAlerts();
+    else if (tab === 'blocklist') this.reloadBlocks();
+    else if (tab === 'fraud') this.reloadFraudGuards();
+    else if (tab === 'policy') this.reloadPolicy();
+  }
+
+  deleteFirstPasskey(): void { if (this.passkeys[0]) this.deletePasskey(this.passkeys[0]); }
+  revokeFirstSession(): void { if (this.sessions[0]) this.revokeSession(this.sessions[0]); }
+  trustFirstDevice(): void { if (this.devices[0]) this.trustDevice(this.devices[0]); }
+  revokeFirstDevice(): void { if (this.devices[0]) this.revokeDevice(this.devices[0]); }
+  signOutFirstDevice(): void { if (this.devices[0]) this.signOutAllDevices(this.devices[0]); }
+  decideFirstApproval(decision: 'approve' | 'reject'): void { if (this.approvals[0]) this.decideApproval(this.approvals[0], decision); }
+  disableFirstPlaybook(): void { if (this.playbooks[0]) this.disablePlaybook(this.playbooks[0]); }
+  resolveFirstPrivacyRequest(): void { if (this.privacyRequests[0]) this.resolvePrivacyRequest(this.privacyRequests[0]); }
+  resolveFirstAlert(): void { if (this.alerts[0]) this.resolveAlert(this.alerts[0]); }
+  unblockFirst(): void { if (this.blocks[0]) this.unblock(this.blocks[0]); }
+  editRoleLater(): void { this.notice = 'Role edit is pending backend edit-role support.'; }
+
   exportComplianceEvidence(): void {
     if (this.saving) return;
     this.saving = true;
@@ -1199,6 +1233,13 @@ export class SecurityCenterPageComponent implements OnInit {
     });
   }
 
+  private reloadPermissions(): void {
+    this.api.get<Envelope<PermissionMatrix>>('security/permission-matrix').subscribe({
+      next: (response) => { this.permissions = this.unwrap(response); },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh permissions.'); },
+    });
+  }
+
   private reloadFraudGuards(): void {
     forkJoin({
       risks: this.api.get<Envelope<{ risks: FraudRisk[] }>>('security/fraud-risks'),
@@ -1251,6 +1292,39 @@ export class SecurityCenterPageComponent implements OnInit {
     this.api.get<Envelope<SsoPolicyView>>('security/sso-policy').subscribe({
       next: (response) => { this.setSsoPolicy(this.unwrap(response)); },
       error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh SSO policy.'); },
+    });
+  }
+
+  private reloadProvisioning(): void {
+    forkJoin({
+      scim: this.api.get<Envelope<ScimTokenStatus>>('security/scim-token'),
+      ssoPolicy: this.api.get<Envelope<SsoPolicyView>>('security/sso-policy'),
+    }).subscribe({
+      next: (result) => {
+        this.scimStatus = this.unwrap(result.scim);
+        this.setSsoPolicy(this.unwrap(result.ssoPolicy));
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh provisioning.'); },
+    });
+  }
+
+  private reloadPrivilegedSession(): void {
+    forkJoin({
+      mfa: this.api.get<Envelope<MfaStatus>>('auth/mfa/status'),
+      privileged: this.api.get<Envelope<PrivilegedSessionStatus>>('security/privileged-session'),
+    }).subscribe({
+      next: (result) => {
+        this.mfaStatus = this.unwrap(result.mfa);
+        this.privilegedStatus = this.unwrap(result.privileged);
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh privileged session.'); },
+    });
+  }
+
+  private reloadPolicy(): void {
+    this.api.get<Envelope<SecurityPolicyView>>('security/policy').subscribe({
+      next: (response) => { this.policy = { ...this.unwrap(response).settings }; },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh security policy.'); },
     });
   }
 

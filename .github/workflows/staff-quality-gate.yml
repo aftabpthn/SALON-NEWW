@@ -1,0 +1,50 @@
+name: Staff quality gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  staff-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: staff-app/package-lock.json
+      - name: Verify staff RBAC and route parity
+        working-directory: backend-rust
+        run: cargo test --test staff_control_center_api_parity -- --nocapture
+      - name: Verify staff security boundaries
+        working-directory: backend-rust
+        run: cargo test --bin aura-shine-backend staff_security_ -- --nocapture
+      - name: Install staff app dependencies
+        working-directory: staff-app
+        run: npm ci
+      - name: Verify staff app contracts
+        working-directory: staff-app
+        run: npx vitest run

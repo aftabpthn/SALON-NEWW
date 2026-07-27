@@ -15,7 +15,10 @@ use crate::{
         staff_leave_repository::{LeaveBalanceRecord, LeaveRequestRecord},
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_enterprise_service, staff_leave_service},
+    services::{
+        auth_service::{self, AuthClaims},
+        staff_enterprise_service, staff_leave_service,
+    },
     state::AppState,
 };
 
@@ -126,7 +129,7 @@ async fn create_request(
     headers: HeaderMap,
     Json(payload): Json<CreateLeaveRequest>,
 ) -> ApiResult<LeaveRequestRecord> {
-    ensure_leave_access(&claims)?;
+    ensure_leave_request_access(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         scoped_leave_staff_id(&state, &claims, &tenant_id, &branch_id, &payload.staff_id).await?;
@@ -203,13 +206,37 @@ fn leave_context(claims: &AuthClaims, headers: &HeaderMap) -> Result<(String, St
 }
 
 fn ensure_leave_access(claims: &AuthClaims) -> Result<(), AppError> {
-    if ["owner", "admin", "manager", "staff"]
-        .iter()
-        .any(|role| role.eq_ignore_ascii_case(&claims.role))
-    {
+    if auth_service::staff_app_permission_allowed(
+        claims,
+        "staff.app.leaves.read",
+        &["owner", "admin", "manager", "staff"],
+        &[
+            "staff.leave.read",
+            "staff.leave.manage",
+            "staff.self_manage",
+            "staff_self.write",
+        ],
+    ) {
         Ok(())
     } else {
-        Err(AppError::forbidden("leave management access is restricted"))
+        Err(AppError::forbidden(
+            "Staff App leave permission is required",
+        ))
+    }
+}
+
+fn ensure_leave_request_access(claims: &AuthClaims) -> Result<(), AppError> {
+    if auth_service::staff_app_permission_allowed(
+        claims,
+        "staff.app.leaves.manage",
+        &["owner", "admin", "manager", "staff"],
+        &["staff.self_manage", "staff_self.write"],
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "Staff App leave request permission is required",
+        ))
     }
 }
 
@@ -217,6 +244,14 @@ fn ensure_leave_manage_access(claims: &AuthClaims) -> Result<(), AppError> {
     if ["owner", "admin", "manager"]
         .iter()
         .any(|role| role.eq_ignore_ascii_case(&claims.role))
+        || (claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "staff.leave.manage")
+            && !claims
+                .denied_permissions
+                .iter()
+                .any(|permission| permission == "staff.leave.manage"))
     {
         Ok(())
     } else {
@@ -231,7 +266,10 @@ async fn scoped_leave_staff_id(
     branch_id: &str,
     requested_staff_id: &str,
 ) -> Result<String, AppError> {
-    if claims.role.eq_ignore_ascii_case("staff") {
+    if !["owner", "admin", "manager"]
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role))
+    {
         staff_enterprise_service::self_staff_id(&state.db, tenant_id, branch_id, &claims.sub).await
     } else {
         Ok(requested_staff_id.trim().to_string())

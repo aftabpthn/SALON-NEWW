@@ -14,6 +14,16 @@
     <p class="error">{{ error }}</p>
   }
 
+  <section class="launchpad" aria-label="Offer launchpad">
+    @for (card of offerLaunchpad(); track card.key) {
+      <button type="button" (click)="launchPreset(card.key)" [disabled]="busy">
+        <span>{{ card.title }}</span>
+        <strong>{{ card.metric }}</strong>
+        <small>{{ card.action }}</small>
+      </button>
+    }
+  </section>
+
   <nav class="tabs" aria-label="Happy Hours workspace">
     <button type="button" [class.active]="tab === 'rules'" (click)="tab = 'rules'">Rules</button>
     <button type="button" [class.active]="tab === 'control'" (click)="tab = 'control'">Control tower</button>

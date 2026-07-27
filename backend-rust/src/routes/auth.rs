@@ -106,6 +106,7 @@ pub struct MeResponse {
     pub role_id: Option<String>,
     pub role: String,
     pub permissions: Vec<String>,
+    pub denied_permissions: Vec<String>,
     pub permission_version: i64,
     pub session_id: String,
     pub branches: Vec<BranchAccess>,
@@ -326,10 +327,26 @@ pub async fn dev_session(
         return Err(AppError::not_found("auth dev session is not available"));
     }
 
+    let tenant_id: String = sqlx::query_scalar(
+        "SELECT id::TEXT FROM tenants WHERE id::TEXT='tenant_aura' OR LOWER(name)=LOWER('tenant_aura') ORDER BY (id::TEXT='tenant_aura') DESC LIMIT 1",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve local tenant"))?
+    .ok_or_else(|| AppError::not_found("local tenant is not configured"))?;
+    let branch_id: String = sqlx::query_scalar(
+        "SELECT id::TEXT FROM branches WHERE tenant_id=$1::UUID AND active=TRUE AND (id::TEXT='branch_hyd' OR scope_id::TEXT='branch_hyd' OR LOWER(name)=LOWER('branch_hyd')) ORDER BY (id::TEXT='branch_hyd') DESC LIMIT 1",
+    )
+    .bind(&tenant_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve local branch"))?
+    .ok_or_else(|| AppError::not_found("local branch is not configured"))?;
+
     let (tokens, _) = auth_service::issue_token_pair(
         "dev-admin",
-        "tenant_aura",
-        Some("branch_hyd".to_string()),
+        &tenant_id,
+        Some(branch_id),
         "owner",
         &state.settings.jwt_access_secret,
         &state.settings.jwt_refresh_secret,
@@ -620,11 +637,22 @@ async fn complete_login(
     let branches = auth_repository::list_branch_access(&state.db, user)
         .await
         .map_err(|_| AppError::internal("failed to load branch access"))?;
-    let selected = match requested_branch_id
+    let requested_access = match requested_branch_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
     {
-        Some(branch_id) => Some(required_branch(&branches, branch_id)?),
+        Some(branch_id) => Some(
+            auth_repository::find_branch_access(&state.db, user, branch_id)
+                .await
+                .map_err(|_| AppError::internal("failed to resolve branch access"))?
+                .ok_or_else(|| {
+                    AppError::forbidden("this user does not have access to the requested branch")
+                })?,
+        ),
+        None => None,
+    };
+    let selected = match requested_access.as_ref() {
+        Some(access) => Some(access),
         None if branches.len() == 1 => branches.first(),
         None => None,
     };
@@ -908,6 +936,7 @@ pub async fn me(
             role_id: claims.role_id,
             role: claims.role,
             permissions: claims.permissions,
+            denied_permissions: claims.denied_permissions,
             permission_version: claims.permission_version,
             session_id: claims.session_id,
             branches: Vec::new(),
@@ -941,6 +970,9 @@ pub async fn me(
             .unwrap_or(user.role_name),
         permissions: access
             .map(|item| item.permissions.clone())
+            .unwrap_or_default(),
+        denied_permissions: access
+            .map(|item| item.denied_permissions.clone())
             .unwrap_or_default(),
         permission_version: user.permission_version,
         session_id: claims.session_id,

@@ -23,10 +23,109 @@
         <button
           type="button"
           [class.active]="activeTab === tab.key"
-          (click)="activeTab = tab.key"
+          (click)="selectTab(tab.key)"
         >{{ tab.label }}</button>
       }
     </nav>
+  }
+
+  @if (!mfaEnrollmentRequired) {
+    @if (activeTab === 'mfa') {
+      <section class="command-strip" aria-label="MFA actions">
+        <button type="button" [disabled]="saving || !!mfaStatus?.enabled" (click)="startMfaSetup()">Setup MFA</button>
+        <button type="button" [disabled]="saving || !mfaCode.trim()" (click)="enableMfa()">Enable MFA</button>
+        <button type="button" [disabled]="saving || !mfaStatus?.enabled || !mfaCode.trim()" (click)="disableMfa()">Disable MFA</button>
+      </section>
+    }
+    @if (activeTab === 'passkeys') {
+      <section class="command-strip" aria-label="Passkey actions">
+        <button type="button" [disabled]="saving || !passkeyLabel.trim()" (click)="addPasskey()">Add passkey</button>
+        <button type="button" [disabled]="!passkeys.length" (click)="deleteFirstPasskey()">Delete passkey</button>
+      </section>
+    }
+    @if (activeTab === 'privileged') {
+      <section class="command-strip" aria-label="Privileged session actions">
+        <button type="button" [disabled]="saving || (mfaStatus?.enabled ? !privilegedMfaCode.trim() : !privilegedPassword.trim())" (click)="verifyPrivilegedSession()">Verify session</button>
+        <button type="button" [disabled]="saving || !privilegedStatus?.active" (click)="revokePrivilegedSession()">End session</button>
+      </section>
+    }
+    @if (activeTab === 'provisioning' && canManageSecurity) {
+      <section class="command-strip" aria-label="SSO and SCIM actions">
+        <button type="button" [disabled]="saving" (click)="saveSsoPolicy()">Save SSO policy</button>
+        <button type="button" [disabled]="saving" (click)="rotateScimToken()">Generate/Rotate SCIM token</button>
+        <button type="button" [disabled]="saving || !scimStatus?.configured" (click)="revokeScimToken()">Revoke SCIM</button>
+      </section>
+    }
+    @if (activeTab === 'audit' && canManageSecurity) {
+      <section class="command-strip" aria-label="Audit actions">
+        <button type="button" [disabled]="saving" (click)="sealAuditChain()">Seal &amp; verify</button>
+        <button type="button" [disabled]="saving" (click)="exportComplianceEvidence()">Export evidence</button>
+      </section>
+    }
+    @if (activeTab === 'sessions' && canManageSecurity) {
+      <section class="command-strip" aria-label="Session actions">
+        <button type="button" [disabled]="!sessions.length" (click)="revokeFirstSession()">Revoke session</button>
+      </section>
+    }
+    @if (activeTab === 'devices' && canManageSecurity) {
+      <section class="command-strip" aria-label="Device actions">
+        <button type="button" [disabled]="!devices.length || saving" (click)="trustFirstDevice()">Trust</button>
+        <button type="button" [disabled]="!devices.length || saving" (click)="revokeFirstDevice()">Revoke</button>
+        <button type="button" [disabled]="!devices.length || saving" (click)="signOutFirstDevice()">Sign out all</button>
+      </section>
+    }
+    @if (activeTab === 'permissions') {
+      <section class="command-strip" aria-label="Permission actions">
+        <button type="button" [disabled]="!simulatorUserId.trim()" (click)="simulatePermissions()">Simulate permission</button>
+        <button type="button" (click)="editRoleLater()">Edit role</button>
+      </section>
+    }
+    @if (activeTab === 'governance' && canManageSecurity) {
+      <section class="command-strip" aria-label="Approvals and access actions">
+        <button type="button" [disabled]="saving || !approvalDraft.actionType.trim() || !approvalDraft.summary.trim()" (click)="createApproval()">Request approval</button>
+        <button type="button" [disabled]="!approvals.length" (click)="decideFirstApproval('approve')">Approve</button>
+        <button type="button" [disabled]="!approvals.length" (click)="decideFirstApproval('reject')">Reject</button>
+        <button type="button" [disabled]="saving || !accessRuleDraft.matchValue.trim()" (click)="createAccessRule()">Add access rule</button>
+        <button type="button" [disabled]="saving || !elevationDraft.userId.trim() || !elevationDraft.permissions.length || elevationDraft.durationMinutes === null || !elevationDraft.reason.trim()" (click)="requestElevation()">Request temporary access</button>
+        @if (canActivateBreakGlass) {
+          <button type="button" [disabled]="saving || !privilegedStatus?.active || !breakGlassDraft.permissions.length || breakGlassDraft.durationMinutes === null || !breakGlassDraft.reason.trim()" (click)="activateBreakGlass()">Break glass</button>
+        }
+      </section>
+    }
+    @if (activeTab === 'playbooks' && canManageSecurity) {
+      <section class="command-strip" aria-label="Playbook actions">
+        <button type="button" [disabled]="saving || !playbookDraft.playbookKey.trim() || !playbookDraft.title.trim() || !playbookDraft.checklistText.trim()" (click)="createPlaybook()">Add playbook</button>
+        <button type="button" [disabled]="!playbooks.length" (click)="disableFirstPlaybook()">Disable playbook</button>
+      </section>
+    }
+    @if (activeTab === 'privacy' && canManageSecurity) {
+      <section class="command-strip" aria-label="Privacy actions">
+        <button type="button" [disabled]="saving || !privacyDraft.summary.trim()" (click)="createPrivacyRequest()">Add privacy request</button>
+        <button type="button" [disabled]="!privacyRequests.length" (click)="resolveFirstPrivacyRequest()">Resolve request</button>
+        <button type="button" [disabled]="saving || !disclosureDraft.summary.trim()" (click)="createDisclosureReport()">Add disclosure report</button>
+      </section>
+    }
+    @if (activeTab === 'alerts' && canManageSecurity) {
+      <section class="command-strip" aria-label="Alert actions">
+        <button type="button" [disabled]="!alerts.length" (click)="resolveFirstAlert()">Resolve alert</button>
+      </section>
+    }
+    @if (activeTab === 'blocklist' && canManageSecurity) {
+      <section class="command-strip" aria-label="Blocklist actions">
+        <button type="button" [disabled]="!blocks.length" (click)="unblockFirst()">Unblock</button>
+      </section>
+    }
+    @if (activeTab === 'fraud' && canManageSecurity) {
+      <section class="command-strip" aria-label="Fraud guard actions">
+        <button type="button" [disabled]="saving" (click)="scanFraudRisks()">Run scan</button>
+        <button type="button" [disabled]="saving || !fraudWarningDraft.title.trim() || !fraudWarningDraft.message.trim()" (click)="createFraudWarning()">Add warning</button>
+      </section>
+    }
+    @if (activeTab === 'policy' && canManageSecurity) {
+      <section class="command-strip" aria-label="Policy actions">
+        <button type="button" [disabled]="saving || !policy" (click)="savePolicy()">Save policy</button>
+      </section>
+    }
   }
 
   @if (loading) {

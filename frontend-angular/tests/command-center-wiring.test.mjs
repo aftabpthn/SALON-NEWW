@@ -24,7 +24,7 @@ test('Command Center preserves management access in route and sidebar', () => {
 });
 
 test('Command Center gates restricted data and actions with current claims', () => {
-  for (const gate of ['canReadStaff', 'canReadInventory', 'canReadPaymentControls', 'canReadSecurity', 'canReadLocations', 'canManageLocations']) {
+  for (const gate of ['canReadInventory', 'canReadPaymentControls', 'canReadLocations', 'canManageLocations']) {
     assert.ok(page.includes(`get ${gate}()`), `${gate} is not defined`);
     assert.ok(template.includes(gate), `${gate} is not rendered`);
   }
@@ -35,9 +35,8 @@ test('Command Center loads real branch APIs without a redundant health request',
   for (const endpoint of [
     '/api/v1/reports/dashboard',
     '/api/v1/profit-intelligence/summary',
-    '/api/v1/staff-enterprise/command-center',
+    '/api/v1/reports/appointments',
     '/api/v1/inventory/command-center',
-    '/api/v1/security/summary',
     '/api/v1/reports/payment-modes',
     '/api/v1/pos/fraud-summary',
     '/api/v1/settings/franchise-controls',
@@ -49,6 +48,14 @@ test('Command Center loads real branch APIs without a redundant health request',
     assert.ok(page.includes(endpoint), `${endpoint} is not wired`);
   }
   assert.doesNotMatch(page, /this\.api\.health\(/);
+});
+
+test('Executive Overview uses matching today and 30-day real-data columns', () => {
+  assert.match(template, /<span>Today<\/span><span>30 days<\/span>/);
+  assert.match(template, /appointmentCount30Days/);
+  assert.match(page, /get appointmentCount30Days\(\)/);
+  assert.match(page, /reports\/appointments\?startDate=\$\{this\.dateOffset\(-29\)\}&endDate=\$\{this\.dateOffset\(0\)\}&pageSize=500/);
+  assert.doesNotMatch(template, /Current <strong>30 days<\/strong>/);
 });
 
 test('Command Center uses real multi-branch controls without source demo records', () => {
@@ -137,12 +144,20 @@ test('Central master publication cannot bypass approval separation', () => {
 test('Command Center keeps every implemented workspace linked', () => {
   for (const workspace of [
     'Profit Intelligence',
-    'Staff Control',
     'Inventory Autopilot',
     'Payment Intelligence',
-    'Security Center',
     'Operational Dashboard',
   ]) {
     assert.ok(template.includes(workspace), `${workspace} is not linked`);
   }
+  assert.doesNotMatch(template, /Staff Control/);
+  assert.doesNotMatch(template, /routerLink="\/staff\/control-center"/);
+  assert.doesNotMatch(sidebar.match(/label: 'Command Center'[\s\S]*?\] \}/)?.[0] ?? '', /Staff Control|\/staff\/control-center/);
+  assert.match(sidebar.match(/label: 'Staff'[\s\S]*?\] \}/)?.[0] ?? '', /route: '\/staff\/control-center'/);
+  assert.doesNotMatch(sidebar.match(/label: 'Command Center'[\s\S]*?\] \}/)?.[0] ?? '', /Profit Intelligence|Inventory Autopilot|\/reports\/profit-intelligence|\/inventory\/advanced-controls/);
+  assert.doesNotMatch(template, /Security Center/);
+  assert.doesNotMatch(template, /routerLink="\/security"/);
+  assert.doesNotMatch(sidebar.match(/label: 'Command Center'[\s\S]*?\] \}/)?.[0] ?? '', /Security Center|\/security/);
+  assert.match(sidebar.match(/label: 'Security'[\s\S]*?\] \}/)?.[0] ?? '', /route: '\/security'/);
+  assert.match(template, /routerLink="\/reports\/profit-intelligence"/);
 });

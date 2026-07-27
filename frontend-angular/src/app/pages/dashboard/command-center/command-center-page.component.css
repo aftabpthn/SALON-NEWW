@@ -168,10 +168,10 @@ button:disabled { cursor: wait; opacity: .65; }
 .priority-dot { width: 8px; height: 8px; border-radius: 99px; background: #f59e0b; }
 .priority-dot.critical, .priority-dot.high { background: #dc2626; }
 
-.profit-grid, .staff-grid, .inventory-grid, .payment-grid, .security-grid, .location-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.profit-grid > section, .staff-grid > section, .inventory-grid > section, .payment-grid > section, .security-grid > section, .location-grid > section { min-width: 0; padding: 14px 16px 16px; border-right: 1px solid #e8edf4; }
-.profit-grid > section:last-child, .staff-grid > section:last-child, .inventory-grid > section:last-child, .payment-grid > section:last-child, .security-grid > section:last-child, .location-grid > section:last-child { border-right: 0; }
-.profit-grid h3, .staff-grid h3, .inventory-grid h3, .payment-grid h3, .security-grid h3, .location-grid h3 { margin: 0 0 9px; color: var(--cc-muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.profit-grid, .inventory-grid, .payment-grid, .location-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section { min-width: 0; padding: 14px 16px 16px; border-right: 1px solid #e8edf4; }
+.profit-grid > section:last-child, .inventory-grid > section:last-child, .payment-grid > section:last-child, .location-grid > section:last-child { border-right: 0; }
+.profit-grid h3, .inventory-grid h3, .payment-grid h3, .location-grid h3 { margin: 0 0 9px; color: var(--cc-muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .metric-list { margin: 0; }
 .metric-list > div, .rank-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; border-top: 1px solid #e8edf4; }
 .metric-list > div:first-child, .rank-list > div:first-child { border-top: 0; }
@@ -288,9 +288,9 @@ button:disabled { cursor: wait; opacity: .65; }
 
 @media (max-width: 900px) {
   .primary-grid { grid-template-columns: 1fr; }
-  .profit-grid, .staff-grid, .inventory-grid, .payment-grid, .security-grid, .location-grid { grid-template-columns: 1fr; }
-  .profit-grid > section, .staff-grid > section, .inventory-grid > section, .payment-grid > section, .security-grid > section, .location-grid > section { border-right: 0; border-top: 1px solid #e8edf4; }
-  .profit-grid > section:first-child, .staff-grid > section:first-child, .inventory-grid > section:first-child, .payment-grid > section:first-child, .security-grid > section:first-child, .location-grid > section:first-child { border-top: 0; }
+  .profit-grid, .inventory-grid, .payment-grid, .location-grid { grid-template-columns: 1fr; }
+  .profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section { border-right: 0; border-top: 1px solid #e8edf4; }
+  .profit-grid > section:first-child, .inventory-grid > section:first-child, .payment-grid > section:first-child, .location-grid > section:first-child { border-top: 0; }
   .location-operations-grid { grid-template-columns: 1fr; }
   .location-operations-grid > section { border-right: 0; border-top: 1px solid #e8edf4; }
   .location-operations-grid > section:first-child { border-top: 0; }

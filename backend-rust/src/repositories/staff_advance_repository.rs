@@ -5,7 +5,8 @@ use sqlx::{FromRow, PgPool, Postgres, Transaction};
 const RECORD_COLUMNS: &str = "id,staff_id,requested_amount_paise,approved_amount_paise,disbursed_amount_paise,\
 outstanding_paise,installment_count,installment_amount_paise,pending_carry_forward_paise,recovery_start_period,\
 reason,status,requested_by,decided_by,decided_at,decision_note,disbursed_by,disbursed_at,disbursement_method,\
-disbursement_reference,waived_by,waived_at,waiver_reason,closed_at,version,created_at,updated_at";
+disbursement_reference,waived_by,waived_at,waiver_reason,cancelled_by,cancelled_at,cancellation_reason,\
+closed_at,version,created_at,updated_at";
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +34,9 @@ pub struct StaffAdvanceRecord {
     pub waived_by: Option<String>,
     pub waived_at: Option<DateTime<Utc>>,
     pub waiver_reason: String,
+    pub cancelled_by: Option<String>,
+    pub cancelled_at: Option<DateTime<Utc>>,
+    pub cancellation_reason: String,
     pub closed_at: Option<DateTime<Utc>>,
     pub version: i32,
     pub created_at: DateTime<Utc>,
@@ -73,7 +77,10 @@ pub async fn create_request(
         INSERT INTO staff_salary_advances(
           tenant_id,branch_id,staff_id,requested_amount_paise,installment_count,
           recovery_start_period,reason,requested_by
-        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+        )
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8
+          FROM staff
+         WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE
         RETURNING {RECORD_COLUMNS}
         "#
     ))
@@ -165,10 +172,14 @@ pub async fn cancel(
     branch_id: &str,
     id: &str,
     version: i32,
+    actor_user_id: &str,
+    reason: &str,
 ) -> Result<Option<StaffAdvanceRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
         r#"
-        UPDATE staff_salary_advances SET status='cancelled',version=version+1,updated_at=NOW()
+        UPDATE staff_salary_advances SET
+          status='cancelled',cancelled_by=$5,cancelled_at=NOW(),cancellation_reason=$6,
+          version=version+1,updated_at=NOW()
         WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status IN ('pending','approved')
         RETURNING {RECORD_COLUMNS}
         "#
@@ -177,6 +188,8 @@ pub async fn cancel(
     .bind(branch_id)
     .bind(id)
     .bind(version)
+    .bind(actor_user_id)
+    .bind(reason)
     .fetch_optional(db)
     .await
 }

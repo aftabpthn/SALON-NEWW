@@ -29,7 +29,11 @@ pub(crate) fn is_supported_photo_url(url: &str) -> bool {
     if !(url.starts_with("https://") || url.starts_with('/')) {
         return false;
     }
-    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    let path = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .to_ascii_lowercase();
     path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".png")
 }
 
@@ -70,6 +74,12 @@ pub struct AuthPermissionOption {
     pub code: &'static str,
     pub label: &'static str,
     pub group: &'static str,
+    pub module: String,
+    pub action: &'static str,
+    pub scope: &'static str,
+    pub sensitive: bool,
+    pub feature_key: Option<&'static str>,
+    pub route_mapping: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -152,6 +162,12 @@ pub async fn load_auth_roles(
                 code: permission.code,
                 label: permission.label,
                 group: permission.group,
+                module: permission.module().to_string(),
+                action: permission.action(),
+                scope: permission.scope(),
+                sensitive: permission.sensitive(),
+                feature_key: permission.feature_key(),
+                route_mapping: permission.route_mapping(),
             })
             .collect(),
         mask_options: AUTH_MASK_OPTIONS
@@ -760,6 +776,8 @@ pub async fn save_branch_access(
                 .is_some_and(|db_error| db_error.is_unique_violation())
             {
                 AppError::conflict("default branch access already exists")
+            } else if matches!(error, sqlx::Error::RowNotFound) {
+                AppError::validation("one or more roles are not assignable to employees")
             } else {
                 AppError::internal("failed to save employee branch access")
             }
@@ -1102,6 +1120,7 @@ pub async fn set_password(
     branch_id: &str,
     staff_id: &str,
     new_password: &str,
+    must_change_password: bool,
 ) -> Result<(), AppError> {
     if !auth_service::password_meets_policy(new_password) {
         return Err(AppError::validation(
@@ -1118,11 +1137,12 @@ pub async fn set_password(
     let user_id = linked_active_user_id(&mut tx, tenant_id, branch_id, staff_id).await?;
 
     sqlx::query(
-        "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=NULL, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE tenant_id=$2 AND id=$3",
+        "UPDATE users SET password_hash=$1, must_change_password=$4, password_changed_at=CASE WHEN $4 THEN NULL ELSE NOW() END, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE tenant_id=$2 AND id=$3",
     )
     .bind(password_hash)
     .bind(tenant_id)
     .bind(&user_id)
+    .bind(must_change_password)
     .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to update employee password"))?;
@@ -1251,6 +1271,7 @@ mod tests {
         ShiftTemplateInput, StaffCategoryInput,
     };
     use crate::repositories::staff_hr_repository::BulkStaffInput;
+    use crate::repositories::staff_repository::is_staff_assignable_role_name;
 
     #[test]
     fn configuration_rejects_negative_pay_rate() {
@@ -1293,12 +1314,28 @@ mod tests {
     }
 
     #[test]
+    fn staff_security_employee_login_rejects_protected_management_roles() {
+        for role in [
+            "Owner",
+            "admin",
+            "Super Admin",
+            "super-admin",
+            "super_admin",
+        ] {
+            assert!(!is_staff_assignable_role_name(role));
+        }
+        for role in ["manager", "staff", "Senior Stylist", "staffappadmin"] {
+            assert!(is_staff_assignable_role_name(role));
+        }
+    }
+
+    #[test]
     fn branch_access_requires_one_active_default() {
         let branches = HashSet::from(["branch_hyd"]);
-        let roles = HashSet::from(["owner"]);
+        let roles = HashSet::from(["manager"]);
         let assignment = || BranchAccessAssignment {
             branch_id: "branch_hyd".into(),
-            role_id: Some("owner".into()),
+            role_id: Some("manager".into()),
             access_type: "permanent".into(),
             valid_from: None,
             valid_until: None,
@@ -1396,6 +1433,7 @@ mod tests {
                 designation: String::new(),
                 active: true,
             }],
+            pricing_levels: vec![],
             shift_templates: vec![ShiftTemplateInput {
                 id: String::new(),
                 code: "regular".into(),

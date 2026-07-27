@@ -6,19 +6,27 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
+use std::{collections::BTreeSet, net::IpAddr};
 use uuid::Uuid;
 
 use crate::{
     config::Settings,
+    infrastructure::cache::RedisClient,
     models::common::AppError,
     repositories::integration_repository::{
         self, ApiKeyCredential, ApiKeyRecord, ConnectorCredential, ConnectorSyncJob,
         WebhookDeliveryLog, WebhookRecord,
     },
-    services::{auth_service, security_service},
+    services::{auth_service, entitlement_service, security_service},
 };
 
-const API_SCOPES: &[&str] = &["clients.read", "appointments.read", "sales.read"];
+const API_SCOPES: &[&str] = &[
+    "clients.read",
+    "appointments.read",
+    "sales.read",
+    "staff.read",
+];
+const DEFAULT_API_RATE_LIMIT_PER_MINUTE: i32 = 60;
 const WEBHOOK_EVENTS: &[&str] = &[
     "client.created",
     "appointment.created",
@@ -165,6 +173,8 @@ pub async fn create_api_key(
     actor: &str,
     name: &str,
     scopes: Vec<String>,
+    ip_allowlist: Vec<String>,
+    rate_limit_per_minute: Option<i32>,
     expires_at: Option<DateTime<Utc>>,
     rotated_from: Option<&str>,
 ) -> Result<ApiKeyCreated, AppError> {
@@ -173,6 +183,8 @@ pub async fn create_api_key(
         return Err(AppError::validation("API key name is invalid"));
     }
     validate_scopes(&scopes)?;
+    let ip_allowlist = normalize_ip_allowlist(ip_allowlist)?;
+    let rate_limit_per_minute = validate_rate_limit(rate_limit_per_minute)?;
     validate_expiry(expires_at)?;
     let (api_key, prefix, secret_hash) = generate_api_key()?;
     let record = integration_repository::insert_api_key(
@@ -183,6 +195,8 @@ pub async fn create_api_key(
         &prefix,
         &secret_hash,
         &json!(scopes),
+        &json!(ip_allowlist),
+        rate_limit_per_minute,
         expires_at,
         actor,
         rotated_from,
@@ -195,7 +209,7 @@ pub async fn create_api_key(
         branch,
         actor,
         "api_client.created",
-        json!({"apiClientId": record.id, "name": record.name, "scopes": record.scopes_json}),
+        json!({"apiClientId": record.id, "name": record.name, "scopes": record.scopes_json, "ipAllowlist": record.ip_allowlist_json, "rateLimitPerMinute": record.rate_limit_per_minute}),
     )
     .await;
     Ok(ApiKeyCreated { record, api_key })
@@ -223,6 +237,16 @@ pub async fn rotate_api_key(
         .map(str::to_string)
         .collect::<Vec<_>>();
     validate_scopes(&scopes)?;
+    let ip_allowlist = old
+        .ip_allowlist_json
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let ip_allowlist = normalize_ip_allowlist(ip_allowlist)?;
+    let rate_limit_per_minute = validate_rate_limit(Some(old.rate_limit_per_minute))?;
     validate_expiry(old.expires_at)?;
     let (api_key, prefix, secret_hash) = generate_api_key()?;
     let record = integration_repository::rotate_api_key(
@@ -234,6 +258,8 @@ pub async fn rotate_api_key(
         &prefix,
         &secret_hash,
         &json!(scopes),
+        &json!(ip_allowlist),
+        rate_limit_per_minute,
         old.expires_at,
         actor,
     )
@@ -246,7 +272,7 @@ pub async fn rotate_api_key(
         branch,
         actor,
         "api_client.rotated",
-        json!({"apiClientId": record.id, "rotatedFromId": old.id, "name": record.name, "scopes": record.scopes_json}),
+        json!({"apiClientId": record.id, "rotatedFromId": old.id, "name": record.name, "scopes": record.scopes_json, "ipAllowlist": record.ip_allowlist_json, "rateLimitPerMinute": record.rate_limit_per_minute}),
     )
     .await;
     Ok(ApiKeyCreated { record, api_key })
@@ -279,8 +305,10 @@ pub async fn revoke_api_key(
 
 pub async fn authenticate_api_key(
     db: &PgPool,
+    redis: &RedisClient,
     api_key: &str,
     required_scope: &str,
+    source_ip: Option<&str>,
 ) -> Result<ApiKeyCredential, AppError> {
     let prefix = api_key.chars().take(17).collect::<String>();
     let credential = integration_repository::active_api_key(db, &prefix)
@@ -299,6 +327,9 @@ pub async fn authenticate_api_key(
     if !allowed {
         return Err(AppError::forbidden("API key scope is not allowed"));
     }
+    ensure_source_ip_allowed(&credential.ip_allowlist_json, source_ip)?;
+    entitlement_service::ensure_feature(db, &credential.tenant_id, "staff.api").await?;
+    enforce_api_key_rate_limit(redis, &credential).await?;
     integration_repository::touch_api_key(db, &credential.id)
         .await
         .map_err(|_| AppError::internal("failed to record API key usage"))?;
@@ -346,6 +377,20 @@ pub async fn api_sales(
     )
     .await
     .map_err(|_| AppError::internal("failed to list integration sales"))
+}
+pub async fn api_staff(
+    db: &PgPool,
+    credential: &ApiKeyCredential,
+    limit: i64,
+) -> Result<Vec<Value>, AppError> {
+    integration_repository::api_staff(
+        db,
+        &credential.tenant_id,
+        &credential.branch_id,
+        limit.clamp(1, 500),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to list integration staff"))
 }
 
 pub async fn list_webhooks(
@@ -1277,6 +1322,85 @@ fn validate_expiry(expires_at: Option<DateTime<Utc>>) -> Result<(), AppError> {
     }
     Ok(())
 }
+fn normalize_ip_allowlist(values: Vec<String>) -> Result<Vec<String>, AppError> {
+    if values.len() > 100 {
+        return Err(AppError::validation("API key IP allowlist is invalid"));
+    }
+    values
+        .into_iter()
+        .map(|value| {
+            value
+                .trim()
+                .parse::<IpAddr>()
+                .map(|ip| ip.to_string())
+                .map_err(|_| AppError::validation("API key IP allowlist is invalid"))
+        })
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map(BTreeSet::into_iter)
+        .map(Iterator::collect)
+}
+fn validate_rate_limit(value: Option<i32>) -> Result<i32, AppError> {
+    let value = value.unwrap_or(DEFAULT_API_RATE_LIMIT_PER_MINUTE);
+    if !(1..=10_000).contains(&value) {
+        return Err(AppError::validation("API key rate limit is invalid"));
+    }
+    Ok(value)
+}
+fn ensure_source_ip_allowed(allowlist: &Value, source_ip: Option<&str>) -> Result<(), AppError> {
+    let allowed = allowlist
+        .as_array()
+        .ok_or_else(|| AppError::internal("API key IP policy is invalid"))?;
+    if allowed.is_empty() {
+        return Ok(());
+    }
+    let source_ip = source_ip
+        .and_then(|value| value.parse::<IpAddr>().ok())
+        .ok_or_else(|| AppError::forbidden("API key is not allowed from this IP address"))?;
+    if allowed
+        .iter()
+        .filter_map(Value::as_str)
+        .filter_map(|value| value.parse::<IpAddr>().ok())
+        .any(|value| value == source_ip)
+    {
+        return Ok(());
+    }
+    Err(AppError::forbidden(
+        "API key is not allowed from this IP address",
+    ))
+}
+async fn enforce_api_key_rate_limit(
+    redis: &RedisClient,
+    credential: &ApiKeyCredential,
+) -> Result<(), AppError> {
+    let mut connection = redis
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|_| {
+            AppError::service_unavailable(
+                "API_RATE_LIMIT_UNAVAILABLE",
+                "API key rate limit store is unavailable",
+            )
+        })?;
+    let count: i64 = redis::cmd("EVAL")
+        .arg("local count=redis.call('INCR',KEYS[1]); if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end; return count")
+        .arg(1)
+        .arg(format!("integration_api_key_rate:{}", credential.id))
+        .arg(60)
+        .query_async(&mut connection)
+        .await
+        .map_err(|_| {
+            AppError::service_unavailable(
+                "API_RATE_LIMIT_UNAVAILABLE",
+                "API key rate limit store is unavailable",
+            )
+        })?;
+    if count > i64::from(credential.rate_limit_per_minute) {
+        return Err(AppError::rate_limited(
+            "API key request limit exceeded; try again later",
+        ));
+    }
+    Ok(())
+}
 fn generate_api_key() -> Result<(String, String, String), AppError> {
     let api_key = format!(
         "ask_live_{}{}",
@@ -1347,17 +1471,28 @@ fn sign(secret: &str, message: &str) -> Result<String, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        connector_token_hash, sign, validate_expiry, validate_scopes, validate_webhook,
-        ConnectorProvider,
+        connector_token_hash, ensure_source_ip_allowed, normalize_ip_allowlist, sign,
+        validate_expiry, validate_rate_limit, validate_scopes, validate_webhook, ConnectorProvider,
     };
     use chrono::{Duration, Utc};
+    use serde_json::json;
     #[test]
     fn integration_inputs_are_scoped_and_signed() {
         assert!(validate_scopes(&["clients.read".into()]).is_ok());
+        assert!(validate_scopes(&["staff.read".into()]).is_ok());
         assert!(validate_scopes(&["admin".into()]).is_err());
         assert!(validate_scopes(&["clients.read".into(), "clients.read".into()]).is_err());
         assert!(validate_expiry(Some(Utc::now() - Duration::minutes(1))).is_err());
         assert!(validate_expiry(Some(Utc::now() + Duration::minutes(1))).is_ok());
+        assert_eq!(
+            normalize_ip_allowlist(vec!["127.0.0.1".into(), "127.0.0.1".into()]).unwrap(),
+            vec!["127.0.0.1"]
+        );
+        assert!(normalize_ip_allowlist(vec!["not-an-ip".into()]).is_err());
+        assert!(ensure_source_ip_allowed(&json!(["127.0.0.1"]), Some("127.0.0.1")).is_ok());
+        assert!(ensure_source_ip_allowed(&json!(["127.0.0.1"]), Some("10.0.0.1")).is_err());
+        assert_eq!(validate_rate_limit(None).unwrap(), 60);
+        assert!(validate_rate_limit(Some(0)).is_err());
         assert!(validate_webhook(
             "CRM",
             "https://example.com/hook",

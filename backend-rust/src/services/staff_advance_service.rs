@@ -4,7 +4,9 @@ use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
-    repositories::staff_advance_repository::{self as repository, AdvanceRecoveryRecord, StaffAdvanceRecord},
+    repositories::staff_advance_repository::{
+        self as repository, AdvanceRecoveryRecord, StaffAdvanceRecord,
+    },
     services::accounting_service,
 };
 
@@ -34,6 +36,7 @@ pub struct AdvanceDecisionInput {
 #[serde(rename_all = "camelCase")]
 pub struct AdvanceCancelInput {
     pub version: i32,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +47,7 @@ pub struct AdvanceDisbursementInput {
     pub payment_method: String,
     pub reference: Option<String>,
     pub idempotency_key: String,
+    pub mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +56,7 @@ pub struct AdvanceDisbursementInput {
 pub struct AdvanceWaiverInput {
     pub version: i32,
     pub reason: String,
+    pub mfa_code: Option<String>,
 }
 
 fn clean(v: &str, max: usize, label: &str) -> Result<String, AppError> {
@@ -90,7 +95,7 @@ pub async fn request_advance(
         ));
     }
     let reason = clean(&input.reason, 500, "reason")?;
-    repository::create_request(
+    match repository::create_request(
         db,
         tenant_id,
         branch_id,
@@ -102,7 +107,15 @@ pub async fn request_advance(
         &reason,
     )
     .await
-    .map_err(|_| AppError::internal("failed to create salary advance request"))
+    {
+        Ok(row) => Ok(row),
+        Err(sqlx::Error::RowNotFound) => {
+            Err(AppError::not_found("active staff not found in this branch"))
+        }
+        Err(_) => Err(AppError::internal(
+            "failed to create salary advance request",
+        )),
+    }
 }
 
 pub async fn list_advances(
@@ -150,7 +163,9 @@ pub async fn decide_advance(
 ) -> Result<StaffAdvanceRecord, AppError> {
     let decision = input.decision.trim().to_ascii_lowercase();
     if !matches!(decision.as_str(), "approved" | "rejected") {
-        return Err(AppError::validation("decision must be approved or rejected"));
+        return Err(AppError::validation(
+            "decision must be approved or rejected",
+        ));
     }
     let note = clean(input.note.as_deref().unwrap_or(""), 500, "decision note")?;
     let approved_amount_paise = if decision == "approved" {
@@ -189,17 +204,31 @@ pub async fn cancel_advance(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    actor_user_id: &str,
     id: &str,
     input: AdvanceCancelInput,
 ) -> Result<StaffAdvanceRecord, AppError> {
-    repository::cancel(db, tenant_id, branch_id, id, input.version)
-        .await
-        .map_err(|_| AppError::internal("failed to cancel salary advance"))?
-        .ok_or_else(|| {
-            AppError::conflict(
-                "salary advance can only be cancelled while pending or approved, and not stale",
-            )
-        })
+    let reason = clean(
+        input.reason.as_deref().unwrap_or(""),
+        500,
+        "cancellation reason",
+    )?;
+    repository::cancel(
+        db,
+        tenant_id,
+        branch_id,
+        id,
+        input.version,
+        actor_user_id,
+        &reason,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to cancel salary advance"))?
+    .ok_or_else(|| {
+        AppError::conflict(
+            "salary advance can only be cancelled while pending or approved, and not stale",
+        )
+    })
 }
 
 pub async fn disburse_advance(
@@ -278,7 +307,16 @@ pub async fn disburse_advance(
         installment_amount_paise,
     )
     .await
-    .map_err(|_| AppError::internal("failed to complete advance disbursement"))?
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|database_error| database_error.is_unique_violation())
+        {
+            AppError::conflict("idempotency key was already used for another disbursement")
+        } else {
+            AppError::internal("failed to complete advance disbursement")
+        }
+    })?
     .ok_or_else(|| AppError::conflict("salary advance status changed; reload and try again"))?;
 
     tx.commit()
@@ -307,7 +345,8 @@ pub async fn waive_advance(
         .await
         .map_err(|_| AppError::internal("failed to lock salary advance"))?
         .ok_or_else(|| AppError::not_found("salary advance not found"))?;
-    if !matches!(advance.status.as_str(), "disbursed" | "recovering") || advance.outstanding_paise <= 0
+    if !matches!(advance.status.as_str(), "disbursed" | "recovering")
+        || advance.outstanding_paise <= 0
     {
         return Err(AppError::conflict(
             "salary advance has no outstanding balance to waive",

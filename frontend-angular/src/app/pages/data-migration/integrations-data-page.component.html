@@ -46,7 +46,7 @@
     <section class="panel"><header><h2>API keys</h2>@if (canManageApiClients) {
     <button class="primary" type="button" (click)="openApiKey()">New API key</button>
     }</header><div class="simple-head"><span>Name</span><span>Prefix</span><span>Scopes</span><span>Status</span><span>Actions</span></div>@for (row of apiKeys; track row) {
-    <div class="simple-row"><strong>{{ row.name }}</strong><code>{{ row.keyPrefix }}</code><span>{{ row.scopesJson.join(', ') }}</span><span>{{ row.status }}</span><span class="row-actions">@if (canManageApiClients) {
+    <div class="simple-row"><strong>{{ row.name }}</strong><code>{{ row.keyPrefix }}</code><span>{{ row.scopesJson.join(', ') }}<small>{{ row.rateLimitPerMinute }} req/min · {{ row.ipAllowlistJson.length ? row.ipAllowlistJson.join(', ') : 'Any IP' }}</small></span><span>{{ row.status }}</span><span class="row-actions">@if (canManageApiClients) {
     <button type="button" (click)="rotateApiKey(row)" [disabled]="row.status !== 'active' || busy">Rotate</button>
     }@if (canManageApiClients) {
     <button type="button" (click)="revokeApiKey(row)" [disabled]="row.status !== 'active' || busy">Revoke</button>
@@ -209,7 +209,7 @@
 @if (drawer === 'api-key') {
   <div class="drawer-body"><label>Name<input [ngModel]="apiKeyDraft.name" (ngModelChange)="apiKeyDraft.name = $event" /></label><label>Scopes@for (scope of apiScopes; track scope) {
   <span class="choice"><input type="checkbox" [checked]="apiKeyDraft.scopes.includes(scope)" (change)="toggleScope(scope)" />{{ scope }}</span>
-}</label></div>
+}</label><label>Allowed IP addresses<input [ngModel]="apiKeyDraft.ipAllowlist" (ngModelChange)="apiKeyDraft.ipAllowlist = $event" placeholder="Any IP" /><small>Separate exact IPv4 or IPv6 addresses with commas.</small></label><label>Requests per minute<input type="number" min="1" max="10000" [ngModel]="apiKeyDraft.rateLimitPerMinute" (ngModelChange)="apiKeyDraft.rateLimitPerMinute = $event" /></label></div>
 }
 @if (drawer === 'webhook') {
   <div class="drawer-body"><label>Name<input [(ngModel)]="webhookDraft.name" /></label><label>HTTPS endpoint<input type="url" [(ngModel)]="webhookDraft.endpointUrl" /></label><label>Events@for (event of webhookEvents; track event) {

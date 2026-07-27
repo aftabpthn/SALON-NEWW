@@ -10,9 +10,7 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 #[tokio::test]
 async fn selected_staff_regeneration_updates_only_target_and_blocks_finalized_runs() -> TestResult {
     let Some(pool) = postgres_pool().await? else {
-        eprintln!(
-            "skipped selected staff regeneration test: DATABASE_URL is not configured"
-        );
+        eprintln!("skipped selected staff regeneration test: DATABASE_URL is not configured");
         return Ok(());
     };
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -177,7 +175,10 @@ async fn selected_staff_regeneration_updates_only_target_and_blocks_finalized_ru
         "second attempt after finalization",
     )
     .await;
-    assert!(blocked.is_err(), "finalized payroll run must reject regeneration");
+    assert!(
+        blocked.is_err(),
+        "finalized payroll run must reject regeneration"
+    );
 
     // Cleanup: deleting the run cascades payroll items/events; deleting staff cascades pay rates/attendance.
     sqlx::query("DELETE FROM staff_payroll_runs WHERE tenant_id=$1")

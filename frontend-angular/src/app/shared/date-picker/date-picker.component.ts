@@ -21,22 +21,28 @@ type CalendarDay = {
 })
 export class DatePickerComponent implements OnChanges {
   readonly language = inject(LanguageService);
+  readonly yearOptions = this.buildYearOptions();
   @Input() value = '';
   @Input() ariaLabel = '';
   @Input() disabled = false;
   @Input() rangeMode = false;
+  @Input() reportPresets = false;
   @Input() rangeEnd = '';
   @Output() valueChange = new EventEmitter<string>();
   @Output() rangeEndChange = new EventEmitter<string>();
 
   open = false;
   draft = '';
+  rangeStartInput = '';
+  rangeEndInput = '';
   viewDate = this.startOfMonth(new Date());
   private selectingRangeEnd = false;
 
   ngOnChanges(changes: SimpleChanges) {
     if ('value' in changes || 'rangeEnd' in changes) {
       this.draft = this.displayValue();
+      this.rangeStartInput = this.toDisplayDate(this.value);
+      this.rangeEndInput = this.toDisplayDate(this.rangeEnd);
       const parsed = this.fromIsoDate(this.value);
       if (parsed) this.viewDate = this.startOfMonth(parsed);
     }
@@ -45,6 +51,15 @@ export class DatePickerComponent implements OnChanges {
   get monthLabel() {
     return this.language.formatDate(this.viewDate, { month: 'long', year: 'numeric' });
   }
+
+  get months() {
+    const formatter = new Intl.DateTimeFormat(this.language.locale(), { month: 'short' });
+    return Array.from({ length: 12 }, (_, month) => ({ value: month, label: formatter.format(new Date(2026, month, 1)) }));
+  }
+
+  get selectedMonth() { return this.viewDate.getMonth(); }
+
+  get selectedYear() { return this.viewDate.getFullYear(); }
 
   get datePlaceholder() { return this.language.preferences().dateFormat; }
 
@@ -93,25 +108,48 @@ export class DatePickerComponent implements OnChanges {
     if (parsed) this.viewDate = this.startOfMonth(parsed);
   }
 
+  setRangeDraft(part: 'start' | 'end', value: string) {
+    if (part === 'start') this.rangeStartInput = value;
+    else this.rangeEndInput = value;
+    const iso = this.fromDisplayDate(value);
+    if (!iso) return;
+    let start = this.value;
+    let end = this.rangeEnd;
+    if (part === 'start') {
+      start = this.rangeEnd && iso > this.rangeEnd ? this.rangeEnd : iso;
+      end = this.rangeEnd && iso > this.rangeEnd ? iso : this.rangeEnd;
+    } else {
+      start = this.value && iso < this.value ? iso : this.value;
+      end = this.value && iso < this.value ? this.value : iso;
+    }
+    this.valueChange.emit(start);
+    this.rangeEndChange.emit(end);
+    this.syncRangeInputs(start, end);
+    const parsed = this.fromIsoDate(iso);
+    if (parsed) this.viewDate = this.startOfMonth(parsed);
+  }
+
   normalizeDraft() {
     this.draft = this.displayValue();
   }
 
   selectDate(iso: string) {
     if (this.rangeMode) {
+      let start = iso;
+      let end = '';
       if (!this.value || this.rangeEnd || !this.selectingRangeEnd) {
-        this.valueChange.emit(iso);
-        this.rangeEndChange.emit('');
         this.selectingRangeEnd = true;
       } else if (iso < this.value) {
-        this.rangeEndChange.emit(this.value);
-        this.valueChange.emit(iso);
+        end = this.value;
         this.selectingRangeEnd = false;
       } else {
-        this.rangeEndChange.emit(iso);
+        start = this.value;
+        end = iso;
         this.selectingRangeEnd = false;
       }
-      this.draft = this.displayValue();
+      this.valueChange.emit(start);
+      this.rangeEndChange.emit(end);
+      this.syncRangeInputs(start, end);
       if (!this.selectingRangeEnd) this.open = false;
       return;
     }
@@ -124,6 +162,8 @@ export class DatePickerComponent implements OnChanges {
 
   clear() {
     this.draft = '';
+    this.rangeStartInput = '';
+    this.rangeEndInput = '';
     this.valueChange.emit('');
     if (this.rangeMode) this.rangeEndChange.emit('');
     this.open = false;
@@ -131,16 +171,6 @@ export class DatePickerComponent implements OnChanges {
 
   today() {
     this.selectDate(this.toIsoDate(new Date()));
-  }
-
-  tomorrow() {
-    const date = new Date();
-    date.setDate(date.getDate() + 1);
-    this.selectDate(this.toIsoDate(date));
-  }
-
-  thisWeek() {
-    this.today();
   }
 
   apply() {
@@ -154,6 +184,43 @@ export class DatePickerComponent implements OnChanges {
     const next = new Date(this.viewDate);
     next.setMonth(next.getMonth() + offset);
     this.viewDate = this.startOfMonth(next);
+  }
+
+  setViewMonth(month: string | number) {
+    this.viewDate = new Date(this.selectedYear, Number(month), 1);
+  }
+
+  setViewYear(year: string | number) {
+    this.viewDate = new Date(Number(year), this.selectedMonth, 1);
+  }
+
+  selectQuarter(quarter: 1 | 2 | 3 | 4) {
+    const startMonth = (quarter - 1) * 3;
+    this.selectRangeByDates(new Date(this.selectedYear, startMonth, 1), new Date(this.selectedYear, startMonth + 3, 0));
+  }
+
+  selectViewYear() {
+    this.selectRangeByDates(new Date(this.selectedYear, 0, 1), new Date(this.selectedYear, 11, 31));
+  }
+
+  private buildYearOptions() {
+    const currentYear = new Date().getFullYear();
+    return Array.from({ length: 141 }, (_, index) => currentYear + 20 - index);
+  }
+
+  private syncRangeInputs(start: string, end: string) {
+    this.rangeStartInput = this.toDisplayDate(start);
+    this.rangeEndInput = this.toDisplayDate(end);
+    this.draft = end ? `${this.rangeStartInput} - ${this.rangeEndInput}` : this.rangeStartInput;
+  }
+
+  private selectRangeByDates(startDate: Date, endDate: Date) {
+    const start = this.toIsoDate(startDate);
+    const end = this.toIsoDate(endDate);
+    this.valueChange.emit(start);
+    this.rangeEndChange.emit(end);
+    this.selectingRangeEnd = false;
+    this.syncRangeInputs(start, end);
   }
 
   private startOfMonth(date: Date) {

@@ -23,6 +23,12 @@ const RULE_TYPES: &[&str] = &[
     "gratuity",
     "bonus",
 ];
+const ROUNDING_METHODS: &[&str] = &[
+    "floor_paisa",
+    "nearest_paisa",
+    "ceil_paisa",
+    "nearest_rupee",
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +83,9 @@ pub struct TipPayoutRequest {
 pub struct StatutoryRuleRequest {
     pub rule_type: String,
     pub state_code: Option<String>,
+    pub jurisdiction_code: String,
+    pub rounding_method: String,
+    pub official_reference: String,
     pub rule: Value,
     pub effective_from: NaiveDate,
     pub effective_to: Option<NaiveDate>,
@@ -611,6 +620,28 @@ pub async fn create_rule(
     r: StatutoryRuleRequest,
 ) -> Result<StatutoryRuleRecord, AppError> {
     let kind = required_enum(&r.rule_type, RULE_TYPES, "statutory rule type")?;
+    let jurisdiction =
+        required(&r.jurisdiction_code, 32, "jurisdiction code")?.to_ascii_uppercase();
+    if !jurisdiction
+        .bytes()
+        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(AppError::validation("jurisdiction code is invalid"));
+    }
+    let rounding = required_enum(
+        &r.rounding_method,
+        ROUNDING_METHODS,
+        "statutory rounding method",
+    )?;
+    let official_reference = required(&r.official_reference, 500, "official reference")?;
+    let mut state =
+        clean(r.state_code.as_deref().unwrap_or(""), 20, "state code")?.to_ascii_uppercase();
+    if state.is_empty() {
+        state = jurisdiction
+            .strip_prefix("IN-")
+            .unwrap_or_default()
+            .to_string();
+    }
     validate_rule(&r.rule)?;
     if r.effective_to.is_some_and(|d| d < r.effective_from) {
         return Err(AppError::validation("effective date range is invalid"));
@@ -621,7 +652,10 @@ pub async fn create_rule(
         b,
         actor,
         &kind,
-        &clean(r.state_code.as_deref().unwrap_or(""), 20, "state code")?,
+        &state,
+        &jurisdiction,
+        &rounding,
+        &official_reference,
         &r.rule,
         r.effective_from,
         r.effective_to,
@@ -633,58 +667,61 @@ pub async fn create_rule(
     ))
 }
 
-pub async fn calculate_statutory(
+pub async fn decide_rule(
     db: &PgPool,
     t: &str,
     b: &str,
     actor: &str,
+    id: &str,
+    r: DecisionRequest,
+) -> Result<StatutoryRuleRecord, AppError> {
+    let decision = required_enum(
+        &r.decision,
+        &["approved", "rejected"],
+        "statutory rule decision",
+    )?;
+    let comments = clean(r.comments.as_deref().unwrap_or(""), 500, "review comments")?;
+    if decision == "rejected" && comments.is_empty() {
+        return Err(AppError::validation("rejection comments are required"));
+    }
+    let current = repository::statutory_rule(db, t, b, id)
+        .await
+        .map_err(internal("load statutory rule"))?
+        .ok_or_else(|| AppError::not_found("statutory rule not found"))?;
+    if current.created_by == actor {
+        return Err(AppError::forbidden(
+            "statutory rule creator cannot approve or reject the same rule",
+        ));
+    }
+    if current.approval_status != "pending" || current.version != r.version {
+        return Err(stale());
+    }
+    repository::decide_statutory_rule(db, t, b, id, r.version, actor, &decision, &comments)
+        .await
+        .map_err(internal("decide statutory rule"))?
+        .ok_or_else(stale)
+}
+
+pub async fn calculate_statutory(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    _actor: &str,
     r: StatutoryCalculationRequest,
 ) -> Result<StatutoryCalculationRecord, AppError> {
-    let (item, from, to, gross, run_status) =
+    let (item, _from, _to, _gross, _run_status) =
         repository::payroll_item(db, t, b, &r.payroll_run_id, &r.staff_id)
             .await
             .map_err(internal("load payroll item"))?
             .ok_or_else(|| AppError::not_found("payroll item not found"))?;
-    if matches!(run_status.as_str(), "finalized" | "paid") {
-        return Err(AppError::conflict(
-            "finalized payroll statutory snapshot cannot be recalculated",
-        ));
-    }
-    let rules = repository::effective_rules(db, t, b, to)
+    repository::statutory_calculation_for_item(db, t, b, &item)
         .await
-        .map_err(internal("load effective statutory rules"))?;
-    if rules.is_empty() {
-        return Err(AppError::validation("active statutory rules are required"));
-    }
-    let mut employee = 0;
-    let mut employer = 0;
-    let mut accrual = 0;
-    let mut breakdown = serde_json::Map::new();
-    for rule in rules {
-        let result = calculate_rule(gross, &rule.rule_json)?;
-        employee += result.0;
-        employer += result.1;
-        accrual += result.2;
-        breakdown.insert(rule.rule_type,json!({"ruleId":rule.id,"employeePaise":result.0,"employerPaise":result.1,"accrualPaise":result.2}));
-    }
-    repository::save_statutory_calculation(
-        db,
-        t,
-        b,
-        &r.payroll_run_id,
-        &item,
-        &r.staff_id,
-        from,
-        to,
-        gross,
-        employee,
-        employer,
-        accrual,
-        &Value::Object(breakdown),
-        actor,
-    )
-    .await
-    .map_err(internal("save statutory calculation"))
+        .map_err(internal("load payroll statutory snapshot"))?
+        .ok_or_else(|| {
+            AppError::validation(
+                "generate or regenerate payroll before loading statutory compliance",
+            )
+        })
 }
 
 pub async fn statutory_summary(
@@ -2049,7 +2086,19 @@ fn validate_rule(v: &Value) -> Result<(), AppError> {
     Ok(())
 }
 pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), AppError> {
+    calculate_rule_with_rounding(gross, v, "floor_paisa")
+}
+pub(crate) fn calculate_rule_with_rounding(
+    gross: i64,
+    v: &Value,
+    rounding_method: &str,
+) -> Result<(i64, i64, i64), AppError> {
     validate_rule(v)?;
+    let rounding_method = required_enum(
+        rounding_method,
+        ROUNDING_METHODS,
+        "statutory rounding method",
+    )?;
     let cap = v
         .get("wageCapPaise")
         .and_then(Value::as_i64)
@@ -2067,7 +2116,11 @@ pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), A
         v.get(fixed)
             .and_then(Value::as_i64)
             .unwrap_or_else(|| {
-                wage.saturating_mul(v.get(key).and_then(Value::as_i64).unwrap_or(0)) / 10000
+                rounded_basis_points(
+                    wage,
+                    v.get(key).and_then(Value::as_i64).unwrap_or(0),
+                    &rounding_method,
+                )
             })
             .max(0)
     };
@@ -2076,6 +2129,16 @@ pub(crate) fn calculate_rule(gross: i64, v: &Value) -> Result<(i64, i64, i64), A
         calc("employerBasisPoints", "employerFixedPaise"),
         calc("accrualBasisPoints", "accrualFixedPaise"),
     ))
+}
+fn rounded_basis_points(amount: i64, basis_points: i64, method: &str) -> i64 {
+    let numerator = i128::from(amount.max(0)) * i128::from(basis_points.max(0));
+    let value = match method {
+        "nearest_paisa" => (numerator + 5_000) / 10_000,
+        "ceil_paisa" if numerator > 0 => (numerator + 9_999) / 10_000,
+        "nearest_rupee" => ((numerator + 500_000) / 1_000_000) * 100,
+        _ => numerator / 10_000,
+    };
+    value.min(i128::from(i64::MAX)) as i64
 }
 fn required(v: &str, max: usize, label: &str) -> Result<String, AppError> {
     let v = clean(v, max, label)?;
@@ -2129,7 +2192,7 @@ fn db_write(duplicate: &'static str, a: &'static str) -> impl FnOnce(sqlx::Error
 
 #[cfg(test)]
 mod tests {
-    use super::calculate_rule;
+    use super::{calculate_rule, calculate_rule_with_rounding};
     use super::{
         ceil_div, forecast_confidence, is_due_training, quiet_delay, render_template,
         ManpowerSourceRecord,
@@ -2140,6 +2203,28 @@ mod tests {
     #[test]
     fn statutory_money_uses_basis_points_and_caps() {
         assert_eq!(calculate_rule(2_000_000,&json!({"wageCapPaise":1_500_000,"employeeBasisPoints":1200,"employerBasisPoints":1200})).unwrap(),(180_000,180_000,0));
+        assert_eq!(
+            calculate_rule_with_rounding(101, &json!({"employeeBasisPoints":100}), "floor_paisa")
+                .unwrap()
+                .0,
+            1
+        );
+        assert_eq!(
+            calculate_rule_with_rounding(101, &json!({"employeeBasisPoints":100}), "ceil_paisa")
+                .unwrap()
+                .0,
+            2
+        );
+        assert_eq!(
+            calculate_rule_with_rounding(
+                15_050,
+                &json!({"employeeBasisPoints":10_000}),
+                "nearest_rupee"
+            )
+            .unwrap()
+            .0,
+            15_100
+        );
     }
 
     #[test]

@@ -15,25 +15,11 @@ type StaffRecentItem = { label: string; path: string };
     <section class="staff-app-shell" [class.staff-compact]="preferences().interface.compactMode">
       <button type="button" class="drawer-backdrop" [class.open]="menuOpen()" (click)="closeMenu()" aria-label="Close menu"></button>
       <aside class="staff-sidebar" [class.open]="menuOpen()" [attr.role]="menuOpen() ? 'dialog' : null" [attr.aria-modal]="menuOpen() ? 'true' : null" [attr.aria-label]="menuOpen() ? 'Staff navigation' : null" [attr.inert]="notificationsOpen() || commandOpen() ? '' : null" tabindex="-1" #menuDialog (keydown)="menuOpen() && trapFocus($event, menuDialog)">
-        <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu">Close</button>
-        <div class="brand-card">
-          <span class="brand-kicker">Aura Shine</span>
-          <strong>{{ preferences().workspace.workspaceName }}</strong>
-          <small>{{ roleLabel() }} workspace</small>
-        </div>
+        <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6 6.4 5z"></path></svg></button>
         <a class="user-card" routerLink="/staff/profile" (click)="closeMenu()" aria-label="Open my profile">
           <b>{{ initials() }}</b>
           <div><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div>
         </a>
-        <button type="button" class="theme-button" aria-label="AuraShine light theme is active" aria-pressed="false" (click)="toggleTheme()">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2h1v2h-1zm0 18v-2h1v2h-1zM4 13H2v-1h2v1zm18 0h-2v-1h2v1zM5.6 6.3 4.2 4.9l.7-.7 1.4 1.4-.7.7zm13.5 13.5-1.4-1.4.7-.7 1.4 1.4-.7.7zm0-14.2-.7.7-1.4-1.4.7-.7 1.4 1.4-.7.7zM6.3 18.4l-1.4 1.4-.7-.7 1.4-1.4.7.7zM12.5 7a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"></path></svg><span>Light theme</span>
-        </button>
-        @if (recent().length) {
-          <section class="recent-card">
-            <span>Recent</span>
-            @for (item of recent(); track item.path) { <a [routerLink]="item.path" (click)="activateRecent(item)">{{ item.label }}</a> }
-          </section>
-        }
         <nav>
           @for (group of navGroups(); track group) {
             <p class="nav-group">{{ group }}</p>
@@ -42,7 +28,7 @@ type StaffRecentItem = { label: string; path: string };
             }
           }
         </nav>
-        <button type="button" class="nav-logout" (click)="logout()">Logout</button>
+        <button type="button" class="nav-logout" (click)="logout()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm5.6 4.4L14.2 8.8l2.2 2.2H9v2h7.4l-2.2 2.2 1.4 1.4 4.6-4.6-4.6-4.6z"></path></svg><span>Logout</span></button>
       </aside>
 
        <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
@@ -51,8 +37,8 @@ type StaffRecentItem = { label: string; path: string };
            <a class="staff-identity" routerLink="/staff/profile" [attr.aria-label]="'Open my profile — ' + identitySubtitle()"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div></a>
           <div class="topbar-actions">
              @if (visibleNav().length) { <button type="button" class="search-button" (click)="openCommand()" aria-label="Search permitted staff tools" [attr.aria-expanded]="commandOpen()" #commandButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-5.1-5.1a7 7 0 1 0-1.4 1.4l5.1 5.1 1.4-1.4zM5 10a5 5 0 1 1 10 0A5 5 0 0 1 5 10z"></path></svg><span>Search workspace</span><kbd>Ctrl K</kbd></button> }
-             @if (staff.hasPermission('read:staff')) { <a class="chat-button" routerLink="/staff/chat" routerLinkActive="active" aria-label="Open chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v10h2v1.8L8.3 16H20V6H4zm3 3h10v2H7V9zm0 4h7v2H7v-2z"></path></svg></a> }
-             @if (staff.hasPermission('read:staff')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
+             @if (staff.hasPermission('staff.app.chat.read')) { <a class="chat-button" routerLink="/staff/chat" routerLinkActive="active" aria-label="Open chat" title="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v10h2v1.8L8.3 16H20V6H4zm3 3h10v2H7V9zm0 4h7v2H7v-2z"></path></svg></a> }
+             @if (staff.hasPermission('staff.app.notifications.read')) { <button type="button" class="bell-button" [class.has-unread]="unreadCount() > 0" (click)="toggleNotifications()" aria-label="Open notifications" [attr.aria-expanded]="notificationsOpen()" #notificationButton>
               <svg class="bell-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 10.8c0-3.5-2.1-6.1-5-6.7V3a1 1 0 0 0-2 0v1.1c-2.9.6-5 3.2-5 6.7V15l-1.6 2.4A1 1 0 0 0 5.2 19h13.6a1 1 0 0 0 .8-1.6L18 15v-4.2zM9.7 20a2.4 2.4 0 0 0 4.6 0H9.7z"></path>
               </svg>
@@ -63,16 +49,16 @@ type StaffRecentItem = { label: string; path: string };
           </div>
         </header>
          <main class="staff-content">
-          @if (preferences().defaults.staffHints && !isDashboard()) { <p class="staff-policy-hint">Tip: use search to quickly open permitted staff tools and appointments.</p> }
           <router-outlet />
         </main>
       </div>
 
        <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
          <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
-         @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/calendar" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Calendar')"></path></svg><span>Calendar</span></a> }
-         @if (staff.hasPermission('read:staff')) { <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
-         <a routerLink="/staff/profile" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Profile')"></path></svg><span>Profile</span></a>
+         @if (staff.hasPermission('staff.app.appointments.read')) { <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a> }
+         @if (staff.hasPermission('staff.app.tasks.read')) { <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
+         @if (staff.hasPermission('staff.app.attendance.read')) { <a routerLink="/staff/attendance" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Attendance')"></path></svg><span>Attendance</span></a> }
+         <button type="button" [class.active]="isMoreActive()" (click)="openMenu()" aria-label="Open more staff tools" [attr.aria-expanded]="menuOpen()" #moreButton><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"></path></svg><span>More</span></button>
       </nav>
 
       @if (commandOpen()) {
@@ -92,7 +78,7 @@ type StaffRecentItem = { label: string; path: string };
         </section>
       }
 
-      @if (notificationsOpen() && staff.hasPermission('read:staff')) {
+      @if (notificationsOpen() && staff.hasPermission('staff.app.notifications.read')) {
         <button type="button" class="drawer-backdrop open" (click)="closeNotifications()" aria-label="Close notifications"></button>
         <aside class="notification-drawer open" role="dialog" aria-modal="true" aria-labelledby="staff-notifications-title" tabindex="-1" #notificationDialog (keydown)="trapFocus($event, notificationDialog)">
           <div class="drawer-title"><strong id="staff-notifications-title">Notifications</strong><button type="button" (click)="closeNotifications()">Close</button></div>
@@ -118,31 +104,29 @@ type StaffRecentItem = { label: string; path: string };
     </section>
   `,
   styles: [`
-    .staff-app-shell { min-height: 100vh; display: grid; grid-template-columns: 272px minmax(0, 1fr); background: var(--staff-background); color: var(--staff-text); }
-    .staff-sidebar { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 16px; border-right: 1px solid var(--staff-border); background: var(--staff-surface-glass); backdrop-filter: blur(18px); }
-    .brand-card { padding: 18px; border: 1px solid var(--staff-border-accent); border-radius: 20px; color: var(--staff-text); background: var(--staff-primary-light); }
-    .brand-card span { display: block; color: var(--staff-primary-hover); font-size: .72rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
-    .brand-card strong { display: block; margin-top: 5px; font-size: 1.45rem; }
-    .brand-card small { display: block; margin-top: 4px; color: var(--staff-text-secondary); font-weight: 650; text-transform: capitalize; }
+    .staff-app-shell { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); background: var(--staff-background); color: var(--staff-text); }
+    .staff-sidebar { position: sticky; top: 0; display:flex; flex-direction:column; height: 100vh; overflow: hidden; padding: 10px 8px; border-right: 1px solid var(--staff-border); background: var(--staff-primary-hover); color: var(--staff-on-primary); }
     .menu-button, .drawer-close { display: none; }
     .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: var(--staff-overlay); backdrop-filter: blur(2px); transition: opacity .18s ease; }
     .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
     .menu-button span { display: block; width: 18px; height: 2px; border-radius: 999px; background: var(--staff-text); }
-    .user-card { display: grid; grid-template-columns: 42px 1fr; gap: 10px; align-items: center; margin-top: 12px; padding: 10px; border: 1px solid var(--staff-border); border-radius: 18px; background: var(--staff-surface); color: var(--staff-text); text-decoration: none; cursor: pointer; }
-    .user-card:hover, .user-card:focus-visible { border-color: var(--staff-primary); background: var(--staff-primary-light); }
-    .user-card b, .profile-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 15px; background: var(--staff-primary); color: var(--staff-on-primary); }
+    .user-card { display: grid; grid-template-columns: 36px 1fr; gap: 10px; align-items: center; margin: 4px 0 6px; padding: 8px; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; background: rgba(255,255,255,.08); color: var(--staff-on-primary); text-decoration: none; cursor: pointer; }
+    .user-card:hover, .user-card:focus-visible { border-color: rgba(255,255,255,.35); background: rgba(255,255,255,.14); }
+    .user-card b { display:grid; place-items:center; width:36px; height:36px; border-radius:6px; background:var(--staff-on-primary); color:var(--staff-primary-hover); }
+    .profile-avatar { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 15px; background: var(--staff-primary); color: var(--staff-on-primary); }
     .user-card strong, .user-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .user-card small { color: var(--staff-text-secondary); font-weight: 600; }
+    .user-card small { color: rgba(255,255,255,.72); font-weight: 600; }
     .recent-card { display: grid; gap: 6px; margin-top: 12px; padding: 10px; border: 1px solid var(--staff-border); border-radius: 18px; background: var(--staff-surface-secondary); }
-    .recent-card span, .nav-group { margin: 12px 2px 4px; color: var(--staff-text-secondary); font-size: .66rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .recent-card span, .nav-group { margin: 12px 8px 4px; color: rgba(255,255,255,.62); font-size: .64rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
     .recent-card a { display:block;min-height:44px;padding:12px 4px;color:var(--staff-text);font-size:.82rem;font-weight:650;text-decoration:none; }
-    nav { display: grid; gap: 5px; margin-top: 14px; }
-    nav a { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; min-height:48px;padding: 8px 10px; border: 1px solid transparent; border-radius: 16px; color: var(--staff-text-secondary); font-weight: 700; text-decoration: none; }
-    nav a span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 12px; background: var(--staff-surface-secondary); color: var(--staff-text-secondary); font-size: .7rem; font-weight: 800; }
+    .staff-sidebar nav { display: grid; flex:1; align-content:start; gap: 3px; min-height:0; margin-top: 0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+    .staff-sidebar nav a { display: grid; grid-template-columns: 34px 1fr; gap: 9px; align-items: center; min-height:44px;padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; color: rgba(255,255,255,.82); font-size:.82rem; font-weight: 600; text-decoration: none; }
+    .staff-sidebar nav a span { display: grid; place-items: center; width: 34px; height: 34px; color: inherit; }
     svg { width: 17px; height: 17px; fill: currentColor; }
-    nav a.active, nav a:hover { border-color: var(--staff-border-accent); background: var(--staff-primary-light); color: var(--staff-primary-hover); }
-    nav a.active span { background: var(--staff-primary); color: var(--staff-on-primary); }
-    .nav-logout { width: 100%; min-height:46px;margin-top: 12px; padding: 11px 13px; border: 1px solid var(--staff-error-border); border-radius: 16px; background: var(--staff-error-surface); color: var(--staff-error-text); font-weight: 750; text-align: left; }
+    .staff-sidebar nav a.active, .staff-sidebar nav a:hover { border-color: var(--staff-border-accent); background: var(--staff-primary-light); color: var(--staff-primary-hover); }
+    .nav-logout { display:flex; align-items:center; gap:9px; width:100%; min-height:44px; margin-top:6px; padding:4px 12px; border:1px solid rgba(255,255,255,.18); border-radius:6px; background:transparent; color:rgba(255,255,255,.86); font-weight:600; text-align:left; }
+    .nav-logout:hover { border-color:rgba(255,255,255,.35); background:rgba(255,255,255,.12); color:var(--staff-on-primary); }
+    .nav-logout svg { width:18px; height:18px; }
     .staff-main-shell { min-width: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100vh; overflow: hidden; }
     .staff-topbar { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height:var(--staff-header-height);padding: 3px 16px; border-bottom: 1px solid var(--staff-border); background: var(--staff-surface-glass); backdrop-filter: blur(16px); }
     .staff-identity { display: flex; align-items:center; min-width: 0; max-width:min(420px,48vw); gap: 10px; color:inherit; text-decoration:none; }
@@ -161,7 +145,7 @@ type StaffRecentItem = { label: string; path: string };
     .theme-button { display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:46px;margin-top:12px;padding:0 13px;border:1px solid var(--staff-border);border-radius:16px;background:var(--staff-surface-secondary);color:var(--staff-text);font-weight:700;text-align:left; }
     .theme-button svg { width:18px;height:18px;fill:currentColor; }
     .theme-button span { font-size:.76rem; }
-    .search-button:hover, .search-button:focus-visible, .chat-button:focus-visible, .theme-button:focus-visible, .bell-button:focus-visible, .menu-button:focus-visible, nav a:focus-visible, .nav-logout:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 2px; }
+    .search-button:hover, .search-button:focus-visible, .chat-button:focus-visible, .theme-button:focus-visible, .bell-button:focus-visible, .menu-button:focus-visible, .staff-sidebar nav a:focus-visible, .nav-logout:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 2px; }
     .search-button small { margin-left: 6px; opacity: .72; }
     .bell-button { position: relative; overflow: visible; display: inline-grid; place-items: center; width: 44px; height: 44px; min-width: 44px; padding: 0; border-radius: 16px; }
     .chat-button { display:inline-grid;place-items:center;width:44px;height:44px;min-width:44px;border-radius:16px;text-decoration:none; }
@@ -222,7 +206,7 @@ type StaffRecentItem = { label: string; path: string };
        .staff-app-shell { --staff-header-height: calc(54px + env(safe-area-inset-top)); display: block; min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
        .staff-main-shell { display: block; height: 100dvh; min-height: 100dvh; overflow-y: auto; overflow-x: hidden; scroll-padding-top: var(--staff-header-height); -webkit-overflow-scrolling: touch; }
         .staff-topbar { position: sticky; top: 0; z-index: 20; min-height: var(--staff-header-height); padding: calc(3px + env(safe-area-inset-top)) 2px 3px 12px; gap: 2px; }
-      .menu-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; width: 48px; height: 48px; margin: 0 2px 0 -10px; padding: 0; border: 0; border-radius: 14px; background: transparent; color: var(--staff-text); font-size: .78rem; font-weight: 750; box-shadow: none; }
+      .menu-button { display: none; }
       .staff-topbar > div:nth-child(2) { min-width: 0; flex: 1 1 auto; }
        .staff-identity { flex: 1 1 auto; width:0; max-width:none; gap: 10px; overflow: hidden; }
       .profile-avatar { width: 38px; height: 38px; background: color-mix(in srgb, var(--staff-primary) 76%, transparent); }
@@ -242,27 +226,26 @@ type StaffRecentItem = { label: string; path: string };
       .notification-drawer { top: 0; right: 0; bottom: 0; left: auto; width: 72vw; min-width: 0; max-width: 360px; height: 100dvh; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-left: 1px solid var(--staff-border); border-radius: 22px 0 0 22px; box-shadow: -18px 0 40px rgba(31, 41, 55, .14); }
       .notification-drawer .drawer-title { position: sticky; top: 0; z-index: 2; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); box-shadow: 0 6px 16px rgba(31, 41, 55, .08); }
        .mobile-bottom-nav { position: fixed; left: 50%; bottom: calc(var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom)); z-index: 27; display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); width: min(calc(100vw - 20px), 430px); min-height: var(--staff-mobile-nav-height); padding: 6px; gap: 3px; transform: translateX(-50%); border: 1px solid var(--staff-border); border-radius: 22px; background: var(--staff-surface-glass); box-shadow: var(--staff-shadow-elevated); backdrop-filter: blur(18px); }
-       .mobile-bottom-nav a { position:relative;display: grid; grid-template-columns: 1fr; grid-template-rows: 23px auto; place-items: center; align-content: center; gap: 2px; min-width: 0; padding: 6px 3px; border: 0; border-radius: 16px; color: var(--staff-text-secondary); font-size: .62rem; font-weight: 700; line-height: 1; text-decoration: none; transition:transform var(--staff-motion-fast) var(--staff-motion-ease),opacity var(--staff-motion-fast) var(--staff-motion-ease); } .mobile-bottom-nav a span, .mobile-bottom-nav a.active span { display: block; width: auto; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; text-transform: none; }
-       .mobile-bottom-nav a.active::after { position:absolute;top:2px;width:16px;height:2px;border-radius:999px;background:var(--staff-primary);content:""; }
-      .mobile-bottom-nav a svg { display: block; width: 20px; height: 20px; margin: 0; fill: currentColor; }
-       .mobile-bottom-nav a.active { color: var(--staff-primary-hover); background: transparent; }
-        .mobile-bottom-nav a.active svg { box-sizing:content-box;padding:2px;border-radius:7px;background:var(--staff-primary-light); }
+       .mobile-bottom-nav :is(a,button) { position:relative;display: grid; grid-template-columns: 1fr; grid-template-rows: 23px auto; place-items: center; align-content: center; gap: 2px; min-width: 0; min-height:44px; padding: 6px 3px; border: 0; border-radius: 16px; background:transparent; color: var(--staff-text-secondary); font:inherit; font-size: .62rem; font-weight: 700; line-height: 1; text-decoration: none; transition:transform var(--staff-motion-fast) var(--staff-motion-ease),opacity var(--staff-motion-fast) var(--staff-motion-ease); } .mobile-bottom-nav :is(a,button) span, .mobile-bottom-nav :is(a,button).active span { display: block; width: auto; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; color: inherit; font-size: inherit; font-weight: inherit; letter-spacing: 0; text-transform: none; }
+       .mobile-bottom-nav :is(a,button).active::after { position:absolute;top:2px;width:16px;height:2px;border-radius:999px;background:var(--staff-primary);content:""; }
+      .mobile-bottom-nav :is(a,button) svg { display: block; width: 20px; height: 20px; margin: 0; fill: currentColor; }
+       .mobile-bottom-nav :is(a,button).active { color: var(--staff-primary-hover); background: var(--staff-primary-light); }
       .drawer-backdrop { display: block; position: fixed; inset: 0; z-index: 29; border: 0; opacity: 0; pointer-events: none; background: rgba(31,41,55,.28); backdrop-filter: blur(2px); transition: opacity .18s ease; }
       .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
-      .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 72vw; min-width: 0; max-width: 360px; box-sizing: border-box; height: 100dvh; overflow: auto; padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0 22px 22px 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 40px rgba(31, 41, 55, .14); }
+      .staff-sidebar { position: fixed; left: 0; top: 0; bottom: 0; z-index: 30; width: 55vw; min-width: 0; box-sizing: border-box; height: 100dvh; padding: calc(10px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left)); border-right: 1px solid var(--staff-border); border-radius: 0; transform: translateX(-104%); transition: transform .2s ease; box-shadow: 18px 0 36px rgba(15,35,64,.22); }
       .staff-sidebar.open { transform: translateX(0); }
-      .drawer-close { position: sticky; top: 0; z-index: 3; display: block; width: 100%; min-height: 48px; margin-bottom: 10px; padding: 9px 12px; border: 1px solid var(--staff-border); border-radius: 16px; background: var(--staff-surface-secondary); color: var(--staff-text); font-weight: 750; text-align: left; box-shadow: 0 6px 16px rgba(31, 41, 55, .08); }
-      .brand-card { display: block; }
-      nav { display: grid; gap: 6px; margin-top: 14px; overflow: visible; }
-      nav a { min-width: 0; padding: 12px 13px; border-radius: 16px; text-align: left; font-size: .92rem; white-space: normal; background: transparent; }
-      nav a.active { background: var(--staff-primary-light); color: var(--staff-primary-hover); border-color: var(--staff-border-accent); }
+      .drawer-close { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 8px; z-index: 3; display: grid; place-items:center; width: 44px; min-height: 44px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--staff-on-primary); box-shadow:none; }
+      .drawer-close svg { width: 20px; height: 20px; fill: currentColor; }
+      .user-card { margin-top:4px; padding-right:52px; }
+      .staff-sidebar nav { margin-top:4px; }
+      .staff-sidebar nav a { min-width: 0; min-height:44px; padding: 4px 8px; border-radius:6px; text-align: left; font-size: .86rem; white-space: normal; }
     }
      @media (max-width: 560px) {
       .staff-topbar { align-items: center; display: flex; }
       .staff-topbar strong { display: block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .network-status { display: none; }
 
-      nav a { padding: 12px 13px; }
+      .staff-sidebar nav a { padding: 4px 8px; }
      }
       @media (max-width: 380px) {
         .profile-avatar { display:none; }
@@ -281,6 +264,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   @ViewChild("commandInput") private commandInput?: ElementRef<HTMLInputElement>;
   @ViewChild("menuDialog") private menuDialog?: ElementRef<HTMLElement>;
   @ViewChild("menuButton") private menuButton?: ElementRef<HTMLButtonElement>;
+  @ViewChild("moreButton") private moreButton?: ElementRef<HTMLButtonElement>;
   @ViewChild("commandButton") private commandButton?: ElementRef<HTMLButtonElement>;
   @ViewChild("notificationButton") private notificationButton?: ElementRef<HTMLButtonElement>;
   readonly menuOpen = signal(false);
@@ -303,32 +287,36 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   readonly theme = signal<"light" | "dark">("light");
   private pollTimer = 0;
   private reconnectTimer = 0;
+  private posReconnectTimer = 0;
   private toastTimer = 0;
   private socket: WebSocket | null = null;
+  private posSocket: WebSocket | null = null;
 
   private readonly nav: StaffNavItem[] = [
-    { label: "Dashboard", path: "/staff/dashboard", iconPath: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z", group: "Home", permission: "read:appointments" },
-    { label: "Appointments", path: "/staff/appointments", iconPath: "M7 2v2H5a2 2 0 0 0-2 2v14h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5V7h14v3z", group: "Work", permission: "read:appointments" },
-    { label: "Business", path: "/staff/business", iconPath: "M3 21V3h8v4h10v14H3zm3-3h2v-3H6v3zm0-6h2V9H6v3zm7 6h2v-3h-2v3zm0-6h2V9h-2v3zm5 6h1v-3h-1v3zm0-6h1V9h-1v3z", group: "Work", permission: "read:appointments" },
-    { label: "Tasks", path: "/staff/tasks", iconPath: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z", group: "Work", permission: "read:staff" },
-    { label: "Attendance", path: "/staff/attendance", iconPath: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z", group: "Work", anyPermissions: ["allow:staff-checkin-checkout", "read:staff", "write:staff"] },
-    { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "read:staff" },
-    { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "read:staff" },
-    { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "read:staff" },
-    { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "read:staff" },
-    { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "read:staff" },
-    { label: "Chat", path: "/staff/chat", iconPath: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z", group: "Comms", permission: "read:staff" },
-    { label: "Payroll", path: "/staff/payroll", iconPath: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", group: "Account", anyPermissions: ["read:payroll", "read:finance"] },
-    { label: "Leaves", path: "/staff/leaves", iconPath: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z", group: "Account", permission: "read:staff" },
-    { label: "Profile", path: "/staff/profile", iconPath: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-6 1.7-6 3.8V20h12v-2.2c0-2.1-2.7-3.8-6-3.8z", group: "Account" },
-    { label: "Settings", path: "/staff/settings", iconPath: "M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7 7 0 0 0 7 6L4.6 5l-2 3.5 2 1.5A8 8 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.6 1.5L10 21h4l.4-2.5A7 7 0 0 0 17 17l2.4 1 2-3.5-2-1.5zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z", group: "Account" }
+    { label: "Dashboard", path: "/staff/dashboard", iconPath: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z", group: "Home", permission: "staff.app.dashboard.read" },
+    { label: "Appointments", path: "/staff/appointments", iconPath: "M7 2v2H5a2 2 0 0 0-2 2v14h18V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 8H5V7h14v3z", group: "Work", permission: "staff.app.appointments.read" },
+    { label: "Business", path: "/staff/business", iconPath: "M3 21V3h8v4h10v14H3zm3-3h2v-3H6v3zm0-6h2V9H6v3zm7 6h2v-3h-2v3zm0-6h2V9h-2v3zm5 6h1v-3h-1v3zm0-6h1V9h-1v3z", group: "Work", permission: "staff.app.business.read" },
+    { label: "Offers", path: "/staff/offers", iconPath: "M20 12v8H4v-8h16zM7 4a3 3 0 0 1 5 2.2A3 3 0 1 1 17 4c0 1.1-.6 2-1.4 2.5H20v4H4v-4h4.4A3 3 0 0 1 7 4zm2 0a1 1 0 1 0 1 1H9V4zm5 1h-1a1 1 0 1 0 1-1v1z", group: "Work", permission: "staff.app.offers.read" },
+    { label: "Tasks", path: "/staff/tasks", iconPath: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z", group: "Work", permission: "staff.app.tasks.read" },
+    { label: "Attendance", path: "/staff/attendance", iconPath: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z", group: "Work", permission: "staff.app.attendance.read" },
+    { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "staff.app.roster.read" },
+    { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "staff.app.calendar.read" },
+    { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "staff.app.performance.read" },
+    { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "staff.app.leaderboard.read" },
+    { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "staff.app.reports.read" },
+    { label: "Chat", path: "/staff/chat", iconPath: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z", group: "Comms", permission: "staff.app.chat.read" },
+    { label: "Payroll", path: "/staff/payroll", iconPath: "M4 6h16v12H4V6zm2 2v8h12V8H6zm6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", group: "Account", permission: "staff.app.payroll.read" },
+    { label: "Leaves", path: "/staff/leaves", iconPath: "M12 2C8 6 6 9 6 12a6 6 0 0 0 12 0c0-3-2-6-6-10z", group: "Account", permission: "staff.app.leaves.read" },
+    { label: "Feedback", path: "/staff/feedback", iconPath: "M4 4h16v11H8l-4 4V4zm4 4v2h8V8H8zm0 4v2h5v-2H8z", group: "Account", permission: "staff.app.feedback.read" },
+    { label: "Profile", path: "/staff/profile", iconPath: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-6 1.7-6 3.8V20h12v-2.2c0-2.1-2.7-3.8-6-3.8z", group: "Account", permission: "staff.app.profile.read" },
+    { label: "Settings", path: "/staff/settings", iconPath: "M19.4 13.5c.1-.5.1-1 .1-1.5s0-1-.1-1.5l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A7 7 0 0 0 7 6L4.6 5l-2 3.5 2 1.5A8 8 0 0 0 4.5 12c0 .5 0 1 .1 1.5l-2 1.5 2 3.5L7 17a7 7 0 0 0 2.6 1.5L10 21h4l.4-2.5A7 7 0 0 0 17 17l2.4 1 2-3.5-2-1.5zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z", group: "Account", permission: "staff.app.settings.read" }
   ];
 
   readonly commandResults = computed(() => {
     const text = this.query().trim().toLowerCase();
     const navItems = this.visibleNav().map((item) => ({ ...item }));
-    const notices = this.staff.hasPermission("read:staff") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
-    const business = this.staff.hasPermission("read:appointments") ? (this.os()?.timeline || []).map((item) => ({ label: item.serviceNames?.join(", ") || "Appointment", path: "/staff/business", iconPath: this.iconFor("Business"), group: "Scheduled work" })) : [];
+    const notices = this.staff.hasPermission("staff.app.notifications.read") ? (this.os()?.notifications || []).map((note) => ({ label: note.title, path: "/staff/notifications", iconPath: this.iconFor("Notifications"), group: note.body || "Notification" })) : [];
+    const business = this.staff.hasPermission("staff.app.business.read") ? (this.os()?.timeline || []).map((item) => ({ label: item.serviceNames?.join(", ") || "Appointment", path: "/staff/business", iconPath: this.iconFor("Business"), group: "Scheduled work" })) : [];
     const all = [...navItems, ...notices, ...business];
     if (!text) return all.slice(0, 12);
     return all
@@ -346,6 +334,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     void this.loadShellData();
     void this.flushOfflineQueue();
     void this.connectRealtime();
+    void this.connectPosRealtime();
     void this.push.refreshStatus();
     this.pollTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && !this.realtimeConnected()) void this.loadShellData();
@@ -355,12 +344,14 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   ngOnDestroy() {
     window.clearInterval(this.pollTimer);
     window.clearTimeout(this.reconnectTimer);
+    window.clearTimeout(this.posReconnectTimer);
     window.clearTimeout(this.toastTimer);
     this.socket?.close();
+    this.posSocket?.close();
     this.setOverlayLock(false);
   }
 
-  @HostListener("window:online") onOnline() { this.online.set(true); void this.flushOfflineQueue(); void this.connectRealtime(); }
+  @HostListener("window:online") onOnline() { this.online.set(true); void this.flushOfflineQueue(); void this.connectRealtime(); void this.connectPosRealtime(); }
   @HostListener("window:offline") onOffline() { this.online.set(false); this.realtimeConnected.set(false); }
   @HostListener("window:keydown", ["$event"])
   onKeydown(event: KeyboardEvent) {
@@ -397,7 +388,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   private touchStartX = 0;
   private touchStartY = 0;
-  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/calendar", "/staff/tasks", "/staff/profile"];
+  private readonly mobileSwipeRoutes = ["/staff/dashboard", "/staff/appointments", "/staff/tasks", "/staff/attendance"];
 
   private navigateMobileSwipe(direction: number) {
     const current = this.router.url.split("?")[0];
@@ -442,6 +433,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   isDashboard(): boolean { return this.router.url.split("?")[0] === "/staff/dashboard"; }
+
+  isMoreActive(): boolean { return !this.mobileSwipeRoutes.includes(this.router.url.split("?")[0]); }
 
   toggleTheme() {
     this.applyLightTheme();
@@ -494,7 +487,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     const wasOpen = this.menuOpen();
     this.menuOpen.set(false);
     this.syncOverlayLock();
-    if (wasOpen && restoreFocus) window.setTimeout(() => this.menuButton?.nativeElement.focus(), 0);
+    if (wasOpen && restoreFocus) window.setTimeout(() => (this.moreButton || this.menuButton)?.nativeElement.focus(), 0);
   }
 
   private searchScore(label: string, group: string, query: string): number {
@@ -571,7 +564,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   private async loadShellData() {
     try {
       const [os, preferences] = await Promise.all([
-        this.staff.enterpriseOs(),
+        this.staff.enterpriseOs({}, false),
         this.staff.workspacePreferences().catch(() => this.preferences())
       ]);
       this.os.set(os);
@@ -589,11 +582,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     if (!this.online() || !this.staff.isAuthenticated()) return;
     if (this.socket && ([WebSocket.CONNECTING, WebSocket.OPEN] as number[]).includes(this.socket.readyState)) return;
     let url = "";
-    try { url = await this.staff.realtimeSocketTicketUrl(); } catch { this.scheduleRealtimeReconnect(); return; }
+    try { url = this.staff.appointmentRealtimeSocketUrl(); } catch { this.scheduleRealtimeReconnect(); return; }
     if (!this.online() || !this.staff.isAuthenticated()) return;
     if (!url) return;
     try {
-      const socket = new WebSocket(url);
+      const socket = new WebSocket(url, this.staff.realtimeSocketProtocols());
       this.socket = socket;
       socket.onopen = () => {
         this.realtimeConnected.set(true);
@@ -615,6 +608,44 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     this.reconnectTimer = window.setTimeout(() => void this.connectRealtime(), 5000);
   }
 
+  private connectPosRealtime() {
+    if (!this.online() || !this.staff.isAuthenticated()) return;
+    if (this.posSocket && ([WebSocket.CONNECTING, WebSocket.OPEN] as number[]).includes(this.posSocket.readyState)) return;
+    let url = "";
+    try { url = this.staff.posRealtimeSocketUrl(); } catch { this.schedulePosRealtimeReconnect(); return; }
+    if (!url) return;
+    try {
+      const socket = new WebSocket(url, this.staff.realtimeSocketProtocols());
+      this.posSocket = socket;
+      socket.onopen = () => {
+        this.staff.invalidateCachedReads();
+        window.dispatchEvent(new CustomEvent("aura:offers-updated"));
+      };
+      socket.onmessage = (event) => {
+        let frame: { type?: string; entityType?: string } = {};
+        try { frame = JSON.parse(String(event.data)); } catch { return; }
+        if (frame.type !== "pos.updated") return;
+        this.staff.invalidateCachedReads();
+        if (frame.entityType === "offer") {
+          window.dispatchEvent(new CustomEvent("aura:offers-updated"));
+          return;
+        }
+        window.dispatchEvent(new CustomEvent("aura:business-updated"));
+      };
+      socket.onerror = () => socket.close();
+      socket.onclose = () => {
+        if (this.online() && this.staff.isAuthenticated()) this.schedulePosRealtimeReconnect();
+      };
+    } catch {
+      this.schedulePosRealtimeReconnect();
+    }
+  }
+
+  private schedulePosRealtimeReconnect() {
+    window.clearTimeout(this.posReconnectTimer);
+    this.posReconnectTimer = window.setTimeout(() => this.connectPosRealtime(), 5000);
+  }
+
   private handleRealtimeMessage(raw: unknown) {
     let frame: { type?: string } = {};
     try { frame = JSON.parse(String(raw)); } catch { return; }
@@ -622,7 +653,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     if (["staff:clocked_in", "staff:clocked_out", "staff:break_started", "staff:break_ended"].includes(frame.type)) {
       window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     }
-    if (frame.type.startsWith("staff-self.") || ["dashboard.updated", "booking.updated", "queue.updated"].includes(frame.type)) {
+    if (frame.type === "appointment.updated") {
+      this.staff.invalidateCachedReads();
+      window.dispatchEvent(new CustomEvent("aura:appointments-updated"));
+    }
+    if (frame.type.startsWith("staff-self.") || ["appointment.updated", "dashboard.updated", "booking.updated", "queue.updated"].includes(frame.type)) {
       void this.loadShellData();
     }
   }

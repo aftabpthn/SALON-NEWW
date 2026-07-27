@@ -52,7 +52,7 @@
               @for (row of section.rows; track trackRow($index, row)) {
                 <tr>
                   @for (column of section.columns; track trackColumn($index, column)) {
-                    <td [attr.data-column]="column">{{ display(row[column]) }}</td>
+                    <td [attr.data-column]="column" [attr.title]="display(row[column])">{{ display(row[column], column) }}</td>
                   }
                 </tr>
               }
@@ -64,5 +64,130 @@
         <div class="empty-state">{{ 'staff.ui.e619c5b961' | translate }}</div>
       }
     </section>
+  }
+
+  @if (taskDrawerOpen) {
+    <div class="drawer-backdrop" (click)="closeTaskDrawer()">
+      <aside class="task-drawer" role="dialog" aria-modal="true" aria-labelledby="task-drawer-title" (click)="$event.stopPropagation()">
+        <header class="drawer-header">
+          <h2 id="task-drawer-title">Add task</h2>
+          <button class="icon-button" type="button" aria-label="Close" title="Close" (click)="closeTaskDrawer()" [disabled]="taskSaving">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <form class="task-form" (ngSubmit)="saveTask()">
+          @if (taskError) { <p class="error form-error">{{ taskError }}</p> }
+
+          <div class="mode-control" role="group" aria-label="Task mode">
+            <button type="button" [class.active]="taskForm.mode === 'service_target'" (click)="taskForm.mode = 'service_target'">Service target</button>
+            <button type="button" [class.active]="taskForm.mode === 'manual'" (click)="taskForm.mode = 'manual'">Manual task</button>
+          </div>
+
+          @if (taskForm.mode === 'service_target') {
+            <div class="form-grid">
+              <label>
+                <span>Assign to</span>
+                <select name="assigneeType" [(ngModel)]="taskForm.assigneeType" [disabled]="taskSaving">
+                  <option value="job_title">Staff category</option>
+                  <option value="staff">Individual staff</option>
+                </select>
+              </label>
+              @if (taskForm.assigneeType === 'job_title') {
+                <label>
+                  <span>Staff category</span>
+                  <select name="jobTitle" [(ngModel)]="taskForm.jobTitle" [disabled]="taskOptionsLoading || taskSaving" required>
+                    <option value="">Select category</option>
+                    @for (category of staffCategories; track category) { <option [value]="category">{{ category }}</option> }
+                  </select>
+                </label>
+              } @else {
+                <label>
+                  <span>Staff</span>
+                  <select name="staffId" [(ngModel)]="taskForm.staffId" [disabled]="taskOptionsLoading || taskSaving" required>
+                    <option value="">Select staff</option>
+                    @for (staff of staffOptions; track staff.id) { <option [value]="staff.id">{{ staffOptionLabel(staff) }}</option> }
+                  </select>
+                </label>
+              }
+            </div>
+
+            <div class="form-grid">
+              <label>
+                <span>Service category</span>
+                <select name="serviceCategory" [(ngModel)]="taskForm.serviceCategory" (ngModelChange)="taskForm.serviceId = ''" [disabled]="taskSaving">
+                  <option value="">All categories</option>
+                  @for (category of serviceCategories; track category) { <option [value]="category">{{ category }}</option> }
+                </select>
+              </label>
+              <label>
+                <span>Service</span>
+                <select name="serviceId" [(ngModel)]="taskForm.serviceId" [disabled]="taskOptionsLoading || taskSaving" required>
+                  <option value="">Select service</option>
+                  @for (service of filteredServiceOptions; track service.id) { <option [value]="service.id">{{ service.name }}</option> }
+                </select>
+              </label>
+            </div>
+
+            <label>
+              <span>Target quantity</span>
+              <input name="targetCount" type="number" min="1" max="10000" step="1" [(ngModel)]="taskForm.targetCount" placeholder="Enter quantity" [disabled]="taskSaving" required />
+            </label>
+
+            <div class="form-grid">
+              <label><span>Start date</span><as-date-picker ariaLabel="Target start date" [(value)]="taskForm.startDate" [disabled]="taskSaving"></as-date-picker></label>
+              <label><span>End date</span><as-date-picker ariaLabel="Target end date" [(value)]="taskForm.endDate" [disabled]="taskSaving"></as-date-picker></label>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                <span>Reward</span>
+                <select name="rewardType" [(ngModel)]="taskForm.rewardType" [disabled]="taskSaving">
+                  <option value="none">No reward</option><option value="bonus">Bonus amount</option><option value="gift">Gift</option><option value="other">Other</option>
+                </select>
+              </label>
+              @if (taskForm.rewardType === 'bonus') {
+                <label><span>Bonus amount (INR)</span><input name="rewardAmount" type="number" min="0" step="0.01" [(ngModel)]="taskForm.rewardAmount" placeholder="Enter amount" [disabled]="taskSaving" /></label>
+              }
+            </div>
+            @if (taskForm.rewardType === 'gift' || taskForm.rewardType === 'other') {
+              <label><span>Reward details</span><input name="rewardDescription" [(ngModel)]="taskForm.rewardDescription" maxlength="500" [disabled]="taskSaving" /></label>
+            }
+          } @else {
+            <label>
+              <span>Staff</span>
+              <select name="staffId" [(ngModel)]="taskForm.staffId" [disabled]="taskOptionsLoading || taskSaving" required>
+                <option value="">{{ taskOptionsLoading ? 'Loading staff…' : 'Select staff' }}</option>
+                @for (staff of staffOptions; track staff.id) { <option [value]="staff.id">{{ staffOptionLabel(staff) }}</option> }
+              </select>
+            </label>
+            <label><span>Task title</span><input name="title" [(ngModel)]="taskForm.title" maxlength="200" [disabled]="taskSaving" required /></label>
+            <label><span>Description</span><textarea name="description" [(ngModel)]="taskForm.description" maxlength="4000" rows="4" [disabled]="taskSaving"></textarea></label>
+            <div class="form-grid">
+            <label>
+              <span>Type</span>
+              <select name="taskType" [(ngModel)]="taskForm.taskType" [disabled]="taskSaving">
+                @for (type of taskTypes; track type) { <option [value]="type">{{ label(type) }}</option> }
+              </select>
+            </label>
+            <label>
+              <span>Priority</span>
+              <select name="priority" [(ngModel)]="taskForm.priority" [disabled]="taskSaving">
+                @for (priority of taskPriorities; track priority) { <option [value]="priority">{{ label(priority) }}</option> }
+              </select>
+            </label>
+            </div>
+            <label><span>Due date</span><as-date-picker ariaLabel="Task due date" [(value)]="taskForm.dueDate" [disabled]="taskSaving"></as-date-picker></label>
+          }
+
+          <footer class="drawer-footer">
+            <button type="button" (click)="closeTaskDrawer()" [disabled]="taskSaving">Cancel</button>
+            <button class="primary-action" type="submit" [disabled]="!canSaveTask">
+              <i class="bi bi-check-lg" aria-hidden="true"></i>{{ taskSaving ? 'Saving…' : 'Save task' }}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>
   }
 </section>
