@@ -109,16 +109,22 @@ fn compute_statutory(
         if rule_type == "esic" && !profile.esic_opt_in {
             continue;
         }
-        let (employee, employer, accrual) =
-            match staff_enterprise_service::calculate_rule(gross_paise, &rule.rule_json) {
-                Ok(v) => v,
-                Err(_) => {
-                    result
-                        .errors
-                        .push(format!("Statutory rule for {rule_type} is invalid"));
-                    continue;
-                }
-            };
+        if !staff_enterprise_service::rule_applies(gross_paise, &rule.applicability_json) {
+            continue;
+        }
+        let (employee, employer, accrual) = match staff_enterprise_service::calculate_rule(
+            gross_paise,
+            &rule.rule_json,
+            &rule.rounding_method,
+        ) {
+            Ok(v) => v,
+            Err(_) => {
+                result
+                    .errors
+                    .push(format!("Statutory rule for {rule_type} is invalid"));
+                continue;
+            }
+        };
         if employee == 0 && employer == 0 && accrual == 0 {
             continue;
         }
@@ -3372,6 +3378,11 @@ mod tests {
             effective_to: None,
             active: true,
             version: 1,
+            rounding_method: "floor".to_string(),
+            official_reference: "test reference".to_string(),
+            approved_by: "test approver".to_string(),
+            approved_at: Some(chrono::Utc::now()),
+            applicability_json: serde_json::json!({}),
             created_at: chrono::Utc::now(),
             updated_at: None,
         }
@@ -3462,7 +3473,7 @@ mod tests {
         let map = best_statutory_rules(&rules);
         let opted_out_pf = profile("", false, true);
         let result = compute_statutory(1_000_000, &map, true, Some(&opted_out_pf));
-        assert_eq!(result.employee_paise, 12_500); // only ESIC (0.75%) applied, PF skipped
+        assert_eq!(result.employee_paise, 7_500); // only ESIC (0.75% of 1_000_000) applied, PF skipped
         assert!(result.errors.iter().any(|e| e.contains("ESIC number")));
         assert!(!result.errors.iter().any(|e| e.contains("UAN")));
     }

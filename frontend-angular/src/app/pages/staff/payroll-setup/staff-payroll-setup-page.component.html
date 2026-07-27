@@ -166,6 +166,16 @@
             <label>Employer fixed (INR)<input type="text" [(ngModel)]="statutoryForm.employerFixedPaise" placeholder="" /></label>
             <label>Wage cap (INR)<input type="text" [(ngModel)]="statutoryForm.wageCapPaise" placeholder="" /></label>
             <label>Eligibility cap (INR)<input type="text" [(ngModel)]="statutoryForm.eligibilityCapPaise" placeholder="" /></label>
+            <label>Rounding<select [(ngModel)]="statutoryForm.roundingMethod">
+              <option value="floor">Floor (paise)</option>
+              <option value="nearest_paisa">Nearest paisa</option>
+              <option value="ceiling_paisa">Ceiling paisa</option>
+              <option value="floor_rupee">Floor rupee</option>
+              <option value="nearest_rupee">Nearest rupee</option>
+              <option value="ceiling_rupee">Ceiling rupee</option>
+            </select></label>
+            <label>Official reference<input type="text" [(ngModel)]="statutoryForm.officialReference" placeholder="Notification / circular / section" /></label>
+            <label>Approved by<input type="text" [(ngModel)]="statutoryForm.approvedBy" placeholder="CA / labour professional" /></label>
             <label>&nbsp;<button type="button" class="primary" [disabled]="loading" (click)="createStatutoryRule()">Add rule</button></label>
           </div>
           <div class="table-scroll">

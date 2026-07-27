@@ -215,6 +215,9 @@ export class StaffPayrollSetupPageComponent implements OnInit {
     eligibilityCapPaise: '',
     effectiveFrom: '',
     effectiveTo: '',
+    roundingMethod: 'floor',
+    officialReference: '',
+    approvedBy: '',
   };
 
   // Salary revisions
@@ -556,6 +559,14 @@ export class StaffPayrollSetupPageComponent implements OnInit {
       this.error = 'Effective from date is required';
       return;
     }
+    if (this.statutoryForm.officialReference.trim().length < 3) {
+      this.error = 'Official reference (notification/circular/section) is required';
+      return;
+    }
+    if (this.statutoryForm.approvedBy.trim().length < 3) {
+      this.error = 'Approved by (CA/labour professional) is required';
+      return;
+    }
     this.loading = true;
     try {
       const rule: Record<string, number> = {};
@@ -580,6 +591,9 @@ export class StaffPayrollSetupPageComponent implements OnInit {
         rule,
         effectiveFrom: this.statutoryForm.effectiveFrom,
         effectiveTo: this.statutoryForm.effectiveTo || null,
+        roundingMethod: this.statutoryForm.roundingMethod,
+        officialReference: this.statutoryForm.officialReference.trim(),
+        approvedBy: this.statutoryForm.approvedBy.trim(),
       };
       const result = await firstValueFrom(this.api.post<ApiEnvelope<StatutoryRuleRecord>>('/staff/payroll-compliance/rules', body));
       this.unwrap(result, 'Unable to create statutory rule');
@@ -595,6 +609,9 @@ export class StaffPayrollSetupPageComponent implements OnInit {
         eligibilityCapPaise: '',
         effectiveFrom: '',
         effectiveTo: '',
+        roundingMethod: 'floor',
+        officialReference: '',
+        approvedBy: '',
       };
       await this.loadStatutoryRules();
     } catch (error) {
