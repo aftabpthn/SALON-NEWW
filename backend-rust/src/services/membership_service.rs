@@ -1213,6 +1213,71 @@ pub async fn public_status(db: &PgPool, token: &str) -> Result<Value, AppError> 
     )
     .await
     .map_err(|_| AppError::internal("failed to load membership credits"))?;
+    let reward_points_balance = sqlx::query_scalar::<_, i32>(
+        "SELECT balance_after FROM membership_reward_ledger \
+         WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
+         ORDER BY created_at DESC,id DESC LIMIT 1",
+    )
+    .bind(&status.tenant_id)
+    .bind(&status.branch_id)
+    .bind(&status.client_id)
+    .fetch_optional(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load reward balance"))?
+    .unwrap_or(0);
+    let stamp_cards = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT COALESCE(jsonb_agg(
+                 jsonb_build_object(
+                   'programCode', code.value,
+                   'programName', COALESCE(NULLIF(BTRIM(program.value->>'name'),''), code.value),
+                   'balance', COALESCE(latest.balance_after,0),
+                   'stampsRequired', required.value,
+                   'remainingStamps', GREATEST(required.value - COALESCE(latest.balance_after,0), 0),
+                   'rewardPointsOnCompletion',
+                     CASE WHEN COALESCE(program.value->>'rewardPointsOnCompletion','') ~ '^[0-9]+$'
+                          THEN (program.value->>'rewardPointsOnCompletion')::INT ELSE 0 END,
+                   'progressBps',
+                     CASE WHEN required.value <= 0 THEN 0
+                          ELSE LEAST(COALESCE(latest.balance_after,0)::BIGINT * 10000 / required.value, 10000) END
+                 )
+                 ORDER BY COALESCE(NULLIF(BTRIM(program.value->>'name'),''), code.value)
+               ), '[]'::jsonb)
+          FROM membership_settings settings
+          CROSS JOIN LATERAL jsonb_array_elements(
+            CASE WHEN jsonb_typeof(settings.settings_json->'stampCards')='array'
+                 THEN settings.settings_json->'stampCards' ELSE '[]'::jsonb END
+          ) program(value)
+          CROSS JOIN LATERAL (
+            SELECT NULLIF(BTRIM(program.value->>'code'),'') AS value
+          ) code
+          CROSS JOIN LATERAL (
+            SELECT CASE WHEN COALESCE(program.value->>'stampsRequired','') ~ '^[0-9]+$'
+                        THEN GREATEST((program.value->>'stampsRequired')::INT, 1) ELSE 0 END AS value
+          ) required
+          LEFT JOIN LATERAL (
+            SELECT event.balance_after
+              FROM stamp_card_events event
+             WHERE event.tenant_id=settings.tenant_id
+               AND event.branch_id=settings.branch_id
+               AND event.client_id=$3
+               AND event.program_code=code.value
+             ORDER BY event.created_at DESC,event.id DESC
+             LIMIT 1
+          ) latest ON TRUE
+         WHERE settings.tenant_id=$1
+           AND settings.branch_id=$2
+           AND program.value->>'active'='true'
+           AND code.value IS NOT NULL
+           AND required.value > 0
+        "#,
+    )
+    .bind(&status.tenant_id)
+    .bind(&status.branch_id)
+    .bind(&status.client_id)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load stamp cards"))?;
     Ok(json!({
         "token":status.token,
         "clientId":status.client_id,
@@ -1222,7 +1287,9 @@ pub async fn public_status(db: &PgPool, token: &str) -> Result<Value, AppError> 
         "status":status.status,
         "expiresAt":status.expires_at,
         "tokenExpiresAt":status.token_expires_at,
-        "credits":credits
+        "credits":credits,
+        "rewardPointsBalance":reward_points_balance,
+        "stampCards":stamp_cards
     }))
 }
 

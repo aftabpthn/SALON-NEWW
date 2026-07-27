@@ -6,7 +6,25 @@ import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
 type PublicCredit = { serviceId: string; serviceName: string; remainingQty: number };
-type PublicStatus = { clientName: string; membershipName: string; status: string; expiresAt?: string; tokenExpiresAt: string; credits: PublicCredit[] };
+type PublicStampCard = {
+  programCode: string;
+  programName: string;
+  balance: number;
+  stampsRequired: number;
+  remainingStamps: number;
+  rewardPointsOnCompletion: number;
+  progressBps: number;
+};
+type PublicStatus = {
+  clientName: string;
+  membershipName: string;
+  status: string;
+  expiresAt?: string;
+  tokenExpiresAt: string;
+  credits: PublicCredit[];
+  rewardPointsBalance: number;
+  stampCards: PublicStampCard[];
+};
 
 @Component({
     selector: 'page-membership-status',
@@ -29,6 +47,7 @@ export class MembershipStatusPageComponent implements OnInit {
 
   ngOnInit() { void this.load(); }
   formatDate(value?: string) { if (!value) return 'No expiry'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB').format(date); }
+  progress(card: PublicStampCard) { return Math.max(0, Math.min(100, Math.round((Number(card.progressBps) || 0) / 100))); }
   async requestRenewal() {
     this.requesting = true; this.error = '';
     try { await firstValueFrom(this.api.post(`/membership-enterprise/self-service/public/${this.token()}/renew`, {})); this.message = 'Renewal request submitted'; }
