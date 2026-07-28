@@ -1,5 +1,8 @@
 pub mod accounting_service;
 pub mod ai_concierge_service;
+pub mod ai_copilot_governance;
+pub mod ai_copilot_tools;
+pub mod ai_scope_service;
 pub mod analytics_service;
 pub mod appointment_reporting_service;
 pub mod auth_service;
