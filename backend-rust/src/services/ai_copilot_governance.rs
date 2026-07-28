@@ -15,7 +15,7 @@ use crate::{
     repositories::ai_scope_repository::{self as repository, AiCopilotAlertRecord},
     routes::context::current_business_date,
     services::{
-        ai_copilot_tools,
+        ai_scoped_copilot_tools,
         ai_scope_service::{
             self as scope_service, AiDomain, AnalysisPeriod, ResolvedScope, ScopeRequest,
             format_money_paise, safe_percent,
@@ -695,13 +695,13 @@ async fn detect_staff_alerts(
     for row in &current {
         // Never flag someone who was barely rostered: that is a scheduling
         // fact, not a performance one.
-        if !ai_copilot_tools::staff_qualifies_for_verdict(row) {
+        if !ai_scoped_copilot_tools::staff_qualifies_for_verdict(row) {
             continue;
         }
         let Some(before) = previous.iter().find(|other| other.staff_id == row.staff_id) else {
             continue;
         };
-        if !ai_copilot_tools::staff_qualifies_for_verdict(before) {
+        if !ai_scoped_copilot_tools::staff_qualifies_for_verdict(before) {
             continue;
         }
         let now_revenue = row.service_revenue_paise + row.product_revenue_paise;
@@ -721,7 +721,7 @@ async fn detect_staff_alerts(
                     format_money_paise(now_revenue),
                     row.completed_appointments,
                     format_money_paise(before_revenue),
-                    ai_copilot_tools::staff_utilization_percent(row),
+                    ai_scoped_copilot_tools::staff_utilization_percent(row),
                 ),
                 metrics: json!({
                     "currentRevenuePaise": now_revenue,

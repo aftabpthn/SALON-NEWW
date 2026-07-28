@@ -22,7 +22,7 @@ use crate::{
         ai_copilot_governance::{
             self, AlertScanResult, DecideActionRequest, ProposeActionRequest,
         },
-        ai_copilot_tools::{self, ToolRequest},
+        ai_scoped_copilot_tools::{self, ToolRequest},
         ai_scope_service::{self, AnswerEnvelope, ScopeRequest},
         auth_service::AuthClaims,
     },
@@ -88,13 +88,13 @@ async fn get_scope(
     .await?;
     Ok(Json(ApiResponse::ok(json!({
         "scope": scope,
-        "tools": ai_copilot_tools::available_tools(&claims),
+        "tools": ai_scoped_copilot_tools::available_tools(&claims),
     }))))
 }
 
 /// The allow-listed tools this login is permitted to run.
 async fn get_tools(Extension(claims): Extension<AuthClaims>) -> ApiResult<Value> {
-    Ok(Json(ApiResponse::ok(ai_copilot_tools::available_tools(
+    Ok(Json(ApiResponse::ok(ai_scoped_copilot_tools::available_tools(
         &claims,
     ))))
 }
@@ -108,7 +108,8 @@ async fn ask(
 ) -> ApiResult<AnswerEnvelope> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_copilot_tools::execute(&state.db, &tenant_id, &branch_id, &claims, &payload).await?,
+        ai_scoped_copilot_tools::execute(&state.db, &tenant_id, &branch_id, &claims, &payload)
+            .await?,
     )))
 }
 

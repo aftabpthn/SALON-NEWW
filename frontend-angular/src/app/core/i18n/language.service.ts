@@ -179,16 +179,22 @@ export class LanguageService {
   }
 
   apiError(error: any, fallbackKey = 'common.error'): string {
-    const code = String(error?.error?.error?.code ?? error?.error?.code ?? '').toUpperCase();
+    return this.errorCodeText(String(error?.error?.error?.code ?? error?.error?.code ?? ''), fallbackKey);
+  }
+
+  /** Translate a backend error code that has already been extracted from the envelope. */
+  errorCodeText(code: string, fallbackKey = 'common.error'): string {
     const key = ({
+      AI_CHANNEL_DISABLED: 'error.aiChannelDisabled',
       CONFLICT: 'error.conflict',
       FORBIDDEN: 'common.permissionDenied',
       INTERNAL_ERROR: 'error.internal',
+      NETWORK_UNAVAILABLE: 'error.networkUnavailable',
       NOT_FOUND: 'error.notFound',
       RATE_LIMITED: 'error.rateLimited',
       UNAUTHENTICATED: 'error.unauthenticated',
       VALIDATION_FAILED: 'error.validation',
-    } as Record<string, string>)[code];
+    } as Record<string, string>)[code.toUpperCase()];
     return this.text(key || fallbackKey);
   }
 

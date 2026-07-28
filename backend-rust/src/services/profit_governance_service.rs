@@ -29,12 +29,12 @@ const SENSITIVE_ACTIONS: &[&str] = &[
     "high_expense",
 ];
 
-struct PolicyOutcome {
-    rule_id: Option<String>,
-    decision: &'static str,
-    status: &'static str,
-    reasons: Vec<&'static str>,
-    message: &'static str,
+pub(crate) struct PolicyOutcome {
+    pub(crate) rule_id: Option<String>,
+    pub(crate) decision: &'static str,
+    pub(crate) status: &'static str,
+    pub(crate) reasons: Vec<&'static str>,
+    pub(crate) message: &'static str,
 }
 
 pub async fn list_rules(
@@ -1072,7 +1072,13 @@ fn validate_identity(
     Ok(())
 }
 
-fn discount_policy(
+/// Decides a discount against the configured rules.
+///
+/// Pure by design: it takes the rules and the numbers and returns a verdict
+/// without touching the database. That is what lets a read-only what-if reach
+/// the same decision the recorded evaluation would, instead of reimplementing
+/// the policy and drifting from it.
+pub(crate) fn discount_policy(
     rules: &[GovernanceRule],
     estimated_profit_paise: i64,
     margin_bps: i64,

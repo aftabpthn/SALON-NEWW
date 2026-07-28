@@ -1,9 +1,9 @@
 
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, inject } from '@angular/core';
+import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
-import { AiConciergeService, AiMessage, AiSession } from '../core/services/ai-concierge.service';
+import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiCopilotEntity, AiCopilotProposal, AiMessage, AiSession, AiSuggestedQuestion } from '../core/services/ai-concierge.service';
 import { LANGUAGE_OPTIONS, LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
@@ -45,6 +45,36 @@ export class AppHeaderComponent implements OnInit {
   assistantSession: AiSession | null = null;
   assistantMessages: AiMessage[] = [];
   assistantAction: { type: string; serviceId: string } | null = null;
+  /** Exact failure behind `assistantError`, so the drawer can show code + request id. */
+  assistantFailure: AiConciergeFailure | null = null;
+  assistantConnection: 'idle' | 'connecting' | 'ready' | 'error' = 'idle';
+  /** `live` when the AI provider answered, otherwise why the CRM fallback replied. */
+  assistantProviderStatus = '';
+  /** Evidence from the CRM tool that answered the last question, if any. */
+  assistantCopilot: AiCopilotAnswer | null = null;
+  /** Tool name when the last question needed a report this role cannot open. */
+  assistantRestrictedTool = '';
+  /** Proposal awaiting the user's explicit go-ahead; nothing runs until they confirm. */
+  assistantPendingProposal: AiCopilotProposal | null = null;
+  private assistantPendingActionId = '';
+  private assistantProposalConfirmationId = '';
+  /** Starter chips, already filtered to what this role may ask. */
+  assistantSuggestions: AiSuggestedQuestion[] = [];
+  /** Assistant message the last answer came from, so feedback can attach to it. */
+  assistantLastMessageId = '';
+  /** The user's verdict on the last answer, once they give one. */
+  assistantFeedback: 'helpful' | 'not_helpful' | '' = '';
+  @ViewChild('assistantTranscript') private assistantTranscript?: ElementRef<HTMLElement>;
+  private assistantRetry: (() => Promise<void>) | null = null;
+  /** Identifies the message being sent, so retrying it cannot post it twice. */
+  private assistantSubmissionId = '';
+  /** Text that id was minted for; editing after a failure earns a fresh id. */
+  private assistantSubmissionBody = '';
+
+  /** Stable id for one submission; `randomUUID` needs a secure context. */
+  private newSubmissionId(): string {
+    return crypto.randomUUID?.() ?? `sub-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  }
 
   get branchName(): string {
     return this.currentBranch?.branchName
@@ -139,27 +169,264 @@ export class AppHeaderComponent implements OnInit {
   async toggleAssistant(): Promise<void> {
     this.assistantOpen = !this.assistantOpen;
     if (!this.assistantOpen || this.assistantSession) return;
+    await this.connectAssistant();
+  }
+
+  /** Opens the session and loads its transcript, keeping itself as the retry action. */
+  async connectAssistant(): Promise<void> {
+    if (this.assistantBusy) return;
     this.assistantBusy = true;
-    this.assistantError = '';
+    this.assistantConnection = 'connecting';
+    this.assistantProviderStatus = '';
+    this.clearCopilotResult();
+    this.clearAssistantError();
     try {
-      this.assistantSession = await this.concierge.open();
+      this.assistantSession ??= await this.concierge.open(this.language.locale());
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
-    } catch (error) { this.assistantError = this.message(error, 'error.unableToLoad'); }
-    finally { this.assistantBusy = false; }
+      // Chips are advisory: failing to load them must not break the drawer.
+      this.assistantSuggestions = await this.concierge
+        .suggestions(this.language.locale())
+        .catch(() => []);
+      this.scrollTranscriptToLatest();
+      this.assistantConnection = 'ready';
+    } catch (error) {
+      this.assistantConnection = 'error';
+      this.captureAssistantError(error, 'error.unableToLoad', () => this.connectAssistant());
+    } finally { this.assistantBusy = false; }
   }
 
   async sendAssistantMessage(): Promise<void> {
     const body = this.assistantDraft.trim();
     if (!body || !this.assistantSession || this.assistantBusy) return;
     this.assistantBusy = true;
-    this.assistantError = '';
+    this.assistantProviderStatus = '';
+    this.clearCopilotResult();
+    this.clearAssistantError();
+    // Identifies what the user typed, not this attempt, so a retry cannot post
+    // the same message twice. Editing the text after a failure is a different
+    // message and earns a fresh id.
+    if (!this.assistantSubmissionId || this.assistantSubmissionBody !== body) {
+      this.assistantSubmissionId = this.newSubmissionId();
+      this.assistantSubmissionBody = body;
+    }
     try {
-      const response = await this.concierge.send(this.assistantSession.id, body);
+      const response = await this.concierge.send(this.assistantSession.id, body, this.assistantSubmissionId);
+      this.assistantSubmissionId = '';
+      this.assistantSubmissionBody = '';
       this.assistantDraft = '';
+      this.assistantProviderStatus = response.providerStatus || '';
+      this.assistantCopilot = response.copilot ?? null;
+      this.assistantRestrictedTool = response.restrictedTool ?? '';
+      this.assistantLastMessageId = response.assistantMessage?.id ?? '';
       this.assistantMessages = await this.concierge.transcript(this.assistantSession.id);
+      this.scrollTranscriptToLatest();
+      this.assistantConnection = 'ready';
       this.assistantAction = response.actionType ? { type: response.actionType, serviceId: response.actionPayload?.serviceId || '' } : null;
-    } catch (error) { this.assistantError = this.message(error, 'common.error'); }
-    finally { this.assistantBusy = false; }
+    } catch (error) {
+      // A conflict means the server already stored this submission, so the send
+      // succeeded even though the response did not arrive. Show the transcript
+      // rather than an error the user cannot act on.
+      if (error instanceof AiConciergeError && error.failure.code === 'CONFLICT') {
+        this.assistantSubmissionId = '';
+        this.assistantSubmissionBody = '';
+        this.assistantDraft = '';
+        this.assistantMessages = await this.concierge.transcript(this.assistantSession.id).catch(() => this.assistantMessages);
+        this.assistantConnection = 'ready';
+        return;
+      }
+      // Keep the text in the box so a retry does not lose what the user typed.
+      this.assistantDraft = body;
+      this.captureAssistantError(error, 'common.error', () => this.sendAssistantMessage());
+    } finally { this.assistantBusy = false; }
+  }
+
+  async retryAssistant(): Promise<void> {
+    const retry = this.assistantRetry;
+    if (!retry || this.assistantBusy) return;
+    await retry();
+  }
+
+  get assistantCanRetry(): boolean {
+    return !!this.assistantRetry && !this.assistantBusy;
+  }
+
+  /** Non-empty only when the deterministic CRM fallback answered instead of the AI provider. */
+  get assistantFallbackReasonKey(): string {
+    return ({
+      not_configured: 'header.aiProviderNotConfigured',
+      unreachable: 'header.aiProviderUnreachable',
+      http_error: 'header.aiProviderErrored',
+      invalid_response: 'header.aiProviderErrored',
+    } as Record<string, string>)[this.assistantProviderStatus] ?? '';
+  }
+
+  get assistantConnectionKey(): string {
+    return ({
+      idle: 'header.aiNotConnected',
+      connecting: 'header.connecting',
+      ready: 'header.aiConnected',
+      error: 'header.aiConnectionFailed',
+    } as Record<string, string>)[this.assistantConnection];
+  }
+
+  /** Opens the CRM screen the tool pointed at, and closes the drawer behind it. */
+  async openCopilotLink(): Promise<void> {
+    const link = this.assistantCopilot?.deepLink;
+    if (!link) return;
+    this.assistantOpen = false;
+    await this.router.navigateByUrl(link);
+  }
+
+  /**
+   * Read-only proposals open straight away. Anything that would change business
+   * data is held here until the user confirms it — the copilot never acts alone.
+   */
+  async selectProposal(proposal: AiCopilotProposal): Promise<void> {
+    if (proposal.requiresApproval) {
+      this.clearProposalApproval();
+      this.assistantPendingProposal = proposal;
+      return;
+    }
+    await this.openProposal(proposal);
+  }
+
+  /** The user approved: open the prefilled screen so they can complete it there. */
+  async confirmProposal(): Promise<void> {
+    const proposal = this.assistantPendingProposal;
+    if (!proposal || this.assistantBusy) return;
+    this.assistantBusy = true;
+    this.clearAssistantError();
+    try {
+      if (!this.assistantPendingActionId) {
+        const draft = await this.concierge.createAction(
+          proposal.kind,
+          proposal.params,
+          proposal.approvalPrompt || proposal.label,
+        );
+        this.assistantPendingActionId = draft.id;
+      }
+      this.assistantProposalConfirmationId ||= this.newSubmissionId();
+      await this.concierge.confirmAction(
+        this.assistantPendingActionId,
+        this.assistantProposalConfirmationId,
+      );
+      await this.openProposal(proposal);
+      this.clearProposalApproval();
+    } catch (error) {
+      this.captureAssistantError(error, 'common.error', () => this.confirmProposal());
+    } finally {
+      this.assistantBusy = false;
+    }
+  }
+
+  cancelProposal(): void {
+    const draftId = this.assistantPendingActionId;
+    this.clearProposalApproval();
+    if (draftId) void this.concierge.cancelAction(draftId).catch(() => undefined);
+  }
+
+  private async openProposal(proposal: AiCopilotProposal): Promise<void> {
+    this.assistantOpen = false;
+    // Params only prefill the target screen; the change is completed there.
+    await this.router.navigate([proposal.route], { queryParams: this.queryParams(proposal.params) });
+  }
+
+  /** Flattens a prefill payload into query params, dropping anything unusable. */
+  private queryParams(params: Record<string, unknown>): Record<string, string> {
+    const flattened: Record<string, string> = {};
+    for (const [key, value] of Object.entries(params ?? {})) {
+      if (value === null || value === undefined) continue;
+      if (Array.isArray(value)) {
+        if (value.length) flattened[key] = value.join(',');
+      } else if (typeof value !== 'object') {
+        flattened[key] = String(value);
+      }
+    }
+    return flattened;
+  }
+
+  /** Sends a chip as if the user typed it. */
+  /**
+   * Opens the CRM record an answer referred to.
+   *
+   * Uses the link the backend supplied rather than building a route from the
+   * entity kind, so the drawer cannot invent a path the API did not sanction.
+   */
+  async openEntity(entity: AiCopilotEntity): Promise<void> {
+    if (!entity.link) return;
+    this.assistantOpen = false;
+    await this.router.navigateByUrl(entity.link);
+  }
+
+  /**
+   * Keeps the newest message in view.
+   *
+   * Deferred a frame because the transcript has not rendered the new message at
+   * the point the reply resolves, so scrolling immediately would land short.
+   */
+  private scrollTranscriptToLatest(): void {
+    const transcript = this.assistantTranscript?.nativeElement;
+    if (!transcript) return;
+    requestAnimationFrame(() => {
+      transcript.scrollTop = transcript.scrollHeight;
+    });
+  }
+
+  async askSuggestion(suggestion: AiSuggestedQuestion): Promise<void> {
+    if (this.assistantBusy) return;
+    this.assistantDraft = suggestion.question;
+    await this.sendAssistantMessage();
+  }
+
+  /** Records whether the last answer helped. Failing to record is not fatal. */
+  async rateAnswer(helpful: boolean): Promise<void> {
+    if (!this.assistantSession || !this.assistantLastMessageId) return;
+    const previous = this.assistantFeedback;
+    this.assistantFeedback = helpful ? 'helpful' : 'not_helpful';
+    try {
+      await this.concierge.sendFeedback(
+        this.assistantSession.id,
+        this.assistantLastMessageId,
+        helpful,
+        this.assistantCopilot?.tool ?? '',
+      );
+    } catch {
+      // Put the button back the way it was rather than claim a vote was stored.
+      this.assistantFeedback = previous;
+    }
+  }
+
+  private clearCopilotResult(): void {
+    this.assistantCopilot = null;
+    this.assistantRestrictedTool = '';
+    this.clearProposalApproval();
+    this.assistantLastMessageId = '';
+    this.assistantFeedback = '';
+  }
+
+  private clearProposalApproval(): void {
+    this.assistantPendingProposal = null;
+    this.assistantPendingActionId = '';
+    this.assistantProposalConfirmationId = '';
+  }
+
+  private clearAssistantError(): void {
+    this.assistantError = '';
+    this.assistantFailure = null;
+    this.assistantRetry = null;
+  }
+
+  private captureAssistantError(error: unknown, fallbackKey: string, retry: () => Promise<void>): void {
+    if (error instanceof AiConciergeError) {
+      this.assistantFailure = error.failure;
+      this.assistantError = this.language.errorCodeText(error.failure.code, fallbackKey);
+    } else {
+      this.assistantFailure = null;
+      this.assistantError = this.message(error, fallbackKey);
+    }
+    this.assistantRetry = retry;
+    // Status 0 means the API was never reached, so the drawer is genuinely disconnected.
+    if (this.assistantFailure?.status === 0) this.assistantConnection = 'error';
   }
 
   async continueBooking(): Promise<void> {
