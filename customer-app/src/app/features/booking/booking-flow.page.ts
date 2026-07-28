@@ -194,24 +194,24 @@ type PendingBookingIntent = {
     .booking-hero img { width: 100%; aspect-ratio: 16 / 10; height: auto; border-radius: 24px; object-fit: cover; }
     .booking-hero .page-title { font-size: clamp(2rem, 5vw, 3.6rem); }
     .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 8px; }
-    .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: rgba(255, 249, 236, 0.9); font-weight: 900; }
-    .stepper button.active, .stepper button.done { color: #120D05; border-color: transparent; background: linear-gradient(135deg, #F4D58D, #D6A94A); box-shadow: 0 14px 30px rgba(214, 169, 74, 0.2); }
+    .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: var(--surface); font-weight: 900; }
+    .stepper button.active, .stepper button.done { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2); }
     .stepper ion-icon { font-size: 1.15rem; }
     .booking-intent-row, .resource-grid, .time-mode-row { display: grid; gap: 10px; margin-bottom: 14px; }
     .booking-intent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: rgba(255, 249, 236, 0.92); box-shadow: var(--shadow-soft); font-weight: 900; }
+    .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-soft); font-weight: 900; }
     .booking-intent-row button { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; align-items: center; padding: 14px; text-align: left; }
-    .booking-intent-row button.active, .resource-grid button.active, .time-mode-row button.active, .addon-grid button.active { color: #120D05; border-color: transparent; background: linear-gradient(135deg, #F4D58D, #D6A94A); }
+    .booking-intent-row button.active, .resource-grid button.active, .time-mode-row button.active, .addon-grid button.active { color: #FFFFFF; border-color: transparent; background: var(--primary); }
     .booking-intent-row button:disabled, .resource-grid button:disabled, .time-mode-row button:disabled, .addon-grid button:disabled { cursor: not-allowed; opacity: 0.58; }
     .booking-intent-row ion-icon { grid-row: span 2; font-size: 1.25rem; }
     .booking-intent-row small, .resource-grid small { color: inherit; opacity: 0.72; line-height: 1.35; }
     .readiness-note, .addon-panel, .resource-panel { display: grid; gap: 8px; padding: 16px; margin-bottom: 14px; }
-    .readiness-note { border-color: rgba(214, 169, 74, 0.22); background: var(--aura-gold-soft); }
+    .readiness-note { border-color: rgba(11, 70, 120, 0.22); background: var(--primary-soft); }
     .readiness-note strong, .readiness-note span, .addon-panel small, .resource-panel small { line-height: 1.45; }
     .readiness-note span, .addon-panel small, .resource-panel small { color: var(--muted); }
     .addon-panel h3, .resource-panel h3 { margin: 0; letter-spacing: 0; }
     .addon-grid { display: grid; gap: 8px; }
-    .addon-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: rgba(255, 249, 236, 0.92); font-weight: 900; }
+    .addon-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface); font-weight: 900; }
     .addon-grid button strong { color: inherit; }
     .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .resource-grid button { display: grid; gap: 4px; justify-items: start; padding: 13px; text-align: left; }
@@ -221,32 +221,32 @@ type PendingBookingIntent = {
     .service-list, .staff-list, .slot-sections { display: grid; gap: 12px; }
     .service-choice, .staff-choice { width: 100%; display: grid; gap: 12px; align-items: center; padding: 16px; border-color: var(--border); color: var(--text); text-align: left; }
     .service-choice { grid-template-columns: minmax(0, 1fr) auto; }
-    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(214, 169, 74, 0.48); background: var(--gold-soft); box-shadow: 0 16px 34px rgba(214, 169, 74, 0.14); }
+    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(11, 70, 120, 0.48); background: var(--primary-soft); box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14); }
     .service-choice h3 { margin: 0 0 6px; font-size: 1.12rem; letter-spacing: -0.035em; }
     .service-choice p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
     .service-choice strong { color: var(--primary-2); }
     .staff-choice { grid-template-columns: auto minmax(0, 1fr) auto; }
     .staff-choice img, .any-avatar { width: 62px; height: 62px; border-radius: 22px; object-fit: cover; }
-    .any-avatar { display: grid; place-items: center; color: #120D05; background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22); font-size: 1.35rem; }
+    .any-avatar { display: grid; place-items: center; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800)); font-size: 1.35rem; }
     .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.35; }
     .staff-choice em { color: var(--primary-2); font-weight: 900; text-align: right; }
-    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(214, 169, 74, 0.32); border-radius: 999px; color: var(--primary); background: rgba(255, 249, 236, 0.94); font-weight: 900; white-space: nowrap; }
+    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(11, 70, 120, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
     .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
-    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(214, 169, 74, 0.28); background: var(--aura-gold-soft); }
+    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(11, 70, 120, 0.28); background: var(--primary-soft); }
     .selected-staff-card span, .selected-staff-card small { display: block; color: var(--muted); line-height: 1.35; }
     .selected-staff-card span { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
     .selected-staff-card strong { display: block; margin-top: 3px; color: var(--text); font-size: 1.02rem; font-weight: 900; }
     .selected-staff-card small { margin-top: 2px; font-weight: 800; }
     .date-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
     .date-row::-webkit-scrollbar { display: none; }
-    .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: rgba(255, 249, 236, 0.94); color: var(--text); font-weight: 900; }
+    .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); font-weight: 900; }
     .date-card { position: relative; display: grid; gap: 5px; justify-items: center; padding: 14px 10px; overflow: hidden; }
-    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: rgba(125, 89, 32, 0.18); }
-    .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36); background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--border-strong); }
+    .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36); background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), rgba(255, 255, 255, 0.96)); }
     .date-card.availability-many::before { background: #21a657; }
-    .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42); background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42); background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), rgba(255, 255, 255, 0.96)); }
     .date-card.availability-partial::before { background: #f09a22; }
-    .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38); background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38); background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), rgba(255, 255, 255, 0.96)); }
     .date-card.availability-full::before { background: #d94141; }
     .date-card span { color: var(--muted); font-size: 0.86rem; }
     .date-card em { color: var(--muted); font-size: 0.72rem; font-style: normal; font-weight: 950; text-transform: uppercase; }
@@ -258,7 +258,7 @@ type PendingBookingIntent = {
     .state-card.error p { color: #EF4444; }
     .slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .slot { padding: 12px 8px; }
-    .slot:disabled { color: rgba(126, 110, 85, 0.42); background: rgba(125, 89, 32, 0.06); text-decoration: line-through; }
+    .slot:disabled { color: rgba(82, 101, 121, 0.48); background: var(--surface-soft); text-decoration: line-through; }
     .confirm-grid { display: grid; gap: 14px; }
     .confirm-card, .trust-card { padding: 20px; }
     .confirm-card h2, .trust-card h3 { margin: 0 0 10px; letter-spacing: -0.04em; }

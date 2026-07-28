@@ -19,6 +19,12 @@ type CustomerSessionRefresh = {
   refreshToken?: string;
 };
 
+class SessionRefreshError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
 let refreshInFlight: Promise<CustomerSessionRefresh> | null = null;
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
@@ -46,12 +52,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
               saveCustomerSession(session);
               return next(withAccessToken(req, session.accessToken, true));
             }),
-            catchError(() => {
-              // Refresh failed: the session is genuinely expired. Clear it and send the
-              // user to login so they are not stuck "authenticated" with a dead token.
-              expireCustomerSession();
-              void router.navigateByUrl("/login");
-              return throwError(() => new Error("Your session expired. Please sign in again."));
+            catchError((refreshError: unknown) => {
+              if (isPermanentRefreshFailure(refreshError)) {
+                expireCustomerSession();
+                void router.navigateByUrl("/login");
+                return throwError(() => new Error("Your session expired. Please sign in again."));
+              }
+              return throwError(() => new Error("Could not reconnect to your session. Please check your connection and retry."));
             })
           );
         }
@@ -83,7 +90,7 @@ function refreshCustomerSessionOnce(requestUrl: string): Promise<CustomerSession
 
 async function refreshCustomerSession(requestUrl: string): Promise<CustomerSessionRefresh> {
   const refreshToken = getStoredValue(REFRESH_TOKEN_KEY);
-  if (!refreshToken) throw new Error("Missing refresh token");
+  if (!refreshToken) throw new SessionRefreshError("Missing refresh token", 401);
 
   const response = await fetch(refreshUrlFor(requestUrl), {
     method: "POST",
@@ -98,12 +105,16 @@ async function refreshCustomerSession(requestUrl: string): Promise<CustomerSessi
   const payload = await readJson(response);
   const session = payload?.data || payload;
   if (!response.ok || !session?.accessToken) {
-    throw new Error(refreshErrorMessage(payload));
+    throw new SessionRefreshError(refreshErrorMessage(payload), response.status);
   }
   return {
     accessToken: String(session.accessToken),
     refreshToken: session.refreshToken ? String(session.refreshToken) : undefined
   };
+}
+
+function isPermanentRefreshFailure(error: unknown): boolean {
+  return error instanceof SessionRefreshError && [400, 401, 403].includes(error.status);
 }
 
 function refreshUrlFor(requestUrl: string): string {

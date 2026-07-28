@@ -3,7 +3,7 @@ import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
+import { bookmarkOutline, briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { YourSalonsListComponent } from "../../shared/your-salons-list.component";
 import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../../core/api.types";
@@ -56,8 +56,13 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
           <section class="account-grid">
             <article class="summary-card premium-card">
               <ion-icon name="heart-outline"></ion-icon>
-              <strong>{{ savedSalonsCount() }} saved salons</strong>
-              <span>Favorite venues and inspirations</span>
+              <strong>{{ savedSalonsCount() }} liked salons</strong>
+              <span>Salons you have liked</span>
+            </article>
+            <article class="summary-card premium-card">
+              <ion-icon name="bookmark-outline"></ion-icon>
+              <strong>{{ marketplace.savedSalons().length }} saved salons</strong>
+              <span>Your shortlist for later</span>
             </article>
             <article class="summary-card premium-card">
               <ion-icon name="sparkles-outline"></ion-icon>
@@ -212,7 +217,8 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         <nav class="menu premium-card" aria-label="Profile menu">
           <div class="menu-section-title">Hub</div>
           <a routerLink="/tabs/bookings"><ion-icon name="sparkles-outline"></ion-icon><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/wishlist"><ion-icon name="heart-outline"></ion-icon><span>Wishlist and saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a routerLink="/tabs/wishlist"><ion-icon name="heart-outline"></ion-icon><span>Liked Salons / Wishlist</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a routerLink="/tabs/saved-salons"><ion-icon name="bookmark-outline"></ion-icon><span>Saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet and payments</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/rewards"><ion-icon name="ribbon-outline"></ion-icon><span>Loyalty rewards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/memberships"><ion-icon name="heart-circle-outline"></ion-icon><span>Memberships</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
@@ -259,11 +265,11 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       min-width: 86px;
       min-height: 42px;
       padding: 0 16px;
-      border: 1px solid rgba(139, 92, 246, 0.24);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       border-radius: 999px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      box-shadow: 0 12px 24px rgba(139, 92, 246, 0.18);
+      box-shadow: 0 12px 24px rgba(11, 70, 120, 0.18);
       font: inherit;
       font-size: 0.8rem;
       font-weight: 900;
@@ -281,7 +287,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     .edit-profile-button:focus-visible {
       outline: none;
       transform: translateY(-1px);
-      box-shadow: 0 14px 28px rgba(139, 92, 246, 0.24);
+      box-shadow: 0 14px 28px rgba(11, 70, 120, 0.22);
     }
 
     .avatar {
@@ -292,7 +298,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       border-radius: 30px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-      box-shadow: 0 16px 34px rgba(139, 92, 246, 0.22);
+      box-shadow: 0 16px 34px rgba(11, 70, 120, 0.2);
       font-size: 2rem;
       font-weight: 900;
     }
@@ -313,15 +319,15 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       padding: 22px;
       border-radius: var(--radius-lg);
       color: #ffffff;
-      border: 1px solid rgba(255, 244, 215, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       background:
         radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.38), transparent 34%),
-        linear-gradient(135deg, #F7D982 0%, #D9A943 48%, #B87D1E 100%);
+        linear-gradient(135deg, var(--brand-600) 0%, var(--primary) 48%, var(--brand-900) 100%);
       box-shadow:
-        0 28px 56px rgba(92, 65, 28, 0.22),
-        0 10px 22px rgba(184, 125, 30, 0.22),
+        0 28px 56px rgba(6, 23, 43, 0.22),
+        0 10px 22px rgba(11, 70, 120, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.58),
-        inset 0 -18px 34px rgba(109, 73, 21, 0.12);
+        inset 0 -18px 34px rgba(6, 23, 43, 0.16);
       transform: perspective(1100px) translate3d(0, 0, 0);
       transform-style: preserve-3d;
       backface-visibility: hidden;
@@ -338,7 +344,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       content: "";
       pointer-events: none;
       background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(92, 65, 28, 0.12)),
+        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(6, 23, 43, 0.14)),
         radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.3), transparent 20%);
       transform: translateZ(18px);
     }
@@ -370,6 +376,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
     .pass-card h2 {
       margin: 6px 0 8px;
+      color: #ffffff !important;
       letter-spacing: -0.04em;
     }
 
@@ -382,7 +389,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     .pass-card ion-icon {
       flex: 0 0 auto;
       font-size: 2.4rem;
-      filter: drop-shadow(0 10px 16px rgba(92, 65, 28, 0.24));
+      filter: drop-shadow(0 10px 16px rgba(6, 23, 43, 0.24));
       transform: translateZ(42px);
     }
 
@@ -390,10 +397,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       .pass-card:hover {
         transform: perspective(1100px) translate3d(0, -8px, 26px) rotateX(1.4deg) rotateY(-1.8deg) scale(1.01);
         box-shadow:
-          0 38px 82px rgba(92, 65, 28, 0.25),
-          0 16px 34px rgba(184, 125, 30, 0.24),
+          0 38px 82px rgba(6, 23, 43, 0.25),
+          0 16px 34px rgba(11, 70, 120, 0.24),
           inset 0 1px 0 rgba(255, 255, 255, 0.72),
-          inset 0 -20px 38px rgba(109, 73, 21, 0.12);
+          inset 0 -20px 38px rgba(6, 23, 43, 0.16);
         filter: saturate(1.06) brightness(1.03);
         animation-play-state: paused;
       }
@@ -414,6 +421,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
     .account-grid {
       display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
     }
 
@@ -489,7 +497,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       margin: 0;
       padding: 12px 14px;
       border-radius: 16px;
-      color: #8B5CF6;
+      color: var(--primary);
       background: var(--aura-gold-soft);
       font-weight: 800;
     }
@@ -498,9 +506,9 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       display: grid;
       gap: 10px;
       padding: 14px;
-      border: 1px solid rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(11, 70, 120, 0.18);
       border-radius: 18px;
-      background: rgba(245, 243, 255, 0.72);
+      background: var(--primary-soft);
     }
 
     .verify-box strong,
@@ -536,8 +544,8 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
     .menu-section-title {
       padding: 14px 18px 8px;
-      color: #8A5C12;
-      background: rgba(244, 213, 141, 0.16);
+      color: var(--primary);
+      background: var(--primary-soft);
       font-size: 0.76rem;
       font-weight: 950;
       letter-spacing: 0.12em;
@@ -578,7 +586,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     }
 
     .menu-item.disabled ion-icon {
-      color: rgba(139, 92, 246, 0.58);
+      color: rgba(11, 70, 120, 0.58);
     }
 
     .menu-item small {
@@ -668,29 +676,28 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       }
 
       .account-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
+        gap: 6px;
       }
 
       .summary-card {
         align-items: center;
         justify-items: center;
-        min-height: 82px;
-        gap: 6px;
-        padding: 10px 8px;
-        border-radius: 18px;
+        min-height: 56px;
+        gap: 2px;
+        padding: 4px;
+        border-radius: 14px;
         text-align: center;
       }
 
       .summary-card ion-icon {
-        width: 32px;
-        height: 32px;
-        padding: 7px;
-        border-radius: 12px;
+        width: 24px;
+        height: 24px;
+        padding: 5px;
+        border-radius: 10px;
       }
 
       .summary-card strong {
-        font-size: 0.72rem;
+        font-size: 0.62rem;
         line-height: 1.15;
       }
 
@@ -769,7 +776,7 @@ export class ProfilePage implements OnInit {
   passwordNotice = "";
 
   constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly route: ActivatedRoute) {
-    addIcons({ briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline });
+    addIcons({ bookmarkOutline, briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline });
   }
 
   async ngOnInit() {
@@ -777,6 +784,7 @@ export class ProfilePage implements OnInit {
       await this.marketplace.loadCustomer().then(() => this.syncForm()).catch(() => undefined);
       await this.marketplace.loadBookings().catch(() => undefined);
       await this.marketplace.loadFavorites().catch(() => undefined);
+      await this.marketplace.ensureSavedSalons().catch(() => undefined);
       await this.marketplace.loadMySalons().catch(() => undefined);
     }
   }

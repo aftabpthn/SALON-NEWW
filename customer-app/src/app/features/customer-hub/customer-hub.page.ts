@@ -369,8 +369,8 @@ const hubConfigs: Record<string, HubConfig> = {
     .hub-tile.active {
       color: #120D05 !important;
       border-color: transparent !important;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A 58%, #9B6B22) !important;
-      box-shadow: 0 18px 44px rgba(214, 169, 74, 0.24) !important;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800)) !important;
+      box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24) !important;
     }
 
     .hub-tile ion-icon {
@@ -379,11 +379,11 @@ const hubConfigs: Record<string, HubConfig> = {
       padding: 11px;
       border-radius: 16px;
       color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .hub-tile.active ion-icon {
-      background: rgba(255, 249, 236, 0.58);
+      background: rgba(255, 255, 255, 0.68);
     }
 
     .hub-tile small {
@@ -461,7 +461,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .demo-chip {
       width: fit-content;
       padding: 4px 9px;
-      border: 1px solid rgba(214, 169, 74, 0.32);
+      border: 1px solid rgba(11, 70, 120, 0.32);
       border-radius: 999px;
       color: #8A5B08 !important;
       background: rgba(246, 217, 148, 0.34);

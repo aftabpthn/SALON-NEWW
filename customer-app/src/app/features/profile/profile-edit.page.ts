@@ -282,7 +282,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .edit-profile-page .hero-card,
     .edit-profile-page .editor-card {
-      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12) !important;
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1) !important;
     }
 
     .edit-profile-page .hero-card *,
@@ -296,7 +296,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         transform: none !important;
         filter: none !important;
         animation-play-state: running !important;
-        box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12) !important;
+        box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1) !important;
       }
 
       .edit-profile-page .hero-card:hover ion-icon,
@@ -390,11 +390,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       font-size: 1.2rem;
-      box-shadow: 0 14px 28px rgba(139, 92, 246, 0.18);
+      box-shadow: 0 14px 28px rgba(11, 70, 120, 0.18);
     }
 
     .section-icon.danger {
-      background: linear-gradient(135deg, #EF4444, #EC4899);
+      background: linear-gradient(135deg, #EF4444, #B91C1C);
     }
 
     ion-list {
@@ -430,9 +430,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       gap: 10px;
       padding: 14px;
-      border: 1px solid rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(11, 70, 120, 0.18);
       border-radius: 18px;
-      background: rgba(245, 243, 255, 0.72);
+      background: var(--primary-soft);
     }
 
     .verify-box strong,
@@ -468,9 +468,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .notice-text {
-      color: #7C3AED;
+      color: var(--primary);
       background: var(--aura-gold-soft);
-      border: 1px solid rgba(124, 58, 237, 0.18);
+      border: 1px solid rgba(11, 70, 120, 0.18);
     }
 
     .error-text {
@@ -488,7 +488,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .danger-card .muted {
-      color: #7A6444 !important;
+      color: var(--muted) !important;
       font-weight: 700;
     }
 
@@ -503,12 +503,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .delete-input-row {
       min-height: 72px;
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      border: 1px solid rgba(11, 70, 120, 0.26);
       border-radius: 18px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.94));
+        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
       box-shadow:
-        0 14px 32px rgba(92, 65, 28, 0.1),
+        0 14px 32px rgba(6, 23, 43, 0.09),
         inset 0 1px 0 rgba(255, 255, 255, 0.84);
       --background: transparent;
       --padding-start: 16px;
@@ -519,39 +519,39 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .delete-input-row ion-icon {
-      color: #9B6B22;
+      color: var(--primary);
       font-size: 1.25rem;
     }
 
     .delete-input-row ion-input {
       --color: var(--text);
-      --placeholder-color: rgba(122, 100, 68, 0.45);
-      --highlight-color-focused: #D6A94A;
-      --highlight-color-valid: #D6A94A;
+      --placeholder-color: rgba(82, 101, 121, 0.55);
+      --highlight-color-focused: var(--focus);
+      --highlight-color-valid: var(--primary);
       --highlight-color-invalid: #EF4444;
       font-weight: 800;
     }
 
     .delete-input-row ion-input::part(label) {
-      color: #7A5019 !important;
+      color: var(--primary) !important;
       font-weight: 900;
     }
 
     .delete-input-row ion-input.has-focus::part(label),
     .delete-input-row ion-input.ion-focused::part(label),
     .delete-input-row:focus-within ion-input::part(label) {
-      color: #B87D1E !important;
+      color: var(--primary) !important;
     }
 
     .delete-input-row ion-input::part(native) {
-      caret-color: #B87D1E;
+      caret-color: var(--primary);
     }
 
     .delete-input-row:focus-within {
-      border-color: rgba(214, 169, 74, 0.58);
+      border-color: rgba(11, 70, 120, 0.58);
       box-shadow:
-        0 14px 30px rgba(92, 65, 28, 0.12),
-        0 0 0 4px rgba(214, 169, 74, 0.16),
+        0 14px 30px rgba(6, 23, 43, 0.1),
+        0 0 0 4px rgba(37, 99, 235, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
 

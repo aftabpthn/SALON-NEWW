@@ -1,9 +1,11 @@
-import { Component, OnInit, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import {
   callOutline,
+  bookmark,
+  bookmarkOutline,
   cardOutline,
   checkmarkCircleOutline,
   clipboardOutline,
@@ -21,7 +23,9 @@ import {
   walletOutline
 } from "ionicons/icons";
 import { PublicOfferItem } from "../../core/api.types";
+import { CustomerFeedbackService } from "../../core/customer-feedback.service";
 import { MarketplaceService } from "../../core/marketplace.service";
+import { Subscription } from "rxjs";
 
 @Component({
   standalone: true,
@@ -40,8 +44,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <img [src]="business().coverImage || business().galleryImages[0] || business().logoUrl || 'assets/icons/icon.svg'" [alt]="business().businessName + ' cover image'" />
           <div class="cover-overlay"></div>
           <div class="cover-actions">
-            <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
+            <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
               <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
+            </ion-button>
+            <ion-button fill="clear" shape="round" [class.saved-action]="isSalonSaved()" [disabled]="savedSalonPending" [attr.aria-label]="isSalonSaved() ? 'Remove saved salon' : 'Save salon'" (click)="toggleSavedSalon()">
+              <ion-icon [name]="isSalonSaved() ? 'bookmark' : 'bookmark-outline'"></ion-icon>
             </ion-button>
             <ion-button fill="clear" shape="round" aria-label="Share business"><ion-icon name="share-outline"></ion-icon></ion-button>
           </div>
@@ -71,6 +78,29 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 <span><ion-icon name="card-outline"></ion-icon>{{ paymentLabel() }}</span>
               </div>
             </section>
+
+            @if (otherBranches().length) {
+            <section class="other-branches-section">
+              <div class="section-heading">
+                <div>
+                  <h2 class="section-title">Other branches ({{ otherBranches().length }})</h2>
+                  <p class="muted">More locations from this salon group</p>
+                </div>
+              </div>
+              <div class="other-branches-rail" aria-label="Other branches from this salon group">
+                @for (branch of otherBranches(); track branch.branchId || branch.id) {
+                  <a class="branch-option" [routerLink]="['/business', branch.slug]">
+                    <span class="branch-option-mark">{{ branch.businessName.slice(0, 1).toUpperCase() }}</span>
+                    <span class="branch-option-copy">
+                      <strong>{{ branch.businessName }}</strong>
+                      <small>{{ branch.area || branch.city || 'Location details' }} · {{ branch.isOpen ? 'Open' : 'Closed' }}</small>
+                    </span>
+                    <ion-icon name="location-outline"></ion-icon>
+                  </a>
+                }
+              </div>
+            </section>
+            }
 
             <section class="gallery-section">
               <div class="section-heading">
@@ -458,7 +488,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       min-height: 34px;
       padding: 7px 11px;
       border-radius: 999px;
-      color: #8B5CF6;
+      color: var(--primary);
       background: var(--pink-soft);
       font-weight: 900;
     }
@@ -697,11 +727,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .coupon-offer .offer-icon {
-      background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(139, 92, 246, 0.08));
+      background: linear-gradient(135deg, rgba(11, 70, 120, 0.12), rgba(7, 90, 156, 0.08));
     }
 
     .coupon-offer .offer-icon ion-icon {
-      color: #EC4899;
+      color: var(--primary);
     }
 
     .promo-offer .offer-icon {
@@ -775,8 +805,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .loyalty-card.primary-card {
-      background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(236, 72, 153, 0.06));
-      border-color: rgba(139, 92, 246, 0.25);
+      background: linear-gradient(135deg, rgba(11, 70, 120, 0.1), rgba(7, 90, 156, 0.06));
+      border-color: rgba(11, 70, 120, 0.25);
     }
 
     .loyalty-card ion-icon {
@@ -967,6 +997,81 @@ import { MarketplaceService } from "../../core/marketplace.service";
       }
     }
 
+    .other-branches-section {
+      display: grid;
+      gap: 12px;
+    }
+
+    .other-branches-rail {
+      display: flex;
+      gap: 9px;
+      overflow-x: auto;
+      padding: 2px 1px 7px;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+    }
+
+    .other-branches-rail::-webkit-scrollbar {
+      display: none;
+    }
+
+    .branch-option {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 min(230px, 76vw);
+      min-height: 58px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 7px 18px rgba(6, 23, 43, 0.07);
+      text-decoration: none;
+      scroll-snap-align: start;
+    }
+
+    .branch-option-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: #704812;
+      background: rgba(11, 70, 120, 0.14);
+      font-size: 0.82rem;
+      font-weight: 950;
+    }
+
+    .branch-option-copy {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .branch-option-copy strong,
+    .branch-option-copy small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .branch-option-copy strong {
+      font-size: 0.8rem;
+    }
+
+    .branch-option-copy small {
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .branch-option > ion-icon {
+      color: #a36d16;
+      font-size: 0.95rem;
+    }
+
     @media (min-width: 768px) {
       .staff-grid,
       .review-grid,
@@ -997,7 +1102,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
   `]
 })
-export class BusinessProfilePage implements OnInit {
+export class BusinessProfilePage implements OnInit, OnDestroy {
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
   readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
@@ -1008,10 +1113,28 @@ export class BusinessProfilePage implements OnInit {
     return primary.branchId === biz.branchId || primary.businessId === biz.id;
   });
   readonly activeOffers = computed(() => this.marketplace.salonOffers()?.offers ?? []);
+  readonly otherBranches = computed(() => {
+    const current = this.business();
+    if (!current?.tenantId) return [];
+    const seen = new Set<string>();
+    return this.marketplace.businesses().filter((branch) => {
+      if (branch.tenantId !== current.tenantId) return false;
+      if (branch.id === current.id || branch.slug === current.slug || (current.branchId && branch.branchId === current.branchId)) return false;
+      const key = branch.branchId || branch.id || branch.slug;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
+  private routeSubscription?: Subscription;
+  favoritePending = false;
+  savedSalonPending = false;
 
-  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
+  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly feedback: CustomerFeedbackService) {
     addIcons({
       callOutline,
+      bookmark,
+      bookmarkOutline,
       cardOutline,
       checkmarkCircleOutline,
       clipboardOutline,
@@ -1031,14 +1154,25 @@ export class BusinessProfilePage implements OnInit {
   }
 
   ngOnInit() {
-    this.reload();
+    this.routeSubscription = this.route.paramMap.subscribe((params) => {
+      this.slug.set(params.get("slug"));
+      this.reload();
+    });
     void this.marketplace.ensureFavorites().catch(() => undefined);
+    void this.marketplace.ensureSavedSalons().catch(() => undefined);
+  }
+
+  ngOnDestroy() {
+    this.routeSubscription?.unsubscribe();
   }
 
   reload() {
     const slug = this.slug();
     if (slug) {
-      void this.marketplace.loadBusiness(slug).then(() => this.loadOffers()).catch(() => undefined);
+      void Promise.all([
+        this.marketplace.loadBusiness(slug),
+        this.marketplace.loadPublicBusinesses()
+      ]).then(() => this.loadOffers()).catch(() => undefined);
     }
   }
 
@@ -1070,14 +1204,45 @@ export class BusinessProfilePage implements OnInit {
     return business ? this.marketplace.isFavorite(business.id) || this.marketplace.isFavorite(business.slug) : false;
   }
 
-  toggleWishlist() {
+  async toggleWishlist() {
     const business = this.business();
-    if (!business) return;
+    if (!business || this.favoritePending) return;
     if (!this.marketplace.isAuthenticated()) {
       void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
       return;
     }
-    void this.marketplace.toggleFavorite(business.id).catch(() => undefined);
+    this.favoritePending = true;
+    try {
+      const saved = await this.marketplace.toggleFavorite(business.id);
+      await this.feedback.success(saved ? "Added to favorites / wishlist" : "Removed from favorites / wishlist");
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Could not update favorites. Please try again.");
+    } finally {
+      this.favoritePending = false;
+    }
+  }
+
+  isSalonSaved(): boolean {
+    const business = this.business();
+    return business ? this.marketplace.isSalonSaved(business.id) : false;
+  }
+
+  async toggleSavedSalon() {
+    const business = this.business();
+    if (!business || this.savedSalonPending) return;
+    if (!this.marketplace.isAuthenticated()) {
+      void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
+      return;
+    }
+    this.savedSalonPending = true;
+    try {
+      const saved = await this.marketplace.toggleSavedSalon(business.id);
+      await this.feedback.success(saved ? "Added to saved salons" : "Removed from saved salons");
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Could not update saved salons. Please try again.");
+    } finally {
+      this.savedSalonPending = false;
+    }
   }
 
   setAsPrimary() {

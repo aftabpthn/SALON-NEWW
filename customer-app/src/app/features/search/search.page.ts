@@ -1,7 +1,8 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { Location } from "@angular/common";
 import { ActivatedRoute } from "@angular/router";
 import { RouterLink } from "@angular/router";
-import { IonButton, IonContent, IonIcon, IonSearchbar } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
@@ -47,27 +48,29 @@ interface ProfessionalResult {
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon, IonSearchbar, BusinessCardComponent],
+  imports: [RouterLink, IonButton, IonContent, IonIcon, BusinessCardComponent],
   template: `
     <ion-content>
       <main class="page search-page">
         <section class="premium-discovery-top" aria-label="Salon discovery">
-          <section class="sticky-search fresha-search-card">
-            <div class="search-input-wrap">
-              <ion-searchbar [placeholder]="placeholder()" [value]="query()" (ionInput)="setQuery($any($event.target).value || '')"></ion-searchbar>
-              <div class="fresha-filter-row" aria-label="Search filters and sorting">
-                <div class="filter-sort-actions">
-                  <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
+          <section class="search-command-bar">
+            <div class="search-command-row">
+            <button type="button" class="search-command-back" (click)="goBack()" aria-label="Go back">
+              <ion-icon name="arrow-back-outline"></ion-icon>
+            </button>
+            <div class="search-command-input-wrap">
+              <input class="search-command-input" type="search" [placeholder]="placeholder()" [value]="query()" (input)="setQuery($any($event.target).value || '')" aria-label="Search salons" />
+              <div class="search-command-actions" aria-label="Search filters and sorting">
+                  <button type="button" class="search-command-action" [class.active]="filterPanelOpen() || activeFilterCount()" [attr.data-count]="activeFilterCount() || null" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
                     <ion-icon name="options-outline"></ion-icon>
                     <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
                     <small>{{ filterButtonLabel() }}</small>
                   </button>
-                  <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
+                  <button type="button" class="search-command-action" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
                     <ion-icon name="swap-vertical-outline"></ion-icon>
                     <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
                     <small>{{ sortDescription(sort()) }}</small>
                   </button>
-                </div>
               </div>
               @if (suggestions().length) {
                 <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
@@ -79,6 +82,7 @@ interface ProfessionalResult {
                   }
                 </div>
               }
+            </div>
             </div>
           </section>
 
@@ -376,6 +380,168 @@ interface ProfessionalResult {
     </ion-content>
   `,
   styles: [`
+    .search-command-bar {
+      position: sticky;
+      top: 8px;
+      z-index: 10;
+      width: 100%;
+      min-height: 52px;
+      margin: 0;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #ffffff;
+      box-shadow: 0 10px 26px rgba(6, 23, 43, 0.1);
+    }
+
+    .search-command-bar:focus-within {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 12px 28px rgba(6, 23, 43, 0.12);
+    }
+
+    .search-command-row {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      align-items: center;
+      min-width: 0;
+    }
+
+    .search-command-back,
+    .search-command-action {
+      display: grid;
+      place-items: center;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .search-command-back {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      font-size: 1.2rem;
+    }
+
+    .search-command-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      min-height: 44px;
+    }
+
+    .search-command-input {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+      min-height: 44px;
+      margin: 0;
+      padding: 0 8px 0 10px;
+      border: 0 !important;
+      outline: 0;
+      color: var(--text) !important;
+      background: transparent !important;
+      box-shadow: none;
+      font: inherit;
+    }
+
+    .search-command-input::placeholder {
+      color: var(--muted);
+      opacity: 0.68;
+    }
+
+    .search-command-actions {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-left: auto;
+    }
+
+    .search-command-action {
+      position: relative;
+      width: 18px;
+      height: 40px;
+      border-radius: 6px;
+      color: var(--muted);
+    }
+
+    .search-command-action ion-icon {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .search-command-action.active {
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .search-command-action span,
+    .search-command-action small {
+      display: none;
+    }
+
+    .search-command-action[data-count]::after {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: grid;
+      place-items: center;
+      min-width: 15px;
+      height: 15px;
+      padding: 0 3px;
+      border: 2px solid #ffffff;
+      border-radius: 999px;
+      color: #ffffff;
+      background: var(--primary);
+      content: attr(data-count);
+      font-size: 0.58rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    @media (max-width: 599px) {
+      .search-command-bar {
+        width: calc(100% + 16px);
+        margin-left: -8px;
+      }
+    }
+
+    .search-primary-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .search-back-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 6px 16px rgba(6, 23, 43, 0.08);
+      cursor: pointer;
+      position: relative;
+      z-index: 20;
+    }
+
+    .search-back-button ion-icon {
+      font-size: 1.2rem;
+    }
+
     .search-hero {
       display: grid;
       gap: 10px;
@@ -468,12 +634,12 @@ interface ProfessionalResult {
     .location-select-row ion-select {
       min-height: 46px;
       padding: 0 12px;
-      border: 1px solid rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(11, 70, 120, 0.16);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.9);
       font-weight: 900;
-      box-shadow: 0 8px 18px rgba(139, 92, 246, 0.06);
+      box-shadow: 0 8px 18px rgba(11, 70, 120, 0.06);
     }
 
     .selected-area-row {
@@ -482,10 +648,10 @@ interface ProfessionalResult {
       justify-content: space-between;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(11, 70, 120, 0.16);
       border-radius: 22px;
       color: var(--text);
-      background: rgba(245, 243, 255, 0.78);
+      background: rgba(231, 240, 248, 0.78);
       font-weight: 900;
     }
 
@@ -518,7 +684,7 @@ interface ProfessionalResult {
       display: grid;
       gap: 6px;
       padding: 8px;
-      border: 1px solid rgba(139, 92, 246, 0.14);
+      border: 1px solid rgba(11, 70, 120, 0.14);
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.98);
       box-shadow: 0 22px 44px rgba(17, 24, 39, 0.12);
@@ -541,7 +707,7 @@ interface ProfessionalResult {
 
     .suggestion-panel button:hover,
     .suggestion-panel button:focus-visible {
-      background: rgba(139, 92, 246, 0.08);
+      background: rgba(11, 70, 120, 0.08);
     }
 
     .suggestion-panel strong,
@@ -646,9 +812,9 @@ interface ProfessionalResult {
       --indicator-color: var(--primary);
       --color: var(--muted);
       --color-checked: var(--primary);
-      --background-checked: rgba(139, 92, 246, 0.08);
-      --background-hover: rgba(139, 92, 246, 0.06);
-      --background-focused: rgba(139, 92, 246, 0.08);
+      --background-checked: var(--primary-soft);
+      --background-hover: rgba(11, 70, 120, 0.06);
+      --background-focused: rgba(37, 99, 235, 0.1);
       font-size: 0.76rem;
       font-weight: 900;
     }
@@ -693,8 +859,8 @@ interface ProfessionalResult {
       margin: 0;
       max-height: calc(100vh - 32px);
       border-radius: 28px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 232, 0.98));
-      box-shadow: 0 30px 90px rgba(35, 25, 13, 0.28) !important;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98));
+      box-shadow: 0 30px 90px rgba(6, 23, 43, 0.24) !important;
     }
 
     .aura-map-card.fullscreen-map .map-copy,
@@ -764,7 +930,7 @@ interface ProfessionalResult {
 
     .live-map.picking {
       cursor: crosshair;
-      outline: 3px solid rgba(139, 92, 246, 0.28);
+      outline: 3px solid rgba(37, 99, 235, 0.4);
       outline-offset: -3px;
     }
 
@@ -793,7 +959,7 @@ interface ProfessionalResult {
       border: 3px solid #ffffff;
       border-radius: 999px;
       transform: translate(-50%, -50%);
-      box-shadow: 0 14px 24px rgba(139, 92, 246, 0.28);
+      box-shadow: 0 14px 24px rgba(11, 70, 120, 0.26);
     }
 
     .venue-pin {
@@ -813,10 +979,10 @@ interface ProfessionalResult {
     .venue-pin.active {
       width: 38px;
       height: 38px;
-      background: #F472B6;
-      outline: 4px solid rgba(244, 114, 182, 0.28);
+      background: var(--brand-900);
+      outline: 4px solid rgba(37, 99, 235, 0.3);
       outline-offset: 2px;
-      box-shadow: 0 18px 32px rgba(251, 113, 133, 0.36);
+      box-shadow: 0 18px 32px rgba(11, 70, 120, 0.3);
     }
 
     .live-map .venue-pin,
@@ -851,7 +1017,7 @@ interface ProfessionalResult {
     .user-pin {
       width: 28px;
       height: 28px;
-      color: #8B5CF6;
+      color: var(--primary);
       background: #ffffff;
       pointer-events: none;
     }
@@ -1032,8 +1198,8 @@ interface ProfessionalResult {
         margin-bottom: 7px;
         padding: 3px 6px;
         border-radius: 14px;
-        background: #fffdf8;
-        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+        background: #FFFFFF;
+        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
       }
 
       .fresha-search-top h1 {
@@ -1064,10 +1230,10 @@ interface ProfessionalResult {
         display: block;
         margin-bottom: 14px;
         padding: 0 8px;
-        border: 1px solid rgba(125, 89, 32, 0.12);
+        border: 1px solid rgba(11, 70, 120, 0.12);
         border-radius: 16px;
         background: #ffffff;
-        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
       }
 
       .search-input-wrap {
@@ -1235,17 +1401,17 @@ interface ProfessionalResult {
     }
 
     .map-toggle-button {
-      border-color: rgba(139, 92, 246, 0.18);
+      border-color: rgba(11, 70, 120, 0.18);
       color: var(--primary);
     }
 
     .header-change-button {
       min-height: 36px;
       padding: 0 14px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 999px;
-      color: #8A5C12;
-      background: rgba(255, 249, 236, 0.94);
+      color: var(--primary);
+      background: rgba(255, 255, 255, 0.94);
       font: inherit;
       font-size: 0.82rem;
       font-weight: 950;
@@ -1302,9 +1468,9 @@ interface ProfessionalResult {
     }
 
     .fresha-filter-row button.active:not(.filter-icon-button) {
-      border-color: rgba(214, 169, 74, 0.5);
-      color: #9A6A13;
-      background: linear-gradient(135deg, rgba(255, 236, 177, 0.96), rgba(255, 249, 236, 0.92));
+      border-color: rgba(11, 70, 120, 0.5);
+      color: var(--primary);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }
 
     .control-button {
@@ -1383,10 +1549,10 @@ interface ProfessionalResult {
       flex: 0 0 auto;
       min-height: 32px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.35);
+      border: 1px solid rgba(11, 70, 120, 0.35);
       border-radius: 999px;
-      color: #7A5019;
-      background: rgba(255, 249, 236, 0.9);
+      color: var(--primary);
+      background: rgba(255, 255, 255, 0.94);
       font: inherit;
       font-size: 0.74rem;
       font-weight: 900;
@@ -1418,10 +1584,10 @@ interface ProfessionalResult {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       max-height: min(82vh, 760px);
-      border: 1px solid rgba(214, 169, 74, 0.32);
+      border: 1px solid rgba(11, 70, 120, 0.32);
       border-radius: 28px 28px 0 0;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 224, 0.98));
-      box-shadow: 0 -24px 70px rgba(92, 65, 28, 0.24);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.98));
+      box-shadow: 0 -24px 70px rgba(6, 23, 43, 0.2);
       overflow: hidden;
     }
 
@@ -1439,7 +1605,7 @@ interface ProfessionalResult {
 
     .sheet-header {
       top: 0;
-      border-bottom: 1px solid rgba(214, 169, 74, 0.18);
+      border-bottom: 1px solid rgba(11, 70, 120, 0.18);
     }
 
     .sheet-header div {
@@ -1463,9 +1629,9 @@ interface ProfessionalResult {
     .sheet-header button {
       min-height: 36px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 999px;
-      color: #9A6A13;
+      color: var(--primary);
       background: rgba(255, 255, 255, 0.88);
       font: inherit;
       font-size: 0.78rem;
@@ -1509,18 +1675,18 @@ interface ProfessionalResult {
       gap: 4px;
       min-height: 72px;
       padding: 12px 14px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
+      border: 1px solid rgba(11, 70, 120, 0.2);
       border-radius: 18px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.9);
       text-align: left;
-      box-shadow: 0 10px 22px rgba(92, 65, 28, 0.06);
+      box-shadow: 0 10px 22px rgba(6, 23, 43, 0.06);
     }
 
     .option-grid button.selected {
       border-color: rgba(154, 106, 19, 0.52);
       color: #120D05;
-      background: linear-gradient(135deg, #FFE08A, #D6A94A, #B87D1E);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 14px 30px rgba(184, 125, 30, 0.24);
     }
 
@@ -1557,7 +1723,7 @@ interface ProfessionalResult {
     }
 
     .range-label-row strong {
-      color: #B87D1E;
+      color: var(--primary);
     }
 
     .range-location-hint {
@@ -1568,7 +1734,7 @@ interface ProfessionalResult {
 
     .range-row input {
       width: 100%;
-      accent-color: #D6A94A;
+      accent-color: var(--primary);
     }
 
     .range-row input:disabled {
@@ -1600,7 +1766,7 @@ interface ProfessionalResult {
       width: 100%;
       min-height: 44px;
       padding: 0 12px 0 28px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       border-radius: 14px;
       background: #fff;
       color: var(--text);
@@ -1610,7 +1776,7 @@ interface ProfessionalResult {
 
     .sheet-footer {
       bottom: 0;
-      border-top: 1px solid rgba(214, 169, 74, 0.18);
+      border-top: 1px solid rgba(11, 70, 120, 0.18);
     }
 
     .apply-button {
@@ -1619,7 +1785,7 @@ interface ProfessionalResult {
       border: 0;
       border-radius: 999px;
       color: #120D05;
-      background: linear-gradient(135deg, #FFE08A, #D6A94A, #B87D1E);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 18px 34px rgba(184, 125, 30, 0.22);
       font: inherit;
       font-weight: 950;
@@ -1630,10 +1796,10 @@ interface ProfessionalResult {
       align-items: center;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(11, 70, 120, 0.18);
       border-radius: 16px;
       color: var(--primary);
-      background: rgba(245, 243, 255, 0.72);
+      background: var(--primary-soft);
       font-size: 0.84rem;
       font-weight: 850;
     }
@@ -1649,9 +1815,9 @@ interface ProfessionalResult {
 
     .option-grid button.needs-location.selected {
       opacity: 1;
-      border-color: rgba(139, 92, 246, 0.4);
-      background: linear-gradient(135deg, rgba(237, 233, 254, 0.96), rgba(196, 181, 253, 0.72));
-      color: #4c1d95;
+      border-color: rgba(11, 70, 120, 0.4);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(203, 213, 225, 0.76));
+      color: var(--brand-800);
     }
 
     .professional-card {
@@ -1679,15 +1845,15 @@ interface ProfessionalResult {
       place-items: center;
       width: 40px;
       height: 40px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 10px 20px rgba(92, 65, 28, 0.1);
+      box-shadow: 0 10px 20px rgba(6, 23, 43, 0.08);
     }
 
     .professional-card .favorite.saved {
-      color: #B87D1E;
+      color: var(--primary);
     }
 
     .professional-copy {
@@ -1733,7 +1899,7 @@ interface ProfessionalResult {
     }
 
     .professional-meta strong {
-      color: #B87D1E;
+      color: var(--primary);
       font-weight: 950;
     }
 
@@ -1746,10 +1912,10 @@ interface ProfessionalResult {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid rgba(218, 165, 32, 0.32);
+      border: 1px solid rgba(11, 70, 120, 0.32);
       border-radius: 24px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 224, 0.94));
-      box-shadow: 0 18px 42px rgba(91, 61, 18, 0.14);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.94));
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12);
     }
 
     .filter-popover.compact {
@@ -1800,7 +1966,7 @@ interface ProfessionalResult {
       color: var(--text);
       background: rgba(255, 255, 255, 0.76);
       text-align: left;
-      box-shadow: 0 10px 24px rgba(91, 61, 18, 0.06);
+      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.06);
     }
 
     .popover-grid button.active {
@@ -1889,9 +2055,9 @@ interface ProfessionalResult {
     }
 
     .filter-icon-button.active {
-      border-color: rgba(214, 169, 74, 0.5);
-      color: #9A6A13;
-      background: linear-gradient(135deg, rgba(255, 236, 177, 0.96), rgba(255, 249, 236, 0.92));
+      border-color: rgba(11, 70, 120, 0.5);
+      color: var(--primary);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }
 
     .fresha-filter-row button:not(.filter-icon-button) {
@@ -2063,8 +2229,37 @@ interface ProfessionalResult {
         display: block;
         gap: 5px;
         margin-bottom: 6px;
-        padding: 6px;
-        border-radius: 14px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .search-primary-row {
+        gap: 2px;
+      }
+
+      .search-back-button {
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap ion-searchbar {
+        --background: transparent;
+        --box-shadow: none;
       }
 
       .fresha-search-card ion-searchbar {
@@ -2080,7 +2275,7 @@ interface ProfessionalResult {
       }
 
       .sticky-search.fresha-search-card .search-input-wrap {
-        position: static !important;
+        position: relative !important;
         display: flex !important;
         align-items: center !important;
         gap: 6px;
@@ -2095,14 +2290,14 @@ interface ProfessionalResult {
       }
 
       .fresha-filter-row {
-        position: static !important;
-        top: auto !important;
-        right: auto !important;
+        position: absolute !important;
+        top: 50% !important;
+        right: -10px !important;
         left: auto !important;
         z-index: 5;
         display: flex;
         flex: 0 0 auto;
-        margin-left: auto;
+        margin: 0;
         align-items: center;
         justify-content: flex-end;
         gap: 6px;
@@ -2110,7 +2305,11 @@ interface ProfessionalResult {
         height: 34px;
         padding: 0;
         overflow: visible;
-        translate: none !important;
+        translate: 0 -50% !important;
+      }
+
+      .search-native-input {
+        padding-right: 84px !important;
       }
 
       .control-button {
@@ -2325,10 +2524,10 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private routeSubscription?: Subscription;
   readonly mapCenter = signal<{ lat: number; lng: number }>(this.defaultCenter);
   readonly placeholder = computed(() => {
-    if (this.mode() === "services") return "Search haircut, facial, nails";
-    if (this.mode() === "staff") return "Search staff name or specialty";
-    if (this.mode() === "locations") return "Search area, city or address";
-    return "Search salon, spa or clinic";
+    if (this.mode() === "services") return "Search services";
+    if (this.mode() === "staff") return "Search professionals";
+    if (this.mode() === "locations") return "Search locations";
+    return "Search salons";
   });
   readonly modeLabel = computed(() => this.searchModes.find((item) => item.key === this.mode())?.label ?? "Salons");
   readonly searchTitle = computed(() => {
@@ -2517,8 +2716,12 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly filterLabel = computed(() => this.activeFilterSummary().join(", ") || "all filters");
   readonly showMap = computed(() => this.mapPanelOpen() || this.mapPickMode() || this.mapFullscreen());
 
-  constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
+  constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute, private readonly browserLocation: Location) {
     addIcons({ arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline });
+  }
+
+  goBack() {
+    this.browserLocation.back();
   }
 
   ngOnInit() {

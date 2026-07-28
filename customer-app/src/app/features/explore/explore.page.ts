@@ -52,21 +52,19 @@ import { Business } from "../../core/api.types";
         </div>
 
         <!-- Categories -->
-        @if (marketplace.categories().length) {
+        <!-- Main Categories -->
         <section class="explore-section">
           <div class="explore-section-head">
             <h2>Categories</h2>
           </div>
           <div class="explore-categories">
-            @for (cat of marketplace.categories(); track cat.id || cat.slug) {
+            @for (cat of mainCategories(); track cat.slug) {
             <a routerLink="/search" [queryParams]="{ category: cat.slug }" class="category-card">
-              <ion-icon name="business-outline"></ion-icon>
-              <span>{{ cat.label }}</span>
+              {{ cat.label }}
             </a>
             }
           </div>
         </section>
-        }
 
         <!-- Where You Left Off -->
         @if (recentlyViewed().length) {
@@ -74,7 +72,7 @@ import { Business } from "../../core/api.types";
           <div class="explore-section-head">
             <h2>Continue where you left off</h2>
           </div>
-          <div class="explore-business-grid">
+          <div class="business-grid explore-business-grid">
             @for (biz of recentlyViewed(); track biz.id) {
               <aura-business-card [business]="biz" [userLocation]="currentLocation()"></aura-business-card>
             }
@@ -88,7 +86,7 @@ import { Business } from "../../core/api.types";
             <h2>Recommended for you</h2>
             <a routerLink="/search">See all</a>
           </div>
-          <div class="explore-business-grid">
+          <div class="business-grid explore-business-grid">
             @for (biz of recommendations(); track biz.id) {
               <aura-business-card [business]="biz" [userLocation]="currentLocation()"></aura-business-card>
             } @empty {
@@ -112,7 +110,7 @@ import { Business } from "../../core/api.types";
             <h2>Book again</h2>
             <a routerLink="/tabs/bookings">View bookings</a>
           </div>
-          <div class="explore-business-grid">
+          <div class="business-grid explore-business-grid">
             @for (item of recentlyVisited(); track item.business.id) {
               <aura-business-card [business]="item.business" [userLocation]="currentLocation()"></aura-business-card>
             }
@@ -175,7 +173,7 @@ import { Business } from "../../core/api.types";
       border: 1px solid var(--border);
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.85);
-      box-shadow: 0 8px 20px rgba(92, 65, 28, 0.06);
+      box-shadow: 0 8px 20px rgba(6, 23, 43, 0.06);
       color: var(--muted);
       font-size: 0.88rem;
       font-weight: 800;
@@ -191,8 +189,8 @@ import { Business } from "../../core/api.types";
 
     @media (hover: hover) and (pointer: fine) {
       .explore-search-bar:hover {
-        border-color: rgba(214, 169, 74, 0.4);
-        box-shadow: 0 12px 28px rgba(92, 65, 28, 0.1);
+        border-color: rgba(11, 70, 120, 0.4);
+        box-shadow: 0 12px 28px rgba(6, 23, 43, 0.09);
       }
     }
 
@@ -231,8 +229,8 @@ import { Business } from "../../core/api.types";
 
     @media (hover: hover) and (pointer: fine) {
       .chip:hover {
-        border-color: rgba(214, 169, 74, 0.4);
-        background: rgba(246, 228, 193, 0.2);
+        border-color: rgba(11, 70, 120, 0.4);
+        background: var(--primary-soft);
       }
     }
 
@@ -265,39 +263,41 @@ import { Business } from "../../core/api.types";
 
     /* ── Categories ── */
     .explore-categories {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-      gap: 10px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
     }
 
+    .explore-categories::-webkit-scrollbar { display: none; }
+
     .category-card {
-      display: grid;
-      gap: 6px;
-      padding: 14px 10px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 12px;
       border: 1px solid var(--border);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.7);
-      text-align: center;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.75);
       text-decoration: none;
-      color: inherit;
+      color: var(--text);
+      font-size: 0.74rem;
+      font-weight: 900;
+      white-space: nowrap;
       transition: border-color 160ms ease;
     }
 
     .category-card ion-icon {
       color: #8a5a16;
-      font-size: 1.3rem;
-      margin: 0 auto;
-    }
-
-    .category-card span {
-      color: var(--text);
-      font-size: 0.74rem;
-      font-weight: 900;
+      font-size: 0.85rem;
     }
 
     @media (hover: hover) and (pointer: fine) {
       .category-card:hover {
-        border-color: rgba(214, 169, 74, 0.4);
+        border-color: rgba(11, 70, 120, 0.4);
       }
     }
 
@@ -345,7 +345,7 @@ import { Business } from "../../core/api.types";
     .skeleton-card {
       height: 180px;
       border-radius: 16px;
-      background: linear-gradient(90deg, rgba(214, 169, 74, 0.06), rgba(214, 169, 74, 0.14), rgba(214, 169, 74, 0.06));
+      background: linear-gradient(90deg, rgba(11, 70, 120, 0.06), rgba(11, 70, 120, 0.14), rgba(11, 70, 120, 0.06));
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
     }
@@ -368,6 +368,48 @@ export class ExplorePage implements OnInit {
   readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "Current area");
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(null);
   readonly skeletons = [1, 2, 3];
+
+  /** Keyword map: if raw category contains any keyword → it belongs to that main bucket */
+  private static readonly GROUP_MAP: Array<{ main: string; keywords: string[] }> = [
+    { main: "Hair",       keywords: ["hair", "shampoo", "conditioning", "keratin", "smoothen", "straighten", "curl", "rebond", "scalp", "hair spa", "head massage"] },
+    { main: "Skin",       keywords: ["skin", "facial", "peel", "glow", "acne", "pigment", "brighten", "derma", "anti aging", "blemish", "tan removal", "bleach"] },
+    { main: "Nails",      keywords: ["nail", "manicure", "pedicure", "gel", "acrylic", "nail art"] },
+    { main: "Makeup",     keywords: ["makeup", "bridal", "party makeup", "base", "contour", "foundation"] },
+    { main: "Massage",    keywords: ["massage", "body massage", "aroma", "deep tissue", "swedish", "thai", "balinese"] },
+    { main: "Waxing",     keywords: ["wax", "waxing", "strip", " Rica", "sugaring", "threading", "epil"] },
+    { main: "Shaving",    keywords: ["shav", "beard", "trim", "razor"] },
+    { main: "Spa",        keywords: ["spa", "steam", "sauna", "wrap", "scrub", "polish", "body polish"] },
+    { main: "Fitness",    keywords: ["fitness", "gym", "yoga", "pilates", " workout"] },
+    { main: "Tattoo",     keywords: ["tattoo", "pierc", "ink"] },
+    { main: "Extensions", keywords: ["extension", "weave", "wig", "toupee"] },
+    { main: "Therapy",    keywords: ["therap", "ayurveda", "acupressure", "reflexology", "physio"] },
+  ];
+
+  readonly mainCategories = computed(() => {
+    const raw = this.marketplace.categories();
+    const grouped = new Map<string, string>(); // mainLabel → first matching raw slug for query
+    for (const cat of raw) {
+      const lower = cat.label.toLowerCase();
+      let matched = false;
+      for (const group of ExplorePage.GROUP_MAP) {
+        if (group.keywords.some((kw) => lower.includes(kw))) {
+          if (!grouped.has(group.main)) {
+            grouped.set(group.main, cat.slug);
+          }
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        // Uncategorized → show raw label as-is (first word only if long)
+        const label = cat.label.length > 16 ? cat.label.split(/\s+/)[0] : cat.label;
+        if (!grouped.has(label)) {
+          grouped.set(label, cat.slug);
+        }
+      }
+    }
+    return Array.from(grouped, ([label, slug]) => ({ label, slug }));
+  });
 
   readonly greeting = computed(() => {
     const name = this.marketplace.customer()?.name?.trim().split(/\s+/)[0];

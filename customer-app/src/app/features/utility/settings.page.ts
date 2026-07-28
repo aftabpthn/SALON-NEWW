@@ -115,7 +115,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       place-items: center;
       border-radius: 14px;
       color: var(--primary-2);
-      background: rgba(245, 243, 255, 0.92);
+      background: var(--primary-soft);
       font-size: 1.14rem;
     }
     .device-panel { display: grid; gap: 14px; padding: 18px; }
@@ -133,12 +133,12 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       line-height: 1.45;
     }
     .empty-state { color: var(--muted); background: var(--surface-soft); }
-    .notice-text { color: var(--primary); background: var(--aura-gold-soft); border: 1px solid rgba(214, 169, 74, 0.22); }
+    .notice-text { color: var(--primary); background: var(--primary-soft); border: 1px solid rgba(11, 70, 120, 0.22); }
     .error-text { color: #EF4444; background: #fff1f2; border: 1px solid rgba(225, 29, 72, 0.16); }
     strong, span { display: block; }
     strong { margin-bottom: 5px; }
     span { color: var(--muted); line-height: 1.4; }
-    small { display: block; margin-top: 7px; color: #8B5CF6; font-weight: 800; }
+    small { display: block; margin-top: 7px; color: var(--primary); font-weight: 800; }
     @media (max-width: 599px) {
       .setting-row, .device-heading { align-items: flex-start; }
       .device-heading { flex-direction: column; }

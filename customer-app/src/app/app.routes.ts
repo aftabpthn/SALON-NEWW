@@ -30,6 +30,10 @@ export const routes: Routes = [
         loadComponent: () => import("./features/home/home.page").then((m) => m.HomePage)
       },
       {
+        path: "my-salon",
+        loadComponent: () => import("./features/my-salon/my-salon.page").then((m) => m.MySalonPage)
+      },
+      {
         path: "search",
         loadComponent: () => import("./features/explore/explore.page").then((m) => m.ExplorePage)
       },
@@ -98,6 +102,11 @@ export const routes: Routes = [
         path: "wishlist",
         canActivate: [customerAuthGuard],
         loadComponent: () => import("./features/wishlist/wishlist.page").then((m) => m.WishlistPage)
+      },
+      {
+        path: "saved-salons",
+        canActivate: [customerAuthGuard],
+        loadComponent: () => import("./features/saved-salons/saved-salons.page").then((m) => m.SavedSalonsPage)
       },
       {
         path: "referrals",

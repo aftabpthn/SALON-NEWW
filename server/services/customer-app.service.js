@@ -56,6 +56,18 @@ function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_customerFavorites_customer ON customerFavorites(tenantId, customerId, createdAt);
 
+    CREATE TABLE IF NOT EXISTS customerSavedSalons (
+      id TEXT PRIMARY KEY,
+      tenantId TEXT NOT NULL,
+      branchId TEXT NOT NULL DEFAULT '',
+      customerId TEXT NOT NULL,
+      businessId TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(tenantId, customerId, businessId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_customerSavedSalons_customer ON customerSavedSalons(tenantId, customerId, createdAt);
+
     CREATE TABLE IF NOT EXISTS customerWaitlistEntries (
       id TEXT PRIMARY KEY,
       tenantId TEXT NOT NULL,
@@ -355,6 +367,40 @@ function removeFavorite(access, businessId) {
   db.prepare(`DELETE FROM customerFavorites WHERE tenantId = @tenantId AND customerId = @customerId AND businessId = @businessId`).run({ tenantId: access.tenantId, customerId: access.userId, businessId });
 }
 
+function savedSalonRows(access) {
+  client(access);
+  return db.prepare(`SELECT * FROM customerSavedSalons WHERE tenantId = @tenantId AND customerId = @customerId ORDER BY datetime(createdAt) DESC`).all({ tenantId: access.tenantId, customerId: access.userId });
+}
+
+function listSavedSalons(access) {
+  return savedSalonRows(access).map(favoriteDto);
+}
+
+function saveSalon(access, businessId) {
+  client(access);
+  const business = businessForBranch(businessId) || customerMarketplaceService.business(businessId);
+  const row = {
+    id: id("save"),
+    tenantId: access.tenantId,
+    branchId: business.branchId || business.id || businessId,
+    customerId: access.userId,
+    businessId: business.branchId || business.id || businessId,
+    createdAt: now(),
+    updatedAt: now()
+  };
+  db.prepare(`
+    INSERT INTO customerSavedSalons (${Object.keys(row).join(", ")})
+    VALUES (${Object.keys(row).map((key) => `@${key}`).join(", ")})
+    ON CONFLICT(tenantId, customerId, businessId) DO UPDATE SET updatedAt = excluded.updatedAt
+  `).run(row);
+  return favoriteDto(row);
+}
+
+function removeSavedSalon(access, businessId) {
+  client(access);
+  db.prepare(`DELETE FROM customerSavedSalons WHERE tenantId = @tenantId AND customerId = @customerId AND businessId = @businessId`).run({ tenantId: access.tenantId, customerId: access.userId, businessId });
+}
+
 function rewards(access) {
   const row = client(access);
   return {
@@ -611,6 +657,9 @@ export const customerAppService = {
   listFavorites,
   addFavorite,
   removeFavorite,
+  listSavedSalons,
+  saveSalon,
+  removeSavedSalon,
   rewards,
   wallet,
   memberships,

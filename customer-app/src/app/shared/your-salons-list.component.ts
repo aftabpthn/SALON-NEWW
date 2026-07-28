@@ -82,11 +82,11 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
   styles: [`
     .salons-section {
       display: grid;
-      gap: 12px;
-      padding: 16px;
+      gap: 6px;
+      padding: 12px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96));
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
     }
 
     .salons-header {
@@ -110,9 +110,14 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 
     .empty-state {
       display: grid;
-      gap: 12px;
-      padding: 18px 0;
+      gap: 8px;
+      padding: 4px 0;
       text-align: center;
+    }
+
+    .empty-state ion-button {
+      min-height: 44px;
+      margin: 0;
     }
 
     .empty-state p {
@@ -140,13 +145,13 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .salon-row.is-primary {
-      background: rgba(214, 169, 74, 0.08);
-      border: 1px solid rgba(214, 169, 74, 0.18);
+      background: rgba(11, 70, 120, 0.08);
+      border: 1px solid rgba(11, 70, 120, 0.18);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .salon-row:hover {
-        background: rgba(214, 169, 74, 0.06);
+        background: rgba(11, 70, 120, 0.06);
       }
     }
 
@@ -156,14 +161,14 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       border-radius: 12px;
       display: grid;
       place-items: center;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, #f0f4f8, #dde6ee);
       font-size: 0.82rem;
       font-weight: 1000;
     }
 
     .salon-initials.primary-badge {
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .salon-details {
@@ -192,8 +197,8 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       flex-shrink: 0;
       padding: 2px 8px;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 0.64rem;
       font-weight: 1000;
       text-transform: uppercase;
@@ -213,7 +218,7 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       padding: 1px 7px;
       border-radius: 999px;
       color: var(--muted);
-      background: rgba(214, 169, 74, 0.08);
+      background: rgba(11, 70, 120, 0.08);
       font-size: 0.72rem;
       font-weight: 800;
     }
@@ -229,8 +234,8 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .meta-pill.relationship[data-type="regular"] {
-      color: #8B5CF6;
-      background: rgba(139, 92, 246, 0.1);
+      color: var(--primary);
+      background: var(--primary-soft);
     }
 
     .salon-actions {
@@ -243,7 +248,7 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       width: 32px;
       height: 32px;
       border-radius: 10px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
+      border: 1px solid rgba(11, 70, 120, 0.2);
       background: rgba(255, 255, 255, 0.7);
       color: var(--text);
       display: grid;
@@ -253,8 +258,8 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .remove-primary-btn {
-      color: #D6A94A;
-      border-color: rgba(214, 169, 74, 0.34);
+      color: var(--primary);
+      border-color: rgba(11, 70, 120, 0.34);
     }
 
     @media (hover: hover) and (pointer: fine) {

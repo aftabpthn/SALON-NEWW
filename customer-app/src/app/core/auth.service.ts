@@ -11,6 +11,7 @@ const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
 const DEVICE_ID_KEY = "auraCustomerDeviceId";
 const BIOMETRIC_ENABLED_KEY = "auraCustomerBiometricEnabled";
 const BIOMETRIC_CREDENTIAL_KEY = "auraCustomerBiometricCredentialId";
+const LAST_ROUTE_KEY = "auraCustomerLastRoute";
 
 @Injectable({ providedIn: "root" })
 export class AuthService {
@@ -598,6 +599,7 @@ export class AuthService {
   private clearSession() {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(LAST_ROUTE_KEY);
     this.accessToken.set(null);
     this.refreshToken.set(null);
     this.customer.set(null);

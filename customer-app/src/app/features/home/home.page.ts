@@ -335,7 +335,7 @@ interface ConsultationChatMessage {
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">{{ hasPrimarySalon() ? 'Explore nearby salons' : 'Recommendations' }}</h2>
+              <h2 class="section-title">Recommendations</h2>
             </div>
             <a routerLink="/tabs/search">Explore all</a>
           </div>
@@ -379,7 +379,7 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">{{ hasPrimarySalon() ? 'More salons near you' : 'Recommended businesses' }}</h2>
+            <h2 class="section-title">All Salons & Spas</h2>
           </div>
           <a routerLink="/tabs/search">See all</a>
         </div>
@@ -490,10 +490,10 @@ interface ConsultationChatMessage {
       gap: 6px;
       min-height: 32px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.3);
+      border: 1px solid rgba(11, 70, 120, 0.3);
       border-radius: 999px;
       color: var(--primary);
-      background: rgba(255, 249, 236, 0.92);
+      background: rgba(255, 255, 255, 0.94);
       font-weight: 900;
       white-space: nowrap;
     }
@@ -513,9 +513,9 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
       background:
-        radial-gradient(circle at 12% 12%, rgba(214, 169, 74, 0.22), transparent 34%),
-        linear-gradient(135deg, rgba(255, 251, 241, 0.98), rgba(246, 228, 193, 0.92));
-      box-shadow: 0 28px 74px rgba(92, 65, 28, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+        radial-gradient(circle at 12% 12%, rgba(11, 70, 120, 0.16), transparent 34%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.92));
+      box-shadow: 0 28px 74px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
     }
 
     .location-notice {
@@ -545,10 +545,10 @@ interface ConsultationChatMessage {
       gap: 12px;
       min-width: 0;
       padding: 18px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 28px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.92));
-      box-shadow: 0 28px 60px rgba(92, 65, 28, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
+      box-shadow: 0 28px 60px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
 
     .consultation-topline,
@@ -621,7 +621,7 @@ interface ConsultationChatMessage {
     .consultation-secondary,
     .consultation-upload {
       min-height: 38px;
-      border: 1px solid rgba(214, 169, 74, 0.34);
+      border: 1px solid rgba(11, 70, 120, 0.34);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.72);
@@ -634,9 +634,9 @@ interface ConsultationChatMessage {
     }
 
     .consultation-goals button.active {
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
-      border-color: rgba(155, 107, 34, 0.4);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
+      border-color: rgba(11, 70, 120, 0.4);
     }
 
     .consultation-chat {
@@ -655,7 +655,7 @@ interface ConsultationChatMessage {
       border-radius: 16px 16px 16px 6px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(214, 169, 74, 0.22);
+      border: 1px solid rgba(11, 70, 120, 0.22);
     }
 
     .consultation-message.customer {
@@ -688,7 +688,7 @@ interface ConsultationChatMessage {
     .consultation-input-label textarea {
       width: 100%;
       min-height: 104px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 18px;
       padding: 13px 14px;
       color: var(--text);
@@ -700,8 +700,8 @@ interface ConsultationChatMessage {
     }
 
     .consultation-input-label textarea:focus {
-      border-color: rgba(155, 107, 34, 0.46);
-      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
+      border-color: rgba(11, 70, 120, 0.46);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
     }
 
     .consultation-upload,
@@ -736,7 +736,7 @@ interface ConsultationChatMessage {
       width: 74px;
       height: 74px;
       overflow: hidden;
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      border: 1px solid rgba(11, 70, 120, 0.26);
       border-radius: 18px;
       padding: 0;
       background: #fff;
@@ -782,10 +782,10 @@ interface ConsultationChatMessage {
       min-height: 44px;
       border: 0;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #B77B24);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-weight: 1000;
-      box-shadow: 0 14px 30px rgba(155, 107, 34, 0.22);
+      box-shadow: 0 14px 30px rgba(11, 70, 120, 0.22);
     }
 
     .consultation-send:disabled {
@@ -796,7 +796,7 @@ interface ConsultationChatMessage {
     .consultation-results {
       display: grid;
       gap: 12px;
-      border-top: 1px solid rgba(214, 169, 74, 0.22);
+      border-top: 1px solid rgba(11, 70, 120, 0.22);
       padding-top: 12px;
     }
 
@@ -829,7 +829,7 @@ interface ConsultationChatMessage {
       display: grid;
       gap: 3px;
       width: 100%;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       border-radius: 16px;
       padding: 10px 42px 10px 12px;
       color: var(--text);
@@ -879,7 +879,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: 30px;
       background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
 
     .home-search-wrap {
@@ -902,19 +902,19 @@ interface ConsultationChatMessage {
       gap: 7px;
       min-height: 44px;
       padding: 0 13px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 999px;
       color: #5F3F10;
-      background: rgba(255, 249, 236, 0.94);
+      background: rgba(255, 255, 255, 0.94);
       font-size: 0.88rem;
       font-weight: 900;
       white-space: nowrap;
-      box-shadow: 0 10px 22px rgba(92, 65, 28, 0.1);
+      box-shadow: 0 10px 22px rgba(6, 23, 43, 0.08);
     }
 
     .home-control-button.map {
-      color: #120D05;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 213, 141, 0.72));
+      color: var(--brand-800);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.84));
     }
 
     .home-control-button ion-icon {
@@ -931,10 +931,10 @@ interface ConsultationChatMessage {
       display: grid;
       gap: 6px;
       padding: 8px;
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      border: 1px solid rgba(11, 70, 120, 0.26);
       border-radius: 20px;
-      background: rgba(255, 251, 241, 0.98);
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18);
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.14);
       backdrop-filter: blur(18px);
     }
 
@@ -952,7 +952,7 @@ interface ConsultationChatMessage {
 
     .home-suggestion-panel button:hover,
     .home-suggestion-panel button:focus-visible {
-      background: rgba(214, 169, 74, 0.12);
+      background: var(--primary-soft);
     }
 
     .home-suggestion-panel strong {
@@ -994,10 +994,10 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background:
-        radial-gradient(circle at 10% 10%, rgba(214, 169, 74, 0.18), transparent 34%),
-        linear-gradient(135deg, rgba(255, 251, 241, 0.98), rgba(246, 228, 193, 0.9)),
+        radial-gradient(circle at 10% 10%, rgba(11, 70, 120, 0.14), transparent 34%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9)),
         var(--surface);
-      box-shadow: 0 24px 58px rgba(92, 65, 28, 0.14);
+      box-shadow: 0 24px 58px rgba(6, 23, 43, 0.12);
     }
 
     .welcome-card h2,
@@ -1043,11 +1043,11 @@ interface ConsultationChatMessage {
       gap: 4px;
       min-width: 124px;
       padding: 13px 12px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
+      border: 1px solid rgba(11, 70, 120, 0.2);
       border-radius: 18px;
-      color: #281806;
-      background: linear-gradient(145deg, #ffffff, #fff4d8);
-      box-shadow: 0 12px 28px rgba(92, 65, 28, 0.09);
+      color: var(--text);
+      background: linear-gradient(145deg, #ffffff, var(--primary-soft));
+      box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
       text-decoration: none;
     }
 
@@ -1093,8 +1093,8 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: inherit;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(255, 249, 236, 0.94));
-      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 252, 0.94));
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
       text-decoration: none;
     }
 
@@ -1104,8 +1104,8 @@ interface ConsultationChatMessage {
       height: 46px;
       padding: 11px;
       border-radius: 18px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
     }
 
     .metric-card span,
@@ -1165,7 +1165,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: inherit;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96));
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
       text-align: left;
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -1216,14 +1216,14 @@ interface ConsultationChatMessage {
       height: 34px;
       padding: 9px;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     @media (hover: hover) and (pointer: fine) {
       .visited-card:hover {
         transform: translateY(-3px);
-        border-color: rgba(214, 169, 74, 0.34);
+        border-color: rgba(11, 70, 120, 0.34);
         box-shadow: var(--shadow-card);
       }
     }
@@ -1303,7 +1303,7 @@ interface ConsultationChatMessage {
       min-height: 360px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(90deg, rgba(214, 169, 74, 0.1), rgba(244, 213, 141, 0.16), rgba(214, 169, 74, 0.1));
+      background: linear-gradient(90deg, rgba(11, 70, 120, 0.08), rgba(7, 90, 156, 0.14), rgba(11, 70, 120, 0.08));
       animation: pulse 1.15s ease-in-out infinite;
       box-shadow: var(--shadow-soft);
     }
@@ -1425,6 +1425,7 @@ interface ConsultationChatMessage {
       .home-page {
         gap: 12px;
         padding-top: 10px;
+        padding-bottom: calc(112px + env(safe-area-inset-bottom));
       }
 
       .hero {
@@ -1446,7 +1447,7 @@ interface ConsultationChatMessage {
         padding: 12px;
         border-radius: 22px;
         background: rgba(255, 255, 255, 0.9);
-        box-shadow: 0 12px 28px rgba(92, 65, 28, 0.08);
+        box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
       }
 
       .home-search-wrap ion-searchbar {
@@ -1544,7 +1545,7 @@ interface ConsultationChatMessage {
         margin-inline: 0;
         padding: 0 !important;
         border-radius: 18px !important;
-        box-shadow: 0 12px 30px rgba(92, 65, 28, 0.14) !important;
+        box-shadow: 0 12px 30px rgba(6, 23, 43, 0.12) !important;
       }
       .home-page .visited-rail {
         grid-auto-columns: calc((100vw - 38px) / 2) !important;
@@ -1665,9 +1666,19 @@ export class HomePage implements OnInit {
   readonly hasPrimarySalon = computed(() => !!this.marketplace.primarySalon());
   readonly searchActive = computed(() => !!this.activeQuery().trim());
   readonly homeResults = computed(() => this.filterBusinesses(this.marketplace.businesses()));
-  readonly recommendations = computed(() => this.recommendedBusinesses().slice(0, 4));
-  readonly recommendedMore = computed(() => this.recommendedBusinesses().slice(4, 10));
-  readonly nearby = computed(() => this.homeResults().slice(6, 12));
+  readonly recommendations = computed(() => this.uniqueBusinesses(this.recommendedBusinesses()).slice(0, 4));
+  readonly recommendedMore = computed(() => {
+    const recommendationIds = new Set(this.recommendations().map((business) => business.id));
+    return this.uniqueBusinesses(this.recommendedBusinesses())
+      .filter((business) => !recommendationIds.has(business.id))
+      .slice(0, 6);
+  });
+  readonly nearby = computed(() => {
+    const usedIds = new Set([...this.recommendations(), ...this.recommendedMore()].map((business) => business.id));
+    return this.uniqueBusinesses(this.homeResults())
+      .filter((business) => !usedIds.has(business.id))
+      .slice(0, 6);
+  });
   readonly recentlyViewed = computed(() => this.recentlyViewedBusinesses());
   readonly recentlyVisited = computed(() => this.recentlyVisitedBusinesses());
   readonly suggestions = computed<HomeSearchSuggestion[]>(() => {
@@ -2221,6 +2232,16 @@ export class HomePage implements OnInit {
       })
       .filter((item) => item.distance !== Number.MAX_SAFE_INTEGER)
       .sort((left, right) => left.distance - right.distance)[0]?.business ?? null;
+  }
+
+  private uniqueBusinesses(rows: Business[]): Business[] {
+    const seen = new Set<string>();
+    return rows.filter((business) => {
+      const key = business.id || business.slug;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private distanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {

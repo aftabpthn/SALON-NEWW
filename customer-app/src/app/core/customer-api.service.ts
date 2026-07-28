@@ -280,6 +280,24 @@ export class CustomerApiService {
     );
   }
 
+  listSavedSalons(): Observable<CustomerFavorite[]> {
+    return this.http.get<ApiResponse<CustomerFavorite[] | ApiList<CustomerFavorite>>>(`${this.baseUrl}/customer/saved-salons`).pipe(
+      map((response) => this.unwrapList<CustomerFavorite>(response))
+    );
+  }
+
+  saveSalon(businessId: string): Observable<CustomerFavorite> {
+    return this.http.post<ApiResponse<CustomerFavorite>>(`${this.baseUrl}/customer/saved-salons/${encodeURIComponent(businessId)}`, {}).pipe(
+      map((response) => this.unwrap<CustomerFavorite>(response))
+    );
+  }
+
+  removeSavedSalon(businessId: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/customer/saved-salons/${encodeURIComponent(businessId)}`).pipe(
+      map(() => undefined)
+    );
+  }
+
   listBusinessReviews(slug: string): Observable<BusinessReview[]> {
     return this.http.get<ApiResponse<BusinessReview[] | ApiList<BusinessReview>>>(`${this.baseUrl}/public/businesses/${encodeURIComponent(slug)}/reviews`).pipe(
       map((response) => this.unwrapList<BusinessReview>(response))

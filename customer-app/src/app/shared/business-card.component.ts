@@ -2,9 +2,10 @@ import { Component, EventEmitter, Input, OnInit, Output } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { heart, heartOutline, locationOutline, timeOutline } from "ionicons/icons";
+import { bookmark, bookmarkOutline, heart, heartOutline, locationOutline, timeOutline } from "ionicons/icons";
 import { Business } from "../core/api.types";
 import { ClockService } from "../core/clock.service";
+import { CustomerFeedbackService } from "../core/customer-feedback.service";
 import { MarketplaceService } from "../core/marketplace.service";
 
 @Component({
@@ -30,9 +31,14 @@ import { MarketplaceService } from "../core/marketplace.service";
           </div>
         }
         <span class="rating-pill">Star {{ ratingText() }}</span>
-        <button class="favorite" [class.saved]="isSaved()" type="button" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
-          <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
-        </button>
+        <div class="cover-actions">
+          <button class="favorite" [class.saved]="isSaved()" type="button" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
+            <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
+          </button>
+          <button class="save-salon" [class.saved]="isSalonSaved()" type="button" [disabled]="savedSalonPending" [attr.aria-label]="isSalonSaved() ? 'Remove saved salon' : 'Save salon'" (click)="toggleSavedSalon($event)">
+            <ion-icon [name]="isSalonSaved() ? 'bookmark' : 'bookmark-outline'"></ion-icon>
+          </button>
+        </div>
         @if (business.hasOffer) {
           <span class="offer-pill">{{ business.offerText }}</span>
         }
@@ -42,17 +48,22 @@ import { MarketplaceService } from "../core/marketplace.service";
         <div class="topline">
           <span class="status-pill" [class.closed]="!isOpenNow()">{{ isOpenNow() ? "Open now" : "Closed" }}</span>
           <span class="countdown-pill" [class.warning]="isClosingSoon()" [class.closed]="!isOpenNow()">{{ timingStatus() }}</span>
-          <span><ion-icon name="location-outline"></ion-icon>{{ distanceLabel() }}</span>
         </div>
         <h3>{{ business.businessName }}</h3>
-        <p class="category">{{ business.category }}</p>
-        <p class="address">{{ business.address }}</p>
+        <p class="business-meta">
+          @if (business.category) {
+            <span class="business-category">{{ business.category }}</span>
+          }
+          @if (distanceLabel(); as location) {
+            <span class="business-location"><ion-icon name="location-outline"></ion-icon>{{ location }}</span>
+          }
+        </p>
         <div class="service-row">
           <span>{{ business.popularService || business.categories[0] || "Service" }}</span>
           <strong>from {{ money(business.startingPricePaise) }}</strong>
         </div>
         <div class="footer-row">
-          <span><ion-icon name="time-outline"></ion-icon>{{ business.hoursLabel || business.nextAvailableSlot || "Hours updating" }}</span>
+          <span><ion-icon name="time-outline"></ion-icon>{{ business.nextAvailableSlot || business.hoursLabel || "Availability updating" }}</span>
           <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
         </div>
       </div>
@@ -65,7 +76,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96)), var(--surface);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96)), var(--surface);
       box-shadow: var(--shadow-soft);
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -75,9 +86,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       transform: scale(0.99);
     }
 
+    .business-card:focus-visible {
+      outline: 3px solid rgba(37, 99, 235, 0.4);
+      outline-offset: 3px;
+    }
+
     .business-card.highlighted {
-      border-color: rgba(214, 169, 74, 0.72);
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18), 0 0 36px rgba(214, 169, 74, 0.16);
+      border-color: rgba(11, 70, 120, 0.62);
+      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.16), 0 0 36px rgba(11, 70, 120, 0.14);
     }
 
     .cover {
@@ -135,30 +151,39 @@ import { MarketplaceService } from "../core/marketplace.service";
       top: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 14px 26px rgba(92, 65, 28, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      box-shadow: 0 14px 26px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.68);
     }
 
-    .favorite {
+    .cover-actions {
       position: absolute;
       top: 12px;
       right: 12px;
       z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .favorite,
+    .save-salon {
+      position: relative;
+      inset: auto;
       width: 44px;
       height: 44px;
       display: grid;
       place-items: center;
-      border: 1px solid rgba(244, 213, 141, 0.32);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 249, 236, 0.84);
-      box-shadow: 0 14px 28px rgba(92, 65, 28, 0.18);
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 14px 28px rgba(6, 23, 43, 0.14);
       backdrop-filter: blur(14px);
     }
 
     .favorite.saved {
-      color: #120D05;
-      border-color: rgba(244, 213, 141, 0.42);
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      border-color: rgba(11, 70, 120, 0.42);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .offer-pill {
@@ -166,7 +191,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       bottom: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 10px 24px rgba(92, 65, 28, 0.16);
+      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.12);
     }
 
     .content {
@@ -204,10 +229,10 @@ import { MarketplaceService } from "../core/marketplace.service";
       align-items: center;
       min-height: 28px;
       padding: 0 10px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
+      border: 1px solid rgba(11, 70, 120, 0.22);
       border-radius: 999px;
-      color: #6D4915;
-      background: linear-gradient(135deg, rgba(255, 249, 236, 0.9), rgba(214, 169, 74, 0.14));
+      color: var(--brand-800);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
       font-size: 0.76rem;
       font-weight: 900;
       white-space: nowrap;
@@ -215,15 +240,15 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .countdown-pill.warning {
-      color: #7A5019;
-      border-color: rgba(214, 169, 74, 0.3);
-      background: linear-gradient(135deg, rgba(255, 249, 236, 0.92), rgba(244, 213, 141, 0.24));
+      color: var(--primary);
+      border-color: rgba(11, 70, 120, 0.3);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
     }
 
     .countdown-pill.closed {
-      color: #7A5019;
-      border-color: rgba(125, 89, 32, 0.18);
-      background: rgba(125, 89, 32, 0.08);
+      color: var(--muted);
+      border-color: var(--border);
+      background: var(--surface-soft);
     }
 
     h3 {
@@ -235,20 +260,52 @@ import { MarketplaceService } from "../core/marketplace.service";
       line-height: 1.1;
     }
 
-    .category,
-    .address {
+    .business-meta {
+      min-height: 19px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       margin: 0;
       color: var(--muted);
       font-size: 0.9rem;
       line-height: 1.35;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .favorite:disabled,
+    .save-salon:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
+    .business-meta > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .business-location {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .business-category + .business-location::before {
+      content: "·";
+      color: rgba(82, 101, 121, 0.68);
+    }
+
+    .business-location ion-icon {
+      flex: 0 0 auto;
     }
 
     .service-row {
       margin-top: 6px;
       padding: 12px;
       border-radius: 18px;
-      border: 1px solid rgba(214, 169, 74, 0.14);
-      background: rgba(255, 249, 236, 0.9);
+      border: 1px solid rgba(11, 70, 120, 0.14);
+      background: rgba(255, 255, 255, 0.94);
     }
 
     .service-row span {
@@ -274,7 +331,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .business-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(214, 169, 74, 0.34);
+        border-color: rgba(11, 70, 120, 0.34);
         box-shadow: var(--shadow-card);
       }
     }
@@ -282,7 +339,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     @media (max-width: 599px) {
       :host-context(.business-rail) .business-card {
         grid-template-columns: 42px minmax(0, 1fr) 26px;
-        grid-template-rows: auto auto auto;
+        grid-template-rows: auto auto auto !important;
         gap: 3px 8px;
         align-items: center;
         width: min(178px, 47vw);
@@ -304,17 +361,16 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       :host-context(.business-rail) .rating-pill,
-      :host-context(.business-rail) .favorite,
+      :host-context(.business-rail) .cover-actions,
       :host-context(.business-rail) .offer-pill,
       :host-context(.business-rail) .topline,
-      :host-context(.business-rail) .address,
       :host-context(.business-rail) .service-row strong,
       :host-context(.business-rail) .footer-row > span {
         display: none;
       }
 
       :host-context(.business-rail) h3,
-      :host-context(.business-rail) .category,
+      :host-context(.business-rail) .business-meta,
       :host-context(.business-rail) .service-row {
         min-width: 0;
         margin: 0;
@@ -328,12 +384,14 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       :host-context(.business-rail) h3 {
         grid-column: 2;
+        min-height: 0;
+        display: block;
         color: var(--text);
         font-size: 0.86rem;
         line-height: 1.05;
       }
 
-      :host-context(.business-rail) .category,
+      :host-context(.business-rail) .business-meta,
       :host-context(.business-rail) .service-row span {
         color: var(--muted);
         font-size: 0.72rem;
@@ -357,6 +415,10 @@ import { MarketplaceService } from "../core/marketplace.service";
         font-size: 0;
       }
 
+      :host-context(.business-rail) .business-location {
+        display: none;
+      }
+
       .business-card {
         border-radius: 18px;
       }
@@ -364,7 +426,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .cover {
         aspect-ratio: auto;
         width: 100%;
-        height: 138px;
+        height: 116px;
       }
 
       .cover-fallback span {
@@ -390,11 +452,18 @@ import { MarketplaceService } from "../core/marketplace.service";
         left: 10px;
       }
 
-      .favorite {
+      .cover-actions {
         top: 10px;
         right: 10px;
-        width: 36px;
-        height: 36px;
+        gap: 5px;
+      }
+
+      .favorite,
+      .save-salon {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
       }
 
       .content {
@@ -409,18 +478,16 @@ import { MarketplaceService } from "../core/marketplace.service";
       h3 {
         margin-top: 2px;
         font-size: 1.05rem;
+        min-height: 2.1em;
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
       }
 
-      .category,
-      .address {
+      .business-meta {
         font-size: 0.78rem;
         line-height: 1.2;
-      }
-
-      .address {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
       .service-row {
@@ -448,6 +515,19 @@ import { MarketplaceService } from "../core/marketplace.service";
         min-height: 36px;
         margin: 0;
       }
+
+      .footer-row > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .save-salon.saved {
+      color: #fff;
+      border-color: var(--primary);
+      background: var(--primary);
     }
 
     @media (min-width: 1024px) {
@@ -478,13 +558,16 @@ export class BusinessCardComponent implements OnInit {
   @Output() cardSelect = new EventEmitter<Business>();
   private readonly savedUserLocation = this.savedLocation();
   private imageFailed = false;
+  favoritePending = false;
+  savedSalonPending = false;
 
-  constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService) {
-    addIcons({ heart, heartOutline, locationOutline, timeOutline });
+  constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService, private readonly feedback: CustomerFeedbackService) {
+    addIcons({ bookmark, bookmarkOutline, heart, heartOutline, locationOutline, timeOutline });
   }
 
   ngOnInit() {
     void this.marketplace.ensureFavorites().catch(() => undefined);
+    void this.marketplace.ensureSavedSalons().catch(() => undefined);
   }
 
   money(pricePaise: number): string {
@@ -543,7 +626,7 @@ export class BusinessCardComponent implements OnInit {
   distanceLabel(): string {
     const distance = this.realDistanceKm();
     if (distance !== null) return `${this.decimalText(distance)} km`;
-    return this.business.area || this.business.city || this.business.address || "Location unavailable";
+    return String(this.business.area || this.business.city || this.business.address || "").trim();
   }
 
   ratingText(): string {
@@ -639,13 +722,45 @@ export class BusinessCardComponent implements OnInit {
     return this.marketplace.isFavorite(this.business.id) || this.marketplace.isFavorite(this.business.slug);
   }
 
-  toggleSave(event: Event) {
+  isSalonSaved(): boolean {
+    return this.marketplace.isSalonSaved(this.business.id);
+  }
+
+  async toggleSavedSalon(event: Event) {
+    event.preventDefault();
     event.stopPropagation();
+    if (this.savedSalonPending) return;
     if (!this.marketplace.isAuthenticated()) {
       void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
       return;
     }
-    void this.marketplace.toggleFavorite(this.business.id).catch(() => undefined);
+    this.savedSalonPending = true;
+    try {
+      const saved = await this.marketplace.toggleSavedSalon(this.business.id);
+      await this.feedback.success(saved ? "Added to saved salons" : "Removed from saved salons");
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Could not update saved salons. Please try again.");
+    } finally {
+      this.savedSalonPending = false;
+    }
+  }
+
+  async toggleSave(event: Event) {
+    event.stopPropagation();
+    if (this.favoritePending) return;
+    if (!this.marketplace.isAuthenticated()) {
+      void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
+      return;
+    }
+    this.favoritePending = true;
+    try {
+      const saved = await this.marketplace.toggleFavorite(this.business.id);
+      await this.feedback.success(saved ? "Added to favorites / wishlist" : "Removed from favorites / wishlist");
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Could not update favorites. Please try again.");
+    } finally {
+      this.favoritePending = false;
+    }
   }
 
   private recordRecentlyViewed() {

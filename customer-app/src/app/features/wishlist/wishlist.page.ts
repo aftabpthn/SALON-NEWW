@@ -14,7 +14,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         <section class="wishlist-hero premium-card">
           <div class="hero-icon"><ion-icon name="heart"></ion-icon></div>
           <div>
-            <h1>Saved salons</h1>
+            <h1>Liked salons</h1>
           </div>
           <ion-button class="primary-gradient" routerLink="/tabs/search">
             <ion-icon name="search-outline" slot="start"></ion-icon>
@@ -42,17 +42,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
             </section>
           }
 
-          <section class="summary-grid">
-            <article class="summary-card premium-card">
-              <span>Saved</span>
-              <strong>{{ savedCount() }}</strong>
-            </article>
-            <article class="summary-card premium-card">
-              <span>Ready to book</span>
-              <strong>{{ bookableCount() }}</strong>
-            </article>
-          </section>
-
           <section class="wishlist-grid">
             @for (favorite of saved(); track favorite.businessId) {
               @if (favorite.business; as business) {
@@ -77,7 +66,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
               }
             } @empty {
               <section class="state-card premium-card">
-                <h2>No saved salons yet</h2>
+                <h2>No liked salons yet</h2>
                 <ion-button class="primary-gradient" routerLink="/tabs/search">Find salons</ion-button>
               </section>
             }
@@ -110,7 +99,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       font-size: 1.7rem;
-      box-shadow: 0 16px 32px rgba(139, 92, 246, 0.2);
+      box-shadow: 0 16px 32px rgba(11, 70, 120, 0.2);
     }
 
     h1,

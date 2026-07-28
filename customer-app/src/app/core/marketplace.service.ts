@@ -39,6 +39,7 @@ export class MarketplaceService {
   readonly businesses = signal<Business[]>([]);
   readonly categories = signal<Category[]>([]);
   readonly favorites = signal<CustomerFavorite[]>([]);
+  readonly savedSalons = signal<CustomerFavorite[]>([]);
   readonly selectedBusiness = signal<Business | null>(null);
   readonly bookings = signal<Booking[]>([]);
   readonly selectedBooking = signal<Booking | null>(null);
@@ -55,6 +56,7 @@ export class MarketplaceService {
   readonly salonOffers = signal<PublicOffersResponse | null>(null);
   readonly mySalonDashboard = signal<MySalonDashboard | null>(null);
   private favoritesLoaded = false;
+  private savedSalonsLoaded = false;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {}
 
@@ -230,6 +232,34 @@ export class MarketplaceService {
     }
     await this.addFavorite(businessId);
     return true;
+  }
+
+  async ensureSavedSalons(): Promise<CustomerFavorite[]> {
+    if (!this.isAuthenticated()) return [];
+    if (this.savedSalonsLoaded) return this.savedSalons();
+    const rows = await firstValueFrom(this.api.listSavedSalons());
+    this.savedSalons.set(rows);
+    this.savedSalonsLoaded = true;
+    return rows;
+  }
+
+  isSalonSaved(businessId: string): boolean {
+    return this.savedSalons().some((row) => row.businessId === businessId || row.business?.id === businessId || row.business?.slug === businessId);
+  }
+
+  async toggleSavedSalon(businessId: string): Promise<boolean> {
+    return this.run("Unable to update saved salons", async () => {
+      if (this.isSalonSaved(businessId)) {
+        await firstValueFrom(this.api.removeSavedSalon(businessId));
+        this.savedSalons.update((rows) => rows.filter((row) => row.businessId !== businessId && row.business?.id !== businessId && row.business?.slug !== businessId));
+        this.savedSalonsLoaded = true;
+        return false;
+      }
+      const saved = await firstValueFrom(this.api.saveSalon(businessId));
+      this.savedSalons.update((rows) => [saved, ...rows.filter((row) => row.businessId !== saved.businessId)]);
+      this.savedSalonsLoaded = true;
+      return true;
+    });
   }
 
   async updateCustomer(payload: Partial<CustomerProfile>): Promise<CustomerProfile> {

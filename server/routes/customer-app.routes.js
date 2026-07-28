@@ -48,6 +48,19 @@ customerAppRouter.delete("/customer/favorites/:businessId", asyncHandler((req, r
   res.json({ removed: true });
 }));
 
+customerAppRouter.get("/customer/saved-salons", asyncHandler((req, res) => {
+  res.json(customerAppService.listSavedSalons(req.access));
+}));
+
+customerAppRouter.post("/customer/saved-salons/:businessId", asyncHandler((req, res) => {
+  res.status(201).json(customerAppService.saveSalon(req.access, req.params.businessId));
+}));
+
+customerAppRouter.delete("/customer/saved-salons/:businessId", asyncHandler((req, res) => {
+  customerAppService.removeSavedSalon(req.access, req.params.businessId);
+  res.json({ removed: true });
+}));
+
 customerAppRouter.get("/customer/rewards", asyncHandler((req, res) => {
   res.json(customerAppService.rewards(req.access));
 }));

@@ -51,7 +51,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-items: center;
       padding: 24px;
       background:
-        radial-gradient(circle at 50% 16%, rgba(244, 114, 182, 0.14), transparent 34%),
+        radial-gradient(circle at 50% 16%, rgba(11, 70, 120, 0.12), transparent 34%),
         transparent;
     }
 
@@ -73,8 +73,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       margin: 0 auto 18px;
       border-radius: 30px;
       color: #ffffff;
-      background: linear-gradient(135deg, #10B981, #F472B6);
-      box-shadow: 0 16px 34px rgba(20, 184, 166, 0.24);
+      background: linear-gradient(135deg, #10B981, #047857);
+      box-shadow: 0 16px 34px rgba(16, 185, 129, 0.24);
       font-size: 2.35rem;
     }
 
@@ -115,10 +115,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .home-button {
-      --color: #7A5019;
-      --color-activated: #241609;
-      --background-hover: rgba(214, 169, 74, 0.12);
-      --background-activated: rgba(214, 169, 74, 0.18);
+      --color: var(--primary);
+      --color-activated: var(--brand-900);
+      --background-hover: var(--primary-soft);
+      --background-activated: rgba(11, 70, 120, 0.16);
       margin-top: 8px;
       font-weight: 900;
       letter-spacing: 0;

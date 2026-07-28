@@ -124,10 +124,10 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
       place-items: center;
       border-radius: 999px;
       color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 1.25rem;
       font-weight: 900;
-      box-shadow: 0 16px 34px rgba(214, 169, 74, 0.22);
+      box-shadow: 0 16px 34px rgba(11, 70, 120, 0.22);
     }
 
     .inbox-actions,
@@ -155,8 +155,8 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     }
 
     .notification-card.unread {
-      border-color: rgba(214, 169, 74, 0.42) !important;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(244, 213, 141, 0.2)) !important;
+      border-color: rgba(11, 70, 120, 0.42) !important;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9)) !important;
     }
 
     .notification-card > ion-icon,
@@ -166,7 +166,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
       padding: 11px;
       border-radius: 16px;
       color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .notification-title {
@@ -183,8 +183,8 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .notification-title span {
       padding: 4px 8px;
       border-radius: 999px;
-      color: #7A5019;
-      background: rgba(214, 169, 74, 0.16);
+      color: var(--primary);
+      background: var(--primary-soft);
       font-size: 0.7rem;
       font-weight: 900;
     }
@@ -200,10 +200,10 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .read-button {
       min-height: 36px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 999px;
       color: var(--primary);
-      background: rgba(255, 249, 236, 0.9);
+      background: rgba(255, 255, 255, 0.94);
       font-weight: 900;
     }
 
@@ -237,7 +237,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .skeleton-row {
       height: 88px;
       border-radius: var(--radius-lg);
-      background: linear-gradient(90deg, rgba(214, 169, 74, 0.1), rgba(244, 213, 141, 0.22), rgba(214, 169, 74, 0.1));
+      background: linear-gradient(90deg, rgba(11, 70, 120, 0.08), rgba(7, 90, 156, 0.16), rgba(11, 70, 120, 0.08));
       animation: pulse 1.15s ease-in-out infinite;
     }
 

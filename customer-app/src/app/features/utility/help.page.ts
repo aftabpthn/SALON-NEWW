@@ -98,7 +98,7 @@ interface HelpItem {
       margin-bottom: 12px;
       border-radius: 22px;
       color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 1.75rem;
     }
 
@@ -138,8 +138,8 @@ interface HelpItem {
 
     .quick-card.active {
       color: #120D05 !important;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A 58%, #9B6B22) !important;
-      box-shadow: 0 18px 44px rgba(214, 169, 74, 0.24) !important;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800)) !important;
+      box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24) !important;
     }
 
     .quick-card ion-icon {

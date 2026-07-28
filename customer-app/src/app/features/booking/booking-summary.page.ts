@@ -99,10 +99,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-items: center;
       margin-bottom: 12px;
       border-radius: 24px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-size: 1.8rem;
-      box-shadow: 0 18px 38px rgba(214, 169, 74, 0.26);
+      box-shadow: 0 18px 38px rgba(11, 70, 120, 0.24);
     }
 
     .summary-hero h1,
@@ -188,8 +188,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       height: 48px;
       padding: 12px;
       border-radius: 18px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .summary-actions {

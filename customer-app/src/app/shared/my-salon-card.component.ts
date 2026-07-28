@@ -64,8 +64,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 251, 241, 0.98), rgba(246, 228, 193, 0.9));
-      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
     }
 
     .salon-header {
@@ -81,8 +81,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       border-radius: 14px;
       display: grid;
       place-items: center;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-weight: 1000;
       font-size: 1.05rem;
       letter-spacing: -0.03em;
@@ -122,7 +122,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       width: 36px;
       height: 36px;
       border-radius: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(11, 70, 120, 0.24);
       background: rgba(255, 255, 255, 0.7);
       color: var(--text);
       display: grid;
@@ -142,9 +142,9 @@ import { MarketplaceService } from "../core/marketplace.service";
       justify-content: center;
       gap: 6px;
       padding: 10px 12px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
+      border: 1px solid rgba(11, 70, 120, 0.22);
       border-radius: 14px;
-      color: #201307;
+      color: var(--text);
       background: rgba(255, 255, 255, 0.72);
       font-size: 0.84rem;
       font-weight: 900;
@@ -155,13 +155,13 @@ import { MarketplaceService } from "../core/marketplace.service";
     .action-pill ion-icon {
       width: 16px;
       height: 16px;
-      color: #8a5a16;
+      color: var(--primary);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .action-pill:hover {
         transform: translateY(-2px);
-        border-color: rgba(214, 169, 74, 0.42);
+        border-color: rgba(11, 70, 120, 0.42);
       }
     }
 
