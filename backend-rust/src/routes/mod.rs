@@ -14,6 +14,7 @@ use axum::{
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
 pub mod ai_concierge;
+pub mod ai_copilot;
 pub mod appointment_activity;
 pub mod appointments;
 pub mod auth;
@@ -26,7 +27,7 @@ pub mod booking_portal_v2;
 pub mod branches;
 pub mod cash_drawer;
 pub mod clients;
-mod context;
+pub(crate) mod context;
 pub mod customer_portal;
 pub mod health;
 pub mod integrations;
@@ -97,6 +98,7 @@ pub fn build_router(state: AppState) -> Router {
     let protected_api = Router::new()
         .merge(auth::protected_router())
         .merge(ai_concierge::router())
+        .merge(ai_copilot::router())
         .merge(balance_sheet::router())
         .merge(branches::router())
         .merge(birthday_anniversary::router())

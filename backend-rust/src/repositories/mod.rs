@@ -3,6 +3,7 @@ pub mod ai_copilot_repository;
 pub mod ai_action_repository;
 pub mod ai_prediction_repository;
 pub mod ai_signal_repository;
+pub mod ai_scope_repository;
 pub mod analytics_repository;
 pub mod auth_repository;
 pub mod availability_repository;
