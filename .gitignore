@@ -14,6 +14,9 @@ target/
 .codex-target-*/
 target_noblock/
 out-tsc/
+# angular.json points the build cache at a Windows path, which becomes a
+# literal "C:" directory when the build runs on Linux/macOS.
+C:/
 __pycache__/
 .venv/
 venv/
