@@ -11,9 +11,21 @@ use crate::{
         self as repository, AiGovernanceRecord, AiMessageRecord, AiOperationalContext,
         AiSessionRecord, AiVoiceCallOpportunity, AiVoiceCallRecord, AiVoiceCallReportSummary,
     },
+    services::ai_copilot_tools::{self, CopilotAnswer},
 };
 
 const CHANNELS: &[&str] = &["web", "whatsapp", "voice"];
+
+/// The AI provider answered.
+const PROVIDER_LIVE: &str = "live";
+/// No AI service URL/token is configured, so the CRM fallback answered.
+const PROVIDER_NOT_CONFIGURED: &str = "not_configured";
+/// The AI service could not be reached (DNS, connection refused, timeout).
+const PROVIDER_UNREACHABLE: &str = "unreachable";
+/// The AI service replied with a non-success status.
+const PROVIDER_HTTP_ERROR: &str = "http_error";
+/// The AI service replied with a body this service could not use.
+const PROVIDER_INVALID_RESPONSE: &str = "invalid_response";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +60,15 @@ pub struct ConciergeResponse {
     pub assistant_message: AiMessageRecord,
     pub action_type: String,
     pub action_payload: Value,
+    /// Which engine produced the reply: `live` when the AI provider answered,
+    /// otherwise the reason the deterministic CRM fallback was used.
+    pub provider_status: String,
+    /// Evidence from the CRM tool that answered, when one did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copilot: Option<CopilotAnswer>,
+    /// Set when a tool matched the question but the caller's role may not run it.
+    #[serde(skip_serializing_if = "str::is_empty")]
+    pub restricted_tool: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +132,121 @@ struct ProviderResponse {
 struct ProviderEnvelope<T> {
     success: bool,
     data: Option<T>,
+}
+
+/// What the CRM tool layer produced for this message.
+enum CopilotOutcome {
+    /// A tool ran and produced grounded evidence.
+    Answered(Box<CopilotAnswer>),
+    /// A tool matched but the caller's role may not run it.
+    Forbidden(&'static str),
+    /// No tool matched the question, or the channel has no signed-in role.
+    NotApplicable,
+}
+
+impl CopilotOutcome {
+    fn answer(&self) -> Option<&CopilotAnswer> {
+        match self {
+            Self::Answered(answer) => Some(answer),
+            _ => None,
+        }
+    }
+}
+
+/// Detects the intent, checks the role, and runs the one matching read tool.
+#[allow(clippy::too_many_arguments)]
+async fn run_copilot_tool(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    role: &str,
+    session_id: &str,
+    message: &str,
+) -> CopilotOutcome {
+    // A bare "why?" continues the previous answer instead of matching nothing.
+    let matched = match ai_copilot_tools::detect(message) {
+        Some(matched) => matched,
+        None if ai_copilot_tools::is_follow_up(message) => {
+            match previous_tool(db, tenant_id, branch_id, session_id).await {
+                Some((tool, subject)) => ai_copilot_tools::continue_tool(tool, subject),
+                None => return CopilotOutcome::NotApplicable,
+            }
+        }
+        None => return CopilotOutcome::NotApplicable,
+    };
+    let actor = ai_copilot_tools::ToolActor::new(user_id, role);
+    let started = std::time::Instant::now();
+    let outcome = ai_copilot_tools::run(db, tenant_id, branch_id, &actor, &matched).await;
+    let elapsed_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
+
+    // Every tool call is audited, allowed or not. The question is stored with
+    // contact details stripped so the audit trail does not become a second
+    // store of client PII.
+    let (audit_outcome, row_count) = match &outcome {
+        Ok(answer) => ("allowed", answer.data_row_count()),
+        Err(ai_copilot_tools::ToolRefusal::Forbidden(_)) => ("forbidden", 0),
+        Err(ai_copilot_tools::ToolRefusal::NoMatch) => ("failed", 0),
+    };
+    if let Err(error) = repository::record_tool_audit(
+        db,
+        tenant_id,
+        branch_id,
+        user_id,
+        role,
+        session_id,
+        matched.tool.name(),
+        audit_outcome,
+        &redact(message),
+        row_count,
+        elapsed_ms,
+    )
+    .await
+    {
+        // An audit failure must be visible, but must not deny the user an answer
+        // they are entitled to.
+        tracing::error!(%error, tool = matched.tool.name(), "failed to write copilot tool audit");
+    }
+
+    match outcome {
+        Ok(answer) => CopilotOutcome::Answered(Box::new(answer)),
+        Err(ai_copilot_tools::ToolRefusal::Forbidden(tool)) => {
+            tracing::info!(
+                tool = tool.name(),
+                role,
+                "copilot tool refused for this role"
+            );
+            CopilotOutcome::Forbidden(tool.name())
+        }
+        Err(ai_copilot_tools::ToolRefusal::NoMatch) => CopilotOutcome::NotApplicable,
+    }
+}
+
+/// Finds the tool that produced the most recent answer in this session, and the
+/// subject the question before it was about, so a follow-up stays on topic.
+async fn previous_tool(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+) -> Option<(ai_copilot_tools::CopilotTool, Vec<String>)> {
+    let history = repository::messages(db, tenant_id, branch_id, session_id, 20)
+        .await
+        .ok()?;
+    // Walk backwards to the last answer a CRM tool produced.
+    let position = history.iter().rposition(|message| {
+        message.role == "assistant" && message.model_name.starts_with("crm-tool:")
+    })?;
+    let tool = ai_copilot_tools::tool_from_model_name(&history[position].model_name)?;
+    // The user turn before it carries the subject, e.g. which client was named.
+    let subject = history[..position]
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .and_then(|message| ai_copilot_tools::detect(&message.body))
+        .map(|matched| matched.subject_candidates)
+        .unwrap_or_default();
+    Some((tool, subject))
 }
 
 pub fn default_governance() -> AiGovernanceRecord {
@@ -250,7 +386,7 @@ pub async fn process_web_message(
         .ok_or_else(|| AppError::not_found("AI session was not found"))?;
     process_message(
         db,
-        settings,
+        ProviderEndpoint::from_settings(settings),
         tenant_id,
         branch_id,
         session,
@@ -289,7 +425,7 @@ pub async fn process_external_message(
     .ok_or_else(|| AppError::validation("external AI session could not be opened"))?;
     process_message(
         db,
-        settings,
+        ProviderEndpoint::from_settings(settings),
         tenant_id,
         branch_id,
         session,
@@ -302,9 +438,47 @@ pub async fn process_external_message(
     .await
 }
 
+/// The only two settings the message pipeline needs to reach the AI provider.
+///
+/// Taking these instead of the whole `Settings` keeps the pipeline callable from
+/// a test, which is what lets the provider-unavailable path be verified against a
+/// real database rather than reasoned about.
+#[derive(Clone, Copy)]
+struct ProviderEndpoint<'a> {
+    url: Option<&'a str>,
+    token: Option<&'a str>,
+}
+
+impl<'a> ProviderEndpoint<'a> {
+    fn from_settings(settings: &'a Settings) -> Self {
+        Self {
+            url: settings.ai_service_url.as_deref(),
+            token: settings.ai_service_token.as_deref(),
+        }
+    }
+
+    /// No provider configured: every caller must fall back to CRM data.
+    #[cfg(test)]
+    fn unconfigured() -> Self {
+        Self {
+            url: None,
+            token: None,
+        }
+    }
+
+    /// A configured provider, used by tests to exercise the unreachable path.
+    #[cfg(test)]
+    fn at(url: &'a str, token: &'a str) -> Self {
+        Self {
+            url: Some(url),
+            token: Some(token),
+        }
+    }
+}
+
 async fn process_message(
     db: &PgPool,
-    settings: &Settings,
+    provider_endpoint: ProviderEndpoint<'_>,
     tenant_id: &str,
     branch_id: &str,
     session: AiSessionRecord,
@@ -351,19 +525,46 @@ async fn process_message(
     } else {
         None
     };
-    let provider = call_provider(
-        settings,
-        tenant_id,
-        branch_id,
-        &session,
-        &raw_body,
-        &history,
-        &services,
-        operational_context.as_ref(),
-        web_role,
-        &governance,
-    )
-    .await;
+    // CRM tools only run for signed-in web users, because every tool is
+    // permission-checked against the caller's role.
+    let copilot = match web_role {
+        Some(role) => {
+            run_copilot_tool(
+                db,
+                tenant_id,
+                branch_id,
+                session.user_id.as_deref().unwrap_or_default(),
+                role,
+                &session.id,
+                &raw_body,
+            )
+            .await
+        }
+        None => CopilotOutcome::NotApplicable,
+    };
+    // A refusal is a final answer: sending it to the provider would invite a
+    // generic reply about data this role is not allowed to see.
+    let (provider, provider_status) = if let CopilotOutcome::Forbidden(tool) = copilot {
+        (
+            restricted_response(tool, &governance.prompt_version),
+            "restricted",
+        )
+    } else {
+        call_provider(
+            provider_endpoint,
+            tenant_id,
+            branch_id,
+            &session,
+            &raw_body,
+            &history,
+            &services,
+            operational_context.as_ref(),
+            web_role,
+            &governance,
+            copilot.answer(),
+        )
+        .await
+    };
     let safe_service = services.iter().find(|item| item.id == provider.service_id);
     let (action_type, action_payload) = if provider.handoff_required || provider.intent == "handoff"
     {
@@ -423,17 +624,52 @@ async fn process_message(
         .await
         .map_err(|_| AppError::internal("failed to store AI action"))?;
     }
+    // Record every proposal that would change business data as pending, so there
+    // is an audit trail of what the copilot suggested and what a person then did
+    // with it. Recording a proposal performs nothing.
+    if let Some(answer) = copilot.answer() {
+        for proposal in answer
+            .proposals
+            .iter()
+            .filter(|proposal| proposal.requires_approval)
+        {
+            repository::add_action(
+                db,
+                tenant_id,
+                branch_id,
+                &session.id,
+                &assistant_message.id,
+                &proposal.kind,
+                &json!({
+                    "route": proposal.route,
+                    "params": proposal.params,
+                    "tool": answer.tool,
+                    "requiresApproval": true,
+                }),
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to store AI proposal"))?;
+        }
+    }
     if action_type == "human_handoff" {
         repository::set_session_status(db, tenant_id, branch_id, &session.id, "handoff")
             .await
             .map_err(|_| AppError::internal("failed to hand off AI session"))?;
     }
+    let (copilot_answer, restricted_tool) = match copilot {
+        CopilotOutcome::Answered(answer) => (Some(*answer), String::new()),
+        CopilotOutcome::Forbidden(tool) => (None, tool.to_string()),
+        CopilotOutcome::NotApplicable => (None, String::new()),
+    };
     Ok(ConciergeResponse {
         session,
         user_message,
         assistant_message,
         action_type: action_type.into(),
         action_payload,
+        provider_status: provider_status.into(),
+        copilot: copilot_answer,
+        restricted_tool,
     })
 }
 
@@ -583,7 +819,7 @@ pub async fn voice_call_report(
     })
 }
 async fn call_provider(
-    settings: &Settings,
+    provider_endpoint: ProviderEndpoint<'_>,
     tenant_id: &str,
     branch_id: &str,
     session: &AiSessionRecord,
@@ -593,20 +829,29 @@ async fn call_provider(
     operational_context: Option<&AiOperationalContext>,
     web_role: Option<&str>,
     governance: &AiGovernanceRecord,
-) -> ProviderResponse {
+    copilot: Option<&CopilotAnswer>,
+) -> (ProviderResponse, &'static str) {
     let financials_visible = web_role.is_some_and(can_view_financials);
-    let fallback = local_response(
-        message,
-        services,
-        operational_context,
-        financials_visible,
-        &governance.prompt_version,
-    );
-    let (Some(url), Some(token)) = (
-        settings.ai_service_url.as_deref(),
-        settings.ai_service_token.as_deref(),
-    ) else {
-        return fallback;
+    // A tool answer is already grounded in CRM data, so it is the fallback reply
+    // whenever the provider cannot be reached.
+    let fallback = match copilot {
+        Some(answer) => copilot_response(answer, &governance.prompt_version),
+        None => local_response(
+            message,
+            services,
+            operational_context,
+            financials_visible,
+            &governance.prompt_version,
+        ),
+    };
+    let (Some(url), Some(token)) = (provider_endpoint.url, provider_endpoint.token) else {
+        tracing::info!(
+            tenant_id,
+            branch_id,
+            channel = %session.channel,
+            "AI service is not configured; answering from CRM data"
+        );
+        return (fallback, PROVIDER_NOT_CONFIGURED);
     };
     let payload = json!({
         "tenant_id":tenant_id,"branch_id":branch_id,"channel":session.channel,"locale":session.locale,"message":message,
@@ -630,33 +875,122 @@ async fn call_provider(
             "low_stock_items":context.low_stock_items,
             "financials_visible":financials_visible
         })),
+        // Verified CRM figures. The provider must explain these, never replace them.
+        "crm_evidence":copilot.map(|answer|json!({
+            "tool":answer.tool,
+            "headline":answer.headline,
+            "branch":answer.branch_name,
+            "period":answer.period,
+            "metrics":answer.metrics,
+            "reason":answer.reason,
+            "evidence":answer.evidence,
+            "recommended_action":answer.recommended_action,
+            "confidence":answer.confidence,
+            "instruction":"These figures come from the CRM database and are authoritative. Explain and summarise them, keeping the branch, the date period, the current-vs-previous values, the stated reason, the confidence level and the recommended action. Never invent numbers, names, dates or causes that are not present here, and never state a cause more strongly than the stated confidence supports."
+        })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });
-    let Ok(client) = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(14))
         .build()
-    else {
-        return fallback;
+    {
+        Ok(client) => client,
+        Err(error) => {
+            tracing::warn!(%error, tenant_id, branch_id, "AI provider client could not be built");
+            return (fallback, PROVIDER_UNREACHABLE);
+        }
     };
-    let Ok(response) = client
+    let response = match client
         .post(format!("{url}/api/v1/concierge/respond"))
         .bearer_auth(token)
         .json(&payload)
         .send()
         .await
-    else {
-        return fallback;
+    {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                tenant_id,
+                branch_id,
+                channel = %session.channel,
+                "AI provider is unreachable; answering from CRM data"
+            );
+            return (fallback, PROVIDER_UNREACHABLE);
+        }
     };
-    if !response.status().is_success() {
-        return fallback;
+    let status = response.status();
+    if !status.is_success() {
+        tracing::warn!(
+            status = status.as_u16(),
+            tenant_id,
+            branch_id,
+            channel = %session.channel,
+            "AI provider returned an error status; answering from CRM data"
+        );
+        return (fallback, PROVIDER_HTTP_ERROR);
     }
-    response
+    match response
         .json::<ProviderEnvelope<ProviderResponse>>()
         .await
-        .ok()
-        .filter(|value| value.success)
-        .and_then(|value| value.data)
-        .unwrap_or(fallback)
+        .map(provider_payload)
+    {
+        Ok(Some(data)) => (data, PROVIDER_LIVE),
+        Ok(None) => {
+            tracing::warn!(
+                tenant_id,
+                branch_id,
+                "AI provider reported failure or sent no payload; answering from CRM data"
+            );
+            (fallback, PROVIDER_INVALID_RESPONSE)
+        }
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                tenant_id,
+                branch_id,
+                "AI provider response could not be parsed; answering from CRM data"
+            );
+            (fallback, PROVIDER_INVALID_RESPONSE)
+        }
+    }
+}
+
+/// A provider payload is only usable when the envelope reports success and carries data.
+fn provider_payload(envelope: ProviderEnvelope<ProviderResponse>) -> Option<ProviderResponse> {
+    envelope.success.then_some(envelope.data).flatten()
+}
+
+/// States plainly that the answer exists but this role may not see it, rather
+/// than pretending the data is unavailable.
+fn restricted_response(tool: &'static str, prompt_version: &str) -> ProviderResponse {
+    ProviderResponse {
+        source: "crm_tool".into(),
+        model: format!("crm-tool:{tool}"),
+        prompt_version: prompt_version.into(),
+        reply_text:
+            "Your role does not have access to this report. Ask an owner, admin or manager to run it."
+                .into(),
+        intent: "general".into(),
+        service_id: String::new(),
+        handoff_required: false,
+        safety_flags: vec!["role_restricted".into()],
+    }
+}
+
+/// Turns a CRM tool answer into a provider-shaped reply, so a tool result reads
+/// the same whether or not the AI provider was reachable.
+fn copilot_response(answer: &CopilotAnswer, prompt_version: &str) -> ProviderResponse {
+    ProviderResponse {
+        source: "crm_tool".into(),
+        model: format!("crm-tool:{}", answer.tool),
+        prompt_version: prompt_version.into(),
+        reply_text: answer.to_reply(),
+        intent: "general".into(),
+        service_id: String::new(),
+        handoff_required: false,
+        safety_flags: vec![],
+    }
 }
 
 fn local_response(
@@ -1065,8 +1399,44 @@ fn call_report_insights(
 
 #[cfg(test)]
 mod tests {
-    use super::{default_governance, local_response, redact};
+    use super::{
+        default_governance, local_response, provider_payload, redact, ProviderEnvelope,
+        ProviderResponse,
+    };
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
+
+    fn provider_reply() -> ProviderResponse {
+        ProviderResponse {
+            source: "ai_service".into(),
+            model: "test-model".into(),
+            prompt_version: "receptionist-v1".into(),
+            reply_text: "hello".into(),
+            intent: "general".into(),
+            service_id: String::new(),
+            handoff_required: false,
+            safety_flags: vec![],
+        }
+    }
+
+    #[test]
+    fn provider_payload_is_used_only_when_the_envelope_succeeds() {
+        assert!(provider_payload(ProviderEnvelope {
+            success: true,
+            data: Some(provider_reply()),
+        })
+        .is_some());
+        // A failed envelope must fall back to CRM data even when it carries a reply.
+        assert!(provider_payload(ProviderEnvelope {
+            success: false,
+            data: Some(provider_reply()),
+        })
+        .is_none());
+        assert!(provider_payload(ProviderEnvelope::<ProviderResponse> {
+            success: true,
+            data: None,
+        })
+        .is_none());
+    }
 
     #[test]
     fn local_receptionist_never_confirms_a_booking() {
@@ -1140,5 +1510,497 @@ mod tests {
         );
         assert!(top.reply_text.contains("Hair Cut"));
         assert!(top.reply_text.contains("14 sold"));
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedbackRequest {
+    pub message_id: String,
+    pub helpful: bool,
+    pub note: Option<String>,
+    pub tool: Option<String>,
+}
+
+/// Records whether an answer was useful.
+///
+/// The message is verified to belong to this tenant, branch and session before
+/// anything is stored, so feedback cannot be attached to another tenant's
+/// conversation by guessing an id. Any free-text note is redacted first.
+pub async fn record_feedback(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    user_id: &str,
+    request: FeedbackRequest,
+) -> Result<(), AppError> {
+    let message_id = limited(&request.message_id, 80, "message id")?;
+    if !repository::message_belongs_to_session(db, tenant_id, branch_id, session_id, &message_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate AI message"))?
+    {
+        return Err(AppError::not_found("AI message was not found"));
+    }
+    let note = request.note.unwrap_or_default();
+    let note = redact(note.trim());
+    if note.chars().count() > 1_000 {
+        return Err(AppError::validation("feedback note is too long"));
+    }
+    let tool = request.tool.unwrap_or_default();
+    let tool = tool.trim();
+    if tool.chars().count() > 80 {
+        return Err(AppError::validation("feedback tool is invalid"));
+    }
+    repository::save_feedback(
+        db,
+        tenant_id,
+        branch_id,
+        session_id,
+        &message_id,
+        user_id,
+        request.helpful,
+        &note,
+        tool,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to store AI feedback"))
+}
+
+/// Phase 0 — the header drawer's basic conversation, proven against a real
+/// database instead of reasoned about.
+///
+/// These cover the flow the drawer actually performs: open a session, send a
+/// message, reload the transcript, and come back after a browser refresh. They
+/// run only when DATABASE_URL points at a migrated schema.
+#[cfg(test)]
+mod phase0_flow_tests {
+    use super::*;
+    use sqlx::postgres::PgPoolOptions;
+    use uuid::Uuid;
+
+    struct Scope {
+        tenant: String,
+        branch: String,
+        user: String,
+    }
+
+    async fn connect() -> Option<PgPool> {
+        dotenvy::dotenv().ok();
+        let url = std::env::var("DATABASE_URL").ok()?;
+        PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+            .ok()
+    }
+
+    /// `users` is keyed to real tenant and branch rows, so the whole chain is
+    /// seeded rather than faked with loose text ids.
+    async fn seed(db: &PgPool) -> Scope {
+        let tenant = Uuid::new_v4().to_string();
+        let branch = Uuid::new_v4().to_string();
+        let user = format!("aiuser_{}", Uuid::new_v4().simple());
+        sqlx::query("INSERT INTO tenants(id,name,status) VALUES ($1::UUID,'Aura Salon Group','active')")
+            .bind(&tenant)
+            .execute(db)
+            .await
+            .expect("tenant seeded");
+        sqlx::query(
+            "INSERT INTO branches(id,tenant_id,name,scope_id,active) VALUES ($2::UUID,$1::UUID,'Andheri West','andheri-west',TRUE)",
+        )
+        .bind(&tenant)
+        .bind(&branch)
+        .execute(db)
+        .await
+        .expect("branch seeded");
+        sqlx::query(
+            "INSERT INTO users(id,tenant_id,branch_id,role_name,email,password_hash,full_name,active)
+             VALUES ($1,$2,$3,'owner',$1||'@example.com','x','Reception Owner',TRUE)",
+        )
+        .bind(&user)
+        .bind(&tenant)
+        .bind(&branch)
+        .execute(db)
+        .await
+        .expect("user seeded");
+        sqlx::query(
+            "INSERT INTO services(id,tenant_id,branch_id,name,category,duration_minutes,price_paise,active)
+             VALUES ($1||'svc',$1,$2,'Hair Spa','Hair',60,150000,TRUE)",
+        )
+        .bind(&tenant)
+        .bind(&branch)
+        .execute(db)
+        .await
+        .expect("service seeded");
+        Scope {
+            tenant,
+            branch,
+            user,
+        }
+    }
+
+    async fn cleanup(db: &PgPool, scope: &Scope) {
+        // Messages and actions cascade from the session.
+        let _ = sqlx::query("DELETE FROM ai_concierge_sessions WHERE tenant_id=$1")
+            .bind(&scope.tenant)
+            .execute(db)
+            .await;
+        for table in ["services", "users"] {
+            let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
+                .bind(&scope.tenant)
+                .execute(db)
+                .await;
+        }
+        let _ = sqlx::query("DELETE FROM branches WHERE tenant_id::TEXT=$1")
+            .bind(&scope.tenant)
+            .execute(db)
+            .await;
+        let _ = sqlx::query("DELETE FROM tenants WHERE id::TEXT=$1")
+            .bind(&scope.tenant)
+            .execute(db)
+            .await;
+    }
+
+    /// The whole Phase 0 acceptance path in the order the drawer performs it.
+    #[tokio::test]
+    async fn hi_is_answered_stored_and_still_there_after_a_reload() {
+        let Some(db) = connect().await else { return };
+        let scope = seed(&db).await;
+
+        let session = open_web_session(
+            &db,
+            &scope.tenant,
+            &scope.branch,
+            &scope.user,
+            OpenSessionRequest { locale: None },
+        )
+        .await
+        .expect("session opens");
+
+        let reply = process_message(
+            &db,
+            ProviderEndpoint::unconfigured(),
+            &scope.tenant,
+            &scope.branch,
+            session.clone(),
+            ConciergeMessageRequest {
+                body: "Hi".into(),
+                provider_message_id: None,
+            },
+            Some("owner"),
+        )
+        .await
+        .expect("a message is answered even with no AI provider configured");
+
+        // With no provider configured the deterministic CRM answer stands in,
+        // and the drawer is told which one replied.
+        assert_eq!(reply.provider_status, PROVIDER_NOT_CONFIGURED);
+        assert_eq!(reply.assistant_message.provider, "rust_deterministic");
+        assert!(
+            !reply.assistant_message.body.trim().is_empty(),
+            "a fallback answer must still say something"
+        );
+
+        // Both sides of the exchange are persisted, not just the reply.
+        let stored = transcript(&db, &scope.tenant, &scope.branch, &session.id)
+            .await
+            .expect("transcript loads");
+        assert_eq!(stored.len(), 2, "user message and assistant reply are stored");
+        assert_eq!(stored[0].role, "user");
+        assert_eq!(stored[0].body, "Hi");
+        assert_eq!(stored[1].role, "assistant");
+
+        // A browser reload re-opens by the same deterministic thread id, so the
+        // conversation comes back instead of starting empty.
+        let after_reload = open_web_session(
+            &db,
+            &scope.tenant,
+            &scope.branch,
+            &scope.user,
+            OpenSessionRequest { locale: None },
+        )
+        .await
+        .expect("session re-opens after a reload");
+        assert_eq!(
+            after_reload.id, session.id,
+            "a reload must resume the same session, not start a new one"
+        );
+        let resumed = transcript(&db, &scope.tenant, &scope.branch, &after_reload.id)
+            .await
+            .expect("transcript loads after reload");
+        assert_eq!(resumed.len(), 2, "the earlier conversation is still there");
+
+        cleanup(&db, &scope).await;
+    }
+
+    /// A failure has to arrive as a typed, quotable error rather than a blank
+    /// one, and must not carry SQL, secrets or internals to the browser.
+    #[tokio::test]
+    async fn an_unknown_session_fails_safely_and_says_nothing_internal() {
+        let Some(db) = connect().await else { return };
+        let scope = seed(&db).await;
+
+        // The drawer loads a transcript on every open, so this is the lookup a
+        // stale or foreign session id actually hits first.
+        let error = transcript(&db, &scope.tenant, &scope.branch, "no-such-session")
+            .await
+            .expect_err("an unknown session is rejected");
+
+        let rendered = format!("{error:?}").to_ascii_lowercase();
+        assert!(
+            rendered.contains("not_found") || rendered.contains("notfound"),
+            "the drawer needs a typed code to translate, got: {rendered}"
+        );
+        for leak in ["select ", "insert ", "postgres://", "panicked", "sqlx::"] {
+            assert!(
+                !rendered.contains(leak),
+                "error must not expose {leak:?}: {rendered}"
+            );
+        }
+
+        cleanup(&db, &scope).await;
+    }
+
+    /// Phase 0 must not disturb the two actions the receptionist already had.
+    #[tokio::test]
+    async fn booking_draft_and_human_handoff_still_behave_as_before() {
+        let Some(db) = connect().await else { return };
+        let scope = seed(&db).await;
+
+        let session = open_web_session(
+            &db,
+            &scope.tenant,
+            &scope.branch,
+            &scope.user,
+            OpenSessionRequest { locale: None },
+        )
+        .await
+        .expect("session opens");
+
+        let booking = process_message(
+            &db,
+            ProviderEndpoint::unconfigured(),
+            &scope.tenant,
+            &scope.branch,
+            session.clone(),
+            ConciergeMessageRequest {
+                body: "I want to book Hair Spa".into(),
+                provider_message_id: None,
+            },
+            Some("owner"),
+        )
+        .await
+        .expect("booking intent is answered");
+        assert_eq!(booking.action_type, "booking_draft");
+        assert_eq!(
+            booking.action_payload["requiresConfirmation"], true,
+            "a draft must still require explicit confirmation"
+        );
+        assert!(
+            !booking.assistant_message.body.to_ascii_lowercase().contains("confirmed"),
+            "the copilot must never claim a booking is confirmed"
+        );
+
+        let handoff = process_message(
+            &db,
+            ProviderEndpoint::unconfigured(),
+            &scope.tenant,
+            &scope.branch,
+            session.clone(),
+            ConciergeMessageRequest {
+                body: "I need a refund for my treatment".into(),
+                provider_message_id: None,
+            },
+            Some("owner"),
+        )
+        .await
+        .expect("a sensitive request is answered");
+        assert_eq!(handoff.action_type, "human_handoff");
+
+        // A handoff parks the session for a person to pick up.
+        let parked = repository::session(&db, &scope.tenant, &scope.branch, &session.id)
+            .await
+            .expect("session reloads")
+            .expect("session exists");
+        assert_eq!(parked.status, "handoff");
+
+        cleanup(&db, &scope).await;
+    }
+
+    /// A resubmitted message must not become a second entry in the transcript.
+    #[tokio::test]
+    async fn the_same_submission_sent_twice_is_stored_once() {
+        let Some(db) = connect().await else { return };
+        let scope = seed(&db).await;
+
+        let session = open_web_session(
+            &db,
+            &scope.tenant,
+            &scope.branch,
+            &scope.user,
+            OpenSessionRequest { locale: None },
+        )
+        .await
+        .expect("session opens");
+
+        let submission = format!("submit_{}", Uuid::new_v4().simple());
+        let send_once = || {
+            process_message(
+                &db,
+                ProviderEndpoint::unconfigured(),
+                &scope.tenant,
+                &scope.branch,
+                session.clone(),
+                ConciergeMessageRequest {
+                    body: "Hi".into(),
+                    provider_message_id: Some(submission.clone()),
+                },
+                Some("owner"),
+            )
+        };
+
+        send_once().await.expect("the first submission is answered");
+        let repeat = send_once()
+            .await
+            .expect_err("the same submission id must not be stored twice");
+        assert!(
+            format!("{repeat:?}").to_ascii_lowercase().contains("conflict"),
+            "a repeat submission is a conflict the drawer can ignore, got: {repeat:?}"
+        );
+
+        let stored = transcript(&db, &scope.tenant, &scope.branch, &session.id)
+            .await
+            .expect("transcript loads");
+        assert_eq!(
+            stored.len(),
+            2,
+            "a double submission leaves one question and one answer, not two of each"
+        );
+
+        cleanup(&db, &scope).await;
+    }
+
+    /// A provider that cannot be reached must degrade to the CRM answer, not
+    /// surface an error to the user.
+    #[tokio::test]
+    async fn an_unreachable_provider_still_answers_from_crm_data() {
+        let Some(db) = connect().await else { return };
+        let scope = seed(&db).await;
+
+        let session = open_web_session(
+            &db,
+            &scope.tenant,
+            &scope.branch,
+            &scope.user,
+            OpenSessionRequest { locale: None },
+        )
+        .await
+        .expect("session opens");
+
+        // Port 1 is reserved and never listening, so the send fails the same way
+        // a timeout or a stopped Python service would.
+        let reply = process_message(
+            &db,
+            ProviderEndpoint::at("http://127.0.0.1:1", "test-token"),
+            &scope.tenant,
+            &scope.branch,
+            session.clone(),
+            ConciergeMessageRequest {
+                body: "Hi".into(),
+                provider_message_id: None,
+            },
+            Some("owner"),
+        )
+        .await
+        .expect("an unreachable provider must not fail the request");
+
+        assert_eq!(reply.provider_status, PROVIDER_UNREACHABLE);
+        assert_eq!(reply.assistant_message.provider, "rust_deterministic");
+        assert!(!reply.assistant_message.body.trim().is_empty());
+
+        cleanup(&db, &scope).await;
+    }
+}
+
+/// Phase 7 — language and channel parity.
+///
+/// The drawer, WhatsApp and voice all go through the same governance and the
+/// same tool permissions. These check the properties that would break quietly.
+#[cfg(test)]
+mod phase7_channel_language_tests {
+    use super::*;
+    use crate::services::ai_copilot_tools;
+
+    /// All three supported languages resolve, and Hinglish is treated as Hindi
+    /// so it gets the Latin-script Hindi chips rather than English ones.
+    #[test]
+    fn hinglish_is_recognised_as_hindi() {
+        assert!(ai_copilot_tools::is_hindi("hi-IN"));
+        assert!(
+            ai_copilot_tools::is_hindi("hi-Latn-IN"),
+            "Hinglish must get Hindi chips, not English ones"
+        );
+        assert!(!ai_copilot_tools::is_hindi("en-IN"));
+    }
+
+    /// A Hinglish chip must still route to the tool it claims, or tapping it
+    /// would produce a different answer than the label promised.
+    #[test]
+    fn hinglish_chips_route_to_the_tool_they_name() {
+        let actor = ai_copilot_tools::ToolActor::new("user1", "owner");
+        let chips = ai_copilot_tools::suggested_questions(&actor, "hi-Latn-IN");
+        assert!(!chips.is_empty(), "Hinglish must offer chips");
+        for chip in chips {
+            let matched = ai_copilot_tools::detect(&chip.question)
+                .unwrap_or_else(|| panic!("Hinglish chip {:?} matches no tool", chip.question));
+            assert_eq!(
+                matched.tool.name(),
+                chip.tool,
+                "Hinglish chip {:?} routes elsewhere",
+                chip.question
+            );
+        }
+    }
+
+    /// Governance decides the channel, and the default is web only. An operator
+    /// has to turn WhatsApp or voice on deliberately.
+    #[test]
+    fn every_channel_is_governed_by_the_same_switch() {
+        let mut governance = default_governance();
+        assert!(ensure_channel(&governance, "web").is_ok());
+        for channel in ["whatsapp", "voice"] {
+            assert!(
+                ensure_channel(&governance, channel).is_err(),
+                "{channel} must be off until it is enabled"
+            );
+        }
+
+        // Enabled explicitly, the same check now passes for all three.
+        governance.allowed_channels = json!(["web", "whatsapp", "voice"]);
+        for channel in CHANNELS {
+            assert!(ensure_channel(&governance, channel).is_ok());
+        }
+
+        // Turning the assistant off closes every channel at once, not just web.
+        governance.enabled = false;
+        for channel in CHANNELS {
+            assert!(
+                ensure_channel(&governance, channel).is_err(),
+                "{channel} must close when the assistant is disabled"
+            );
+        }
+    }
+
+    /// Redaction is applied to the stored transcript on every channel, because
+    /// it is applied before the channel is considered at all.
+    #[test]
+    fn contact_details_are_redacted_whatever_the_channel() {
+        let governance = default_governance();
+        assert!(governance.redact_sensitive_data);
+        assert_eq!(
+            redact("call 9876543210 or mail me@example.com"),
+            "call [redacted] or mail [redacted]"
+        );
     }
 }

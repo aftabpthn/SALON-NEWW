@@ -17,6 +17,11 @@ use crate::{
         ai_concierge_service::{
             self, ConciergeMessageRequest, ConciergeResponse, GovernanceRequest, OpenSessionRequest,
         },
+        ai_copilot_tools,
+        ai_prediction_service::{self, PredictionKind, PredictionRun},
+        ai_action_service::{self, ActionDraft, ConfirmDraftRequest, CreateDraftRequest},
+        ai_briefing_service::{self, BranchComparisonRow, Briefing, Cadence, Signal},
+        ai_what_if_service::{self, WhatIf, WhatIfResult},
         auth_service::AuthClaims,
     },
     state::AppState,
@@ -28,7 +33,17 @@ pub fn router() -> Router<AppState> {
         .route("/ai/concierge/sessions", post(open_session))
         .route("/ai/concierge/sessions/:id/messages", post(send_message))
         .route("/ai/concierge/sessions/:id/transcript", get(get_transcript))
+        .route("/ai/concierge/suggestions", get(get_suggestions))
+        .route("/ai/concierge/sessions/:id/feedback", post(save_feedback))
         .route("/ai/concierge/calls/report", get(call_report))
+        .route("/ai/predictions/:kind", post(run_prediction))
+        .route("/ai/predictions/:kind/latest", get(get_latest_prediction))
+        .route("/ai/what-if", post(run_what_if))
+        .route("/ai/briefing/:cadence", get(get_briefing))
+        .route("/ai/briefing/compare/:signal", get(compare_branches))
+        .route("/ai/actions/drafts", post(create_action_draft))
+        .route("/ai/actions/drafts/:id/confirm", post(confirm_action_draft))
+        .route("/ai/actions/drafts/:id/cancel", post(cancel_action_draft))
 }
 
 pub fn public_router() -> Router<AppState> {
@@ -126,6 +141,60 @@ async fn get_transcript(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SuggestionsQuery {
+    locale: Option<String>,
+}
+
+/// Starter questions this role may actually have answered.
+async fn get_suggestions(
+    Extension(claims): Extension<AuthClaims>,
+    Query(query): Query<SuggestionsQuery>,
+) -> ApiResult<Vec<ai_copilot_tools::SuggestedQuestion>> {
+    require_ai_read(&claims)?;
+    let actor = ai_copilot_tools::ToolActor::new(&claims.sub, &claims.role);
+    Ok(Json(ApiResponse::ok(
+        ai_copilot_tools::suggested_questions(&actor, query.locale.as_deref().unwrap_or("en-IN")),
+    )))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FeedbackRequest {
+    message_id: String,
+    helpful: bool,
+    note: Option<String>,
+    tool: Option<String>,
+}
+
+/// Records whether an answer was useful. Voting twice replaces the first vote.
+async fn save_feedback(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+    Json(payload): Json<FeedbackRequest>,
+) -> ApiResult<Value> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_concierge_service::record_feedback(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &session_id,
+        &claims.sub,
+        ai_concierge_service::FeedbackRequest {
+            message_id: payload.message_id,
+            helpful: payload.helpful,
+            note: payload.note,
+            tool: payload.tool,
+        },
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(serde_json::json!({"recorded": true}))))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CallReportQuery {
     start_date: Option<String>,
     end_date: Option<String>,
@@ -146,6 +215,196 @@ async fn call_report(
             &branch_id,
             query.start_date.as_deref(),
             query.end_date.as_deref(),
+        )
+        .await?,
+    )))
+}
+
+/// Runs a prediction over this branch's history.
+///
+/// The kind is matched against the allow-list rather than passed through, so a
+/// caller cannot name an arbitrary computation.
+async fn run_prediction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(kind): Path<String>,
+) -> ApiResult<PredictionRun> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let kind = PredictionKind::from_name(&kind)
+        .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_prediction_service::predict(
+            &state.db,
+            &state.settings,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            kind,
+        )
+        .await?,
+    )))
+}
+
+/// The last stored run for this branch, for audit and for reuse without
+/// recomputing.
+async fn get_latest_prediction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(kind): Path<String>,
+) -> ApiResult<Option<PredictionRun>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let kind = PredictionKind::from_name(&kind)
+        .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_prediction_service::latest_run(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            kind,
+        )
+        .await?,
+    )))
+}
+
+/// Projects a scenario without performing it.
+///
+/// This is a POST because the scenario is a body, not because anything is
+/// created: the handler writes nothing, publishes no offer and sends no
+/// campaign.
+async fn run_what_if(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(scenario): Json<WhatIf>,
+) -> ApiResult<WhatIfResult> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_what_if_service::simulate(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            scenario,
+        )
+        .await?,
+    )))
+}
+
+/// Raises an action draft. Creates no business record.
+async fn create_action_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateDraftRequest>,
+) -> ApiResult<ActionDraft> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_service::create_draft(
+            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, payload,
+        )
+        .await?,
+    )))
+}
+
+/// Records approval for a draft the user has explicitly confirmed.
+async fn confirm_action_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+    Json(payload): Json<ConfirmDraftRequest>,
+) -> ApiResult<ActionDraft> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_service::confirm_draft(
+            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, &draft_id, payload,
+        )
+        .await?,
+    )))
+}
+
+async fn cancel_action_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+) -> ApiResult<ActionDraft> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_service::cancel_draft(
+            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, &draft_id,
+        )
+        .await?,
+    )))
+}
+
+/// The briefing for this branch, on demand.
+///
+/// A preview: it does not record the signals as raised, so reading it cannot
+/// suppress the scheduled run that follows.
+async fn get_briefing(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(cadence): Path<String>,
+) -> ApiResult<Briefing> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let cadence = Cadence::from_name(&cadence)
+        .ok_or_else(|| AppError::not_found("that briefing cadence is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_briefing_service::build_briefing(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            cadence,
+            false,
+        )
+        .await?,
+    )))
+}
+
+/// Compares one signal across the branches this user is actually allowed to see.
+///
+/// The branch list comes from the user's own access grants, so a comparison can
+/// never widen past what they could open directly.
+async fn compare_branches(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(signal): Path<String>,
+) -> ApiResult<Vec<BranchComparisonRow>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let signal = Signal::from_key(&signal)
+        .ok_or_else(|| AppError::not_found("that comparison is not available"))?;
+    let user = crate::repositories::auth_repository::find_user_by_id(
+        &state.db, &tenant_id, &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load branch access"))?
+    .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
+    let branches = crate::repositories::auth_repository::list_branch_access(&state.db, &user)
+        .await
+        .map_err(|_| AppError::internal("failed to load branch access"))?
+        .into_iter()
+        .map(|access| (access.branch_id, access.branch_name))
+        .collect::<Vec<_>>();
+    Ok(Json(ApiResponse::ok(
+        ai_briefing_service::compare_branches(
+            &state.db, &tenant_id, &claims.role, &claims.sub, &branches, signal,
         )
         .await?,
     )))

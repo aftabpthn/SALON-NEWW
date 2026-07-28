@@ -73,6 +73,30 @@ class ForecastRequest(BaseModel):
     periods: int = Field(default=3, ge=1, le=12)
 
 
+class PredictionSubject(BaseModel):
+    subject_id: str
+    subject_name: str = ""
+    sample_size: int = 0
+    features: dict[str, float] = Field(default_factory=dict)
+
+
+class PredictionRequest(BaseModel):
+    """Features built by Rust from real CRM history.
+
+    The service scores what it is given and nothing else: it never queries the
+    database, and it may not introduce a subject Rust did not send.
+    """
+
+    tenant_id: str
+    branch_id: str = ""
+    kind: str
+    unit: str = ""
+    history_start: str = ""
+    history_end: str = ""
+    minimum_samples: int = 1
+    subjects: list[PredictionSubject] = Field(default_factory=list)
+
+
 class CandidateService(BaseModel):
     id: str
     name: str
@@ -364,6 +388,170 @@ def forecast(payload: ForecastRequest):
             "metric": payload.metric,
             "method": "three_point_moving_average",
             "forecast": forecast_points,
+        }
+    )
+
+
+# Version of the scoring below. Bump when a rule changes, so a stored run stays
+# traceable to the logic that produced it.
+PREDICTION_MODEL_VERSION = "aurashine-predict-v1"
+
+
+def _band(centre: float, spread: float, floor: float | None = None, ceiling: float | None = None):
+    """A range around a point estimate, clamped to the metric's real limits.
+
+    Predictions are always returned as a band. A single value would read as a
+    promise the history cannot support.
+    """
+    lower = centre - spread
+    upper = centre + spread
+    if floor is not None:
+        lower = max(lower, floor)
+        upper = max(upper, floor)
+    if ceiling is not None:
+        lower = min(lower, ceiling)
+        upper = min(upper, ceiling)
+    return round(lower, 2), round(upper, 2)
+
+
+def _confidence(sample_size: int, minimum: int) -> str:
+    """Confidence follows how much history backed the subject, nothing else."""
+    if sample_size >= minimum * 4:
+        return "high"
+    if sample_size >= minimum * 2:
+        return "medium"
+    return "low"
+
+
+def _score_subject(kind: str, subject: PredictionSubject):
+    feature = lambda key: float(subject.features.get(key, 0.0))
+    history_days = max(feature("history_days"), 1.0)
+
+    if kind == "client_return_window":
+        interval = feature("visit_frequency_days")
+        elapsed = feature("recency_days")
+        spread = max(interval / 4.0, 2.0)
+        lower, upper = _band(interval - elapsed, spread, floor=0.0)
+        return lower, upper, [
+            f"Usual service interval about {interval:.0f} days.",
+            f"Last visit {elapsed:.0f} days ago.",
+        ]
+
+    if kind == "client_churn_risk":
+        score = feature("churn_risk_score")
+        lower, upper = _band(score, 10.0, floor=0.0, ceiling=100.0)
+        return lower, upper, [
+            f"Recorded churn risk {score:.0f}.",
+            f"{feature('recency_days'):.0f} days since last visit.",
+        ]
+
+    if kind == "no_show_risk":
+        rate = feature("no_show_rate_bps") / 100.0
+        lower, upper = _band(rate, 5.0, floor=0.0, ceiling=100.0)
+        return lower, upper, [
+            f"Historic no-show rate {rate:.1f}%.",
+            f"Cancellation rate {feature('cancellation_rate_bps') / 100.0:.1f}%.",
+        ]
+
+    if kind == "service_demand":
+        current = feature("current_bookings")
+        previous = feature("previous_bookings")
+        # Weighted towards the recent window, which is the better guide.
+        centre = (current * 2.0 + previous) / 3.0
+        lower, upper = _band(centre, max(centre * 0.25, 1.0), floor=0.0)
+        return lower, upper, [
+            f"{current:.0f} bookings this window against {previous:.0f} before.",
+            f"{feature('current_repeat_clients'):.0f} repeat clients.",
+        ]
+
+    if kind == "staff_utilization":
+        scheduled = feature("current_scheduled_minutes")
+        booked = feature("current_booked_minutes")
+        centre = (booked / scheduled * 100.0) if scheduled > 0 else 0.0
+        lower, upper = _band(centre, 10.0, floor=0.0, ceiling=100.0)
+        return lower, upper, [
+            f"Booked {booked:.0f} of {scheduled:.0f} rostered minutes.",
+        ]
+
+    if kind == "appointment_load":
+        completed = sum(
+            value for key, value in subject.features.items() if key.endswith("_completed")
+        )
+        centre = completed / 7.0
+        lower, upper = _band(centre, max(centre * 0.25, 1.0), floor=0.0)
+        return lower, upper, [
+            f"{completed:.0f} completed appointments across the weekday profile.",
+        ]
+
+    if kind == "revenue_forecast":
+        values = [
+            value for key, value in subject.features.items()
+            if key.startswith("revenue_") and value > 0
+        ]
+        centre = mean(values) if values else 0.0
+        lower, upper = _band(centre, max(centre * 0.2, 1.0), floor=0.0)
+        return lower, upper, [
+            f"Mean of {len(values)} trading day(s).",
+        ]
+
+    if kind == "inventory_reorder_risk":
+        consumed = feature("consumed_units")
+        stock = feature("stock_quantity")
+        per_day = consumed / history_days
+        centre = (stock / per_day) if per_day > 0 else 0.0
+        lower, upper = _band(centre, max(centre * 0.25, 1.0), floor=0.0)
+        return lower, upper, [
+            f"{stock:.0f} in stock against {consumed:.0f} used in the window.",
+            f"Reorder point {feature('reorder_point'):.0f}.",
+        ]
+
+    if kind == "membership_renewal_risk":
+        failures = feature("failure_count")
+        days = feature("days_until_expiry")
+        centre = min(failures * 25.0 + (30.0 if days <= 7 else 0.0), 100.0)
+        lower, upper = _band(centre, 10.0, floor=0.0, ceiling=100.0)
+        return lower, upper, [
+            f"{failures:.0f} failed auto-renew attempt(s).",
+            f"Expires in {days:.0f} days.",
+        ]
+
+    return None
+
+
+@app.post("/api/v1/predictions")
+def predictions(payload: PredictionRequest):
+    """Scores a feature set Rust built from real history.
+
+    Subjects below the caller's minimum sample size are skipped rather than
+    scored: Rust already filters them, and skipping again here means a change on
+    either side cannot quietly start predicting from too little history.
+    """
+    scored = []
+    for subject in payload.subjects:
+        if subject.sample_size < payload.minimum_samples:
+            continue
+        result = _score_subject(payload.kind, subject)
+        if result is None:
+            continue
+        lower, upper, signals = result
+        scored.append(
+            {
+                "subject_id": subject.subject_id,
+                "lower_value": lower,
+                "upper_value": upper,
+                "confidence": _confidence(subject.sample_size, max(payload.minimum_samples, 1)),
+                "signals": signals,
+            }
+        )
+
+    return envelope(
+        {
+            "model_version": PREDICTION_MODEL_VERSION,
+            "kind": payload.kind,
+            "unit": payload.unit,
+            "history_start": payload.history_start,
+            "history_end": payload.history_end,
+            "predictions": scored,
         }
     )
 

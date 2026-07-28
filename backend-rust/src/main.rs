@@ -126,6 +126,24 @@ async fn main() -> Result<()> {
     }
 
     {
+        // Proactive briefing. Six-hourly rather than daily so a restart cannot
+        // skip a day; the per-signal cooldown is what stops it repeating.
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
+            loop {
+                interval.tick().await;
+                if services::ai_briefing_service::run_daily_briefing_worker(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("AI daily briefing cycle failed");
+                }
+            }
+        });
+    }
+
+    {
         let worker_state = state.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(21_600));

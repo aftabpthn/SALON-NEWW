@@ -1,5 +1,10 @@
 pub mod accounting_service;
 pub mod ai_concierge_service;
+pub mod ai_briefing_service;
+pub mod ai_copilot_tools;
+pub mod ai_action_service;
+pub mod ai_prediction_service;
+pub mod ai_what_if_service;
 pub mod analytics_service;
 pub mod appointment_reporting_service;
 pub mod auth_service;
