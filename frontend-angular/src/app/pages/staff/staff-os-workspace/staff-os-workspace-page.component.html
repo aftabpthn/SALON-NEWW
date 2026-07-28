@@ -18,6 +18,9 @@
   @if (error) {
     <p class="error">{{ error }}</p>
   }
+  @if (notice) {
+    <p class="notice">{{ notice }}</p>
+  }
 
   @for (section of sections; track trackSection($index, section)) {
     <section class="data-card">
@@ -64,6 +67,62 @@
         <div class="empty-state">{{ 'staff.ui.e619c5b961' | translate }}</div>
       }
     </section>
+  }
+
+  @if (actionDrawerOpen && activeAction) {
+    <div class="drawer-backdrop" (click)="closeActionDrawer()">
+      <aside class="task-drawer" role="dialog" aria-modal="true" aria-labelledby="action-drawer-title" (click)="$event.stopPropagation()">
+        <header class="drawer-header">
+          <h2 id="action-drawer-title">{{ activeAction.title || activeAction.label }}</h2>
+          <button class="icon-button" type="button" aria-label="Close" title="Close" (click)="closeActionDrawer()" [disabled]="actionSaving">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <form class="task-form" (ngSubmit)="saveAction()">
+          @if (actionError) { <p class="error form-error">{{ actionError }}</p> }
+
+          @for (field of activeAction.fields || []; track field.key) {
+            <label>
+              <span>{{ field.label }}{{ field.optional ? ' (optional)' : '' }}</span>
+              @switch (field.type) {
+                @case ('staff') {
+                  <select [name]="field.key" [(ngModel)]="actionValues[field.key]" [disabled]="taskOptionsLoading || actionSaving">
+                    <option value="">{{ taskOptionsLoading ? 'Loading staff…' : 'Select staff' }}</option>
+                    @for (staff of staffOptions; track staff.id) { <option [value]="staff.id">{{ staffOptionLabel(staff) }}</option> }
+                  </select>
+                }
+                @case ('select') {
+                  <select [name]="field.key" [(ngModel)]="actionValues[field.key]" [disabled]="actionSaving">
+                    <option value="">Select {{ field.label.toLowerCase() }}</option>
+                    @for (option of field.options || []; track option) { <option [value]="option">{{ label(option) }}</option> }
+                  </select>
+                }
+                @case ('date') {
+                  <as-date-picker [ariaLabel]="field.label" [(value)]="actionValues[field.key]" [disabled]="actionSaving"></as-date-picker>
+                }
+                @case ('number') {
+                  <input [name]="field.key" type="number" step="1" [(ngModel)]="actionValues[field.key]" [disabled]="actionSaving" />
+                }
+                @case ('textarea') {
+                  <textarea [name]="field.key" rows="3" maxlength="4000" [(ngModel)]="actionValues[field.key]" [disabled]="actionSaving"></textarea>
+                }
+                @default {
+                  <input [name]="field.key" type="text" maxlength="200" [(ngModel)]="actionValues[field.key]" [disabled]="actionSaving" />
+                }
+              }
+            </label>
+          }
+
+          <footer class="drawer-footer">
+            <button type="button" (click)="closeActionDrawer()" [disabled]="actionSaving">Cancel</button>
+            <button class="primary-action" type="submit" [disabled]="!canSaveAction">
+              <i class="bi bi-check-lg" aria-hidden="true"></i>{{ actionSaving ? 'Saving…' : (activeAction.submitLabel || 'Save') }}
+            </button>
+          </footer>
+        </form>
+      </aside>
+    </div>
   }
 
   @if (taskDrawerOpen) {

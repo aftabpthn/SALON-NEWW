@@ -11,13 +11,14 @@ test('target incentives uses connected incentive and performance APIs', () => {
   const setup = read('../src/app/pages/staff/payroll/staff-payroll-setup.component.ts');
 
   assert.match(models, /'target-incentive': \{[\s\S]+path: '\/staff\/incentive-rules'/);
-  assert.match(models, /'target-incentive': \{[\s\S]+path: '\/staff\/performance\?date_from=\{periodStart\}&date_to=\{periodEnd\}'/);
+  // PerformanceQuery is rename_all = "camelCase", so the wire names are dateFrom/dateTo.
+  assert.match(models, /'target-incentive': \{[\s\S]+path: '\/staff\/performance\?dateFrom=\{periodStart\}&dateTo=\{periodEnd\}'/);
   assert.match(models, /Add incentive rule[\s\S]+route: '\/staff\/payroll\?tab=setup&section=incentives'/);
-  assert.match(models, /leaderboard: \{[\s\S]+path: '\/staff\/performance\?date_from=\{periodStart\}&date_to=\{periodEnd\}'/);
+  assert.match(models, /leaderboard: \{[\s\S]+path: '\/staff\/performance\?dateFrom=\{periodStart\}&dateTo=\{periodEnd\}'/);
 
   assert.match(store, /\.replace\('\{periodStart\}', periodStart\)/);
   assert.match(store, /\.replace\('\{periodEnd\}', periodEnd\)/);
-  assert.match(routes, /struct PerformanceQuery \{[\s\S]+date_from: NaiveDate,[\s\S]+date_to: NaiveDate/);
+  assert.match(routes, /#\[serde\(rename_all = "camelCase"\)\]\s*struct PerformanceQuery \{[\s\S]+date_from: NaiveDate,[\s\S]+date_to: NaiveDate/);
   assert.match(routes, /route\("\/staff\/performance", get\(get_performance\)\)/);
   assert.match(setup, /if \(section === 'incentives'\) this\.incentives = await this\.get<IncentiveRule\[]>\('\/staff\/incentive-rules'\)/);
   assert.match(setup, /this\.api\.post\('\/staff\/incentive-rules'/);

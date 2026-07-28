@@ -3,7 +3,7 @@ import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { STAFF_OS_VIEWS, StaffOsAction, StaffOsSection } from '../../../features/staff-os/domain/staff-os.models';
+import { STAFF_OS_VIEWS, StaffOsAction, StaffOsActionField, StaffOsSection } from '../../../features/staff-os/domain/staff-os.models';
 import { StaffOsStore } from '../../../features/staff-os/application/staff-os.store';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
@@ -37,10 +37,16 @@ export class StaffOsWorkspacePageComponent implements OnInit {
   sections: StaffOsSection[] = [];
   loading = false;
   error = '';
+  notice = '';
   taskDrawerOpen = false;
   taskOptionsLoading = false;
   taskSaving = false;
   taskError = '';
+  actionDrawerOpen = false;
+  actionSaving = false;
+  actionError = '';
+  activeAction: StaffOsAction | null = null;
+  actionValues: Record<string, string> = {};
   staffOptions: StaffOption[] = [];
   serviceOptions: ServiceOption[] = [];
   readonly taskTypes = ['general', 'training', 'follow_up', 'compliance', 'performance'];
@@ -74,17 +80,100 @@ export class StaffOsWorkspacePageComponent implements OnInit {
       await this.openTaskDrawer();
       return;
     }
+    if (!action.fields?.length) {
+      this.error = '';
+      this.notice = '';
+      try {
+        await this.submitAction(action, {});
+      } catch (error) {
+        this.error = this.message(error);
+      }
+      return;
+    }
+    await this.openActionDrawer(action);
+  }
+
+  async openActionDrawer(action: StaffOsAction) {
+    this.activeAction = action;
+    this.actionDrawerOpen = true;
+    this.actionError = '';
+    this.notice = '';
+    this.actionValues = {};
+    for (const field of action.fields || []) this.actionValues[field.key] = this.resolve(field.value || '');
+    if ((action.fields || []).some((field) => field.type === 'staff')) await this.ensureStaffOptions();
+  }
+
+  closeActionDrawer() {
+    if (this.actionSaving) return;
+    this.actionDrawerOpen = false;
+    this.activeAction = null;
+    this.actionValues = {};
+    this.actionError = '';
+  }
+
+  get canSaveAction() {
+    if (this.actionSaving || this.taskOptionsLoading || !this.activeAction) return false;
+    return (this.activeAction.fields || []).every((field) => field.optional || this.actionValues[field.key]?.trim());
+  }
+
+  async saveAction() {
+    const action = this.activeAction;
+    if (!action?.postPath) return;
     const body: Record<string, unknown> = {};
     for (const field of action.fields || []) {
-      const defaultValue = this.resolve(field.value || '');
-      const value = window.prompt(field.label, defaultValue)?.trim();
-      if (!value) return;
-      body[field.key] = this.actionValue(field.key, value);
+      const raw = (this.actionValues[field.key] || '').trim();
+      if (!raw) {
+        if (field.optional) continue;
+        this.actionError = `${field.label} is required`;
+        return;
+      }
+      body[field.key] = this.fieldValue(field, raw);
     }
+    this.actionSaving = true;
+    this.actionError = '';
+    try {
+      await this.submitAction(action, body);
+      this.actionDrawerOpen = false;
+      this.activeAction = null;
+      this.actionValues = {};
+    } catch (error) {
+      this.actionError = this.message(error);
+    } finally {
+      this.actionSaving = false;
+    }
+  }
+
+  private async submitAction(action: StaffOsAction, body: Record<string, unknown>) {
+    if (!action.postPath) return;
     if (action.postPath.includes('clock-in')) body['clockInAt'] = new Date().toISOString();
     if (action.postPath.includes('clock-out')) body['clockOutAt'] = new Date().toISOString();
     await this.store.post(action.postPath, body);
+    this.notice = action.successMessage || `${action.label} completed`;
     await this.refresh();
+  }
+
+  private fieldValue(field: StaffOsActionField, raw: string): unknown {
+    if (field.type === 'number' || /(?:count|minutes|amount|value)$/i.test(field.key)) {
+      const number = Number(raw);
+      return Number.isFinite(number) ? number : raw;
+    }
+    // Backend timestamp fields (dueAt, startAt…) take an ISO datetime, date pickers give YYYY-MM-DD.
+    if (/At$/.test(field.key) && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date(`${raw}T23:59:59+05:30`).toISOString();
+    return raw;
+  }
+
+  private async ensureStaffOptions() {
+    if (this.staffOptions.length) return;
+    this.taskOptionsLoading = true;
+    try {
+      const response = await this.store.get<StaffListResponse>('/staff/list?page=1&pageSize=100&active=true&sortBy=firstName&sortDirection=asc');
+      this.staffOptions = response.items || [];
+      if (!this.staffOptions.length) this.actionError = 'No active staff found';
+    } catch (error) {
+      this.actionError = this.message(error);
+    } finally {
+      this.taskOptionsLoading = false;
+    }
   }
 
   async openTaskDrawer() {
@@ -233,11 +322,6 @@ export class StaffOsWorkspacePageComponent implements OnInit {
   trackRow(index: number, row: Record<string, unknown>) { return String(row['id'] || row['staffId'] || index); }
 
   private resolve(value: string) { return value.replace('{today}', this.periodEnd); }
-  private actionValue(key: string, value: string) {
-    if (!/(?:count|minutes|amount|value)$/i.test(key)) return value;
-    const number = Number(value);
-    return Number.isFinite(number) ? number : value;
-  }
   private iso(value: Date) { return value.toISOString().slice(0, 10); }
   private isIdColumn(column: string) { return /(^id$|id$)/i.test(column); }
   private objectLabel(value: Record<string, unknown>) {
