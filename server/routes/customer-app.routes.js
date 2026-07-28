@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authenticateJwt } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { customerAppService } from "../services/customer-app.service.js";
+import { customerNotificationService } from "../services/customer-notification.service.js";
 
 export const customerAppRouter = Router();
 
@@ -106,7 +107,31 @@ customerAppRouter.get("/customer/payments", asyncHandler((req, res) => {
 }));
 
 customerAppRouter.get("/customer/notifications", asyncHandler((req, res) => {
-  res.json(customerAppService.notifications(req.access));
+  res.json(customerNotificationService.list(req.access, req.query || {}));
+}));
+
+customerAppRouter.patch("/customer/notifications/read-all", asyncHandler((req, res) => {
+  res.json(customerNotificationService.markAllRead(req.access));
+}));
+
+customerAppRouter.patch("/customer/notifications/:id", asyncHandler((req, res) => {
+  res.json(customerNotificationService.markRead(req.access, req.params.id, req.body?.status || "read"));
+}));
+
+customerAppRouter.get("/customer/notification-preferences", asyncHandler((req, res) => {
+  res.json(customerNotificationService.preferences(req.access));
+}));
+
+customerAppRouter.patch("/customer/notification-preferences", asyncHandler((req, res) => {
+  res.json(customerNotificationService.updatePreferences(req.access, req.body || {}));
+}));
+
+customerAppRouter.put("/customer/push-devices/:deviceId", asyncHandler((req, res) => {
+  res.json(customerNotificationService.registerDevice(req.access, { ...req.body, deviceId: req.params.deviceId }));
+}));
+
+customerAppRouter.delete("/customer/push-devices/:deviceId", asyncHandler((req, res) => {
+  res.json(customerNotificationService.unregisterDevice(req.access, req.params.deviceId));
 }));
 
 customerAppRouter.get("/customer/devices", asyncHandler((req, res) => {

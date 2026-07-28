@@ -26,6 +26,7 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPrimarySalon,
+  CustomerPushDevicePayload,
   MySalonDashboard,
   CustomerProfile,
   CustomerRewardSummary,
@@ -379,6 +380,30 @@ export class CustomerApiService {
   listNotifications(): Observable<CustomerNotification[]> {
     return this.http.get<ApiResponse<CustomerNotification[] | ApiList<CustomerNotification>>>(`${this.baseUrl}/customer/notifications`).pipe(
       map((response) => this.unwrapList<CustomerNotification>(response))
+    );
+  }
+
+  updateNotificationStatus(id: string, status: "read" | "unread"): Observable<CustomerNotification> {
+    return this.http.patch<ApiResponse<CustomerNotification>>(`${this.baseUrl}/customer/notifications/${encodeURIComponent(id)}`, { status }).pipe(
+      map((response) => this.unwrap<CustomerNotification>(response))
+    );
+  }
+
+  markAllNotificationsRead(): Observable<{ updated: number; readAt: string }> {
+    return this.http.patch<ApiResponse<{ updated: number; readAt: string }>>(`${this.baseUrl}/customer/notifications/read-all`, {}).pipe(
+      map((response) => this.unwrap<{ updated: number; readAt: string }>(response))
+    );
+  }
+
+  registerPushDevice(deviceId: string, payload: CustomerPushDevicePayload): Observable<void> {
+    return this.http.put<ApiResponse<unknown>>(`${this.baseUrl}/customer/push-devices/${encodeURIComponent(deviceId)}`, payload).pipe(
+      map(() => undefined)
+    );
+  }
+
+  unregisterPushDevice(deviceId: string): Observable<void> {
+    return this.http.delete<ApiResponse<unknown>>(`${this.baseUrl}/customer/push-devices/${encodeURIComponent(deviceId)}`).pipe(
+      map(() => undefined)
     );
   }
 

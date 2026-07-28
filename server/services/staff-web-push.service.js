@@ -67,7 +67,7 @@ export const staffWebPushService = {
     const notification = db.prepare(`SELECT * FROM push_notifications
       WHERE id = @id AND tenantId = @tenantId`).get({ id: pushNotificationId, tenantId });
     if (!notification) return { success: true, skipped: "notification_not_found" };
-    if (notification.status === "sent") return { success: true, skipped: "already_sent" };
+    if (["sent", "cancelled"].includes(notification.status)) return { success: true, skipped: notification.status };
     const subscriptions = configured() ? db.prepare(`SELECT * FROM push_subscriptions
       WHERE tenantId = @tenantId AND userId = @userId AND status = 'active' AND provider = 'web-push'
       ORDER BY updatedAt DESC`).all({ tenantId, userId: notification.userId }) : [];
@@ -107,7 +107,12 @@ export const staffWebPushService = {
     if (firebaseMessagingService.configured()) {
       for (const device of fcmDevices) {
         try {
-          const messageId = await firebaseMessagingService.sendToToken(device.deviceToken, { title: notification.title, body: notification.message, data });
+          const messageId = await firebaseMessagingService.sendToToken(device.deviceToken, {
+            title: notification.title,
+            body: notification.message,
+            data,
+            androidChannelId: data.androidChannelId || "staff_notifications"
+          });
           delivered += 1;
           providerMessageIds.push(messageId);
         } catch (error) {

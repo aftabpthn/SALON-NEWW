@@ -17,10 +17,12 @@ import { MarketplaceService } from "../core/marketplace.service";
       class="business-card"
       [class.featured]="featured"
       [class.highlighted]="highlighted"
+      [class.variant-personal]="variant === 'personal'"
+      [class.variant-discovery]="variant === 'discovery'"
       tabindex="0"
       (click)="openCard()"
       (keydown.enter)="openCard()"
-      (keydown.space)="openCard()">
+      (keydown.space)="$event.preventDefault(); openCard()">
       <div class="cover">
         @if (displayImage()) {
           <img class="image-fill" [src]="displayImage()" [alt]="business.businessName + ' salon interior'" loading="lazy" (error)="markImageFailed()" />
@@ -107,8 +109,17 @@ import { MarketplaceService } from "../core/marketplace.service";
       position: absolute;
       inset: 0;
       content: "";
-      background: linear-gradient(180deg, rgba(35, 25, 13, 0.02), rgba(35, 25, 13, 0.38));
+      background: linear-gradient(180deg, rgba(6, 23, 43, 0.02), rgba(6, 23, 43, 0.42));
       pointer-events: none;
+    }
+
+    .business-card.variant-personal {
+      box-shadow: 0 12px 30px rgba(6, 23, 43, 0.08);
+    }
+
+    .business-card.variant-discovery {
+      border-color: rgba(11, 70, 120, 0.2);
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.11);
     }
 
     .cover-fallback {
@@ -338,21 +349,22 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     @media (max-width: 599px) {
       :host-context(.business-rail) .business-card {
-        grid-template-columns: 42px minmax(0, 1fr) 26px;
+        grid-template-columns: 68px minmax(0, 1fr) 36px;
         grid-template-rows: auto auto auto !important;
         gap: 3px 8px;
         align-items: center;
-        width: min(178px, 47vw);
-        height: 68px;
-        min-height: 68px;
-        padding: 7px;
-        border-radius: 14px;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: 92px;
+        padding: 8px;
+        border-radius: 16px;
       }
 
       :host-context(.business-rail) .cover {
         grid-row: span 3;
-        width: 42px;
-        height: 42px;
+        width: 68px;
+        height: 68px;
         border-radius: 14px;
       }
 
@@ -406,10 +418,10 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       :host-context(.business-rail) .footer-row ion-button {
-        width: 26px;
-        min-width: 26px;
-        height: 26px;
-        min-height: 26px;
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        min-height: 36px;
         --padding-start: 0;
         --padding-end: 0;
         font-size: 0;
@@ -546,6 +558,265 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding: 24px;
       }
     }
+
+    @media (max-width: 900px) {
+      :host-context(.business-rail) .business-card.variant-personal {
+        grid-template-rows: minmax(104px, auto) !important;
+        grid-template-columns: 76px minmax(0, 1fr);
+        align-items: stretch;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: 104px;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 16px;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .cover {
+        grid-row: 1;
+        width: 76px;
+        height: 100%;
+        min-height: 104px;
+        aspect-ratio: auto;
+        border-radius: 0;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .content {
+        display: grid;
+        align-content: center;
+        gap: 4px;
+        min-width: 0;
+        padding: 8px 9px;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .rating-pill,
+      :host-context(.business-rail) .business-card.variant-personal .cover-actions,
+      :host-context(.business-rail) .business-card.variant-personal .offer-pill,
+      :host-context(.business-rail) .business-card.variant-personal .topline {
+        display: none;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal h3 {
+        display: block;
+        grid-column: auto;
+        min-height: 0;
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.9rem;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .business-meta {
+        display: flex;
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .service-row span,
+      :host-context(.business-rail) .business-card.variant-personal .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .footer-row {
+        display: grid;
+        grid-column: auto;
+        grid-row: auto;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 5px;
+        padding-top: 0;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .service-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px;
+        margin-top: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-size: 0.68rem;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .service-row strong,
+      :host-context(.business-rail) .business-card.variant-personal .footer-row > span {
+        display: inline-flex;
+      }
+
+      :host-context(.business-rail) .business-card.variant-personal .footer-row ion-button {
+        width: 68px;
+        min-width: 68px;
+        height: 36px;
+        min-height: 36px;
+        margin: 0;
+        --padding-start: 9px;
+        --padding-end: 9px;
+        font-size: 0.72rem;
+      }
+
+    }
+
+    @media (max-width: 599px) {
+
+      .business-card.variant-discovery {
+        width: 100%;
+        min-width: 0;
+        border-radius: 18px;
+        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
+      }
+
+      .business-card.variant-discovery .cover {
+        height: 124px;
+      }
+
+      .business-card.variant-discovery .content {
+        gap: 5px;
+        padding: 10px 12px 12px;
+      }
+
+      .business-card.variant-discovery .countdown-pill {
+        display: none;
+      }
+
+      .business-card.variant-discovery h3 {
+        min-height: 0;
+        margin-top: 0;
+        font-size: 1.02rem;
+        line-height: 1.12;
+      }
+
+      .business-card.variant-discovery .business-meta {
+        font-size: 0.76rem;
+      }
+
+      .business-card.variant-discovery .service-row {
+        margin-top: 2px;
+        padding: 8px 10px;
+        border-radius: 13px;
+      }
+
+      .business-card.variant-discovery .footer-row {
+        gap: 8px;
+        padding-top: 2px;
+      }
+
+      .business-card.variant-discovery .content,
+      .business-card.variant-discovery .topline,
+      .business-card.variant-discovery h3,
+      .business-card.variant-discovery .business-meta,
+      .business-card.variant-discovery .service-row,
+      .business-card.variant-discovery .footer-row,
+      .business-card.variant-discovery .service-row span,
+      .business-card.variant-discovery .footer-row > span {
+        min-width: 0;
+      }
+
+      .business-card.variant-discovery .service-row,
+      .business-card.variant-discovery .footer-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+
+      .business-card.variant-discovery .service-row span,
+      .business-card.variant-discovery .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-discovery .service-row strong {
+        width: auto;
+        min-width: max-content;
+        max-width: 100%;
+      }
+
+      .business-card.variant-discovery .footer-row ion-button {
+        width: 92px;
+        min-width: 92px;
+        max-width: 100%;
+        min-height: 44px;
+        margin: 0;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal,
+      :host-context(.favourites-rail) .business-card.variant-personal {
+        grid-template-columns: 52px minmax(0, 1fr);
+        grid-template-rows: 74px !important;
+        align-items: stretch;
+        min-height: 74px;
+        max-height: 74px;
+        border-radius: 14px;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .cover,
+      :host-context(.favourites-rail) .business-card.variant-personal .cover {
+        grid-row: 1;
+        width: 52px;
+        height: 74px;
+        min-height: 0;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .content,
+      :host-context(.favourites-rail) .business-card.variant-personal .content {
+        align-content: center;
+        gap: 3px;
+        padding: 7px 8px;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal h3,
+      :host-context(.favourites-rail) .business-card.variant-personal h3 {
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.78rem;
+        line-height: 1.12;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .business-meta,
+      :host-context(.favourites-rail) .business-card.variant-personal .business-meta {
+        display: block;
+        overflow: hidden;
+        font-size: 0.61rem;
+        line-height: 1.15;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .service-row,
+      :host-context(.continue-rail) .business-card.variant-personal .footer-row,
+      :host-context(.favourites-rail) .business-card.variant-personal .service-row,
+      :host-context(.favourites-rail) .business-card.variant-personal .footer-row {
+        display: none;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback span,
+      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback span {
+        width: 34px;
+        height: 34px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback small,
+      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback small {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .business-card { transition: none; }
+    }
   `]
 })
 export class BusinessCardComponent implements OnInit {
@@ -553,6 +824,7 @@ export class BusinessCardComponent implements OnInit {
   @Input() featured = false;
   @Input() selectable = false;
   @Input() highlighted = false;
+  @Input() variant: "default" | "personal" | "discovery" = "default";
   @Input() displayDistanceKm: number | null | undefined = undefined;
   @Input() userLocation: { lat: number; lng: number } | null = null;
   @Output() cardSelect = new EventEmitter<Business>();

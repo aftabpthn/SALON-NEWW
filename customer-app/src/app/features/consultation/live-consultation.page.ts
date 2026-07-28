@@ -33,53 +33,157 @@ interface ConsultationChatMessage {
   template: `
     <ion-content>
       <main class="page consultation-page chat-page">
-        <section class="chat-bot-shell premium-card">
+        <section class="concierge-shell" id="consultation-workspace" aria-labelledby="consultation-title">
           <header class="chat-bot-header">
             <button type="button" class="back-button" routerLink="/tabs/home" aria-label="Back to home">
               <ion-icon name="arrow-back-outline"></ion-icon>
             </button>
-            <div class="bot-mark" aria-hidden="true">
-              <ion-icon name="sparkles-outline"></ion-icon>
+            <div class="header-identity">
+              <div class="bot-mark" aria-hidden="true">
+                <ion-icon name="sparkles-outline"></ion-icon>
+              </div>
+              <div class="chat-title">
+                <h1 id="consultation-title">Aura Concierge</h1>
+                <button type="button" class="header-location" (click)="useCurrentLocation()" [disabled]="locating()">
+                  <span class="status-dot" aria-hidden="true"></span>
+                  <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
+                  <span>{{ locating() ? "Detecting location" : areaLabel() }}</span>
+                </button>
+              </div>
             </div>
-            <div class="chat-title">
-              <h1>Aura Consult</h1>
-              <span>{{ areaLabel() }} · {{ matchedBusinesses().length }} salons in context · {{ consultationPhotos().length }} photo{{ consultationPhotos().length === 1 ? "" : "s" }}</span>
-            </div>
-            <button type="button" class="location-chip" (click)="useCurrentLocation()" [disabled]="locating()">
-              <ion-icon name="navigate-outline"></ion-icon>
-              {{ locating() ? "Detecting" : areaLabel() }}
-            </button>
+            <span class="context-count">{{ matchedBusinesses().length }} salon{{ matchedBusinesses().length === 1 ? "" : "s" }}</span>
           </header>
 
-          <div class="goal-grid" aria-label="Quick consultation prompts">
-            @for (goal of consultationGoals; track goal) {
-              <button type="button" [class.active]="selectedConsultationGoals().includes(goal)" (click)="toggleGoal(goal)">
-                {{ goal }}
-              </button>
-            }
+          <div class="goal-scroll-shell">
+            <div class="goal-grid" aria-label="Quick consultation prompts">
+              @for (goal of consultationGoals; track goal) {
+                <button
+                  type="button"
+                  [class.active]="selectedConsultationGoals().includes(goal)"
+                  [attr.aria-pressed]="selectedConsultationGoals().includes(goal)"
+                  (click)="toggleGoal(goal)">
+                  {{ goal }}
+                </button>
+              }
+            </div>
           </div>
 
-          <section class="chat-thread" aria-live="polite">
-            @for (message of consultationMessages(); track message.role + message.text) {
-              <div class="chat-message" [class.customer]="message.role === 'customer'">
-                <strong>{{ message.role === "customer" ? "You" : "Aura AI" }}</strong>
-                <span>{{ message.text }}</span>
-              </div>
-            }
+          <div class="conversation-scroll" [attr.aria-busy]="consultationLoading()">
+            <section class="chat-thread intro-thread" aria-label="Aura Concierge welcome">
+              @if (consultationMessages()[0]; as message) {
+                <div class="chat-message">
+                  <strong>{{ message.role === "customer" ? "You" : "Aura Concierge" }}</strong>
+                  <span>{{ message.text }}</span>
+                </div>
+              }
+            </section>
 
-            @if (!consultationResponse() && matchedBusinesses().length) {
-              <div class="chat-message system-message">
-                <strong>Nearby context</strong>
-                <span>I can use {{ matchedBusinesses().length }} salon profiles near {{ areaLabel() }} while planning.</span>
-                <div class="compact-cards">
-                  @for (business of matchedBusinesses().slice(0, 3); track business.id) {
-                    <button type="button" (click)="openBusiness(business.slug)">
-                      <b>{{ business.businessName }}</b>
-                      <small>{{ locationLine(business) }} · {{ money(business.startingPricePaise) }}</small>
+            <section class="consultation-composer" id="consultation-composer" aria-label="Message Aura Concierge">
+              <label class="composer-label">
+                <span>Message Aura</span>
+                <ion-textarea
+                  rows="3"
+                  autoGrow="true"
+                  [(ngModel)]="consultationText"
+                  placeholder="Ask about hair, skin, nails, spa, budget, timing, allergy, or upload a photo.">
+                </ion-textarea>
+              </label>
+
+              <details class="chat-options">
+                <summary>
+                  <span>Add budget, timing &amp; sensitivities</span>
+                  <small>Optional</small>
+                </summary>
+                <section class="problem-grid" aria-label="Consultation problem details">
+                  <label>
+                    <span>Time / event</span>
+                    <input [(ngModel)]="problemProfile.timeframe" placeholder="Today, weekend, wedding" />
+                  </label>
+                  <label>
+                    <span>Budget</span>
+                    <input [(ngModel)]="problemProfile.budget" placeholder="Under INR 5000" />
+                  </label>
+                  <label>
+                    <span>History</span>
+                    <input [(ngModel)]="problemProfile.history" placeholder="Color, keratin, acne actives" />
+                  </label>
+                  <label>
+                    <span>Sensitivity</span>
+                    <input [(ngModel)]="problemProfile.sensitivities" placeholder="Allergy, itch, pregnancy, none" />
+                  </label>
+                </section>
+                <div class="context-list compact-context">
+                  @for (item of contextItems; track item.title) {
+                    <div>
+                      <ion-icon [name]="item.icon"></ion-icon>
+                      <span><strong>{{ item.title }}</strong><small>{{ item.copy }}</small></span>
+                    </div>
+                  }
+                </div>
+              </details>
+
+              <input #photoInput type="file" accept="image/*" multiple hidden (change)="addPhotos($event)" />
+
+              @if (consultationPhotos().length) {
+                <div class="photo-strip" aria-label="Attached consultation photos">
+                  @for (photo of consultationPhotos(); track photo.name) {
+                    <button type="button" (click)="removePhoto(photo.name)" [attr.aria-label]="'Remove ' + photo.name">
+                      <img [src]="photo.dataUrl" [alt]="photo.name" />
+                      <ion-icon name="close-outline"></ion-icon>
                     </button>
                   }
                 </div>
-              </div>
+              }
+
+              @if (locationNotice()) {
+                <p class="notice-text inline-notice" role="status">{{ locationNotice() }}</p>
+              }
+              @if (consultationError()) {
+                <p class="error-text inline-notice" role="alert">{{ consultationError() }}</p>
+              }
+
+              <footer class="workspace-actions">
+                <ion-button class="primary-gradient" (click)="sendConsultation()" [disabled]="consultationLoading()">
+                  <ion-icon name="sparkles-outline" slot="start"></ion-icon>
+                  {{ consultationLoading() ? "Creating your plan…" : consultationResponse() ? "Send message" : "Ask Aura" }}
+                </ion-button>
+                <button type="button" class="upload-button" (click)="photoInput.click()">
+                  <ion-icon name="camera-outline"></ion-icon>
+                  Photos
+                </button>
+              </footer>
+            </section>
+
+            <section class="chat-thread continuation-thread" aria-label="Consultation conversation" aria-live="polite">
+              @for (message of consultationMessages().slice(1); track message.role + message.text) {
+                <div class="chat-message" [class.customer]="message.role === 'customer'">
+                  <strong>{{ message.role === "customer" ? "You" : "Aura Concierge" }}</strong>
+                  <span>{{ message.text }}</span>
+                </div>
+              }
+
+            @if (!consultationResponse() && matchedBusinesses().length) {
+              <details class="nearby-context">
+                <summary>
+                  <span><strong>Nearby context</strong><small>{{ matchedBusinesses().length }} salon{{ matchedBusinesses().length === 1 ? "" : "s" }} near {{ areaLabel() }}</small></span>
+                </summary>
+                <div class="compact-cards">
+                  @for (business of matchedBusinesses().slice(0, 2); track business.id) {
+                    <button type="button" (click)="openBusiness(business.slug)">
+                      <b>{{ business.businessName }}</b>
+                      <small class="business-meta">
+                        @if (business.area || business.city || business.state || business.address) {
+                          <span>{{ locationLine(business) }}</span>
+                        }
+                        @if (business.distanceKm != null) { <span>{{ business.distanceKm }} km</span> }
+                        <span>{{ business.isOpen ? "Open" : "Closed" }}</span>
+                        @if (business.ratingAverage > 0) { <span>{{ business.ratingAverage }} rating</span> }
+                        @if (business.startingPricePaise > 0) { <span>{{ money(business.startingPricePaise) }}</span> }
+                      </small>
+                    </button>
+                  }
+                </div>
+              </details>
             }
 
             @if (consultationResponse(); as response) {
@@ -228,210 +332,234 @@ interface ConsultationChatMessage {
                 }
               </div>
             }
-          </section>
 
-          <section class="composer-card" id="consultation-composer">
-            <label class="composer-label">
-              <span>Message Aura</span>
-              <ion-textarea
-                rows="3"
-                autoGrow="true"
-                [(ngModel)]="consultationText"
-                placeholder="Ask about hair, skin, nails, spa, budget, timing, allergy, or upload a photo.">
-              </ion-textarea>
-            </label>
-
-            <details class="chat-options">
-              <summary>Details, budget and safety</summary>
-              <section class="problem-grid" aria-label="Consultation problem details">
-                <label>
-                  <span>Time / event</span>
-                  <input [(ngModel)]="problemProfile.timeframe" placeholder="Today, weekend, wedding" />
-                </label>
-                <label>
-                  <span>Budget</span>
-                  <input [(ngModel)]="problemProfile.budget" placeholder="Under INR 5000" />
-                </label>
-                <label>
-                  <span>History</span>
-                  <input [(ngModel)]="problemProfile.history" placeholder="Color, keratin, acne actives" />
-                </label>
-                <label>
-                  <span>Sensitivity</span>
-                  <input [(ngModel)]="problemProfile.sensitivities" placeholder="Allergy, itch, pregnancy, none" />
-                </label>
-              </section>
-              <div class="context-list compact-context">
-                @for (item of contextItems; track item.title) {
-                  <div>
-                    <ion-icon [name]="item.icon"></ion-icon>
-                    <span><strong>{{ item.title }}</strong><small>{{ item.copy }}</small></span>
-                  </div>
-                }
-              </div>
-            </details>
-
-            <input #photoInput type="file" accept="image/*" multiple hidden (change)="addPhotos($event)" />
-
-            @if (consultationPhotos().length) {
-              <div class="photo-strip" aria-label="Attached consultation photos">
-                @for (photo of consultationPhotos(); track photo.name) {
-                  <button type="button" (click)="removePhoto(photo.name)" [attr.aria-label]="'Remove ' + photo.name">
-                    <img [src]="photo.dataUrl" [alt]="photo.name" />
-                    <ion-icon name="close-outline"></ion-icon>
-                  </button>
-                }
-              </div>
-            }
-
-            @if (locationNotice()) {
-              <p class="notice-text inline-notice">{{ locationNotice() }}</p>
-            }
-            @if (consultationError()) {
-              <p class="error-text inline-notice">{{ consultationError() }}</p>
-            }
-
-            <footer class="workspace-actions">
-              <ion-button class="primary-gradient" (click)="sendConsultation()" [disabled]="consultationLoading()">
-                <ion-icon name="sparkles-outline" slot="start"></ion-icon>
-                {{ consultationLoading() ? "Thinking" : consultationResponse() ? "Send" : "Ask Aura" }}
-              </ion-button>
-              <button type="button" class="upload-button" (click)="photoInput.click()">
-                <ion-icon name="camera-outline"></ion-icon>
-                Photos
-              </button>
-              <ion-button fill="outline" class="secondary-button" routerLink="/tabs/search">
-                <ion-icon name="search-outline" slot="start"></ion-icon>
-                Discover
-              </ion-button>
-            </footer>
-          </section>
+              <a class="discover-link" routerLink="/tabs/search">
+                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                Discover salons
+              </a>
+            </section>
+          </div>
         </section>
       </main>
     </ion-content>
   `,
   styles: [`
     .consultation-page {
-      max-width: 1040px;
-      margin: 0 auto;
-      padding-bottom: 96px;
+      width: min(100%, 980px);
+      min-height: 100%;
+      padding: 0 0 calc(112px + env(safe-area-inset-bottom));
+      scroll-padding-bottom: calc(132px + env(safe-area-inset-bottom));
     }
 
-    .chat-bot-shell {
+    .concierge-shell {
       display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr) auto;
-      gap: 12px;
-      height: min(780px, calc(100vh - 142px));
-      min-height: 620px;
-      padding: 16px;
-      overflow: hidden;
-      border-radius: 28px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.92));
+      grid-template-rows: auto auto minmax(0, 1fr);
+      min-height: calc(100dvh - 60px);
+      color: var(--text);
+      background: #FFFFFF;
     }
 
     .chat-bot-header {
+      position: sticky;
+      top: 0;
+      z-index: 4;
       display: grid;
-      grid-template-columns: auto auto minmax(0, 1fr) auto;
-      gap: 12px;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      gap: 10px;
       align-items: center;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.18);
+      padding: 10px 16px 8px;
+      border-bottom: 1px solid rgba(11, 70, 120, 0.12);
+      background: rgba(255, 255, 255, 0.97);
+      backdrop-filter: blur(16px);
     }
 
     .back-button,
-    .location-chip,
+    .header-location,
     .upload-button,
     .compact-cards button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      gap: 7px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.94);
-      font-weight: 900;
+      background: transparent;
+      font-weight: 800;
     }
 
-    .back-button,
-    .bot-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 999px;
+    .back-button {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      font-size: 1.2rem;
+    }
+
+    .back-button:hover,
+    .back-button:focus-visible {
+      background: var(--primary-soft);
+    }
+
+    .header-identity {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
     .bot-mark {
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
       display: grid;
       place-items: center;
-      color: #120D05;
-      background: linear-gradient(135deg, var(--brand-600), var(--primary));
-      box-shadow: 0 10px 24px rgba(11, 70, 120, 0.2);
+      border-radius: 12px;
+      color: #FFFFFF;
+      background: var(--brand-800);
     }
 
     .chat-title {
       min-width: 0;
-    }
-
-    .chat-title h1,
-    .chat-title p,
-    .chat-title span {
-      margin: 0;
+      display: grid;
+      gap: 3px;
     }
 
     .chat-title h1 {
+      margin: 0;
+      overflow: hidden;
       color: var(--text);
-      font-size: clamp(1.25rem, 2.2vw, 1.8rem);
-      line-height: 1;
-      letter-spacing: 0;
+      font-size: clamp(1.08rem, 4.8vw, 1.35rem);
+      line-height: 1.05;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .chat-title span {
-      display: block;
-      max-width: 100%;
+    .header-location {
+      position: relative;
+      justify-content: flex-start;
+      min-width: 0;
+      min-height: 36px;
+      padding: 0;
+      border: 0;
       overflow: hidden;
       color: var(--muted);
-      font-size: 0.84rem;
-      font-weight: 800;
-      line-height: 1.35;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      text-align: left;
+    }
+
+    .header-location::after {
+      content: "";
+      position: absolute;
+      inset: -4px 0;
+    }
+
+    .header-location:disabled {
+      opacity: 0.65;
+    }
+
+    .header-location span:last-child {
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .location-chip {
-      min-height: 40px;
-      max-width: 240px;
-      padding: 0 12px;
+    .header-location ion-icon {
+      flex: 0 0 auto;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      flex: 0 0 6px;
+      border-radius: 50%;
+      background: #168A54;
+      box-shadow: 0 0 0 3px rgba(22, 138, 84, 0.12);
+    }
+
+    .context-count {
+      max-width: 74px;
+      padding: 5px 8px;
       border-radius: 999px;
+      color: var(--brand-700);
+      background: var(--primary-soft);
+      font-size: 0.68rem;
+      font-weight: 850;
+      line-height: 1.15;
+      text-align: center;
+    }
+
+    .goal-scroll-shell {
+      position: relative;
+      min-width: 0;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+      background: #FFFFFF;
+    }
+
+    .goal-scroll-shell::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      width: 34px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0), #FFFFFF 82%);
+      pointer-events: none;
     }
 
     .goal-grid {
       display: flex;
       gap: 8px;
+      padding: 10px 38px 9px 16px;
       overflow-x: auto;
-      padding-bottom: 2px;
+      overscroll-behavior-inline: contain;
+      scroll-padding-inline: 16px;
+      scrollbar-width: none;
+    }
+
+    .goal-grid::-webkit-scrollbar,
+    .photo-strip::-webkit-scrollbar {
+      display: none;
     }
 
     .goal-grid button,
     .suggested-replies button {
       flex: 0 0 auto;
-      min-height: 34px;
-      padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid rgba(11, 70, 120, 0.2);
       border-radius: 999px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.94);
-      font-size: 0.82rem;
-      font-weight: 900;
+      color: var(--brand-800);
+      background: #FFFFFF;
+      font-size: 0.8rem;
+      font-weight: 800;
       white-space: nowrap;
+      transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast);
     }
 
     .goal-grid button.active,
-    .suggested-replies button:hover {
-      color: #120D05;
-      border-color: transparent;
-      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800));
+    .goal-grid button[aria-pressed="true"] {
+      color: #FFFFFF;
+      border-color: var(--brand-800);
+      background: var(--brand-800);
+    }
+
+    .conversation-scroll {
+      min-height: 0;
+      display: grid;
+      align-content: start;
+      overflow: visible;
+      scroll-padding-block: 16px calc(132px + env(safe-area-inset-bottom));
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+    }
+
+    .suggested-replies button:hover,
+    .suggested-replies button:focus-visible {
+      color: #FFFFFF;
+      border-color: var(--brand-700);
+      background: var(--brand-700);
     }
 
     .chat-thread {
@@ -439,89 +567,134 @@ interface ConsultationChatMessage {
       align-content: start;
       gap: 12px;
       min-height: 0;
-      overflow-y: auto;
-      padding: 14px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
-      border-radius: 24px;
-      background: rgba(246, 249, 252, 0.72);
+      padding: 16px;
       scroll-behavior: smooth;
+    }
+
+    .intro-thread {
+      padding-bottom: 8px;
+    }
+
+    .intro-thread .chat-message {
+      max-width: min(100%, 640px);
+      padding: 8px 0;
+      border-radius: 0;
+      background: transparent;
+    }
+
+    .continuation-thread {
+      padding-top: 12px;
     }
 
     .chat-message {
       justify-self: start;
       display: grid;
-      gap: 8px;
+      gap: 5px;
       width: fit-content;
-      max-width: min(76%, 720px);
-      padding: 12px 14px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
-      border-radius: 20px 20px 20px 8px;
+      max-width: min(84%, 700px);
+      padding: 10px 12px;
+      border-radius: 14px 14px 14px 4px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.9);
-      box-shadow: 0 8px 22px rgba(6, 23, 43, 0.06);
-      font-weight: 800;
-      line-height: 1.5;
+      background: var(--surface-soft);
+      font-size: 0.9rem;
+      font-weight: 650;
+      line-height: 1.48;
+      overflow-wrap: anywhere;
     }
 
     .chat-message.customer {
       justify-self: end;
-      border-color: transparent;
-      border-radius: 20px 20px 8px 20px;
-      color: #120D05;
-      background: linear-gradient(135deg, rgba(7, 90, 156, 0.96), rgba(11, 70, 120, 0.86));
+      border-radius: 14px 14px 4px 14px;
+      color: #FFFFFF;
+      background: var(--brand-800);
     }
 
-    .chat-message strong {
-      font-size: 0.74rem;
+    .chat-message > strong {
+      color: inherit;
+      font-size: 0.68rem;
+      font-weight: 850;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.07em;
     }
 
-    .system-message,
+    .system-message {
+      width: min(100%, 760px);
+      max-width: 100%;
+      border-left: 3px solid var(--brand-600);
+      border-radius: 0;
+      background: transparent;
+    }
+
     .plan-message {
       width: min(100%, 820px);
-      max-width: min(92%, 820px);
+      max-width: 100%;
+      padding: 16px;
+      border: 1px solid rgba(11, 70, 120, 0.14);
+      border-radius: 16px;
+      background: #FFFFFF;
+      box-shadow: 0 10px 28px rgba(6, 23, 43, 0.06);
     }
 
     .answer-copy,
     .result-grid p {
       margin: 0;
       color: var(--text);
-      font-weight: 800;
+      font-weight: 650;
       line-height: 1.55;
+      white-space: pre-wrap;
     }
 
-    .composer-card {
+    .consultation-composer {
       display: grid;
-      gap: 10px;
-      padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
-      border-radius: 24px;
-      background: rgba(255, 255, 255, 0.76);
-      box-shadow: 0 -8px 28px rgba(6, 23, 43, 0.06);
+      gap: 8px;
+      margin-inline: 16px;
+      padding: 10px 0 14px;
+      border-block: 1px solid rgba(11, 70, 120, 0.12);
+      background: #FFFFFF;
     }
 
     .composer-label {
       display: grid;
       gap: 6px;
       color: var(--text);
-      font-size: 0.84rem;
-      font-weight: 900;
+      font-size: 0.76rem;
+      font-weight: 850;
     }
 
     ion-textarea {
-      --background: rgba(255, 255, 255, 0.94);
-      --border-radius: 18px;
+      --background: var(--surface-soft);
+      --border-radius: 14px;
       --color: var(--text);
-      --placeholder-color: rgba(126, 110, 85, 0.64);
-      min-height: 82px;
-      padding: 8px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
-      border-radius: 18px;
+      --padding-start: 0;
+      --padding-end: 0;
+      --padding-top: 0;
+      --padding-bottom: 0;
+      --placeholder-color: #53677A;
+      width: 100%;
+      min-height: 88px;
+      overflow: visible;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+
+    ion-textarea::part(native) {
+      min-height: 86px;
+      padding: 12px;
+      overflow: visible;
+      line-height: 1.45;
+      resize: vertical;
+    }
+
+    ion-textarea:focus-within,
+    ion-textarea::part(native):focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
+      outline: none;
     }
 
     .workspace-actions,
-    .photo-uploader,
     .suggested-replies {
       display: flex;
       flex-wrap: wrap;
@@ -529,68 +702,155 @@ interface ConsultationChatMessage {
       align-items: center;
     }
 
-    .workspace-actions ion-button,
-    .workspace-actions button {
-      min-height: 38px;
+    .workspace-actions .primary-gradient {
+      flex: 1 1 150px;
+      min-height: 44px;
+      margin: 0;
     }
 
     .upload-button {
-      min-height: 38px;
+      min-height: 44px;
       padding: 0 13px;
-      border-radius: 999px;
+      border: 1px solid rgba(11, 70, 120, 0.2);
+      border-radius: 12px;
     }
 
-    .chat-options {
-      border: 1px solid rgba(11, 70, 120, 0.18);
-      border-radius: 18px;
-      background: rgba(246, 249, 252, 0.66);
-      padding: 8px 10px;
+    .discover-link {
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 44px;
+      padding: 0 4px;
+      color: var(--brand-700);
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-decoration: underline;
+      text-decoration-color: rgba(11, 70, 120, 0.3);
+      text-underline-offset: 3px;
+    }
+
+    .chat-options,
+    .plan-details {
+      padding-block: 2px;
+      border: 0;
+      background: transparent;
     }
 
     .chat-options summary,
-    .plan-details summary {
+    .plan-details summary,
+    .nearby-context summary {
+      min-height: 44px;
+      display: list-item;
+      box-sizing: border-box;
+      padding-block: 12px;
+      cursor: pointer;
+      color: var(--brand-700);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .chat-options summary::marker,
+    .plan-details summary::marker,
+    .nearby-context summary::marker {
+      color: var(--brand-600);
+    }
+
+    .chat-options summary small {
+      margin-left: 8px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.66rem;
+      font-weight: 750;
+    }
+
+    .chat-options summary:focus-visible,
+    .plan-details summary:focus-visible,
+    .nearby-context summary:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
+    .nearby-context {
+      width: min(100%, 760px);
+      padding-block: 2px;
+      border-block: 1px solid rgba(11, 70, 120, 0.1);
+    }
+
+    .nearby-context summary {
       cursor: pointer;
       color: var(--text);
-      font-size: 0.84rem;
-      font-weight: 900;
+    }
+
+    .nearby-context summary span {
+      min-width: 0;
+      max-width: calc(100% - 20px);
+      display: inline-grid;
+      gap: 2px;
+      vertical-align: middle;
+    }
+
+    .nearby-context summary strong,
+    .nearby-context summary small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nearby-context summary small {
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 650;
+    }
+
+    .nearby-context .compact-cards {
+      margin-bottom: 10px;
     }
 
     .problem-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin-top: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 6px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(11, 70, 120, 0.12);
     }
 
     .problem-grid label {
+      min-width: 0;
       display: grid;
       gap: 5px;
-      color: #6f614b;
-      font-size: 0.68rem;
-      font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 800;
     }
 
     .problem-grid input {
-      min-height: 38px;
       min-width: 0;
-      border: 1px solid rgba(11, 70, 120, 0.24);
-      border-radius: 13px;
-      background: rgba(255, 255, 255, 0.78);
-      color: var(--text);
-      padding: 0 10px;
-      font-size: 0.82rem;
-      font-weight: 800;
+      min-height: 44px;
+      padding: 0 11px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
       outline: none;
-      text-transform: none;
-      letter-spacing: 0;
+      color: var(--text);
+      background: #FFFFFF;
+      font: inherit;
+      font-size: 0.82rem;
+    }
+
+    .problem-grid input:focus-visible {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
     }
 
     .photo-strip {
       display: flex;
       gap: 8px;
       overflow-x: auto;
+      scrollbar-width: none;
     }
 
     .photo-strip button {
@@ -600,9 +860,9 @@ interface ConsultationChatMessage {
       flex: 0 0 auto;
       padding: 0;
       overflow: hidden;
-      border: 1px solid rgba(11, 70, 120, 0.24);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #FFFFFF;
     }
 
     .photo-strip img {
@@ -615,23 +875,28 @@ interface ConsultationChatMessage {
       position: absolute;
       top: 4px;
       right: 4px;
-      padding: 3px;
-      border-radius: 999px;
-      color: #120D05;
-      background: rgba(255, 255, 255, 0.94);
+      padding: 4px;
+      border-radius: 50%;
+      color: var(--brand-950);
+      background: #FFFFFF;
+      box-shadow: 0 2px 8px rgba(6, 23, 43, 0.18);
     }
 
     .inline-notice,
     .notice-text {
       margin: 0;
-      padding: 8px 10px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
-      border-radius: 14px;
-      color: #7E5F17;
-      background: rgba(255, 242, 199, 0.72);
-      font-size: 0.84rem;
-      font-weight: 800;
-      line-height: 1.35;
+      padding: 9px 10px;
+      border-radius: 8px;
+      color: #744B00;
+      background: #FFF8E8;
+      font-size: 0.8rem;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .error-text.inline-notice {
+      color: #991B1B;
+      background: #FEF2F2;
     }
 
     .consult-summary-grid,
@@ -644,44 +909,51 @@ interface ConsultationChatMessage {
 
     .consult-summary-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+      padding-block: 8px;
+      border-block: 1px solid rgba(11, 70, 120, 0.1);
     }
 
-    .consult-summary-grid article,
-    .result-grid section {
+    .consult-summary-grid article {
+      min-width: 0;
       display: grid;
-      gap: 6px;
-      padding: 10px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
-      border-radius: 16px;
-      background: rgba(246, 249, 252, 0.8);
+      align-content: start;
+      gap: 3px;
+      padding-inline: 8px;
+      border-left: 1px solid rgba(11, 70, 120, 0.1);
+    }
+
+    .consult-summary-grid article:first-child {
+      padding-left: 0;
+      border-left: 0;
     }
 
     .consult-summary-grid span {
-      color: #7E6E55;
-      font-size: 0.68rem;
-      font-weight: 900;
+      color: var(--muted);
+      font-size: 0.65rem;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
     }
 
     .consult-summary-grid strong {
+      overflow-wrap: anywhere;
       color: var(--text);
-      font-size: 0.86rem;
+      font-size: 0.82rem;
       line-height: 1.35;
-    }
-
-    .plan-details {
-      display: grid;
-      gap: 10px;
-      padding: 10px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
-      border-radius: 16px;
-      background: rgba(246, 249, 252, 0.64);
     }
 
     .result-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-top: 10px;
+      margin-top: 6px;
+      border-top: 1px solid rgba(11, 70, 120, 0.1);
+    }
+
+    .result-grid section {
+      display: grid;
+      align-content: start;
+      gap: 7px;
+      padding: 12px 4px;
+      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
     }
 
     .result-grid h3 {
@@ -689,7 +961,7 @@ interface ConsultationChatMessage {
       align-items: center;
       gap: 7px;
       margin: 0;
-      font-size: 0.92rem;
+      font-size: 0.88rem;
     }
 
     .result-grid ol,
@@ -697,9 +969,9 @@ interface ConsultationChatMessage {
       margin: 0;
       padding-left: 18px;
       color: var(--muted);
-      font-size: 0.86rem;
-      font-weight: 800;
-      line-height: 1.42;
+      font-size: 0.82rem;
+      font-weight: 650;
+      line-height: 1.5;
     }
 
     .compact-cards {
@@ -707,11 +979,29 @@ interface ConsultationChatMessage {
     }
 
     .compact-cards button {
-      justify-content: start;
-      min-height: 56px;
-      padding: 10px;
-      border-radius: 16px;
+      display: grid;
+      justify-content: flex-start;
+      gap: 3px;
+      min-width: 0;
+      min-height: 52px;
+      padding: 9px 10px;
+      border: 1px solid rgba(11, 70, 120, 0.14);
+      border-radius: 10px;
       text-align: left;
+    }
+
+    .compact-cards .business-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 8px;
+      overflow: visible;
+      white-space: normal;
+    }
+
+    .business-meta span:not(:last-child)::after {
+      content: "·";
+      margin-left: 8px;
+      color: var(--border-strong);
     }
 
     .compact-cards b,
@@ -725,95 +1015,169 @@ interface ConsultationChatMessage {
     .compact-cards small,
     .context-list small {
       color: var(--muted);
-      font-size: 0.76rem;
-      font-weight: 800;
-      line-height: 1.3;
+      font-size: 0.72rem;
+      font-weight: 650;
+      line-height: 1.35;
     }
 
     .compact-context {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       margin-top: 10px;
     }
 
     .context-list div {
+      min-width: 0;
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       gap: 8px;
       align-items: start;
-      padding: 9px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.62);
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
     }
 
     .context-list ion-icon {
-      width: 30px;
-      height: 30px;
-      padding: 7px;
-      border-radius: 12px;
-      color: #120D05;
-      background: linear-gradient(135deg, var(--brand-600), var(--primary));
+      width: 28px;
+      height: 28px;
+      padding: 6px;
+      border-radius: 9px;
+      color: #FFFFFF;
+      background: var(--brand-700);
     }
 
     .context-list strong {
       display: block;
       color: var(--text);
-      font-size: 0.82rem;
+      font-size: 0.78rem;
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 599px) {
       .consultation-page {
-        padding: 0 12px 92px;
+        width: 100%;
+        padding-bottom: calc(118px + env(safe-area-inset-bottom));
       }
 
-      .chat-bot-shell {
-        height: calc(100vh - 104px);
-        min-height: 560px;
-        border-radius: 22px;
-        padding: 12px;
-      }
-
-      .chat-bot-header {
-        grid-template-columns: auto minmax(0, 1fr) auto;
+      .concierge-shell {
+        min-height: calc(100dvh - 78px);
       }
 
       .bot-mark {
         display: none;
       }
 
-      .location-chip {
-        max-width: 150px;
+      .chat-message {
+        max-width: 90%;
       }
 
-      .chat-message,
       .system-message,
       .plan-message {
-        max-width: 94%;
+        max-width: 100%;
+      }
+
+      .compact-cards,
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-actions .primary-gradient {
+        order: -1;
+      }
+    }
+
+    @media (max-width: 374px) {
+      .chat-bot-header,
+      .chat-thread {
+        padding-inline: 12px;
+      }
+
+      .goal-grid {
+        padding-right: 34px;
+        padding-left: 12px;
+      }
+
+      .consultation-composer {
+        margin-inline: 12px;
+      }
+
+      .context-count {
+        max-width: 58px;
+        padding-inline: 6px;
       }
 
       .problem-grid,
       .compact-context,
-      .consult-summary-grid,
-      .result-grid,
-      .compact-cards {
+      .consult-summary-grid {
         grid-template-columns: 1fr;
+      }
+
+      .consult-summary-grid article {
+        padding: 7px 0;
+        border-left: 0;
+        border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+      }
+
+      .workspace-actions .primary-gradient {
+        flex-basis: 100%;
       }
     }
 
-    @media (max-width: 599px) {
-      .chat-bot-shell {
-        height: calc(100vh - 92px);
-        min-height: 520px;
+    @media (min-width: 600px) {
+      .consultation-page {
+        width: min(calc(100% - 32px), 980px);
+        padding-top: 16px;
       }
 
-      .chat-title span,
-      .location-chip {
-        font-size: 0.76rem;
+      .concierge-shell {
+        height: min(820px, calc(100dvh - 126px));
+        min-height: 620px;
+        overflow: hidden;
+        border: 1px solid rgba(11, 70, 120, 0.12);
+        border-radius: 20px;
+        box-shadow: 0 18px 48px rgba(6, 23, 43, 0.09);
       }
 
-      .workspace-actions ion-button,
-      .workspace-actions button {
-        flex: 1 1 auto;
+      .conversation-scroll {
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
+      .chat-bot-header {
+        padding-inline: 20px;
+      }
+
+      .chat-thread {
+        padding-inline: 20px;
+      }
+
+      .goal-grid {
+        padding-right: 42px;
+        padding-left: 20px;
+      }
+
+      .consultation-composer {
+        margin-inline: 20px;
+      }
+    }
+
+    @media (min-width: 600px) and (max-height: 699px) {
+      .concierge-shell {
+        height: auto;
+        min-height: calc(100dvh - 80px);
+        overflow: visible;
+      }
+
+      .conversation-scroll {
+        overflow: visible;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .goal-grid button,
+      .back-button {
+        transition: none;
+      }
+
+      .chat-thread {
+        scroll-behavior: auto;
       }
     }
   `]

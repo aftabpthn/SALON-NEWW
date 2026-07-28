@@ -2,6 +2,7 @@ import { badRequest, notFound } from "../utils/app-error.js";
 import { repositories } from "../repositories/repository-registry.js";
 import { tenantService } from "./tenant.service.js";
 import { whatsappAutomationService } from "./whatsapp-automation.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 
 const STATUSES = new Set(["waiting", "offered", "booked", "expired", "cancelled"]);
 
@@ -107,6 +108,20 @@ export class WaitlistService {
       status: "offered",
       offeredAt: now()
     }, scope(access, entry.branchId || branchId));
+    customerNotificationService.safeCreate({
+      tenantId: access.tenantId,
+      branchId: offered.branchId || branchId,
+      customerId: offered.clientId,
+      type: "waitlist_slot_available",
+      category: "bookings",
+      title: "A slot is available",
+      body: `A preferred appointment slot is available on ${new Date(startAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`,
+      data: { waitlistEntryId: offered.id, serviceId, staffId: slot.staffId || "", startAt, endAt },
+      deepLink: "/tabs/bookings",
+      sourceType: "waitlist",
+      sourceId: offered.id,
+      eventKey: `waitlist:${offered.id}:offered:${startAt}`
+    });
     const notification = this.sendOfferNotification(offered, { ...slot, serviceId, startAt, endAt, branchId }, access);
     return { ...offered, notification };
   }

@@ -4,6 +4,7 @@ import { badRequest, conflict, notFound } from "../utils/app-error.js";
 import { bookingRulesService } from "./booking-rules.service.js";
 import { jobQueueService } from "./job-queue.service.js";
 import { onlineBookingWhatsappService } from "./online-booking-whatsapp.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 import { tenantService } from "./tenant.service.js";
 
 function money(value) {
@@ -137,6 +138,22 @@ export const bookingDepositService = {
     if (targetAppointmentId) {
       onlineBookingWhatsappService.sendBookingConfirmation(tenantId, targetAppointmentId);
     }
+    if (appointment?.clientId) {
+      customerNotificationService.safeCreate({
+        tenantId,
+        branchId: appointment.branchId || "",
+        customerId: appointment.clientId,
+        type: "deposit_paid",
+        category: "payments",
+        title: "Deposit received",
+        body: "Your booking deposit was received successfully.",
+        data: { appointmentId: targetAppointmentId, paymentLinkId: link.id, amountPaise: Math.round(Number(link.amount || 0) * 100) },
+        deepLink: `/bookings/${targetAppointmentId}`,
+        sourceType: "booking_payment_link",
+        sourceId: link.id,
+        eventKey: `booking-deposit:${link.id}:paid`
+      });
+    }
     return { paid: true, appointmentId: targetAppointmentId, paymentLinkId: link.id };
   },
 
@@ -148,6 +165,23 @@ export const bookingDepositService = {
     db.prepare("UPDATE booking_payment_links SET status = 'failed', updatedAt = CURRENT_TIMESTAMP WHERE id = ? AND tenantId = ?").run(paymentLinkId, tenantId);
     if (link.sessionId) {
       onlineBookingWhatsappService.sendPaymentFailedRecovery(tenantId, link.sessionId, link.paymentLink, { appointmentId: link.appointmentId, reason });
+    }
+    const appointment = link.appointmentId ? repositories.appointments.getById(link.appointmentId, { tenantId }) : null;
+    if (appointment?.clientId) {
+      customerNotificationService.safeCreate({
+        tenantId,
+        branchId: appointment.branchId || "",
+        customerId: appointment.clientId,
+        type: "deposit_failed",
+        category: "payments",
+        title: "Deposit payment failed",
+        body: "We could not confirm your booking deposit. Please retry the payment.",
+        data: { appointmentId: appointment.id, paymentLinkId: link.id },
+        deepLink: `/bookings/${appointment.id}`,
+        sourceType: "booking_payment_link",
+        sourceId: link.id,
+        eventKey: `booking-deposit:${link.id}:failed:${link.updatedAt || new Date().toISOString()}`
+      });
     }
     insertAudit({
       tenantId,

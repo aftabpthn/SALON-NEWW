@@ -2,6 +2,7 @@ import { repositories } from "../repositories/repository-registry.js";
 import { badRequest, conflict, notFound } from "../utils/app-error.js";
 import { appointmentActivityService, APPOINTMENT_ACTIVITY_ACTIONS } from "./appointment-activity.service.js";
 import { customerSalonRelationshipService } from "./customer-salon-relationship.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 import { resourceService } from "./resource.service.js";
 import { salonOperationsService } from "./salon-operations.service.js";
 import { tenantService } from "./tenant.service.js";
@@ -38,6 +39,7 @@ function updateStatus(id, status, access, extra = {}, meta = {}) {
     source: meta.source || "appointment-lifecycle",
     access
   });
+  customerNotificationService.safeNotifyAppointmentChanged(current, updated);
   return { appointment: updated };
 }
 
@@ -169,6 +171,7 @@ export const appointmentLifecycleService = {
       source: "service-complete",
       access
     });
+    customerNotificationService.safeNotifyAppointmentChanged(current, result.appointment);
 
     // Track customer-salon relationship on completion
     try {

@@ -47,10 +47,22 @@ import { MarketplaceService } from "../core/marketplace.service";
           <div class="salon-initials" aria-hidden="true">{{ salonInitials(suggestedSalon.businessName) }}</div>
           <div class="prompt-content">
             <h3>Make {{ suggestedSalon.businessName }} your primary salon?</h3>
-            <p>You've visited {{ suggestedSalon.visitCount }} times. Set as primary for quick access.</p>
+            <p>{{ suggestionCopy(suggestedSalon) }}</p>
             <div class="prompt-actions">
               <ion-button size="small" class="primary-gradient" (click)="confirmSetPrimary(suggestedSalon)">Set as primary</ion-button>
               <ion-button size="small" fill="clear" (click)="dismissPrompt.emit()">Not now</ion-button>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div class="prompt-card empty-primary">
+          <div class="salon-initials" aria-hidden="true">+</div>
+          <div class="prompt-content">
+            <h3>Choose your primary salon</h3>
+            <p>Select a salon you've booked, or discover a new salon and set it as primary.</p>
+            <div class="prompt-actions">
+              <ion-button size="small" class="primary-gradient" (click)="openSalonPicker.emit()">Choose salon</ion-button>
+              <ion-button size="small" fill="clear" routerLink="/tabs/search">Discover</ion-button>
             </div>
           </div>
         </div>
@@ -230,5 +242,13 @@ export class MySalonCardComponent {
 
   confirmSetPrimary(salon: import("../core/api.types").CustomerSalonRelationship): void {
     this.setPrimary.emit(salon);
+  }
+
+  suggestionCopy(salon: CustomerSalonRelationship): string {
+    if (salon.relationshipType === "booked") {
+      return "You've booked this salon. Set it as primary for quick booking, wallet and rewards access.";
+    }
+    const visits = Math.max(1, Number(salon.visitCount || 0));
+    return `You've visited ${visits} ${visits === 1 ? "time" : "times"}. Set as primary for quick access.`;
   }
 }

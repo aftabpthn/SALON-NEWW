@@ -1685,7 +1685,7 @@ interface ProfessionalResult {
 
     .option-grid button.selected {
       border-color: rgba(154, 106, 19, 0.52);
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 14px 30px rgba(184, 125, 30, 0.24);
     }
@@ -1784,7 +1784,7 @@ interface ProfessionalResult {
       min-height: 50px;
       border: 0;
       border-radius: 999px;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 18px 34px rgba(184, 125, 30, 0.22);
       font: inherit;

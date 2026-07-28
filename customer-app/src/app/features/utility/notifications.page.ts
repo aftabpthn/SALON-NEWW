@@ -5,6 +5,7 @@ import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkDoneOutline, notificationsOutline, pricetagOutline, refreshOutline, walletOutline } from "ionicons/icons";
 import { CustomerNotification } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
+import { CustomerApiService } from "../../core/customer-api.service";
 
 type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 
@@ -75,7 +76,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
                   }
                 </div>
                 <p>{{ item.message }}</p>
-                <small>{{ dateLabel(item.createdAt) }}</small>
+                <small>{{ dateLabel(item.scheduledAt || item.createdAt) }}</small>
               </div>
               <button type="button" class="read-button" (click)="toggleRead(item, $event)">
                 {{ isUnread(item) ? "Mark read" : "Unread" }}
@@ -123,7 +124,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
       display: grid;
       place-items: center;
       border-radius: 999px;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 1.25rem;
       font-weight: 900;
@@ -165,7 +166,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
       height: 44px;
       padding: 11px;
       border-radius: 16px;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
@@ -266,6 +267,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 export class NotificationsPage implements OnInit {
   readonly filter = signal<NotificationFilter>("all");
   readonly readIds = signal(new Set<string>(this.restoreReadIds()));
+  readonly unreadIds = signal(new Set<string>());
   readonly filters: Array<{ key: NotificationFilter; label: string }> = [
     { key: "all", label: "All" },
     { key: "unread", label: "Unread" },
@@ -275,12 +277,14 @@ export class NotificationsPage implements OnInit {
   ];
   readonly notifications = computed(() => {
     const data = this.marketplace.accountModule();
-    return Array.isArray(data) ? data as CustomerNotification[] : [];
+    return Array.isArray(data)
+      ? data.filter((item): item is CustomerNotification => Boolean(item && typeof item === "object" && "id" in item && "type" in item && "message" in item))
+      : [];
   });
   readonly unreadCount = computed(() => this.notifications().filter((item) => this.isUnread(item)).length);
   readonly filteredNotifications = computed(() => this.notifications().filter((item) => this.matchesFilter(item)));
 
-  constructor(readonly marketplace: MarketplaceService, private readonly router: Router) {
+  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly api: CustomerApiService) {
     addIcons({ calendarOutline, checkmarkDoneOutline, notificationsOutline, pricetagOutline, refreshOutline, walletOutline });
   }
 
@@ -295,27 +299,51 @@ export class NotificationsPage implements OnInit {
   }
 
   isUnread(item: CustomerNotification): boolean {
-    return item.status !== "read" && !this.readIds().has(item.id);
+    return this.unreadIds().has(item.id) || (item.status !== "read" && !this.readIds().has(item.id));
   }
 
   markAllRead() {
+    const previous = new Set(this.readIds());
     const next = new Set(this.readIds());
     this.notifications().forEach((item) => next.add(item.id));
+    this.unreadIds.set(new Set());
     this.persist(next);
+    this.api.markAllNotificationsRead().subscribe({ error: () => { this.persist(previous); this.reload(); } });
   }
 
   toggleRead(item: CustomerNotification, event: Event) {
     event.stopPropagation();
+    const wasUnread = this.isUnread(item);
+    const previousRead = new Set(this.readIds());
+    const previousUnread = new Set(this.unreadIds());
     const next = new Set(this.readIds());
-    if (next.has(item.id)) next.delete(item.id);
-    else next.add(item.id);
+    const unread = new Set(this.unreadIds());
+    if (wasUnread) {
+      next.add(item.id);
+      unread.delete(item.id);
+    } else {
+      next.delete(item.id);
+      unread.add(item.id);
+    }
+    this.unreadIds.set(unread);
     this.persist(next);
+    this.api.updateNotificationStatus(item.id, wasUnread ? "read" : "unread").subscribe({
+      error: () => {
+        this.unreadIds.set(previousUnread);
+        this.persist(previousRead);
+        this.reload();
+      }
+    });
   }
 
   openNotification(item: CustomerNotification) {
     const next = new Set(this.readIds());
     next.add(item.id);
+    const unread = new Set(this.unreadIds());
+    unread.delete(item.id);
+    this.unreadIds.set(unread);
     this.persist(next);
+    if (item.status !== "read") this.api.updateNotificationStatus(item.id, "read").subscribe({ error: () => undefined });
     void this.router.navigateByUrl(this.deepLinkFor(item));
   }
 
@@ -328,6 +356,7 @@ export class NotificationsPage implements OnInit {
   }
 
   titleFor(item: CustomerNotification): string {
+    if (item.title) return item.title;
     if (item.type) return this.titleCase(item.type);
     if (item.channel) return this.titleCase(item.channel);
     return "AuraSalon update";
@@ -350,6 +379,7 @@ export class NotificationsPage implements OnInit {
   }
 
   private deepLinkFor(item: CustomerNotification): string {
+    if (item.deepLink && this.isSafeDeepLink(item.deepLink)) return item.deepLink;
     const text = this.searchText(item);
     if (text.includes("payment") || text.includes("invoice") || text.includes("wallet")) return "/tabs/wallet";
     if (text.includes("offer") || text.includes("deal") || text.includes("promo")) return "/tabs/offers";
@@ -358,7 +388,11 @@ export class NotificationsPage implements OnInit {
   }
 
   private searchText(item: CustomerNotification): string {
-    return `${item.type} ${item.channel} ${item.message} ${item.status}`.toLowerCase();
+    return `${item.type} ${item.channel} ${item.title || ""} ${item.message} ${item.status}`.toLowerCase();
+  }
+
+  private isSafeDeepLink(value: string): boolean {
+    return /^(?:\/bookings\/[A-Za-z0-9_-]+|\/tabs\/(?:bookings|wallet|offers|rewards|memberships|profile)|\/notifications)$/.test(value);
   }
 
   private persist(ids: Set<string>) {

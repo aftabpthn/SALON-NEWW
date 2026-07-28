@@ -57,6 +57,7 @@ import { getSchemaMigrationHealth, initializeSchemaMigrationHealth } from "./ser
 import { ensureDashboardSchema } from "./services/dashboard-schema.service.js";
 import { ensureCustomerAuthSchema } from "./services/customer-auth-schema.service.js";
 import { ensureCustomerIdentitySchema } from "./services/customer-identity-schema.service.js";
+import { ensureCustomerNotificationSchema } from "./services/customer-notification-schema.service.js";
 import { ensureCustomerCareAiSchema } from "./services/customer-care-ai-schema.service.js";
 import { ensureOwnerPosHandoffSchema } from "./services/owner-pos-handoff-schema.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -307,6 +308,7 @@ export function createApp() {
   ensureDashboardSchema();
   ensureCustomerAuthSchema();
   ensureCustomerIdentitySchema();
+  ensureCustomerNotificationSchema();
   ensureCustomerCareAiSchema();
   ensureOwnerPosHandoffSchema();
   ensureWaitlistSchema();

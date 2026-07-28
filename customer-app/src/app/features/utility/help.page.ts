@@ -97,7 +97,7 @@ interface HelpItem {
       place-items: center;
       margin-bottom: 12px;
       border-radius: 22px;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 1.75rem;
     }
@@ -137,7 +137,7 @@ interface HelpItem {
     }
 
     .quick-card.active {
-      color: #120D05 !important;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800)) !important;
       box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24) !important;
     }
@@ -147,7 +147,8 @@ interface HelpItem {
     }
 
     .quick-card small {
-      color: var(--muted);
+      color: inherit;
+      opacity: 0.72;
       font-weight: 800;
       line-height: 1.35;
     }

@@ -403,6 +403,7 @@ export class AuthService {
     this.loading.set(true);
     this.error.set("");
     try {
+      await firstValueFrom(this.api.unregisterPushDevice(this.deviceInfo().deviceId)).catch(() => undefined);
       await firstValueFrom(this.api.logout());
       await this.firebaseAuth.logout();
     } catch (error) {

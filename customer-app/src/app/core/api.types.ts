@@ -322,6 +322,12 @@ export interface CustomerDeviceInfo {
   userAgent?: string;
 }
 
+export interface CustomerPushDevicePayload {
+  token: string;
+  platform: "android" | "ios";
+  appVersion?: string;
+}
+
 export interface CustomerDeviceSession {
   id: string;
   deviceId: string;
@@ -567,9 +573,15 @@ export interface CustomerPaymentLink {
 export interface CustomerNotification {
   id: string;
   type: string;
+  category?: string;
   channel: string;
+  title?: string;
   message: string;
   status: string;
+  readAt?: string | null;
+  deepLink?: string;
+  data?: Record<string, unknown>;
+  scheduledAt?: string;
   createdAt: string;
 }
 

@@ -1857,10 +1857,13 @@ strong {
 .category,
 .address,
 .helper,
-.step-copy,
+.step-copy {
+  color: var(--customer-muted) !important;
+}
+
 p,
 small {
-  color: var(--customer-muted) !important;
+  color: var(--customer-muted);
 }
 
 .premium-card,
@@ -1895,7 +1898,7 @@ small {
 .composer-card {
   border-color: var(--customer-border) !important;
   border-radius: 18px !important;
-  color: var(--customer-text) !important;
+  color: var(--customer-text);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96)),
     var(--customer-surface) !important;

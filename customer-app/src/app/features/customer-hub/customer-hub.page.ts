@@ -367,7 +367,7 @@ const hubConfigs: Record<string, HubConfig> = {
     }
 
     .hub-tile.active {
-      color: #120D05 !important;
+      color: #FFFFFF;
       border-color: transparent !important;
       background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800)) !important;
       box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24) !important;
@@ -378,16 +378,18 @@ const hubConfigs: Record<string, HubConfig> = {
       height: 44px;
       padding: 11px;
       border-radius: 16px;
-      color: #120D05;
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .hub-tile.active ion-icon {
+      color: var(--primary);
       background: rgba(255, 255, 255, 0.68);
     }
 
     .hub-tile small {
-      color: var(--muted);
+      color: inherit;
+      opacity: 0.72;
       font-weight: 800;
       line-height: 1.35;
     }

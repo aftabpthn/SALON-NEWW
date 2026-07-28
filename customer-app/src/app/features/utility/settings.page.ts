@@ -30,6 +30,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
         <section class="premium-card setting-row"><div><strong>Booking reminders</strong><span>Push reminders before appointments</span></div><ion-toggle [(ngModel)]="preferences.bookingReminders" (ionChange)="save()" aria-label="Booking reminders"></ion-toggle></section>
         <section class="premium-card setting-row"><div><strong>Marketing offers</strong><span>Personalized beauty and wellness deals</span></div><ion-toggle [(ngModel)]="preferences.promotions" (ionChange)="save()" aria-label="Marketing offers"></ion-toggle></section>
         <section class="premium-card setting-row"><div><strong>Loyalty alerts</strong><span>Rewards, points, and membership updates</span></div><ion-toggle [(ngModel)]="preferences.loyalty" (ionChange)="save()" aria-label="Loyalty alerts"></ion-toggle></section>
+        <section class="premium-card setting-row"><div><strong>Membership alerts</strong><span>Renewal, expiry, and benefit updates</span></div><ion-toggle [(ngModel)]="preferences.membership" (ionChange)="save()" aria-label="Membership alerts"></ion-toggle></section>
 
         <section class="section-heading">
           <h2>Device security</h2>

@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from "@angular/core";
 import { IonApp, IonRouterOutlet } from "@ionic/angular/standalone";
 import { NavigationEnd, Router } from "@angular/router";
 import { filter, Subscription } from "rxjs";
+import { CustomerPushNotificationService } from "./core/customer-push-notification.service";
 
 const ACCESS_TOKEN_KEY = "auraCustomerAccessToken";
 const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
@@ -20,9 +21,10 @@ const LAST_ROUTE_KEY = "auraCustomerLastRoute";
 export class AppComponent implements OnInit, OnDestroy {
   private navigationSubscription?: Subscription;
 
-  constructor(private readonly router: Router) {}
+  constructor(private readonly router: Router, private readonly pushNotifications: CustomerPushNotificationService) {}
 
   ngOnInit() {
+    void this.pushNotifications.initialize();
     this.navigationSubscription = this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => this.rememberRoute(event.urlAfterRedirects));

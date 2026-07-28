@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { columnsFor, db, insertRow, tableHasColumn, updateRow } from "../db.js";
 import { badRequest, notFound, unauthorized } from "../utils/app-error.js";
 import { customerMarketplaceService } from "./customer-marketplace.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -243,12 +244,14 @@ function createBooking(access, payload = {}) {
     notes: payload.notes || "",
     billable: 1
   });
+  customerNotificationService.safeNotifyAppointmentCreated(created, true);
   return mapBooking(created);
 }
 
 function cancelBooking(access, bookingId, payload = {}) {
   const row = bookingById(access, bookingId);
   const updated = updateRow("appointments", row.id, { status: "cancelled", notes: [row.notes, payload.reason ? `Customer cancel reason: ${payload.reason}` : "Customer cancelled from app"].filter(Boolean).join("\n") }, { tenantId: access.tenantId });
+  customerNotificationService.safeNotifyAppointmentChanged(row, updated);
   return mapBooking(updated);
 }
 
@@ -263,6 +266,7 @@ function rescheduleBooking(access, bookingId, payload = {}) {
     staffId: payload.staffId || row.staffId,
     status: "booked"
   }, { tenantId: access.tenantId });
+  customerNotificationService.safeNotifyAppointmentChanged(row, updated);
   return mapBooking(updated);
 }
 
@@ -290,6 +294,20 @@ function waitlist(access, bookingId, payload = {}) {
     updatedAt: now()
   };
   db.prepare(`INSERT INTO customerWaitlistEntries (${Object.keys(entry).join(", ")}) VALUES (${Object.keys(entry).map((key) => `@${key}`).join(", ")})`).run(entry);
+  customerNotificationService.safeCreate({
+    tenantId: entry.tenantId,
+    branchId: entry.branchId,
+    customerId: entry.customerId,
+    type: "waitlist_joined",
+    category: "bookings",
+    title: "Waitlist joined",
+    body: "You are on the waitlist. We will alert you as soon as a suitable slot opens.",
+    data: { waitlistId: entry.id, appointmentId: entry.bookingId },
+    deepLink: `/bookings/${entry.bookingId}`,
+    sourceType: "waitlist",
+    sourceId: entry.id,
+    eventKey: `waitlist:${entry.id}:joined`
+  });
   return {
     id: entry.id,
     bookingId: row.id,
@@ -629,12 +647,22 @@ function logoutDevice(access, sessionId) {
   client(access);
   if (!tableExists("refresh_tokens")) return;
   db.prepare(`UPDATE refresh_tokens SET revokedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND role = 'customer' AND deviceId = @deviceId`).run({ revokedAt: now(), tenantId: access.tenantId, userId: access.userId, deviceId: sessionId });
+  if (tableExists("mobile_devices")) {
+    db.prepare(`UPDATE mobile_devices SET status = 'inactive', deviceToken = '', updatedAt = @updatedAt
+      WHERE tenantId = @tenantId AND userId = @userId AND json_extract(capabilities, '$.clientDeviceId') = @deviceId`)
+      .run({ updatedAt: now(), tenantId: access.tenantId, userId: access.userId, deviceId: sessionId });
+  }
 }
 
 function logoutAllDevices(access) {
   client(access);
   if (!tableExists("refresh_tokens")) return;
   db.prepare(`UPDATE refresh_tokens SET revokedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND role = 'customer'`).run({ revokedAt: now(), tenantId: access.tenantId, userId: access.userId });
+  if (tableExists("mobile_devices")) {
+    db.prepare(`UPDATE mobile_devices SET status = 'inactive', deviceToken = '', updatedAt = @updatedAt
+      WHERE tenantId = @tenantId AND userId = @userId`)
+      .run({ updatedAt: now(), tenantId: access.tenantId, userId: access.userId });
+  }
 }
 
 function deleteMe(access) {

@@ -37,6 +37,18 @@ interface HomeSearchSuggestion {
   query: string;
 }
 
+interface HomeRecentSearch {
+  query: string;
+  mode: "salons" | "services" | "staff" | "locations";
+}
+
+interface HomeVisitedBusiness {
+  business: Business;
+  serviceName: string;
+  serviceId?: string;
+  lastVisitLabel: string;
+}
+
 interface ConsultationChatMessage {
   role: "customer" | "assistant";
   text: string;
@@ -76,11 +88,10 @@ interface ConsultationChatMessage {
       </ion-header>
 
       <main class="page home-page">
-        <section class="hero">
+        <section class="hero dashboard-hero">
           <div class="hero-copy">
-            @if (!mobileHome()) {
-              <h1 class="page-title">Find and book your next self-care visit</h1>
-            }
+            <span class="eyebrow">Your day, beautifully planned</span>
+            <h1 class="page-title">{{ greeting() }}</h1>
             <div class="search-panel">
               <div class="home-search-wrap">
                 <ion-searchbar
@@ -90,9 +101,9 @@ interface ConsultationChatMessage {
                   (ionSearch)="search()">
                 </ion-searchbar>
                 @if (suggestions().length) {
-                  <div class="home-suggestion-panel" role="listbox" aria-label="Home search suggestions">
+                  <div class="home-suggestion-panel" aria-label="Home search suggestions">
                     @for (suggestion of suggestions(); track suggestion.key) {
-                      <button type="button" role="option" (click)="applySuggestion(suggestion)">
+                      <button type="button" (click)="applySuggestion(suggestion)">
                         <strong>{{ suggestion.label }}</strong>
                         <span>{{ suggestion.type }} · {{ suggestion.copy }}</span>
                       </button>
@@ -100,208 +111,72 @@ interface ConsultationChatMessage {
                   </div>
                 }
               </div>
-              <div class="home-control-row" aria-label="Home search controls">
-                <button type="button" class="home-control-button" aria-label="Filter salons and services" title="Filter" (click)="openDiscoverPanel('filter')">
-                  <ion-icon name="options-outline"></ion-icon>
-                  <span>Filter</span>
-                </button>
-                <button type="button" class="home-control-button" aria-label="Sort search results" title="Sort" (click)="openDiscoverPanel('sort')">
-                  <ion-icon name="swap-vertical-outline"></ion-icon>
-                  <span>Sort</span>
-                </button>
-                <button type="button" class="home-control-button map" aria-label="Show salons on map" title="Show map" (click)="openMapSearch()">
-                  <ion-icon name="map-outline"></ion-icon>
-                  <span>Show map</span>
-                </button>
-              </div>
-              <ion-button class="primary-gradient" (click)="search()">
+              <ion-button class="primary-gradient" aria-label="Open full search" (click)="search()">
                 <ion-icon name="search-outline" slot="start"></ion-icon>
                 Search
               </ion-button>
             </div>
-            @if (!mobileHome()) {
-            <div class="category-strip hero-category-strip">
-              <button class="pill" [class.active]="categoryFilter() === ''" type="button" (click)="setCategory('')">All</button>
-              @for (category of marketplace.categories(); track category.id || category.slug) {
-                <button class="pill" [class.active]="categoryFilter() === category.slug" type="button" (click)="setCategory(category.slug)">
-                  {{ category.label }}
-                </button>
-              }
-            </div>
+            @if (recentSearches().length) {
+              <nav class="recent-searches" aria-label="Recently searched">
+                <span>Recent</span>
+                @for (item of recentSearches(); track item.query + item.mode) {
+                  <button type="button" (click)="repeatSearch(item)">{{ item.query }}</button>
+                }
+              </nav>
             }
             @if (!mobileHome() && locationNotice()) {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
           </div>
-          @if (!mobileHome()) {
-          <aside class="live-consultation-card" aria-label="Live AI consultation">
-            <div class="consultation-topline">
-              <span><ion-icon name="sparkles-outline"></ion-icon> Live consultation</span>
-              <small>{{ consultationResponse()?.mode === "openai" ? "ChatGPT AI live" : "Smart local guide" }}</small>
-            </div>
-            <h2>Show photos, chat, and get the right salon plan</h2>
-
-            <div class="consultation-goals" aria-label="Consultation goals">
-              @for (goal of consultationGoals; track goal) {
-                <button type="button" [class.active]="selectedConsultationGoals().includes(goal)" (click)="toggleConsultationGoal(goal)">{{ goal }}</button>
-              }
-            </div>
-
-            <div class="consultation-chat">
-              @for (message of consultationMessages(); track message.text) {
-                <div class="consultation-message" [class.customer]="message.role === 'customer'">
-                  <strong>{{ message.role === "customer" ? "You" : "Aura AI" }}</strong>
-                  <span>{{ message.text }}</span>
-                </div>
-              }
-            </div>
-
-            <label class="consultation-input-label">
-              Consultation details
-              <textarea
-                rows="4"
-                [(ngModel)]="consultationText"
-                placeholder="Example: I need hair color for wedding next week, budget 3000, near Jubilee Hills, attach current hair photo.">
-              </textarea>
-            </label>
-
-            <div class="consultation-photo-row">
-              <input #consultationPhotoInput type="file" accept="image/*" multiple hidden (change)="addConsultationPhotos($event)" />
-              <button type="button" class="consultation-upload" (click)="consultationPhotoInput.click()">
-                <ion-icon name="camera-outline"></ion-icon>
-                Add photos
-              </button>
-              <span>{{ consultationPhotos().length }}/5 photos</span>
-            </div>
-
-            @if (consultationPhotos().length) {
-              <div class="consultation-photo-strip">
-                @for (photo of consultationPhotos(); track photo.name) {
-                  <button type="button" (click)="removeConsultationPhoto(photo.name)" [title]="'Remove ' + photo.name">
-                    <img [src]="photo.dataUrl" [alt]="photo.name" />
-                    <span>Remove</span>
-                  </button>
-                }
+          @if (nextAppointment(); as booking) {
+            <article class="next-appointment" aria-labelledby="next-appointment-title">
+              <div class="appointment-date" aria-hidden="true">
+                <span>{{ appointmentMonth(booking) }}</span>
+                <strong>{{ appointmentDay(booking) }}</strong>
               </div>
-            }
-
-            @if (consultationError()) {
-              <p class="consultation-error">{{ consultationError() }}</p>
-            }
-
-            <div class="consultation-actions">
-              <button type="button" class="consultation-send" [disabled]="consultationLoading()" (click)="sendConsultation()">
-                <ion-icon name="chatbubbles-outline"></ion-icon>
-                {{ consultationLoading() ? "Consulting" : "Start consultation" }}
-              </button>
-              <button type="button" class="consultation-secondary" (click)="useCurrentLocation()">
-                <ion-icon name="location-outline"></ion-icon>
-                {{ areaLabel() }}
-              </button>
-            </div>
-
-            @if (consultationResponse(); as response) {
-              <div class="consultation-results">
-                <div>
-                  <strong>Plan</strong>
-                  <ol>
-                    @for (step of response.actionPlan; track step) {
-                      <li>{{ step }}</li>
-                    }
-                  </ol>
-                </div>
-                <div>
-                  <strong>Best salons</strong>
-                  @for (salon of response.recommendedSalons; track salon.slug || salon.businessName) {
-                    <button type="button" class="consultation-result-card" (click)="openBusinessSlug(salon.slug)">
-                      <span>{{ salon.businessName }}</span>
-                      <small>{{ salon.location }} - {{ salon.openStatus || "Check availability" }}</small>
-                      <ion-icon name="chevron-forward-outline"></ion-icon>
-                    </button>
-                  }
-                </div>
-                <div>
-                  <strong>Services</strong>
-                  @for (service of response.recommendedServices.slice(0, 3); track service.name + service.businessName) {
-                    <button type="button" class="consultation-service-card" (click)="openBusinessSlug(service.slug)">
-                      <span>{{ service.name }}</span>
-                      <small>{{ service.businessName }} - {{ service.priceLabel }} - {{ service.durationLabel }}</small>
-                    </button>
-                  }
-                </div>
-                <p class="consultation-safety">{{ response.safetyNote }}</p>
+              <div class="appointment-copy">
+                <span class="eyebrow">Up next</span>
+                <h2 id="next-appointment-title">{{ booking.serviceName }}</h2>
+                <p>{{ booking.businessName }} · {{ appointmentTime(booking) }}</p>
               </div>
-            }
-          </aside>
+              <a [routerLink]="['/bookings', booking.id]" aria-label="View upcoming appointment">
+                View
+                <ion-icon name="chevron-forward-outline"></ion-icon>
+              </a>
+            </article>
+          } @else {
+            <article class="next-appointment empty-appointment">
+              <div class="appointment-date"><ion-icon name="calendar-outline"></ion-icon></div>
+              <div class="appointment-copy"><span class="eyebrow">Your next visit</span><h2>Make time for yourself</h2><p>Find a service that fits your day.</p></div>
+              <a routerLink="/tabs/search">Explore <ion-icon name="chevron-forward-outline"></ion-icon></a>
+            </article>
           }
         </section>
 
-        <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
-          <article class="welcome-card">
-            <h2>{{ greeting() }}</h2>
-            <div class="welcome-actions">
-              <ion-button class="primary-gradient" routerLink="/tabs/search">
-                <ion-icon name="search-outline" slot="start"></ion-icon>
-                Discover salons
-              </ion-button>
-              <ion-button fill="outline" class="secondary-button" routerLink="/tabs/rewards">
-                <ion-icon name="ribbon-outline" slot="start"></ion-icon>
-                Rewards
-              </ion-button>
-            </div>
-          </article>
-
-          @if (marketplace.isAuthenticated()) {
+        @if (marketplace.isAuthenticated()) {
+          <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
             <aura-my-salon-card
               [primarySalon]="marketplace.primarySalon()"
-              [suggestedSalon]="marketplace.suggestedSalon()"
+              [suggestedSalon]="primarySalonSuggestion()"
               (openSalonPicker)="openSalonPicker()"
               (dismissPrompt)="dismissPrimaryPrompt()"
               (setPrimary)="onSetPrimarySalon($event)">
             </aura-my-salon-card>
-          }
-
-          <!-- Primary Salon User: loyalty-focused quick actions -->
-          @if (hasPrimarySalon()) {
-            <nav class="customer-quick-actions primary-salon-actions" aria-label="Your salon quick actions">
-              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>Book again</span><small>Schedule a visit</small></a>
-              <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet</span><small>Credits and balance</small></a>
-              <a routerLink="/tabs/memberships"><ion-icon name="ribbon-outline"></ion-icon><span>Membership</span><small>Plans and perks</small></a>
-              <a routerLink="/tabs/rewards"><ion-icon name="pricetag-outline"></ion-icon><span>Rewards</span><small>Points and gifts</small></a>
-            </nav>
-          } @else {
-            <!-- New / browsing user: discovery-focused quick actions -->
-            <nav class="customer-quick-actions" aria-label="Customer quick actions">
-              <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Book now</span><small>Services near you</small></a>
-              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>My bookings</span><small>Reschedule or cancel</small></a>
-              <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Deals and rewards</small></a>
-              <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
-            </nav>
-          }
-
-          <div class="customer-metrics">
-            @for (metric of customerMetrics(); track metric.label) {
-              <a class="metric-card" [routerLink]="metric.route">
-                <ion-icon [name]="metric.icon"></ion-icon>
-                <span>{{ metric.label }}</span>
-                <strong>{{ metric.value }}</strong>
-                <small>{{ metric.note }}</small>
-              </a>
-            }
-          </div>
-        </section>
+          </section>
+        }
 
         <!-- Book Again faster (shown when authenticated with visit history) -->
         @if (!searchActive() && recentlyVisited().length) {
           <section class="mobile-secondary-section">
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">{{ hasPrimarySalon() ? 'Book at ' + (marketplace.primarySalon()?.businessName || 'your salon') : 'Book again faster' }}</h2>
+               <span class="section-kicker">From your visits</span>
+               <h2 class="section-title">Book again</h2>
             </div>
           </div>
           <div class="visited-rail">
             @for (item of recentlyVisited(); track item.business.id) {
-              <button type="button" class="visited-card premium-card" (click)="openBusiness(item.business)">
+               <button type="button" class="visited-card premium-card" (click)="bookAgain(item)">
                 @if (businessImage(item.business)) {
                   <img [src]="businessImage(item.business)" [alt]="item.business.businessName + ' cover'" />
                 } @else {
@@ -310,7 +185,7 @@ interface ConsultationChatMessage {
                 <span>{{ item.lastVisitLabel }}</span>
                 <strong>{{ item.business.businessName }}</strong>
                 <small>{{ item.serviceName || item.business.popularService || item.business.category }}</small>
-                <ion-icon name="time-outline"></ion-icon>
+                 <ion-icon name="chevron-forward-outline"></ion-icon>
               </button>
             }
           </div>
@@ -319,29 +194,62 @@ interface ConsultationChatMessage {
 
         @if (!searchActive() && recentlyViewed().length) {
           <section class="mobile-secondary-section">
-          <div class="section-heading">
-            <div>
-              <h2 class="section-title">Continue where you left off</h2>
+            <div class="section-heading">
+              <div><span class="section-kicker">Recently viewed</span><h2 class="section-title">Continue where you left off</h2></div>
             </div>
-          </div>
-          <div class="business-rail">
-            @for (business of recentlyViewed(); track business.id) {
-              <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
-            }
-          </div>
+            <div class="business-rail continue-rail">
+              @for (business of recentlyViewed(); track business.id) {
+                <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+              }
+            </div>
           </section>
+        }
+
+        @if (!searchActive() && marketplace.isAuthenticated()) {
+          <section class="mobile-secondary-section">
+            <div class="section-heading"><div><span class="section-kicker">Saved by you</span><h2 class="section-title">Favourites</h2></div><a routerLink="/tabs/wishlist">View all</a></div>
+            @if (favoriteBusinesses().length) {
+              <div class="business-rail favourites-rail">
+                @for (business of favoriteBusinesses(); track business.id) {
+                  <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+                }
+              </div>
+            } @else {
+              <a class="favourites-empty" routerLink="/tabs/wishlist"><span>Keep your shortlist close</span><strong>Browse saved salons <ion-icon name="chevron-forward-outline"></ion-icon></strong></a>
+            }
+          </section>
+        }
+
+        @if (!searchActive() && relevantOffers().length) {
+          <section class="mobile-secondary-section">
+            <div class="section-heading"><div><span class="section-kicker">Available now</span><h2 class="section-title">Offers from relevant salons</h2></div><a routerLink="/tabs/offers">All offers</a></div>
+            <div class="business-rail">
+              @for (business of relevantOffers(); track business.id) {
+                <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+              }
+            </div>
+          </section>
+        }
+
+        @if (!searchActive()) {
+          <nav class="account-shortcuts" aria-label="Balance and benefits">
+            <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet</span></a>
+            <a routerLink="/tabs/memberships"><ion-icon name="ribbon-outline"></ion-icon><span>Membership</span></a>
+            <a routerLink="/tabs/rewards"><ion-icon name="pricetag-outline"></ion-icon><span>Rewards</span><strong>{{ marketplace.customer()?.loyaltyPoints ?? 0 }} pts</strong></a>
+          </nav>
         }
 
         @if (!searchActive()) {
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Recommendations</h2>
+              <span class="section-kicker">{{ recommendationKicker() }}</span>
+              <h2 class="section-title">Picked for you</h2>
             </div>
-            <a routerLink="/tabs/search">Explore all</a>
+            <a routerLink="/tabs/search">Explore</a>
           </div>
           <div class="business-grid recommended priority-grid">
             @for (business of recommendations(); track business.id) {
-              <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+              <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
             } @empty {
               <section class="state-card premium-card"><h2>No recommendations yet</h2></section>
             }
@@ -368,7 +276,7 @@ interface ConsultationChatMessage {
           </div>
           <div class="business-grid recommended">
             @for (business of homeResults(); track business.id) {
-              <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+              <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
             } @empty {
               <section class="state-card premium-card"><h2>No places found</h2></section>
             }
@@ -379,31 +287,14 @@ interface ConsultationChatMessage {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">All Salons & Spas</h2>
+            <span class="section-kicker">{{ nearbyContextLabel() }}</span>
+            <h2 class="section-title">Nearby for you</h2>
           </div>
-          <a routerLink="/tabs/search">See all</a>
-        </div>
-        <div class="business-grid recommended">
-          @for (business of recommendedMore(); track business.id) {
-            <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
-          } @empty {
-            <section class="state-card premium-card"><h2>No businesses found</h2></section>
-          }
-        </div>
-        </section>
-        }
-
-        @if (!searchActive()) {
-        <section class="mobile-secondary-section">
-        <div class="section-heading">
-          <div>
-            <h2 class="section-title">{{ hasPrimarySalon() ? 'Discover new salons' : 'Nearby businesses' }}</h2>
-          </div>
-          <a routerLink="/tabs/search">View map</a>
+          <a routerLink="/search" [queryParams]="{ filter: 'nearest', sort: 'distance', nearMe: true, map: true }">View map</a>
         </div>
         <div class="nearby-grid">
           @for (business of nearby(); track business.id) {
-            <aura-business-card [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+            <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
           } @empty {
             <section class="state-card premium-card"><h2>No nearby businesses yet</h2></section>
           }
@@ -412,24 +303,15 @@ interface ConsultationChatMessage {
         }
 
         @if (!searchActive()) {
-        <section class="mobile-secondary-section">
-        <div class="section-heading">
-          <div>
-            <h2 class="section-title">Services customers love</h2>
-          </div>
-        </div>
-        <div class="service-scroller">
-          @for (item of popularServices(); track item.label) {
-            <a class="service-chip premium-card" [routerLink]="['/business', item.slug]">
-              <img [src]="item.image" [alt]="item.label" />
-              <span>{{ item.label }}</span>
-              <strong>{{ item.price }}</strong>
-            </a>
-          } @empty {
-            <section class="state-card premium-card"><h2>No services published yet</h2></section>
-          }
-        </div>
-        </section>
+          <section class="lower-actions">
+            <div class="section-heading"><div><span class="section-kicker">More to do</span><h2 class="section-title">Quick actions</h2></div></div>
+            <nav class="customer-quick-actions" aria-label="Quick actions">
+              <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>Bookings</span><small>Manage visits</small></a>
+              <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Browse live deals</small></a>
+              <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
+              <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Explore</span><small>Discover more</small></a>
+            </nav>
+          </section>
         }
       </main>
     </ion-content>
@@ -535,7 +417,7 @@ interface ConsultationChatMessage {
     .hero-copy .muted {
       max-width: 620px;
       margin: 0;
-      color: #7E6E55;
+      color: var(--muted);
       font-size: 1.08rem;
     }
 
@@ -577,7 +459,7 @@ interface ConsultationChatMessage {
     }
 
     .consultation-topline span {
-      color: #120D05;
+      color: var(--text);
     }
 
     .consultation-topline small {
@@ -600,7 +482,7 @@ interface ConsultationChatMessage {
     }
 
     .consultation-copy {
-      color: #7E6E55;
+      color: var(--muted);
       line-height: 1.45;
       font-size: 0.95rem;
     }
@@ -757,7 +639,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       padding: 3px;
       color: #fff;
-      background: rgba(18, 13, 5, 0.72);
+      background: rgba(6, 23, 43, 0.78);
       font-size: 0.62rem;
       font-weight: 900;
       text-align: center;
@@ -818,7 +700,7 @@ interface ConsultationChatMessage {
       gap: 6px;
       margin: 0;
       padding-left: 18px;
-      color: #5E4C34;
+      color: var(--muted);
       font-size: 0.9rem;
       line-height: 1.4;
     }
@@ -863,7 +745,7 @@ interface ConsultationChatMessage {
 
     .consultation-safety {
       margin: 0;
-      color: #7E6E55;
+      color: var(--muted);
       font-size: 0.78rem;
       font-weight: 800;
       line-height: 1.38;
@@ -904,7 +786,7 @@ interface ConsultationChatMessage {
       padding: 0 13px;
       border: 1px solid rgba(11, 70, 120, 0.28);
       border-radius: 999px;
-      color: #5F3F10;
+      color: var(--primary);
       background: rgba(255, 255, 255, 0.94);
       font-size: 0.88rem;
       font-weight: 900;
@@ -1014,7 +896,7 @@ interface ConsultationChatMessage {
 
     .welcome-card p {
       max-width: 680px;
-      color: #7E6E55;
+      color: var(--muted);
       line-height: 1.5;
     }
 
@@ -1054,18 +936,18 @@ interface ConsultationChatMessage {
     .customer-quick-actions ion-icon {
       width: 22px;
       height: 22px;
-      color: #8a5a16;
+      color: var(--primary);
     }
 
     .customer-quick-actions span {
-      color: #201307;
+      color: var(--text);
       font-size: 1.15rem;
       font-weight: 950;
       white-space: nowrap;
     }
 
     .customer-quick-actions small {
-      color: #7e6e55;
+      color: var(--muted);
       font-size: 0.72rem;
       font-weight: 800;
       line-height: 1.2;
@@ -1388,7 +1270,7 @@ interface ConsultationChatMessage {
       }
     }
 
-    @media (max-width: 767px) {
+    @media (max-width: 900px) {
       .home-toolbar {
         gap: 8px;
         min-height: 54px;
@@ -1411,7 +1293,7 @@ interface ConsultationChatMessage {
 
       .location-copy strong {
         max-width: 220px;
-        color: #2A1A08;
+        color: var(--text);
         font-size: 0.82rem;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1423,9 +1305,11 @@ interface ConsultationChatMessage {
       }
 
       .home-page {
-        gap: 12px;
+        gap: 24px;
         padding-top: 10px;
-        padding-bottom: calc(112px + env(safe-area-inset-bottom));
+        padding-inline: 16px;
+        padding-bottom: calc(156px + env(safe-area-inset-bottom));
+        scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom));
       }
 
       .hero {
@@ -1471,6 +1355,22 @@ interface ConsultationChatMessage {
       .nearby-grid {
         grid-template-columns: minmax(0, 1fr) !important;
       }
+
+      .mobile-secondary-section {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .section-heading {
+        align-items: end;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .section-heading > div { min-width: 0; }
+      .section-heading a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; }
+      .section-title { overflow-wrap: anywhere; }
     }
 
     @media (min-width: 768px) {
@@ -1503,31 +1403,55 @@ interface ConsultationChatMessage {
       }
     }
 
-    @media (max-width: 767px) {
-      .visited-rail {
-        grid-auto-columns: 178px;
+    @media (max-width: 900px) {
+      .home-page .business-rail,
+      .home-page .visited-rail {
+        grid-auto-flow: row;
+        grid-auto-columns: initial;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        overflow: visible;
+        padding: 0;
       }
 
-      .visited-card {
-        width: 178px !important;
-        min-width: 178px !important;
-        height: 68px !important;
-        min-height: 68px !important;
-        grid-template-columns: 42px minmax(0, 1fr) 26px !important;
-        grid-template-rows: auto auto auto !important;
+      .home-page .business-rail aura-business-card { display: block; width: 100%; min-width: 0; }
+      .home-page .business-rail aura-business-card:nth-child(n + 3),
+      .home-page .visited-rail .visited-card:nth-child(n + 3) { display: none; }
+      .home-page .visited-card {
+        grid-template-columns: 68px minmax(0, 1fr) 40px;
+        grid-template-rows: auto auto auto;
+        gap: 3px 9px;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: 92px;
+        padding: 8px;
+        overflow: visible;
+        border-radius: 16px;
+      }
+      .home-page .visited-card img,
+      .home-page .visited-fallback {
+        width: 68px;
+        height: 68px;
+        aspect-ratio: 1 / 1;
+        border-radius: 14px;
+      }
+      .home-page .visited-card span,
+      .home-page .visited-card strong,
+      .home-page .visited-card small {
+        min-width: 0;
         overflow: hidden;
-        padding: 7px !important;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-
-      .visited-card img,
-      .visited-fallback {
-        width: 42px !important;
-        height: 42px !important;
-        aspect-ratio: 1 / 1 !important;
-      }
+      .home-page .visited-card span { font-size: 0.72rem; line-height: 1.25; }
+      .home-page .visited-card strong { font-size: 0.96rem; line-height: 1.15; }
+      .home-page .visited-card small { font-size: 0.74rem; line-height: 1.25; }
+      .home-page .visited-card ion-icon { width: 40px; height: 40px; padding: 11px; }
     }
 
     @media (max-width: 599px) {
+      .home-page { scroll-padding-top: 54px; }
       ion-header { height: 44px !important; }
       ion-toolbar { height: 44px !important; --min-height: 44px !important; }
       .home-toolbar { grid-template-columns: auto 1fr !important; }
@@ -1538,22 +1462,14 @@ interface ConsultationChatMessage {
       .home-page .location-row strong { font-size: 0.78rem !important; }
       .home-page .hero { margin-top: 0; }
       .home-page .search-panel {
-        position: sticky !important;
-        top: 0 !important;
-        z-index: 30 !important;
+        position: relative !important;
+        top: auto !important;
+        z-index: 2 !important;
         display: block !important;
         margin-inline: 0;
         padding: 0 !important;
         border-radius: 18px !important;
         box-shadow: 0 12px 30px rgba(6, 23, 43, 0.12) !important;
-      }
-      .home-page .visited-rail {
-        grid-auto-columns: calc((100vw - 38px) / 2) !important;
-        padding-right: 0 !important;
-      }
-      .home-page .visited-card {
-        width: 100% !important;
-        min-width: 0 !important;
       }
       .home-page .home-search-wrap {
         position: relative;
@@ -1638,6 +1554,336 @@ interface ConsultationChatMessage {
       }
     }
 
+    .dashboard-hero {
+      min-height: 0;
+      grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+      align-items: center;
+      padding: clamp(22px, 4vw, 42px);
+      overflow: visible;
+    }
+
+    .dashboard-hero .hero-copy {
+      align-content: center;
+    }
+
+    .dashboard-hero .page-title {
+      display: block;
+      max-width: 640px;
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(2rem, 5vw, 4.4rem);
+      line-height: 0.96;
+      letter-spacing: -0.055em;
+    }
+
+    .eyebrow,
+    .section-kicker {
+      display: block;
+      color: var(--primary);
+      font-size: 0.72rem;
+      font-weight: 950;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .recent-searches {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px;
+      scrollbar-width: none;
+    }
+
+    .recent-searches > span {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 900;
+    }
+
+    .recent-searches button {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--surface);
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 850;
+    }
+
+    .next-appointment {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 26px;
+      color: #fff;
+      background: linear-gradient(145deg, var(--brand-800), var(--primary));
+      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.22);
+    }
+
+    .appointment-date {
+      display: grid;
+      place-items: center;
+      width: 66px;
+      min-width: 66px;
+      height: 72px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .appointment-date span {
+      align-self: end;
+      font-size: 0.68rem;
+      font-weight: 950;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .appointment-date strong {
+      align-self: start;
+      font-size: 1.75rem;
+      line-height: 1;
+    }
+
+    .appointment-date ion-icon { font-size: 1.5rem; }
+
+    .appointment-copy { min-width: 0; }
+    .appointment-copy .eyebrow { color: rgba(255, 255, 255, 0.84); }
+    .appointment-copy h2 { margin: 4px 0; color: #fff; font-size: clamp(1.1rem, 2vw, 1.45rem); line-height: 1.1; }
+    .appointment-copy p { margin: 0; color: rgba(255, 255, 255, 0.88); font-size: 0.82rem; font-weight: 750; line-height: 1.4; }
+    .next-appointment > a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 44px;
+      padding: 0 12px;
+      border-radius: 999px;
+      color: var(--brand-800);
+      background: #fff;
+      font-size: 0.78rem;
+      font-weight: 950;
+      text-decoration: none;
+    }
+
+    .aura-dashboard { grid-template-columns: minmax(0, 1fr); }
+
+    .account-shortcuts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .account-shortcuts a {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 2px 10px;
+      min-height: 64px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      color: var(--text);
+      background: var(--surface);
+      text-decoration: none;
+      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.06);
+    }
+
+    .account-shortcuts ion-icon { grid-row: span 2; color: var(--primary); font-size: 1.2rem; }
+    .account-shortcuts span { min-width: 0; font-size: 0.8rem; font-weight: 900; overflow: hidden; text-overflow: ellipsis; }
+    .account-shortcuts strong { color: var(--muted); font-size: 0.7rem; }
+    .favourites-empty {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 72px;
+      padding: 14px 16px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 18px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 0.82rem;
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .favourites-empty strong { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); white-space: nowrap; }
+    .section-heading { align-items: end; }
+    .section-title { margin-top: 3px; }
+    .lower-actions { display: grid; gap: 12px; margin-top: 16px; opacity: 0.9; }
+    .lower-actions .customer-quick-actions { display: grid; }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 3px solid rgba(37, 99, 235, 0.42);
+      outline-offset: 3px;
+    }
+
+    ion-content::part(scroll) { scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom)); }
+
+    @media (max-width: 900px) {
+      .home-page .business-rail,
+      .home-page .visited-rail {
+        grid-auto-flow: row !important;
+        grid-auto-columns: minmax(0, 1fr) !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        width: 100%;
+        min-width: 0;
+        overflow: visible !important;
+      }
+      .home-page .business-rail aura-business-card {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+      .dashboard-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        padding: 0;
+      }
+      .dashboard-hero .eyebrow,
+      .dashboard-hero .page-title { display: none; }
+      .dashboard-hero .search-panel { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 6px !important; }
+      .dashboard-hero .search-panel ion-button { width: 44px; min-width: 44px; height: 44px; font-size: 0; --padding-start: 0; --padding-end: 0; }
+      .next-appointment {
+        grid-template-columns: 56px minmax(0, 1fr) auto;
+        gap: 12px;
+        width: 100%;
+        padding: 14px;
+        border-radius: 22px;
+        background: linear-gradient(145deg, var(--brand-900), var(--brand-700));
+        box-shadow: 0 14px 32px rgba(6, 23, 43, 0.18);
+      }
+      .next-appointment > a { grid-column: auto; justify-self: end; min-width: 64px; margin: 0; }
+      .appointment-date { width: 56px; min-width: 56px; height: 60px; border-radius: 16px; background: rgba(255, 255, 255, 0.14); }
+      .appointment-date span { color: #fff; }
+      .appointment-date strong { color: #fff; font-size: 1.55rem; }
+      .appointment-copy h2 { color: #fff; font-size: 1.08rem; }
+      .appointment-copy p { color: rgba(255, 255, 255, 0.88); }
+      .account-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 0; }
+      .account-shortcuts a {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        align-content: center;
+        gap: 5px;
+        min-width: 0;
+        min-height: 78px;
+        padding: 9px 4px;
+        text-align: center;
+      }
+      .account-shortcuts ion-icon { grid-row: auto; font-size: 1.25rem; }
+      .account-shortcuts span { width: 100%; font-size: 0.72rem; line-height: 1.15; text-overflow: clip; white-space: nowrap; }
+      .account-shortcuts strong { font-size: 0.66rem; line-height: 1.1; white-space: nowrap; }
+      .customer-quick-actions { display: grid; }
+    }
+
+    @media (max-width: 599px) {
+      .home-page .visited-rail {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .home-page .visited-rail .visited-card:nth-child(-n + 4) { display: grid !important; }
+      .home-page .visited-rail .visited-card:nth-child(n + 5) { display: none !important; }
+      .home-page .visited-rail .visited-card {
+        grid-template-columns: 52px minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        align-content: center;
+        gap: 3px 7px;
+        min-height: 74px;
+        max-height: 74px;
+        padding: 6px;
+        overflow: hidden;
+        border-radius: 14px;
+      }
+      .home-page .visited-rail .visited-card img,
+      .home-page .visited-rail .visited-fallback {
+        grid-row: span 2;
+        width: 52px;
+        height: 62px;
+        border-radius: 12px;
+      }
+      .home-page .visited-rail .visited-card > span,
+      .home-page .visited-rail .visited-card ion-icon { display: none; }
+      .home-page .visited-rail .visited-card strong {
+        grid-column: 2;
+        font-size: 0.78rem;
+        line-height: 1.1;
+      }
+      .home-page .visited-rail .visited-card small {
+        grid-column: 2;
+        font-size: 0.62rem;
+        line-height: 1.15;
+      }
+
+      .home-page .business-rail.continue-rail,
+      .home-page .business-rail.favourites-rail {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px;
+        align-items: stretch;
+        margin-bottom: 4px;
+      }
+      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(-n + 4) { display: block !important; }
+      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(n + 5) { display: none !important; }
+
+      .home-page .lower-actions {
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .home-page .lower-actions .section-kicker { font-size: 0.62rem; }
+      .home-page .lower-actions .section-title { font-size: 1rem; }
+      .home-page .lower-actions .customer-quick-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        overflow: visible;
+        padding: 0;
+      }
+      .home-page .lower-actions .customer-quick-actions a {
+        grid-template-columns: 20px minmax(0, 1fr);
+        align-items: center;
+        gap: 3px 8px;
+        min-width: 0;
+        min-height: 62px;
+        padding: 8px 10px;
+        border-radius: 14px;
+      }
+      .home-page .lower-actions .customer-quick-actions ion-icon {
+        grid-row: 1;
+        width: 20px;
+        height: 20px;
+      }
+      .home-page .lower-actions .customer-quick-actions span {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 0.82rem;
+        line-height: 1.1;
+        text-overflow: ellipsis;
+      }
+      .home-page .lower-actions .customer-quick-actions small { display: none; }
+    }
+
+    @media (max-width: 349px) {
+      .next-appointment { grid-template-columns: 52px minmax(0, 1fr); }
+      .next-appointment > a { grid-column: 1 / -1; width: 100%; justify-self: stretch; }
+      .appointment-date { width: 52px; min-width: 52px; }
+      .account-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .account-shortcuts a:last-child { grid-column: 1 / -1; }
+      .favourites-empty { align-items: flex-start; flex-direction: column; gap: 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton-card { animation: none; }
+      .visited-card { transition: none; }
+    }
+
   `]
 })
 export class HomePage implements OnInit {
@@ -1649,6 +1895,7 @@ export class HomePage implements OnInit {
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(this.savedLocation());
   readonly locating = signal(false);
   readonly locationNotice = signal("");
+  readonly recentSearches = signal<HomeRecentSearch[]>(this.readRecentSearches());
   readonly consultationLoading = signal(false);
   readonly consultationError = signal("");
   readonly consultationPhotos = signal<LiveConsultationPhoto[]>([]);
@@ -1674,13 +1921,77 @@ export class HomePage implements OnInit {
       .slice(0, 6);
   });
   readonly nearby = computed(() => {
-    const usedIds = new Set([...this.recommendations(), ...this.recommendedMore()].map((business) => business.id));
+    const usedIds = new Set(this.recommendations().map((business) => business.id));
+    const preferredCategories = new Set([
+      ...this.recentlyViewed().flatMap((business) => business.categories),
+      ...this.recentlyVisited().flatMap((item) => item.business.categories)
+    ]);
+    const score = (business: Business) => (business.categories.some((category) => preferredCategories.has(category)) ? 20 : 0)
+      - Number(business.distanceKm || 10);
     return this.uniqueBusinesses(this.homeResults())
       .filter((business) => !usedIds.has(business.id))
+      .sort((left, right) => score(right) - score(left))
       .slice(0, 6);
   });
   readonly recentlyViewed = computed(() => this.recentlyViewedBusinesses());
   readonly recentlyVisited = computed(() => this.recentlyVisitedBusinesses());
+  readonly primarySalonSuggestion = computed<CustomerSalonRelationship | null>(() => {
+    if (this.marketplace.primarySalon()) return null;
+
+    const backendSuggestion = this.marketplace.suggestedSalon();
+    if (backendSuggestion) return backendSuggestion;
+
+    const visitedSalon = [...this.marketplace.mySalons()]
+      .filter((salon) => Number(salon.visitCount || 0) >= 1)
+      .sort((left, right) => Number(right.visitCount || 0) - Number(left.visitCount || 0))[0];
+    if (visitedSalon) return visitedSalon;
+
+    const booking = [...this.marketplace.bookings()]
+      .filter((item) => item.status !== "cancelled" && (!!item.businessId || !!item.businessName))
+      .sort((left, right) => this.bookingTime(right) - this.bookingTime(left))[0];
+    if (!booking) return null;
+
+    const business = this.marketplace.businesses().find((item) => item.id === booking.businessId || item.businessName === booking.businessName);
+    if (!business?.tenantId || !business.branchId) return null;
+
+    const bookingDate = new Date(this.bookingTime(booking) || Date.now()).toISOString();
+    return {
+      id: `booking-${booking.id}`,
+      customerId: String(this.marketplace.customer()?.id || ""),
+      tenantId: business.tenantId,
+      branchId: business.branchId,
+      businessId: business.id,
+      businessName: business.businessName,
+      relationshipType: "booked",
+      visitCount: 1,
+      lastVisitAt: bookingDate,
+      isFavorite: 0,
+      createdAt: bookingDate,
+      updatedAt: bookingDate
+    };
+  });
+  readonly recommendationKicker = computed(() => this.recentlyViewed().length || this.recentlyVisited().length
+    ? "Based on your activity"
+    : "Selected by rating and distance");
+  readonly nextAppointment = computed(() => [...this.marketplace.bookings()]
+    .filter((booking) => booking.status !== "cancelled" && booking.status !== "completed" && this.bookingTime(booking) >= Date.now())
+    .sort((left, right) => this.bookingTime(left) - this.bookingTime(right))[0] ?? null);
+  readonly favoriteBusinesses = computed(() => this.uniqueBusinesses(this.marketplace.favorites()
+    .map((favorite) => favorite.business || this.marketplace.businesses().find((business) => business.id === favorite.businessId || business.slug === favorite.businessId))
+    .filter((business): business is Business => !!business))
+    .slice(0, 4));
+  readonly relevantOffers = computed(() => {
+    const preferredCategories = new Set([
+      ...this.recentlyViewed().flatMap((business) => business.categories),
+      ...this.recentlyVisited().flatMap((item) => item.business.categories)
+    ]);
+    const score = (business: Business) => (business.categories.some((category) => preferredCategories.has(category)) ? 20 : 0)
+      + Math.max(0, 8 - Number(business.distanceKm || 8))
+      + Number(business.ratingAverage || 0);
+    return this.uniqueBusinesses(this.marketplace.businesses().filter((business) => business.hasOffer))
+      .sort((left, right) => score(right) - score(left))
+      .slice(0, 4);
+  });
   readonly suggestions = computed<HomeSearchSuggestion[]>(() => {
     const query = this.query().trim().toLowerCase();
     if (!query) return [];
@@ -1759,7 +2070,8 @@ export class HomePage implements OnInit {
       this.marketplace.loadCategories(),
       this.marketplace.isAuthenticated() ? this.marketplace.loadCustomer() : Promise.resolve(null),
       this.marketplace.isAuthenticated() ? this.marketplace.loadBookings() : Promise.resolve([]),
-      this.marketplace.isAuthenticated() ? this.marketplace.loadMySalons().catch(() => null) : Promise.resolve(null)
+      this.marketplace.isAuthenticated() ? this.marketplace.loadMySalons().catch(() => null) : Promise.resolve(null),
+      this.marketplace.isAuthenticated() ? this.marketplace.ensureFavorites().catch(() => []) : Promise.resolve([])
     ]).catch(() => undefined);
   }
 
@@ -1806,6 +2118,11 @@ export class HomePage implements OnInit {
     void this.openDiscover(suggestion.query, this.modeForSuggestion(suggestion));
   }
 
+  repeatSearch(item: HomeRecentSearch) {
+    this.query.set(item.query);
+    void this.openDiscover(item.query, item.mode);
+  }
+
   search() {
     const intent = this.searchIntent(this.query().trim());
     void this.openDiscover(intent.query, intent.mode, intent.nearMe);
@@ -1813,7 +2130,7 @@ export class HomePage implements OnInit {
 
   openDiscoverPanel(panel: "filter" | "sort") {
     const intent = this.searchIntent(this.query().trim());
-    return this.router.navigate(["/tabs/search"], {
+    return this.router.navigate(["/search"], {
       queryParams: {
         q: intent.query || undefined,
         mode: intent.mode,
@@ -1824,7 +2141,7 @@ export class HomePage implements OnInit {
 
   openMapSearch() {
     const intent = this.searchIntent(this.query().trim());
-    return this.router.navigate(["/tabs/search"], {
+    return this.router.navigate(["/search"], {
       queryParams: {
         q: intent.query || undefined,
         mode: "locations",
@@ -1844,6 +2161,35 @@ export class HomePage implements OnInit {
 
   openBusiness(business: Business) {
     void this.router.navigate(["/business", business.slug]);
+  }
+
+  bookAgain(item: HomeVisitedBusiness) {
+    void this.router.navigate(["/business", item.business.slug, "book"], {
+      queryParams: { serviceId: item.serviceId || undefined }
+    });
+  }
+
+  appointmentMonth(booking: Booking): string {
+    const time = this.bookingTime(booking);
+    return time ? new Intl.DateTimeFormat("en-IN", { month: "short" }).format(new Date(time)) : "Next";
+  }
+
+  appointmentDay(booking: Booking): string {
+    const time = this.bookingTime(booking);
+    return time ? new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(new Date(time)) : "·";
+  }
+
+  appointmentTime(booking: Booking): string {
+    const time = this.bookingTime(booking);
+    return time
+      ? new Intl.DateTimeFormat("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(time))
+      : (booking.displayStartAt || "Time to be confirmed");
+  }
+
+  nearbyContextLabel(): string {
+    const history = [...this.recentlyViewed(), ...this.recentlyVisited().map((item) => item.business)];
+    const category = history.flatMap((business) => business.categories).find(Boolean);
+    return category ? `Near ${this.areaLabel()} · inspired by ${category}` : `Near ${this.areaLabel()}`;
   }
 
   businessImage(business: Business): string {
@@ -2081,10 +2427,11 @@ export class HomePage implements OnInit {
       .slice(0, 6);
   }
 
-  private recentlyVisitedBusinesses(): Array<{ business: Business; serviceName: string; lastVisitLabel: string }> {
+  private recentlyVisitedBusinesses(): HomeVisitedBusiness[] {
     const businesses = this.marketplace.businesses();
     const seen = new Set<string>();
     return [...this.marketplace.bookings()]
+      .filter((booking) => (booking.status === "completed" || this.bookingTime(booking) < Date.now()) && booking.status !== "cancelled")
       .filter((booking) => !!booking.businessId || !!booking.businessName)
       .sort((left, right) => this.bookingTime(right) - this.bookingTime(left))
       .map((booking) => {
@@ -2101,6 +2448,7 @@ export class HomePage implements OnInit {
       .map((item) => ({
         business: item.business,
         serviceName: item.booking.serviceName || "",
+        serviceId: item.booking.serviceId,
         lastVisitLabel: this.visitLabel(item.booking)
       }));
   }
@@ -2114,8 +2462,8 @@ export class HomePage implements OnInit {
     }
   }
 
-  private bookingTime(booking: { startAt?: string; startsAt?: string }): number {
-    const value = booking.startAt || booking.startsAt || "";
+  private bookingTime(booking: { startAt?: string; displayStartAt?: string; startsAt?: string }): number {
+    const value = booking.startAt || booking.displayStartAt || booking.startsAt || "";
     const time = value ? new Date(value).getTime() : 0;
     return Number.isFinite(time) ? time : 0;
   }
@@ -2178,7 +2526,8 @@ export class HomePage implements OnInit {
   }
 
   private openDiscover(query: string, mode: "salons" | "services" | "staff" | "locations", nearMe = false) {
-    return this.router.navigate(["/tabs/search"], {
+    this.recordRecentSearch(query, mode);
+    return this.router.navigate(["/search"], {
       queryParams: {
         q: query || undefined,
         mode,
@@ -2232,6 +2581,27 @@ export class HomePage implements OnInit {
       })
       .filter((item) => item.distance !== Number.MAX_SAFE_INTEGER)
       .sort((left, right) => left.distance - right.distance)[0]?.business ?? null;
+  }
+
+  private readRecentSearches(): HomeRecentSearch[] {
+    try {
+      const value = JSON.parse(localStorage.getItem("aura_customer_recent_searches") || "[]") as HomeRecentSearch[];
+      return Array.isArray(value) ? value.filter((item) => !!item?.query && !!item?.mode).slice(0, 5) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private recordRecentSearch(query: string, mode: HomeRecentSearch["mode"]) {
+    const normalized = query.trim();
+    if (!normalized) return;
+    const next = [{ query: normalized, mode }, ...this.recentSearches().filter((item) => item.query.toLowerCase() !== normalized.toLowerCase())].slice(0, 5);
+    this.recentSearches.set(next);
+    try {
+      localStorage.setItem("aura_customer_recent_searches", JSON.stringify(next));
+    } catch {
+      // Search history is optional when browser storage is unavailable.
+    }
   }
 
   private uniqueBusinesses(rows: Business[]): Business[] {

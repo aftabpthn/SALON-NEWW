@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { authenticateJwt } from "../middleware/auth.js";
 import { customerAuthService } from "../services/customer-auth.service.js";
+import { customerNotificationService } from "../services/customer-notification.service.js";
 
 export const customerAuthRouter = Router();
 
@@ -89,7 +90,7 @@ customerAuthRouter.get(
   "/customer/me",
   authenticateJwt(),
   asyncHandler((req, res) => {
-    res.json(customerAuthService.me(req.access));
+    res.json({ ...customerAuthService.me(req.access), notificationPreferences: customerNotificationService.preferences(req.access) });
   })
 );
 
@@ -97,7 +98,11 @@ customerAuthRouter.patch(
   "/customer/me",
   authenticateJwt(),
   asyncHandler((req, res) => {
-    res.json(customerAuthService.updateMe(req.body || {}, req.access));
+    const customer = customerAuthService.updateMe(req.body || {}, req.access);
+    const notificationPreferences = req.body?.notificationPreferences
+      ? customerNotificationService.updatePreferences(req.access, req.body.notificationPreferences)
+      : customerNotificationService.preferences(req.access);
+    res.json({ ...customer, notificationPreferences });
   })
 );
 

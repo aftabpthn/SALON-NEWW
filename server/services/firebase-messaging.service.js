@@ -23,10 +23,13 @@ export const firebaseMessagingService = {
       android: {
         priority: "high",
         notification: {
-          channelId: "staff_notifications",
+          channelId: notification.androidChannelId || "staff_notifications",
           sound: "default",
           clickAction: "FCM_PLUGIN_ACTIVITY"
         }
+      },
+      apns: {
+        payload: { aps: { sound: "default" } }
       }
     });
   }
