@@ -274,10 +274,12 @@
       <div><dt>Cash in</dt><dd>{{ money(report.cashInPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       <div><dt>Cash out</dt><dd>{{ money(report.cashOutPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       <div><dt>Cash refunds</dt><dd>{{ money(report.cashRefundsPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
-      @if (session?.status !== 'open') {
+      @if (reportCanShowCloseTotals) {
         <div><dt>Expected cash</dt><dd>{{ report.expectedCashPaise == null ? 'Restricted' : (money(report.expectedCashPaise) | currency:'INR':'symbol':'1.0-2') }}</dd></div>
         <div><dt>Counted cash</dt><dd>{{ money(report.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
         <div><dt>Variance</dt><dd>{{ report.variancePaise == null ? 'Restricted' : (money(report.variancePaise) | currency:'INR':'symbol':'1.0-2') }}</dd></div>
+      } @else {
+        <div><dt>Drawer status</dt><dd>{{ report.status === 'not_opened' ? 'Not opened' : report.status.replace('_', ' ') }}</dd></div>
       }
       <div><dt>Bank deposited</dt><dd>{{ money(report.bankDepositPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       <div><dt>Pending deposit</dt><dd>{{ money(report.pendingDepositPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>

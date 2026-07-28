@@ -316,6 +316,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   branchAccessLoading = false;
   branchAccessSaving = false;
   branchAccessError = '';
+  serviceCategoryFilter = 'all';
   loginProvision = emptyLoginProvision();
   passwordModalOpen = false;
   passwordAction: 'update' | 'reset' = 'update';
@@ -689,8 +690,12 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     if (this.newPassword.length < 12) { this.actionError = 'Password must be at least 12 characters'; return; }
     this.actionSaving = true;
     try {
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/staff/${this.editingId}/password`, { newPassword: this.newPassword }));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/staff/${this.editingId}/password`, {
+        newPassword: this.newPassword,
+        mustChangePassword: this.passwordAction === 'reset',
+      }));
       if (!result.success) throw new Error(result.error?.message || 'Unable to update password');
+      if (this.branchAccessLoaded) await this.loadBranchAccess();
       this.passwordModalOpen = false;
       this.newPassword = '';
     } catch (error) {
@@ -724,11 +729,17 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   setTab(tab: StaffTab) {
     if (!this.editingId) return;
     this.activeTab = tab;
-    if (tab === 'Branch Access' && !this.branchAccessLoaded && !this.branchAccessLoading) {
+    if (tab === 'Documents' && !this.documentsLoading) {
+      void this.loadDocuments();
+    }
+    if (tab === 'History' && !this.historyLoading) {
+      void this.loadHistory();
+    }
+    if (tab === 'Branch Access' && !this.branchAccessLoading) {
       void this.loadBranchAccess();
     }
-    if (tab === 'Operations' && !this.operationsLoaded && !this.operationsLoading) {
-      void this.loadOperations();
+    if (tab === 'Operations' && !this.operationsLoading) {
+      void this.loadOperations(true);
     }
   }
 
@@ -945,6 +956,18 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   catalogFor(type: CatalogType) { return this.configuration.catalog.filter((item) => item.itemType === type); }
+  get serviceGroups() {
+    const groups = new Map<string, CatalogOption[]>();
+    for (const item of this.serviceCatalog) {
+      const category = item.category.trim() || 'Uncategorized';
+      if (this.serviceCategoryFilter !== 'all' && category !== this.serviceCategoryFilter) continue;
+      groups.set(category, [...(groups.get(category) || []), item]);
+    }
+    return [...groups].sort(([left], [right]) => left.localeCompare(right)).map(([category, items]) => ({ category, items }));
+  }
+  get serviceCategories() { return [...new Set(this.serviceCatalog.map((item) => item.category.trim() || 'Uncategorized'))].sort(); }
+  get allServicesAssigned() { return this.serviceCatalog.length > 0 && this.serviceCatalog.every((item) => item.assigned); }
+  setServicesAssigned(items: CatalogOption[], assigned: boolean) { items.forEach((item) => { item.assigned = assigned; }); }
   get assignedCatalog() { return this.configuration.catalog.filter((item) => item.assigned); }
   rupees(pricePaise: number | null | undefined) { return pricePaise === null || pricePaise === undefined ? '-' : `₹${(pricePaise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`; }
 
@@ -1052,6 +1075,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       })),
       leavePolicies: data.leavePolicies,
     };
+    if (this.serviceCategoryFilter !== 'all' && !this.serviceCategories.includes(this.serviceCategoryFilter)) this.serviceCategoryFilter = 'all';
   }
 
   private async saveConfigurationFor(staffId: string) {

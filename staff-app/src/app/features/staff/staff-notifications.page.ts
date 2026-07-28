@@ -61,10 +61,10 @@ export class StaffNotificationsPage implements OnInit {
   }
 
   canReadNotifications(): boolean {
-    return this.staff.hasPermission("read:staff");
+    return this.staff.hasPermission("staff.app.notifications.read");
   }
 
   canUpdateNotifications(): boolean {
-    return this.staff.hasAnyPermission(["write:staff", "update:staff"]);
+    return this.staff.hasPermission("staff.app.notifications.manage");
   }
 }

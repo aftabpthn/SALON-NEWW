@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, inject, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiService } from '../../shared/services/api.service';
@@ -229,6 +229,7 @@ type CashTill = { id: string; name: string };
 })
 export class AppointmentsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly staffPhotoObjectUrls = new Set<string>();
@@ -1695,6 +1696,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         phone: String(client.phone || ''),
         email: String(client.email || ''),
       })).filter((client) => client.id);
+      const routeClientId = this.route.snapshot.queryParamMap.get('clientId') || '';
+      const routeClient = routeClientId ? this.clients.find((client) => client.id === routeClientId) : undefined;
+      if (routeClient) this.selectClient(routeClient);
     } catch {
       this.clients = [];
     }

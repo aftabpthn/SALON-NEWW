@@ -15,9 +15,10 @@ use crate::{
         PayrollAdjustmentRuleInput, PayrollAdjustmentRuleRecord, PayrollStructureInput,
         PayrollStructureRecord, PerformanceSourceRecord, StaffMobileConflictRecord,
         StaffMobileDeviceAuthRecord, StaffMobileDeviceRecord, StaffMobileSyncRecord,
-        StaffTaskCommentRecord, StaffTaskInput, StaffTaskRecord,
+        StaffServiceTargetInput, StaffServiceTargetRecord, StaffTaskCommentRecord, StaffTaskInput,
+        StaffTaskRecord,
     },
-    services::{auth_service, staff_attendance_service},
+    services::{auth_service, entitlement_service, staff_attendance_service},
 };
 
 const TARGET_TYPES: &[&str] = &[
@@ -156,6 +157,21 @@ pub struct StaffTaskRequest {
     pub due_at: Option<DateTime<Utc>>,
     pub status: Option<String>,
     pub version: Option<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffServiceTargetRequest {
+    pub assignee_type: String,
+    pub staff_id: Option<String>,
+    pub job_title: Option<String>,
+    pub service_id: String,
+    pub target_count: i64,
+    pub starts_on: NaiveDate,
+    pub ends_on: NaiveDate,
+    pub reward_type: Option<String>,
+    pub reward_amount_paise: Option<i64>,
+    pub reward_description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -910,6 +926,7 @@ async fn authenticate_gateway(
     if api_key.is_empty() || !auth_service::verify_password(api_key, &gateway.api_key_hash) {
         return Err(AppError::forbidden("invalid biometric gateway credentials"));
     }
+    entitlement_service::ensure_write_feature(db, &gateway.tenant_id, "staff.biometric").await?;
     Ok(gateway)
 }
 
@@ -1404,6 +1421,96 @@ pub async fn create_task(
         .ok_or_else(|| AppError::validation("assigned employee is invalid"))
 }
 
+pub async fn list_service_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<StaffServiceTargetRecord>, AppError> {
+    let status = optional_enum(
+        status,
+        &["active", "completed", "expired", "cancelled"],
+        "service target status",
+    )?;
+    repository::list_service_targets(db, tenant_id, branch_id, staff_id.trim(), &status)
+        .await
+        .map_err(internal("load staff service targets"))
+}
+
+pub async fn create_service_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request: StaffServiceTargetRequest,
+) -> Result<Vec<StaffServiceTargetRecord>, AppError> {
+    let assignee_type = required_enum(
+        &request.assignee_type,
+        &["staff", "job_title"],
+        "assignee type",
+    )?;
+    let assignee_value = if assignee_type == "staff" {
+        required_text(request.staff_id.as_deref().unwrap_or(""), 120, "staff")?
+    } else {
+        required_text(
+            request.job_title.as_deref().unwrap_or(""),
+            160,
+            "staff category",
+        )?
+    };
+    if request.target_count < 1 || request.target_count > 10_000 {
+        return Err(AppError::validation(
+            "service target count must be between 1 and 10000",
+        ));
+    }
+    if request.ends_on < request.starts_on || (request.ends_on - request.starts_on).num_days() > 366
+    {
+        return Err(AppError::validation(
+            "service target period must be 367 days or less",
+        ));
+    }
+    let reward_type = required_enum(
+        request.reward_type.as_deref().unwrap_or("none"),
+        &["none", "bonus", "gift", "other"],
+        "reward type",
+    )?;
+    let reward_amount_paise = request.reward_amount_paise.unwrap_or(0);
+    if reward_amount_paise < 0 || (reward_type == "bonus" && reward_amount_paise == 0) {
+        return Err(AppError::validation(
+            "bonus amount must be greater than zero",
+        ));
+    }
+    let reward_description = clean(
+        request.reward_description.as_deref().unwrap_or(""),
+        500,
+        "reward description",
+    )?;
+    if matches!(reward_type.as_str(), "gift" | "other") && reward_description.is_empty() {
+        return Err(AppError::validation("reward description is required"));
+    }
+    let input = StaffServiceTargetInput {
+        assignee_type,
+        assignee_value,
+        service_id: required_text(&request.service_id, 120, "service")?,
+        target_count: request.target_count,
+        starts_on: request.starts_on,
+        ends_on: request.ends_on,
+        reward_type,
+        reward_amount_paise,
+        reward_description,
+    };
+    let rows = repository::create_service_targets(db, tenant_id, branch_id, actor_user_id, &input)
+        .await
+        .map_err(internal("save staff service targets"))?;
+    if rows.is_empty() {
+        return Err(AppError::conflict(
+            "no eligible staff found or the target already exists",
+        ));
+    }
+    Ok(rows)
+}
+
 pub async fn update_task(
     db: &PgPool,
     tenant_id: &str,
@@ -1755,6 +1862,20 @@ fn adjustment_input(
         APPLICATION_MODES,
         "application mode",
     )?;
+    if trigger_type == "weekly_off_worked" && kind != "allowance" {
+        return Err(AppError::validation(
+            "weekly-off-worked rules must be allowances",
+        ));
+    }
+    if matches!(
+        trigger_type.as_str(),
+        "weekend_penalty" | "sandwich_penalty" | "unpaid_week_off"
+    ) && kind == "allowance"
+    {
+        return Err(AppError::validation(
+            "weekly-off penalty rules cannot be allowances",
+        ));
+    }
     let amount_paise = request.amount_paise.unwrap_or(0);
     let trigger_count = request.trigger_count.unwrap_or(1);
     if amount_paise < 0 || trigger_count < 1 {
@@ -1851,8 +1972,8 @@ fn database_write_error(
 #[cfg(test)]
 mod tests {
     use super::{
-        incentive_input, mobile_business_date, sha256_text, weighted_score, IncentiveRuleRequest,
-        IncentiveSlabRequest,
+        adjustment_input, incentive_input, mobile_business_date, sha256_text, weighted_score,
+        IncentiveRuleRequest, IncentiveSlabRequest, PayrollAdjustmentRuleRequest,
     };
     use chrono::{DateTime, NaiveDate, Utc};
 
@@ -1908,5 +2029,24 @@ mod tests {
             mobile_business_date(None, now),
             NaiveDate::from_ymd_opt(2026, 7, 14).unwrap()
         );
+    }
+
+    #[test]
+    fn weekly_off_rule_kinds_match_their_salary_effect() {
+        let request = |kind: &str, trigger: &str| PayrollAdjustmentRuleRequest {
+            kind: kind.into(),
+            name: "Weekly off rule".into(),
+            amount_paise: Some(10_000),
+            trigger_type: Some(trigger.into()),
+            trigger_count: Some(1),
+            application_mode: Some("per_occurrence".into()),
+            auto_apply: Some(true),
+            notes: None,
+            active: Some(true),
+            version: None,
+        };
+        assert!(adjustment_input(request("allowance", "weekly_off_worked")).is_ok());
+        assert!(adjustment_input(request("deduction", "weekly_off_worked")).is_err());
+        assert!(adjustment_input(request("allowance", "sandwich_penalty")).is_err());
     }
 }

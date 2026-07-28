@@ -5,7 +5,7 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../shared/services/api.service';
-import { LanguageService, TenantLanguageSettings } from '../../core/i18n/language.service';
+import { LANGUAGE_OPTIONS, LanguageService, TenantLanguageSettings } from '../../core/i18n/language.service';
 
 type SettingsPanel = 'appointments' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language';
 
@@ -48,10 +48,12 @@ type AuthPermissionOption = {
   code: string;
   label: string;
   group: string;
-  action?: string;
-  scope?: string;
-  sensitive?: boolean;
-  featureKey?: string;
+  module: string;
+  action: 'read' | 'write' | 'approve' | 'export';
+  scope: 'self' | 'branch' | 'tenant' | 'platform';
+  sensitive: boolean;
+  featureKey: string | null;
+  routeMapping: 'tenant_route_access' | 'handler_field_policy' | 'compatibility_alias';
 };
 type AuthPermissionGroup = { name: string; permissions: AuthPermissionOption[] };
 type AuthMaskOption = { code: string; label: string };
@@ -217,7 +219,6 @@ export class SettingsPageComponent implements OnInit {
   roleMaxDiscount = '';
   roleMaxRefund = '';
   roleMaxCashMovement = '';
-  roleReason = '';
   permissionSearch = '';
   rolesLoading = false;
   rolesSaving = false;
@@ -288,7 +289,7 @@ export class SettingsPageComponent implements OnInit {
   readonly weekStartOptions = ['Sunday', 'Monday'];
   readonly slotOptions = [10, 15, 30, 60];
   readonly timeFormatOptions = ['12 Hours', '24 Hours'];
-  readonly languageOptions = [{ code: 'en-IN', label: 'English' }, { code: 'hi-IN', label: 'हिन्दी' }] as const;
+  readonly languageOptions = LANGUAGE_OPTIONS;
   readonly regionOptions = [{ code: 'IN', label: 'India' }, { code: 'US', label: 'United States' }, { code: 'GB', label: 'United Kingdom' }, { code: 'AE', label: 'United Arab Emirates' }, { code: 'CA', label: 'Canada' }, { code: 'AU', label: 'Australia' }, { code: 'SG', label: 'Singapore' }];
   readonly currencyOptions = ['INR', 'USD', 'GBP', 'AED', 'CAD', 'AUD', 'SGD', 'EUR'];
   readonly timezoneOptions = ['Asia/Kolkata', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney'];
@@ -421,6 +422,10 @@ export class SettingsPageComponent implements OnInit {
   }
 
   get languagePreviewDirection() { return this.language.directionFor(this.languageSettings.primaryLanguage); }
+
+  languageName(code: string) {
+    return this.languageOptions.find((option) => option.code === code)?.label ?? code;
+  }
 
   async loadLanguageSettings(force = false) {
     this.languageLoading = true;
@@ -767,7 +772,6 @@ export class SettingsPageComponent implements OnInit {
     this.roleMaxDiscount = '';
     this.roleMaxRefund = '';
     this.roleMaxCashMovement = '';
-    this.roleReason = '';
     this.roleError = '';
     this.roleStatus = '';
   }
@@ -781,7 +785,6 @@ export class SettingsPageComponent implements OnInit {
     this.roleMaxDiscount = this.rupeeLimit(role.maxDiscountPaise);
     this.roleMaxRefund = this.rupeeLimit(role.maxRefundPaise);
     this.roleMaxCashMovement = this.rupeeLimit(role.maxCashMovementPaise);
-    this.roleReason = '';
     this.roleError = '';
     this.roleStatus = '';
   }
@@ -829,12 +832,6 @@ export class SettingsPageComponent implements OnInit {
     this.rolePermissions = this.rolePermissions.filter((permission) => permission !== code);
   }
 
-  get sensitiveRoleGrants(): AuthPermissionOption[] {
-    return this.permissionOptions.filter(
-      (permission) => permission.sensitive && this.rolePermissions.includes(permission.code)
-    );
-  }
-
   hasRoleMask(code: string) {
     return this.roleMaskedFields.includes(code);
   }
@@ -855,20 +852,6 @@ export class SettingsPageComponent implements OnInit {
       this.roleError = 'Role name and permission are required';
       return;
     }
-    const sensitiveGrants = this.sensitiveRoleGrants;
-    const reason = this.roleReason.trim();
-    if (sensitiveGrants.length) {
-      if (reason.length < 5) {
-        this.roleError = 'A reason (at least 5 characters) is required for sensitive permissions';
-        return;
-      }
-      const confirmed = window.confirm(
-        `This role grants sensitive permissions:\n${sensitiveGrants
-          .map((permission) => `• ${permission.label} (${permission.code})`)
-          .join('\n')}\n\nSave with the recorded reason?`
-      );
-      if (!confirmed) return;
-    }
     this.rolesSaving = true;
     try {
       const path = this.selectedRoleId
@@ -882,7 +865,6 @@ export class SettingsPageComponent implements OnInit {
         maxDiscountPaise: this.limitPaise(this.roleMaxDiscount),
         maxRefundPaise: this.limitPaise(this.roleMaxRefund),
         maxCashMovementPaise: this.limitPaise(this.roleMaxCashMovement),
-        reason: sensitiveGrants.length ? reason : null,
       };
       const request = this.selectedRoleId
         ? this.api.put<any>(path, payload)
@@ -892,7 +874,6 @@ export class SettingsPageComponent implements OnInit {
       const saved = this.roles.find((role) => role.id === this.selectedRoleId)
         ?? this.roles.find((role) => role.name.toLowerCase() === name.toLowerCase());
       if (saved) this.selectRole(saved);
-      this.roleReason = '';
       this.roleStatus = 'Saved';
     } catch (error: any) {
       this.roleError = error?.error?.error?.message || error?.error?.message || error?.message || 'Unable to save role';

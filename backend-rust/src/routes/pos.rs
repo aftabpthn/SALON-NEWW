@@ -35,7 +35,6 @@ use crate::{
     services::payment_gateway_service,
     services::razorpay_payment_service,
     services::security_service,
-    services::stamp_card_service,
     services::wallet_service,
     state::{AppState, AppointmentEvent},
 };
@@ -251,14 +250,6 @@ pub fn router() -> Router<AppState> {
         .route("/pos/sales/:id/payments", post(add_pos_payment))
         .route("/pos/invoices/:id/payments", post(add_pos_payment))
         .route("/invoices/:id/payments", post(add_pos_payment))
-        .route(
-            "/pos/loyalty/redeem-qr/verify",
-            post(verify_loyalty_redeem_qr),
-        )
-        .route(
-            "/pos/invoices/:id/loyalty-redeem-qr",
-            post(redeem_loyalty_redeem_qr),
-        )
         .route("/pos/payments", get(list_pos_payments))
         .route(
             "/pos/happy-hours/rules",
@@ -544,12 +535,6 @@ pub struct PosPaymentInput {
     pub idempotency_key: Option<String>,
     pub cash_drawer_till_id: Option<String>,
     pub paid_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoyaltyQrInput {
-    pub token: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1542,6 +1527,7 @@ struct PosCouponRow {
     pub per_client_limit: i64,
     pub target_service_ids: Vec<String>,
     pub target_service_categories: Vec<String>,
+    pub target_package_ids: Vec<String>,
     pub target_client_segments: Vec<String>,
     pub first_visit_only: bool,
     pub referral_required: bool,
@@ -2151,39 +2137,6 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         terminal_id: None,
         wallet_credit_paise: None,
     }
-}
-
-async fn verify_loyalty_redeem_qr(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<LoyaltyQrInput>,
-) -> ApiResult<membership_service::LoyaltyRedeemQrToken> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        membership_service::verify_reward_qr(&state.db, &tenant_id, &branch_id, &payload.token)
-            .await?,
-    )))
-}
-
-async fn redeem_loyalty_redeem_qr(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Json(payload): Json<LoyaltyQrInput>,
-) -> ApiResult<membership_service::LoyaltyQrRedeemResult> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        membership_service::redeem_reward_qr(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &id,
-            &payload.token,
-            &claims.sub,
-        )
-        .await?,
-    )))
 }
 
 fn payment_response(row: PosPaymentRow) -> PosPaymentResponse {
@@ -3116,7 +3069,8 @@ async fn resolve_coupon_discount(
         SELECT code, discount_type, discount_value_paise, discount_bps,
                min_subtotal_paise, max_discount_paise, active,
                starts_at, ends_at, usage_limit, used_count, per_client_limit,
-               target_service_ids, target_service_categories, target_client_segments,
+               target_service_ids, target_service_categories, target_package_ids,
+               target_client_segments,
                first_visit_only, referral_required, target_client_id, approval_status,
                allow_membership_stacking, allow_package_stacking
         FROM pos_coupons
@@ -3256,7 +3210,10 @@ async fn resolve_coupon_discount(
             "coupon cannot be stacked with package benefits",
         ));
     }
-    if !row.target_service_ids.is_empty() || !row.target_service_categories.is_empty() {
+    if !row.target_service_ids.is_empty()
+        || !row.target_service_categories.is_empty()
+        || !row.target_package_ids.is_empty()
+    {
         let service_ids = payload
             .lines
             .as_ref()
@@ -3296,9 +3253,68 @@ async fn resolve_coupon_discount(
                 .iter()
                 .any(|target| target.eq_ignore_ascii_case(category))
         });
-        if !id_match && !category_match {
+        let mut package_ids = payload
+            .lines
+            .as_ref()
+            .or(payload.items.as_ref())
+            .into_iter()
+            .flatten()
+            .filter(|line| {
+                line.line_type
+                    .as_deref()
+                    .or(line.item_type.as_deref())
+                    .or(line.kind.as_deref())
+                    .is_some_and(|kind| kind.eq_ignore_ascii_case("package"))
+            })
+            .filter_map(|line| {
+                line.item_id
+                    .as_ref()
+                    .or(line.id.as_ref())
+                    .map(|id| id.trim().to_string())
+            })
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        let credit_ids = payload
+            .package_redemptions
+            .as_ref()
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|item| {
+                package_redemption_string(
+                    item,
+                    &[
+                        "clientPackageCreditId",
+                        "client_package_credit_id",
+                        "creditId",
+                        "credit_id",
+                        "id",
+                    ],
+                )
+            })
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>();
+        if !credit_ids.is_empty() {
+            let redeemed_package_ids = sqlx::query_scalar::<_, String>(
+                "SELECT DISTINCT package_id FROM client_package_credits WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND id=ANY($4) AND active=TRUE AND remaining_qty>0",
+            )
+            .bind(tenant_id)
+            .bind(branch_id)
+            .bind(client_id)
+            .bind(&credit_ids)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|_| AppError::internal("failed to evaluate coupon package targeting"))?;
+            package_ids.extend(redeemed_package_ids);
+        }
+        let package_match = package_ids.iter().any(|id| {
+            row.target_package_ids
+                .iter()
+                .any(|target| target.eq_ignore_ascii_case(id))
+        });
+        if !id_match && !category_match && !package_match {
             return Err(AppError::validation(
-                "coupon is not valid for the selected services",
+                "coupon is not valid for the selected services or packages",
             ));
         }
     }
@@ -12106,18 +12122,6 @@ async fn refund_pos_invoice(
         sale.total_paise,
     )
     .await?;
-    reverse_stamp_cards_for_refund(
-        &mut tx,
-        &tenant_id,
-        &branch_id,
-        &sale.client_id,
-        &sale.staff_id,
-        &id,
-        &refund_id,
-        next_refunded,
-        sale.total_paise,
-    )
-    .await?;
     let settlements = payment_allocations
         .iter()
         .map(|allocation| accounting_service::RefundSettlement {
@@ -13847,39 +13851,6 @@ async fn post_membership_rewards(
         .and_then(Value::as_i64)
         .unwrap_or(0)
         .clamp(0, i64::from(i32::MAX));
-    // Stamp cards are a separate loyalty currency and are not membership
-    // gated, so they are posted before the membership eligibility checks
-    // below. Same transaction, same call sites, same idempotency guarantees.
-    post_stamp_cards(
-        tx,
-        tenant_id,
-        branch_id,
-        client_id,
-        staff_id,
-        sale_id,
-        total_paise,
-        &settings,
-    )
-    .await?;
-    let rewards_config = settings
-        .get("rewards")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({}));
-    let reward_line_types: Vec<String> = [
-        ("service", "enableForServices"),
-        ("product", "enableForProducts"),
-        ("package", "enableForPackages"),
-        ("membership", "enableForMemberships"),
-    ]
-    .iter()
-    .filter(|(_, flag)| {
-        rewards_config
-            .get(*flag)
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-    })
-    .map(|(line_type, _)| (*line_type).to_string())
-    .collect();
     let redeemed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(quantity),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='redemption' AND item_id='reward_points'")
         .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
         .map_err(|_| AppError::internal("failed to load reward redemption"))?;
@@ -13913,16 +13884,7 @@ async fn post_membership_rewards(
             "active membership with shared loyalty is required for reward redemption",
         ));
     }
-    // Owners may let any client earn points on a paid invoice. Redemption is
-    // unchanged and still requires an active membership — the check above has
-    // already rejected a non-member redemption, so reaching this point with
-    // `allow_non_members` only ever widens earning.
-    let allow_non_members = rewards_config
-        .get("allowNonMembers")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let earn_without_membership = allow_non_members && redeemed == 0;
-    if !eligible && !loyalty_eligible && !earn_without_membership {
+    if !eligible && !loyalty_eligible {
         return Ok(());
     }
     if !enabled && redeemed > 0 {
@@ -13959,16 +13921,6 @@ async fn post_membership_rewards(
         .await
         .map_err(|_| AppError::internal("failed to load shared reward balance"))?
         .ok_or_else(|| AppError::validation("reward points balance is insufficient or not shared with this branch"))?;
-        let minimum_redemption = rewards_config
-            .get("minimumRedemptionPoints")
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-            .clamp(0, i64::from(i32::MAX));
-        if !reward_line_types.is_empty() && i64::from(reward_source.2) < minimum_redemption {
-            return Err(AppError::validation(
-                "reward points balance is below the minimum eligible for redemption",
-            ));
-        }
     }
     sqlx::query("SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant_id)
@@ -13984,30 +13936,9 @@ async fn post_membership_rewards(
             .bind(tenant_id).bind(&reward_source.0).bind(&reward_source.1).bind(sale_id).bind(redeemed as i32).bind(source_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post reward redemption"))?;
     }
-    let earned = if reward_line_types.is_empty() {
-        reward_points_for_sale(total_paise, rate)
-    } else {
-        let eligible_paise = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(SUM(line_total_paise),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type=ANY($4)",
-        )
-        .bind(tenant_id)
-        .bind(branch_id)
-        .bind(sale_id)
-        .bind(&reward_line_types)
-        .fetch_one(&mut **tx)
-        .await
-        .map_err(|_| AppError::internal("failed to load reward eligible amount"))?;
-        reward_points_for_config(eligible_paise, &rewards_config)
-    };
+    let earned = reward_points_for_sale(total_paise, rate);
     if enabled && earned > 0 {
-        // `source_balance` is only the earning client's running balance when
-        // this sale also redeemed from that same client. Otherwise the current
-        // balance must be read, or the ledger would record `balance_after` as
-        // just this sale's points and wipe the client's accrued total.
-        let mut target_balance = if reuses_redemption_balance(
-            redeemed,
-            reward_source.0 == branch_id && reward_source.1 == client_id,
-        ) {
+        let mut target_balance = if reward_source.0 == branch_id && reward_source.1 == client_id {
             source_balance
         } else {
             sqlx::query_scalar::<_, i32>("SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1")
@@ -14022,359 +13953,11 @@ async fn post_membership_rewards(
     Ok(())
 }
 
-/// Posts stamp card events for a paid invoice: at most one stamp per active
-/// program, and a completion event plus configured reward points once the card
-/// is full. The database unique indexes are the duplicate guard — this hook
-/// can run several times for one sale.
-#[allow(clippy::too_many_arguments)]
-async fn post_stamp_cards(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    client_id: &str,
-    staff_id: &str,
-    sale_id: &str,
-    total_paise: i64,
-    settings: &Value,
-) -> Result<(), AppError> {
-    let programs = stamp_card_service::active_programs(settings);
-    if programs.is_empty() || client_id.trim().is_empty() || sale_id.trim().is_empty() {
-        return Ok(());
-    }
-    let line_types = stamp_card_service::sale_line_types(tx, tenant_id, branch_id, sale_id).await?;
-
-    for program in programs {
-        if !stamp_card_service::invoice_earns_stamp(&program, total_paise, &line_types) {
-            continue;
-        }
-        let balance =
-            stamp_card_service::current_balance(tx, tenant_id, branch_id, client_id, &program.code)
-                .await?;
-        let earned_balance = balance.saturating_add(1);
-        let posted = stamp_card_service::insert_event(
-            tx,
-            tenant_id,
-            branch_id,
-            client_id,
-            &program.code,
-            stamp_card_service::StampEvent {
-                source_sale_id: sale_id,
-                source_refund_id: "",
-                event_type: "earned",
-                stamps: 1,
-                balance_after: earned_balance,
-                staff_id,
-                note: "POS sale stamp",
-                idempotency_key: "",
-            },
-        )
-        .await?;
-        if !posted {
-            // Replayed hook: the stamp already exists, nothing further to do.
-            continue;
-        }
-        security_service::record_audit_tx(
-            tx,
-            tenant_id,
-            branch_id,
-            staff_id,
-            "loyalty.stamp.earned",
-            serde_json::json!({
-                "programCode": program.code,
-                "clientId": client_id,
-                "saleId": sale_id,
-                "balanceAfter": earned_balance,
-            }),
-        )
-        .await?;
-
-        if !stamp_card_service::completion_follows_new_stamp(
-            posted,
-            earned_balance,
-            program.stamps_required,
-        ) {
-            continue;
-        }
-        let completion_balance = earned_balance - program.stamps_required;
-        let completion_key = stamp_card_service::completion_idempotency_key(sale_id, &program.code);
-        let completed = stamp_card_service::insert_event(
-            tx,
-            tenant_id,
-            branch_id,
-            client_id,
-            &program.code,
-            stamp_card_service::StampEvent {
-                source_sale_id: "",
-                source_refund_id: "",
-                event_type: "redeemed",
-                stamps: program.stamps_required,
-                balance_after: completion_balance,
-                staff_id,
-                note: "Stamp card completed",
-                idempotency_key: &completion_key,
-            },
-        )
-        .await?;
-        // The completion event carries the authoritative replay guard. If it
-        // conflicted, this card was already completed for this sale: issuing
-        // points or auditing again would double-reward the customer.
-        if !completed {
-            continue;
-        }
-
-        if program.reward_points_on_completion > 0 {
-            // Issued with an empty source_sale_id so it cannot collide with
-            // the invoice's own 'earned' row, which is keyed by sale in
-            // idx_membership_reward_ledger_sale_type. The completion key
-            // guards replays instead.
-            let points_balance = sqlx::query_scalar::<_, i32>(
-                "SELECT balance_after FROM membership_reward_ledger \
-                 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
-                 ORDER BY created_at DESC, id DESC LIMIT 1",
-            )
-            .bind(tenant_id)
-            .bind(branch_id)
-            .bind(client_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|_| AppError::internal("failed to load reward balance"))?
-            .unwrap_or(0);
-            sqlx::query(
-                "INSERT INTO membership_reward_ledger \
-                 (tenant_id,branch_id,client_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) \
-                 VALUES ($1,$2,$3,'earned',$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
-            )
-            .bind(tenant_id)
-            .bind(branch_id)
-            .bind(client_id)
-            .bind(program.reward_points_on_completion)
-            .bind(points_balance.saturating_add(program.reward_points_on_completion))
-            .bind(staff_id)
-            .bind(format!("Stamp card reward: {}", program.name))
-            .bind(&completion_key)
-            .execute(&mut **tx)
-            .await
-            .map_err(|_| AppError::internal("failed to post stamp card reward points"))?;
-        }
-
-        security_service::record_audit_tx(
-            tx,
-            tenant_id,
-            branch_id,
-            staff_id,
-            "loyalty.stamp.completed",
-            serde_json::json!({
-                "programCode": program.code,
-                "clientId": client_id,
-                "saleId": sale_id,
-                "stampsRedeemed": program.stamps_required,
-                "rewardPoints": program.reward_points_on_completion,
-                "balanceAfter": completion_balance,
-            }),
-        )
-        .await?;
-    }
-    Ok(())
-}
-
-/// Reverses stamps earned on a fully refunded invoice. A partial refund keeps
-/// the stamp in Phase 1B.
-pub(crate) async fn reverse_stamp_cards_for_refund(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    client_id: &str,
-    staff_id: &str,
-    sale_id: &str,
-    refund_id: &str,
-    refunded_paise: i64,
-    sale_total_paise: i64,
-) -> Result<(), AppError> {
-    if !stamp_card_service::refund_reverses_stamp(refunded_paise, sale_total_paise) {
-        return Ok(());
-    }
-    let earned = sqlx::query_as::<_, (String, i32)>(
-        "SELECT program_code, stamps FROM stamp_card_events \
-         WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 \
-           AND event_type='earned'",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(client_id)
-    .bind(sale_id)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(|_| AppError::internal("failed to load stamps for refund"))?;
-
-    for (program_code, stamps) in earned {
-        let completion_key = stamp_card_service::completion_idempotency_key(sale_id, &program_code);
-        let completed_stamps = sqlx::query_scalar::<_, i32>(
-            "SELECT stamps FROM stamp_card_events \
-             WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND program_code=$4 \
-               AND event_type='redeemed' AND idempotency_key=$5",
-        )
-        .bind(tenant_id)
-        .bind(branch_id)
-        .bind(client_id)
-        .bind(&program_code)
-        .bind(&completion_key)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(|_| AppError::internal("failed to load stamp completion for refund"))?;
-        let balance =
-            stamp_card_service::current_balance(tx, tenant_id, branch_id, client_id, &program_code)
-                .await?;
-        let reversed =
-            stamp_card_service::refund_reversal_balance(balance, stamps, completed_stamps);
-        let reversal_key =
-            stamp_card_service::stamp_reversal_idempotency_key(refund_id, &program_code);
-        let posted = stamp_card_service::insert_event(
-            tx,
-            tenant_id,
-            branch_id,
-            client_id,
-            &program_code,
-            stamp_card_service::StampEvent {
-                source_sale_id: "",
-                source_refund_id: refund_id,
-                event_type: "reversed",
-                stamps,
-                balance_after: reversed,
-                staff_id,
-                note: "POS refund stamp reversal",
-                idempotency_key: &reversal_key,
-            },
-        )
-        .await?;
-        if posted {
-            let completion_points = sqlx::query_scalar::<_, i32>(
-                "SELECT points FROM membership_reward_ledger \
-                 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
-                   AND transaction_type='earned' AND idempotency_key=$4",
-            )
-            .bind(tenant_id)
-            .bind(branch_id)
-            .bind(client_id)
-            .bind(&completion_key)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(|_| AppError::internal("failed to load stamp reward completion"))?
-            .unwrap_or(0);
-            if completion_points > 0 {
-                let points_balance = sqlx::query_scalar::<_, i32>(
-                    "SELECT balance_after FROM membership_reward_ledger \
-                     WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 \
-                     ORDER BY created_at DESC, id DESC LIMIT 1",
-                )
-                .bind(tenant_id)
-                .bind(branch_id)
-                .bind(client_id)
-                .fetch_optional(&mut **tx)
-                .await
-                .map_err(|_| AppError::internal("failed to load reward balance"))?
-                .unwrap_or(0);
-                let delta =
-                    stamp_card_service::reward_reversal_delta(points_balance, completion_points);
-                if delta != 0 {
-                    let reward_reversal_key =
-                        stamp_card_service::completion_reversal_idempotency_key(
-                            refund_id,
-                            &program_code,
-                        );
-                    sqlx::query(
-                        "INSERT INTO membership_reward_ledger \
-                         (tenant_id,branch_id,client_id,source_refund_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) \
-                         VALUES ($1,$2,$3,$4,'reversed',$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING",
-                    )
-                    .bind(tenant_id)
-                    .bind(branch_id)
-                    .bind(client_id)
-                    .bind(&reward_reversal_key)
-                    .bind(delta)
-                    .bind(points_balance.saturating_add(delta))
-                    .bind(staff_id)
-                    .bind(format!("Stamp card reward reversal: {program_code}"))
-                    .bind(&reward_reversal_key)
-                    .execute(&mut **tx)
-                    .await
-                    .map_err(|_| AppError::internal("failed to reverse stamp card reward points"))?;
-                }
-            }
-            security_service::record_audit_tx(
-                tx,
-                tenant_id,
-                branch_id,
-                staff_id,
-                "loyalty.stamp.reversed",
-                serde_json::json!({
-                    "programCode": program_code,
-                    "clientId": client_id,
-                    "saleId": sale_id,
-                    "refundId": refund_id,
-                    "stamps": stamps,
-                    "completedStamps": completed_stamps.unwrap_or(0),
-                    "reversedRewardPoints": completion_points,
-                    "balanceAfter": reversed,
-                }),
-            )
-            .await?;
-        }
-    }
-    Ok(())
-}
-
-/// Whether the post-redemption balance already reflects the earning client's
-/// running total. That only holds when this sale redeemed points from the same
-/// client in the same branch; with no redemption the running balance has not
-/// been loaded yet and must be read from the ledger.
-fn reuses_redemption_balance(redeemed_points: i64, source_is_earning_client: bool) -> bool {
-    redeemed_points > 0 && source_is_earning_client
-}
-
 fn reward_points_for_sale(total_paise: i64, points_per_100_rupees: i64) -> i64 {
     total_paise
         .max(0)
         .saturating_mul(points_per_100_rupees.max(0))
         / 10_000
-}
-
-fn reward_points_for_config(eligible_paise: i64, rewards: &Value) -> i64 {
-    let value_paise = rewards
-        .get("rewardValuePaise")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-    let points = rewards
-        .get("rewardPoints")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-    if value_paise <= 0 || points <= 0 {
-        return 0;
-    }
-    let mut earned = (eligible_paise.max(0) / value_paise).saturating_mul(points);
-    // Only the highest matching bill threshold applies, so bonuses never stack.
-    let best_rule = rewards
-        .get("bonusRules")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|rule| {
-            let min_bill = rule
-                .get("minBillPaise")
-                .and_then(Value::as_i64)
-                .unwrap_or(0);
-            let bonus_value = rule.get("rewardValue").and_then(Value::as_i64).unwrap_or(0);
-            let reward_type = rule.get("rewardType").and_then(Value::as_str).unwrap_or("");
-            (bonus_value > 0 && eligible_paise >= min_bill)
-                .then(|| (min_bill, reward_type.to_string(), bonus_value))
-        })
-        .max_by_key(|(min_bill, _, _)| *min_bill);
-    if let Some((_, reward_type, bonus_value)) = best_rule {
-        earned = match reward_type.as_str() {
-            "percentage" => earned.saturating_add(earned.saturating_mul(bonus_value) / 100),
-            _ => earned.saturating_add(bonus_value),
-        };
-    }
-    earned
 }
 
 fn package_setting<'a>(settings: &'a Value, path: &[&str]) -> Option<&'a Value> {
@@ -14488,73 +14071,10 @@ fn membership_pos_policy(settings: &Value) -> MembershipPosPolicy {
 mod package_credit_value_tests {
     use super::{
         allocate_package_credit_values, membership_discount_paise, membership_pos_policy,
-        reuses_redemption_balance, reward_discount_for_points, reward_points_for_config,
-        reward_points_for_sale,
+        reward_discount_for_points, reward_points_for_sale,
     };
     use serde_json::json;
     use sqlx::PgPool;
-
-    /// Phase 1A: a paid invoice earns for any client only when the owner has
-    /// enabled it. The flag is read from the persisted rewards settings, so a
-    /// tenant that never opts in keeps the members-only behaviour.
-    fn earns_without_membership(rewards: &serde_json::Value, redeemed_points: i64) -> bool {
-        rewards
-            .get("allowNonMembers")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-            && redeemed_points == 0
-    }
-
-    #[test]
-    fn non_member_earning_is_off_until_the_owner_enables_it() {
-        // Default and legacy settings (flag absent) stay members-only.
-        assert!(!earns_without_membership(&json!({}), 0));
-        assert!(!earns_without_membership(
-            &json!({ "allowNonMembers": false }),
-            0
-        ));
-
-        // Enabled: a paid invoice with no redemption earns for any client.
-        assert!(earns_without_membership(
-            &json!({ "allowNonMembers": true }),
-            0
-        ));
-
-        // Redemption is untouched by the flag: a sale that spends points is
-        // never widened, so membership is still required to redeem.
-        assert!(!earns_without_membership(
-            &json!({ "allowNonMembers": true }),
-            50
-        ));
-    }
-
-    #[test]
-    fn earned_points_add_to_the_existing_balance_not_reset_it() {
-        // No redemption: the running balance must be loaded from the ledger,
-        // otherwise balance_after would be written as just this sale's points.
-        assert!(!reuses_redemption_balance(0, true));
-        assert!(!reuses_redemption_balance(0, false));
-
-        // Redemption from the earning client: the post-redemption balance is
-        // already this client's running total.
-        assert!(reuses_redemption_balance(40, true));
-
-        // Redemption from a shared member in another branch: the earning
-        // client's own balance must still be loaded.
-        assert!(!reuses_redemption_balance(40, false));
-    }
-
-    #[test]
-    fn non_member_earning_uses_the_configured_ratio() {
-        // Earning maths is shared with members — enabling non-members does not
-        // introduce a second calculation path.
-        let rewards = json!({ "rewardValuePaise": 10_000, "rewardPoints": 5 });
-        assert_eq!(reward_points_for_config(10_000, &rewards), 5);
-        // Whole blocks only: 2.5 blocks earns 2 blocks' worth.
-        assert_eq!(reward_points_for_config(25_000, &rewards), 10);
-        assert_eq!(reward_points_for_config(9_999, &rewards), 0);
-        assert_eq!(reward_points_for_config(0, &rewards), 0);
-    }
 
     #[test]
     fn allocates_the_exact_sold_value_across_immutable_credits() {

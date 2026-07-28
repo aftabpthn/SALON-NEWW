@@ -49,6 +49,14 @@ pub struct AuthRoleOptionRecord {
     pub name: String,
 }
 
+pub fn is_staff_assignable_role_name(name: &str) -> bool {
+    let normalized = name
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', '_', ' '], "");
+    !matches!(normalized.as_str(), "owner" | "admin" | "superadmin")
+}
+
 #[derive(Debug, Clone, FromRow)]
 pub struct AuthRoleRecord {
     pub id: String,
@@ -392,12 +400,14 @@ pub async fn list_auth_roles(
     db: &PgPool,
     tenant_id: &str,
 ) -> Result<Vec<AuthRoleOptionRecord>, sqlx::Error> {
-    sqlx::query_as::<_, AuthRoleOptionRecord>(
+    let mut roles = sqlx::query_as::<_, AuthRoleOptionRecord>(
         "SELECT id, name FROM roles WHERE tenant_id=$1 ORDER BY name ASC",
     )
     .bind(tenant_id)
     .fetch_all(db)
-    .await
+    .await?;
+    roles.retain(|role| is_staff_assignable_role_name(&role.name));
+    Ok(roles)
 }
 
 pub async fn find_staff_login(
@@ -471,6 +481,10 @@ pub async fn provision_staff_login(
         tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     };
+    if !is_staff_assignable_role_name(&role_name) {
+        tx.rollback().await?;
+        return Err(sqlx::Error::RowNotFound);
+    }
 
     let user_id = sqlx::query_scalar::<_, String>(
         r#"
@@ -615,35 +629,6 @@ pub async fn update_auth_role(
     .await
 }
 
-/// Invalidates active sessions for every user holding the role, either as
-/// their primary role or through a branch assignment. The auth middleware
-/// rejects tokens whose permission_version no longer matches, forcing re-login.
-pub async fn bump_permission_version_for_role(
-    db: &PgPool,
-    tenant_id: &str,
-    role_id: &str,
-) -> Result<u64, sqlx::Error> {
-    sqlx::query(
-        r#"
-        UPDATE users
-        SET permission_version = permission_version + 1
-        WHERE tenant_id = $1
-          AND (
-            role_id = $2
-            OR id IN (
-              SELECT user_id FROM user_branch_roles
-              WHERE tenant_id = $1 AND role_id = $2 AND active = TRUE
-            )
-          )
-        "#,
-    )
-    .bind(tenant_id)
-    .bind(role_id)
-    .execute(db)
-    .await
-    .map(|result| result.rows_affected())
-}
-
 pub async fn replace_branch_access(
     db: &PgPool,
     tenant_id: &str,
@@ -660,7 +645,7 @@ pub async fn replace_branch_access(
     .await?;
 
     for assignment in assignments {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             INSERT INTO user_branch_roles (
               tenant_id, user_id, branch_id, role_id, role_name, access_type,
@@ -669,6 +654,7 @@ pub async fn replace_branch_access(
             SELECT $1, $2, $3, role.id, role.name, $5, $6, $7, $8, $9, NOW()
             FROM roles role
             WHERE role.tenant_id=$1 AND role.id=$4
+              AND REGEXP_REPLACE(LOWER(role.name), '[-_ ]', '', 'g') NOT IN ('owner','admin','superadmin')
             ON CONFLICT (tenant_id, user_id, branch_id) DO UPDATE SET
               role_id=EXCLUDED.role_id,
               role_name=EXCLUDED.role_name,
@@ -691,6 +677,10 @@ pub async fn replace_branch_access(
         .bind(assignment.active)
         .execute(&mut *tx)
         .await?;
+        if result.rows_affected() != 1 {
+            tx.rollback().await?;
+            return Err(sqlx::Error::RowNotFound);
+        }
     }
 
     if let Some(default) = assignments
@@ -755,6 +745,67 @@ pub async fn get_profile(
     .bind(staff_id)
     .fetch_optional(db)
     .await
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::{replace_branch_access, BranchRoleAssignmentInput};
+    use sqlx::PgPool;
+
+    #[sqlx::test(migrations = false)]
+    async fn staff_security_protected_roles_cannot_replace_branch_access(pool: PgPool) {
+        sqlx::raw_sql(
+            r#"
+            CREATE TABLE roles(id TEXT, tenant_id TEXT, name TEXT, PRIMARY KEY(tenant_id,id));
+            CREATE TABLE user_branch_roles(
+              tenant_id TEXT,user_id TEXT,branch_id TEXT,role_id TEXT,role_name TEXT,
+              access_type TEXT,valid_from DATE,valid_until DATE,is_default BOOLEAN,
+              active BOOLEAN,updated_at TIMESTAMPTZ,
+              PRIMARY KEY(tenant_id,user_id,branch_id)
+            );
+            CREATE TABLE users(
+              id TEXT,tenant_id TEXT,branch_id TEXT,role_id TEXT,role_name TEXT,
+              updated_at TIMESTAMPTZ,PRIMARY KEY(tenant_id,id)
+            );
+            CREATE TABLE auth_refresh_tokens(
+              tenant_id TEXT,user_id TEXT,revoked_at TIMESTAMPTZ,revoke_reason TEXT
+            );
+            INSERT INTO roles VALUES
+              ('manager','tenant-1','Manager'),
+              ('owner','tenant-1','Owner');
+            INSERT INTO users(id,tenant_id) VALUES('user-1','tenant-1');
+            INSERT INTO auth_refresh_tokens(tenant_id,user_id) VALUES('tenant-1','user-1');
+            "#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let assignment = |role_id: &str| BranchRoleAssignmentInput {
+            branch_id: "branch-1".into(),
+            role_id: role_id.into(),
+            access_type: "permanent".into(),
+            valid_from: None,
+            valid_until: None,
+            is_default: true,
+            active: true,
+        };
+        replace_branch_access(&pool, "tenant-1", "user-1", &[assignment("manager")])
+            .await
+            .unwrap();
+        assert!(matches!(
+            replace_branch_access(&pool, "tenant-1", "user-1", &[assignment("owner")]).await,
+            Err(sqlx::Error::RowNotFound)
+        ));
+
+        let role: (String, bool) = sqlx::query_as(
+            "SELECT role_name,active FROM user_branch_roles WHERE tenant_id='tenant-1' AND user_id='user-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(role, ("Manager".into(), true));
+    }
 }
 
 pub async fn upsert_profile(

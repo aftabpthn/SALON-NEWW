@@ -5,6 +5,9 @@
 .tabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .tabs button { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .tabs button.active, .tabs button:hover, .tabs button:focus-visible { border-color: var(--brand); color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, white); outline: 0; }
+.command-strip { display: flex; flex-wrap: wrap; gap: 7px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 20px rgba(18, 32, 51, 0.04); }
+.command-strip button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--panel); font-weight: 600; cursor: pointer; }
+.command-strip button:hover:not(:disabled), .command-strip button:focus-visible { border-color: var(--brand); color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, white); outline: 0; }
 .panel { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 8px 20px rgba(18, 32, 51, 0.06); }
 .status-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; }
 .status-strip div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px; border-right: 1px solid var(--line); }

@@ -40,19 +40,15 @@
       <span class="icon-badge amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
       <div><span>Stock risk</span>@if (!canReadInventory) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ (inventoryCommand?.summary?.stockoutRisk || 0) + (inventoryCommand?.summary?.overstockRisk || 0) }}</strong> }</div>
     </article>
-    <article class="kpi-card">
-      <span class="icon-badge red"><i class="bi bi-shield-exclamation" aria-hidden="true"></i></span>
-      <div><span>Security alerts</span>@if (!canReadSecurity) { <strong>—</strong> } @else if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ openAlerts }}</strong> }</div>
-    </article>
   </section>
 
   <section class="primary-grid">
     <article class="panel overview-panel">
       <header class="panel-header">
         <div><span class="eyebrow">Business</span><h2>Executive overview</h2></div>
-        <span>Current <strong>30 days</strong></span>
+        <span>Today <strong>30 days</strong></span>
       </header>
-      <div class="overview-head"><span>Area</span><span>Current</span><span>Overall</span></div>
+      <div class="overview-head"><span>Area</span><span>Today</span><span>30 days</span></div>
       <div class="overview-row">
         <span><i class="bi bi-cash-stack" aria-hidden="true"></i>Sales</span>
         <strong>{{ snapshotLoading ? '—' : money(snapshot.todaySalesPaise) }}</strong>
@@ -61,7 +57,7 @@
       <div class="overview-row">
         <span><i class="bi bi-calendar3" aria-hidden="true"></i>Appointments</span>
         <strong>{{ snapshotLoading ? '—' : snapshot.todayAppointments }}</strong>
-        <strong>{{ snapshotLoading ? '—' : snapshot.totalAppointments }}</strong>
+        <strong>{{ financeLoading ? '—' : appointmentCount30Days }}</strong>
       </div>
       <div class="overview-row">
         <span><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>Net profit</span>
@@ -78,7 +74,7 @@
     <article class="panel action-panel">
       <header class="panel-header">
         <div><span class="eyebrow">Today</span><h2>Action queue</h2></div>
-        <a routerLink="/reports">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        <a routerLink="/reports/profit-intelligence">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
       </header>
       @if (controlsLoading) {
         <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading actions</div>
@@ -103,7 +99,7 @@
   <section class="panel profit-panel">
     <header class="panel-header">
       <div><span class="eyebrow">Finance</span><h2>Profit Intelligence</h2></div>
-      <a routerLink="/reports">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      <a routerLink="/reports/profit-intelligence">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </header>
     @if (financeLoading) {
       <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading profit data</div>
@@ -143,53 +139,6 @@
               }
             </div>
           }
-        </section>
-      </div>
-    }
-  </section>
-
-  <section class="panel staff-panel">
-    <header class="panel-header">
-      <div><span class="eyebrow">Team</span><h2>Staff Control</h2></div>
-      @if (canReadStaff) { <a routerLink="/staff/control-center">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
-    </header>
-    @if (!canReadStaff) {
-      <div class="compact-state">Access restricted</div>
-    } @else if (staffLoading) {
-      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading staff data</div>
-    } @else if (errors.has('staff')) {
-      <div class="compact-state">{{ staffError }}</div>
-    } @else {
-      <div class="staff-grid">
-        <section aria-label="Staff summary">
-          <h3>30-day summary</h3>
-          <dl class="metric-list">
-            <div><dt>Staff</dt><dd>{{ staff?.kpis?.staffCount || 0 }}</dd></div>
-            <div><dt>Staff revenue</dt><dd>{{ money(staff?.kpis?.totalRevenuePaise || 0) }}</dd></div>
-            <div><dt>High-risk signals</dt><dd>{{ staff?.kpis?.highRiskSignals || 0 }}</dd></div>
-            <div><dt>Pending approvals</dt><dd>{{ staff?.kpis?.pendingApprovals || 0 }}</dd></div>
-            <div><dt>Training due</dt><dd>{{ staff?.kpis?.trainingDue || 0 }}</dd></div>
-          </dl>
-        </section>
-        <section aria-label="Top staff">
-          <h3>Top staff</h3>
-          @if (topStaff.length === 0) {
-            <div class="section-empty">No records yet</div>
-          } @else {
-            <div class="rank-list">
-              @for (row of topStaff; track row.staffId) {
-                <div><span>{{ row.staffName }}</span><strong>Score {{ row.score ?? '—' }}</strong></div>
-              }
-            </div>
-          }
-        </section>
-        <section aria-label="Staff attention queue">
-          <h3>Attention queue</h3>
-          <dl class="metric-list">
-            <div><dt>Risk signals</dt><dd>{{ staff?.attentionQueue?.riskSignals?.length || 0 }}</dd></div>
-            <div><dt>Approvals</dt><dd>{{ staff?.attentionQueue?.pendingApprovals?.length || 0 }}</dd></div>
-            <div><dt>Training assignments</dt><dd>{{ staff?.attentionQueue?.dueTraining?.length || 0 }}</dd></div>
-          </dl>
         </section>
       </div>
     }
@@ -323,45 +272,6 @@
             <div><dt>High-risk cases</dt><dd>{{ canReadPaymentControls ? (paymentRisk?.highRiskCount || 0) : '—' }}</dd></div>
             <div><dt>Cases reviewed</dt><dd>{{ canReadPaymentControls ? (paymentRisk?.caseCount || 0) : '—' }}</dd></div>
             <div><dt>Providers ready</dt><dd>{{ canReadPaymentControls ? readyProviderCount + '/' + paymentProviders.length : '—' }}</dd></div>
-          </dl>
-        </section>
-      </div>
-    }
-  </section>
-
-  <section class="panel security-panel">
-    <header class="panel-header">
-      <div><span class="eyebrow">Protection</span><h2>Security Center</h2></div>
-      @if (canReadSecurity) { <a routerLink="/security">Open workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></a> }
-    </header>
-    @if (!canReadSecurity) {
-      <div class="compact-state">Access restricted</div>
-    } @else if (controlsLoading) {
-      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading security controls</div>
-    } @else if (errors.has('security')) {
-      <div class="compact-state">Security summary unavailable</div>
-    } @else {
-      <div class="security-grid">
-        <section aria-label="Threat controls">
-          <h3>Threat controls</h3>
-          <dl class="metric-list">
-            <div><dt>Open alerts</dt><dd>{{ security?.counts?.openAlerts || 0 }}</dd></div>
-            <div><dt>Active blocks</dt><dd>{{ security?.counts?.activeBlocks || 0 }}</dd></div>
-          </dl>
-        </section>
-        <section aria-label="Access controls">
-          <h3>Access controls</h3>
-          <dl class="metric-list">
-            <div><dt>Active sessions</dt><dd>{{ security?.counts?.activeSessions || 0 }}</dd></div>
-            <div><dt>Session revocation</dt><dd>{{ security?.policy?.settings?.sessionRevocationEnabled ? 'Enabled' : 'Disabled' }}</dd></div>
-          </dl>
-        </section>
-        <section aria-label="Audit controls">
-          <h3>Audit controls</h3>
-          <dl class="metric-list">
-            <div><dt>Audit events</dt><dd>{{ security?.counts?.auditEvents || 0 }}</dd></div>
-            <div><dt>Retention</dt><dd>{{ security?.policy?.settings?.auditRetentionDays || 0 }} days</dd></div>
-            <div><dt>Policy</dt><dd>{{ security?.policy?.persisted ? 'Saved' : 'Default' }}</dd></div>
           </dl>
         </section>
       </div>
@@ -535,11 +445,9 @@
       <section class="panel workspace-panel">
         <header class="panel-header"><div><span class="eyebrow">Operations</span><h2>Workspaces</h2></div></header>
         <div class="workspace-grid">
-          <a routerLink="/reports"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-          @if (canReadStaff) { <a routerLink="/staff/control-center"><span class="icon-badge blue"><i class="bi bi-person-gear" aria-hidden="true"></i></span><strong>Staff Control</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
+          <a routerLink="/reports/profit-intelligence"><span class="icon-badge blue"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span><strong>Profit Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
           @if (canReadInventory) { <a routerLink="/inventory/advanced-controls"><span class="icon-badge blue"><i class="bi bi-box-seam" aria-hidden="true"></i></span><strong>Inventory Autopilot</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
           @if (canReadPaymentControls) { <a routerLink="/pos/enterprise"><span class="icon-badge blue"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></span><strong>Payment Intelligence</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
-          @if (canReadSecurity) { <a routerLink="/security"><span class="icon-badge blue"><i class="bi bi-shield-lock" aria-hidden="true"></i></span><strong>Security Center</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a> }
           <a routerLink="/dashboard"><span class="icon-badge blue"><i class="bi bi-grid-1x2" aria-hidden="true"></i></span><strong>Operational Dashboard</strong><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
         </div>
       </section>

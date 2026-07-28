@@ -1,12 +1,13 @@
 import { Component, OnInit, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
-import { StaffAppService, StaffDashboard } from "../../core/staff-app.service";
+import { StaffAppService, StaffDashboard, StaffWorkspacePreferences, StaffWorkspacePreferenceUpdate } from "../../core/staff-app.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 import { StaffPermissionBadgesComponent } from "./staff-permission-badges.component";
 
 @Component({
   standalone: true,
-  imports: [StaffPageStateComponent, StaffPermissionBadgesComponent],
+  imports: [FormsModule, StaffPageStateComponent, StaffPermissionBadgesComponent],
   template: `
     <section class="page">
       <header class="page-head">
@@ -60,6 +61,46 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
             </details>
           </div>
         </section>
+
+        @if (preferences(); as prefs) {
+          <section class="panel preferences-panel">
+            <div class="panel-title"><h2>Workspace preferences</h2><span>{{ prefs.localization.timezone }}</span></div>
+            <form class="preferences-grid" (ngSubmit)="savePreferences()">
+              <label>
+                <span>Workspace</span>
+                <input name="workspaceName" [(ngModel)]="preferenceForm.workspaceName" maxlength="80" />
+              </label>
+              <label>
+                <span>Timezone</span>
+                <select name="timezone" [(ngModel)]="preferenceForm.timezone">
+                  <option value="Asia/Kolkata">Asia/Kolkata</option>
+                  <option value="UTC">UTC</option>
+                </select>
+              </label>
+              <label>
+                <span>Date format</span>
+                <select name="dateFormat" [(ngModel)]="preferenceForm.dateFormat">
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                </select>
+              </label>
+              <label>
+                <span>Time format</span>
+                <select name="timeFormat" [(ngModel)]="preferenceForm.timeFormat">
+                  <option value="HH:mm">24 hour</option>
+                  <option value="hh:mm a">12 hour</option>
+                </select>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" name="compactMode" [(ngModel)]="preferenceForm.compactMode" />
+                <span>Compact mode</span>
+              </label>
+              <div class="row-actions preference-actions">
+                <button class="button primary" type="submit" [disabled]="savingPreferences()">Save preferences</button>
+              </div>
+            </form>
+          </section>
+        }
       }
     </section>
   `,
@@ -85,6 +126,15 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
     .permission-panel summary:focus-visible { outline: 3px solid var(--staff-focus-ring); outline-offset: 2px; border-radius: 14px; }
     .permission-list { justify-content: flex-start; padding: 0 14px 12px; border-top: 1px solid var(--staff-border); }
     .permission-panel[open] .permission-list { padding-top: 10px; }
+    .preferences-panel { margin-top: 10px; }
+    .preferences-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+    .preferences-grid label { display: flex; flex-direction: column; gap: 5px; min-width: 0; color: var(--staff-text-secondary); font-size: .72rem; font-weight: 700; }
+    .preferences-grid input, .preferences-grid select { width: 100%; min-height: 38px; border: 1px solid var(--staff-border); border-radius: 12px; padding: 0 10px; color: var(--staff-text); background: var(--staff-surface); box-sizing: border-box; }
+    .check-row { flex-direction: row !important; align-items: center; min-height: 38px; }
+    .check-row input { width: 16px; min-height: 16px; }
+    .preference-actions { justify-content: flex-end; }
+    @media (max-width: 820px) { .preferences-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .preferences-grid { grid-template-columns: 1fr; } }
     @media (prefers-reduced-motion: reduce) {
       .biometric-switch, .biometric-switch span { transition: none; }
     }
@@ -92,8 +142,11 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
 })
 export class StaffSettingsPage implements OnInit {
   readonly dashboard = signal<StaffDashboard | null>(null);
+  readonly preferences = signal<StaffWorkspacePreferences | null>(null);
   readonly loading = signal(false);
+  readonly savingPreferences = signal(false);
   readonly message = signal("");
+  preferenceForm: StaffWorkspacePreferenceUpdate = {};
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
@@ -102,7 +155,12 @@ export class StaffSettingsPage implements OnInit {
   async load() {
     this.loading.set(true);
     try {
-      this.dashboard.set(await this.staff.dashboard());
+      const [dashboard, preferences] = await Promise.all([
+        this.staff.dashboard(),
+        this.staff.workspacePreferences()
+      ]);
+      this.dashboard.set(dashboard);
+      this.setPreferences(preferences);
     } finally {
       this.loading.set(false);
     }
@@ -127,8 +185,33 @@ export class StaffSettingsPage implements OnInit {
     this.message.set("Session refreshed.");
   }
 
+  async savePreferences() {
+    this.savingPreferences.set(true);
+    try {
+      const saved = await this.staff.saveWorkspacePreferences(this.preferenceForm);
+      this.setPreferences(saved);
+      document.documentElement.dataset["staffCompactMode"] = saved.interface.compactMode ? "true" : "false";
+      this.message.set("Preferences saved.");
+    } finally {
+      this.savingPreferences.set(false);
+    }
+  }
+
   async logout() {
     await this.staff.logout();
     await this.router.navigateByUrl("/staff/login");
+  }
+
+  private setPreferences(preferences: StaffWorkspacePreferences) {
+    this.preferences.set(preferences);
+    this.preferenceForm = {
+      workspaceName: preferences.workspace.workspaceName,
+      timezone: preferences.localization.timezone,
+      locale: preferences.localization.locale,
+      dateFormat: preferences.dateTime.dateFormat,
+      timeFormat: preferences.dateTime.timeFormat,
+      compactMode: preferences.interface.compactMode,
+      staffHints: preferences.defaults.staffHints
+    };
   }
 }

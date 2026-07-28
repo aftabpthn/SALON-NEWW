@@ -1,9 +1,8 @@
 use crate::{
     config::is_local_env,
     middleware::{
-        auth as auth_middleware, security_headers as security_headers_middleware,
-        request_timing as request_timing_middleware,
-        tenant as tenant_middleware,
+        auth as auth_middleware, request_timing as request_timing_middleware,
+        security_headers as security_headers_middleware, tenant as tenant_middleware,
     },
     state::AppState,
 };
@@ -44,6 +43,7 @@ pub mod notifications;
 pub mod operations;
 pub mod outgoing_funds;
 pub mod packages;
+pub mod payment_platform;
 pub mod pos;
 pub mod pos_enterprise;
 pub mod pos_legacy_completion;
@@ -90,6 +90,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(membership_enterprise::public_router())
         .merge(booking_extensions::public_router())
         .merge(pos_enterprise::public_router())
+        .merge(payment_platform::public_router())
         .merge(scim::router())
         .merge(integrations::public_router());
 
@@ -117,6 +118,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(pos::router())
         .merge(pos_enterprise::router())
         .merge(pos_legacy_completion::router())
+        .merge(payment_platform::router())
         .merge(purchases::router())
         .merge(purchase_bill_drafts::router())
         .merge(cash_drawer::router())
@@ -163,7 +165,9 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api", api)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn(request_timing_middleware::request_timing))
+        .layer(axum::middleware::from_fn(
+            request_timing_middleware::request_timing,
+        ))
         .layer(cors)
         .layer(from_fn_with_state(
             state.clone(),

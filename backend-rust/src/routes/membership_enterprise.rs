@@ -1,8 +1,8 @@
 use axum::{
-    Json, Router,
     extract::{Path, Query, State},
-    http::{HeaderMap, HeaderValue, header},
+    http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
+    Json, Router,
 };
 use qrcodegen::{QrCode, QrCodeEcc};
 use serde::{Deserialize, Serialize};
@@ -126,18 +126,6 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(reward_abuse_alerts),
         )
         .route(
-            "/membership-enterprise/rewards/anti-fraud/approvals",
-            axum::routing::get(anti_fraud_approvals),
-        )
-        .route(
-            "/membership-enterprise/rewards/stamps/manual-approvals",
-            axum::routing::post(request_manual_stamp_approval),
-        )
-        .route(
-            "/membership-enterprise/rewards/anti-fraud/approvals/:id/decision",
-            axum::routing::post(decide_anti_fraud_approval),
-        )
-        .route(
             "/membership-enterprise/risk-signals/:id/review",
             axum::routing::post(review_risk_signal),
         )
@@ -233,10 +221,6 @@ pub fn public_router() -> Router<AppState> {
             "/membership-enterprise/self-service/public/:token/request",
             axum::routing::post(public_self_service_request),
         )
-        .route(
-            "/membership-enterprise/self-service/public/:token/reward-qr",
-            axum::routing::post(public_reward_qr),
-        )
 }
 
 #[derive(Deserialize)]
@@ -300,7 +284,6 @@ struct FreezeRequest {
 struct ListQuery {
     days: Option<i64>,
     limit: Option<i64>,
-    status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -310,22 +293,6 @@ struct RewardAdjustmentRequest {
     points: i32,
     note: String,
     idempotency_key: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ManualStampApprovalRequest {
-    client_id: String,
-    program_code: String,
-    stamps: i32,
-    note: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApprovalDecisionRequest {
-    decision: String,
-    note: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -398,20 +365,6 @@ struct PublicSelfServiceRequest {
     credit_delta: Option<i32>,
     service_id: Option<String>,
     payment_reference: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PublicRewardQrRequest {
-    points: i32,
-    amount_paise: i64,
-    idempotency_key: String,
-    reward_code: Option<String>,
-    reward_type: Option<String>,
-    reward_label: Option<String>,
-    reward_bps: Option<i32>,
-    service_id: Option<String>,
-    occasion_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -889,65 +842,6 @@ async fn reward_abuse_alerts(
     )))
 }
 
-async fn anti_fraud_approvals(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<ListQuery>,
-) -> ApiResult<Vec<crate::repositories::security_repository::SecurityApprovalRecord>> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        membership_service::anti_fraud_approvals(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            query.status.as_deref().unwrap_or("all"),
-        )
-        .await?,
-    )))
-}
-
-async fn request_manual_stamp_approval(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<ManualStampApprovalRequest>,
-) -> ApiResult<crate::repositories::security_repository::SecurityApprovalRecord> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        membership_service::request_manual_stamp_approval(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &actor(&headers),
-            &payload.client_id,
-            &payload.program_code,
-            payload.stamps,
-            payload.note.as_deref().unwrap_or(""),
-        )
-        .await?,
-    )))
-}
-
-async fn decide_anti_fraud_approval(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Json(payload): Json<ApprovalDecisionRequest>,
-) -> ApiResult<membership_service::ManualStampApprovalResult> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        membership_service::decide_anti_fraud_approval(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &actor(&headers),
-            &id,
-            &payload.decision,
-            payload.note.as_deref().unwrap_or(""),
-        )
-        .await?,
-    )))
-}
-
 async fn review_risk_signal(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1149,44 +1043,6 @@ async fn public_renew_request(
     Ok(Json(ApiResponse::ok(
         membership_service::public_renew_request(&state.db, &token).await?,
     )))
-}
-
-async fn public_reward_qr(
-    State(state): State<AppState>,
-    Path(token): Path<String>,
-    Json(payload): Json<PublicRewardQrRequest>,
-) -> ApiResult<Value> {
-    let item = membership_service::create_public_reward_qr(
-        &state.db,
-        &token,
-        membership_service::CreateRewardQrInput {
-            points: payload.points,
-            amount_paise: payload.amount_paise,
-            idempotency_key: payload.idempotency_key,
-            reward_code: payload.reward_code,
-            reward_type: payload.reward_type,
-            reward_label: payload.reward_label,
-            reward_bps: payload.reward_bps,
-            service_id: payload.service_id,
-            occasion_type: payload.occasion_type,
-        },
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(serde_json::json!({
-        "id": item.id,
-        "token": item.token,
-        "points": item.points,
-        "amountPaise": item.amount_paise,
-        "rewardCode": item.reward_code,
-        "rewardType": item.reward_type,
-        "rewardLabel": item.reward_label,
-        "rewardBps": item.reward_bps,
-        "serviceId": item.service_id,
-        "occasionType": item.occasion_type,
-        "status": item.status,
-        "expiresAt": item.expires_at,
-        "qrSvg": membership_qr_svg(&item.token)?,
-    }))))
 }
 
 async fn proration_preview(

@@ -25,7 +25,7 @@ use crate::{
         staff_repository::{self, CreateStaff, StaffProfileRecord, StaffRecord, UpdateStaff},
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, permission_registry, staff_service},
+    services::{auth_service::AuthClaims, staff_service},
     state::AppState,
 };
 
@@ -334,6 +334,7 @@ pub struct AttendanceRuleRequest {
 #[serde(rename_all = "camelCase")]
 pub struct StaffPasswordRequest {
     pub new_password: String,
+    pub must_change_password: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -398,8 +399,6 @@ pub struct AuthRoleWriteRequest {
     pub max_discount_paise: Option<i64>,
     pub max_refund_paise: Option<i64>,
     pub max_cash_movement_paise: Option<i64>,
-    /// Required whenever the role grants sensitive permissions.
-    pub reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1009,7 +1008,9 @@ async fn upload_staff_file(
         return Err(AppError::validation("invalid staff file"));
     }
     if kind == "photo" && !is_supported_staff_photo(file_name, &content_type, &bytes) {
-        return Err(AppError::validation("staff photo must be a valid JPG or PNG image"));
+        return Err(AppError::validation(
+            "staff photo must be a valid JPG or PNG image",
+        ));
     }
     let row = staff_hr_repository::save_file(
         &state.db,
@@ -1454,8 +1455,6 @@ async fn create_auth_role(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let role_name = payload.name.clone();
-    let sensitive_grants = permission_registry::sensitive_subset(&payload.permissions);
-    let reason = payload.reason.clone();
     let roles = staff_service::create_auth_role(
         &state.db,
         &tenant_id,
@@ -1468,19 +1467,10 @@ async fn create_auth_role(
             max_refund_paise: payload.max_refund_paise,
             max_cash_movement_paise: payload.max_cash_movement_paise,
         },
-        payload.reason,
     )
     .await?;
     audit_auth_role_change(
-        &state,
-        &claims,
-        &tenant_id,
-        &branch_id,
-        "created",
-        None,
-        role_name,
-        sensitive_grants,
-        reason,
+        &state, &claims, &tenant_id, &branch_id, "created", None, role_name,
     )
     .await;
     Ok(Json(ApiResponse::ok(roles)))
@@ -1496,8 +1486,6 @@ async fn update_auth_role(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let role_name = payload.name.clone();
-    let sensitive_grants = permission_registry::sensitive_subset(&payload.permissions);
-    let reason = payload.reason.clone();
     let roles = staff_service::update_auth_role(
         &state.db,
         &tenant_id,
@@ -1511,7 +1499,6 @@ async fn update_auth_role(
             max_refund_paise: payload.max_refund_paise,
             max_cash_movement_paise: payload.max_cash_movement_paise,
         },
-        payload.reason,
     )
     .await?;
     audit_auth_role_change(
@@ -1522,14 +1509,11 @@ async fn update_auth_role(
         "updated",
         Some(role_id),
         role_name,
-        sensitive_grants,
-        reason,
     )
     .await;
     Ok(Json(ApiResponse::ok(roles)))
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn audit_auth_role_change(
     state: &AppState,
     claims: &AuthClaims,
@@ -1538,8 +1522,6 @@ async fn audit_auth_role_change(
     action: &str,
     role_id: Option<String>,
     role_name: String,
-    sensitive_grants: Vec<String>,
-    reason: Option<String>,
 ) {
     let _ = auth_repository::audit(
         &state.db,
@@ -1553,13 +1535,7 @@ async fn audit_auth_role_change(
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({
-                "action": action,
-                "roleId": role_id,
-                "roleName": role_name,
-                "sensitivePermissions": sensitive_grants,
-                "reason": reason,
-            }),
+            details: json!({ "action": action, "roleId": role_id, "roleName": role_name }),
         },
     )
     .await;
@@ -1574,12 +1550,14 @@ async fn set_staff_password(
 ) -> ApiResult<StaffPasswordResponse> {
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let must_change_password = payload.must_change_password.unwrap_or(true);
     staff_service::set_password(
         &state.db,
         &tenant_id,
         &branch_id,
         &id,
         payload.new_password.trim(),
+        must_change_password,
     )
     .await?;
     let _ = auth_repository::audit(
@@ -1590,11 +1568,15 @@ async fn set_staff_password(
             session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
             branch_id: Some(&branch_id),
             identity: None,
-            event_type: "staff.password.reset",
+            event_type: if must_change_password {
+                "staff.password.reset"
+            } else {
+                "staff.password.updated"
+            },
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({ "staffId": id, "mustChangePassword": true }),
+            details: json!({ "staffId": id, "mustChangePassword": must_change_password }),
         },
     )
     .await;
@@ -1944,7 +1926,9 @@ mod tests {
         assert!(staff_service::is_supported_photo_url(
             "https://cdn.example.com/profile.JPG?size=200"
         ));
-        assert!(staff_service::is_supported_photo_url("/staff/files/file_123"));
+        assert!(staff_service::is_supported_photo_url(
+            "/staff/files/file_123"
+        ));
         assert!(!staff_service::is_supported_photo_url(
             "https://example.com/profile.webp"
         ));

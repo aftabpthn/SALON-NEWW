@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, Utc};
+use chrono::Utc;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 
@@ -37,7 +37,6 @@ pub async fn schedule(state: &AppState) -> Result<usize, AppError> {
     queued += sms_center_service::schedule_due(&state.db).await?;
     queued += schedule_appointment_reminders(state).await?;
     queued += schedule_review_requests(state).await?;
-    queued += schedule_loyalty_campaigns(state).await?;
     for (tenant_id, branch_id) in scopes {
         let active_triggers = marketing_leads_repository::active_automation_triggers(
             &state.db, &tenant_id, &branch_id,
@@ -468,121 +467,6 @@ async fn schedule_review_requests(state: &AppState) -> Result<usize, AppError> {
     Ok(queued)
 }
 
-async fn schedule_loyalty_campaigns(state: &AppState) -> Result<usize, AppError> {
-    let mut queued = 0usize;
-    let earned = sqlx::query_as::<_, (String, String, String, String, String, String, String, i32, i32)>(
-        "SELECT ledger.tenant_id,ledger.branch_id,ledger.id,ledger.client_id,COALESCE(client.phone,''),COALESCE(client.email,''),COALESCE(NULLIF(TRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),'Client'),ledger.points,ledger.balance_after \
-           FROM membership_reward_ledger ledger \
-           JOIN clients client ON client.tenant_id=ledger.tenant_id AND client.branch_id=ledger.branch_id AND client.id=ledger.client_id \
-          WHERE ledger.transaction_type='earned' AND ledger.points>0 AND ledger.created_at>=NOW()-INTERVAL '2 days' \
-            AND client.active=TRUE AND client.merged_into_client_id IS NULL \
-          ORDER BY ledger.created_at DESC LIMIT 250",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| AppError::internal("failed to load loyalty reward earnings"))?;
-    for (tenant_id, branch_id, ledger_id, client_id, phone, email, client_name, points, balance) in
-        earned
-    {
-        queued += enqueue_channels(
-            state,
-            &tenant_id,
-            &branch_id,
-            "loyalty_reward_earned",
-            &ledger_id,
-            &client_id,
-            &phone,
-            &email,
-            &loyalty_reward_earned_message(points, balance),
-            &client_name,
-            None,
-        )
-        .await?;
-    }
-
-    let expiring = sqlx::query_as::<_, (String, String, String, String, String, String, String, i32, NaiveDate)>(
-        "SELECT ledger.tenant_id,ledger.branch_id,ledger.id,ledger.client_id,COALESCE(client.phone,''),COALESCE(client.email,''),COALESCE(NULLIF(TRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),'Client'),ledger.balance_after,ledger.expires_at \
-           FROM membership_reward_ledger ledger \
-           JOIN clients client ON client.tenant_id=ledger.tenant_id AND client.branch_id=ledger.branch_id AND client.id=ledger.client_id \
-          WHERE ledger.expires_at IS NOT NULL AND ledger.expires_at BETWEEN CURRENT_DATE AND CURRENT_DATE+7 \
-            AND ledger.balance_after>0 AND client.active=TRUE AND client.merged_into_client_id IS NULL \
-          ORDER BY ledger.expires_at,ledger.created_at DESC LIMIT 250",
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| AppError::internal("failed to load expiring loyalty rewards"))?;
-    for (tenant_id, branch_id, ledger_id, client_id, phone, email, client_name, balance, expiry) in
-        expiring
-    {
-        queued += enqueue_channels(
-            state,
-            &tenant_id,
-            &branch_id,
-            "loyalty_reward_expiring",
-            &format!("{ledger_id}:{expiry}"),
-            &client_id,
-            &phone,
-            &email,
-            &loyalty_reward_expiring_message(balance, expiry),
-            &client_name,
-            None,
-        )
-        .await?;
-    }
-
-    queued += schedule_loyalty_reactivation(state, "loyalty_inactive_nudge", 45, 89).await?;
-    queued += schedule_loyalty_reactivation(state, "loyalty_win_back_offer", 90, i32::MAX).await?;
-    Ok(queued)
-}
-
-async fn schedule_loyalty_reactivation(
-    state: &AppState,
-    source_type: &str,
-    min_days: i32,
-    max_days: i32,
-) -> Result<usize, AppError> {
-    let rows = sqlx::query_as::<_, (String, String, String, String, String, String, i32)>(
-        "WITH visits AS (
-             SELECT client.tenant_id,client.branch_id,client.id AS client_id,
-                    GREATEST(CURRENT_DATE-COALESCE(MAX(appointment.start_at)::DATE,client.created_at::DATE),0)::INT AS inactive_days
-               FROM clients client
-               LEFT JOIN appointments appointment ON appointment.tenant_id=client.tenant_id AND appointment.branch_id=client.branch_id AND appointment.client_id=client.id AND appointment.status IN ('completed','billed','paid')
-              WHERE client.active=TRUE AND client.merged_into_client_id IS NULL
-              GROUP BY client.tenant_id,client.branch_id,client.id,client.created_at
-           )
-           SELECT client.tenant_id,client.branch_id,client.id,COALESCE(client.phone,''),COALESCE(client.email,''),COALESCE(NULLIF(TRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),'Client'),visits.inactive_days
-             FROM visits
-             JOIN clients client ON client.tenant_id=visits.tenant_id AND client.branch_id=visits.branch_id AND client.id=visits.client_id
-            WHERE visits.inactive_days BETWEEN $1 AND $2
-              AND EXISTS (SELECT 1 FROM membership_reward_ledger ledger WHERE ledger.tenant_id=client.tenant_id AND ledger.branch_id=client.branch_id AND ledger.client_id=client.id AND ledger.balance_after>0)
-            ORDER BY visits.inactive_days DESC LIMIT 250",
-    )
-    .bind(min_days)
-    .bind(max_days)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| AppError::internal("failed to load loyalty reactivation clients"))?;
-    let bucket = loyalty_campaign_bucket();
-    let mut queued = 0usize;
-    for (tenant_id, branch_id, client_id, phone, email, client_name, inactive_days) in rows {
-        queued += enqueue_channels(
-            state,
-            &tenant_id,
-            &branch_id,
-            source_type,
-            &format!("{client_id}:{bucket}"),
-            &client_id,
-            &phone,
-            &email,
-            &loyalty_reactivation_message(source_type, inactive_days),
-            &client_name,
-            None,
-        )
-        .await?;
-    }
-    Ok(queued)
-}
-
 async fn enqueue_channels(
     state: &AppState,
     tenant_id: &str,
@@ -687,39 +571,8 @@ fn notification_subject(source_type: &str) -> &'static str {
         "package_alert" => "Package update",
         "review_request" => "How was your visit?",
         "review_recovery" => "Client follow-up",
-        "loyalty_reward_earned" => "Reward earned",
-        "loyalty_reward_expiring" => "Reward expiring",
-        "loyalty_inactive_nudge" => "Loyalty update",
-        "loyalty_win_back_offer" => "Win-back offer",
         _ => "Client update",
     }
-}
-
-fn loyalty_reward_earned_message(points: i32, balance: i32) -> String {
-    format!("You earned {points} loyalty points. Current balance: {balance}.")
-}
-
-fn loyalty_reward_expiring_message(balance: i32, expiry: NaiveDate) -> String {
-    format!(
-        "Your {balance} loyalty points expire on {}.",
-        expiry.format("%d/%m/%Y")
-    )
-}
-
-fn loyalty_reactivation_message(source_type: &str, inactive_days: i32) -> String {
-    if source_type == "loyalty_win_back_offer" {
-        format!(
-            "We miss you. Use your loyalty rewards on your next visit. Last visit: {inactive_days} days ago."
-        )
-    } else {
-        format!(
-            "Your loyalty rewards are waiting. Book your next visit and keep your benefits active. Last visit: {inactive_days} days ago."
-        )
-    }
-}
-
-fn loyalty_campaign_bucket() -> String {
-    Utc::now().format("%Y%m").to_string()
 }
 
 pub async fn process_due(state: &AppState) -> Result<usize, AppError> {
@@ -825,11 +678,7 @@ async fn refresh_occasion_delivery(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        legacy_occasion_automation_allowed, loyalty_reactivation_message,
-        loyalty_reward_earned_message, loyalty_reward_expiring_message, notification_subject,
-    };
-    use chrono::NaiveDate;
+    use super::{legacy_occasion_automation_allowed, notification_subject};
 
     #[test]
     fn managed_mode_disables_legacy_occasion_automation() {
@@ -847,23 +696,6 @@ mod tests {
         assert_eq!(
             notification_subject("appointment_reminder"),
             "Appointment update"
-        );
-    }
-
-    #[test]
-    fn loyalty_campaign_messages_are_stable() {
-        assert_eq!(
-            loyalty_reward_earned_message(25, 125),
-            "You earned 25 loyalty points. Current balance: 125."
-        );
-        assert_eq!(
-            loyalty_reward_expiring_message(80, NaiveDate::from_ymd_opt(2026, 7, 31).unwrap()),
-            "Your 80 loyalty points expire on 31/07/2026."
-        );
-        assert!(loyalty_reactivation_message("loyalty_win_back_offer", 90).contains("We miss you"));
-        assert_eq!(
-            notification_subject("loyalty_reward_earned"),
-            "Reward earned"
         );
     }
 }

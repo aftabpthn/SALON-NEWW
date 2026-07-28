@@ -15,7 +15,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
        @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
        @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (today(); as data) {
-        <section class="grid four"><article class="kpi"><span>Status</span><strong>{{ attendanceStatus() }}</strong></article><article class="kpi"><span>Clock in</span><strong>{{ activeOrLatestAttendance()?.clockInAt ? (activeOrLatestAttendance()?.clockInAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Clock out</span><strong>{{ activeOrLatestAttendance()?.clockOutAt ? (activeOrLatestAttendance()?.clockOutAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Worked</span><strong>{{ workedLabel() }}</strong></article></section>
+        <section class="grid four"><article class="kpi"><span>Status</span><strong>{{ attendanceStatus() }}</strong></article><article class="kpi"><span>Clock in</span><strong>{{ activeOrLatestAttendance()?.clockInAt ? (activeOrLatestAttendance()?.clockInAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Worked</span><strong>{{ workedLabel() }}</strong></article><article class="kpi"><span>Overtime</span><strong>{{ formatMinutes(activeOrLatestAttendance()?.overtimeMinutes) }}</strong></article></section>
+        <section class="panel"><div class="panel-title"><h2>Shift schedule</h2><span>{{ data.schedules.length ? data.schedules[0].status : 'not assigned' }}</span></div><div class="list">@for (shift of data.schedules; track shift.id) { <div class="row"><strong>{{ shift.scheduleDate | date:'dd/MM/yyyy' }}</strong><span>{{ shift.startTime || '-' }} - {{ shift.endTime || '-' }} · {{ shift.shiftType || 'shift' }}</span></div> } @empty { <p class="empty">No shift assigned.</p> }</div></section>
         <section class="panel"><div class="panel-title"><h2>Actions</h2><span>{{ pendingAction() ? 'Saving...' : data.date }}</span></div><div class="row-actions">@if (canUseAttendance()) { @if (!activeAttendance()) { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="clockIn()">{{ pendingAction() === 'clock-in' ? 'Clocking in...' : 'Clock in' }}</button> } @else if (isOnBreak()) { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="endBreak()">{{ pendingAction() === 'end-break' ? 'Ending break...' : 'End break' }}</button> } @else { <button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="startBreak()">{{ pendingAction() === 'start-break' ? 'Starting break...' : 'Start break' }}</button><button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="clockOut()">{{ pendingAction() === 'clock-out' ? 'Clocking out...' : 'Clock out' }}</button> } }</div></section>
         <section class="panel"><div class="panel-title"><h2>Last 30 days attendance</h2><span>{{ attendance().length }}</span></div><div class="list">@for (row of attendance(); track row.id) { <div class="row"><div class="row-main"><strong>{{ row.businessDate }}</strong><small>Clock in {{ row.clockInAt ? (row.clockInAt | date:'shortTime') : '-' }} · Clock out {{ row.clockOutAt ? (row.clockOutAt | date:'shortTime') : '-' }}</small><small>Worked {{ formatMinutes(row.totalWorkedMinutes) }} · Break {{ formatMinutes(row.totalBreakMinutes) }} · Scheduled {{ row.scheduledShiftMinutes === null ? 'Not captured (legacy)' : formatMinutes(row.scheduledShiftMinutes) }} · OT {{ formatMinutes(row.overtimeMinutes) }}</small><small>{{ row.source || 'staff-app' }} · {{ row.overtimeCalculationStatus }}</small></div><span class="badge">{{ row.status }}</span></div> } @empty { <p class="empty">No attendance records in the last 30 days.</p> }</div></section>
       }
@@ -32,7 +33,10 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly pendingAction = signal<"clock-in" | "clock-out" | "start-break" | "end-break" | null>(null);
   readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
-  private readonly attendanceUpdated = () => void this.load();
+  private readonly attendanceUpdated = (event: Event) => {
+    if ((event as CustomEvent).detail?.source === "attendance-page") return;
+    void this.load();
+  };
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); void this.load(); }
   ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
@@ -44,7 +48,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
       this.attendance.set(attendance);
     } finally { this.loading.set(false); }
   }
-  canUseAttendance(): boolean { return this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"]); }
+  canUseAttendance(): boolean { return this.staff.hasPermission("staff.app.attendance.manage"); }
   attendanceStatus(): string { return this.activeOrLatestAttendance()?.status?.replace(/_/g, " ") || "not clocked in"; }
   isOnBreak(): boolean { return !!this.today()?.activeBreak || ["on_break", "break"].includes(String(this.activeAttendance()?.status || "").toLowerCase()); }
   workedLabel(): string { const row = this.activeOrLatestAttendance(); if (!row?.clockInAt) return "-"; if (row.clockOutAt) return this.formatMinutes(row.totalWorkedMinutes); const minutes = Math.max(0, Math.floor((Date.now() - new Date(row.clockInAt).getTime()) / 60000) - Number(row.totalBreakMinutes || 0)); return this.formatMinutes(minutes); }
@@ -66,6 +70,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
       }
       this.message.set(completedMessage);
       await this.load();
+      if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:attendance-updated", { detail: { source: "attendance-page" } }));
     } catch {
       this.localError.set(this.staff.error() || `Unable to ${action.replace(/-/g, " ")}.`);
     } finally {

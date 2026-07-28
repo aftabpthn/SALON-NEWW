@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
@@ -51,6 +51,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly tabs: Array<{ key: LeaveTab; label: string; icon: string }> = [
     { key: 'requests', label: 'Requests', icon: 'bi-inbox' },
@@ -89,11 +90,13 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   }
 
   async ngOnInit() {
+    this.applyQueryParams();
     await Promise.all([this.loadStaff(), this.reload()]);
   }
 
   get pendingCount() { return this.requests.filter((row) => row.status === 'pending').length; }
   get approvedCount() { return this.requests.filter((row) => row.status === 'approved').length; }
+  get canExport() { return this.activeTab === 'balances' ? this.balances.length > 0 : this.requests.length > 0; }
   get calendarDays() {
     const first = new Date(this.year, this.month - 1, 1);
     const start = new Date(this.year, this.month - 1, 1 - first.getDay());
@@ -112,6 +115,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
     this.loading = true;
     this.error = '';
     try {
+      await this.syncQueryParams();
       await Promise.all([this.loadRequests(), this.loadBalances()]);
     } catch (error) {
       this.error = this.message(error, this.language.text('staff.message.10ffb1ebb7'));
@@ -122,6 +126,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
 
   openCreate() {
     this.form = this.emptyForm();
+    if (this.staffId) this.form.staffId = this.staffId;
     this.createOpen = true;
     this.error = '';
     this.success = '';
@@ -195,15 +200,24 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   }
 
   exportCsv() {
-    if (!this.requests.length) return;
+    if (!this.canExport) return;
+    const body = this.activeTab === 'balances'
+      ? [
+          ['employee', 'code', 'leaveType', 'annualDays', 'usedDays', 'pendingDays', 'remainingDays'],
+          ...this.balances.map((row) => [row.staffName, row.employeeCode || '', row.leaveType, row.annualDays, row.usedDays, row.pendingDays, row.remainingDays]),
+        ]
+      : [
+          ['employee', 'code', 'leaveType', 'startDate', 'endDate', 'days', 'reason', 'status', 'reviewNote'],
+          ...this.requests.map((row) => [row.staffName, row.employeeCode || '', row.leaveType, row.startDate, row.endDate, row.days, row.reason, row.status, row.reviewNote]),
+        ];
     const rows = [
-      [...['employee', 'code', 'leaveType', 'startDate', 'endDate', 'days', 'reason', 'status', 'reviewNote'].map((key) => this.language.text(`staff.export.${key}`))],
-      ...this.requests.map((row) => [row.staffName, row.employeeCode || '', row.leaveType, row.startDate, row.endDate, row.days, row.reason, row.status, row.reviewNote]),
+      body[0].map((key) => this.language.text(`staff.export.${String(key)}`)),
+      ...body.slice(1),
     ];
     const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    link.download = `staff-leave-${this.year}-${String(this.month).padStart(2, '0')}.csv`;
+    link.download = `staff-leave-${this.activeTab}-${this.year}-${String(this.month).padStart(2, '0')}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -215,6 +229,7 @@ export class StaffLeaveManagementPageComponent implements OnInit {
   label(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   staffLabel(row: StaffOption) { return [row.firstName || row.appointmentDisplayName, row.lastName].filter(Boolean).join(' '); }
   backToStaff() { void this.router.navigate(['/staff']); }
+  async selectTab(tab: LeaveTab) { this.activeTab = tab; await this.syncQueryParams(); }
 
   private async loadStaff() {
     try {
@@ -242,6 +257,34 @@ export class StaffLeaveManagementPageComponent implements OnInit {
 
   private emptyForm() {
     return { staffId: '', leaveType: 'casual', startDate: '', endDate: '', reason: '' };
+  }
+
+  private applyQueryParams() {
+    const params = this.route.snapshot.queryParamMap;
+    const tab = params.get('tab');
+    const month = Number(params.get('month'));
+    const year = Number(params.get('year'));
+    const status = params.get('status') || '';
+    if (this.tabs.some((item) => item.key === tab)) this.activeTab = tab as LeaveTab;
+    if (Number.isInteger(month) && month >= 1 && month <= 12) this.month = month;
+    if (this.years.includes(year)) this.year = year;
+    if (['pending', 'approved', 'rejected'].includes(status)) this.status = status;
+    this.staffId = params.get('staffId') || '';
+  }
+
+  private async syncQueryParams() {
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        tab: this.activeTab,
+        month: this.month,
+        year: this.year,
+        staffId: this.staffId || null,
+        status: this.status || null,
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
   }
 
   private unwrap<T>(result: ApiEnvelope<T>, fallback: string): T {

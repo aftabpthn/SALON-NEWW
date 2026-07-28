@@ -165,6 +165,18 @@ test('invoice amount KPIs filter rows using real due and wallet contributions', 
   assert.match(invoicesTemplate, /(\*ngFor="let invoice of visibleInvoices|@for \(invoice of visibleInvoices; track trackByInvoice)/);
 });
 
+test('invoice register uses API filters and keeps zero-value invoices honest', () => {
+  assert.match(invoices, /new URLSearchParams\(\{ page: '1', pageSize: '100' \}\)/);
+  assert.match(invoices, /params\.set\('q', this\.searchText\.trim\(\)\.toLowerCase\(\)\)/);
+  assert.match(invoices, /params\.set\('status', this\.statusFilter\)/);
+  assert.match(invoices, /params\.set\('payment_method', this\.paymentMethodFilter\)/);
+  assert.match(invoices, /return 'No charge'/);
+  assert.match(invoices, /row\.totalPaise === 0 \? 'No charge'/);
+  assert.match(invoicesTemplate, /name="invoiceSearch"/);
+  assert.match(invoicesTemplate, /name="invoiceStatus"/);
+  assert.match(invoicesTemplate, /name="paymentMethod"/);
+});
+
 test('POS checkout preserves paise and sends wallet credit once', () => {
   assert.match(checkout, /fillPayment\(method: PaymentMode\): void/);
   assert.equal((checkout.match(/walletCreditPaise: options\.forceUnpaid \? 0 : paymentSplit\.length \? this\.walletCreditPaise : 0/g) ?? []).length, 1);
@@ -181,6 +193,9 @@ test('POS checkout applies coupons before payment and supports partial wallet ov
   assert.match(checkoutTemplate, /\(click\)="applyCoupon\(\)"/);
   assert.match(posBackend, /"\/pos\/coupons\/preview", post\(preview_pos_coupon\)/);
   assert.match(posBackend, /resolve_coupon_discount\(&state, &tenant_id, &branch_id, &mut payload\)\.await\?/);
+  assert.match(posBackend, /target_service_ids, target_service_categories, target_package_ids/);
+  assert.match(posBackend, /SELECT DISTINCT package_id FROM client_package_credits WHERE tenant_id=\$1 AND branch_id=\$2 AND client_id=\$3 AND id=ANY\(\$4\)/);
+  assert.match(posBackend, /if !id_match && !category_match && !package_match/);
 });
 
 test('wallet payment is capped to the selected client balance', () => {
@@ -274,9 +289,9 @@ test('invoice register links invoice, client, staff and payment mode to their re
   assert.match(invoicesTemplate, /\[routerLink\]="\['\/staff', invoice\.staffId\]"/);
   assert.match(invoicesTemplate, /routerLink="\/pos\/payment-modes"/);
   assert.match(invoicesTemplate, /<span>Payment status<\/span>/);
-  assert.match(invoicesTemplate, /class="payment-status"><em>\{\{ lifecycleLabel\(invoice\) \}\}<\/em>/);
+  assert.match(invoicesTemplate, /class="payment-status"><em class="status-badge" \[ngClass\]="statusTone\(lifecycleLabel\(invoice\)\)">\{\{ lifecycleLabel\(invoice\) \}\}<\/em>/);
   assert.match(invoicesTemplate, /<span>Invoice status<\/span>/);
-  assert.match(invoicesTemplate, /class="invoice-status"><em>\{\{ invoice\.status \|\| '-' \}\}<\/em>/);
+  assert.match(invoicesTemplate, /class="invoice-status"><em class="status-badge" \[ngClass\]="statusTone\(invoice\.status\)">\{\{ invoice\.status \|\| '-' \}\}<\/em>/);
   assert.doesNotMatch(invoicesTemplate, /<button[^>]*class="invoice-row"/);
 });
 

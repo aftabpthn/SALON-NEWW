@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use axum::{
+    body::Body,
     extract::{ConnectInfo, Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{Html, IntoResponse, Response},
@@ -142,6 +143,12 @@ pub fn router() -> Router<AppState> {
         .route("/public/live-consultations", post(live_consultation))
         .route("/marketplace/businesses", get(businesses))
         .route("/marketplace/categories", get(categories))
+        .route("/marketplace/offers", get(marketplace_offers))
+        .route("/marketplace/offers/events", post(marketplace_offer_event))
+        .route(
+            "/marketplace/offers/:id/creative",
+            get(marketplace_offer_creative),
+        )
         .route("/marketplace/businesses/:id", get(business))
         .route(
             "/marketplace/businesses/:id/services",
@@ -287,6 +294,19 @@ struct MarketplaceQuery {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct MarketplaceOffersQuery {
+    branch_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MarketplaceOfferEventRequest {
+    offer_id: String,
+    channel: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct AvailabilityQuery {
     service_id: String,
     date: Option<String>,
@@ -315,6 +335,7 @@ struct BookingRequest {
     end_at: String,
     notes: Option<String>,
     rebook_from_booking_id: Option<String>,
+    source: Option<String>,
     #[serde(default = "default_payment_mode")]
     payment_mode: String,
     #[serde(default)]
@@ -1865,6 +1886,67 @@ async fn categories(State(state): State<AppState>) -> ApiResult<Vec<Value>> {
             .map_err(|_| AppError::internal("failed to load marketplace categories"))?,
     )))
 }
+
+async fn marketplace_offers(
+    State(state): State<AppState>,
+    Query(query): Query<MarketplaceOffersQuery>,
+) -> ApiResult<Vec<Value>> {
+    let branch_id = query.branch_id.as_deref().unwrap_or("").trim();
+    if branch_id.len() > 120 {
+        return Err(AppError::validation("branchId is invalid"));
+    }
+    let rows = repo::marketplace_offers(&state.db, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load marketplace offers"))?;
+    let offer_ids = rows
+        .iter()
+        .filter_map(|offer| offer.get("id").and_then(Value::as_str))
+        .collect::<Vec<_>>();
+    if !offer_ids.is_empty() {
+        sqlx::query("INSERT INTO marketing_offer_events(tenant_id,branch_id,offer_id,event_type,channel) SELECT tenant_id,branch_id,id,'view','customer_app' FROM pos_coupons WHERE id=ANY($1)")
+            .bind(&offer_ids).execute(&state.db).await
+            .map_err(|_| AppError::internal("failed to track customer offer views"))?;
+    }
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn marketplace_offer_event(
+    State(state): State<AppState>,
+    Json(body): Json<MarketplaceOfferEventRequest>,
+) -> ApiResult<Value> {
+    let channel = body.channel.trim().to_ascii_lowercase();
+    if body.offer_id.trim().is_empty()
+        || body.offer_id.trim().len() > 120
+        || !matches!(channel.as_str(), "customer_app" | "instagram" | "whatsapp")
+    {
+        return Err(AppError::validation("offer event is invalid"));
+    }
+    let recorded = sqlx::query_scalar::<_, String>(r#"INSERT INTO marketing_offer_events(tenant_id,branch_id,offer_id,event_type,channel)
+      SELECT tenant_id,branch_id,id,'click',$2 FROM pos_coupons
+      WHERE id=$1 AND active=TRUE AND approval_status='approved' AND show_in_customer_app=TRUE
+        AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW()) RETURNING id"#)
+        .bind(body.offer_id.trim()).bind(&channel).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to track offer click"))?
+        .ok_or_else(|| AppError::not_found("active offer was not found"))?;
+    Ok(Json(ApiResponse::ok(
+        json!({"recorded":!recorded.is_empty()}),
+    )))
+}
+
+async fn marketplace_offer_creative(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    let row = repo::marketplace_offer_creative(&state.db, id.trim())
+        .await
+        .map_err(|_| AppError::internal("failed to load marketplace offer creative"))?
+        .ok_or_else(|| AppError::not_found("offer creative was not found"))?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, row.0)
+        .header(header::CACHE_CONTROL, "public, max-age=300")
+        .body(Body::from(row.1))
+        .map_err(|_| AppError::internal("failed to stream marketplace offer creative"))
+}
 async fn business(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {
     let mut profile = repo::business(&state.db, &id)
         .await
@@ -2071,6 +2153,38 @@ async fn create_customer_booking(
         })?
     };
     let service_ids = body.service_ids.clone();
+    let booking_source = if let Some(source) = body
+        .source
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let parts = source.split(':').collect::<Vec<_>>();
+        if parts.len() != 3
+            || parts[0] != "marketing_offer"
+            || !matches!(parts[2], "customer_app" | "instagram" | "whatsapp")
+        {
+            return Err(appointments::ApiError::bad_request(
+                "booking source is invalid",
+            ));
+        }
+        let valid = sqlx::query_scalar::<_, bool>(r#"SELECT EXISTS(SELECT 1 FROM pos_coupons offer
+          WHERE offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=$3
+            AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+            AND (offer.starts_at IS NULL OR offer.starts_at<=NOW()) AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())
+            AND (CARDINALITY(offer.target_service_ids)=0 OR offer.target_service_ids && $4))"#)
+            .bind(booking_tenant_id).bind(booking_branch_id).bind(parts[1]).bind(&service_ids)
+            .fetch_one(&state.db).await
+            .map_err(|_| appointments::ApiError::internal("failed to validate booking source"))?;
+        if !valid {
+            return Err(appointments::ApiError::bad_request(
+                "offer is not applicable to this booking",
+            ));
+        }
+        source.to_string()
+    } else {
+        "public-booking".to_string()
+    };
     let rebook_from_booking_id = body
         .rebook_from_booking_id
         .as_deref()
@@ -2142,11 +2256,11 @@ async fn create_customer_booking(
             notes: body.notes.unwrap_or_default(),
             status: "booked".to_string(),
             booking_group_id: String::new(),
-            source_channel: Some("booking-portal-v2".to_string()),
+            source_channel: Some("customer-app".to_string()),
             source: Some(
                 rebook_from_booking_id
                     .map(|id| format!("public-booking:rebook:{id}"))
-                    .unwrap_or_else(|| "public-booking".to_string()),
+                    .unwrap_or(booking_source),
             ),
             chair_room_id: String::new(),
             service_selections: body.service_selections,

@@ -94,6 +94,9 @@ fn db_error(error: sqlx::Error, message: &str) -> AppError {
     match error {
         sqlx::Error::RowNotFound => AppError::validation(message),
         sqlx::Error::Database(ref e) if e.is_unique_violation() => AppError::conflict(message),
+        sqlx::Error::Database(ref e) if e.code().as_deref() == Some("23514") => {
+            AppError::validation(message)
+        }
         sqlx::Error::Protocol(ref value) if value.contains("maker cannot") => {
             AppError::forbidden("requester cannot approve their own override")
         }
@@ -304,7 +307,12 @@ pub async fn create_container(
         &text(&p.idempotency_key, "idempotencyKey", 160)?,
     )
     .await
-    .map_err(|e| db_error(e, "backbar container could not be created"))
+    .map_err(|e| {
+        db_error(
+            e,
+            "no unreserved retail unit is available for this sealed container",
+        )
+    })
 }
 pub async fn open_container(
     db: &PgPool,

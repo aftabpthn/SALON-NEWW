@@ -12,8 +12,12 @@ test('cash drawer clears stale state and exposes honest section states', () => {
   assert.match(component, /sectionErrors = \{ staff: '', movements: '', tills: '', deposits: '', reconciliations: '', report: '' \}/);
   assert.match(component, /\/staff\/list\?\$\{params\.toString\(\)\}/);
   assert.match(component, /next: \(\) => \{ reset\(\); this\.busy = false; reload\(\)/);
+  assert.match(component, /reportCanShowCloseTotals/);
+  assert.match(component, /!\['open', 'not_opened'\]\.includes\(this\.report\.status\)/);
   assert.match(template, /<as-date-picker/);
   assert.match(template, /displayDate\(businessDate\)/);
+  assert.match(template, /reportCanShowCloseTotals/);
+  assert.match(template, /Drawer status/);
   assert.match(template, /sectionErrors\.deposits/);
   assert.match(template, /sectionErrors\.tills/);
   assert.match(template, /sectionErrors\.movements/);

@@ -225,6 +225,12 @@ Current domain folder names:
 - Default page section gaps should stay compact; increase spacing only when the user explicitly asks or the layout needs it for readability.
 - Empty states should be short and compact; avoid oversized blank panels before real data exists.
 
+## Staff App Mobile And Loading Rule
+
+- Staff App changes must be mobile-friendly first: no desktop-only layouts, clipped text, oversized controls, or horizontal overflow on phone widths.
+- Render the first useful API-backed state as soon as the core data is available; load optional panels, preferences, notifications, and secondary metrics after the first screen is usable.
+- Every Staff App loading state must be compact, visible immediately, and backed by real API/cache state only; do not block the first screen on non-critical calls.
+
 ## Frontend Utility Icon Button Rule
 
 - Utility icon buttons, grid buttons, toolbar icon buttons, and small action icon controls should use a neutral white background by default.

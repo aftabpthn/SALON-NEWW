@@ -7,6 +7,7 @@ import {
   StaffBusinessAppointment,
   StaffBusinessInvoiceDetail,
   StaffBusinessQuery,
+  StaffBusinessServiceInvoice,
 } from "../../core/staff-app.service";
 import { businessDate } from "../../core/business-date";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
@@ -164,19 +165,53 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
 
         @if (data.billingVisible) {
           <details class="panel">
-            <summary>Connected invoice totals · {{ data.summary.bills }} bills</summary>
+            <summary>My service totals · {{ data.summary.bills }} invoices</summary>
             <section class="grid four">
-              <article class="kpi"><span>Bill amount</span><strong>{{ formatMoney(data.summary.subtotalPaise) }}</strong></article>
-              <article class="kpi"><span>Manual discount</span><strong>{{ formatMoney(data.summary.discountPaise) }}</strong></article>
-              <article class="kpi"><span>Coupon discount</span><strong>{{ formatMoney(data.summary.couponDiscountPaise) }}</strong></article>
-              <article class="kpi"><span>After discount</span><strong>{{ formatMoney(data.summary.afterDiscountPaise) }}</strong></article>
-              <article class="kpi"><span>GST</span><strong>{{ formatMoney(data.summary.gstPaise) }}</strong></article>
-              <article class="kpi"><span>Grand total</span><strong>{{ formatMoney(data.summary.totalPaise) }}</strong></article>
-              <article class="kpi"><span>Paid</span><strong>{{ formatMoney(data.summary.paidPaise) }}</strong></article>
-              <article class="kpi"><span>Due</span><strong>{{ formatMoney(data.summary.duePaise) }}</strong></article>
+              @if (data.permissions.serviceAmount) {
+                <article class="kpi"><span>Original amount</span><strong>{{ formatMoney(data.summary.subtotalPaise) }}</strong></article>
+                <article class="kpi"><span>Taxable amount</span><strong>{{ formatMoney(data.summary.afterDiscountPaise) }}</strong></article>
+                <article class="kpi"><span>Final service total</span><strong>{{ formatMoney(data.summary.totalPaise) }}</strong></article>
+              }
+              @if (data.permissions.discount) { <article class="kpi"><span>Discount</span><strong>{{ formatMoney(data.summary.discountPaise) }}</strong></article> }
+              @if (data.permissions.tax) { <article class="kpi"><span>GST</span><strong>{{ formatMoney(data.summary.gstPaise) }}</strong></article> }
             </section>
           </details>
+
+          @if (data.permissions.serviceAmount) {
+            <details class="panel">
+              <summary>Revenue attribution</summary>
+              <section class="grid four">
+                <article class="kpi"><span>Service</span><strong>{{ formatMoney(data.performance.serviceRevenuePaise) }}</strong></article>
+                <article class="kpi"><span>Product</span><strong>{{ formatMoney(data.performance.productRevenuePaise) }}</strong></article>
+                <article class="kpi"><span>Membership</span><strong>{{ formatMoney(data.performance.membershipRevenuePaise) }}</strong></article>
+                <article class="kpi"><span>Package</span><strong>{{ formatMoney(data.performance.packageRevenuePaise) }}</strong></article>
+                <article class="kpi"><span>Gift card</span><strong>{{ formatMoney(data.performance.giftCardRevenuePaise) }}</strong></article>
+              </section>
+            </details>
+          }
         }
+
+        <section class="panel">
+          <div class="panel-title"><h2>My service invoices</h2><span>{{ (data.serviceInvoices || []).length }} shown</span></div>
+          <div class="list">
+            @for (line of (data.serviceInvoices || []); track line.saleId + ':' + line.id) {
+              <div class="row service-invoice-row">
+                <div class="row-main">
+                  <strong>{{ line.serviceName }}</strong>
+                  <small>{{ dateLabel(line.businessDate) }} · {{ line.refundStatus }} @if (line.splitPercent < 100) { · {{ line.splitPercent }}% share }</small>
+                  @if (line.clientName) { <small>Client: {{ line.clientName }}</small> }
+                  @if (line.invoiceNumber) { <small>Invoice: {{ line.invoiceNumber }}</small> }
+                  @if (data.permissions.serviceAmount) { <small>Original {{ formatMoney(line.grossPaise) }} · Taxable {{ formatMoney(line.taxablePaise) }} · Final {{ formatMoney(line.totalPaise) }}</small> }
+                  @if (data.permissions.discount) { <small>Discount {{ formatMoney(line.discountPaise) }}</small> }
+                  @if (data.permissions.tax) { <small>GST {{ line.gstPercent ?? 0 }}% · {{ formatMoney(line.gstPaise) }} · CGST {{ formatMoney(line.cgstPaise) }} · SGST {{ formatMoney(line.sgstPaise) }} · IGST {{ formatMoney(line.igstPaise) }} · {{ line.taxMode || 'mode not recorded' }}</small> }
+                  @if (data.permissions.serviceAmount && line.refundedPaise) { <small>Refund {{ formatMoney(line.refundedPaise) }} · Net {{ formatMoney(line.netTotalPaise) }}</small> }
+                  @if (data.permissions.commission) { <small>Commission {{ formatMoney(line.commissionPaise) }}</small> }
+                </div>
+                @if (data.permissions.invoiceDetail) { <button class="link-button" type="button" (click)="openInvoice(line, $event)">Invoice</button> }
+              </div>
+            } @empty { <p class="empty">No service invoices found.</p> }
+          </div>
+        </section>
 
         @if (data.earnings; as earnings) {
           <details class="panel">
@@ -245,25 +280,10 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
                       <small>{{ liveElapsed(item) }} min elapsed · {{ liveRemaining(item) }} min remaining @if (liveOverrun(item)) { · {{ liveOverrun(item) }} min overrun }</small>
                     }
                     @if (!item.timer.live && item.timer.overrunMinutes) { <small>{{ item.timer.overrunMinutes }} min overrun</small> }
-                    @if (data.billingVisible && item.attribution; as share) {
-                      <p><strong>My attributed revenue {{ formatMoney(share.afterDiscountPaise) }}</strong></p>
-                      <small>Gross {{ formatMoney(share.grossPaise) }} · Discount {{ formatMoney(share.discountPaise) }} · GST {{ formatMoney(share.gstPaise) }} · Paid {{ formatMoney(share.paidPaise) }} · Due {{ formatMoney(share.duePaise) }}</small>
-                    }
-                    @if (data.billingVisible && item.billing; as bill) {
-                      <p>Bill {{ bill.invoiceNumber || bill.saleId }} · {{ bill.invoiceStatus || 'pending' }}</p>
-                      <small>Amount {{ formatMoney(bill.subtotalPaise) }} · Discount {{ formatMoney(bill.discountPaise) }} · Coupon {{ formatMoney(bill.couponDiscountPaise) }}</small>
-                      <small>After discount {{ formatMoney(bill.afterDiscountPaise) }} · GST {{ formatMoney(bill.gstPaise) }} · Total {{ formatMoney(bill.totalPaise) }}</small>
-                      <small>Paid {{ formatMoney(bill.paidPaise) }} · Due {{ formatMoney(bill.duePaise) }}</small>
-                    } @else if (data.billingVisible) {
-                      <p>Bill not generated for this appointment.</p>
-                    } @else {
-                      <p>Billing details are restricted for your role.</p>
-                    }
                     </div>
                     <div class="row-actions">
                       <span class="badge" [class.red]="item.state === 'late'" [class.green]="item.state === 'active'">{{ item.status }}</span>
                       <button class="link-button" type="button" (click)="openAppointment(item, $event)">Details</button>
-                      @if (data.permissions.invoiceDetail && item.billing?.invoiceId) { <button class="link-button" type="button" (click)="openInvoice(item, $event)">Invoice</button> }
                     </div>
                   </div>
                 </details>
@@ -272,9 +292,6 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             <details class="business-day-summary">
               <summary>Day summary</summary>
               <p>{{ group.summary.completedServices }} completed · {{ formatMinutes(group.summary.workedMinutes) }} worked · {{ formatPercent(group.summary.performance.utilizationPercent) }} utilized</p>
-              @if (data.billingVisible) {
-                <p>Bill {{ formatMoney(group.summary.subtotalPaise) }} · Discount {{ formatMoney(group.summary.discountPaise) }} · Coupon {{ formatMoney(group.summary.couponDiscountPaise) }} · Due {{ formatMoney(group.summary.duePaise) }}</p>
-              }
             </details>
           </section>
         } @empty {
@@ -315,20 +332,20 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             @if (invoiceError()) { <section staffPageState class="notice">{{ invoiceError() }}</section> }
             @if (invoiceDetail(); as invoice) {
               <section class="grid two compact-grid">
-                <article class="kpi"><span>Invoice</span><strong>{{ invoice.invoiceNumber || invoice.id }}</strong><small>{{ invoice.status }}</small></article>
-                <article class="kpi"><span>Total</span><strong>{{ formatMoney(invoice.totals.totalPaise) }}</strong><small>{{ formatMoney(invoice.totals.duePaise) }} due</small></article>
+                @if (invoice.invoiceNumber) { <article class="kpi"><span>Invoice</span><strong>{{ invoice.invoiceNumber }}</strong><small>{{ invoice.status }}</small></article> }
+                @if (business()?.permissions?.serviceAmount) { <article class="kpi"><span>My service total</span><strong>{{ formatMoney(invoice.totals.totalPaise) }}</strong></article> }
               </section>
               @if (invoice.clientName) { <div class="list"><div class="row"><strong>Client name</strong><span>{{ invoice.clientName }}</span></div></div> }
               <div class="list">
                 @for (item of invoice.items; track item.id) {
-                  <div class="row"><div><strong>{{ item.name }}</strong><small>{{ item.type }} · Qty {{ item.quantity }}</small></div><span>{{ formatMoney(item.amountPaise) }}</span></div>
-                } @empty { <p class="empty">No invoice items available.</p> }
-              </div>
-              <h3>Payments</h3>
-              <div class="list">
-                @for (payment of invoice.payments; track payment.id) {
-                  <div class="row"><div><strong>{{ payment.mode || 'Payment' }}</strong><small>{{ payment.createdAt | date:'short':'+0530' }}</small></div><span>{{ formatMoney(payment.amountPaise) }}</span></div>
-                } @empty { <p class="empty">No payments recorded.</p> }
+                  <div class="row service-invoice-row"><div class="row-main"><strong>{{ item.serviceName }}</strong><small>Qty {{ item.quantity }} @if (item.splitPercent < 100) { · {{ item.splitPercent }}% share }</small>
+                    @if (business()?.permissions?.serviceAmount) { <small>Original {{ formatMoney(item.grossPaise) }} · Taxable {{ formatMoney(item.taxablePaise) }} · Final {{ formatMoney(item.totalPaise) }}</small> }
+                    @if (business()?.permissions?.discount) { <small>Discount {{ formatMoney(item.discountPaise) }}</small> }
+                    @if (business()?.permissions?.tax) { <small>GST {{ item.gstPercent ?? 0 }}% · {{ formatMoney(item.gstPaise) }} · CGST {{ formatMoney(item.cgstPaise) }} · SGST {{ formatMoney(item.sgstPaise) }} · IGST {{ formatMoney(item.igstPaise) }} · {{ item.taxMode || 'mode not recorded' }}</small> }
+                    @if (business()?.permissions?.serviceAmount && item.refundedPaise) { <small>Refund {{ formatMoney(item.refundedPaise) }} · Net {{ formatMoney(item.netTotalPaise) }}</small> }
+                    @if (business()?.permissions?.commission) { <small>Commission {{ formatMoney(item.commissionPaise) }}</small> }
+                  </div></div>
+                } @empty { <p class="empty">No service lines available.</p> }
               </div>
             }
           </aside>
@@ -391,9 +408,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
       suggestions.push({ type, value: cleanValue });
     };
 
-    for (const appointment of this.business()?.appointments || []) {
-      add("Invoice", appointment.billing?.invoiceNumber || appointment.billing?.saleId);
-    }
+    for (const invoice of this.business()?.serviceInvoices || []) add("Invoice", invoice.invoiceNumber);
     for (const service of this.business()?.services || []) add("Service", service.name);
 
     return suggestions
@@ -444,7 +459,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
         this.business.set(data);
       } else {
         const byId = new Map([...current.appointments, ...data.appointments].map((item) => [item.id, item]));
-        this.business.set({ ...data, appointments: [...byId.values()] });
+        const serviceInvoices = new Map([...(current.serviceInvoices || []), ...(data.serviceInvoices || [])].map((item) => [`${item.saleId}:${item.id}`, item]));
+        this.business.set({ ...data, appointments: [...byId.values()], serviceInvoices: [...serviceInvoices.values()] });
       }
     } catch {
       // StaffAppService exposes the API error message in its error signal.
@@ -483,7 +499,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     void this.load(true);
   }
 
-  canReadBusiness(): boolean { return this.staff.hasPermission("read:appointments"); }
+  canReadBusiness(): boolean { return this.staff.hasPermission("staff.app.business.read"); }
   formatMinutes(minutes: number): string { const safe = Math.max(0, Number(minutes || 0)); return `${Math.floor(safe / 60)}h ${safe % 60}m`; }
   formatMoney(paise: number | null): string { return formatPaiseInr(paise); }
   formatPercent(value: number | null): string { return value === null ? "—" : `${value}%`; }
@@ -555,8 +571,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     setTimeout(() => document.getElementById("business-appointment-drawer")?.focus());
   }
 
-  async openInvoice(item: StaffBusinessAppointment, event: Event) {
-    const invoiceId = item.billing?.invoiceId;
+  async openInvoice(item: StaffBusinessServiceInvoice, event: Event) {
+    const invoiceId = item.invoiceId;
     if (!invoiceId || !this.business()?.permissions.invoiceDetail) return;
     this.drawerTrigger = event.currentTarget as HTMLElement;
     this.selectedAppointment.set(null);
@@ -591,6 +607,11 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   @HostListener("document:keydown.escape")
   onEscape() {
     if (this.selectedAppointment() || this.invoiceDrawerOpen()) this.closeDrawers();
+  }
+
+  @HostListener("window:aura:business-updated")
+  onBusinessUpdated() {
+    if (this.canReadBusiness()) void this.load(true);
   }
 
   private query(page = 1): StaffBusinessQuery {

@@ -4,6 +4,150 @@ use std::path::Path;
 
 pub const PAYMENT_PROVIDERS: &[&str] = &["razorpay", "cashfree", "phonepe"];
 
+pub struct PaymentProviderCatalogEntry {
+    pub provider: &'static str,
+    pub display_name: &'static str,
+    pub regions: &'static [&'static str],
+    pub countries: &'static [&'static str],
+    pub currencies: &'static [&'static str],
+    pub documentation_url: &'static str,
+    pub implemented: bool,
+    pub recommended: bool,
+}
+
+pub const PAYMENT_PROVIDER_CATALOG: &[PaymentProviderCatalogEntry] = &[
+    PaymentProviderCatalogEntry {
+        provider: "aurashine_payments",
+        display_name: "AuraShine Payments",
+        regions: &["Global"],
+        countries: &["*"],
+        currencies: &["Multi-currency"],
+        documentation_url: "",
+        implemented: false,
+        recommended: true,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "razorpay",
+        display_name: "Razorpay",
+        regions: &["India"],
+        countries: &["IN"],
+        currencies: &["INR"],
+        documentation_url: "https://razorpay.com/docs/payments/payment-links/",
+        implemented: true,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "cashfree",
+        display_name: "Cashfree",
+        regions: &["India"],
+        countries: &["IN"],
+        currencies: &["INR"],
+        documentation_url: "https://www.cashfree.com/docs/payments/payment-links/overview",
+        implemented: true,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "phonepe",
+        display_name: "PhonePe",
+        regions: &["India"],
+        countries: &["IN"],
+        currencies: &["INR"],
+        documentation_url: "https://developer.phonepe.com/payment-gateway/",
+        implemented: true,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "stripe",
+        display_name: "Stripe",
+        regions: &["Global"],
+        countries: &["US", "GB", "CA", "AU", "SG", "AE"],
+        currencies: &["Multi-currency"],
+        documentation_url: "https://stripe.com/global",
+        implemented: true,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "paypal",
+        display_name: "PayPal",
+        regions: &["Global"],
+        countries: &["IN", "US", "GB", "AE", "CA", "AU", "SG", "BR", "MX"],
+        currencies: &["Multi-currency"],
+        documentation_url: "https://developer.paypal.com/docs/checkout/",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "adyen",
+        display_name: "Adyen",
+        regions: &["Global"],
+        countries: &["US", "GB", "AE", "CA", "AU", "SG"],
+        currencies: &["Multi-currency"],
+        documentation_url: "https://docs.adyen.com/online-payments",
+        implemented: true,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "square",
+        display_name: "Square",
+        regions: &["North America", "Europe", "Asia Pacific"],
+        countries: &["US", "GB", "CA", "AU"],
+        currencies: &["Local currency"],
+        documentation_url: "https://developer.squareup.com/docs/international-development",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "mollie",
+        display_name: "Mollie",
+        regions: &["Europe"],
+        countries: &["GB", "NL", "BE", "DE", "FR"],
+        currencies: &["Multi-currency"],
+        documentation_url: "https://docs.mollie.com/docs/accepting-payments",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "mercadopago",
+        display_name: "Mercado Pago",
+        regions: &["Latin America"],
+        countries: &["BR", "MX", "AR", "CL", "CO", "PE", "UY"],
+        currencies: &["Local currency"],
+        documentation_url: "https://www.mercadopago.com/developers/en/docs",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "paystack",
+        display_name: "Paystack",
+        regions: &["Africa"],
+        countries: &["NG", "GH", "ZA", "KE", "CI"],
+        currencies: &["NGN", "GHS", "ZAR", "KES", "XOF", "USD"],
+        documentation_url: "https://paystack.com/docs/payments/",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "flutterwave",
+        display_name: "Flutterwave",
+        regions: &["Africa"],
+        countries: &["NG", "GH", "ZA", "KE", "UG", "TZ", "RW"],
+        currencies: &["Multi-currency"],
+        documentation_url: "https://developer.flutterwave.com/docs/collecting-payments/overview",
+        implemented: false,
+        recommended: false,
+    },
+    PaymentProviderCatalogEntry {
+        provider: "tap",
+        display_name: "Tap Payments",
+        regions: &["Middle East"],
+        countries: &["AE", "SA", "KW", "BH", "QA", "OM"],
+        currencies: &["Local currency"],
+        documentation_url: "https://developers.tap.company/docs",
+        implemented: false,
+        recommended: false,
+    },
+];
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct Settings {
@@ -48,6 +192,7 @@ pub struct Settings {
     pub aws_region: Option<String>,
     pub aws_s3_bucket: Option<String>,
     pub cors_allowed_origins: Vec<String>,
+    pub customer_app_base_url: String,
     pub enable_dev_session: bool,
     pub dev_session_secret: Option<String>,
     pub ai_service_url: Option<String>,
@@ -83,6 +228,12 @@ pub struct Settings {
     pub phonepe_webhook_password: Option<String>,
     pub payment_provider_environment: String,
     pub payment_return_url: Option<String>,
+    pub stripe_secret_key: Option<String>,
+    pub stripe_webhook_secret: Option<String>,
+    pub adyen_api_key: Option<String>,
+    pub adyen_hmac_key: Option<String>,
+    pub adyen_merchant_account: Option<String>,
+    pub adyen_live_prefix: Option<String>,
 }
 
 impl Settings {
@@ -102,6 +253,14 @@ impl Settings {
         let jwt_access_secret = secure_secret("JWT_ACCESS_SECRET")?;
         let jwt_refresh_secret = secure_secret("JWT_REFRESH_SECRET")?;
         let cors_allowed_origins = csv_var("CORS_ALLOWED_ORIGINS");
+        let customer_app_base_url = var_or("CUSTOMER_APP_BASE_URL", "http://127.0.0.1:4310")
+            .trim_end_matches('/')
+            .to_string();
+        if !customer_app_base_url.starts_with("http://")
+            && !customer_app_base_url.starts_with("https://")
+        {
+            return Err(anyhow!("CUSTOMER_APP_BASE_URL must be an HTTP(S) URL"));
+        }
         let enable_dev_session = var_or_parse("ENABLE_DEV_SESSION", false)?;
         if !is_local_env(&app_env) && cors_allowed_origins.is_empty() {
             return Err(anyhow!(
@@ -196,6 +355,7 @@ impl Settings {
                 .ok()
                 .filter(|v| !v.is_empty()),
             cors_allowed_origins,
+            customer_app_base_url,
             enable_dev_session,
             dev_session_secret,
             ai_service_url: std::env::var("AI_SERVICE_URL")
@@ -271,6 +431,12 @@ impl Settings {
             payment_return_url: std::env::var("PAYMENT_RETURN_URL")
                 .ok()
                 .filter(|value| value.starts_with("https://")),
+            stripe_secret_key: optional_secure_secret("STRIPE_SECRET_KEY")?,
+            stripe_webhook_secret: optional_secure_secret("STRIPE_WEBHOOK_SECRET")?,
+            adyen_api_key: optional_secure_secret("ADYEN_API_KEY")?,
+            adyen_hmac_key: optional_secure_secret("ADYEN_HMAC_KEY")?,
+            adyen_merchant_account: optional_value("ADYEN_MERCHANT_ACCOUNT"),
+            adyen_live_prefix: optional_value("ADYEN_LIVE_PREFIX"),
         })
     }
 
@@ -330,6 +496,14 @@ impl Settings {
 
     pub fn payment_provider_enabled(&self, provider: &str) -> bool {
         match provider {
+            "stripe" => self.stripe_secret_key.is_some() && self.payment_return_url.is_some(),
+            "adyen" => {
+                self.adyen_api_key.is_some()
+                    && self.adyen_merchant_account.is_some()
+                    && self.payment_return_url.is_some()
+                    && (self.payment_provider_environment == "sandbox"
+                        || self.adyen_live_prefix.is_some())
+            }
             "razorpay" => self.razorpay_payment_links_enabled(),
             "cashfree" => {
                 self.cashfree_client_id.is_some() && self.cashfree_client_secret.is_some()
@@ -346,6 +520,8 @@ impl Settings {
 
     pub fn payment_provider_webhook_configured(&self, provider: &str) -> bool {
         match provider {
+            "stripe" => self.stripe_webhook_secret.is_some(),
+            "adyen" => self.adyen_hmac_key.is_some(),
             "razorpay" => self.razorpay_webhook_configured(),
             "cashfree" => self.cashfree_client_secret.is_some(),
             "phonepe" => {

@@ -120,59 +120,31 @@ pub struct UsageSnapshot {
 pub struct EntitlementContext {
     pub tenant_status: String,
     pub subscription_status: Option<String>,
+    pub features_json: Option<Value>,
     pub included_branches: Option<i32>,
     pub overage_branch_paise: Option<i64>,
     pub active_branch_count: i64,
-    pub plan_features: Option<serde_json::Value>,
-    pub grace_period_days: Option<i32>,
-    pub suspension_policy: Option<String>,
-    pub retention_window_days: Option<i32>,
-    pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
-    pub trial_ends_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub cancelled_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub override_status: Option<String>,
-    pub override_expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 const ENTITLEMENT_CONTEXT_SQL: &str = r#"
     SELECT tenant.status AS tenant_status,
            subscription.status AS subscription_status,
+           subscription.features_json,
            subscription.included_branches,
            subscription.overage_branch_paise,
            (SELECT COUNT(*) FROM branches branch
-             WHERE branch.tenant_id=tenant.id AND branch.active=TRUE) AS active_branch_count,
-           subscription.features_json AS plan_features,
-           subscription.grace_period_days,
-           subscription.suspension_policy,
-           subscription.retention_window_days,
-           subscription.current_period_end,
-           subscription.trial_ends_at,
-           subscription.cancelled_at,
-           override.override_status,
-           override.expires_at AS override_expires_at
+             WHERE branch.tenant_id=tenant.id AND branch.active=TRUE) AS active_branch_count
       FROM tenants tenant
       LEFT JOIN LATERAL (
-        SELECT current.id AS subscription_id,current.status,
-               current.current_period_end,current.trial_ends_at,current.cancelled_at,
-               plan.included_branches,plan.overage_branch_paise,plan.features_json,
-               plan.grace_period_days,plan.suspension_policy,plan.retention_window_days
+        SELECT current.status,plan.features_json,plan.included_branches,plan.overage_branch_paise
           FROM saas_subscriptions current
           JOIN saas_plans plan ON plan.id=current.plan_id
          WHERE current.tenant_id=tenant.id::text
-         ORDER BY CASE WHEN current.status IN ('trialing','active','past_due','grace','paused','suspended')
+         ORDER BY CASE WHEN current.status IN ('trialing','active','past_due','paused')
                        THEN 0 ELSE 1 END,
                   current.created_at DESC
          LIMIT 1
       ) subscription ON TRUE
-      LEFT JOIN LATERAL (
-        SELECT active_override.override_status,active_override.expires_at
-          FROM saas_subscription_overrides active_override
-         WHERE active_override.subscription_id=subscription.subscription_id
-           AND active_override.revoked_at IS NULL
-           AND active_override.expires_at > NOW()
-         ORDER BY active_override.created_at DESC
-         LIMIT 1
-      ) override ON TRUE
      WHERE tenant.id::text=$1
 "#;
 
@@ -536,78 +508,6 @@ pub async fn update_subscription(
 ) -> Result<bool, sqlx::Error> {
     let changed=sqlx::query("UPDATE saas_subscriptions s SET plan_id=p.id,status=$4,cancel_at_period_end=$5,cancelled_at=CASE WHEN $4='cancelled' THEN NOW() ELSE NULL END,updated_by=$6,updated_at=NOW(),version=s.version+1 FROM saas_plans p WHERE s.id=$1 AND s.version=$2 AND p.id=$3 AND (p.active=TRUE OR p.id=s.plan_id)")
         .bind(id).bind(version).bind(plan_id).bind(status).bind(cancel_at_period_end).bind(actor).execute(db).await?.rows_affected();
-    Ok(changed > 0)
-}
-
-pub async fn create_subscription_override(
-    db: &PgPool,
-    subscription_id: &str,
-    override_status: &str,
-    reason: &str,
-    expires_at: DateTime<Utc>,
-    actor: &str,
-) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar::<_, Value>(
-        r#"
-        INSERT INTO saas_subscription_overrides (
-          tenant_id, subscription_id, override_status, reason, expires_at, created_by
-        )
-        SELECT s.tenant_id, s.id, $2, $3, $4, $5
-          FROM saas_subscriptions s
-         WHERE s.id=$1
-        RETURNING jsonb_build_object(
-          'id', id, 'tenantId', tenant_id, 'subscriptionId', subscription_id,
-          'overrideStatus', override_status, 'reason', reason,
-          'expiresAt', expires_at, 'createdBy', created_by, 'createdAt', created_at
-        )
-        "#,
-    )
-    .bind(subscription_id)
-    .bind(override_status)
-    .bind(reason)
-    .bind(expires_at)
-    .bind(actor)
-    .fetch_optional(db)
-    .await
-}
-
-pub async fn list_subscription_overrides(
-    db: &PgPool,
-    subscription_id: &str,
-) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar::<_, Value>(
-        r#"
-        SELECT jsonb_build_object(
-          'id', id, 'tenantId', tenant_id, 'subscriptionId', subscription_id,
-          'overrideStatus', override_status, 'reason', reason,
-          'expiresAt', expires_at, 'createdBy', created_by, 'createdAt', created_at,
-          'revokedAt', revoked_at, 'revokedBy', revoked_by,
-          'active', revoked_at IS NULL AND expires_at > NOW()
-        )
-        FROM saas_subscription_overrides
-        WHERE subscription_id=$1
-        ORDER BY created_at DESC
-        LIMIT 200
-        "#,
-    )
-    .bind(subscription_id)
-    .fetch_all(db)
-    .await
-}
-
-pub async fn revoke_subscription_override(
-    db: &PgPool,
-    override_id: &str,
-    actor: &str,
-) -> Result<bool, sqlx::Error> {
-    let changed = sqlx::query(
-        "UPDATE saas_subscription_overrides SET revoked_at=NOW(), revoked_by=$2 WHERE id=$1 AND revoked_at IS NULL",
-    )
-    .bind(override_id)
-    .bind(actor)
-    .execute(db)
-    .await?
-    .rows_affected();
     Ok(changed > 0)
 }
 

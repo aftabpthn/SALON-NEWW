@@ -11,7 +11,7 @@ type Tab = 'Overview' | 'Integrations' | 'API Keys' | 'Webhooks' | 'Imports' | '
 type Provider = { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string };
 type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
 type ConnectorSyncJob = { id: string; provider: string; triggerSource: string; status: string; attempts: number; lastError: string; createdAt: string; completedAt?: string };
-type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; status: string; lastUsedAt?: string; createdAt: string };
+type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; ipAllowlistJson: string[]; rateLimitPerMinute: number; status: string; lastUsedAt?: string; createdAt: string };
 type WebhookRow = { id: string; name: string; endpointUrl: string; events: string[]; active: boolean; updatedAt: string };
 type UploadSession = { id: string; missingParts: number[]; receivedBytes: number; expectedSizeBytes: number; status: string };
 type MappingSuggestions = { source: string; suggestions: Record<string, string>; unmatchedColumns: string[] };
@@ -25,11 +25,11 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   readonly migration = inject(DataMigrationStore);
   readonly tabs: Tab[] = ['Overview', 'Integrations', 'API Keys', 'Webhooks', 'Imports', 'Exports'];
-  readonly apiScopes = ['clients.read', 'appointments.read', 'sales.read'];
+  readonly apiScopes = ['clients.read', 'appointments.read', 'sales.read', 'staff.read'];
   readonly webhookEvents = ['client.created', 'appointment.created', 'appointment.status_changed', 'sale.status_changed'];
   activeTab: Tab = 'Imports'; providers: Provider[] = []; connectors: ConnectorRow[] = []; connectorJobs: ConnectorSyncJob[] = []; apiKeys: ApiKeyRow[] = []; webhooks: WebhookRow[] = [];
   drawer: 'import' | 'api-key' | 'webhook' | 'governance' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; selectedJob: ImportJob | null = null;
-  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; suggestedMapping: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, 'merge' | 'keep' | 'link'> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[] };
+  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; suggestedMapping: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, 'merge' | 'keep' | 'link'> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[], ipAllowlist: '', rateLimitPerMinute: 60 };
   webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] as string[] }; revealedSecret = '';
   netsuiteAccountId = '';
   selectedSourceFile: File | null = null; selectedSourceFileId = ''; uploadSessionId = ''; uploadProgress = 0; uploadStatus = '';
@@ -68,7 +68,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
 
   openImport() { this.entity = ''; this.mode = 'dry-run'; this.fileName = ''; this.csvText = ''; this.rowCount = 0; this.selectedMappingId = ''; this.mappingName = ''; this.mappingSource = ''; this.suggestedMapping = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.chunkSize = 5000; this.allowPartialImport = false; this.selectedSourceFile = null; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = ''; this.selectedJob = null; this.migration.clearGovernance(); this.drawer = 'import'; }
   queueEvidence(file: SourceFile) { this.openImport(); this.fileName = file.originalFileName; this.selectedSourceFileId = file.id; this.uploadStatus = 'Evidence verified'; }
-  openApiKey() { if (!this.canManageApiClients) return; this.apiKeyDraft = { name: '', scopes: ['clients.read'] }; this.revealedSecret = ''; this.drawer = 'api-key'; }
+  openApiKey() { if (!this.canManageApiClients) return; this.apiKeyDraft = { name: '', scopes: ['clients.read'], ipAllowlist: '', rateLimitPerMinute: 60 }; this.revealedSecret = ''; this.drawer = 'api-key'; }
   openWebhook() { this.webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] }; this.revealedSecret = ''; this.drawer = 'webhook'; }
   closeDrawer() { if (!this.busy) { this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); } }
   toggleScope(scope: string) { this.apiKeyDraft.scopes = this.toggle(this.apiKeyDraft.scopes, scope); }
@@ -146,7 +146,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs', { entity: this.entity, fileName: this.fileName, mode: this.mode, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions })); this.drawer = ''; await this.reloadImportData(); }, 'Import job could not be created');
   }
   async downloadEvidence(file: SourceFile) { await this.action(async () => this.downloadBlob(await firstValueFrom(this.api.getBlob(`/settings/integrations/import-source-files/${file.id}/evidence`)), file.originalFileName), 'Source evidence could not be downloaded'); }
-  async saveApiKey() { if (!this.canManageApiClients || !this.apiKeyDraft.name.trim() || !this.apiKeyDraft.scopes.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/api-keys', this.apiKeyDraft)); this.revealedSecret = result.data?.apiKey || ''; await this.reload(); }, 'API key could not be created'); }
+  async saveApiKey() { if (!this.canManageApiClients || !this.apiKeyDraft.name.trim() || !this.apiKeyDraft.scopes.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/api-keys', { ...this.apiKeyDraft, ipAllowlist: this.apiKeyDraft.ipAllowlist.split(/[\s,]+/).filter(Boolean) })); this.revealedSecret = result.data?.apiKey || ''; await this.reload(); }, 'API key could not be created'); }
   async rotateApiKey(row: ApiKeyRow) { if (!this.canManageApiClients) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>(`/settings/integrations/api-keys/${row.id}/rotate`, {})); this.revealedSecret = result.data?.apiKey || ''; await this.reload(); }, 'API key could not be rotated'); }
   async revokeApiKey(row: ApiKeyRow) { if (!this.canManageApiClients || !confirm(`Revoke ${row.name}?`)) return; await this.action(async () => { await firstValueFrom(this.api.delete(`/settings/integrations/api-keys/${row.id}`)); await this.reload(); }, 'API key could not be revoked'); }
   async saveWebhook() { if (!this.webhookDraft.name.trim() || !this.webhookDraft.endpointUrl.trim() || !this.webhookDraft.events.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/webhooks', this.webhookDraft)); this.revealedSecret = result.data?.signingSecret || ''; await this.reload(); }, 'Webhook could not be created'); }

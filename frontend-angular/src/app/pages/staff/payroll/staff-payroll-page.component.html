@@ -4,20 +4,18 @@
       <span class="eyebrow">{{ 'staff.ui.d45987441a' | translate }}</span>
       <h1>{{ pageTitle }}</h1>
     </div>
-    <div class="header-actions">
-      <button type="button" class="back-button" (click)="goToPayrollSetup()"><i class="bi bi-gear"></i>Payroll Setup</button>
-      <button type="button" class="back-button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>{{ backLabel }}</button>
-    </div>
+    <button type="button" class="back-button" (click)="backToStaff()"><i class="bi bi-arrow-left"></i>{{ backLabel }}</button>
   </header>
 
   <nav class="view-tabs" [attr.aria-label]="'staff.ui.c3fd81dd15' | translate">
     @for (tab of tabs; track tab) {
-      <button type="button" [class.active]="activeTab === tab.key" (click)="activeTab = tab.key">
+      <button type="button" [class.active]="activeTab === tab.key" (click)="selectTab(tab.key)">
         <i class="bi" [ngClass]="tab.icon"></i>{{ tab.label }}
       </button>
     }
   </nav>
 
+  @if (activeTab !== 'setup') {
   <section class="command-bar" [attr.aria-label]="'staff.ui.f932704215' | translate">
     <label><span>{{ 'staff.ui.f5eda1b11a' | translate }}</span><select [(ngModel)]="cycle" disabled><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option></select></label>
     <label><span>{{ 'staff.ui.1627510b24' | translate }}</span><input [value]="branchLabel" disabled /></label>
@@ -36,17 +34,22 @@
 <label><span>{{ 'staff.ui.a7b93d2128' | translate }}</span><select [(ngModel)]="salaryMode" (ngModelChange)="changeMode()"><option value="preview">{{ 'staff.ui.c3f226b359' | translate }}</option><option value="generate">{{ 'staff.ui.b814a72f17' | translate }}</option><option value="history">{{ 'staff.ui.1448a25aed' | translate }}</option></select></label>
 <div class="command-actions">
   <button type="button" class="icon-button" [attr.title]="'staff.ui.56e3badc4e' | translate" [attr.aria-label]="'staff.ui.f4c5e6cb83' | translate" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>
-  @if (staffId && salaryMode !== 'history') {
-    <button type="button" [disabled]="!canRegenerateSelected" (click)="openRegenerateDialog()"><i class="bi bi-arrow-repeat"></i>{{ action === 'regenerate-preview' ? 'Loading...' : 'Regenerate selected staff' }}</button>
-  }
-  <button type="button" class="primary" [disabled]="loading" (click)="runSelectedMode()"><i class="bi bi-play-fill"></i>{{ action === 'run' ? 'Running...' : salaryMode === 'generate' ? 'Generate salary' : salaryMode === 'history' ? 'Load list' : 'Preview salary' }}</button>
+  <button type="button" class="primary" [disabled]="runActionDisabled" [attr.title]="generationLocked ? 'Finalized or paid payroll cannot be regenerated' : null" (click)="runSelectedMode()"><i class="bi" [ngClass]="staffId && salaryMode === 'generate' ? 'bi-arrow-repeat' : 'bi-play-fill'"></i>{{ primaryActionLabel }}</button>
 </div>
 </section>
+  }
 
+@if (activeTab !== 'setup') {
 <section class="utility-bar">
   <button type="button" [disabled]="loading" (click)="checkSourceData(true)"><i class="bi bi-calculator"></i>{{ action === 'commissions' ? 'Calculating...' : 'Calculate commissions' }}</button>
   <button type="button" [disabled]="items.length === 0" (click)="exportCsv()"><i class="bi bi-download"></i>{{ 'staff.ui.f3e4fadb9e' | translate }}</button>
   <button type="button" (click)="holidayOpen = !holidayOpen"><i class="bi bi-calendar-event"></i>{{ 'staff.ui.80729cc5d8' | translate }}</button>
+  @if (run && ['finalized', 'partially_paid', 'paid'].includes(run.status)) {
+    <button type="button" [disabled]="!canViewPayouts" (click)="openPayouts()"><i class="bi bi-bank"></i>Payout reconciliation</button>
+  }
+  @if (run?.status === 'paid') {
+    <button type="button" [disabled]="!canManageCorrections" (click)="openCorrections()"><i class="bi bi-arrow-left-right"></i>Corrections</button>
+  }
   <div class="column-control">
     <button type="button" (click)="columnMenuOpen = !columnMenuOpen"><i class="bi bi-layout-three-columns"></i>{{ 'staff.ui.cf723c59b6' | translate }}</button>
     @if (columnMenuOpen) {
@@ -58,6 +61,7 @@
     }
   </div>
 </section>
+}
 
 @if (holidayOpen) {
   <section class="holiday-card">
@@ -71,6 +75,7 @@
   </section>
 }
 
+@if (activeTab !== 'setup') {
 <section class="progress-strip" [attr.aria-label]="'staff.ui.a981654009' | translate">
   <div [class.complete]="currentStep >= 0" [class.current]="currentStep === 0"><span><i class="bi bi-database-check"></i></span><b>{{ 'staff.ui.158411acfe' | translate }}</b></div>
   <i class="bi bi-chevron-right connector"></i>
@@ -80,6 +85,7 @@
   <i class="bi bi-chevron-right connector"></i>
   <div [class.complete]="currentStep >= 3" [class.current]="currentStep >= 3"><span><i class="bi bi-lock-fill"></i></span><b>{{ 'staff.ui.876126b164' | translate }}</b></div>
 </section>
+}
 
 @if (error) {
   <div class="message error"><i class="bi bi-exclamation-circle"></i>{{ error }}</div>
@@ -88,7 +94,7 @@
   <div class="message success"><i class="bi bi-check-circle"></i>{{ success }}</div>
 }
 
-@if (activeTab !== 'history') {
+@if (activeTab === 'summary' || activeTab === 'detail') {
   <section class="validation-bar" [class.has-errors]="invalidCount > 0">
     <div>
       <i class="bi" [ngClass]="invalidCount ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill'"></i>
@@ -108,7 +114,7 @@
   </section>
 }
 
-@if (activeTab !== 'history') {
+@if (activeTab === 'summary' || activeTab === 'detail') {
   <section class="ledger-card">
     <header class="ledger-heading">
       <div><h2>{{ 'staff.ui.076d805c67' | translate }}</h2><span>{{ months[month - 1] }} {{ year }} · {{ filteredItems.length }} of {{ items.length }} employee{{ items.length === 1 ? '' : 's' }}</span></div>
@@ -252,21 +258,53 @@
 
 @if (activeTab === 'history') {
   <section class="history-card">
-    <header><div><h2>{{ 'staff.ui.0bd1502ae9' | translate }}</h2><span>{{ 'staff.ui.da147c12de' | translate }}</span></div><button type="button" class="icon-button" (click)="loadHistory()" [attr.title]="'staff.ui.ebbc55f9ce' | translate"><i class="bi bi-arrow-clockwise"></i></button></header>
+    <header>
+      <div><h2>{{ 'staff.ui.0bd1502ae9' | translate }}</h2><span>{{ historyTotal }} payroll run{{ historyTotal === 1 ? '' : 's' }}</span></div>
+      <div class="history-actions">
+        <button type="button" (click)="exportHistory()"><i class="bi bi-download"></i>Export</button>
+        <button type="button" class="icon-button" (click)="loadHistory()" [attr.title]="'staff.ui.ebbc55f9ce' | translate"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+    </header>
+    <div class="history-filters">
+      <label><span>Period</span><select [(ngModel)]="historyPeriod"><option value="all">All dates</option><option value="month">Month</option><option value="range">Date range</option></select></label>
+      @if (historyPeriod === 'month') {
+        <label><span>Month</span><select [(ngModel)]="historyMonth">@for (name of months; track name; let index = $index) {<option [ngValue]="index + 1">{{ name }}</option>}</select></label>
+        <label><span>Year</span><select [(ngModel)]="historyYear">@for (option of years; track option) {<option [ngValue]="option">{{ option }}</option>}</select></label>
+      }
+      @if (historyPeriod === 'range') {
+        <label><span>From</span><as-date-picker [value]="historyFrom" (valueChange)="historyFrom = $event" ariaLabel="History from date"></as-date-picker></label>
+        <label><span>To</span><as-date-picker [value]="historyTo" (valueChange)="historyTo = $event" ariaLabel="History to date"></as-date-picker></label>
+      }
+      <label><span>Employee</span><select [(ngModel)]="historyStaffId"><option value="">All employees</option>@for (employee of staff; track employee.id) {<option [value]="employee.id">{{ staffLabel(employee) }}</option>}</select></label>
+      <label><span>Category</span><select [(ngModel)]="historyCategory"><option value="">All categories</option>@for (option of categoryOptions; track option) {<option [value]="option">{{ option }}</option>}</select></label>
+      <label><span>Branch</span><select [(ngModel)]="historyScope"><option value="branch">Current branch</option><option value="tenant">All authorized branches</option></select></label>
+      <label><span>Status</span><select [(ngModel)]="historyStatus"><option value="">All statuses</option><option value="calculated">Calculated</option><option value="reviewed">Reviewed</option><option value="finalized">Finalized</option><option value="partially_paid">Partially paid</option><option value="paid">Paid</option></select></label>
+      <label><span>Payment</span><select [(ngModel)]="historyPaymentMethod"><option value="">All methods</option><option value="cash">Cash</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="other">Other</option></select></label>
+      <label><span>Validation</span><select [(ngModel)]="historyValidationState"><option value="">All results</option><option value="valid">Valid</option><option value="invalid">Has errors</option></select></label>
+      <label class="history-search"><span>Search</span><input type="search" [(ngModel)]="historySearch" placeholder="Employee name or code" (keyup.enter)="applyHistoryFilters()"></label>
+      <div class="history-filter-actions"><button type="button" (click)="clearHistoryFilters()">Clear</button><button type="button" class="primary" (click)="applyHistoryFilters()">Apply</button></div>
+    </div>
     @for (savedRun of history; track savedRun) {
       <button type="button" class="history-row" (click)="openHistoryRun(savedRun)">
-        <span><strong>{{ formatDate(savedRun.periodStart) }} – {{ formatDate(savedRun.periodEnd) }}</strong><small>{{ savedRun.staffCount }} employees</small></span>
-        <span><strong>{{ formatMoney(savedRun.netPaise) }}</strong><small>{{ savedRun.invalidCount }} validation errors</small></span>
+        <span><strong>{{ formatDate(savedRun.periodStart) }} – {{ formatDate(savedRun.periodEnd) }}</strong><small>{{ savedRun.branchName || branchLabel }} · {{ savedRun.staffCount }} employees</small></span>
+        <span><strong>{{ formatMoney(savedRun.netPaise) }}</strong><small>{{ savedRun.paymentMethod ? statusLabel(savedRun.paymentMethod) : 'Not paid' }} · {{ savedRun.invalidCount }} validation errors</small></span>
         <span class="status-pill">{{ statusLabel(savedRun.status) }}</span><i class="bi bi-chevron-right"></i>
       </button>
     }
     @if (history.length === 0) {
       <div class="empty-state compact"><span><i class="bi bi-clock-history"></i></span><h3>{{ 'staff.ui.d8efdd5675' | translate }}</h3></div>
     }
+    @if (historyTotal > historyPageSize) {
+      <footer class="history-pagination"><span>Page {{ historyPage }} of {{ historyPageCount }}</span><div><button type="button" [disabled]="historyPage === 1" (click)="changeHistoryPage(historyPage - 1)">Previous</button><button type="button" [disabled]="historyPage === historyPageCount" (click)="changeHistoryPage(historyPage + 1)">Next</button></div></footer>
+    }
   </section>
 }
 
-@if (run && activeTab !== 'history') {
+@if (activeTab === 'setup') {
+  <staff-payroll-setup [staff]="staff" [year]="year" [month]="month" [initialSection]="setupSection" [createAdjustment]="setupCreateAdjustment" [initialAdjustmentKind]="setupAdjustmentKind"></staff-payroll-setup>
+}
+
+@if (run && (activeTab === 'summary' || activeTab === 'detail')) {
   <section class="calculation-log">
     <button type="button" (click)="logOpen = !logOpen"><span><i class="bi bi-journal-text"></i>{{ 'staff.ui.dd5c6766d2' | translate }}</span><i class="bi" [ngClass]="logOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i></button>
     @if (logOpen) {
@@ -282,21 +320,15 @@
   </section>
 }
 
-@if (activeTab !== 'history') {
+@if (activeTab === 'summary' || activeTab === 'detail') {
   <footer class="action-footer">
     <button type="button" (click)="backToStaff()">{{ 'staff.ui.77dfd2135f' | translate }}</button>
-    @if (run?.status === 'reviewed' || run?.status === 'finalized') {
+    @if (run?.status === 'reviewed') {
       <div class="payout-fields">
-        @if (run?.status === 'finalized') {
-          <label>{{ 'staff.ui.88306943fe' | translate }}<select [(ngModel)]="payoutMethod"><option value="">{{ 'staff.ui.8598222918' | translate }}</option><option value="bank">{{ 'staff.ui.9e89988cc3' | translate }}</option><option value="upi">{{ 'staff.ui.f295b2cdff' | translate }}</option><option value="cash">{{ 'staff.ui.758ec54e43' | translate }}</option><option value="other">{{ 'staff.ui.6e6a6f2086' | translate }}</option></select></label>
-        }
-        @if (run?.status === 'finalized' && payoutMethod !== 'cash' && payoutMethod !== 'bank') {
-          <label>{{ 'staff.ui.db1c784524' | translate }}<input maxlength="160" [(ngModel)]="payoutReference" /></label>
-        }
         <label>{{ 'staff.ui.645f64770a' | translate }}<input type="password" autocomplete="one-time-code" [(ngModel)]="actionMfaCode" [attr.placeholder]="'staff.ui.68ccfb13bc' | translate" /></label>
       </div>
     }
-    @if (run?.status !== 'finalized') {
+    @if (run?.status !== 'reviewed') {
       <span></span>
     }
     <button type="button" [disabled]="!canSaveDraft" (click)="saveDraft()"><i class="bi bi-save"></i>{{ action === 'save' ? 'Saving...' : 'Save draft' }}</button>
@@ -304,33 +336,162 @@
   </footer>
 }
 
-@if (regenerateDialogOpen) {
-  <aside class="detail-drawer">
+@if (payoutDrawerOpen) {
+  <aside class="detail-drawer payout-drawer" role="dialog" aria-modal="true" aria-labelledby="payout-title">
     <header>
-      <div><span class="eyebrow">Confirm regeneration</span><h2>{{ regenerateAfter?.staffName }}</h2><small>{{ regenerateAfter?.employeeCode || 'No employee code' }} · {{ months[month - 1] }} {{ year }}</small></div>
+      <div><span class="eyebrow">Payroll settlement</span><h2 id="payout-title">Staff payouts</h2><small>{{ formatDate(run?.periodStart || '') }} - {{ formatDate(run?.periodEnd || '') }}</small></div>
+      <button type="button" class="icon-button" (click)="closePayouts()" aria-label="Close payouts"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <div class="payout-body">
+      @if (payoutReconciliation) {
+        <section class="payout-summary">
+          <article><span>Paid</span><strong>{{ payoutReconciliation.paidCount }} / {{ payoutReconciliation.staffCount }}</strong><small>{{ formatMoney(payoutReconciliation.paidPaise) }}</small></article>
+          <article><span>Outstanding</span><strong>{{ formatMoney(payoutReconciliation.outstandingPaise) }}</strong><small>{{ payoutReconciliation.pendingCount }} pending</small></article>
+          <article><span>Exceptions</span><strong>{{ payoutReconciliation.failedCount + payoutReconciliation.heldCount }}</strong><small>{{ payoutReconciliation.failedCount }} failed · {{ payoutReconciliation.heldCount }} held</small></article>
+        </section>
+        <section class="drawer-card payout-controls">
+          <div class="payout-control-grid">
+            <label><span>Payment method</span><select [(ngModel)]="payoutMethod"><option value="">Select method</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
+            <label><span>Default reference</span><input maxlength="160" [(ngModel)]="payoutReference" placeholder="Optional for cash/bank" /></label>
+            <label><span>MFA code</span><input type="password" autocomplete="one-time-code" [(ngModel)]="actionMfaCode" /></label>
+          </div>
+          <label><span>Hold reason</span><input maxlength="500" [(ngModel)]="payoutHoldReason" placeholder="Required when holding salary" /></label>
+        </section>
+        <section class="drawer-card payout-ledger">
+          <header><label><input type="checkbox" (change)="toggleAllPayouts($any($event.target).checked)" />Select unpaid</label><span>{{ statusLabel(payoutReconciliation.runStatus) }}</span></header>
+          @for (item of payoutReconciliation.items; track item.staffId) {
+            <article class="payout-row" [class.failed]="item.status === 'failed'" [class.held]="item.status === 'held'">
+              <input type="checkbox" [disabled]="item.status === 'paid' || item.status === 'processing'" [(ngModel)]="payoutSelected[item.staffId]" [attr.aria-label]="'Select ' + item.staffName" />
+              <div><strong>{{ item.staffName }}</strong><small>{{ item.employeeCode || 'No employee code' }} · {{ formatMoney(item.netPaise) }}</small>@if (item.lastError) {<small class="payout-error">{{ item.lastError }}</small>}@if (item.holdReason) {<small class="payout-hold">{{ item.holdReason }}</small>}</div>
+              <input maxlength="160" [(ngModel)]="payoutReferences[item.staffId]" [disabled]="item.status === 'paid' || item.status === 'held' || item.status === 'processing'" placeholder="Staff reference" [attr.aria-label]="item.staffName + ' payment reference'" />
+              <span class="status-pill">{{ statusLabel(item.status) }}</span>
+            </article>
+          }
+        </section>
+      }
+    </div>
+    <footer class="payout-actions">
+      <button type="button" (click)="closePayouts()">Close</button>
+      <button type="button" [disabled]="!canReleaseSelected" (click)="releaseSelectedPayouts()">Release hold</button>
+      <button type="button" [disabled]="!canHoldSelected" (click)="holdSelectedPayouts()">Hold selected</button>
+      <button type="button" class="primary" [disabled]="!canPaySelected" (click)="paySelectedStaff()">{{ payoutReconciliation?.failedCount ? 'Pay / retry selected' : 'Pay selected' }}</button>
+    </footer>
+  </aside>
+}
+
+@if (regenerateDialogOpen) {
+  <aside class="detail-drawer regeneration-drawer" role="dialog" aria-modal="true" aria-labelledby="regeneration-title">
+    <header>
+      <div><span class="eyebrow">Confirm regeneration</span><h2 id="regeneration-title">{{ regenerateAfter?.staffName }}</h2><small>{{ regenerateAfter?.employeeCode || 'No employee code' }} · {{ months[month - 1] }} {{ year }}</small></div>
       <button type="button" class="icon-button" (click)="closeRegenerateDialog()" aria-label="Close"><i class="bi bi-x-lg"></i></button>
     </header>
-    <section class="drawer-card">
-      <h3>What will change</h3>
-      <div class="table-scroll">
-        <table class="diff-table">
-          <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">New</th><th scope="col">Difference</th></tr></thead>
-          <tbody>
-            @for (row of regenerateRows; track row) {
-              <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td></tr>
+    <div class="regeneration-body">
+      @if (regenerateAfter?.validationWarnings?.length) {
+        <section class="drawer-card">
+          @for (warning of regenerateAfter?.validationWarnings || []; track warning) { <p><i class="bi bi-exclamation-triangle"></i>{{ warning }}</p> }
+        </section>
+      }
+      <section class="drawer-card">
+        <h3>What will change</h3>
+        <div class="table-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">New</th><th scope="col">Difference</th></tr></thead>
+            <tbody>
+              @for (row of regenerateRows; track row[0]) {
+                <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td><td>{{ row[3] }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="drawer-card">
+        <h3>Regeneration reason</h3>
+        <textarea rows="3" maxlength="500" [(ngModel)]="regenerateReason" placeholder="Explain why this employee's payroll is being regenerated" aria-label="Regeneration reason"></textarea>
+      </section>
+    </div>
+    <footer class="regenerate-actions">
+      <button type="button" (click)="closeRegenerateDialog()">Cancel</button>
+      <button type="button" class="primary" [disabled]="!canConfirmRegenerate" (click)="confirmRegenerateSelected()"><i class="bi bi-arrow-repeat"></i>{{ action === 'regenerate' ? 'Regenerating...' : 'Confirm regeneration' }}</button>
+    </footer>
+  </aside>
+}
+
+@if (correctionDrawerOpen) {
+  <aside class="detail-drawer correction-drawer" role="dialog" aria-modal="true" aria-labelledby="correction-title">
+    <header>
+      <div><span class="eyebrow">Paid payroll control</span><h2 id="correction-title">Corrections</h2><small>{{ formatDate(run?.periodStart || '') }} - {{ formatDate(run?.periodEnd || '') }}</small></div>
+      <button type="button" class="icon-button" (click)="closeCorrections()" aria-label="Close corrections"><i class="bi bi-x-lg"></i></button>
+    </header>
+    <div class="correction-body">
+      <section class="drawer-card correction-form">
+        <h3>Request correction</h3>
+        <div class="correction-grid">
+          <label><span>Employee</span><select [(ngModel)]="correctionStaffId"><option value="">Select employee</option>@for (item of items; track item.staffId) {<option [value]="item.staffId">{{ item.staffName }}</option>}</select></label>
+          <label><span>Type</span><select [(ngModel)]="correctionType"><option value="arrear">Positive arrear</option><option value="recovery">Negative recovery</option></select></label>
+          <label><span>Amount</span><input type="number" min="0.01" step="0.01" [(ngModel)]="correctionAmount" placeholder="₹" /></label>
+        </div>
+        <label><span>Reason</span><textarea rows="3" maxlength="500" [(ngModel)]="correctionReason" placeholder="Mandatory correction reason"></textarea></label>
+        <button type="button" class="primary" [disabled]="!canRequestCorrection" (click)="requestCorrection()">{{ action === 'correction-request' ? 'Requesting...' : 'Request correction' }}</button>
+      </section>
+
+      <section class="drawer-card correction-list">
+        <h3>Correction ledger</h3>
+        @for (correction of corrections; track correction.id) {
+          <button type="button" class="correction-row" [class.active]="selectedCorrection?.id === correction.id" (click)="selectCorrection(correction)">
+            <span><strong>{{ correctionStaffName(correction.staffId) }}</strong><small>{{ correction.correctionType === 'arrear' ? '+' : '-' }}{{ formatMoney(correction.amountPaise) }} · {{ correction.reason }}</small></span>
+            <span class="status-pill">{{ statusLabel(correction.status) }}</span>
+          </button>
+        }
+        @if (corrections.length === 0) { <p>No corrections yet</p> }
+      </section>
+
+      @if (selectedCorrection) {
+        <section class="drawer-card correction-detail">
+          <h3>Selected correction</h3>
+          <div class="drawer-grid">
+            <article><span>Employee</span><strong>{{ correctionStaffName(selectedCorrection.staffId) }}</strong></article>
+            <article><span>Amount</span><strong>{{ selectedCorrection.correctionType === 'arrear' ? '+' : '-' }}{{ formatMoney(selectedCorrection.amountPaise) }}</strong></article>
+            <article><span>Status</span><strong>{{ statusLabel(selectedCorrection.status) }}</strong></article>
+            <article><span>Requested</span><strong>{{ formatDate(selectedCorrection.createdAt) }}</strong></article>
+          </div>
+          <p>{{ selectedCorrection.reason }}</p>
+          @if (selectedCorrection.status === 'pending') {
+            <label><span>Decision note</span><textarea rows="2" maxlength="500" [(ngModel)]="correctionDecisionNote"></textarea></label>
+            @if (selectedCorrection.requestedBy === currentUserId) { <p class="maker-checker"><i class="bi bi-shield-lock"></i>A different payroll manager must approve this request.</p> }
+            @if (selectedCorrection.requestedBy !== currentUserId) { <label><span>Approval MFA code</span><input type="password" autocomplete="one-time-code" [(ngModel)]="correctionMfaCode" /></label> }
+          }
+          @if (selectedCorrection.status === 'approved') {
+            @if (selectedCorrection.correctionType === 'arrear') {
+              <label><span>Payment method</span><select [(ngModel)]="correctionPaymentMethod"><option value="">Select method</option><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="other">Other</option></select></label>
             }
-          </tbody>
-        </table>
-      </div>
-    </section>
-    <section class="drawer-card">
-      <h3>Regeneration reason</h3>
-      <textarea rows="3" maxlength="500" [(ngModel)]="regenerateReason" placeholder="Explain why this employee's payroll is being regenerated" aria-label="Regeneration reason"></textarea>
-      <div class="regenerate-actions">
-        <button type="button" (click)="closeRegenerateDialog()">Cancel</button>
-        <button type="button" class="primary" [disabled]="!canConfirmRegenerate" (click)="confirmRegenerateSelected()"><i class="bi bi-arrow-repeat"></i>{{ action === 'regenerate' ? 'Regenerating...' : 'Confirm regeneration' }}</button>
-      </div>
-    </section>
+            <label><span>Payment reference</span><input maxlength="160" [(ngModel)]="correctionPaymentReference" /></label>
+            <label><span>Posting MFA code</span><input type="password" autocomplete="one-time-code" [(ngModel)]="correctionMfaCode" /></label>
+          }
+          @if (selectedCorrection.decisionNote) { <p><strong>Decision note:</strong> {{ selectedCorrection.decisionNote }}</p> }
+          @if (selectedCorrection.paymentReference) { <p><strong>Payment reference:</strong> {{ selectedCorrection.paymentReference }}</p> }
+        </section>
+
+        <section class="drawer-card correction-history">
+          <h3>Audit history</h3>
+          @for (event of correctionEvents; track event.id) { <p><span><strong>{{ statusLabel(event.eventType.replace('correction.', '')) }}</strong><small>{{ formatDate(event.createdAt) }}</small></span></p> }
+        </section>
+      }
+    </div>
+    <footer class="correction-actions">
+      <button type="button" (click)="closeCorrections()">Close</button>
+      @if (selectedCorrection?.status === 'pending') {
+        <button type="button" [disabled]="loading" (click)="cancelCorrection()">Cancel request</button>
+        <button type="button" [disabled]="loading" (click)="decideCorrection('rejected')">Reject</button>
+        <button type="button" class="primary" [disabled]="!canApproveCorrection" (click)="decideCorrection('approved')">Approve</button>
+      }
+      @if (selectedCorrection?.status === 'approved') {
+        <button type="button" [disabled]="loading" (click)="cancelCorrection()">Cancel</button>
+        <button type="button" class="primary" [disabled]="!canPostCorrection" (click)="postCorrection()">Post correction</button>
+      }
+      @if (selectedCorrection?.status === 'posted') {
+        <button type="button" class="primary" (click)="printCorrectedPayslip(selectedCorrection)"><i class="bi bi-printer"></i>Corrected payslip</button>
+      }
+    </footer>
   </aside>
 }
 
@@ -353,6 +514,17 @@
         }
         @for (message of selectedItem.validationWarnings; track message) {
           <p><i class="bi bi-exclamation-circle-fill"></i>{{ message }}</p>
+        }
+      </section>
+    }
+    @if (weekendRuleEvents(selectedItem).length || weekendAdjustmentRows(selectedItem).length) {
+      <section class="drawer-card rule-breakdown">
+        <h3>Weekly-off calculation</h3>
+        @for (event of weekendRuleEvents(selectedItem); track event) {
+          <p><span><strong>{{ statusLabel(event.rule || '') }}</strong><small>{{ formatDate(event.date || '') }}{{ weekendEventDetail(event) ? ' · ' + weekendEventDetail(event) : '' }}</small></span></p>
+        }
+        @for (rule of weekendAdjustmentRows(selectedItem); track rule) {
+          <p><span><strong>{{ rule.name || statusLabel(rule.triggerType || '') }}</strong><small>{{ rule.occurrences || 0 }} occurrence(s) · {{ formatMoney(rule.amountPaise || 0) }} · {{ statusLabel(rule.kind || '') }}</small></span></p>
         }
       </section>
     }

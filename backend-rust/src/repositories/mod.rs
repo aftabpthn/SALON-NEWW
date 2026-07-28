@@ -1,5 +1,4 @@
 pub mod ai_concierge_repository;
-pub mod ai_copilot_repository;
 pub mod analytics_repository;
 pub mod auth_repository;
 pub mod availability_repository;
@@ -45,6 +44,7 @@ pub mod sms_center_repository;
 pub mod sso_repository;
 pub mod staff_advance_repository;
 pub mod staff_advanced_repository;
+pub mod staff_ai_repository;
 pub mod staff_attendance_repository;
 pub mod staff_configuration_repository;
 pub mod staff_enterprise_repository;

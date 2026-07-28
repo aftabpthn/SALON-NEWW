@@ -33,6 +33,18 @@ pub fn router() -> Router<AppState> {
         .route("/staff-payroll/runs/:run_id/mark-paid", post(mark_paid))
         .route("/staff-payroll/runs/:run_id/payout", post(record_payout))
         .route(
+            "/staff-payroll/runs/:run_id/payouts",
+            get(payout_reconciliation),
+        )
+        .route(
+            "/staff-payroll/runs/:run_id/payouts/hold",
+            post(hold_payouts),
+        )
+        .route(
+            "/staff-payroll/runs/:run_id/payouts/release",
+            post(release_payout_holds),
+        )
+        .route(
             "/staff-payroll/holidays",
             get(list_holidays).post(save_holiday),
         )
@@ -74,26 +86,7 @@ pub fn router() -> Router<AppState> {
             "/staff-payroll/corrections/:id/cancel",
             post(cancel_correction),
         )
-        .route(
-            "/staff-payroll/corrections/:id/post",
-            post(post_correction),
-        )
-        .route(
-            "/staff-payroll/runs/:run_id/staff/:staff_id/hold",
-            post(hold_staff_payout).delete(release_staff_payout_hold),
-        )
-        .route(
-            "/staff-payroll/runs/:run_id/staff/:staff_id/payout",
-            post(pay_staff),
-        )
-        .route(
-            "/staff-payroll/runs/:run_id/staff/:staff_id/payout-attempts",
-            get(payout_attempts),
-        )
-        .route(
-            "/staff-payroll/runs/:run_id/reconciliation",
-            get(payout_reconciliation),
-        )
+        .route("/staff-payroll/corrections/:id/post", post(post_correction))
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,6 +134,10 @@ struct PayoutRequest {
     reference: Option<String>,
     idempotency_key: String,
     mfa_code: Option<String>,
+    #[serde(default)]
+    staff_ids: Vec<String>,
+    #[serde(default)]
+    staff_references: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,11 +204,6 @@ async fn run_payroll(
     validate_cycle(payload.cycle.as_deref())?;
     let staff_id = payload.staff_id.as_deref().unwrap_or("").trim();
     let reason = payload.reason.as_deref().unwrap_or("").trim();
-    if !staff_id.is_empty() && reason.is_empty() {
-        return Err(AppError::validation(
-            "a regeneration reason is required when regenerating selected staff",
-        ));
-    }
     let result = staff_payroll_service::run_payroll(
         &state.db,
         &tenant_id,
@@ -231,8 +223,10 @@ async fn get_run(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(run_id): Path<String>,
+    Query(query): Query<PayrollRunBranchRequest>,
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let (tenant_id, branch_id) =
+        payroll_history_run_context(&state, &claims, &headers, query.branch_id.as_deref()).await?;
     let result = staff_payroll_service::detail(&state.db, &tenant_id, &branch_id, &run_id).await?;
     Ok(Json(ApiResponse::ok(result)))
 }
@@ -377,6 +371,17 @@ async fn decide_correction(
     Json(payload): Json<staff_payroll_service::PayrollCorrectionDecisionInput>,
 ) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollCorrectionRecord> {
     let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    if payload.decision.trim().eq_ignore_ascii_case("approved") {
+        require_payroll_action_mfa(
+            &state,
+            &claims,
+            &tenant_id,
+            &branch_id,
+            payload.mfa_code.as_deref(),
+            "payroll.correction_approve",
+        )
+        .await?;
+    }
     let row = staff_payroll_service::decide_correction(
         &state.db,
         &tenant_id,
@@ -438,106 +443,6 @@ async fn post_correction(
     Ok(Json(ApiResponse::ok(row)))
 }
 
-async fn hold_staff_payout(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path((run_id, staff_id)): Path<(String, String)>,
-    Json(payload): Json<staff_payroll_service::PayrollStaffHoldInput>,
-) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
-    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
-    let row = staff_payroll_service::hold_staff_payout(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &run_id,
-        &staff_id,
-        &claims.sub,
-        payload,
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(row)))
-}
-
-async fn release_staff_payout_hold(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path((run_id, staff_id)): Path<(String, String)>,
-) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
-    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
-    let row = staff_payroll_service::release_staff_payout_hold(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &run_id,
-        &staff_id,
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(row)))
-}
-
-async fn pay_staff(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path((run_id, staff_id)): Path<(String, String)>,
-    Json(payload): Json<staff_payroll_service::PayrollStaffPayoutInput>,
-) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollItemRecord> {
-    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
-    require_payroll_action_mfa(
-        &state,
-        &claims,
-        &tenant_id,
-        &branch_id,
-        payload.mfa_code.as_deref(),
-        "payroll.staff_payout",
-    )
-    .await?;
-    let row = staff_payroll_service::pay_staff(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &run_id,
-        &staff_id,
-        &claims.sub,
-        payload,
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(row)))
-}
-
-async fn payout_attempts(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path((run_id, staff_id)): Path<(String, String)>,
-) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayoutAttemptDetailRecord>> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
-    let rows = staff_payroll_service::payout_attempts_for_staff(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &run_id,
-        &staff_id,
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(rows)))
-}
-
-async fn payout_reconciliation(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path(run_id): Path<String>,
-) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::PayoutReconciliationRow>> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
-    let rows =
-        staff_payroll_service::payout_reconciliation(&state.db, &tenant_id, &branch_id, &run_id)
-            .await?;
-    Ok(Json(ApiResponse::ok(rows)))
-}
-
 async fn record_payout(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -566,10 +471,85 @@ async fn record_payout(
             payment_method: payload.payment_method,
             reference: payload.reference.unwrap_or_default(),
             idempotency_key: payload.idempotency_key,
+            staff_ids: payload.staff_ids,
+            staff_references: payload.staff_references,
         },
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn payout_reconciliation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> ApiResult<staff_payroll_service::PayrollPayoutReconciliation> {
+    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_payroll_service::payout_reconciliation(&state.db, &tenant_id, &branch_id, &run_id)
+            .await?,
+    )))
+}
+
+async fn hold_payouts(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollPayoutHoldInput>,
+) -> ApiResult<staff_payroll_service::PayrollPayoutReconciliation> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.payout_hold",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        staff_payroll_service::hold_payouts(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &run_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn release_payout_holds(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Json(payload): Json<staff_payroll_service::PayrollPayoutReleaseInput>,
+) -> ApiResult<staff_payroll_service::PayrollPayoutReconciliation> {
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
+    require_payroll_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.payout_hold_release",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        staff_payroll_service::release_payout_holds(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &run_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
 }
 
 async fn list_holidays(
@@ -643,14 +623,19 @@ async fn export_run(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(run_id): Path<String>,
+    Query(query): Query<PayrollRunBranchRequest>,
 ) -> Result<Response<Body>, AppError> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let (tenant_id, branch_id) =
+        payroll_history_run_context(&state, &claims, &headers, query.branch_id.as_deref()).await?;
     let detail = staff_payroll_service::detail(&state.db, &tenant_id, &branch_id, &run_id).await?;
     let mut csv = String::from("Employee,Code,Attendance days,Worked minutes,Overtime minutes,Earned salary,Overtime pay,Commission,PF,ESIC,Professional tax,TDS,Employer contribution,Advance recovery,Adjustment,Gross,Deductions,Net pay,Status\r\n");
     for item in detail.items {
-        let attendance_days =
-            f64::from(item.attendance_days_x2 + item.paid_leave_days_x2 + item.weekly_off_days_x2)
-                / 2.0;
+        let attendance_days = f64::from(
+            item.attendance_days_x2
+                + item.paid_leave_days_x2
+                + item.weekly_off_days_x2
+                + item.holiday_days_x2,
+        ) / 2.0;
         csv.push_str(
             &[
                 csv_cell(&item.staff_name),
@@ -661,22 +646,27 @@ async fn export_run(
                 staff_payroll_service::paise_text(item.earned_salary_paise),
                 staff_payroll_service::paise_text(item.overtime_paise),
                 staff_payroll_service::paise_text(item.commission_paise),
-                staff_payroll_service::paise_text(staff_payroll_service::statutory_employee_amount(
-                    &item.calculation_json,
-                    "providentFund",
-                )),
-                staff_payroll_service::paise_text(staff_payroll_service::statutory_employee_amount(
-                    &item.calculation_json,
-                    "esic",
-                )),
-                staff_payroll_service::paise_text(staff_payroll_service::statutory_employee_amount(
-                    &item.calculation_json,
-                    "professionalTax",
-                )),
-                staff_payroll_service::paise_text(staff_payroll_service::statutory_employee_amount(
-                    &item.calculation_json,
-                    "tds",
-                )),
+                staff_payroll_service::paise_text(
+                    staff_payroll_service::statutory_employee_amount(
+                        &item.calculation_json,
+                        "providentFund",
+                    ),
+                ),
+                staff_payroll_service::paise_text(
+                    staff_payroll_service::statutory_employee_amount(
+                        &item.calculation_json,
+                        "esic",
+                    ),
+                ),
+                staff_payroll_service::paise_text(
+                    staff_payroll_service::statutory_employee_amount(
+                        &item.calculation_json,
+                        "professionalTax",
+                    ),
+                ),
+                staff_payroll_service::paise_text(
+                    staff_payroll_service::statutory_employee_amount(&item.calculation_json, "tds"),
+                ),
                 staff_payroll_service::paise_text(staff_payroll_service::statutory_employer_total(
                     &item.calculation_json,
                 )),
@@ -722,6 +712,13 @@ struct PayrollHistoryRequest {
     search: Option<String>,
     page: Option<i64>,
     page_size: Option<i64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PayrollRunBranchRequest {
+    branch_id: Option<String>,
+    corrected: Option<bool>,
 }
 
 async fn payroll_history(
@@ -777,7 +774,7 @@ async fn export_history(
         query.scope.as_deref().unwrap_or("branch"),
     )
     .await?;
-    let page = staff_payroll_service::history(
+    let page = staff_payroll_service::history_export(
         &state.db,
         &tenant_id,
         &branch_ids,
@@ -798,21 +795,29 @@ async fn export_history(
     )
     .await?;
     let mut csv = String::from(
-        "Period start,Period end,Status,Staff count,Invalid count,Gross,Deductions,Net,Reviewed at,Finalized at,Paid at\r\n",
+        "Branch,Branch ID,Period start,Period end,Status,Payment method,Payment reference,Staff count,Invalid count,Gross,Deductions,Net,Reviewed at,Finalized at,Paid at\r\n",
     );
     for run in page.items {
         csv.push_str(
             &[
+                csv_cell(&run.branch_name),
+                csv_cell(&run.branch_id),
                 run.period_start.to_string(),
                 run.period_end.to_string(),
                 csv_cell(&run.status),
+                csv_cell(&run.payment_method),
+                csv_cell(&run.payment_reference),
                 run.staff_count.to_string(),
                 run.invalid_count.to_string(),
                 staff_payroll_service::paise_text(run.gross_paise),
                 staff_payroll_service::paise_text(run.deductions_paise),
                 staff_payroll_service::paise_text(run.net_paise),
-                run.reviewed_at.map(|at| at.to_rfc3339()).unwrap_or_default(),
-                run.finalized_at.map(|at| at.to_rfc3339()).unwrap_or_default(),
+                run.reviewed_at
+                    .map(|at| at.to_rfc3339())
+                    .unwrap_or_default(),
+                run.finalized_at
+                    .map(|at| at.to_rfc3339())
+                    .unwrap_or_default(),
                 run.paid_at.map(|at| at.to_rfc3339()).unwrap_or_default(),
             ]
             .join(","),
@@ -867,18 +872,24 @@ async fn download_payslip(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path((run_id, staff_id)): Path<(String, String)>,
+    Query(query): Query<PayrollRunBranchRequest>,
 ) -> Result<Response<Body>, AppError> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
-    let pdf =
-        staff_payroll_service::payslip_pdf(&state.db, &tenant_id, &branch_id, &run_id, &staff_id)
-            .await?;
+    let (tenant_id, branch_id) =
+        payroll_history_run_context(&state, &claims, &headers, query.branch_id.as_deref()).await?;
+    let corrected = query.corrected.unwrap_or(false);
+    let pdf = staff_payroll_service::payslip_pdf(
+        &state.db, &tenant_id, &branch_id, &run_id, &staff_id, corrected,
+    )
+    .await?;
     Response::builder()
         .header(header::CONTENT_TYPE, "application/pdf")
         .header(
             header::CONTENT_DISPOSITION,
             format!(
-                "attachment; filename=\"payslip-{}-{}.pdf\"",
-                run_id, staff_id
+                "attachment; filename=\"{}payslip-{}-{}.pdf\"",
+                if corrected { "corrected-" } else { "" },
+                run_id,
+                staff_id
             ),
         )
         .body(Body::from(pdf))
@@ -890,7 +901,7 @@ async fn list_statutory_profiles(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<crate::repositories::staff_payroll_repository::StatutoryProfileRecord>> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
     let rows =
         staff_payroll_service::list_statutory_profiles(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -902,7 +913,7 @@ async fn get_statutory_profile(
     headers: HeaderMap,
     Path(staff_id): Path<String>,
 ) -> ApiResult<Option<crate::repositories::staff_payroll_repository::StatutoryProfileRecord>> {
-    let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
+    let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
     let rows =
         staff_payroll_service::list_statutory_profiles(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
@@ -920,11 +931,25 @@ async fn save_statutory_profile(
     let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
     let result = staff_payroll_service::save_statutory_profile(
         &state.db,
+        state.settings.security_encryption_key.as_deref(),
         &tenant_id,
         &branch_id,
         &staff_id,
         &claims.sub,
         payload,
+    )
+    .await?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "staff.statutory_profile.updated",
+        serde_json::json!({
+            "staffId": staff_id,
+            "pfOptIn": result.pf_opt_in,
+            "esicOptIn": result.esic_opt_in,
+        }),
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
@@ -948,9 +973,10 @@ async fn set_payroll_period_schedule(
     Json(payload): Json<staff_payroll_service::PayrollPeriodScheduleInput>,
 ) -> ApiResult<crate::repositories::staff_payroll_repository::PayrollPeriodRecord> {
     let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
-    let row =
-        staff_payroll_service::set_payroll_period_schedule(&state.db, &tenant_id, &branch_id, payload)
-            .await?;
+    let row = staff_payroll_service::set_payroll_period_schedule(
+        &state.db, &tenant_id, &branch_id, payload,
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1005,6 +1031,28 @@ fn payroll_read_context(
         headers,
         &["staff.payroll.read", "staff.payroll.manage"],
     )
+}
+
+async fn payroll_history_run_context(
+    state: &AppState,
+    claims: &AuthClaims,
+    headers: &HeaderMap,
+    requested_branch_id: Option<&str>,
+) -> Result<(String, String), AppError> {
+    let (tenant_id, selected_branch_id) = payroll_read_context(claims, headers)?;
+    let requested_branch_id = requested_branch_id.unwrap_or("").trim();
+    if requested_branch_id.is_empty() || requested_branch_id == selected_branch_id {
+        return Ok((tenant_id, selected_branch_id));
+    }
+    let branch_ids =
+        history_scope_branch_ids(state, claims, &tenant_id, &selected_branch_id, "tenant").await?;
+    if !branch_ids
+        .iter()
+        .any(|branch_id| branch_id == requested_branch_id)
+    {
+        return Err(AppError::forbidden("payroll branch access is restricted"));
+    }
+    Ok((tenant_id, requested_branch_id.to_string()))
 }
 
 fn payroll_manage_context(

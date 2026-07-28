@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
@@ -25,6 +25,22 @@ type OutgoingCategory = {
 
 type AccountDefinition = { code: string; name: string; group: string };
 type PartyOption = { id: string; name: string };
+type CashTill = { id: string; tillCode: string; tillName: string; status: string };
+type SupplierPayable = {
+  purchaseReceiptId: string;
+  supplierId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  receivedDate: string;
+  dueDate?: string;
+  totalPaise: number;
+  returnedPaise: number;
+  paidPaise: number;
+  balancePaise: number;
+};
+type SupplierPaymentMetric = { supplierId: string; paidPaise: number; unpaidPaise: number; extraPaidPaise: number };
+type SupplierPaymentSummary = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number; suppliers: SupplierPaymentMetric[] };
+type SupplierPaymentDraft = { receiptId: string; amount: string; method: string; reference: string };
 
 type OutgoingLine = {
   id: string;
@@ -184,6 +200,9 @@ type ReportLine = OutgoingLine & {
 export class OutgoingFundsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private cashTillsLoadVersion = 0;
 
   readonly rows = signal<OutgoingVoucher[]>([]);
   readonly categories = signal<OutgoingCategory[]>([]);
@@ -191,6 +210,9 @@ export class OutgoingFundsPageComponent implements OnInit {
   readonly suppliers = signal<PartyOption[]>([]);
   readonly staff = signal<PartyOption[]>([]);
   readonly clients = signal<PartyOption[]>([]);
+  readonly cashTills = signal<CashTill[]>([]);
+  readonly cashDrawerOpen = signal(false);
+  readonly cashTillsLoading = signal(false);
   readonly summary = signal<OutgoingSummary>({ voucherCount: 0, totalPaise: 0, pendingCount: 0, inputGstPaise: 0 });
   readonly totalRecords = signal(0);
   readonly currentPage = signal(1);
@@ -202,6 +224,11 @@ export class OutgoingFundsPageComponent implements OnInit {
   readonly success = signal('');
   readonly activeTab = signal<'entries' | 'report'>('entries');
   readonly decisionMode = signal<'reject' | 'reverse' | ''>('');
+  readonly supplierPaymentOpen = signal(false);
+  readonly supplierPaymentLoading = signal(false);
+  readonly supplierPayables = signal<SupplierPayable[]>([]);
+  readonly supplierPaymentMetric = signal<SupplierPaymentMetric>({ supplierId: '', paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0 });
+  readonly paymentSupplier = signal<PartyOption | null>(null);
 
   search = '';
   fromDate = '';
@@ -210,6 +237,8 @@ export class OutgoingFundsPageComponent implements OnInit {
   category = '';
   decisionReason = '';
   draft: VoucherDraft = blankVoucherDraft();
+  supplierPaymentMode: 'payable' | 'advance' = 'payable';
+  supplierPaymentDraft: SupplierPaymentDraft = blankSupplierPaymentDraft();
 
   readonly paymentAccounts = computed(() => this.accounts().filter((account) => ['CASH_ON_HAND', 'BANK_CLEARING'].includes(account.code)));
   readonly manualCategories = computed(() => this.categories().filter((category) => category.manualEntry));
@@ -236,7 +265,7 @@ export class OutgoingFundsPageComponent implements OnInit {
   readonly canApprove = this.auth.hasRole('owner', 'admin', 'manager');
 
   ngOnInit(): void {
-    void this.loadInitial();
+    void this.loadInitial().then(() => this.openSupplierPaymentFromQuery());
   }
 
   async loadInitial(): Promise<void> {
@@ -312,6 +341,130 @@ export class OutgoingFundsPageComponent implements OnInit {
     this.error.set('');
     this.success.set('');
     this.drawerOpen.set(true);
+    void this.loadCashTills();
+  }
+
+  async openSupplierPaymentFromQuery(): Promise<void> {
+    const supplierId = this.route.snapshot.queryParamMap.get('supplierId')?.trim();
+    if (!supplierId) return;
+    const supplier = this.suppliers().find((row) => row.id === supplierId);
+    if (!supplier) {
+      this.error.set('Supplier is not available in this branch');
+      return;
+    }
+    this.drawerOpen.set(false);
+    this.paymentSupplier.set(supplier);
+    this.supplierPaymentOpen.set(true);
+    this.supplierPaymentMode = 'payable';
+    this.supplierPaymentDraft = blankSupplierPaymentDraft();
+    await this.loadSupplierPayment();
+  }
+
+  async loadSupplierPayment(): Promise<void> {
+    const supplier = this.paymentSupplier();
+    if (!supplier) return;
+    this.supplierPaymentLoading.set(true);
+    this.error.set('');
+    try {
+      const [payableResponse, summaryResponse] = await Promise.all([
+        firstValueFrom(this.api.get<any>(`/api/v1/purchases/payables?supplierId=${encodeURIComponent(supplier.id)}`)),
+        firstValueFrom(this.api.get<any>('/api/v1/purchases/payment-summary')),
+      ]);
+      const payables = this.unwrap<SupplierPayable[]>(payableResponse) || [];
+      const summary = this.unwrap<SupplierPaymentSummary>(summaryResponse);
+      this.supplierPayables.set(payables);
+      this.supplierPaymentMetric.set(summary?.suppliers?.find((row) => row.supplierId === supplier.id)
+        ?? { supplierId: supplier.id, paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0 });
+      const selected = payables.find((row) => row.purchaseReceiptId === this.supplierPaymentDraft.receiptId && row.balancePaise > 0)
+        ?? payables.find((row) => row.balancePaise > 0);
+      this.supplierPaymentDraft.receiptId = selected?.purchaseReceiptId || '';
+      this.supplierPaymentDraft.amount = selected ? this.inputMoney(selected.balancePaise) : '';
+    } catch (error) {
+      this.supplierPayables.set([]);
+      this.error.set(this.errorMessage(error, 'Unable to load supplier payments'));
+    } finally {
+      this.supplierPaymentLoading.set(false);
+    }
+  }
+
+  setSupplierPaymentMode(mode: 'payable' | 'advance'): void {
+    this.supplierPaymentMode = mode;
+    this.supplierPaymentDraft = blankSupplierPaymentDraft();
+    if (mode === 'payable') {
+      const payable = this.supplierPayables().find((row) => row.balancePaise > 0);
+      this.supplierPaymentDraft.receiptId = payable?.purchaseReceiptId || '';
+      this.supplierPaymentDraft.amount = payable ? this.inputMoney(payable.balancePaise) : '';
+    }
+    this.error.set('');
+    this.success.set('');
+  }
+
+  supplierPayableChanged(): void {
+    const payable = this.selectedSupplierPayable();
+    this.supplierPaymentDraft.amount = payable ? this.inputMoney(payable.balancePaise) : '';
+  }
+
+  selectedSupplierPayable(): SupplierPayable | undefined {
+    return this.supplierPayables().find((row) => row.purchaseReceiptId === this.supplierPaymentDraft.receiptId);
+  }
+
+  async saveSupplierPayment(): Promise<void> {
+    const supplier = this.paymentSupplier();
+    const amountPaise = this.rupeesToPaise(this.supplierPaymentDraft.amount);
+    const payable = this.selectedSupplierPayable();
+    if (!supplier || amountPaise <= 0) {
+      this.error.set('Enter a valid supplier payment amount');
+      return;
+    }
+    if (this.supplierPaymentMode === 'payable' && (!payable || amountPaise > payable.balancePaise)) {
+      this.error.set('Payment cannot exceed the selected unpaid balance');
+      return;
+    }
+    this.busy.set(true);
+    this.error.set('');
+    this.success.set('');
+    try {
+      const payload = {
+        amountPaise,
+        paymentMethod: this.supplierPaymentDraft.method,
+        reference: this.supplierPaymentDraft.reference.trim() || null,
+        idempotencyKey: crypto.randomUUID(),
+      };
+      if (this.supplierPaymentMode === 'payable') {
+        await firstValueFrom(this.api.post('/api/v1/purchases/payments', {
+          ...payload,
+          purchaseReceiptId: payable!.purchaseReceiptId,
+        }));
+        this.success.set('Supplier payment posted');
+      } else {
+        await firstValueFrom(this.api.post('/api/v1/purchases/supplier-advances', {
+          ...payload,
+          supplierId: supplier.id,
+        }));
+        this.success.set('Extra supplier payment recorded');
+      }
+      await Promise.all([this.loadSupplierPayment(), this.reload(false)]);
+      if (this.supplierPaymentMode === 'advance') this.supplierPaymentDraft = blankSupplierPaymentDraft();
+    } catch (error) {
+      this.error.set(this.errorMessage(error, 'Unable to post supplier payment'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  closeSupplierPayment(): void {
+    if (this.busy()) return;
+    this.supplierPaymentOpen.set(false);
+    this.paymentSupplier.set(null);
+    this.supplierPayables.set([]);
+    this.error.set('');
+    this.success.set('');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { supplierPayment: null, supplierId: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
   }
 
   openVoucher(voucher: OutgoingVoucher): void {
@@ -360,6 +513,7 @@ export class OutgoingFundsPageComponent implements OnInit {
     this.error.set('');
     this.success.set('');
     this.drawerOpen.set(true);
+    void this.loadCashTills();
   }
 
   openVoucherById(id: string): void {
@@ -403,11 +557,18 @@ export class OutgoingFundsPageComponent implements OnInit {
       this.draft.paymentAccountCode = 'BANK_CLEARING';
       this.draft.fundSource = 'bank';
     }
+    void this.loadCashTills();
   }
 
   paymentAccountChanged(): void {
     this.draft.fundSource = this.defaultFundSource(this.draft.paymentAccountCode);
     if (this.draft.paymentAccountCode !== 'CASH_ON_HAND') this.draft.cashDrawerTillId = '';
+    void this.loadCashTills();
+  }
+
+  voucherDateChanged(value: string): void {
+    this.draft.businessDate = value;
+    void this.loadCashTills();
   }
 
   defaultFundSource(paymentAccountCode: string): string {
@@ -417,6 +578,15 @@ export class OutgoingFundsPageComponent implements OnInit {
   linePartyChanged(line: DraftLine): void {
     line.linkedPartyId = '';
     line.linkedPartyName = '';
+  }
+
+  linePartySelected(line: DraftLine): void {
+    const party = this.partyOptionsFor(line.linkedPartyType).find((option) => option.id === line.linkedPartyId);
+    line.linkedPartyName = party?.name || '';
+  }
+
+  isRecordLineParty(line: DraftLine): boolean {
+    return ['vendor', 'staff', 'client'].includes(line.linkedPartyType);
   }
 
   addAttachment(): void {
@@ -438,9 +608,13 @@ export class OutgoingFundsPageComponent implements OnInit {
   }
 
   partyOptions(): PartyOption[] {
-    if (this.draft.linkedPartyType === 'vendor') return this.suppliers();
-    if (this.draft.linkedPartyType === 'staff') return this.staff();
-    if (this.draft.linkedPartyType === 'client') return this.clients();
+    return this.partyOptionsFor(this.draft.linkedPartyType);
+  }
+
+  partyOptionsFor(type: string): PartyOption[] {
+    if (type === 'vendor') return this.suppliers();
+    if (type === 'staff') return this.staff();
+    if (type === 'client') return this.clients();
     return [];
   }
 
@@ -452,9 +626,21 @@ export class OutgoingFundsPageComponent implements OnInit {
     this.draft.linkedPartyName = value.replace(/\b\S+/g, (word) => `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`);
   }
 
+  categoryRequirementText(): string {
+    const selected = this.draft.lines
+      .map((line) => this.categories().find((category) => category.key === line.categoryKey))
+      .filter((category): category is OutgoingCategory => !!category);
+    const required = [
+      selected.some((category) => category.requiresParty) ? 'linked party' : '',
+      selected.some((category) => category.requiresBillReference) ? 'bill reference' : '',
+      selected.some((category) => category.requiresAttachment) ? 'evidence' : '',
+    ].filter(Boolean);
+    return required.length ? `Required for selected category: ${required.join(', ')}` : '';
+  }
+
   async save(submit: boolean): Promise<void> {
     if (!this.canEditSelected()) return;
-    const payload = this.payload();
+    const payload = this.payload(submit);
     if (!payload) return;
     this.busy.set(true);
     this.error.set('');
@@ -594,7 +780,7 @@ export class OutgoingFundsPageComponent implements OnInit {
     return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  private payload(): Record<string, unknown> | null {
+  private payload(submit: boolean): Record<string, unknown> | null {
     if (!this.draft.businessDate || !this.draft.paymentAccountCode || !this.draft.paymentMode) {
       this.error.set('Voucher date, payment account and payment mode are required');
       return null;
@@ -633,6 +819,18 @@ export class OutgoingFundsPageComponent implements OnInit {
       this.error.set('Select or enter the linked party');
       return null;
     }
+    if (lines.some((line) => ['vendor', 'staff', 'client'].includes(line.linkedPartyType) && !line.linkedPartyId)) {
+      this.error.set('Select the real record for every line party');
+      return null;
+    }
+    if (lines.some((line) => ['owner', 'other'].includes(line.linkedPartyType) && !line.linkedPartyName)) {
+      this.error.set('Enter the name for every owner or other line party');
+      return null;
+    }
+    if (submit && this.draft.paymentAccountCode === 'CASH_ON_HAND' && this.cashTills().length > 1 && !this.draft.cashDrawerTillId) {
+      this.error.set('Select the cash till before submitting');
+      return null;
+    }
     const attachments = this.draft.attachments
       .map((attachment) => ({
         lineNumber: attachment.lineNumber ? Number(attachment.lineNumber) : null,
@@ -648,6 +846,28 @@ export class OutgoingFundsPageComponent implements OnInit {
       this.error.set('Attachment file URL must start with http:// or https://');
       return null;
     }
+    const attachmentUrl = this.draft.attachmentUrl.trim();
+    if (attachmentUrl && !/^https?:\/\//i.test(attachmentUrl)) {
+      this.error.set('Attachment URL must start with http:// or https://');
+      return null;
+    }
+    const selectedCategories = lines
+      .map((line) => this.categories().find((category) => category.key === line.categoryKey))
+      .filter((category): category is OutgoingCategory => !!category);
+    if (selectedCategories.some((category) => category.requiresParty)
+      && this.draft.linkedPartyType === 'none'
+      && !lines.some((line) => !['voucher', 'none'].includes(line.linkedPartyType))) {
+      this.error.set('Linked party is required for the selected category');
+      return null;
+    }
+    if (selectedCategories.some((category) => category.requiresBillReference) && !this.draft.billReference.trim()) {
+      this.error.set('Bill reference is required for the selected category');
+      return null;
+    }
+    if (selectedCategories.some((category) => category.requiresAttachment) && !attachmentUrl && !attachments.length) {
+      this.error.set('Evidence is required for the selected category');
+      return null;
+    }
     return {
       businessDate: this.draft.businessDate,
       paymentAccountCode: this.draft.paymentAccountCode,
@@ -661,7 +881,7 @@ export class OutgoingFundsPageComponent implements OnInit {
       linkedPartyId: this.draft.linkedPartyId || null,
       linkedPartyName: this.draft.linkedPartyName.trim() || null,
       billReference: this.draft.billReference.trim() || null,
-      attachmentUrl: this.draft.attachmentUrl.trim() || null,
+      attachmentUrl: attachmentUrl || null,
       remarks: this.draft.remarks.trim() || null,
       lines,
       attachments,
@@ -687,6 +907,35 @@ export class OutgoingFundsPageComponent implements OnInit {
     this.suppliers.set(this.partyRows(results[0]));
     this.staff.set(this.partyRows(results[1]));
     this.clients.set(this.partyRows(results[2]));
+  }
+
+  private async loadCashTills(): Promise<void> {
+    const version = ++this.cashTillsLoadVersion;
+    this.cashTills.set([]);
+    this.cashDrawerOpen.set(false);
+    this.cashTillsLoading.set(false);
+    if (this.draft.paymentAccountCode !== 'CASH_ON_HAND' || !this.draft.businessDate) return;
+    this.cashTillsLoading.set(true);
+    try {
+      const sessionResponse = await firstValueFrom(this.api.get<any>(`/api/v1/pos/cash-drawer/current?businessDate=${this.draft.businessDate}`));
+      if (version !== this.cashTillsLoadVersion) return;
+      const session = this.unwrap<any>(sessionResponse);
+      if (!session?.id || session.status !== 'open') return;
+      this.cashDrawerOpen.set(true);
+      const tillResponse = await firstValueFrom(this.api.get<any>(`/api/v1/pos/cash-drawer/${session.id}/tills`));
+      if (version !== this.cashTillsLoadVersion) return;
+      const tills = (this.unwrap<CashTill[]>(tillResponse) || []).filter((till) => till.status === 'open');
+      this.cashTills.set(tills);
+      if (!tills.some((till) => till.id === this.draft.cashDrawerTillId)) {
+        this.draft.cashDrawerTillId = tills.length === 1 ? tills[0].id : '';
+      }
+    } catch {
+      if (version !== this.cashTillsLoadVersion) return;
+      this.cashTills.set([]);
+      this.cashDrawerOpen.set(false);
+    } finally {
+      if (version === this.cashTillsLoadVersion) this.cashTillsLoading.set(false);
+    }
   }
 
   private partyRows(result: PromiseSettledResult<any>): PartyOption[] {
@@ -757,6 +1006,10 @@ function blankLineDraft(): DraftLine {
 
 function blankAttachmentDraft(): DraftAttachment {
   return { lineNumber: '', fileUrl: '', fileType: '' };
+}
+
+function blankSupplierPaymentDraft(): SupplierPaymentDraft {
+  return { receiptId: '', amount: '', method: 'bank', reference: '' };
 }
 
 function todayIso(): string {

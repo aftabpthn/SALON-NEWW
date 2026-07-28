@@ -26,6 +26,18 @@ h1, h2, h3, p { margin: 0; }
   background: radial-gradient(circle at 92% 0, #eaf5ff 0, transparent 31%), #f7faff;
 }
 
+.outgoing-main {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.outgoing-page.drawer-open {
+  grid-template-columns: minmax(0, 1fr) 420px;
+  align-items: start;
+}
+
 .command-strip,
 .workspace-card {
   border: 1px solid var(--line);
@@ -136,6 +148,8 @@ textarea:disabled { cursor: not-allowed; opacity: .62; }
 .status-message.error,
 .drawer-message.error { border-color: #f1c0bb; background: #fff5f4; color: #a72b22; }
 .drawer-message { margin: 12px 18px 0; }
+.field-state { color: #a05a00; font-size: 10px; font-weight: 600; }
+.category-requirement { padding: 8px 10px; border: 1px solid #f0d7a2; border-radius: 8px; background: #fff9eb; color: #805100; font-size: 11px; font-weight: 600; }
 
 .view-tabs {
   display: flex;
@@ -249,19 +263,35 @@ td small { margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 6
 .pager button { width: 30px; min-width: 30px; min-height: 30px; padding: 0; }
 
 .voucher-drawer {
-  position: fixed;
-  inset: 0 0 0 auto;
+  position: sticky;
+  top: 12px;
   z-index: 80;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  width: min(560px, 100vw);
+  width: 100%;
+  min-height: calc(100vh - 71px);
+  max-height: calc(100vh - 71px);
   overflow: hidden;
   border-left: 1px solid var(--line);
   background: #fff;
   box-shadow: -18px 0 42px rgba(7, 24, 50, .18);
 }
 .voucher-drawer > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 17px 18px; border-bottom: 1px solid var(--line); }
-.drawer-body { display: grid; align-content: start; gap: 16px; overflow: auto; padding: 16px 18px 24px; }
+.supplier-payment-body { display:grid; align-content:start; gap:14px; }
+.supplier-payment-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.supplier-payment-summary article { min-width:0; display:grid; gap:5px; padding:11px; border:1px solid var(--line); border-radius:10px; background:var(--soft); }
+.supplier-payment-summary span { color:var(--muted); font-size:10px; font-weight:700; text-transform:uppercase; }
+.supplier-payment-summary strong { overflow:hidden; font-size:16px; text-overflow:ellipsis; }
+.supplier-payment-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.supplier-payment-tabs button { min-height:38px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+.supplier-payment-tabs button.active { border-color:var(--blue); background:#eff6ff; color:#174ea6; }
+.supplier-payment-form .full { grid-column:1/-1; }
+.supplier-bills { display:grid; gap:9px; min-width:0; }
+.supplier-bills .table-wrap { max-height:280px; border:1px solid var(--line); border-radius:10px; }
+.supplier-bills th,.supplier-bills td { padding:9px 10px; }
+.supplier-bills td small { display:block; margin-top:3px; color:var(--muted); font-size:11px; }
+.compact-empty { padding:18px; border:1px dashed var(--line); border-radius:10px; color:var(--muted); text-align:center; }
+.drawer-body { min-height: 0; display: grid; align-content: start; gap: 16px; overflow: auto; padding: 16px 18px 24px; }
 .voucher-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .voucher-meta > span:not(.status-pill) { color: var(--muted); font-size: 10px; font-weight: 700; }
 
@@ -321,6 +351,7 @@ label as-date-picker { width: 100%; }
 
 @media (max-width: 720px) {
   .outgoing-page { gap: 8px; padding: 8px; }
+  .outgoing-page.drawer-open { grid-template-columns: 1fr; }
   .command-strip { flex-direction: column; padding: 13px; }
   .command-actions { width: 100%; justify-content: flex-start; }
   .command-actions .primary-button { flex: 1; }
@@ -334,7 +365,13 @@ label as-date-picker { width: 100%; }
   .workflow-shortcuts { align-items: flex-start; flex-direction: column; }
   .workflow-shortcuts a { width: 100%; justify-content: flex-start; }
   .table-wrap { max-height: none; }
-  .voucher-drawer { width: 100vw; }
+  .voucher-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: 100vw;
+    min-height: 0;
+    max-height: none;
+  }
   .form-grid,
   .line-card,
   .attachment-card { grid-template-columns: 1fr; }
@@ -345,3 +382,4 @@ label as-date-picker { width: 100%; }
   .drawer-footer { overflow-x: auto; justify-content: flex-start; }
   .drawer-footer button { flex: 0 0 auto; }
 }
+@media (max-width:520px) { .supplier-payment-summary { grid-template-columns:1fr; }.supplier-payment-form { grid-template-columns:1fr; }.supplier-payment-form .full { grid-column:auto; } }

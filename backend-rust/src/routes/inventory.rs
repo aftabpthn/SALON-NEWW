@@ -62,6 +62,8 @@ pub struct InventoryValuationQuery {
 pub struct BackbarUsageQuery {
     pub date: Option<chrono::NaiveDate>,
     pub staff_id: Option<String>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
     pub limit: Option<i64>,
 }
 
@@ -143,6 +145,7 @@ pub struct InventoryWriteRequest {
     pub gst_percent: Option<i32>,
     pub barcode: Option<String>,
     pub batch_tracked: Option<bool>,
+    pub dual_use_stock: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<String>,
     pub idempotency_key: Option<String>,
@@ -185,6 +188,7 @@ pub struct InventoryResponse {
     pub gst_percent: i32,
     pub barcode: String,
     pub batch_tracked: bool,
+    pub dual_use_stock: bool,
     pub active: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -201,6 +205,10 @@ pub struct Product360Response {
     pub last_supplier: Option<String>,
     pub recipe_count: i64,
     pub consumed_quantity: i64,
+    pub retail_shelf_quantity: i64,
+    pub sealed_backbar_quantity: i64,
+    pub open_container_balance: i64,
+    pub open_container_unit: Option<String>,
     pub kit_components: Vec<inventory_repository::InventoryKitComponentRecord>,
     pub branch_stocks: serde_json::Value,
     pub expiry_timeline: serde_json::Value,
@@ -356,6 +364,8 @@ async fn list_backbar_usage(
         &branch_id,
         query.date,
         query.staff_id.as_deref().unwrap_or_default(),
+        query.client_id.as_deref().unwrap_or_default(),
+        query.appointment_id.as_deref().unwrap_or_default(),
         query.limit.unwrap_or(250).clamp(1, 1000),
     )
     .await
@@ -404,7 +414,7 @@ async fn review_backbar_usage(
             .any(|permission| permission == "inventory.approve")
     {
         return Err(AppError::forbidden(
-            "owner approval is required for recipe wastage",
+            "manager approval is required for recipe variance",
         ));
     }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
@@ -827,6 +837,10 @@ async fn product_360(
         last_supplier: summary.last_supplier,
         recipe_count: summary.recipe_count,
         consumed_quantity: summary.consumed_quantity,
+        retail_shelf_quantity: summary.retail_shelf_quantity,
+        sealed_backbar_quantity: summary.sealed_backbar_quantity,
+        open_container_balance: summary.open_container_balance,
+        open_container_unit: summary.open_container_unit,
         kit_components,
         branch_stocks: extended["branchStocks"].clone(),
         expiry_timeline: extended["expiryTimeline"].clone(),
@@ -880,6 +894,7 @@ async fn create_inventory(
             gst_percent: non_negative_i32(payload.gst_percent, "gstPercent")?,
             barcode: &barcode,
             batch_tracked: payload.batch_tracked.unwrap_or(false),
+            dual_use_stock: payload.dual_use_stock.unwrap_or(false),
             active: payload.active.unwrap_or(true),
         },
     )
@@ -923,6 +938,7 @@ async fn update_inventory(
             gst_percent: payload.gst_percent.map(|value| value.max(0)),
             barcode: barcode.as_deref(),
             batch_tracked: payload.batch_tracked,
+            dual_use_stock: payload.dual_use_stock,
             active: payload.active,
             adjustment_reason: payload.adjustment_reason.as_deref(),
             idempotency_key: payload.idempotency_key.as_deref(),
@@ -1019,6 +1035,7 @@ impl From<InventoryRecord> for InventoryResponse {
             gst_percent: record.gst_percent,
             barcode: record.barcode,
             batch_tracked: record.batch_tracked,
+            dual_use_stock: record.dual_use_stock,
             active: record.active,
             created_at: record.created_at,
             updated_at: record.updated_at,

@@ -1,6 +1,6 @@
 <section class="package-workspace" [class.drawer-open]="drawerOpen">
   <header class="workspace-toolbar">
-    <nav class="catalog-tabs" aria-label="Membership catalog"><a routerLink="/memberships" routerLinkActive="active">Memberships</a><a routerLink="/packages" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Packages</a></nav>
+    <nav class="catalog-tabs" aria-label="Membership catalog"><a routerLink="/memberships" routerLinkActive="active">Memberships</a><a routerLink="/packages" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Packages</a><a routerLink="/memberships" [queryParams]="{ tab: 'giftCards' }">Gift cards</a><a routerLink="/memberships" [queryParams]="{ tab: 'coupons' }">Coupon codes</a></nav>
     <button class="refresh-button" type="button" (click)="loadWorkspace()">Refresh</button>
   </header>
 

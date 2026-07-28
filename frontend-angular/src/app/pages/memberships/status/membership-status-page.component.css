@@ -8,19 +8,6 @@ dl { margin: 0; }
 dl div { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 18px; border-bottom: 1px solid #e2e9f2; }
 dt { color: #617089; font-weight: 600; } dd { margin: 0; font-weight: 700; }
 .pill { padding: 5px 9px; border-radius: 999px; background: #e9f8f1; color: #087d4d; text-transform: capitalize; }
-.loyalty-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid #e2e9f2; }
-.loyalty-panel div { display: grid; gap: 4px; padding: 14px 18px; border-right: 1px solid #e2e9f2; }
-.loyalty-panel div:last-child { border-right: 0; }
-.loyalty-panel span, .stamp-card span, .stamp-card small { color: #617089; font-size: 13px; font-weight: 600; }
-.loyalty-panel strong { font-size: 18px; }
-.stamp-section { display: grid; gap: 10px; padding: 16px 18px; border-bottom: 1px solid #e2e9f2; }
-.stamp-section h2 { margin: 0; font-size: 15px; }
-.stamp-card { display: grid; gap: 8px; padding: 11px; border: 1px solid #d4dfed; border-radius: 8px; background: #f8fbff; }
-.stamp-card div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.stamp-card strong { overflow-wrap: anywhere; }
-.stamp-card small { display: flex; flex-wrap: wrap; gap: 4px; }
-.progress { height: 8px; overflow: hidden; border-radius: 999px; background: #dbe7f5; }
-.progress span { display: block; height: 100%; border-radius: inherit; background: #087d4d; }
 button { width: 100%; min-height: 42px; border: 0; border-radius: 9px; background: #087d4d; color: #fff; font-weight: 600; cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
 button:disabled { opacity: .55; cursor: not-allowed; }
@@ -31,19 +18,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .request-section label { display: grid; gap: 5px; color: #53647e; font-size: 13px; font-weight: 600; }
 .request-section input, .request-section select, .request-section textarea { width: 100%; min-height: 40px; box-sizing: border-box; border: 1px solid #c8d6e7; border-radius: 8px; padding: 8px 10px; background: #fff; color: #0d1f3c; font: inherit; font-weight: 400; }
 .request-section textarea { min-height: 64px; resize: vertical; }
-.qr-box { display: grid; justify-items: center; gap: 6px; padding: 12px; border: 1px solid #d4dfed; border-radius: 8px; background: #f8fbff; text-align: center; }
-.qr-box svg { width: 164px; height: 164px; }
-.qr-box span { color: #617089; font-size: 13px; font-weight: 600; }
 
 @media (max-width: 480px) {
   .status-page { padding: 12px; }
   header, .request-section { padding-inline: 14px; }
   dl div { align-items: flex-start; flex-direction: column; padding: 12px 14px; }
-  .loyalty-panel { grid-template-columns: 1fr; }
-  .loyalty-panel div { border-right: 0; border-bottom: 1px solid #e2e9f2; padding-inline: 14px; }
-  .loyalty-panel div:last-child { border-bottom: 0; }
-  .stamp-section { padding-inline: 14px; }
-  .stamp-card div:first-child { align-items: flex-start; flex-direction: column; gap: 3px; }
   dd { width: 100%; overflow-wrap: anywhere; text-align: left; }
   button, .request-section input, .request-section select { min-height: 44px; }
 }

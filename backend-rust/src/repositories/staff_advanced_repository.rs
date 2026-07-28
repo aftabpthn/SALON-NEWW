@@ -122,6 +122,41 @@ pub struct StaffTaskInput {
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct StaffServiceTargetRecord {
+    pub id: String,
+    pub staff_id: String,
+    pub staff_name: String,
+    pub assignment_type: String,
+    pub assignment_label: String,
+    pub service_id: String,
+    pub service_name: String,
+    pub target_count: i64,
+    pub achieved_count: i64,
+    pub progress_percent: i32,
+    pub starts_on: NaiveDate,
+    pub ends_on: NaiveDate,
+    pub reward_type: String,
+    pub reward_amount_paise: i64,
+    pub reward_description: String,
+    pub progress_status: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StaffServiceTargetInput {
+    pub assignee_type: String,
+    pub assignee_value: String,
+    pub service_id: String,
+    pub target_count: i64,
+    pub starts_on: NaiveDate,
+    pub ends_on: NaiveDate,
+    pub reward_type: String,
+    pub reward_amount_paise: i64,
+    pub reward_description: String,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct StaffTaskCommentRecord {
     pub id: String,
     pub task_id: String,
@@ -751,6 +786,107 @@ pub async fn create_task(
     .bind(&input.status)
     .bind(actor_user_id)
     .fetch_optional(db)
+    .await
+}
+
+pub async fn list_service_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<StaffServiceTargetRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH target_rows AS (
+          SELECT target.id,target.staff_id,
+            COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(staff.first_name || ' ' || staff.last_name),'') AS staff_name,
+            target.assignment_type,target.assignment_label,target.service_id,target.service_name,target.target_count,
+            COALESCE(progress.achieved_count,0)::BIGINT AS achieved_count,
+            LEAST(100,COALESCE(progress.achieved_count,0)*100/target.target_count)::INTEGER AS progress_percent,
+            target.starts_on,target.ends_on,target.reward_type,target.reward_amount_paise,target.reward_description,
+            CASE WHEN target.status='cancelled' THEN 'cancelled'
+                 WHEN COALESCE(progress.achieved_count,0)>=target.target_count THEN 'completed'
+                 WHEN CURRENT_DATE>target.ends_on THEN 'expired' ELSE 'active' END AS progress_status,
+            target.created_at
+          FROM staff_service_targets target
+          JOIN staff ON staff.tenant_id=target.tenant_id AND staff.branch_id=target.branch_id AND staff.id=target.staff_id
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(line.quantity),0)::BIGINT AS achieved_count
+            FROM pos_sale_lines line
+            JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id
+            WHERE line.tenant_id=target.tenant_id AND line.branch_id=target.branch_id
+              AND line.line_type='service' AND line.item_id=target.service_id
+              AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN target.starts_on AND target.ends_on
+              AND sale.status NOT IN ('draft','cancelled','voided','refunded')
+              AND (line.staff_id=target.staff_id OR EXISTS (
+                SELECT 1 FROM JSONB_ARRAY_ELEMENTS(COALESCE(line.staff_splits,'[]'::JSONB)) split(value)
+                WHERE split.value->>'staffId'=target.staff_id
+              ))
+          ) progress ON TRUE
+          WHERE target.tenant_id=$1 AND target.branch_id=$2 AND ($3='' OR target.staff_id=$3)
+        )
+        SELECT * FROM target_rows WHERE $4='' OR progress_status=$4
+        ORDER BY (progress_status='active') DESC,ends_on,staff_name,service_name,id
+        LIMIT 1000
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(status)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn create_service_targets(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    input: &StaffServiceTargetInput,
+) -> Result<Vec<StaffServiceTargetRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        WITH inserted AS (
+          INSERT INTO staff_service_targets(
+            tenant_id,branch_id,staff_id,assignment_type,assignment_label,service_id,service_name,
+            target_count,starts_on,ends_on,reward_type,reward_amount_paise,reward_description,created_by
+          )
+          SELECT $1,$2,staff.id,$3,
+            CASE WHEN $3='job_title' THEN staff.job_title ELSE COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(staff.first_name || ' ' || staff.last_name),'') END,
+            service.id,service.name,$6,$7,$8,$9,$10,$11,$12
+          FROM staff
+          JOIN services service ON service.tenant_id=staff.tenant_id AND service.branch_id=staff.branch_id AND service.id=$5 AND service.active=TRUE
+          WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+            AND (($3='staff' AND staff.id=$4) OR ($3='job_title' AND staff.job_title=$4))
+          ON CONFLICT DO NOTHING
+          RETURNING *
+        )
+        SELECT inserted.id,inserted.staff_id,
+          COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(staff.first_name || ' ' || staff.last_name),'') AS staff_name,
+          inserted.assignment_type,inserted.assignment_label,inserted.service_id,inserted.service_name,
+          inserted.target_count,0::BIGINT AS achieved_count,0::INTEGER AS progress_percent,
+          inserted.starts_on,inserted.ends_on,inserted.reward_type,inserted.reward_amount_paise,
+          inserted.reward_description,'active'::TEXT AS progress_status,inserted.created_at
+        FROM inserted
+        JOIN staff ON staff.tenant_id=inserted.tenant_id AND staff.branch_id=inserted.branch_id AND staff.id=inserted.staff_id
+        ORDER BY staff_name,inserted.id
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&input.assignee_type)
+    .bind(&input.assignee_value)
+    .bind(&input.service_id)
+    .bind(input.target_count)
+    .bind(input.starts_on)
+    .bind(input.ends_on)
+    .bind(&input.reward_type)
+    .bind(input.reward_amount_paise)
+    .bind(&input.reward_description)
+    .bind(actor_user_id)
+    .fetch_all(db)
     .await
 }
 

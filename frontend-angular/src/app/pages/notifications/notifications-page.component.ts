@@ -1,6 +1,7 @@
 
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -56,6 +57,7 @@ type SmsCenterSummary = { eligibleRecipients: number; campaigns: SmsCenterCampai
 export class NotificationsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
   private teamSocket: WebSocket | null = null;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   messages: InboxMessage[] = [];
@@ -144,6 +146,11 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
       this.teamMessages = Array.isArray(team.data) ? team.data : [];
       this.eligibleRecipients = control.data?.eligibleRecipients || 0;
       this.controlCampaigns = Array.isArray(control.data?.campaigns) ? control.data.campaigns : [];
+      const routeClientId = this.route.snapshot.queryParamMap.get('clientId') || '';
+      if (routeClientId && this.threads.some((thread) => thread.clientId === routeClientId)) {
+        this.selectedClientId = routeClientId;
+        this.mode = 'client';
+      }
       if (!this.threads.some((thread) => thread.clientId === this.selectedClientId)) {
         this.selectedClientId = this.threads[0]?.clientId || '';
       }

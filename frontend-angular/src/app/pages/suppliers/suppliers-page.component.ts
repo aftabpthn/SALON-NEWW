@@ -2,10 +2,11 @@ import { LanguageService } from '../../core/i18n/language.service';
 
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
-import { isOpenOrderStatus, supplierCompleteness, supplierPurchaseMetrics } from './supplier-metrics';
+import { isOpenOrderStatus, supplierCompleteness, supplierPaymentStatus, supplierPurchaseMetrics } from './supplier-metrics';
 
 type Supplier = {
   id: string;
@@ -31,7 +32,9 @@ type PurchaseOrder = {
   totalPaise: number;
 };
 
-type Payable = { supplierId: string; totalPaise: number; returnedPaise: number; balancePaise: number };
+type Payable = { supplierId: string; totalPaise: number; returnedPaise: number; paidPaise: number; balancePaise: number };
+type SupplierPaymentMetric = { supplierId: string; paidPaise: number; unpaidPaise: number; extraPaidPaise: number };
+type SupplierPaymentSummary = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number; suppliers: SupplierPaymentMetric[] };
 type View = 'register' | 'compliance' | 'price';
 type QuickFilter = 'all' | 'gstin' | 'openPo';
 
@@ -44,10 +47,12 @@ type QuickFilter = 'all' | 'gstin' | 'openPo';
 export class SuppliersPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
 
   suppliers: Supplier[] = [];
   orders: PurchaseOrder[] = [];
   payables: Payable[] = [];
+  paymentSummary: SupplierPaymentSummary = this.emptyPaymentSummary();
   ordersLoaded = false;
   view: View = 'register';
   quickFilter: QuickFilter = 'all';
@@ -113,6 +118,7 @@ export class SuppliersPageComponent implements OnInit {
       this.suppliers = [];
       this.orders = [];
       this.payables = [];
+      this.paymentSummary = this.emptyPaymentSummary();
       this.ordersLoaded = false;
       this.error = this.message(error, this.language.text('inventory.message.b4783cda79'));
       this.loading = false;
@@ -121,14 +127,16 @@ export class SuppliersPageComponent implements OnInit {
 
   private async loadMetrics() {
     try {
-      [this.orders, this.payables] = await Promise.all([
-        this.get<PurchaseOrder[]>('/purchases/orders?page=1&pageSize=50&withCount=false'),
-        this.get<Payable[]>('/purchases/payables?page=1&pageSize=50&withCount=false'),
+      [this.orders, this.payables, this.paymentSummary] = await Promise.all([
+        this.get<PurchaseOrder[]>('/purchases/orders'),
+        this.get<Payable[]>('/purchases/payables'),
+        this.get<SupplierPaymentSummary>('/purchases/payment-summary'),
       ]);
       this.ordersLoaded = true;
     } catch {
       this.orders = [];
       this.payables = [];
+      this.paymentSummary = this.emptyPaymentSummary();
     }
   }
 
@@ -171,6 +179,25 @@ export class SuppliersPageComponent implements OnInit {
 
   score(supplier: Supplier) { return supplierCompleteness(supplier); }
   metricsFor(supplierId: string) { return supplierPurchaseMetrics(supplierId, this.orders, this.payables); }
+
+  paymentMetricsFor(supplierId: string): SupplierPaymentMetric {
+    return this.paymentSummary.suppliers.find((row) => row.supplierId === supplierId)
+      ?? { supplierId, paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0 };
+  }
+
+  paymentStatus(supplierId: string) {
+    return supplierPaymentStatus(this.paymentMetricsFor(supplierId));
+  }
+
+  openPayments(supplier: Supplier) {
+    const metric = this.paymentMetricsFor(supplier.id);
+    void this.router.navigate(['/finance/outgoing-funds'], {
+      queryParams: {
+        supplierPayment: metric.unpaidPaise > 0 ? 'pay' : 'view',
+        supplierId: supplier.id,
+      },
+    });
+  }
   compliance(supplier: Supplier) { const score = this.score(supplier); return score === 100 ? 'Complete' : score >= 75 ? 'Review' : 'At risk'; }
   money(paise: number) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format((paise || 0) / 100); }
 
@@ -258,6 +285,10 @@ export class SuppliersPageComponent implements OnInit {
       paymentTermsDays: null,
       active: true,
     };
+  }
+
+  private emptyPaymentSummary(): SupplierPaymentSummary {
+    return { paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0, suppliers: [] };
   }
 }
 

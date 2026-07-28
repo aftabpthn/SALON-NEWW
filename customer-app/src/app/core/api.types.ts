@@ -37,6 +37,26 @@ export interface Category {
   slug: string;
 }
 
+export interface CustomerMarketingOffer {
+  id: string;
+  branchId: string;
+  businessSlug: string;
+  businessName: string;
+  branchName: string;
+  code: string;
+  title: string;
+  customerDescription: string;
+  benefitType: string;
+  benefitValue: number;
+  targetServiceIds: string[];
+  applicableServices: Pick<ServiceItem, "id" | "name">[];
+  startsAt?: string;
+  endsAt?: string;
+  minimumBillPaise: number;
+  perClientLimit: number;
+  hasCreative: boolean;
+}
+
 export interface ServiceItem {
   id: string;
   businessId?: string;
@@ -379,6 +399,7 @@ export interface CreateBookingPayload {
   endAt: string;
   notes?: string;
   rebookFromBookingId?: string;
+  source?: string;
   paymentMode: "pay_at_venue" | "online";
   cardGuaranteeAccepted?: boolean;
 }

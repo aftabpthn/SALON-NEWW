@@ -591,7 +591,8 @@ pub struct OvertimeApprovalRecord {
     pub ot_approved_at: Option<DateTime<Utc>>,
 }
 
-const OVERTIME_APPROVAL_COLUMNS: &str = "id,staff_id,business_date,overtime_minutes,ot_approval_status,\
+const OVERTIME_APPROVAL_COLUMNS: &str =
+    "id,staff_id,business_date,overtime_minutes,ot_approval_status,\
 approved_overtime_minutes,ot_approved_by,ot_approved_at";
 
 pub async fn list_overtime(
@@ -644,6 +645,22 @@ pub async fn decide_overtime(
     .bind(actor_user_id)
     .bind(decision)
     .bind(approved_overtime_minutes)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn overtime_business_date(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    attendance_id: &str,
+) -> Result<Option<NaiveDate>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT business_date FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND overtime_minutes>0",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(attendance_id)
     .fetch_optional(db)
     .await
 }

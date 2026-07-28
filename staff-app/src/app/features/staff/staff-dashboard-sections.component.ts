@@ -7,29 +7,14 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
   standalone: true,
   imports: [RouterLink],
   template: `
-    <section class="staff-home-controls" aria-label="Staff context filters">
-      <button type="button" class="staff-filter-chip">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('calendar')"></path></svg>
-        <span>Date</span>
-        <b>Today</b>
-      </button>
-      <button type="button" class="staff-filter-chip">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V7l8-4 8 4v14h-6v-6h-4v6H4zm2-2h2v-6h8v6h2V8.2l-6-3-6 3V19z"></path></svg>
-        <span>Branch</span>
-        <b>Current</b>
-      </button>
-    </section>
-
     <section class="today-hero" aria-labelledby="today-heading">
       <span class="shift-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11H7v-2h4V6h2v7z"></path></svg>
       </span>
       <div class="today-hero-copy">
-        <p class="eyebrow">{{ viewModel.hero.eyebrow }}</p>
         <h1 id="today-heading">Today’s Shift</h1>
         <p>{{ viewModel.hero.title }}</p>
         @if (viewModel.hero.detail) { <small class="shift-detail">{{ viewModel.hero.detail }}</small> }
-        @if (viewModel.hero.hint) { <small class="hero-hint">{{ viewModel.hero.hint }}</small> }
         @if (viewModel.hero.shiftAssigned) { <span class="shift-line"><b>Shift</b> {{ viewModel.hero.shift }}</span> }
       </div>
       <div class="hero-action-stack" aria-label="Recommended next actions">
@@ -42,34 +27,34 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
 
     @if (viewModel.quickActions.length) {
       <section class="dashboard-section quick-section" aria-labelledby="quick-actions-heading">
-        <div class="section-heading"><div><p class="eyebrow">Start here</p><h2 id="quick-actions-heading">Quick Actions</h2></div></div>
+        <div class="section-heading"><h2 id="quick-actions-heading">Quick Actions</h2></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
-            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></a> }
-            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ pendingLabel(action) }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></button> }
+            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b></span></a> }
+            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ pendingLabel(action) }}</b></span></button> }
           }
         </div>
       </section>
     }
 
     <section class="dashboard-section" aria-labelledby="overview-heading">
-      <div class="section-heading"><div><p class="eyebrow">At a glance</p><h2 id="overview-heading">Today’s Overview</h2></div></div>
+      <div class="section-heading"><h2 id="overview-heading">Today’s Overview</h2></div>
        <div class="overview-grid" [class.three-metrics]="viewModel.overview.length === 3" [class.single-metric]="viewModel.overview.length === 1">
         @for (metric of viewModel.overview; track metric.label) {
-          @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></a> }
-          @else { <article class="overview-card"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></article> }
+          @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></a> }
+          @else { <article class="overview-card"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></article> }
         }
       </div>
     </section>
 
     <section class="dashboard-section" aria-labelledby="next-work-heading">
-        <div class="section-heading"><div><p class="eyebrow">On the floor</p><h2 id="next-work-heading">Today’s Appointments</h2></div>@if (viewModel.work.queueRoute; as queueRoute) { <a [routerLink]="queueRoute">Open queue</a> }</div>
+        <div class="section-heading"><h2 id="next-work-heading">Today’s Appointments</h2>@if (viewModel.work.queueRoute; as queueRoute) { <a [routerLink]="queueRoute">Open queue</a> }</div>
       <article class="next-work-card" [class.active-work]="viewModel.work.mode === 'active'" [class.waiting-work]="viewModel.work.mode === 'waiting'" [class.delayed-work]="viewModel.work.tone === 'amber'" [class.empty-work]="viewModel.work.mode === 'empty'">
         @if (viewModel.work.mode === 'empty') {
           <span class="appointment-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path [attr.d]="iconFor('appointments')"></path></svg></span>
         }
         <div class="work-time"><span>{{ viewModel.work.eyebrow }}</span><b>{{ viewModel.work.meta }}</b></div>
-        <div class="work-main"><h3>{{ viewModel.work.title }}</h3>@if (viewModel.work.detail) { <p>{{ viewModel.work.detail }}</p> }@if (viewModel.work.status) { <span class="work-status">{{ viewModel.work.status }}</span> }
+        <div class="work-main"><h3>{{ viewModel.work.title }}</h3>@if (viewModel.work.detail && viewModel.work.mode !== 'empty') { <p>{{ viewModel.work.detail }}</p> }@if (viewModel.work.status) { <span class="work-status">{{ viewModel.work.status }}</span> }
           @if (viewModel.work.progress !== undefined) { <div class="timer-track" aria-label="Service progress"><span [style.width.%]="viewModel.work.progress"></span></div> }
         </div>
         <div class="work-actions">
@@ -84,7 +69,7 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
 
     @if (viewModel.alerts.length) {
       <section class="dashboard-section" aria-labelledby="priority-heading">
-        <div class="section-heading"><div><p class="eyebrow alert-eyebrow">Needs attention</p><h2 id="priority-heading">Priority feed</h2></div></div>
+        <div class="section-heading"><h2 id="priority-heading">Priority feed</h2></div>
         <div class="priority-list">
           @for (alert of viewModel.alerts; track alert.id) {
             <a [routerLink]="alert.route" [class.critical]="alert.tone === 'critical'"><i aria-hidden="true"></i><div><strong>{{ alert.title }}</strong><small>{{ alert.detail }}</small></div><b aria-hidden="true">→</b></a>
@@ -95,7 +80,7 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
 
     @if (viewModel.performance.length) {
       <section class="dashboard-section performance-section" aria-labelledby="performance-heading">
-        <div class="section-heading"><div><p class="eyebrow">Your progress</p><h2 id="performance-heading">Performance summary</h2></div>@if (viewModel.performanceRoute; as performanceRoute) { <a [routerLink]="performanceRoute">View details</a> }</div>
+        <div class="section-heading"><h2 id="performance-heading">Performance summary</h2>@if (viewModel.performanceRoute; as performanceRoute) { <a [routerLink]="performanceRoute">View details</a> }</div>
         <div class="performance-grid">
           @for (metric of viewModel.performance; track metric.label) {
             <article [attr.title]="metric.explanation || null" [attr.aria-label]="metric.explanation ? metric.label + ': ' + metric.value + '. ' + metric.explanation : null"><span class="metric-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(metric.label.toLowerCase())"></path></svg>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small>
@@ -108,8 +93,8 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
 
     @if (viewModel.tools.length) {
       <section class="dashboard-section more-tools" aria-labelledby="tools-heading">
-        <div class="section-heading"><div><p class="eyebrow">Your tools</p><h2 id="tools-heading">Workspace</h2></div></div>
-        <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route" [attr.title]="tool.label + ' — ' + tool.hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><span><strong>{{ tool.label }}</strong><small>{{ tool.hint }}</small></span></a> }</div>
+        <div class="section-heading"><h2 id="tools-heading">Workspace</h2></div>
+        <div class="tool-grid">@for (tool of viewModel.tools; track tool.id) { <a [routerLink]="tool.route"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(tool.id)"></path></svg><strong>{{ tool.label }}</strong></a> }</div>
       </section>
     }
   `,

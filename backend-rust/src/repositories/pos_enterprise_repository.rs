@@ -618,7 +618,8 @@ pub async fn create_corporate_account(
     terms: i32,
 ) -> Result<CorporateAccount, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let code = next_branch_code(&mut tx, tenant, branch, BusinessCodeKind::CorporateAccount).await?;
+    let code =
+        next_branch_code(&mut tx, tenant, branch, BusinessCodeKind::CorporateAccount).await?;
     let row = sqlx::query_as("INSERT INTO corporate_billing_accounts (tenant_id,branch_id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,payment_terms_days,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,account_code,account_name,billing_email,phone,gstin,credit_limit_paise,0::BIGINT outstanding_paise,payment_terms_days,status,created_at")
         .bind(tenant).bind(branch).bind(code).bind(name).bind(email).bind(phone).bind(gstin).bind(limit).bind(terms).bind(actor).fetch_one(&mut *tx).await?;
     tx.commit().await?;

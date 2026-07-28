@@ -23,21 +23,49 @@ import { StaffAppService } from "../../core/staff-app.service";
           @if (message()) {
             <div class="notice success">{{ message() }}</div>
           }
-           @if (staff.biometricEnabled()) {
-             <button type="button" class="biometric-button" [disabled]="staff.loading()" (click)="unlockBiometric()">Sign in with passkey</button>
+          @if (recoveryCodes.length) {
+            <div class="recovery-codes"><strong>Recovery codes</strong>@for (code of recoveryCodes; track code) { <code>{{ code }}</code> }</div>
           }
+          @if (staff.passwordChangeRequired()) {
+            <form class="staff-form" (ngSubmit)="changePassword($event)">
+              <div class="floating-field password-field">
+                <input id="staff-new-password" [(ngModel)]="newPassword" name="newPassword" type="password" placeholder="New password" autocomplete="new-password" required />
+                <label for="staff-new-password">New password</label>
+              </div>
+              <div class="floating-field password-field">
+                <input id="staff-confirm-password" [(ngModel)]="confirmPassword" name="confirmPassword" type="password" placeholder="Confirm password" autocomplete="new-password" required />
+                <label for="staff-confirm-password">Confirm password</label>
+              </div>
+              <button type="submit" [disabled]="staff.loading()">Change password</button>
+            </form>
+          } @else if (staff.mfaEnrollmentRequired()) {
+            @if (staff.mfaSetup(); as setup) {
+              <form class="staff-form" (ngSubmit)="enableMfa($event)">
+                <label class="setup-key">Authenticator setup key<input type="text" readonly [value]="setup.secret" /></label>
+                <a class="authenticator-link" [href]="setup.otpAuthUri">Open authenticator app</a>
+                <div class="floating-field">
+                  <input id="staff-mfa-setup-code" [(ngModel)]="mfaSetupCode" name="mfaSetupCode" inputmode="numeric" placeholder="6-digit code" autocomplete="one-time-code" maxlength="6" required />
+                  <label for="staff-mfa-setup-code">6-digit code</label>
+                </div>
+                <button type="submit" [disabled]="staff.loading()">Enable authenticator</button>
+              </form>
+            }
+          } @else {
+            @if (staff.biometricEnabled()) {
+              <button type="button" class="biometric-button" [disabled]="staff.loading()" (click)="unlockBiometric()">Sign in with passkey</button>
+            }
 
-          <form class="staff-form" (ngSubmit)="login($event)">
+            <form class="staff-form" (ngSubmit)="login($event)">
             <div class="floating-field">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v4h1a2 2 0 0 1 2 2v10h-7v-4H8v4H4Zm3-14h2V5H7v2Zm4 0h2V5h-2v2Zm-4 4h2V9H7v2Zm4 0h2V9h-2v2Zm4 2v2h2v-2h-2Zm0 6h2v-2h-2v2Z"></path></svg>
-              <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="Tenant ID" autocomplete="organization" required />
-              <label for="staff-tenant-id">Tenant ID</label>
+              <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="Salon code" autocomplete="organization" required />
+              <label for="staff-tenant-id">Salon code</label>
             </div>
 
             <div class="floating-field">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4V4Zm0 6h16v10H4V10Zm3 2v2h3v-2H7Zm5 0v2h5v-2h-5Zm-5 4v2h3v-2H7Zm5 0v2h5v-2h-5Z"></path></svg>
-              <input id="staff-branch-id" [(ngModel)]="branchId" name="branchId" placeholder="Branch ID (optional)" autocomplete="organization" />
-              <label for="staff-branch-id">Branch ID (optional)</label>
+              <input id="staff-branch-id" [(ngModel)]="branchId" name="branchId" placeholder="Branch code (optional)" autocomplete="organization" />
+              <label for="staff-branch-id">Branch code (optional)</label>
             </div>
 
             <div class="floating-field">
@@ -59,10 +87,19 @@ import { StaffAppService } from "../../core/staff-app.service";
               </button>
             </div>
 
+            @if (mfaRequired()) {
+              <div class="floating-field">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm0 5a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm3 9H9v-1.5c0-1.7 1.3-2.5 3-2.5s3 .8 3 2.5V16Z"></path></svg>
+                <input id="staff-mfa-code" [(ngModel)]="mfaCode" name="mfaCode" placeholder="Authenticator or recovery code" autocomplete="one-time-code" maxlength="64" required />
+                <label for="staff-mfa-code">Authenticator or recovery code</label>
+              </div>
+            }
+
             <button type="submit" [disabled]="staff.loading()">
               @if (staff.loading()) { <ion-spinner name="crescent"></ion-spinner> } @else { Open staff app }
             </button>
-          </form>
+            </form>
+          }
 
            @if (staff.hasSavedSession() && staff.biometricSupported()) {
             <button type="button" class="secondary-button" [disabled]="staff.loading()" (click)="toggleBiometric()">
@@ -115,6 +152,11 @@ import { StaffAppService } from "../../core/staff-app.service";
     .biometric-button { border-color: var(--staff-border-accent); background: var(--staff-primary-light); color: var(--staff-primary-hover); }
     .notice { margin: 18px 0; padding: 14px 16px; border: 1px solid var(--staff-error-border); border-radius: 16px; color: var(--staff-error-text); background: var(--staff-error-surface); font-weight: 650; }
     .success { border-color: var(--staff-success-border); color: var(--staff-success-text); background: var(--staff-success-surface); }
+    .setup-key { display: grid; gap: 6px; color: var(--staff-text-secondary); font-size: .78rem; font-weight: 700; }
+    .setup-key input { min-height: 48px; padding: 10px 12px; border: 1px solid var(--staff-input-border); border-radius: 10px; background: var(--staff-surface); color: var(--staff-text); font: inherit; }
+    .authenticator-link { color: var(--staff-primary-hover); font-weight: 750; }
+    .recovery-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 16px; padding: 14px; border: 1px solid var(--staff-success-border); border-radius: 12px; background: var(--staff-success-surface); }
+    .recovery-codes strong { grid-column: 1 / -1; }
     .customer-link { display: block; margin-top: 18px; color: var(--staff-primary-hover); font-weight: 700; text-align: center; text-decoration: none; }
     @media (max-width: 820px) { .login-grid { width: calc(100% - 40px); padding: 20px 0; } .staff-card { padding: 20px; } }
     @media (prefers-reduced-motion: reduce) { .floating-field input, .floating-field label, .floating-field > svg, .floating-field input::placeholder { transition: none; } }
@@ -124,23 +166,66 @@ export class StaffLoginPage {
   readonly customerAppUrl = environment.customerAppUrl;
   readonly message = signal("");
   readonly showPassword = signal(false);
+  readonly mfaRequired = signal(false);
   tenantId = "";
   branchId = "";
   loginId = "";
   password = "";
+  mfaCode = "";
+  newPassword = "";
+  confirmPassword = "";
+  mfaSetupCode = "";
+  recoveryCodes: string[] = [];
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
   async login(event?: Event) {
     event?.preventDefault();
     if (this.staff.loading()) return;
+    this.showPassword.set(false);
     this.message.set("");
     try {
-      await this.staff.login({ tenantId: this.tenantId, branchId: this.branchId, loginId: this.loginId, password: this.password });
+      await this.staff.login({ tenantId: this.tenantId, branchId: this.branchId, loginId: this.loginId, password: this.password, mfaCode: this.mfaCode });
       this.message.set("Staff session created. Opening dashboard...");
       await this.router.navigateByUrl("/staff/dashboard");
     } catch {
       this.message.set("");
+      if (this.staff.error().toLowerCase().includes("mfa") || this.staff.error().toLowerCase().includes("authenticator")) {
+        this.mfaRequired.set(true);
+      }
+    }
+  }
+
+  async changePassword(event?: Event) {
+    event?.preventDefault();
+    this.message.set("");
+    if (this.newPassword.length < 12) { this.staff.error.set("Password must be at least 12 characters."); return; }
+    if (this.newPassword !== this.confirmPassword) { this.staff.error.set("Passwords do not match."); return; }
+    try {
+      await this.staff.changeRequiredPassword(this.newPassword);
+      this.password = "";
+      this.mfaCode = "";
+      this.newPassword = "";
+      this.confirmPassword = "";
+      this.mfaRequired.set(false);
+      this.message.set("Password changed. Sign in with your new password.");
+    } catch (error) {
+      this.staff.error.set(error instanceof Error ? error.message : "Unable to change password.");
+    }
+  }
+
+  async enableMfa(event?: Event) {
+    event?.preventDefault();
+    this.message.set("");
+    if (!/^\d{6}$/.test(this.mfaSetupCode.trim())) { this.staff.error.set("Enter the 6-digit authenticator code."); return; }
+    try {
+      this.recoveryCodes = await this.staff.enableRequiredMfa(this.mfaSetupCode.trim());
+      this.mfaSetupCode = "";
+      this.password = "";
+      this.mfaCode = "";
+      this.message.set("Authenticator enabled. Save the recovery codes, then sign in again.");
+    } catch (error) {
+      this.staff.error.set(error instanceof Error ? error.message : "Unable to enable authenticator.");
     }
   }
 

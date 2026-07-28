@@ -1932,13 +1932,7 @@ async fn update_treatment_photo(
         return Err(AppError::validation("invalid treatment photo update"));
     }
     let row = clients_repository::update_treatment_photo(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &id,
-        &photo_id,
-        caption,
-        photo_type,
+        &state.db, &tenant_id, &branch_id, &id, &photo_id, caption, photo_type,
     )
     .await
     .map_err(|_| AppError::internal("failed to update treatment photo"))?
@@ -2026,9 +2020,11 @@ async fn get_treatment_photo(
 
 async fn create_client(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<ClientWriteRequest>,
 ) -> ApiResult<ClientResponse> {
+    require_client_permission(&claims, "clients.manage")?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     validate_client_write(&payload, true)?;
     let first_name = payload
@@ -2078,10 +2074,12 @@ async fn create_client(
 
 async fn update_client(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ClientWriteRequest>,
 ) -> ApiResult<ClientResponse> {
+    require_client_permission(&claims, "clients.manage")?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     validate_client_write(&payload, false)?;
     let categories_json = payload

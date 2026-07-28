@@ -1,6 +1,6 @@
 <main class="status-page">
   <section class="status-card">
-    <header><span>AS</span><h1>Membership & rewards</h1></header>
+    <header><span>AS</span><h1>Membership status</h1></header>
     @if (loading) {
       <div class="loading">Loading membership...</div>
     }
@@ -9,43 +9,9 @@
     }
     @if (status; as item) {
       <dl><div><dt>Client</dt><dd>{{ item.clientName }}</dd></div><div><dt>Membership</dt><dd>{{ item.membershipName || '—' }}</dd></div><div><dt>Status</dt><dd><span class="pill">{{ item.status }}</span></dd></div><div><dt>Expiry</dt><dd>{{ formatDate(item.expiresAt) }}</dd></div></dl>
-      <section class="loyalty-panel">
-        <div><span>Reward points</span><strong>{{ item.rewardPointsBalance || 0 }}</strong></div>
-        <div><span>Link expiry</span><strong>{{ formatDate(item.tokenExpiresAt) }}</strong></div>
-      </section>
-      @if (item.stampCards?.length) {
-        <section class="stamp-section">
-          <h2>Stamp cards</h2>
-          @for (card of item.stampCards; track card.programCode) {
-            <article class="stamp-card">
-              <div><strong>{{ card.programName }}</strong><span>{{ card.balance }} / {{ card.stampsRequired }} stamps</span></div>
-              <div class="progress"><span [style.width.%]="progress(card)"></span></div>
-              <small><span>{{ card.remainingStamps }} remaining</span>@if (card.rewardPointsOnCompletion) { <span>· {{ card.rewardPointsOnCompletion }} points reward</span> }</small>
-            </article>
-          }
-        </section>
-      }
       @if (message) {
         <p class="success">{{ message }}</p>
       }
-      <section class="request-section">
-        <h2>Redeem QR</h2>
-        @if (item.advancedRewards?.length) {
-          <label>Reward<select [(ngModel)]="selectedRewardCode"><option value="">Custom amount</option>@for (reward of item.advancedRewards; track reward.code) {
-            <option [value]="reward.code">{{ reward.name }} · {{ reward.pointsRequired }} points</option>
-          }</select></label>
-        }
-        <label>Points<input type="number" min="1" [(ngModel)]="redeemPoints" /></label>
-        <label>Amount<input type="number" min="1" step="0.01" [(ngModel)]="redeemAmountRupees" /></label>
-        <button type="button" [disabled]="requesting || !item.rewardPointsBalance" (click)="createRewardQr()">Generate one-time QR</button>
-        @if (rewardQr) {
-          <div class="qr-box">
-            <div [innerHTML]="rewardQr.qrSvg"></div>
-            <strong>{{ rewardQr.points }} points · ₹{{ rewardQr.amountPaise / 100 }}</strong>
-            <span>Expires {{ formatDate(rewardQr.expiresAt) }}</span>
-          </div>
-        }
-      </section>
       <section class="request-section"><h2>Renewal</h2><button type="button" [disabled]="requesting" (click)="requestRenewal()">Request renewal</button></section>
       <section class="request-section"><h2>Payment update</h2><label>Payment reference<input [(ngModel)]="paymentReference" maxlength="200" /></label><button type="button" [disabled]="requesting" (click)="submitRequest('payment_method_update')">Submit payment update</button></section>
       <section class="request-section"><h2>Credit adjustment</h2><label>Service<select [(ngModel)]="creditServiceId"><option value="">Select service</option>@for (credit of item.credits; track credit) {

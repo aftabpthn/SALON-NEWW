@@ -66,6 +66,7 @@ export class AvailabilityPageComponent implements OnInit {
   editorStaff?: ScheduleStaff;
   editorDate = '';
   editorDraft?: ScheduleEntry;
+  editorSecondShiftOpen = false;
 
   ngOnInit() { void this.loadSchedule(); }
 
@@ -133,16 +134,66 @@ export class AvailabilityPageComponent implements OnInit {
   cell(staffId: string, date: string) { return this.entries.get(this.key(staffId, date)); }
   operationsFor(staffId: string, date: string) { return this.operationBlocks.get(this.key(staffId, date)) || []; }
   operationLabel(block: ScheduleOperationBlock) { return block.operationType.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+  timeTemplateFor(staffId: string) {
+    return this.days.map((date) => this.cell(staffId, date)).find((entry) => Boolean(entry?.shift1Start || entry?.shift2Start));
+  }
+  hasTemplateTime(staffId: string, date: string) {
+    const template = this.timeTemplateFor(staffId);
+    const entry = this.cell(staffId, date);
+    return Boolean(template && entry
+      && entry.shift1Start === template.shift1Start && entry.shift1End === template.shift1End
+      && entry.shift2Start === template.shift2Start && entry.shift2End === template.shift2End);
+  }
+
+  applyTemplateTime(event: Event, person: ScheduleStaff, date: string) {
+    event.stopPropagation();
+    const template = this.timeTemplateFor(person.id);
+    if (!template) {
+      this.error = 'First add shift time for this employee, then use tick to copy it';
+      return;
+    }
+    const entry = { ...(this.cell(person.id, date) || this.emptyEntry(person.id, date)) };
+    Object.assign(entry, {
+      shift1Start: template.shift1Start,
+      shift1End: template.shift1End,
+      shift2Start: template.shift2Start,
+      shift2End: template.shift2End,
+      status: 'working' as ScheduleStatus,
+    });
+    this.entries.set(this.key(person.id, date), entry);
+    this.error = '';
+    this.dirty = true;
+  }
 
   openEditor(person: ScheduleStaff, date: string) {
     const existing = this.cell(person.id, date);
     this.editorStaff = person;
     this.editorDate = date;
     this.editorDraft = existing ? { ...existing } : this.emptyEntry(person.id, date);
+    this.editorSecondShiftOpen = this.hasSecondShift(this.editorDraft);
     this.editorOpen = true;
   }
 
-  closeEditor() { this.editorOpen = false; }
+  closeEditor() { this.editorOpen = false; this.editorSecondShiftOpen = false; }
+
+  hasSecondShift(entry: ScheduleEntry) {
+    return this.editorSecondShiftOpen || Boolean(entry.shift2Start || entry.shift2End);
+  }
+
+  addSecondShift() {
+    if (!this.editorDraft) return;
+    this.editorSecondShiftOpen = true;
+    this.editorDraft.shift2Start = this.editorDraft.shift2Start || '';
+    this.editorDraft.shift2End = this.editorDraft.shift2End || '';
+    if (this.editorDraft.status === 'not_set') this.editorDraft.status = 'working';
+  }
+
+  removeSecondShift() {
+    if (!this.editorDraft) return;
+    this.editorSecondShiftOpen = false;
+    this.editorDraft.shift2Start = '';
+    this.editorDraft.shift2End = '';
+  }
 
   applyEditor() {
     if (!this.editorDraft) return;

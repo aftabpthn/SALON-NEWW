@@ -28,6 +28,44 @@
     }
   </nav>
 
+  @if (activeTab === 'workforce') {
+    <section class="command-strip" aria-label="Workforce actions">
+      @if (canManage('staff.operations.manage', 'staff.app.schedule.manage')) { <button type="button" (click)="createShiftSwap()">Add shift swap</button> }
+      @if (canManage('staff.operations.manage', 'staff.manage')) { <button type="button" (click)="createTransfer()">Add branch transfer</button> }
+      @if (canManage('staff.operations.manage', 'staff.manage')) { <button type="button" (click)="optimizeRoster()">Optimize roster</button> }
+    </section>
+  }
+  @if (activeTab === 'development') {
+    <section class="command-strip" aria-label="Development actions">
+      @if (canManage('staff.development.manage', 'staff.manage')) { <button type="button" (click)="createLicense()">Add license</button> }
+      @if (canManage('staff.development.manage', 'staff.manage')) { <button type="button" (click)="createReview()">Add review</button> }
+      @if (canManage('staff.development.manage', 'staff.app.tasks.manage')) { <button type="button" (click)="assignTraining()">Assign training</button> }
+      @if (canManage('staff.development.manage', 'staff.app.tasks.manage')) { <button type="button" (click)="createCoachingGoal()">Add coaching goal</button> }
+    </section>
+  }
+  @if (activeTab === 'systems') {
+    <section class="command-strip" aria-label="Systems actions">
+      @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="createDevice()">Add biometric device</button> }
+      @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="registerGateway()">Register gateway</button> }
+      @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="createMapping()">Add device mapping</button> }
+      @if (canManage('staff.systems.manage', 'staff.app.notifications.manage')) { <button type="button" (click)="registerMobileDevice()">Register mobile device</button> }
+    </section>
+  }
+  @if (activeTab === 'governance') {
+    <section class="command-strip" aria-label="Governance actions">
+      @if (canManage('staff.governance.manage', 'staff.manage')) { <button type="button" (click)="createApproval()">Add approval</button> }
+      @if (canManage('staff.app.notifications.manage', 'staff.governance.manage')) { <button type="button" (click)="createTemplate()">Add notification template</button> }
+      @if (canManage('staff.app.feedback.manage', 'staff.governance.manage')) { <button type="button" (click)="addFeedbackResolution()">Add feedback resolution</button> }
+    </section>
+  }
+  @if (activeTab === 'content') {
+    <section class="command-strip" aria-label="Content actions">
+      @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createContentTask()">Add task</button> }
+      @if (canManage('marketing.offers.manage', 'marketing.manage')) { <button type="button" (click)="createContentOffer()">Add offer</button> }
+      @if (canManage('staff.payroll.manage', 'payroll.manage')) { <button type="button" (click)="createPenaltyRule()">Add penalty/payroll rule</button> }
+    </section>
+  }
+
   @if (activeTab === 'command') {
     <section class="summary-strip">
       @for (item of objectEntries(command?.['kpis']); track item) {
@@ -106,6 +144,14 @@
 }</div>@if (objectEntries(manpower).length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section></div>
+<section class="data-card"><header><div><h2>Staff AI</h2><span>{{ staffAi?.['humanReviewOnly'] ? 'Human review only' : 'No analysis' }}</span></div></header>
+<div class="table-wrap"><table><thead><tr><th scope="col">Analysis</th><th scope="col">Signals</th><th scope="col">Highest priority</th></tr></thead><tbody>
+@for (section of staffAiSections(); track section['key']) {
+  <tr><td><strong>{{ section['label'] }}</strong></td><td>{{ section['result']?.['signalCount'] || 0 }}</td><td>{{ section['result']?.['signals']?.[0]?.['evidence']?.[0] || 'No review signal' }}</td></tr>
+}
+</tbody></table></div>@if (staffAiSections().length === 0) {
+<div class="empty">No AI analysis available</div>
+}</section>
 }
 
 @if (activeTab === 'development') {
@@ -198,7 +244,12 @@
 }
 
 @if (activeTab === 'governance') {
-  <section class="summary-strip"><div><span>{{ 'staff.ui.6ac383a960' | translate }}</span><strong>{{ approvals.length }}</strong></div><div><span>{{ 'staff.ui.9e7d8c07e1' | translate }}</span><strong>{{ auditRows.length }}</strong></div><div><span>{{ 'staff.ui.753a22b2eb' | translate }}</span><strong>{{ notifications.length }}</strong></div><div><span>{{ 'staff.ui.7243ee3dc1' | translate }}</span><strong>{{ tips.length }}</strong></div></section>
+  <section class="summary-strip"><div><span>{{ 'staff.ui.6ac383a960' | translate }}</span><strong>{{ approvals.length }}</strong></div><div><span>Staff feedback</span><strong>{{ feedbackRows.length }}</strong></div><div><span>{{ 'staff.ui.9e7d8c07e1' | translate }}</span><strong>{{ auditRows.length }}</strong></div><div><span>{{ 'staff.ui.753a22b2eb' | translate }}</span><strong>{{ notifications.length }}</strong></div><div><span>{{ 'staff.ui.7243ee3dc1' | translate }}</span><strong>{{ tips.length }}</strong></div></section>
+  <section class="data-card"><header><div><h2>Staff feedback</h2></div></header>@for (row of feedbackRows; track trackById($index, row)) {
+  <article class="record feedback-record"><div><strong>{{ staffName(row) }} · {{ label(row['category']) }}</strong><small>{{ row['title'] }} · {{ row['body'] }} · {{ formatDateTime(row['createdAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="feedback-editor"><select [(ngModel)]="row['nextStatus']" aria-label="Feedback status"><option value="open">Open</option><option value="in_review">In review</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select><input [(ngModel)]="row['managerNoteDraft']" maxlength="2000" placeholder="Manager note" aria-label="Manager note" /><button class="primary" type="button" (click)="resolveFeedback(row)">Save</button></div></article>
+  }@if (feedbackRows.length === 0) {
+  <div class="empty">No staff feedback yet</div>
+}</section>
   <div class="two-column"><section class="data-card"><header><div><h2>{{ 'staff.ui.deb9d03cf0' | translate }}</h2></div></header>@for (row of approvals; track trackById($index, row)) {
   <article class="record"><div><strong>{{ label(row['requestType'] || 'Approval') }}</strong><small>{{ row['entityType'] }} · {{ formatDateTime(row['createdAt']) }}</small></div><span class="status">{{ row['status'] }}</span><div class="row-actions"><button type="button" (click)="decideApproval(row, 'rejected')">{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" (click)="decideApproval(row, 'approved')">{{ 'staff.ui.7b2c7f146a' | translate }}</button></div></article>
   }@if (approvals.length === 0) {
@@ -237,5 +288,38 @@
 }@if (tips.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
+}
+
+@if (activeTab === 'content') {
+  <section class="summary-strip"><div><span>Tasks</span><strong>{{ contentTasks.length }}</strong></div><div><span>Offers</span><strong>{{ contentOffers.length }}</strong></div><div><span>Penalty rules</span><strong>{{ penaltyRules.length }}</strong></div></section>
+  <section class="content-grid">
+    <article class="data-card content-card">
+      <header><div><h2>Task</h2><span>{{ contentTasks.length }} records</span></div></header>
+      <div class="content-body"><button class="primary" type="button" (click)="createContentTask()">Add task</button></div>
+      @for (row of contentTasks | slice:0:8; track trackById($index, row)) {
+        <article class="record"><div><strong>{{ row['title'] || row['taskType'] || 'Task' }}</strong><small>{{ staffName(row) }} · {{ formatDateTime(row['dueAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] || 'open' }}</span></article>
+      }@if (contentTasks.length === 0) {
+        <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
+      }
+    </article>
+    <article class="data-card content-card">
+      <header><div><h2>Offer</h2><span>{{ contentOffers.length }} records</span></div></header>
+      <div class="content-body"><button class="primary" type="button" (click)="createContentOffer()">Add offer</button></div>
+      @for (row of contentOffers | slice:0:8; track trackById($index, row)) {
+        <article class="record"><div><strong>{{ row['code'] || row['title'] || 'Offer' }}</strong><small>{{ label(row['benefitType'] || row['discountType'] || 'offer') }} · Ends {{ formatDateTime(row['endsAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] || 'active' }}</span></article>
+      }@if (contentOffers.length === 0) {
+        <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
+      }
+    </article>
+    <article class="data-card content-card">
+      <header><div><h2>Penalty rule</h2><span>{{ penaltyRules.length }} records</span></div></header>
+      <div class="content-body"><button class="primary" type="button" (click)="createPenaltyRule()">Add rule</button></div>
+      @for (row of penaltyRules | slice:0:8; track trackById($index, row)) {
+        <article class="record"><div><strong>{{ row['name'] || row['triggerType'] || 'Rule' }}</strong><small>{{ label(row['kind'] || 'deduction') }} · {{ money(row['amountPaise']) }}</small></div><span class="status" [ngClass]="statusClass(row['active'] === false ? 'offline' : 'approved')">{{ row['active'] === false ? 'inactive' : 'active' }}</span></article>
+      }@if (penaltyRules.length === 0) {
+        <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
+      }
+    </article>
+  </section>
 }
 </section>

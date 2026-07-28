@@ -54,7 +54,9 @@
           <label>Currency<input [(ngModel)]="languageSettings.currency" maxlength="3" list="currency-codes" [disabled]="!canManageLanguageTenant" /></label>
           <label>Timezone<input [(ngModel)]="languageSettings.timeZone" maxlength="64" list="timezone-codes" [disabled]="!canManageLanguageTenant" /></label>
           <label>Date format<select [(ngModel)]="languageSettings.dateFormat" [disabled]="!canManageLanguageTenant"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></label>
-          <label>Number format<select [(ngModel)]="languageSettings.numberLocale" [disabled]="!canManageLanguageTenant"><option value="en-IN">1,23,456.78</option><option value="hi-IN">१,२३,४५६.७८</option></select></label>
+          <label>Number format<select [(ngModel)]="languageSettings.numberLocale" [disabled]="!canManageLanguageTenant">@for (option of languageOptions; track option) {
+            <option [value]="option.code">{{ option.label }}</option>
+          }</select></label>
         </div>
         <datalist id="region-codes">@for (option of regionOptions; track option) {
           <option [value]="option.code">{{ option.label }}</option>
@@ -72,7 +74,7 @@
       </label>
       <section class="language-preview" [attr.dir]="languagePreviewDirection">
         <span>Direction preview · {{ languagePreviewDirection | uppercase }}</span>
-        <strong>{{ languageSettings.displayMode === 'bilingual' ? 'Save / सहेजें' : (languageSettings.primaryLanguage === 'hi-IN' ? 'सहेजें' : 'Save') }}</strong>
+        <strong>{{ languageSettings.displayMode === 'bilingual' && languageSettings.secondaryLanguage ? languageName(languageSettings.primaryLanguage) + ' + ' + languageName(languageSettings.secondaryLanguage) : languageName(languageSettings.primaryLanguage) }}</strong>
       </section>
       <footer>
         <button class="primary" type="button" [disabled]="!canManageLanguageTenant || languageSaving" (click)="saveLanguageSettings()">{{ languageSaving ? 'Saving…' : 'Save tenant default' }}</button>
@@ -464,14 +466,7 @@
                   <h4>{{ group.name }}</h4>
                   @for (permission of group.permissions; track trackByPermissionCode($index, permission)) {
                     <div class="permission-option">
-                      <span>
-                        <b>{{ permission.label }}
-                          @if (permission.sensitive) {
-                            <em class="sensitive-badge">Sensitive</em>
-                          }
-                        </b>
-                        <small>{{ permission.code }}</small>
-                      </span>
+                      <span><b>{{ permission.label }}</b><small>{{ permission.code }}</small></span>
                       <div class="permission-decisions">
                         <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasRolePermission(permission.code)" (change)="toggleRolePermission(permission.code)" />Allow</label>
                         <label><input type="checkbox" [disabled]="!!selectedRole?.isSystem" [checked]="hasDeniedPermission(permission.code)" (change)="toggleDeniedPermission(permission.code)" />Deny</label>
@@ -495,19 +490,6 @@
                     </label>
                   }
                 </div>
-              </section>
-            }
-            @if (sensitiveRoleGrants.length && !selectedRole?.isSystem) {
-              <section class="role-policy-block sensitive-reason-block">
-                <h4>Sensitive permission reason</h4>
-                <label>
-                  <span>Why does this role need {{ sensitiveRoleGrants.length }} sensitive permission{{ sensitiveRoleGrants.length > 1 ? 's' : '' }}?</span>
-                  <input
-                    [(ngModel)]="roleReason"
-                    maxlength="240"
-                    placeholder="Reason (recorded in the audit log)"
-                  />
-                </label>
               </section>
             }
             <section class="role-policy-block">

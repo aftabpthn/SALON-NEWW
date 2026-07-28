@@ -4,9 +4,62 @@ import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import english from './catalogs/en-in';
 
-export type LanguageCode = 'en-IN' | 'hi-IN';
+export type LanguageCode =
+  | 'en-IN'
+  | 'hi-IN'
+  | 'hi-Latn-IN'
+  | 'ar-SA'
+  | 'pt-BR'
+  | 'th-TH'
+  | 'zh-CN'
+  | 'ja-JP'
+  | 'tr-TR'
+  | 'nb-NO'
+  | 'es-ES'
+  | 'fr-FR'
+  | 'id-ID'
+  | 'da-DK'
+  | 'hu-HU'
+  | 'de-DE'
+  | 'it-IT'
+  | 'nl-NL'
+  | 'ms-MY'
+  | 'vi-VN'
+  | 'ko-KR'
+  | 'fil-PH'
+  | 'ru-RU'
+  | 'pl-PL'
+  | 'sv-SE';
 export type LanguageDisplayMode = 'single' | 'bilingual';
 export type TranslationParams = Record<string, string | number>;
+
+export const LANGUAGE_OPTIONS: ReadonlyArray<{ code: LanguageCode; label: string }> = [
+  { code: 'en-IN', label: 'English' },
+  { code: 'hi-IN', label: 'हिन्दी' },
+  { code: 'hi-Latn-IN', label: 'Hinglish' },
+  { code: 'ar-SA', label: 'Arabic' },
+  { code: 'pt-BR', label: 'Português Brasileiro' },
+  { code: 'th-TH', label: 'ไทย (Thai)' },
+  { code: 'zh-CN', label: '中文 (Chinese)' },
+  { code: 'ja-JP', label: '日本語 (Japanese)' },
+  { code: 'tr-TR', label: 'Turkish' },
+  { code: 'nb-NO', label: 'Norwegian' },
+  { code: 'es-ES', label: 'Spanish' },
+  { code: 'fr-FR', label: 'Français' },
+  { code: 'id-ID', label: 'Indonesian' },
+  { code: 'da-DK', label: 'Danish' },
+  { code: 'hu-HU', label: 'Hungarian' },
+  { code: 'de-DE', label: 'German' },
+  { code: 'it-IT', label: 'Italian' },
+  { code: 'nl-NL', label: 'Dutch' },
+  { code: 'ms-MY', label: 'Malay' },
+  { code: 'vi-VN', label: 'Vietnamese' },
+  { code: 'ko-KR', label: 'Korean' },
+  { code: 'fil-PH', label: 'Filipino / Tagalog' },
+  { code: 'ru-RU', label: 'Russian' },
+  { code: 'pl-PL', label: 'Polish' },
+  { code: 'sv-SE', label: 'Swedish' },
+];
 
 export interface LanguagePreferences {
   primary: LanguageCode;
@@ -59,6 +112,7 @@ const DEFAULT_PREFERENCES: LanguagePreferences = {
 
 const LANGUAGE_LOADERS: Partial<Record<LanguageCode, () => Promise<Catalog>>> = {
   'hi-IN': () => import('./catalogs/hi-in').then(({ default: catalog }) => catalog),
+  'hi-Latn-IN': () => import('./catalogs/hi-latn-in').then(({ default: catalog }) => catalog),
 };
 
 const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ps', 'sd', 'ug', 'ur', 'yi']);
@@ -125,22 +179,16 @@ export class LanguageService {
   }
 
   apiError(error: any, fallbackKey = 'common.error'): string {
-    return this.errorCodeText(String(error?.error?.error?.code ?? error?.error?.code ?? ''), fallbackKey);
-  }
-
-  /** Translate a backend error code that has already been extracted from the envelope. */
-  errorCodeText(code: string, fallbackKey = 'common.error'): string {
+    const code = String(error?.error?.error?.code ?? error?.error?.code ?? '').toUpperCase();
     const key = ({
-      AI_CHANNEL_DISABLED: 'error.aiChannelDisabled',
       CONFLICT: 'error.conflict',
       FORBIDDEN: 'common.permissionDenied',
       INTERNAL_ERROR: 'error.internal',
-      NETWORK_UNAVAILABLE: 'error.networkUnavailable',
       NOT_FOUND: 'error.notFound',
       RATE_LIMITED: 'error.rateLimited',
       UNAUTHENTICATED: 'error.unauthenticated',
       VALIDATION_FAILED: 'error.validation',
-    } as Record<string, string>)[code.toUpperCase()];
+    } as Record<string, string>)[code];
     return this.text(key || fallbackKey);
   }
 

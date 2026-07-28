@@ -44,6 +44,11 @@ const ENDPOINT_REQUIREMENTS: &[EndpointRequirement] = &[
     },
     EndpointRequirement {
         group: "workforce",
+        method: "GET",
+        path: "/staff/intelligence/ai-analysis",
+    },
+    EndpointRequirement {
+        group: "workforce",
         method: "POST",
         path: "/staff/shift-swaps",
     },
@@ -218,6 +223,16 @@ const ENDPOINT_REQUIREMENTS: &[EndpointRequirement] = &[
     EndpointRequirement {
         group: "governance",
         method: "GET",
+        path: "/staff/feedback",
+    },
+    EndpointRequirement {
+        group: "governance",
+        method: "PATCH",
+        path: "/staff/feedback/:id",
+    },
+    EndpointRequirement {
+        group: "governance",
+        method: "GET",
         path: "/staff/audit",
     },
     EndpointRequirement {
@@ -285,6 +300,37 @@ const ENDPOINT_REQUIREMENTS: &[EndpointRequirement] = &[
         method: "POST",
         path: "/staff/notifications/:id/delivery-result",
     },
+    // Content
+    EndpointRequirement {
+        group: "content",
+        method: "GET",
+        path: "/staff/tasks",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/tasks",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "GET",
+        path: "/marketing/offers",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/marketing/offers",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "GET",
+        path: "/staff/payroll-adjustment-rules",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/payroll-adjustment-rules",
+    },
 ];
 
 #[test]
@@ -294,6 +340,7 @@ fn staff_control_center_parity_matrix_is_routed() {
         manifest_dir.join("src/routes/staff_enterprise.rs"),
         manifest_dir.join("src/routes/staff_operations.rs"),
         manifest_dir.join("src/routes/staff_advanced.rs"),
+        manifest_dir.join("src/routes/marketing_leads.rs"),
     ];
 
     let mut route_map: HashMap<String, HashSet<String>> = HashMap::new();

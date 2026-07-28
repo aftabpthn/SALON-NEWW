@@ -27,6 +27,7 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
               <div class="row"><strong>Staff ID</strong><span>{{ staff.user()?.staffId || data.staff.id }}</span></div>
               <div class="row"><strong>Login ID</strong><span>{{ staff.user()?.loginId || '-' }}</span></div>
               <div class="row"><strong>Role</strong><span>{{ staff.user()?.role || data.staff.roleId }}</span></div>
+              <div class="row"><strong>Designation</strong><span>{{ data.staff.designation || '-' }}</span></div>
               <div class="row"><strong>Department</strong><span>{{ data.staff.department || '-' }}</span></div>
             </div>
           </article>

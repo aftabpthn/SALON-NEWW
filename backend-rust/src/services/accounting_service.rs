@@ -549,12 +549,23 @@ pub async fn post_purchase_grn(
     cgst_paise: i64,
     sgst_paise: i64,
     igst_paise: i64,
+    shipping_paise: i64,
+    handling_paise: i64,
 ) -> Result<(), AppError> {
     let total_paise = taxable_paise
         .saturating_add(cgst_paise)
         .saturating_add(sgst_paise)
-        .saturating_add(igst_paise);
-    if taxable_paise < 0 || cgst_paise < 0 || sgst_paise < 0 || igst_paise < 0 || total_paise == 0 {
+        .saturating_add(igst_paise)
+        .saturating_add(shipping_paise)
+        .saturating_add(handling_paise);
+    if taxable_paise < 0
+        || cgst_paise < 0
+        || sgst_paise < 0
+        || igst_paise < 0
+        || shipping_paise < 0
+        || handling_paise < 0
+        || total_paise == 0
+    {
         return Err(AppError::validation("GRN accounting totals are invalid"));
     }
     let mut lines = vec![
@@ -587,6 +598,14 @@ pub async fn post_purchase_grn(
         lines.push(JournalLine {
             account_code: "INPUT_IGST",
             debit_paise: igst_paise,
+            credit_paise: 0,
+        });
+    }
+    let commercial_charges = shipping_paise.saturating_add(handling_paise);
+    if commercial_charges > 0 {
+        lines.push(JournalLine {
+            account_code: "OPERATING_EXPENSE",
+            debit_paise: commercial_charges,
             credit_paise: 0,
         });
     }
@@ -757,11 +776,48 @@ pub async fn post_supplier_payment(
     .await
 }
 
-pub async fn post_payroll_payout(
+pub async fn post_supplier_advance(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    advance_id: &str,
+    method: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Err(AppError::validation("supplier advance amount is invalid"));
+    }
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "supplier_advance",
+        advance_id,
+        "Supplier advance",
+        vec![
+            JournalLine {
+                account_code: "PREPAID_EXPENSES",
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: payment_account(method),
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn post_staff_payroll_payout(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
     run_id: &str,
+    payout_id: &str,
+    staff_id: &str,
     method: &str,
     gross_paise: i64,
     net_paise: i64,
@@ -773,16 +829,17 @@ pub async fn post_payroll_payout(
         return Err(AppError::validation("payroll payout amount is invalid"));
     }
     let withheld_paise = gross_paise - net_paise;
-    let statutory_paise = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(SUM(employer_contribution_paise + accrual_paise),0)::BIGINT FROM staff_payroll_statutory_calculations WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3",
+    let (employee_statutory_paise, employer_statutory_paise) = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT COALESCE(SUM(employee_deduction_paise),0)::BIGINT,COALESCE(SUM(employer_contribution_paise + accrual_paise),0)::BIGINT FROM staff_payroll_statutory_calculations WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4",
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(run_id)
+    .bind(staff_id)
     .fetch_one(&mut **tx)
     .await
     .map_err(|_| AppError::internal("failed to calculate payroll statutory liability"))?;
-    if statutory_paise < 0 {
+    if employee_statutory_paise < 0 || employer_statutory_paise < 0 {
         return Err(AppError::validation(
             "payroll statutory liability is invalid",
         ));
@@ -791,11 +848,12 @@ pub async fn post_payroll_payout(
     // staff member), not a new liability — it must reduce STAFF_ADVANCE_ASSET directly rather
     // than fold into PAYROLL_DEDUCTIONS_PAYABLE like statutory/manual withholding does.
     let advance_recovery_paise = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(SUM(recovered_paise),0)::BIGINT FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3",
+        "SELECT COALESCE(SUM(recovered_paise),0)::BIGINT FROM staff_advance_recoveries WHERE tenant_id=$1 AND branch_id=$2 AND payroll_run_id=$3 AND staff_id=$4 AND applied=TRUE",
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(run_id)
+    .bind(staff_id)
     .fetch_one(&mut **tx)
     .await
     .map_err(|_| AppError::internal("failed to calculate payroll advance recovery"))?;
@@ -804,7 +862,11 @@ pub async fn post_payroll_payout(
             "payroll advance recovery amount is invalid",
         ));
     }
-    let payable_withheld_paise = withheld_paise - advance_recovery_paise;
+    let payable_withheld_paise = payroll_deductions_payable(
+        withheld_paise,
+        employee_statutory_paise,
+        advance_recovery_paise,
+    )?;
     let mut lines = vec![
         JournalLine {
             account_code: "PAYROLL_EXPENSE",
@@ -831,16 +893,19 @@ pub async fn post_payroll_payout(
             credit_paise: advance_recovery_paise,
         });
     }
-    if statutory_paise > 0 {
+    if employer_statutory_paise > 0 {
         lines.push(JournalLine {
             account_code: "PAYROLL_STATUTORY_EXPENSE",
-            debit_paise: statutory_paise,
+            debit_paise: employer_statutory_paise,
             credit_paise: 0,
         });
+    }
+    let statutory_payable_paise = employee_statutory_paise + employer_statutory_paise;
+    if statutory_payable_paise > 0 {
         lines.push(JournalLine {
             account_code: "PAYROLL_STATUTORY_PAYABLE",
             debit_paise: 0,
-            credit_paise: statutory_paise,
+            credit_paise: statutory_payable_paise,
         });
     }
     post_entry(
@@ -848,11 +913,23 @@ pub async fn post_payroll_payout(
         tenant_id,
         branch_id,
         "payroll_payout",
-        run_id,
+        payout_id,
         "Staff payroll payout",
         lines,
     )
     .await
+}
+
+fn payroll_deductions_payable(
+    withheld_paise: i64,
+    employee_statutory_paise: i64,
+    advance_recovery_paise: i64,
+) -> Result<i64, AppError> {
+    withheld_paise
+        .checked_sub(employee_statutory_paise)
+        .and_then(|value| value.checked_sub(advance_recovery_paise))
+        .filter(|value| *value >= 0)
+        .ok_or_else(|| AppError::validation("payroll withholding breakdown is invalid"))
 }
 
 /// Disbursing a salary advance is never a salary expense — it moves cash into a receivable
@@ -866,7 +943,9 @@ pub async fn post_staff_advance_disbursement(
     amount_paise: i64,
 ) -> Result<(), AppError> {
     if amount_paise <= 0 {
-        return Err(AppError::validation("advance disbursement amount is invalid"));
+        return Err(AppError::validation(
+            "advance disbursement amount is invalid",
+        ));
     }
     post_entry(
         tx,
@@ -922,92 +1001,6 @@ pub async fn post_staff_advance_waiver(
                 credit_paise: amount_paise,
             },
         ],
-    )
-    .await
-}
-
-/// Posts one staff member's individual payout within a partial-payout run — the same shape as
-/// `post_payroll_payout` (gross expense, net cash out, withheld payable, advance-asset credit,
-/// statutory expense/payable) but scoped to a single payroll item instead of the whole run, so a
-/// held/failed/retried staff member's payout can be posted independently of everyone else's.
-/// Uses `source_type="payroll_item_payout"` (distinct from the run-level `"payroll_payout"`) so
-/// the two posting paths never collide.
-#[allow(clippy::too_many_arguments)]
-pub async fn post_staff_payout_item(
-    tx: &mut Transaction<'_, Postgres>,
-    tenant_id: &str,
-    branch_id: &str,
-    item_id: &str,
-    method: &str,
-    gross_paise: i64,
-    net_paise: i64,
-    statutory_employer_paise: i64,
-    advance_recovery_paise: i64,
-) -> Result<(), AppError> {
-    if gross_paise == 0 {
-        return Ok(());
-    }
-    if gross_paise < 0 || net_paise < 0 || net_paise > gross_paise {
-        return Err(AppError::validation("payroll item payout amount is invalid"));
-    }
-    let withheld_paise = gross_paise - net_paise;
-    if !(0..=withheld_paise).contains(&advance_recovery_paise) {
-        return Err(AppError::validation(
-            "payroll item advance recovery amount is invalid",
-        ));
-    }
-    if statutory_employer_paise < 0 {
-        return Err(AppError::validation(
-            "payroll item statutory liability is invalid",
-        ));
-    }
-    let payable_withheld_paise = withheld_paise - advance_recovery_paise;
-    let mut lines = vec![
-        JournalLine {
-            account_code: "PAYROLL_EXPENSE",
-            debit_paise: gross_paise,
-            credit_paise: 0,
-        },
-        JournalLine {
-            account_code: payment_account(method),
-            debit_paise: 0,
-            credit_paise: net_paise,
-        },
-    ];
-    if payable_withheld_paise > 0 {
-        lines.push(JournalLine {
-            account_code: "PAYROLL_DEDUCTIONS_PAYABLE",
-            debit_paise: 0,
-            credit_paise: payable_withheld_paise,
-        });
-    }
-    if advance_recovery_paise > 0 {
-        lines.push(JournalLine {
-            account_code: "STAFF_ADVANCE_ASSET",
-            debit_paise: 0,
-            credit_paise: advance_recovery_paise,
-        });
-    }
-    if statutory_employer_paise > 0 {
-        lines.push(JournalLine {
-            account_code: "PAYROLL_STATUTORY_EXPENSE",
-            debit_paise: statutory_employer_paise,
-            credit_paise: 0,
-        });
-        lines.push(JournalLine {
-            account_code: "PAYROLL_STATUTORY_PAYABLE",
-            debit_paise: 0,
-            credit_paise: statutory_employer_paise,
-        });
-    }
-    post_entry(
-        tx,
-        tenant_id,
-        branch_id,
-        "payroll_item_payout",
-        item_id,
-        "Staff payroll item payout",
-        lines,
     )
     .await
 }
@@ -1493,9 +1486,7 @@ fn customer_credit_lines<'a>(
 fn payment_account(method: &str) -> &'static str {
     match method.trim().to_ascii_lowercase().as_str() {
         "cash" => "CASH_ON_HAND",
-        "wallet" | "store_credit" | "gift_card" | "booking_advance" => {
-            "CUSTOMER_CREDIT_LIABILITY"
-        }
+        "wallet" | "store_credit" | "gift_card" | "booking_advance" => "CUSTOMER_CREDIT_LIABILITY",
         _ => "BANK_CLEARING",
     }
 }
@@ -1503,8 +1494,9 @@ fn payment_account(method: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        customer_credit_lines, invoice_correction_lines, is_balanced, refund_journal_lines,
-        reverse_lines, InvoiceAccountingTotals, JournalLine, RefundSettlement,
+        customer_credit_lines, invoice_correction_lines, is_balanced, payroll_deductions_payable,
+        refund_journal_lines, reverse_lines, InvoiceAccountingTotals, JournalLine,
+        RefundSettlement,
     };
 
     #[test]
@@ -1552,6 +1544,15 @@ mod tests {
             &customer_credit_lines(-500, "ACCOUNTS_RECEIVABLE").unwrap()
         ));
         assert!(customer_credit_lines(0, "BANK_CLEARING").is_err());
+    }
+
+    #[test]
+    fn payroll_withholding_separates_statutory_and_advance_amounts() {
+        assert_eq!(
+            payroll_deductions_payable(50_000, 20_000, 10_000).unwrap(),
+            20_000
+        );
+        assert!(payroll_deductions_payable(10_000, 8_000, 3_000).is_err());
     }
 
     #[test]

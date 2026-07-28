@@ -171,6 +171,16 @@
       <button type="button" (click)="saveProfitView()">Save view</button>
       }<button type="button" (click)="exportProfit('csv')">CSV</button><button type="button" (click)="exportProfit('excel')">Excel</button><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ profitLoading ? 'Loading...' : 'Run Report' }}</button></div>
     </header>
+    <div class="profit-command-strip">
+      @if (canManageProfit) {
+        <button type="button" (click)="addExpense()">Add expense</button>
+        <button type="button" (click)="addCostOfGoods()">Add cost of goods</button>
+        <button type="button" (click)="addAdjustment()">Add adjustment</button>
+        <button type="button" (click)="createProfitLeakAction()">Create profit leak action</button>
+      }
+      <button type="button" (click)="exportProfit('csv')">Export P&amp;L</button>
+      <button type="button" (click)="openReconciliation()">Open reconciliation</button>
+    </div>
     <nav class="profit-tabs" aria-label="Profit Intelligence views">
       @for (tab of profitTabs; track tab) {
         <button type="button" [class.active]="profitTab === tab.id" (click)="profitTab = tab.id">{{ tab.label }}@if (tab.id === 'actions' && actionCounts.active) {
@@ -349,7 +359,7 @@
     @if (advanced?.leaks?.length) {
       <div class="insight-list">@for (leak of advanced?.leaks; track leak) {
         <article [class]="leak.severity"><div><span>{{ titleCase(leak.kind.replace('_',' ')) }}</span><h3>{{ leak.title }}</h3><p>{{ leak.message }}</p></div><strong>{{ money(leak.impactPaise) }}</strong>@if (canManageProfit) {
-        <button type="button" (click)="queueLeak(leak)">Add action</button>
+        <div class="queue-actions"><button type="button" (click)="queueLeak(leak)">Add action</button><button type="button" (click)="markLeakReviewed(leak)" [disabled]="actionBusyId === 'leak:' + leak.sourceType + ':' + leak.sourceId">Mark reviewed</button></div>
       }</article>
     }</div>
   } @else {

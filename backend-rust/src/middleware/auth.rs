@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, net::SocketAddr, time::{Duration, Instant}};
+use std::{
+    collections::BTreeSet,
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 
 use axum::{
     body::{to_bytes, Body},
@@ -66,7 +70,9 @@ pub async fn require_auth(
                 .map_err(|_| AppError::internal("failed to validate user session"))?
                 .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
 
-            if claims.permission_version != 0 && claims.permission_version != user.permission_version {
+            if claims.permission_version != 0
+                && claims.permission_version != user.permission_version
+            {
                 return Err(AppError::unauthenticated(
                     "user permissions changed; please sign in again",
                 ));
@@ -104,14 +110,15 @@ pub async fn require_auth(
                 claims.max_discount_paise = access.max_discount_paise;
                 claims.max_refund_paise = access.max_refund_paise;
                 claims.max_cash_movement_paise = access.max_cash_movement_paise;
-                let elevated = crate::repositories::security_repository::active_elevated_permissions(
-                    &state.db,
-                    &claims.tenant_id,
-                    branch_id,
-                    &claims.sub,
-                )
-                .await
-                .map_err(|_| AppError::internal("failed to validate temporary access"))?;
+                let elevated =
+                    crate::repositories::security_repository::active_elevated_permissions(
+                        &state.db,
+                        &claims.tenant_id,
+                        branch_id,
+                        &claims.sub,
+                    )
+                    .await
+                    .map_err(|_| AppError::internal("failed to validate temporary access"))?;
                 for permission in elevated {
                     if !claims.denied_permissions.contains(&permission)
                         && !claims.permissions.contains(&permission)
@@ -125,10 +132,10 @@ pub async fn require_auth(
             }
 
             if mfa_enrollment_required(req.uri().path(), claims.mfa_enrollment_required) {
-                return Err(
-                    AppError::forbidden("MFA setup is required before using the application")
-                        .with_details(serde_json::json!({ "mfaEnrollmentRequired": true })),
-                );
+                return Err(AppError::forbidden(
+                    "MFA setup is required before using the application",
+                )
+                .with_details(serde_json::json!({ "mfaEnrollmentRequired": true })));
             }
 
             if !claims.session_id.is_empty() {
@@ -162,13 +169,7 @@ pub async fn require_auth(
     }
 
     if request_mutates_data(req.method()) {
-        entitlement_service::ensure_route_write_allowed(
-            &state.db,
-            &claims.tenant_id,
-            req.method(),
-            req.uri().path(),
-        )
-        .await?;
+        entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)
@@ -256,7 +257,15 @@ async fn apply_auth_cache(
         return Ok(false);
     }
 
-    if claims.permission_version != 0 && claims.permission_version != cached.permission_version {
+    let current_permission_version =
+        auth_repository::find_active_permission_version(&state.db, &claims.tenant_id, &claims.sub)
+            .await
+            .map_err(|_| AppError::internal("failed to validate user permissions"))?
+            .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
+    if current_permission_version != cached.permission_version
+        || (claims.permission_version != 0
+            && claims.permission_version != current_permission_version)
+    {
         let mut cache = state.auth_cache.write().await;
         cache.remove(cache_key);
         return Err(AppError::unauthenticated(
@@ -496,7 +505,7 @@ fn mfa_enrollment_required(path: &str, required: bool) -> bool {
     required && !path.contains("/auth/mfa/") && !path.ends_with("/auth/change-password")
 }
 
-pub(crate) fn scope_header_mismatch(
+fn scope_header_mismatch(
     headers: &axum::http::HeaderMap,
     claims: &AuthClaims,
 ) -> Option<(&'static str, &'static str)> {

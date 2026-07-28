@@ -14,8 +14,7 @@ use crate::{
         auth_service::AuthClaims,
         saas_service::{
             self, BillingRunInput, InvoiceIssueInput, InvoicePaymentInput, PlanInput,
-            SalonOnboardingInput, SubscriptionCreate, SubscriptionOverrideInput,
-            SubscriptionUpdate, TicketCreateInput,
+            SalonOnboardingInput, SubscriptionCreate, SubscriptionUpdate, TicketCreateInput,
             TicketMessageInput, TicketUpdateInput, UsageEventInput,
         },
     },
@@ -43,14 +42,6 @@ pub fn router() -> Router<AppState> {
         .route(
             "/platform/saas/subscriptions/:id",
             patch(update_subscription),
-        )
-        .route(
-            "/platform/saas/subscriptions/:id/overrides",
-            get(list_subscription_overrides).post(create_subscription_override),
-        )
-        .route(
-            "/platform/saas/subscription-overrides/:id/revoke",
-            post(revoke_subscription_override),
         )
         .route(
             "/platform/saas/usage",
@@ -205,34 +196,6 @@ async fn update_subscription(
 ) -> ApiResult<Vec<Value>> {
     Ok(Json(ApiResponse::ok(
         saas_service::update_subscription(&state.db, &id, &claims.sub, payload).await?,
-    )))
-}
-async fn create_subscription_override(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    Path(id): Path<String>,
-    Json(payload): Json<SubscriptionOverrideInput>,
-) -> ApiResult<Value> {
-    Ok(Json(ApiResponse::ok(
-        saas_service::create_subscription_override(&state.db, &claims.sub, &id, payload).await?,
-    )))
-}
-async fn list_subscription_overrides(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> ApiResult<Vec<Value>> {
-    Ok(Json(ApiResponse::ok(
-        saas_service::list_subscription_overrides(&state.db, &id).await?,
-    )))
-}
-async fn revoke_subscription_override(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    Path(id): Path<String>,
-) -> ApiResult<Value> {
-    saas_service::revoke_subscription_override(&state.db, &claims.sub, &id).await?;
-    Ok(Json(ApiResponse::ok(
-        serde_json::json!({ "revoked": true, "overrideId": id }),
     )))
 }
 async fn platform_usage(

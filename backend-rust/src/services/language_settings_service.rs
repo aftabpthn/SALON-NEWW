@@ -8,7 +8,33 @@ use crate::{
     },
 };
 
-const SUPPORTED_LANGUAGES: [&str; 2] = ["en-IN", "hi-IN"];
+const SUPPORTED_LANGUAGES: [&str; 25] = [
+    "en-IN",
+    "hi-IN",
+    "hi-Latn-IN",
+    "ar-SA",
+    "pt-BR",
+    "th-TH",
+    "zh-CN",
+    "ja-JP",
+    "tr-TR",
+    "nb-NO",
+    "es-ES",
+    "fr-FR",
+    "id-ID",
+    "da-DK",
+    "hu-HU",
+    "de-DE",
+    "it-IT",
+    "nl-NL",
+    "ms-MY",
+    "vi-VN",
+    "ko-KR",
+    "fil-PH",
+    "ru-RU",
+    "pl-PL",
+    "sv-SE",
+];
 const DATE_FORMATS: [&str; 3] = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -283,7 +309,7 @@ mod tests {
     fn validates_single_and_bilingual_preferences() {
         assert!(validate_user(UserLanguagePreference {
             primary_language: "en-IN".into(),
-            secondary_language: Some("hi-IN".into()),
+            secondary_language: Some("fr-FR".into()),
             display_mode: "single".into()
         })
         .unwrap()
@@ -291,7 +317,7 @@ mod tests {
         .is_none());
         assert!(validate_user(UserLanguagePreference {
             primary_language: "en-IN".into(),
-            secondary_language: Some("hi-IN".into()),
+            secondary_language: Some("fr-FR".into()),
             display_mode: "bilingual".into()
         })
         .is_ok());

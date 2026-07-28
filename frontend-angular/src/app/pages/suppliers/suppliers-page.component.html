@@ -44,6 +44,15 @@
     <article class="green"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><div><span>{{ 'inventory.ui.82e3e3c2b6' | translate }}</span><strong>{{ openOrderCount }}</strong></div></article>
   </section>
 
+  <section class="vendor-payments" aria-label="Vendor payment summary">
+    <h2>Vendor Payments</h2>
+    <div class="metrics finance-metrics">
+      <article class="paid"><i class="bi bi-check-circle" aria-hidden="true"></i><div><span>Paid</span><strong>{{ ordersLoaded ? money(paymentSummary.paidPaise) : '—' }}</strong></div></article>
+      <article class="unpaid"><i class="bi bi-clock" aria-hidden="true"></i><div><span>Unpaid</span><strong>{{ ordersLoaded ? money(paymentSummary.unpaidPaise) : '—' }}</strong></div></article>
+      <article class="extra"><i class="bi bi-wallet2" aria-hidden="true"></i><div><span>Extra Paid</span><strong>{{ ordersLoaded ? money(paymentSummary.extraPaidPaise) : '—' }}</strong></div></article>
+    </div>
+  </section>
+
   @if (view === 'register') {
     <section class="register-card">
       <header>
@@ -68,6 +77,9 @@
                 <th scope="col">{{ 'inventory.ui.184c052113' | translate }}</th>
                 <th scope="col" class="numeric">{{ 'inventory.ui.489f487724' | translate }}</th>
                 <th scope="col" class="numeric">{{ 'inventory.ui.14eeee8d40' | translate }}</th>
+                <th scope="col" class="numeric">Paid</th>
+                <th scope="col" class="numeric">Unpaid</th>
+                <th scope="col">Payment status</th>
                 <th scope="col" class="numeric">{{ 'inventory.ui.82e3e3c2b6' | translate }}</th>
                 <th scope="col">{{ 'inventory.ui.68f0ae4911' | translate }}</th>
                 <th scope="col">{{ 'inventory.ui.bae7d5be70' | translate }}</th>
@@ -81,15 +93,18 @@
                   <td><strong>{{ supplier.contactName || '—' }}</strong><small>{{ supplier.phone || supplier.email || '—' }} · {{ supplier.gstin || 'GSTIN missing' }}</small></td>
                   <td class="numeric"><span class="score">{{ score(supplier) }}%</span></td>
                   <td class="numeric">{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td>
+                  <td class="numeric"><button type="button" class="amount-link" (click)="openPayments(supplier)">{{ ordersLoaded ? money(paymentMetricsFor(supplier.id).paidPaise) : '—' }}</button></td>
+                  <td class="numeric"><button type="button" class="amount-link unpaid-link" (click)="openPayments(supplier)">{{ ordersLoaded ? money(paymentMetricsFor(supplier.id).unpaidPaise) : '—' }}</button></td>
+                  <td><button type="button" class="payment-status" [attr.data-status]="paymentStatus(supplier.id)" (click)="openPayments(supplier)">{{ ordersLoaded ? paymentStatus(supplier.id) : '—' }}</button></td>
                   <td class="numeric">{{ openOrdersFor(supplier.id) }}</td>
                   <td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td>
                   <td><span class="status" [class.inactive]="!supplier.active">{{ supplier.active ? 'Active' : 'Inactive' }}</span></td>
-                  <td><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
+                  <td class="row-actions"><button type="button" class="payment-action" (click)="openPayments(supplier)">{{ paymentMetricsFor(supplier.id).unpaidPaise > 0 ? 'Pay now' : 'View payments' }} <i class="bi bi-arrow-right" aria-hidden="true"></i></button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
                 </tr>
               }
               @if (!filteredSuppliers.length) {
                 <tr>
-                  <td class="empty-state" colspan="8">{{ 'inventory.ui.e619c5b961' | translate }}</td>
+                  <td class="empty-state" colspan="11">{{ 'inventory.ui.e619c5b961' | translate }}</td>
                 </tr>
               }
             </tbody>

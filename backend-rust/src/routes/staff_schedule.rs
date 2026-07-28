@@ -2,7 +2,7 @@ use axum::{
     extract::{Query, State},
     http::HeaderMap,
     routing::{get, post},
-    Extension, Json, Router,
+    Json, Router,
 };
 use chrono::{NaiveDate, NaiveTime};
 use serde::Deserialize;
@@ -11,18 +11,9 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::staff_schedule_repository::ScheduleEntryInput,
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_identity_service, staff_schedule_service},
+    services::staff_schedule_service,
     state::AppState,
 };
-
-/// Booking and front-desk grants keep team roster visibility; everyone else
-/// without schedule management rights only sees their own schedule.
-const SCHEDULE_VIEW_PERMISSIONS: &[&str] = &[
-    "staff.schedule.manage",
-    "appointments.manage",
-    "bookings.manage",
-    "front_desk.write",
-];
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -72,20 +63,10 @@ struct CopyScheduleRequest {
 
 async fn get_schedule(
     State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<ScheduleQuery>,
 ) -> ApiResult<staff_schedule_service::ScheduleData> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let staff_filter = staff_identity_service::resolve_read_filter(
-        &state.db,
-        &claims,
-        &tenant_id,
-        &branch_id,
-        query.staff_id.as_deref().unwrap_or(""),
-        SCHEDULE_VIEW_PERMISSIONS,
-    )
-    .await?;
     let data = staff_schedule_service::load(
         &state.db,
         &tenant_id,
@@ -94,7 +75,7 @@ async fn get_schedule(
         query.date_to,
         query.role_id.as_deref().unwrap_or("").trim(),
         query.job.as_deref().unwrap_or("").trim(),
-        &staff_filter,
+        query.staff_id.as_deref().unwrap_or("").trim(),
     )
     .await?;
     Ok(Json(ApiResponse::ok(data)))

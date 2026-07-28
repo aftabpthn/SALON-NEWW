@@ -17,6 +17,7 @@
   <button type="button" (click)="loadSummary()" [disabled]="loading"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>{{ 'staff.ui.56e3badc4e' | translate }}</button>
   <span class="toolbar-spacer"></span>
   <button class="recalculate" type="button" (click)="recalculate()" [disabled]="loading || recalculating"><i class="bi bi-arrow-repeat" aria-hidden="true"></i>{{ recalculating ? 'Recalculating…' : 'Recalculate' }}</button>
+  <button type="button" (click)="openPayroll()" [disabled]="loading"><i class="bi bi-wallet2" aria-hidden="true"></i>Generate salary</button>
   <button type="button" (click)="exportCsv()" [disabled]="!rows.length"><i class="bi bi-download" aria-hidden="true"></i>{{ 'staff.ui.5755f9ac0a' | translate }}</button>
   <button type="button" (click)="printPdf()" [disabled]="!rows.length"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>{{ 'staff.ui.3dd7d56a8e' | translate }}</button>
   <div class="column-control">
@@ -79,6 +80,23 @@
           }@if (isVisible('revisedSpecialLeaveBalance')) {
           <th scope="col">{{ 'staff.ui.b5184d02cf' | translate }}</th>
         }
+        @if (isVisible('earnedSalary')) {
+          <th scope="col">Earned Salary</th>
+          }@if (isVisible('overtimePay')) {
+          <th scope="col">OT Pay</th>
+          }@if (isVisible('commission')) {
+          <th scope="col">Commission</th>
+          }@if (isVisible('grossPay')) {
+          <th scope="col">Gross Pay</th>
+          }@if (isVisible('deductions')) {
+          <th scope="col">Deductions</th>
+          }@if (isVisible('advanceRecovery')) {
+          <th scope="col">Advance Recovery</th>
+          }@if (isVisible('netPay')) {
+          <th scope="col">Net Pay</th>
+          }@if (isVisible('payrollStatus')) {
+          <th scope="col">Payroll Status</th>
+        }
         @if (isVisible('comments')) {
           <th scope="col">{{ 'staff.ui.fce06e20e5' | translate }}</th>
         }
@@ -128,6 +146,23 @@
               <td>{{ row.revisedLeaveBalance }}</td>
               }@if (isVisible('revisedSpecialLeaveBalance')) {
               <td>{{ row.revisedSpecialLeaveBalance }}</td>
+            }
+            @if (isVisible('earnedSalary')) {
+              <td>{{ payrollMoney(row, 'earnedSalaryPaise') }}</td>
+              }@if (isVisible('overtimePay')) {
+              <td>{{ payrollMoney(row, 'overtimePaise') }}</td>
+              }@if (isVisible('commission')) {
+              <td>{{ payrollMoney(row, 'commissionPaise') }}</td>
+              }@if (isVisible('grossPay')) {
+              <td>{{ payrollMoney(row, 'grossPaise') }}</td>
+              }@if (isVisible('deductions')) {
+              <td>{{ payrollMoney(row, 'deductionsPaise') }}</td>
+              }@if (isVisible('advanceRecovery')) {
+              <td>{{ payrollMoney(row, 'advanceRecoveryPaise') }}</td>
+              }@if (isVisible('netPay')) {
+              <td>{{ payrollMoney(row, 'netPaise') }}</td>
+              }@if (isVisible('payrollStatus')) {
+              <td><span class="payroll-state" [class.ready]="payrollStatus(row) === 'Ready'">{{ payrollStatus(row) }}</span></td>
             }
             @if (isVisible('comments')) {
               <td><input class="comment-input" maxlength="500" [(ngModel)]="row.comments" /></td>

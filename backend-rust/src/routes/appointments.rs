@@ -4,7 +4,7 @@ use crate::{
     services::{
         accounting_service, auth_service::AuthClaims, benefit_notification_service,
         booking_intelligence_service, cash_drawer_service, service_pricing_service,
-        wallet_service,
+        staff_enterprise_service, wallet_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -164,6 +164,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/appointments/:id/reschedule",
             axum::routing::post(reschedule_appointment),
+        )
+        .route(
+            "/staff-self/appointments/:id/cancel",
+            axum::routing::post(cancel_self_appointment),
+        )
+        .route(
+            "/staff-self/appointments/:id/reschedule",
+            axum::routing::post(reschedule_self_appointment),
         )
         .route(
             "/appointments/:id/check-in",
@@ -3675,6 +3683,16 @@ pub async fn cancel_appointment(
     Path(id): Path<String>,
     Json(payload): Json<StatusPayload>,
 ) -> Result<Json<AppointmentResponse>, ApiError> {
+    cancel_appointment_inner(&state, &headers, &id, &payload, true).await
+}
+
+async fn cancel_appointment_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    id: &str,
+    payload: &StatusPayload,
+    include_booking_group: bool,
+) -> Result<Json<AppointmentResponse>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
     if status_is_closed(&current.status) {
@@ -3688,7 +3706,7 @@ pub async fn cancel_appointment(
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_default()
         .to_string();
-    let apply_group = !booking_group_id.is_empty();
+    let apply_group = include_booking_group && !booking_group_id.is_empty();
     let before_rows = sqlx::query(
         "SELECT id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at
          FROM appointments
@@ -3768,6 +3786,52 @@ pub async fn cancel_appointment(
         waitlist_offer: waitlist_offers.into_iter().next(),
         sales_order: None,
     }))
+}
+
+async fn self_appointment(
+    state: &AppState,
+    claims: &AuthClaims,
+    headers: &HeaderMap,
+    appointment_id: &str,
+) -> Result<(String, String, String, AppointmentPayload), ApiError> {
+    if !crate::services::auth_service::staff_app_permission_allowed(
+        claims,
+        "staff.app.appointments.manage",
+        &["owner", "admin", "manager", "staff"],
+        &["appointments.manage", "write:appointments"],
+    ) {
+        return Err(ApiError::with_status(
+            StatusCode::FORBIDDEN,
+            "Staff App appointment permission is required",
+        ));
+    }
+    let (tenant_id, branch_id) = scope_from_headers(headers, None, None);
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await
+            .map_err(|error| ApiError::with_status(error.status_code(), error.message()))?;
+    let appointment = find_appointment(state, &tenant_id, &branch_id, appointment_id).await?;
+    if appointment.staff_id != staff_id {
+        return Err(ApiError::not_found("Appointment not found"));
+    }
+    Ok((tenant_id, branch_id, staff_id, appointment))
+}
+
+async fn cancel_self_appointment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StatusPayload>,
+) -> Result<Json<AppointmentResponse>, ApiError> {
+    self_appointment(&state, &claims, &headers, &id).await?;
+    let reason = payload.reason.trim();
+    if !(3..=500).contains(&reason.chars().count()) {
+        return Err(ApiError::bad_request(
+            "cancellation reason must be between 3 and 500 characters",
+        ));
+    }
+    cancel_appointment_inner(&state, &headers, &id, &payload, false).await
 }
 
 async fn remove_appointment_service(
@@ -3986,6 +4050,42 @@ pub async fn reschedule_appointment(
     )
     .await?;
     Ok(Json(updated))
+}
+
+async fn reschedule_self_appointment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(mut payload): Json<ReschedulePayload>,
+) -> Result<Json<AppointmentPayload>, ApiError> {
+    let (_, branch_id, staff_id, current) =
+        self_appointment(&state, &claims, &headers, &id).await?;
+    let reason = payload.reason.trim();
+    if !(3..=500).contains(&reason.chars().count()) {
+        return Err(ApiError::bad_request(
+            "reschedule reason must be between 3 and 500 characters",
+        ));
+    }
+    let start_at = parse_datetime(&payload.start_at, "start_at")?;
+    if start_at <= Utc::now() {
+        return Err(ApiError::bad_request(
+            "appointment must be rescheduled to a future time",
+        ));
+    }
+    let current_start = parse_datetime(&current.start_at, "current.start_at")?;
+    let current_end = parse_datetime(&current.end_at, "current.end_at")?;
+    payload.staff_id = staff_id;
+    payload.branch_id = branch_id;
+    payload.end_at = Some((start_at + (current_end - current_start)).to_rfc3339());
+    payload.service_ids.clear();
+    payload.chair_room_id.clear();
+    payload.booking_group_id.clear();
+    payload.change_mode.clear();
+    payload.staff_change_approval.clear();
+    payload.staff_change_reason.clear();
+    payload.actor_source = "staff-app".to_string();
+    reschedule_appointment(State(state), headers, Path(id), Json(payload)).await
 }
 
 pub(crate) async fn check_in_appointment(

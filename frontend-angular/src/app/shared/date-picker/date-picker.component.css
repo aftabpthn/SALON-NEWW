@@ -40,12 +40,14 @@ input {
 }
 
 input:focus,
-button:focus {
+button:focus,
+select:focus {
   outline: none;
 }
 
 input:focus-visible,
-button:focus-visible {
+button:focus-visible,
+select:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: -2px;
 }
@@ -66,38 +68,12 @@ button:focus-visible {
   left: 0;
   z-index: 120;
   display: grid;
-  grid-template-columns: 92px 286px;
+  width: 322px;
   overflow: hidden;
   border: 1px solid #d8e0ea;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 22px 55px rgba(15, 23, 42, .2);
-}
-
-.shortcut-rail {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  padding: 14px 10px;
-  border-right: 1px solid #e8edf4;
-  background: #f7fbff;
-}
-
-.shortcut-rail button {
-  min-height: 30px;
-  padding: 0 9px;
-  border: 1px solid #d8e0ea;
-  border-radius: 999px;
-  background: #fff;
-  color: #334155;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.shortcut-rail button:hover {
-  border-color: #0f7a4f;
-  color: #0f7a4f;
 }
 
 .calendar-main {
@@ -117,9 +93,68 @@ header {
   grid-template-columns: 34px 1fr 34px;
 }
 
-header strong {
-  text-align: center;
-  font-size: 15px;
+.calendar-jump {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 7px;
+}
+
+.calendar-jump select {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  background: #fff;
+  color: #071832;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.range-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.range-fields label {
+  display: grid;
+  gap: 4px;
+  color: #5d6b82;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.range-fields input {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.preset-row button {
+  min-height: 30px;
+  border: 1px solid #c7d6e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #0b4f8a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.preset-row button:hover {
+  border-color: #0b68c9;
+  background: #eff6ff;
 }
 
 header button {
@@ -204,16 +239,9 @@ footer .apply {
     top: 50%;
     right: 12px;
     left: 12px;
-    grid-template-columns: 1fr;
     width: auto;
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     transform: translateY(-50%);
-  }
-
-  .shortcut-rail {
-    grid-template-columns: repeat(3, 1fr);
-    border-right: 0;
-    border-bottom: 1px solid #e8edf4;
   }
 }

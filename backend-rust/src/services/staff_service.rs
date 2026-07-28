@@ -20,7 +20,6 @@ use crate::{
         },
     },
     services::auth_service::{self, TENANT_PERMISSION_CATALOG},
-    services::permission_registry,
 };
 
 pub(crate) fn is_supported_photo_url(url: &str) -> bool {
@@ -30,7 +29,11 @@ pub(crate) fn is_supported_photo_url(url: &str) -> bool {
     if !(url.starts_with("https://") || url.starts_with('/')) {
         return false;
     }
-    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    let path = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(url)
+        .to_ascii_lowercase();
     path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".png")
 }
 
@@ -71,10 +74,12 @@ pub struct AuthPermissionOption {
     pub code: &'static str,
     pub label: &'static str,
     pub group: &'static str,
+    pub module: String,
     pub action: &'static str,
     pub scope: &'static str,
     pub sensitive: bool,
-    pub feature_key: &'static str,
+    pub feature_key: Option<&'static str>,
+    pub route_mapping: &'static str,
 }
 
 #[derive(Debug, Serialize)]
@@ -151,15 +156,18 @@ pub async fn load_auth_roles(
         .collect();
     Ok(AuthRoleManagementData {
         roles,
-        permission_options: permission_registry::tenant_assignable()
-            .map(|spec| AuthPermissionOption {
-                code: spec.key,
-                label: spec.label,
-                group: spec.module,
-                action: spec.action.as_str(),
-                scope: spec.scope.as_str(),
-                sensitive: spec.sensitive,
-                feature_key: spec.feature_key,
+        permission_options: TENANT_PERMISSION_CATALOG
+            .iter()
+            .map(|permission| AuthPermissionOption {
+                code: permission.code,
+                label: permission.label,
+                group: permission.group,
+                module: permission.module().to_string(),
+                action: permission.action(),
+                scope: permission.scope(),
+                sensitive: permission.sensitive(),
+                feature_key: permission.feature_key(),
+                route_mapping: permission.route_mapping(),
             })
             .collect(),
         mask_options: AUTH_MASK_OPTIONS
@@ -175,10 +183,8 @@ pub async fn create_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
-    reason: Option<String>,
 ) -> Result<AuthRoleManagementData, AppError> {
-    let (name, permissions, security) =
-        validate_auth_role(name, permissions, security, reason.as_deref())?;
+    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
     staff_repository::create_auth_role(
         db,
         tenant_id,
@@ -202,7 +208,6 @@ pub async fn update_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
-    reason: Option<String>,
 ) -> Result<AuthRoleManagementData, AppError> {
     let role = staff_repository::get_auth_role(db, tenant_id, role_id)
         .await
@@ -211,8 +216,7 @@ pub async fn update_auth_role(
     if role.is_system {
         return Err(AppError::forbidden("system roles cannot be edited"));
     }
-    let (name, permissions, security) =
-        validate_auth_role(name, permissions, security, reason.as_deref())?;
+    let (name, permissions, security) = validate_auth_role(name, permissions, security)?;
     staff_repository::update_auth_role(
         db,
         tenant_id,
@@ -228,12 +232,6 @@ pub async fn update_auth_role(
     .await
     .map_err(role_write_error)?
     .ok_or_else(|| AppError::not_found("authentication role was not found"))?;
-    // A permission change invalidates existing sessions for everyone holding
-    // this role: their permission_version no longer matches and the auth
-    // middleware forces a fresh sign-in.
-    staff_repository::bump_permission_version_for_role(db, tenant_id, role_id)
-        .await
-        .map_err(|_| AppError::internal("failed to refresh sessions for updated role"))?;
     load_auth_roles(db, tenant_id).await
 }
 
@@ -241,7 +239,6 @@ fn validate_auth_role(
     name: String,
     permissions: Vec<String>,
     security: AuthRoleSecurityInput,
-    reason: Option<&str>,
 ) -> Result<(String, Vec<String>, AuthRoleSecurityInput), AppError> {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if !(2..=60).contains(&name.chars().count())
@@ -274,16 +271,6 @@ fn validate_auth_role(
         .filter(|permission| requested.contains(permission.code))
         .map(|permission| permission.code.to_string())
         .collect::<Vec<_>>();
-    let sensitive_grants = permission_registry::sensitive_subset(&permissions);
-    if !sensitive_grants.is_empty() {
-        let reason = reason.unwrap_or_default().trim();
-        if !(5..=240).contains(&reason.chars().count()) {
-            return Err(AppError::validation(format!(
-                "a reason of 5 to 240 characters is required when granting sensitive permissions: {}",
-                sensitive_grants.join(", ")
-            )));
-        }
-    }
     let denied = security
         .denied_permissions
         .iter()
@@ -635,11 +622,7 @@ pub async fn load_branch_access(
         email: login.as_ref().map(|item| item.email.clone()),
         must_change_password: login.as_ref().is_some_and(|item| item.must_change_password),
         branches,
-        // Owner/admin/platform roles are never offered for employee logins.
-        roles: roles
-            .into_iter()
-            .filter(|role| !permission_registry::is_privileged_role_name(&role.name))
-            .collect(),
+        roles,
     })
 }
 
@@ -672,15 +655,6 @@ pub async fn provision_login(
     let role_id = input.role_id.trim();
     if role_id.is_empty() {
         return Err(AppError::validation("roleId is required"));
-    }
-    let role = staff_repository::get_auth_role(db, tenant_id, role_id)
-        .await
-        .map_err(|_| AppError::internal("failed to validate employee role"))?
-        .ok_or_else(|| AppError::validation("roleId is invalid"))?;
-    if permission_registry::is_privileged_role_name(&role.name) {
-        return Err(AppError::forbidden(
-            "owner, admin, and platform roles cannot be assigned to employee logins",
-        ));
     }
     if !auth_service::password_meets_policy(&input.initial_password) {
         return Err(AppError::validation(
@@ -788,22 +762,6 @@ pub async fn save_branch_access(
         .iter()
         .map(|branch| branch.branch_id.as_str())
         .collect::<HashSet<_>>();
-    let privileged_role_ids = roles
-        .iter()
-        .filter(|role| permission_registry::is_privileged_role_name(&role.name))
-        .map(|role| role.id.as_str())
-        .collect::<HashSet<_>>();
-    if assignments.iter().any(|assignment| {
-        assignment
-            .role_id
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(|role_id| privileged_role_ids.contains(role_id))
-    }) {
-        return Err(AppError::forbidden(
-            "owner, admin, and platform roles cannot be assigned as employee branch roles",
-        ));
-    }
     let role_ids = roles
         .iter()
         .map(|role| role.id.as_str())
@@ -818,6 +776,8 @@ pub async fn save_branch_access(
                 .is_some_and(|db_error| db_error.is_unique_violation())
             {
                 AppError::conflict("default branch access already exists")
+            } else if matches!(error, sqlx::Error::RowNotFound) {
+                AppError::validation("one or more roles are not assignable to employees")
             } else {
                 AppError::internal("failed to save employee branch access")
             }
@@ -1160,6 +1120,7 @@ pub async fn set_password(
     branch_id: &str,
     staff_id: &str,
     new_password: &str,
+    must_change_password: bool,
 ) -> Result<(), AppError> {
     if !auth_service::password_meets_policy(new_password) {
         return Err(AppError::validation(
@@ -1176,11 +1137,12 @@ pub async fn set_password(
     let user_id = linked_active_user_id(&mut tx, tenant_id, branch_id, staff_id).await?;
 
     sqlx::query(
-        "UPDATE users SET password_hash=$1, must_change_password=TRUE, password_changed_at=NULL, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE tenant_id=$2 AND id=$3",
+        "UPDATE users SET password_hash=$1, must_change_password=$4, password_changed_at=CASE WHEN $4 THEN NULL ELSE NOW() END, failed_login_count=0, locked_until=NULL, updated_at=NOW() WHERE tenant_id=$2 AND id=$3",
     )
     .bind(password_hash)
     .bind(tenant_id)
     .bind(&user_id)
+    .bind(must_change_password)
     .execute(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to update employee password"))?;
@@ -1309,6 +1271,7 @@ mod tests {
         ShiftTemplateInput, StaffCategoryInput,
     };
     use crate::repositories::staff_hr_repository::BulkStaffInput;
+    use crate::repositories::staff_repository::is_staff_assignable_role_name;
 
     #[test]
     fn configuration_rejects_negative_pay_rate() {
@@ -1351,12 +1314,28 @@ mod tests {
     }
 
     #[test]
+    fn staff_security_employee_login_rejects_protected_management_roles() {
+        for role in [
+            "Owner",
+            "admin",
+            "Super Admin",
+            "super-admin",
+            "super_admin",
+        ] {
+            assert!(!is_staff_assignable_role_name(role));
+        }
+        for role in ["manager", "staff", "Senior Stylist", "staffappadmin"] {
+            assert!(is_staff_assignable_role_name(role));
+        }
+    }
+
+    #[test]
     fn branch_access_requires_one_active_default() {
         let branches = HashSet::from(["branch_hyd"]);
-        let roles = HashSet::from(["owner"]);
+        let roles = HashSet::from(["manager"]);
         let assignment = || BranchAccessAssignment {
             branch_id: "branch_hyd".into(),
-            role_id: Some("owner".into()),
+            role_id: Some("manager".into()),
             access_type: "permanent".into(),
             valid_from: None,
             valid_until: None,
@@ -1414,22 +1393,19 @@ mod tests {
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["unknown".into()],
-            AuthRoleSecurityInput::default(),
-            None
+            AuthRoleSecurityInput::default()
         )
         .is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["tenant.read".into(), "tenant.read".into()],
-            AuthRoleSecurityInput::default(),
-            None
+            AuthRoleSecurityInput::default()
         )
         .is_err());
         assert!(validate_auth_role(
             "Regional Lead".into(),
             vec!["appointments.read".into(), "clients.manage".into()],
-            AuthRoleSecurityInput::default(),
-            None
+            AuthRoleSecurityInput::default()
         )
         .is_ok());
         assert!(validate_auth_role(
@@ -1442,42 +1418,7 @@ mod tests {
                 "clients.reviews.link".into(),
                 "purchases.approve".into(),
             ],
-            AuthRoleSecurityInput::default(),
-            Some("compliance role for the client data team")
-        )
-        .is_ok());
-    }
-
-    #[test]
-    fn sensitive_permission_grants_require_a_reason() {
-        let sensitive = vec!["pos.read".into(), "pos.refund".into()];
-        assert!(validate_auth_role(
-            "Refund Desk".into(),
-            sensitive.clone(),
-            AuthRoleSecurityInput::default(),
-            None
-        )
-        .is_err());
-        assert!(validate_auth_role(
-            "Refund Desk".into(),
-            sensitive.clone(),
-            AuthRoleSecurityInput::default(),
-            Some("  x  ")
-        )
-        .is_err());
-        assert!(validate_auth_role(
-            "Refund Desk".into(),
-            sensitive,
-            AuthRoleSecurityInput::default(),
-            Some("front desk refund handling approved by owner")
-        )
-        .is_ok());
-        // Non-sensitive grants stay reason-free.
-        assert!(validate_auth_role(
-            "Viewer".into(),
-            vec!["appointments.read".into()],
-            AuthRoleSecurityInput::default(),
-            None
+            AuthRoleSecurityInput::default()
         )
         .is_ok());
     }
@@ -1492,7 +1433,7 @@ mod tests {
                 designation: String::new(),
                 active: true,
             }],
-            pricing_levels: Vec::new(),
+            pricing_levels: vec![],
             shift_templates: vec![ShiftTemplateInput {
                 id: String::new(),
                 code: "regular".into(),

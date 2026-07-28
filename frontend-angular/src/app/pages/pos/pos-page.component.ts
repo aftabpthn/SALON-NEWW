@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../shared/services/api.service';
 import { PosRealtimeService } from '../../core/services/pos-realtime.service';
 import { printInvoiceDocument } from '../../shared/utils/safe-invoice-print';
@@ -211,9 +212,10 @@ export class PosPageComponent implements OnInit, OnDestroy {
   private liveUpdates?: Subscription;
   private heartbeatTimer = 0;
 
-  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute, private readonly router: Router, private readonly realtime: PosRealtimeService) {}
+  constructor(private readonly api: ApiService, private readonly route: ActivatedRoute, private readonly router: Router, private readonly realtime: PosRealtimeService, private readonly auth: AuthService) {}
 
   ngOnInit(): void {
+    this.refreshBranchName();
     this.loadOfflineCheckouts();
     this.syncOfflineCheckouts();
     const draftId = this.route.snapshot.queryParamMap.get('draft');
@@ -1725,6 +1727,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     }
     const paymentSplit = options.forceUnpaid ? [] : this.cappedPaymentSplit();
     const packageRedemptions = this.packageRedemptionPayload();
+    const branchName = this.resolvedBranchName();
     lines.push(...packageRedemptions.map((row) => ({
       lineType: 'package_redeem', line_type: 'package_redeem', itemId: row.clientPackageCreditId, item_id: row.clientPackageCreditId,
       itemName: `${row.packageName} · ${row.serviceName}`, item_name: `${row.packageName} · ${row.serviceName}`,
@@ -1737,8 +1740,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
       client_id: clientId,
       staffId,
       staff_id: staffId,
-      branchName: this.branchName.trim() || null,
-      branch_name: this.branchName.trim() || null,
+      branchName: branchName || null,
+      branch_name: branchName || null,
       businessDate: this.displayDateToIso(this.invoiceDate),
       business_date: this.displayDateToIso(this.invoiceDate),
       source: this.source.trim() || 'Counter',
@@ -1996,5 +1999,13 @@ export class PosPageComponent implements OnInit, OnDestroy {
   private displayDateToIso(value: string): string { const p = value.trim().split('/'); return p.length === 3 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : new Date().toISOString().slice(0, 10); }
   private optionalDisplayDateToIso(value: string): string | null { const p = value.trim().split('/'); return p.length === 3 && p.every((part) => /^\d+$/.test(part)) && p[2].length === 4 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : null; }
   private toDisplayDate(date: Date): string { return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`; }
+  private refreshBranchName(): void { this.branchName = this.resolvedBranchName(); }
+  private resolvedBranchName(): string {
+    const branchId = localStorage.getItem('aurashine_branch_id');
+    return this.auth.branchNameFor(branchId)
+      || this.readStoredBranchName()
+      || branchId
+      || '';
+  }
   private readStoredBranchName(): string { return localStorage.getItem('aurashine_branch_name') ?? localStorage.getItem('selectedBranchName') ?? localStorage.getItem('branchName') ?? ''; }
 }

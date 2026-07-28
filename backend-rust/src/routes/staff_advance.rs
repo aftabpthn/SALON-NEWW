@@ -11,6 +11,7 @@ use crate::{
     routes::context::tenant_branch,
     services::{
         auth_service::AuthClaims,
+        security_service,
         staff_advance_service::{
             self, AdvanceCancelInput, AdvanceDecisionInput, AdvanceDisbursementInput,
             AdvanceRequestInput, AdvanceWaiverInput,
@@ -76,7 +77,8 @@ async fn list_advance_recoveries(
     Path(id): Path<String>,
 ) -> ApiResult<Vec<AdvanceRecoveryRecord>> {
     let (tenant_id, branch_id) = advance_read_context(&claims, &headers)?;
-    let rows = staff_advance_service::advance_recoveries(&state.db, &tenant_id, &branch_id, &id).await?;
+    let rows =
+        staff_advance_service::advance_recoveries(&state.db, &tenant_id, &branch_id, &id).await?;
     Ok(Json(ApiResponse::ok(rows)))
 }
 
@@ -126,9 +128,15 @@ async fn cancel_advance(
     Json(payload): Json<AdvanceCancelInput>,
 ) -> ApiResult<StaffAdvanceRecord> {
     let (tenant_id, branch_id) = advance_manage_context(&claims, &headers)?;
-    let row =
-        staff_advance_service::cancel_advance(&state.db, &tenant_id, &branch_id, &id, payload)
-            .await?;
+    let row = staff_advance_service::cancel_advance(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &id,
+        payload,
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -140,6 +148,15 @@ async fn disburse_advance(
     Json(payload): Json<AdvanceDisbursementInput>,
 ) -> ApiResult<StaffAdvanceRecord> {
     let (tenant_id, branch_id) = advance_manage_context(&claims, &headers)?;
+    require_advance_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.advance.disburse",
+    )
+    .await?;
     let row = staff_advance_service::disburse_advance(
         &state.db,
         &tenant_id,
@@ -160,6 +177,15 @@ async fn waive_advance(
     Json(payload): Json<AdvanceWaiverInput>,
 ) -> ApiResult<StaffAdvanceRecord> {
     let (tenant_id, branch_id) = advance_manage_context(&claims, &headers)?;
+    require_advance_action_mfa(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.mfa_code.as_deref(),
+        "payroll.advance.waive",
+    )
+    .await?;
     let row = staff_advance_service::waive_advance(
         &state.db,
         &tenant_id,
@@ -172,11 +198,36 @@ async fn waive_advance(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn require_advance_action_mfa(
+    state: &AppState,
+    claims: &AuthClaims,
+    tenant_id: &str,
+    branch_id: &str,
+    code: Option<&str>,
+    action: &str,
+) -> Result<(), AppError> {
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        tenant_id,
+        branch_id,
+        &claims.sub,
+        &claims.session_id,
+        code,
+        action,
+    )
+    .await
+}
+
 fn advance_read_context(
     claims: &AuthClaims,
     headers: &axum::http::HeaderMap,
 ) -> Result<(String, String), AppError> {
-    advance_context(claims, headers, &["staff.payroll.read", "staff.payroll.manage"])
+    advance_context(
+        claims,
+        headers,
+        &["staff.payroll.read", "staff.payroll.manage"],
+    )
 }
 
 fn advance_manage_context(

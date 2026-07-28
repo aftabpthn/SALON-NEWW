@@ -510,6 +510,58 @@ pub async fn business_services(db: &PgPool, branch_id: &str) -> Result<Vec<Value
         .bind(branch_id).fetch_all(db).await
 }
 
+pub async fn marketplace_offers(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT JSONB_BUILD_OBJECT(
+          'id',offer.id,'branchId',branch.id::TEXT,'businessSlug',branch.id::TEXT,
+          'businessName',tenant.name,'branchName',branch.name,'code',offer.code,
+          'title',COALESCE(NULLIF(offer.title,''),offer.code),
+          'customerDescription',offer.customer_description,
+          'benefitType',offer.marketing_benefit_type,'benefitValue',offer.benefit_value,
+          'targetServiceIds',offer.target_service_ids,
+          'applicableServices',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',service.id,'name',service.name) ORDER BY service.name)
+            FROM services service WHERE service.tenant_id=offer.tenant_id AND service.branch_id=offer.branch_id
+              AND service.active=TRUE AND service.id=ANY(offer.target_service_ids)),'[]'::JSONB),
+          'startsAt',offer.starts_at,'endsAt',offer.ends_at,
+          'minimumBillPaise',offer.min_subtotal_paise,'perClientLimit',offer.per_client_limit,
+          'hasCreative',EXISTS(SELECT 1 FROM marketing_offer_creatives creative
+            WHERE creative.tenant_id=offer.tenant_id AND creative.branch_id=offer.branch_id AND creative.offer_id=offer.id)
+        )
+        FROM pos_coupons offer
+        JOIN branches branch ON offer.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name)
+        JOIN tenants tenant ON tenant.id=branch.tenant_id AND offer.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name)
+        WHERE branch.active=TRUE AND tenant.status='active'
+          AND ($1='' OR $1 IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name))
+          AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+          AND (offer.starts_at IS NULL OR offer.starts_at<=NOW())
+          AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())
+        ORDER BY COALESCE(offer.ends_at,offer.starts_at,offer.created_at),offer.title,offer.code"#,
+    )
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn marketplace_offer_creative(
+    db: &PgPool,
+    offer_id: &str,
+) -> Result<Option<(String, Vec<u8>)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT creative.content_type,creative.content_bytes
+        FROM marketing_offer_creatives creative
+        JOIN pos_coupons offer ON offer.id=creative.offer_id AND offer.tenant_id=creative.tenant_id AND offer.branch_id=creative.branch_id
+        JOIN branches branch ON offer.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name)
+        JOIN tenants tenant ON tenant.id=branch.tenant_id AND offer.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name)
+        WHERE creative.offer_id=$1 AND branch.active=TRUE AND tenant.status='active'
+          AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+          AND (offer.starts_at IS NULL OR offer.starts_at<=NOW())
+          AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())"#,
+    )
+    .bind(offer_id)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn business_staff(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar("SELECT jsonb_build_object('id',s.id,'businessId',b.id::TEXT,'name',COALESCE(NULLIF(s.appointment_display_name,''),BTRIM(CONCAT_WS(' ',s.first_name,s.last_name))),'title',s.job_title) FROM staff s JOIN branches b ON s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) JOIN tenants t ON t.id=b.tenant_id AND s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE AND s.active=TRUE ORDER BY s.appointment_display_name,s.first_name")
         .bind(branch_id).fetch_all(db).await
@@ -612,60 +664,7 @@ pub async fn account_rewards(db: &PgPool, account_id: &str) -> Result<Value, sql
     } else {
         "Bronze"
     };
-    // Stamp card progress, scoped through the account's linked clients so a
-    // customer only ever sees their own tenant/branch cards. The latest
-    // balance is joined to the branch's program configuration so the customer
-    // sees real progress (3 of 5, 60%) rather than a bare number. Balances are
-    // per branch in Phase 1B. Programs the customer has no events for do not
-    // appear; a card whose program was removed still reports its balance with
-    // a null target rather than vanishing.
-    let stamp_cards: Vec<Value> = sqlx::query_scalar(
-        r#"
-        SELECT jsonb_build_object(
-                 'programCode', x.program_code,
-                 'programName', COALESCE(NULLIF(program.value->>'name',''), x.program_code),
-                 'branchId', x.branch_id,
-                 'stamps', x.balance_after,
-                 'stampsRequired', required.value,
-                 'remainingStamps',
-                   CASE WHEN required.value IS NULL THEN NULL
-                        ELSE GREATEST(required.value - x.balance_after, 0) END,
-                 'rewardPointsOnCompletion',
-                   COALESCE((program.value->>'rewardPointsOnCompletion')::INT, 0),
-                 'progressBps',
-                   CASE WHEN COALESCE(required.value, 0) <= 0 THEN 0
-                        ELSE LEAST(x.balance_after::BIGINT * 10000 / required.value, 10000) END,
-                 'updatedAt', x.created_at)
-          FROM (SELECT DISTINCT ON (s.tenant_id,s.branch_id,s.client_id,s.program_code)
-                       s.tenant_id, s.branch_id, s.client_id, s.program_code,
-                       s.balance_after, s.created_at
-                  FROM stamp_card_events s
-                  JOIN customer_account_clients l ON l.account_id=$1
-                    AND l.tenant_id=s.tenant_id AND l.branch_id=s.branch_id AND l.client_id=s.client_id
-                 ORDER BY s.tenant_id,s.branch_id,s.client_id,s.program_code,s.created_at DESC,s.id DESC) x
-          LEFT JOIN membership_settings ms
-            ON ms.tenant_id=x.tenant_id AND ms.branch_id=x.branch_id
-          LEFT JOIN LATERAL (
-                 SELECT entry AS value
-                   FROM jsonb_array_elements(
-                          CASE WHEN jsonb_typeof(ms.settings_json->'stampCards')='array'
-                               THEN ms.settings_json->'stampCards' ELSE '[]'::jsonb END) entry
-                  WHERE entry->>'code' = x.program_code
-                  LIMIT 1) program ON TRUE
-          LEFT JOIN LATERAL (
-                 SELECT NULLIF((program.value->>'stampsRequired'),'')::INT AS value) required ON TRUE
-         ORDER BY x.created_at DESC
-        "#,
-    )
-    .bind(account_id)
-    .fetch_all(db)
-    .await?;
-    Ok(json!({
-        "loyaltyPoints": loyalty_points,
-        "tier": tier,
-        "history": history,
-        "stampCards": stamp_cards
-    }))
+    Ok(json!({"loyaltyPoints":loyalty_points,"tier":tier,"history":history}))
 }
 
 pub async fn account_wallet(db: &PgPool, account_id: &str) -> Result<Value, sqlx::Error> {

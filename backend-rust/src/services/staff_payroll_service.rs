@@ -16,12 +16,11 @@ use crate::{
             PayrollItemDraft, StatutoryContribution, StatutoryProfileSource,
         },
     },
-    services::{accounting_service, staff_enterprise_service},
+    services::{accounting_service, security_service, staff_enterprise_service},
 };
 
 /// The statutory rule types wired into automatic payroll calculation. `gratuity` and `bonus`
-/// rows in `staff_payroll_statutory_rules` are intentionally excluded here — they stay
-/// available only through the manual `/staff/payroll-compliance/calculate` endpoint.
+/// rules are intentionally excluded until they have dedicated payroll treatment.
 const AUTO_STATUTORY_TYPES: [(&str, &str); 4] = [
     ("provident_fund", "providentFund"),
     ("esic", "esic"),
@@ -86,19 +85,17 @@ fn compute_statutory(
         return result;
     }
     let Some(profile) = profile else {
-        result.errors.push(
-            "Statutory profile is missing; PF/ESIC/PT/TDS cannot be calculated".to_string(),
-        );
+        result
+            .errors
+            .push("Statutory profile is missing; PF/ESIC/PT/TDS cannot be calculated".to_string());
         return result;
     };
     let has_pt_rule = rule_map.keys().any(|(t, _)| t == "professional_tax");
     for (rule_type, key) in AUTO_STATUTORY_TYPES {
-        let Some(rule) = resolve_statutory_rule(rule_map, rule_type, &profile.pt_state_code)
-        else {
+        let Some(rule) = resolve_statutory_rule(rule_map, rule_type, &profile.pt_state_code) else {
             if rule_type == "professional_tax" && has_pt_rule {
                 result.errors.push(
-                    "Professional tax state is required to select the applicable rule"
-                        .to_string(),
+                    "Professional tax state is required to select the applicable rule".to_string(),
                 );
             }
             continue;
@@ -109,22 +106,20 @@ fn compute_statutory(
         if rule_type == "esic" && !profile.esic_opt_in {
             continue;
         }
-        if !staff_enterprise_service::rule_applies(gross_paise, &rule.applicability_json) {
-            continue;
-        }
-        let (employee, employer, accrual) = match staff_enterprise_service::calculate_rule(
-            gross_paise,
-            &rule.rule_json,
-            &rule.rounding_method,
-        ) {
-            Ok(v) => v,
-            Err(_) => {
-                result
-                    .errors
-                    .push(format!("Statutory rule for {rule_type} is invalid"));
-                continue;
-            }
-        };
+        let (employee, employer, accrual) =
+            match staff_enterprise_service::calculate_rule_with_rounding(
+                gross_paise,
+                &rule.rule_json,
+                &rule.rounding_method,
+            ) {
+                Ok(v) => v,
+                Err(_) => {
+                    result
+                        .errors
+                        .push(format!("Statutory rule for {rule_type} is invalid"));
+                    continue;
+                }
+            };
         if employee == 0 && employer == 0 && accrual == 0 {
             continue;
         }
@@ -148,6 +143,9 @@ fn compute_statutory(
             json!({
                 "ruleId": rule.id,
                 "stateCode": rule.state_code,
+                "jurisdictionCode": rule.jurisdiction_code,
+                "roundingMethod": rule.rounding_method,
+                "officialReference": rule.official_reference,
                 "employeePaise": employee,
                 "employerPaise": employer,
                 "accrualPaise": accrual,
@@ -157,7 +155,8 @@ fn compute_statutory(
     result
 }
 
-/// Content hash of one staff member's attendance rows for the period, used to detect whether
+/// Content hash of one staff member's attendance rows used by the period calculation, including
+/// adjacent boundary context, used to detect whether
 /// the underlying attendance source changed since payroll was last calculated for them (see
 /// `run_payroll`'s regeneration source-change warning). Order-independent: rows are sorted by
 /// business date before hashing so fetch order never affects the digest.
@@ -240,10 +239,10 @@ fn is_statutory_named(name: &str) -> bool {
         .filter(|t| !t.is_empty())
         .map(|t| t.to_string())
         .collect();
-    const KEYWORDS: [&str; 8] = [
-        "pf", "provident", "esic", "esi", "tds", "professional", "pt", "vpf",
-    ];
-    KEYWORDS.iter().any(|k| tokens.contains(*k))
+    ["pf", "provident", "esic", "esi", "tds", "pt", "vpf"]
+        .iter()
+        .any(|keyword| tokens.contains(*keyword))
+        || (tokens.contains("professional") && tokens.contains("tax"))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -319,6 +318,42 @@ pub struct PayrollPayoutInput {
     pub payment_method: String,
     pub reference: String,
     pub idempotency_key: String,
+    pub staff_ids: Vec<String>,
+    pub staff_references: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPayoutHoldInput {
+    pub staff_ids: Vec<String>,
+    pub reason: String,
+    pub mfa_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPayoutReleaseInput {
+    pub staff_ids: Vec<String>,
+    pub mfa_code: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayrollPayoutReconciliation {
+    pub run_status: String,
+    pub staff_count: usize,
+    pub paid_count: usize,
+    pub held_count: usize,
+    pub failed_count: usize,
+    pub processing_count: usize,
+    pub pending_count: usize,
+    pub total_paise: i64,
+    pub paid_paise: i64,
+    pub outstanding_paise: i64,
+    pub balanced: bool,
+    pub items: Vec<repository::PayrollPayoutStateRecord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -377,6 +412,8 @@ pub async fn preview(
         policies,
         attendance,
         schedules,
+        attendance_context,
+        schedule_context,
         commission_snapshots,
         sale_lines,
         tips,
@@ -405,6 +442,22 @@ pub async fn preview(
             period_start,
             period_end
         ),
+        repository::attendance_sources(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start - Duration::days(1),
+            period_end + Duration::days(1)
+        ),
+        repository::schedule_sources(
+            db,
+            tenant_id,
+            branch_id,
+            &staff_ids,
+            period_start - Duration::days(1),
+            period_end + Duration::days(1)
+        ),
         repository::commission_snapshots(
             db,
             tenant_id,
@@ -423,7 +476,13 @@ pub async fn preview(
             period_end
         ),
         repository::payroll_adjustment_rules(db, tenant_id, branch_id),
-        repository::list_holidays(db, tenant_id, branch_id, period_start, period_end),
+        repository::list_holidays(
+            db,
+            tenant_id,
+            branch_id,
+            period_start - Duration::days(1),
+            period_end + Duration::days(1)
+        ),
         enterprise_repository::effective_rules_all(db, tenant_id, branch_id, period_end),
         repository::statutory_profiles(db, tenant_id, branch_id, &staff_ids),
         repository::active_advances(db, tenant_id, branch_id, &staff_ids, period_end),
@@ -487,6 +546,20 @@ pub async fn preview(
     let mut schedules_by_staff = HashMap::<String, Vec<_>>::new();
     for row in schedules {
         schedules_by_staff
+            .entry(row.staff_id.clone())
+            .or_default()
+            .push(row);
+    }
+    let mut attendance_context_by_staff = HashMap::<String, Vec<_>>::new();
+    for row in attendance_context {
+        attendance_context_by_staff
+            .entry(row.staff_id.clone())
+            .or_default()
+            .push(row);
+    }
+    let mut schedule_context_by_staff = HashMap::<String, Vec<_>>::new();
+    for row in schedule_context {
+        schedule_context_by_staff
             .entry(row.staff_id.clone())
             .or_default()
             .push(row);
@@ -566,6 +639,11 @@ pub async fn preview(
         .filter(|row| row.is_paid)
         .map(|row| row.holiday_date)
         .collect::<HashSet<_>>();
+    let period_paid_holidays = paid_holidays
+        .iter()
+        .filter(|date| **date >= period_start && **date <= period_end)
+        .copied()
+        .collect::<HashSet<_>>();
     let items = staff
         .into_iter()
         .map(|staff_row| {
@@ -575,6 +653,14 @@ pub async fn preview(
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
             let schedule_rows = schedules_by_staff
+                .get(&staff_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let attendance_context_rows = attendance_context_by_staff
+                .get(&staff_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let schedule_context_rows = schedule_context_by_staff
                 .get(&staff_id)
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
@@ -671,7 +757,7 @@ pub async fn preview(
                 .map(|row| row.business_date)
                 .collect::<HashSet<_>>();
             let holiday_days_x2 = paid_holiday_days_x2(
-                &paid_holidays,
+                &period_paid_holidays,
                 &attended_dates,
                 &compensated_schedule_dates,
                 staff_row.joining_date,
@@ -738,8 +824,17 @@ pub async fn preview(
                 .cloned()
                 .unwrap_or_default();
             let tip_paise = tips_by_staff.get(&staff_id).copied().unwrap_or(0);
-            let weekend_sandwich =
-                compute_weekend_sandwich(schedule_rows, attendance_rows, &paid_holidays);
+            let weekend_sandwich = compute_weekend_sandwich(
+                schedule_context_rows,
+                attendance_context_rows,
+                &paid_holidays,
+                period_start,
+                period_end,
+            );
+            let deductible_weekly_off_days = unpaid_week_off_occurrences(
+                staff_row.pay_rate_type.as_deref(),
+                weekly_off_days_x2,
+            );
             let rule_adjustments = auto_adjustments(
                 &adjustment_rules,
                 late_count,
@@ -747,7 +842,7 @@ pub async fn preview(
                 half_day_count,
                 short_hours,
                 open_clock_ins as i64,
-                i64::from(unpaid_leave_days_x2 / 2),
+                deductible_weekly_off_days,
                 &weekend_sandwich,
             );
             let auto_deduction_paise = rule_adjustments.deduction_paise + rule_adjustments.fine_paise;
@@ -796,6 +891,8 @@ pub async fn preview(
                 "paidLeaveDaysX2": paid_leave_days_x2,
                 "unpaidLeaveDaysX2": unpaid_leave_days_x2,
                 "weeklyOffDaysX2": weekly_off_days_x2,
+                "paidWeeklyOffDaysX2": paid_weekly_off_x2,
+                "unpaidWeeklyOffDaysX2": if paid_weekly_off_x2 == 0 { weekly_off_days_x2 } else { 0 },
                 "holidayDaysX2": holiday_days_x2,
                 "payableDaysX2": payable_days_x2,
                 "workedMinutes": worked_minutes,
@@ -835,6 +932,7 @@ pub async fn preview(
                 "weekendPenaltyOccurrences": weekend_sandwich.weekend_penalty_count,
                 "sandwichPenaltyOccurrences": weekend_sandwich.sandwich_penalty_count,
                 "weeklyOffWorkedOccurrences": weekend_sandwich.weekly_off_worked_count,
+                "unpaidWeekOffRuleOccurrences": deductible_weekly_off_days,
                 "weekendSandwichBreakdown": weekend_sandwich.breakdown.clone(),
                 "statutoryEmployeePaise": statutory.employee_paise,
                 "statutoryEmployerPaise": statutory.employer_paise,
@@ -886,7 +984,7 @@ pub async fn preview(
                 statutory_accrual_paise: statutory.accrual_paise,
                 statutory_breakdown,
                 advance_recovery_items: advance_recovery.items,
-                attendance_source_hash: attendance_source_hash(attendance_rows),
+                attendance_source_hash: attendance_source_hash(attendance_context_rows),
                 staff_id,
                 staff_name: staff_row.staff_name,
                 employee_code: staff_row.employee_code,
@@ -958,11 +1056,25 @@ pub async fn run_payroll(
     .await
     .map_err(|_| AppError::internal("failed to check payroll run"))?;
     if let Some(existing) = &existing_run {
-        if matches!(existing.status.as_str(), "finalized" | "paid") {
+        if matches!(
+            existing.status.as_str(),
+            "finalized" | "partially_paid" | "paid"
+        ) {
             return Err(AppError::conflict(
-                "finalized or paid payroll cannot be recalculated",
+                "finalized or partially paid payroll cannot be recalculated",
             ));
         }
+    }
+    let reason = reason.trim();
+    if reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "regeneration reason must not exceed 500 characters",
+        ));
+    }
+    if !staff_id.trim().is_empty() && existing_run.is_some() && reason.is_empty() {
+        return Err(AppError::validation(
+            "a regeneration reason is required when regenerating selected staff",
+        ));
     }
     if let Some(existing) = &existing_run {
         // Warn (non-blocking) when attendance changed since this staff's last calculation —
@@ -1055,7 +1167,7 @@ pub async fn run_payroll(
         .map_err(|_| AppError::internal("failed to regenerate payroll staff"))?
     };
     let result = detail(db, tenant_id, branch_id, &run.id).await?;
-    if !staff_id.trim().is_empty() {
+    if !staff_id.trim().is_empty() && existing_run.is_some() {
         if let Some(item) = result.items.iter().find(|item| item.staff_id == staff_id) {
             queue_corrected_notification(
                 db,
@@ -1102,7 +1214,7 @@ pub struct PayrollHistoryQuery {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PayrollHistoryPage {
-    pub items: Vec<repository::PayrollRunRecord>,
+    pub items: Vec<repository::PayrollHistoryRunRecord>,
     pub total: i64,
     pub page: i64,
     pub page_size: i64,
@@ -1131,7 +1243,9 @@ fn history_filter_bounds(
 fn history_validation_state(value: Option<&str>) -> Result<String, AppError> {
     let value = value.unwrap_or("").trim().to_string();
     if !value.is_empty() && !matches!(value.as_str(), "valid" | "invalid") {
-        return Err(AppError::validation("validationState must be valid or invalid"));
+        return Err(AppError::validation(
+            "validationState must be valid or invalid",
+        ));
     }
     Ok(value)
 }
@@ -1139,22 +1253,35 @@ fn history_validation_state(value: Option<&str>) -> Result<String, AppError> {
 fn history_status(value: Option<&str>) -> Result<String, AppError> {
     let value = value.unwrap_or("").trim().to_string();
     if !value.is_empty()
-        && !matches!(value.as_str(), "calculated" | "reviewed" | "finalized" | "paid")
+        && !matches!(
+            value.as_str(),
+            "calculated" | "reviewed" | "finalized" | "partially_paid" | "paid"
+        )
     {
         return Err(AppError::validation("status is invalid"));
     }
     Ok(value)
 }
 
-pub async fn history(
+fn history_payment_method(value: Option<&str>) -> Result<String, AppError> {
+    let value = value.unwrap_or("").trim().to_lowercase();
+    if !value.is_empty() && !matches!(value.as_str(), "cash" | "bank" | "upi" | "other") {
+        return Err(AppError::validation("paymentMethod is invalid"));
+    }
+    Ok(value)
+}
+
+async fn history_with_limit(
     db: &PgPool,
     tenant_id: &str,
     branch_ids: &[String],
     query: PayrollHistoryQuery,
+    max_page_size: i64,
 ) -> Result<PayrollHistoryPage, AppError> {
     let (from, to) = history_filter_bounds(&query)?;
     let status = history_status(query.status.as_deref())?;
     let validation_state = history_validation_state(query.validation_state.as_deref())?;
+    let payment_method = history_payment_method(query.payment_method.as_deref())?;
     let filters = repository::PayrollHistoryFilters {
         tenant_id,
         branch_ids,
@@ -1162,13 +1289,13 @@ pub async fn history(
         to,
         status: &status,
         validation_state: &validation_state,
-        payment_method: query.payment_method.as_deref().unwrap_or("").trim(),
+        payment_method: &payment_method,
         staff_id: query.staff_id.as_deref().unwrap_or("").trim(),
         category: query.category.as_deref().unwrap_or("").trim(),
         search: query.search.as_deref().unwrap_or("").trim(),
     };
     let page = query.page.unwrap_or(1).max(1);
-    let page_size = query.page_size.unwrap_or(25).clamp(1, 100);
+    let page_size = query.page_size.unwrap_or(25).clamp(1, max_page_size);
     let (items, total) = tokio::try_join!(
         repository::list_runs_filtered(db, &filters, page, page_size),
         repository::count_runs_filtered(db, &filters),
@@ -1180,6 +1307,30 @@ pub async fn history(
         page,
         page_size,
     })
+}
+
+pub async fn history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    query: PayrollHistoryQuery,
+) -> Result<PayrollHistoryPage, AppError> {
+    history_with_limit(db, tenant_id, branch_ids, query, 100).await
+}
+
+pub async fn history_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    query: PayrollHistoryQuery,
+) -> Result<PayrollHistoryPage, AppError> {
+    let page = history_with_limit(db, tenant_id, branch_ids, query, 5_000).await?;
+    if page.total > page.items.len() as i64 {
+        return Err(AppError::validation(
+            "payroll history export exceeds 5000 rows; narrow the filters",
+        ));
+    }
+    Ok(page)
 }
 
 pub async fn detail(
@@ -1245,6 +1396,8 @@ fn payslip_version_hash(
     hasher.update(item.deductions_paise.to_le_bytes());
     hasher.update(item.net_paise.to_le_bytes());
     hasher.update(item.attendance_source_hash.as_bytes());
+    let mut corrections = corrections.iter().collect::<Vec<_>>();
+    corrections.sort_by(|left, right| left.id.cmp(&right.id));
     for correction in corrections {
         hasher.update([b';']);
         hasher.update(&correction.id);
@@ -1302,9 +1455,13 @@ pub async fn payslip_pdf(
     branch_id: &str,
     run_id: &str,
     staff_id: &str,
+    include_corrections: bool,
 ) -> Result<Vec<u8>, AppError> {
     let detail = detail(db, tenant_id, branch_id, run_id).await?;
-    if !matches!(detail.run.status.as_str(), "finalized" | "paid") {
+    if !matches!(
+        detail.run.status.as_str(),
+        "finalized" | "partially_paid" | "paid"
+    ) {
         return Err(AppError::conflict(
             "payslips are available after payroll finalization",
         ));
@@ -1363,7 +1520,10 @@ pub async fn payslip_pdf(
             f64::from(item.holiday_days_x2) / 2.0
         ),
         format!("  Worked minutes: {}", item.worked_minutes),
-        format!("  Overtime minutes (approved): {}", item.overtime_minutes),
+        format!(
+            "  Overtime minutes (approved): {}",
+            salary_row_i64(&salary_row, "approvedOvertimeMinutes")
+        ),
         String::new(),
         format!(
             "Earned salary: INR {}",
@@ -1388,7 +1548,10 @@ pub async fn payslip_pdf(
             "  Package: INR {}",
             paise_text(salary_row_i64(&salary_row, "packageCommissionPaise"))
         ),
-        format!("  Total commission: INR {}", paise_text(item.commission_paise)),
+        format!(
+            "  Total commission: INR {}",
+            paise_text(item.commission_paise)
+        ),
         String::new(),
         format!(
             "Tips: INR {}",
@@ -1424,14 +1587,21 @@ pub async fn payslip_pdf(
     lines.push(format!("Net pay: INR {}", paise_text(item.net_paise)));
     lines.push(String::new());
 
-    let corrections = repository::list_corrections_for_run(db, tenant_id, branch_id, run_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load payroll corrections"))?
-        .into_iter()
-        .filter(|correction| correction.staff_id == staff_id && correction.status == "posted")
-        .collect::<Vec<_>>();
+    let corrections = if include_corrections {
+        repository::list_corrections_for_run(db, tenant_id, branch_id, run_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load payroll corrections"))?
+            .into_iter()
+            .filter(|correction| correction.staff_id == staff_id && correction.status == "posted")
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     if !corrections.is_empty() {
-        lines.push("Corrections (this payslip is unchanged; these are separate, approved adjustments):".to_string());
+        lines.push(
+            "Corrections (this payslip is unchanged; these are separate, approved adjustments):"
+                .to_string(),
+        );
         let mut corrected_net_paise = item.net_paise;
         for correction in &corrections {
             let sign = if correction.correction_type == "arrear" {
@@ -1499,7 +1669,11 @@ pub async fn payslip_pdf(
             .unwrap_or_else(|| "-".to_string())
     ));
     Ok(crate::services::invoice_pdf::render_text_report(
-        "STAFF PAYSLIP",
+        if include_corrections {
+            "CORRECTED STAFF PAYSLIP"
+        } else {
+            "STAFF PAYSLIP"
+        },
         &lines,
     ))
 }
@@ -1523,7 +1697,10 @@ fn statutory_payslip_lines(calculation_json: &Value) -> Vec<String> {
     let mut lines = vec!["Statutory deductions (PF/ESIC/PT/TDS):".to_string()];
     for (key, label) in LABELS {
         if let Some(entry) = breakdown.get(key) {
-            let employee_paise = entry.get("employeePaise").and_then(Value::as_i64).unwrap_or(0);
+            let employee_paise = entry
+                .get("employeePaise")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
             lines.push(format!("  {label}: INR {}", paise_text(employee_paise)));
         }
     }
@@ -1603,9 +1780,15 @@ pub async fn save_adjustments(
             })
         })
         .collect::<Result<Vec<_>, AppError>>()?;
-    repository::update_adjustments(db, tenant_id, branch_id, run_id, actor_user_id, &inputs)
-        .await
-        .map_err(|_| AppError::internal("failed to save payroll draft"))?;
+    let saved =
+        repository::update_adjustments(db, tenant_id, branch_id, run_id, actor_user_id, &inputs)
+            .await
+            .map_err(|_| AppError::internal("failed to save payroll draft"))?;
+    if !saved {
+        return Err(AppError::validation(
+            "adjustment leaves insufficient net pay for salary advance recovery",
+        ));
+    }
     detail(db, tenant_id, branch_id, run_id).await
 }
 
@@ -1650,274 +1833,15 @@ pub async fn finalize(
 }
 
 pub async fn mark_paid(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    actor_user_id: &str,
+    _db: &PgPool,
+    _tenant_id: &str,
+    _branch_id: &str,
+    _run_id: &str,
+    _actor_user_id: &str,
 ) -> Result<PayrollRunDetail, AppError> {
-    transition(
-        db,
-        tenant_id,
-        branch_id,
-        run_id,
-        actor_user_id,
-        "finalized",
-        "paid",
-    )
-    .await
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-pub struct PayrollStaffHoldInput {
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-pub struct PayrollStaffPayoutInput {
-    pub payment_method: String,
-    pub reference: Option<String>,
-    pub idempotency_key: String,
-    /// Outcome as reported by whoever actually processed the disbursement — this codebase has
-    /// no live bank-API integration (same as every other external channel here), so success or
-    /// failure is reported back after the fact, exactly like notification delivery results are.
-    pub status: String,
-    pub failure_reason: Option<String>,
-    pub mfa_code: Option<String>,
-}
-
-/// Puts one staff member's payout on hold — they're excluded from payout entirely until
-/// released, without affecting anyone else in the run.
-pub async fn hold_staff_payout(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    staff_id: &str,
-    actor_user_id: &str,
-    input: PayrollStaffHoldInput,
-) -> Result<repository::PayrollItemRecord, AppError> {
-    let reason = input.reason.trim();
-    if reason.is_empty() || reason.chars().count() > 500 {
-        return Err(AppError::validation(
-            "a hold reason of 1 to 500 characters is required",
-        ));
-    }
-    repository::hold_staff_payout(db, tenant_id, branch_id, run_id, staff_id, actor_user_id, reason)
-        .await
-        .map_err(|_| AppError::internal("failed to hold staff payout"))?
-        .ok_or_else(|| {
-            AppError::conflict("staff payout can only be held while pending or failed")
-        })
-}
-
-pub async fn release_staff_payout_hold(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    staff_id: &str,
-) -> Result<repository::PayrollItemRecord, AppError> {
-    repository::release_staff_payout_hold(db, tenant_id, branch_id, run_id, staff_id)
-        .await
-        .map_err(|_| AppError::internal("failed to release staff payout hold"))?
-        .ok_or_else(|| AppError::conflict("staff payout is not on hold"))
-}
-
-/// Pays (or records the failure of paying) exactly one staff member within a run, independent of
-/// everyone else — this is what makes partial payout possible: some staff can succeed, some can
-/// be retried after a failure, and others can stay held, all within the same run. Idempotent on
-/// `idempotency_key`: replaying the exact same request after a prior success returns the
-/// already-recorded result rather than posting a second accounting entry (the underlying
-/// journal write is itself idempotent on `(source_type, source_id)`, so this is defense in depth,
-/// not the only guard).
-pub async fn pay_staff(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    staff_id: &str,
-    actor_user_id: &str,
-    input: PayrollStaffPayoutInput,
-) -> Result<repository::PayrollItemRecord, AppError> {
-    let method = input.payment_method.trim().to_ascii_lowercase();
-    if !matches!(method.as_str(), "cash" | "bank" | "upi" | "other") {
-        return Err(AppError::validation("paymentMethod is invalid"));
-    }
-    let reference = input.reference.unwrap_or_default().trim().to_string();
-    if matches!(method.as_str(), "upi" | "other") && reference.is_empty() {
-        return Err(AppError::validation(
-            "reference is required for UPI or other payout",
-        ));
-    }
-    let idempotency_key = input.idempotency_key.trim().to_string();
-    if idempotency_key.is_empty() || idempotency_key.chars().count() > 160 {
-        return Err(AppError::validation("idempotency key is invalid"));
-    }
-    let status = input.status.trim().to_ascii_lowercase();
-    if !matches!(status.as_str(), "succeeded" | "failed") {
-        return Err(AppError::validation("status must be succeeded or failed"));
-    }
-    let failure_reason = input.failure_reason.unwrap_or_default().trim().to_string();
-    if status == "failed" && failure_reason.is_empty() {
-        return Err(AppError::validation(
-            "a failure reason is required when reporting a failed payout",
-        ));
-    }
-
-    let mut tx = db
-        .begin()
-        .await
-        .map_err(|_| AppError::internal("failed to start staff payout"))?;
-    let run = repository::lock_run_for_payout(&mut tx, tenant_id, branch_id, run_id)
-        .await
-        .map_err(|_| AppError::internal("failed to lock payroll run"))?
-        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
-    if !matches!(run.status.as_str(), "finalized" | "partially_paid" | "paid") {
-        return Err(AppError::conflict(
-            "payroll must be finalized before any staff can be paid",
-        ));
-    }
-    let item = repository::lock_item_for_payout(&mut tx, tenant_id, branch_id, run_id, staff_id)
-        .await
-        .map_err(|_| AppError::internal("failed to lock payroll item"))?
-        .ok_or_else(|| AppError::not_found("payroll employee not found in this run"))?;
-
-    if item.payout_status == "held" {
-        return Err(AppError::conflict(
-            "staff payout is on hold; release the hold before paying",
-        ));
-    }
-    if item.payout_status == "succeeded" {
-        let replay = repository::payout_attempt_replay(
-            &mut tx,
-            tenant_id,
-            branch_id,
-            run_id,
-            staff_id,
-            &idempotency_key,
-        )
-        .await
-        .map_err(|_| AppError::internal("failed to check staff payout retry"))?;
-        tx.rollback()
-            .await
-            .map_err(|_| AppError::internal("failed to finish staff payout retry"))?;
-        if replay {
-            return Ok(item);
-        }
-        return Err(AppError::conflict("staff has already been paid for this run"));
-    }
-
-    if status == "succeeded" {
-        let statutory_employer_paise = statutory_employer_total(&item.calculation_json);
-        let advance_recovery_paise = advance_recovery_total(&item.calculation_json);
-        accounting_service::post_staff_payout_item(
-            &mut tx,
-            tenant_id,
-            branch_id,
-            &item.id,
-            &method,
-            item.gross_paise,
-            item.net_paise,
-            statutory_employer_paise,
-            advance_recovery_paise,
-        )
-        .await?;
-    }
-
-    repository::insert_payout_attempt(
-        &mut tx,
-        tenant_id,
-        branch_id,
-        run_id,
-        &item.id,
-        staff_id,
-        &method,
-        &reference,
-        &idempotency_key,
-        &status,
-        &failure_reason,
-        actor_user_id,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to record staff payout attempt"))?;
-
-    let updated = repository::complete_staff_payout(
-        &mut tx,
-        tenant_id,
-        branch_id,
-        run_id,
-        &item.id,
-        staff_id,
-        actor_user_id,
-        &status,
-        &method,
-        &reference,
-        &idempotency_key,
-        item.earned_salary_paise + item.overtime_paise,
-        item.commission_paise,
-        item.adjustment_paise,
-        item.deductions_paise,
-        item.net_paise,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to complete staff payout"))?
-    .ok_or_else(|| AppError::conflict("payroll item status changed; reload and try again"))?;
-
-    repository::refresh_run_payout_status(&mut tx, tenant_id, branch_id, run_id, actor_user_id)
-        .await
-        .map_err(|_| AppError::internal("failed to refresh payroll run payout status"))?;
-
-    tx.commit()
-        .await
-        .map_err(|_| AppError::internal("failed to commit staff payout"))?;
-
-    if status == "succeeded" {
-        let run_record = detail(db, tenant_id, branch_id, run_id).await;
-        if let Ok(run_record) = run_record {
-            queue_paid_notifications_for_staff(
-                db,
-                tenant_id,
-                branch_id,
-                actor_user_id,
-                &run_record.run,
-                &updated,
-                &method,
-            )
-            .await;
-        }
-    }
-    Ok(updated)
-}
-
-pub async fn payout_attempts_for_staff(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-    staff_id: &str,
-) -> Result<Vec<repository::PayoutAttemptDetailRecord>, AppError> {
-    repository::payout_attempts_for_staff(db, tenant_id, branch_id, run_id, staff_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load staff payout attempts"))
-}
-
-/// Run-level reconciliation: a per-payout-status breakdown (pending/held/succeeded/failed) with
-/// counts and net-pay totals, so an admin can see at a glance whether a run is fully settled,
-/// and if not, exactly what's outstanding and why.
-pub async fn payout_reconciliation(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    run_id: &str,
-) -> Result<Vec<repository::PayoutReconciliationRow>, AppError> {
-    repository::payout_reconciliation(db, tenant_id, branch_id, run_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load payroll payout reconciliation"))
+    Err(AppError::conflict(
+        "use the payroll payout action so payment and accounting are recorded together",
+    ))
 }
 
 pub async fn record_payout(
@@ -1929,91 +1853,257 @@ pub async fn record_payout(
     actor_user_id: &str,
     input: PayrollPayoutInput,
 ) -> Result<PayrollRunDetail, AppError> {
-    let (method, mut reference, key) = validate_payout(input)?;
-    if method == "bank" {
-        let current = detail(db, tenant_id, branch_id, run_id).await?;
-        if current.run.status == "finalized" {
-            reference =
-                submit_bank_payout(settings, tenant_id, branch_id, run_id, &key, &current).await?;
-        }
-    }
-    let reference = reference.as_str();
-    let key = key.as_str();
-
-    let mut tx = db
-        .begin()
-        .await
-        .map_err(|_| AppError::internal("failed to start payroll payout"))?;
-    let run = repository::lock_run_for_payout(&mut tx, tenant_id, branch_id, run_id)
-        .await
-        .map_err(|_| AppError::internal("failed to lock payroll payout"))?
-        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
-    if run.status == "paid" {
-        let replay = repository::payout_replay_exists(&mut tx, tenant_id, branch_id, run_id, key)
-            .await
-            .map_err(|_| AppError::internal("failed to check payroll payout retry"))?;
-        tx.rollback()
-            .await
-            .map_err(|_| AppError::internal("failed to finish payroll payout retry"))?;
-        if replay {
-            return detail(db, tenant_id, branch_id, run_id).await;
-        }
-        return Err(AppError::conflict("payroll is already paid"));
-    }
-    if run.status != "finalized" {
+    let (method, reference, key) = validate_payout(&input)?;
+    let current = detail(db, tenant_id, branch_id, run_id).await?;
+    if !matches!(
+        current.run.status.as_str(),
+        "finalized" | "partially_paid" | "paid"
+    ) {
         return Err(AppError::conflict(
             "payroll must be finalized before payout",
         ));
     }
-    let rows = repository::create_payouts(
-        &mut tx,
-        tenant_id,
-        branch_id,
-        run_id,
-        &method,
-        reference,
-        key,
-        actor_user_id,
-    )
-    .await
-    .map_err(|_| AppError::conflict("failed to record payroll payout"))?;
-    if rows != run.staff_count as u64 {
-        return Err(AppError::conflict(
-            "payroll payout items do not match the finalized run",
-        ));
+    let requested = normalized_staff_ids(&input.staff_ids)?;
+    let items = current
+        .items
+        .iter()
+        .filter(|item| requested.is_empty() || requested.contains(&item.staff_id))
+        .collect::<Vec<_>>();
+    if items.is_empty() || (!requested.is_empty() && items.len() != requested.len()) {
+        return Err(AppError::validation("payout staff selection is invalid"));
     }
-    accounting_service::post_payroll_payout(
-        &mut tx,
-        tenant_id,
-        branch_id,
-        run_id,
-        &method,
-        run.gross_paise,
-        run.net_paise,
-    )
-    .await?;
-    if !repository::complete_payout(
-        &mut tx,
-        tenant_id,
-        branch_id,
-        run_id,
-        actor_user_id,
-        &method,
-        reference,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to complete payroll payout"))?
-    {
-        return Err(AppError::conflict(
-            "payroll status changed; reload and try again",
-        ));
-    }
-    tx.commit()
+    let mut paid_staff_ids = HashSet::new();
+    for item in items {
+        let item_reference = input
+            .staff_references
+            .get(&item.staff_id)
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .unwrap_or(reference.as_str())
+            .to_string();
+        if item_reference.chars().count() > 160
+            || (matches!(method.as_str(), "upi" | "other") && item_reference.is_empty())
+        {
+            return Err(AppError::validation(
+                "each UPI or other payout requires a valid staff reference",
+            ));
+        }
+        let staff_key = payout_staff_key(&key, &item.staff_id);
+        let Some(state_id) = repository::reserve_payout_attempt(
+            db,
+            tenant_id,
+            branch_id,
+            run_id,
+            &item.staff_id,
+            &method,
+            &item_reference,
+            &staff_key,
+            actor_user_id,
+        )
         .await
-        .map_err(|_| AppError::internal("failed to commit payroll payout"))?;
+        .map_err(|_| AppError::internal("failed to reserve staff payout"))?
+        else {
+            continue;
+        };
+        let paid_reference = if method == "bank" {
+            match submit_bank_payout(
+                settings, tenant_id, branch_id, run_id, &staff_key, &current, item,
+            )
+            .await
+            {
+                Ok(provider_reference) => provider_reference,
+                Err(error) => {
+                    repository::fail_staff_payout(
+                        db,
+                        tenant_id,
+                        branch_id,
+                        run_id,
+                        &state_id,
+                        &item.staff_id,
+                        &staff_key,
+                        error.message(),
+                        actor_user_id,
+                    )
+                    .await
+                    .map_err(|_| AppError::internal("failed to record bank payout failure"))?;
+                    continue;
+                }
+            }
+        } else {
+            item_reference
+        };
+        let mut tx = db
+            .begin()
+            .await
+            .map_err(|_| AppError::internal("failed to complete staff payout"))?;
+        let state = repository::lock_payout_state(&mut tx, tenant_id, branch_id, &state_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock staff payout"))?
+            .ok_or_else(|| AppError::not_found("staff payout not found"))?;
+        if state.status != "processing" || state.staff_id != item.staff_id {
+            tx.rollback()
+                .await
+                .map_err(|_| AppError::internal("failed to finish staff payout retry"))?;
+            continue;
+        }
+        let payout_id = repository::create_staff_payout(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            run_id,
+            &item.staff_id,
+            &method,
+            &paid_reference,
+            &staff_key,
+            actor_user_id,
+        )
+        .await
+        .map_err(|_| AppError::conflict("staff payout was already recorded"))?;
+        accounting_service::post_staff_payroll_payout(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            run_id,
+            &payout_id,
+            &item.staff_id,
+            &method,
+            item.gross_paise,
+            item.net_paise,
+        )
+        .await?;
+        repository::complete_staff_payout(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            run_id,
+            &state_id,
+            &item.staff_id,
+            &staff_key,
+            &paid_reference,
+            actor_user_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to complete staff payout"))?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to commit staff payout"))?;
+        paid_staff_ids.insert(item.staff_id.clone());
+    }
     let result = detail(db, tenant_id, branch_id, run_id).await?;
-    queue_paid_notifications(db, tenant_id, branch_id, actor_user_id, &result, &method).await;
+    queue_paid_notifications(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        &result,
+        &method,
+        &paid_staff_ids,
+    )
+    .await;
     Ok(result)
+}
+
+pub async fn payout_reconciliation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<PayrollPayoutReconciliation, AppError> {
+    let run = repository::get_run(db, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll run"))?
+        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
+    let items = repository::list_payout_states(db, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to reconcile payroll payouts"))?;
+    let paid_paise = items
+        .iter()
+        .filter(|item| item.status == "paid")
+        .map(|item| item.net_paise)
+        .sum::<i64>();
+    let outstanding_paise = items
+        .iter()
+        .filter(|item| item.status != "paid")
+        .map(|item| item.net_paise)
+        .sum::<i64>();
+    let total_paise = items.iter().map(|item| item.net_paise).sum::<i64>();
+    let count = |status: &str| items.iter().filter(|item| item.status == status).count();
+    Ok(PayrollPayoutReconciliation {
+        run_status: run.status,
+        staff_count: items.len(),
+        paid_count: count("paid"),
+        held_count: count("held"),
+        failed_count: count("failed"),
+        processing_count: count("processing"),
+        pending_count: count("pending"),
+        total_paise,
+        paid_paise,
+        outstanding_paise,
+        balanced: total_paise == paid_paise + outstanding_paise,
+        items,
+    })
+}
+
+pub async fn hold_payouts(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    actor_user_id: &str,
+    input: PayrollPayoutHoldInput,
+) -> Result<PayrollPayoutReconciliation, AppError> {
+    let ids = normalized_staff_ids(&input.staff_ids)?;
+    let reason = input.reason.trim();
+    if ids.is_empty() || reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "staff selection and a hold reason of 1 to 500 characters are required",
+        ));
+    }
+    ensure_partial_payout_run(db, tenant_id, branch_id, run_id).await?;
+    let rows = repository::hold_payouts(
+        db,
+        tenant_id,
+        branch_id,
+        run_id,
+        &ids.into_iter().collect::<Vec<_>>(),
+        reason,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to hold staff payouts"))?;
+    if rows == 0 {
+        return Err(AppError::conflict("selected payouts cannot be held"));
+    }
+    payout_reconciliation(db, tenant_id, branch_id, run_id).await
+}
+
+pub async fn release_payout_holds(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+    actor_user_id: &str,
+    input: PayrollPayoutReleaseInput,
+) -> Result<PayrollPayoutReconciliation, AppError> {
+    let ids = normalized_staff_ids(&input.staff_ids)?;
+    if ids.is_empty() {
+        return Err(AppError::validation("staff selection is required"));
+    }
+    ensure_partial_payout_run(db, tenant_id, branch_id, run_id).await?;
+    let rows = repository::release_payout_holds(
+        db,
+        tenant_id,
+        branch_id,
+        run_id,
+        &ids.into_iter().collect::<Vec<_>>(),
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to release staff payout holds"))?;
+    if rows == 0 {
+        return Err(AppError::conflict("selected payouts are not held"));
+    }
+    payout_reconciliation(db, tenant_id, branch_id, run_id).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -2033,6 +2123,7 @@ pub struct PayrollCorrectionDecisionInput {
     pub version: i32,
     pub decision: String,
     pub note: Option<String>,
+    pub mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2156,7 +2247,9 @@ pub async fn decide_correction(
 ) -> Result<repository::PayrollCorrectionRecord, AppError> {
     let decision = input.decision.trim().to_ascii_lowercase();
     if !matches!(decision.as_str(), "approved" | "rejected") {
-        return Err(AppError::validation("decision must be approved or rejected"));
+        return Err(AppError::validation(
+            "decision must be approved or rejected",
+        ));
     }
     let note = input.note.unwrap_or_default().trim().to_string();
     if note.chars().count() > 500 {
@@ -2175,7 +2268,9 @@ pub async fn decide_correction(
     .await
     .map_err(|_| AppError::internal("failed to decide payroll correction"))?
     .ok_or_else(|| {
-        AppError::conflict("payroll correction is not pending or was updated by another request")
+        AppError::conflict(
+            "payroll correction is not pending, is stale, or requires a different approver",
+        )
     })
 }
 
@@ -2247,9 +2342,12 @@ pub async fn post_correction(
             .await
             .map_err(|_| AppError::internal("failed to finish correction posting retry"))?;
         if replay {
-            return correction_detail(db, tenant_id, branch_id, id)
+            let updated = correction_detail(db, tenant_id, branch_id, id)
                 .await
-                .map(|detail| detail.correction);
+                .map(|detail| detail.correction)?;
+            queue_posted_correction_notification(db, tenant_id, branch_id, actor_user_id, &updated)
+                .await;
+            return Ok(updated);
         }
         return Err(AppError::conflict(
             "payroll correction must be approved before posting",
@@ -2306,20 +2404,16 @@ pub async fn post_correction(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit payroll correction posting"))?;
+    queue_posted_correction_notification(db, tenant_id, branch_id, actor_user_id, &updated).await;
     Ok(updated)
 }
 
-fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String), AppError> {
+fn validate_payout(input: &PayrollPayoutInput) -> Result<(String, String, String), AppError> {
     let method = input.payment_method.trim().to_ascii_lowercase();
     let reference = input.reference.trim().to_string();
     let key = input.idempotency_key.trim().to_string();
     if !matches!(method.as_str(), "cash" | "bank" | "upi" | "other") {
         return Err(AppError::validation("paymentMethod is invalid"));
-    }
-    if matches!(method.as_str(), "upi" | "other") && reference.is_empty() {
-        return Err(AppError::validation(
-            "reference is required for UPI or other payout",
-        ));
     }
     if reference.chars().count() > 160 || key.is_empty() || key.chars().count() > 160 {
         return Err(AppError::validation(
@@ -2329,6 +2423,50 @@ fn validate_payout(input: PayrollPayoutInput) -> Result<(String, String, String)
     Ok((method, reference, key))
 }
 
+fn normalized_staff_ids(staff_ids: &[String]) -> Result<HashSet<String>, AppError> {
+    let ids = staff_ids
+        .iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<HashSet<_>>();
+    if ids.len() != staff_ids.len() {
+        return Err(AppError::validation(
+            "staff payout selection must contain unique valid staff IDs",
+        ));
+    }
+    Ok(ids)
+}
+
+async fn ensure_partial_payout_run(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    run_id: &str,
+) -> Result<(), AppError> {
+    let run = repository::get_run(db, tenant_id, branch_id, run_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll run"))?
+        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
+    if !matches!(run.status.as_str(), "finalized" | "partially_paid") {
+        return Err(AppError::conflict(
+            "only finalized or partially paid payroll can be changed",
+        ));
+    }
+    Ok(())
+}
+
+fn payout_staff_key(request_key: &str, staff_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(request_key.as_bytes());
+    hasher.update([0]);
+    hasher.update(staff_id.as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 async fn submit_bank_payout(
     settings: &Settings,
     tenant_id: &str,
@@ -2336,6 +2474,7 @@ async fn submit_bank_payout(
     run_id: &str,
     idempotency_key: &str,
     detail: &PayrollRunDetail,
+    item: &repository::PayrollItemRecord,
 ) -> Result<String, AppError> {
     if !settings.payroll_payout_provider_enabled() {
         return Err(AppError::service_unavailable(
@@ -2370,12 +2509,12 @@ async fn submit_bank_payout(
             "periodEnd":detail.run.period_end,
             "currency":"INR",
             "idempotencyKey":idempotency_key,
-            "items":detail.items.iter().map(|item| json!({
+            "items":[json!({
                 "staffId":item.staff_id,
                 "employeeCode":item.employee_code,
                 "staffName":item.staff_name,
                 "amountPaise":item.net_paise,
-            })).collect::<Vec<_>>()
+            })]
         }))
         .send()
         .await
@@ -2512,8 +2651,16 @@ async fn transition(
     }
     repository::transition_run(db, tenant_id, branch_id, run_id, actor_user_id, next)
         .await
-        .map_err(|_| AppError::internal("failed to update payroll status"))?
-        .ok_or_else(|| AppError::not_found("payroll run not found"))?;
+        .map_err(|error| {
+            if matches!(&error, sqlx::Error::Protocol(message) if message == "salary advance recovery snapshot is stale") {
+                AppError::conflict(
+                    "salary advance changed after payroll calculation; recalculate the payroll run",
+                )
+            } else {
+                AppError::internal("failed to update payroll status")
+            }
+        })?
+        .ok_or_else(|| AppError::conflict("payroll status changed; reload and try again"))?;
     detail(db, tenant_id, branch_id, run_id).await
 }
 
@@ -2619,6 +2766,8 @@ fn compute_weekend_sandwich(
     schedule_rows: &[repository::ScheduleSourceRecord],
     attendance_rows: &[repository::AttendanceSourceRecord],
     paid_holidays: &HashSet<NaiveDate>,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
 ) -> WeekendSandwichMetrics {
     let attendance_status: HashMap<NaiveDate, &str> = attendance_rows
         .iter()
@@ -2637,10 +2786,19 @@ fn compute_weekend_sandwich(
 
     let mut off_days: Vec<NaiveDate> = schedule_rows
         .iter()
-        .filter(|row| row.status == "weekly_off")
+        .filter(|row| {
+            row.status == "weekly_off"
+                && row.schedule_date >= period_start
+                && row.schedule_date <= period_end
+        })
         .map(|row| row.schedule_date)
         .collect();
-    off_days.extend(paid_holidays.iter().copied());
+    off_days.extend(
+        paid_holidays
+            .iter()
+            .filter(|date| **date >= period_start && **date <= period_end)
+            .copied(),
+    );
     off_days.sort();
     off_days.dedup();
 
@@ -2667,7 +2825,11 @@ fn compute_weekend_sandwich(
             }));
         }
     }
-    for row in schedule_rows.iter().filter(|row| row.status == "weekly_off") {
+    for row in schedule_rows.iter().filter(|row| {
+        row.status == "weekly_off"
+            && row.schedule_date >= period_start
+            && row.schedule_date <= period_end
+    }) {
         if matches!(
             attendance_status.get(&row.schedule_date),
             Some(&"clocked_out") | Some(&"present") | Some(&"half_day")
@@ -2680,6 +2842,14 @@ fn compute_weekend_sandwich(
         }
     }
     result
+}
+
+fn unpaid_week_off_occurrences(pay_rate_type: Option<&str>, weekly_off_days_x2: i32) -> i64 {
+    if pay_rate_type == Some("monthly") {
+        i64::from(weekly_off_days_x2 / 2)
+    } else {
+        0
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2837,8 +3007,41 @@ pub async fn list_statutory_profiles(
         .map_err(|_| AppError::internal("failed to load statutory profiles"))
 }
 
+pub async fn protect_legacy_statutory_pii(
+    db: &PgPool,
+    encryption_key: Option<&str>,
+) -> Result<(), AppError> {
+    let rows = repository::legacy_statutory_pii(db)
+        .await
+        .map_err(|_| AppError::internal("failed to load legacy statutory PII"))?;
+    if !rows.is_empty() {
+        let key = statutory_encryption_key(encryption_key)?;
+        for row in rows {
+            let (uan, uan_last_four) = encrypt_identifier(key, &row.uan)?;
+            let (esic, esic_last_four) = encrypt_identifier(key, &row.esic_number)?;
+            let (pan, pan_last_four) = encrypt_identifier(key, &row.pan_number)?;
+            repository::protect_legacy_statutory_pii(
+                db,
+                &row.id,
+                &uan,
+                &uan_last_four,
+                &esic,
+                &esic_last_four,
+                &pan,
+                &pan_last_four,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to protect legacy statutory PII"))?;
+        }
+    }
+    repository::validate_statutory_plaintext_constraint(db)
+        .await
+        .map_err(|_| AppError::internal("failed to validate statutory PII protection"))
+}
+
 pub async fn save_statutory_profile(
     db: &PgPool,
+    encryption_key: Option<&str>,
     tenant_id: &str,
     branch_id: &str,
     staff_id: &str,
@@ -2854,23 +3057,92 @@ pub async fn save_statutory_profile(
     };
     let uan = field(input.uan, "UAN")?;
     let esic_number = field(input.esic_number, "ESIC number")?;
-    let pan_number = field(input.pan_number, "PAN")?;
-    let pt_state_code = field(input.pt_state_code, "PT state code")?;
+    let pan_number = field(input.pan_number, "PAN")?.to_ascii_uppercase();
+    let pt_state_code = field(input.pt_state_code, "PT state code")?.to_ascii_uppercase();
+    validate_statutory_identifiers(&uan, &esic_number, &pan_number, &pt_state_code)?;
+    let key = statutory_encryption_key(encryption_key)?;
+    let (uan_ciphertext, uan_last_four) = encrypt_identifier(key, &uan)?;
+    let (esic_ciphertext, esic_last_four) = encrypt_identifier(key, &esic_number)?;
+    let (pan_ciphertext, pan_last_four) = encrypt_identifier(key, &pan_number)?;
     repository::upsert_statutory_profile(
         db,
         tenant_id,
         branch_id,
         staff_id,
         actor_user_id,
-        &uan,
-        &esic_number,
-        &pan_number,
+        &uan_ciphertext,
+        &uan_last_four,
+        &esic_ciphertext,
+        &esic_last_four,
+        &pan_ciphertext,
+        &pan_last_four,
         &pt_state_code,
         input.pf_opt_in.unwrap_or(true),
         input.esic_opt_in.unwrap_or(true),
     )
     .await
-    .map_err(|_| AppError::internal("failed to save statutory profile"))
+    .map_err(|error| match error {
+        sqlx::Error::RowNotFound => AppError::not_found("active staff member not found"),
+        _ => AppError::internal("failed to save statutory profile"),
+    })
+}
+
+fn statutory_encryption_key(value: Option<&str>) -> Result<&str, AppError> {
+    value.ok_or_else(|| {
+        AppError::service_unavailable(
+            "STATUTORY_PII_ENCRYPTION_NOT_CONFIGURED",
+            "statutory PII encryption is not configured",
+        )
+    })
+}
+
+fn encrypt_identifier(key: &str, value: &str) -> Result<(String, String), AppError> {
+    if value.is_empty() {
+        return Ok((String::new(), String::new()));
+    }
+    let last_four = value
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    Ok((security_service::encrypt_secret(key, value)?, last_four))
+}
+
+fn validate_statutory_identifiers(
+    uan: &str,
+    esic_number: &str,
+    pan_number: &str,
+    pt_state_code: &str,
+) -> Result<(), AppError> {
+    if !uan.is_empty() && (uan.len() != 12 || !uan.bytes().all(|byte| byte.is_ascii_digit())) {
+        return Err(AppError::validation("UAN must contain exactly 12 digits"));
+    }
+    if !esic_number.is_empty()
+        && (esic_number.len() != 17 || !esic_number.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err(AppError::validation(
+            "ESIC number must contain exactly 17 digits",
+        ));
+    }
+    let pan = pan_number.as_bytes();
+    if !pan_number.is_empty()
+        && (pan.len() != 10
+            || !pan[..5].iter().all(u8::is_ascii_uppercase)
+            || !pan[5..9].iter().all(u8::is_ascii_digit)
+            || !pan[9].is_ascii_uppercase())
+    {
+        return Err(AppError::validation("PAN format is invalid"));
+    }
+    if !pt_state_code
+        .bytes()
+        .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(AppError::validation("PT state code is invalid"));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -3052,7 +3324,7 @@ async fn queue_payroll_notification(
     staff_id: &str,
     notification_type: &str,
     idempotency_key: &str,
-    variables: HashMap<String, String>,
+    mut variables: HashMap<String, String>,
     contains_payroll_amounts: bool,
 ) {
     match enterprise_repository::notification_already_queued(
@@ -3068,55 +3340,101 @@ async fn queue_payroll_notification(
         Ok(true) => return,
         Ok(false) => {}
         Err(error) => {
-            tracing::warn!(?error, notification_type, staff_id, "failed to check payroll notification idempotency");
+            tracing::warn!(
+                ?error,
+                notification_type,
+                staff_id,
+                "failed to check payroll notification idempotency"
+            );
             return;
         }
     }
+    let context =
+        match enterprise_repository::notification_context(db, tenant_id, branch_id, staff_id).await
+        {
+            Ok(Some(context)) => context,
+            Ok(None) => return,
+            Err(error) => {
+                tracing::warn!(
+                    ?error,
+                    notification_type,
+                    staff_id,
+                    "failed to load payroll notification context"
+                );
+                return;
+            }
+        };
     let template = match enterprise_repository::active_notification_template_by_type(
         db,
         tenant_id,
         branch_id,
         notification_type,
-        "en-IN",
+        &context.language_code,
     )
     .await
     {
         Ok(Some(template)) => template,
         Ok(None) => return,
         Err(error) => {
-            tracing::warn!(?error, notification_type, "failed to load payroll notification template");
+            tracing::warn!(
+                ?error,
+                notification_type,
+                "failed to load payroll notification template"
+            );
             return;
         }
     };
-    let context =
-        match enterprise_repository::notification_context(db, tenant_id, branch_id, staff_id).await {
-            Ok(Some(context)) => context,
-            Ok(None) => return,
-            Err(error) => {
-                tracing::warn!(?error, notification_type, staff_id, "failed to load payroll notification context");
-                return;
-            }
-        };
-    let channel = if context.whatsapp_opt_in == Some(true) {
+    let whatsapp_digits = context
+        .mobile_phone
+        .chars()
+        .filter(char::is_ascii_digit)
+        .count();
+    let channel = if context.whatsapp_opt_in == Some(true) && (8..=15).contains(&whatsapp_digits) {
         "whatsapp"
     } else {
         "in_app"
     };
+    let amount_consent = context.allow_payroll_amounts == Some(true);
+    if contains_payroll_amounts && !amount_consent {
+        variables.retain(|key, _| !is_payroll_amount_variable(key));
+    }
     let request = staff_enterprise_service::QueueNotificationRequest {
         staff_id: staff_id.to_string(),
         template_id: template.id,
         channel: channel.to_string(),
         variables: Some(variables),
-        contains_payroll_amounts: Some(contains_payroll_amounts),
+        contains_payroll_amounts: Some(contains_payroll_amounts && amount_consent),
         scheduled_at: None,
         metadata: Some(json!({ "idempotencyKey": idempotency_key })),
     };
-    if let Err(error) =
-        staff_enterprise_service::queue_notification(db, tenant_id, branch_id, actor_user_id, request)
-            .await
+    if let Err(error) = staff_enterprise_service::queue_notification(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        request,
+    )
+    .await
     {
-        tracing::warn!(?error, notification_type, staff_id, "failed to queue payroll notification");
+        tracing::warn!(
+            ?error,
+            notification_type,
+            staff_id,
+            "failed to queue payroll notification"
+        );
     }
+}
+
+fn is_payroll_amount_variable(key: &str) -> bool {
+    matches!(
+        key,
+        "payroll.netPay"
+            | "payroll.grossPay"
+            | "payroll.fineAmount"
+            | "payroll.recoveredAmount"
+            | "payroll.outstandingBalance"
+            | "payroll.correctionAmount"
+    )
 }
 
 fn payroll_notification_period_var(run: &repository::PayrollRunRecord) -> HashMap<String, String> {
@@ -3138,24 +3456,14 @@ async fn queue_finalize_notifications(
     actor_user_id: &str,
     detail: &PayrollRunDetail,
 ) {
-    let recoveries = repository::applied_advance_recoveries_for_run(
-        db,
-        tenant_id,
-        branch_id,
-        &detail.run.id,
-    )
-    .await
-    .unwrap_or_default();
+    let recoveries =
+        repository::applied_advance_recoveries_for_run(db, tenant_id, branch_id, &detail.run.id)
+            .await
+            .unwrap_or_default();
     for item in &detail.items {
         let mut vars = payroll_notification_period_var(&detail.run);
-        vars.insert(
-            "payroll.netPay".to_string(),
-            paise_text(item.net_paise),
-        );
-        vars.insert(
-            "payroll.grossPay".to_string(),
-            paise_text(item.gross_paise),
-        );
+        vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
+        vars.insert("payroll.grossPay".to_string(), paise_text(item.gross_paise));
         queue_payroll_notification(
             db,
             tenant_id,
@@ -3175,7 +3483,10 @@ async fn queue_finalize_notifications(
             actor_user_id,
             &item.staff_id,
             "payroll_payslip_available",
-            &format!("payroll_payslip_available:{}:{}", detail.run.id, item.staff_id),
+            &format!(
+                "payroll_payslip_available:{}:{}",
+                detail.run.id, item.staff_id
+            ),
             payroll_notification_period_var(&detail.run),
             false,
         )
@@ -3219,7 +3530,10 @@ async fn queue_finalize_notifications(
             actor_user_id,
             &recovery.staff_id,
             "payroll_advance_recovered",
-            &format!("payroll_advance_recovered:{}:{}", recovery.advance_id, detail.run.id),
+            &format!(
+                "payroll_advance_recovered:{}:{}",
+                recovery.advance_id, detail.run.id
+            ),
             vars,
             true,
         )
@@ -3235,51 +3549,32 @@ async fn queue_paid_notifications(
     actor_user_id: &str,
     detail: &PayrollRunDetail,
     payment_method: &str,
+    paid_staff_ids: &HashSet<String>,
 ) {
-    for item in &detail.items {
-        queue_paid_notifications_for_staff(
+    for item in detail
+        .items
+        .iter()
+        .filter(|item| paid_staff_ids.contains(&item.staff_id))
+    {
+        let mut vars = payroll_notification_period_var(&detail.run);
+        vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
+        vars.insert(
+            "payroll.paymentMethod".to_string(),
+            payment_method.to_string(),
+        );
+        queue_payroll_notification(
             db,
             tenant_id,
             branch_id,
             actor_user_id,
-            &detail.run,
-            item,
-            payment_method,
+            &item.staff_id,
+            "payroll_paid",
+            &format!("payroll_paid:{}:{}", detail.run.id, item.staff_id),
+            vars,
+            true,
         )
         .await;
     }
-}
-
-/// Queues `payroll_paid` for exactly one staff member — used both by the bulk pay-everyone-at-once
-/// flow (looped by `queue_paid_notifications`) and by the individual per-staff payout added for
-/// partial payout, where only one staff member's payout succeeds at a time.
-async fn queue_paid_notifications_for_staff(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    actor_user_id: &str,
-    run: &repository::PayrollRunRecord,
-    item: &repository::PayrollItemRecord,
-    payment_method: &str,
-) {
-    let mut vars = payroll_notification_period_var(run);
-    vars.insert("payroll.netPay".to_string(), paise_text(item.net_paise));
-    vars.insert(
-        "payroll.paymentMethod".to_string(),
-        payment_method.to_string(),
-    );
-    queue_payroll_notification(
-        db,
-        tenant_id,
-        branch_id,
-        actor_user_id,
-        &item.staff_id,
-        "payroll_paid",
-        &format!("payroll_paid:{}:{}", run.id, item.staff_id),
-        vars,
-        true,
-    )
-    .await;
 }
 
 /// Queues `payroll_corrected` for a staff member whose payroll item was just regenerated.
@@ -3315,20 +3610,59 @@ async fn queue_corrected_notification(
     .await;
 }
 
+async fn queue_posted_correction_notification(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    correction: &repository::PayrollCorrectionRecord,
+) {
+    let run = match repository::get_run(db, tenant_id, branch_id, &correction.original_run_id).await
+    {
+        Ok(Some(run)) => run,
+        _ => return,
+    };
+    let mut vars = payroll_notification_period_var(&run);
+    vars.insert(
+        "payroll.correctionAmount".to_string(),
+        paise_text(correction.amount_paise),
+    );
+    vars.insert(
+        "payroll.correctionType".to_string(),
+        correction.correction_type.clone(),
+    );
+    vars.insert("payroll.reason".to_string(), correction.reason.clone());
+    queue_payroll_notification(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        &correction.staff_id,
+        "payroll_corrected",
+        &format!("payroll_corrected:posted:{}", correction.id),
+        vars,
+        true,
+    )
+    .await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        best_statutory_rules, compute_statutory, compute_weekend_sandwich, is_statutory_named,
-        line_attributions, multiply_divide, paid_holiday_days_x2, period, resolve_statutory_rule,
-        settled_provider_reference, validate_payout, PayrollPayoutInput, StatutoryProfileSource,
-        StatutoryRuleRecord,
+        best_statutory_rules, compute_advance_recovery, compute_statutory,
+        compute_weekend_sandwich, encrypt_identifier, history_payment_method,
+        is_payroll_amount_variable, is_statutory_named, line_attributions, mask_sensitive_id,
+        multiply_divide, normalized_staff_ids, paid_holiday_days_x2, payout_staff_key, period,
+        resolve_statutory_rule, settled_provider_reference, statutory_encryption_key,
+        unpaid_week_off_occurrences, validate_payout, validate_statutory_identifiers,
+        PayrollPayoutInput, StatutoryProfileSource, StatutoryRuleRecord,
     };
     use crate::repositories::staff_payroll_repository::{
-        AttendanceSourceRecord, ScheduleSourceRecord,
+        ActiveAdvanceSource, AttendanceSourceRecord, ScheduleSourceRecord,
     };
     use chrono::Datelike;
     use serde_json::{json, Value};
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn commission_split_uses_integer_paise_rounding() {
@@ -3339,16 +3673,20 @@ mod tests {
             250
         );
         assert_eq!(period(2024, 2).unwrap().1.day(), 29);
-        assert!(validate_payout(PayrollPayoutInput {
+        assert!(validate_payout(&PayrollPayoutInput {
             payment_method: "bank".into(),
             reference: "UTR-1".into(),
-            idempotency_key: "retry-1".into()
+            idempotency_key: "retry-1".into(),
+            staff_ids: Vec::new(),
+            staff_references: HashMap::new(),
         })
         .is_ok());
-        assert!(validate_payout(PayrollPayoutInput {
+        assert!(validate_payout(&PayrollPayoutInput {
             payment_method: "bank".into(),
             reference: String::new(),
-            idempotency_key: "retry-2".into()
+            idempotency_key: "retry-2".into(),
+            staff_ids: Vec::new(),
+            staff_references: HashMap::new(),
         })
         .is_ok());
         let holiday = chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap();
@@ -3368,21 +3706,96 @@ mod tests {
         );
     }
 
-    fn rule(rule_type: &str, state_code: &str, effective_from: &str, json: Value) -> StatutoryRuleRecord {
+    #[test]
+    fn staff_payout_keys_are_stable_and_staff_scoped() {
+        assert_eq!(
+            payout_staff_key("request-1", "staff-1"),
+            payout_staff_key("request-1", "staff-1")
+        );
+        assert_ne!(
+            payout_staff_key("request-1", "staff-1"),
+            payout_staff_key("request-1", "staff-2")
+        );
+        assert!(normalized_staff_ids(&["staff-1".into(), "staff-1".into()]).is_err());
+    }
+
+    #[test]
+    fn payroll_history_validates_payment_method_and_masks_pan() {
+        assert_eq!(history_payment_method(Some(" UPI ")).unwrap(), "upi");
+        assert!(history_payment_method(Some("cheque")).is_err());
+        assert_eq!(mask_sensitive_id("ABCDE1234F"), "XXXXXX234F");
+    }
+
+    #[test]
+    fn staff_security_statutory_identifiers_are_validated_and_encrypted() {
+        let uan = "100000000001";
+        let key = "test-only-statutory-key";
+        validate_statutory_identifiers(uan, "12345678901234567", "ABCDE1234F", "IN-MH").unwrap();
+        assert!(validate_statutory_identifiers("123", "", "", "IN-MH").is_err());
+        assert!(statutory_encryption_key(None).is_err());
+
+        let (ciphertext, last_four) = encrypt_identifier(key, uan).unwrap();
+        assert_ne!(ciphertext, uan);
+        assert_eq!(last_four, "0001");
+        assert_eq!(
+            crate::services::security_service::decrypt_secret(key, &ciphertext).unwrap(),
+            uan
+        );
+    }
+
+    #[test]
+    fn payroll_notifications_identify_sensitive_amount_variables() {
+        assert!(is_payroll_amount_variable("payroll.netPay"));
+        assert!(is_payroll_amount_variable("payroll.correctionAmount"));
+        assert!(!is_payroll_amount_variable("payroll.period"));
+        assert!(!is_payroll_amount_variable("payroll.reason"));
+    }
+
+    #[test]
+    fn advance_recovery_caps_at_net_capacity_and_carries_shortfall() {
+        let advances = vec![ActiveAdvanceSource {
+            id: "advance-1".to_string(),
+            staff_id: "staff-1".to_string(),
+            outstanding_paise: 50_000,
+            installment_amount_paise: 20_000,
+            pending_carry_forward_paise: 5_000,
+        }];
+        let limited = compute_advance_recovery(10_000, &advances);
+        assert_eq!(limited.total_recovered_paise, 10_000);
+        assert_eq!(limited.items[0].carried_forward_paise, 15_000);
+
+        let zero_pay = compute_advance_recovery(0, &advances);
+        assert_eq!(zero_pay.total_recovered_paise, 0);
+        assert_eq!(zero_pay.items[0].carried_forward_paise, 25_000);
+    }
+
+    fn rule(
+        rule_type: &str,
+        state_code: &str,
+        effective_from: &str,
+        json: Value,
+    ) -> StatutoryRuleRecord {
         StatutoryRuleRecord {
             id: format!("{rule_type}-{state_code}-{effective_from}"),
             rule_type: rule_type.to_string(),
             state_code: state_code.to_string(),
+            jurisdiction_code: if state_code.is_empty() {
+                "IN".to_string()
+            } else {
+                format!("IN-{state_code}")
+            },
+            rounding_method: "floor_paisa".to_string(),
+            official_reference: "test-reference".to_string(),
             rule_json: json,
             effective_from: chrono::NaiveDate::parse_from_str(effective_from, "%Y-%m-%d").unwrap(),
             effective_to: None,
             active: true,
-            version: 1,
-            rounding_method: "floor".to_string(),
-            official_reference: "test reference".to_string(),
-            approved_by: "test approver".to_string(),
+            approval_status: "approved".to_string(),
+            created_by: "maker".to_string(),
+            approved_by: Some("checker".to_string()),
             approved_at: Some(chrono::Utc::now()),
-            applicability_json: serde_json::json!({}),
+            review_note: String::new(),
+            version: 1,
             created_at: chrono::Utc::now(),
             updated_at: None,
         }
@@ -3407,6 +3820,7 @@ mod tests {
         assert!(is_statutory_named("Professional Tax"));
         assert!(is_statutory_named("TDS"));
         assert!(!is_statutory_named("Late attendance fine"));
+        assert!(!is_statutory_named("Professional conduct fine"));
     }
 
     #[test]
@@ -3451,7 +3865,10 @@ mod tests {
         let map = best_statutory_rules(&rules);
         let result = compute_statutory(1_000_000, &map, true, None);
         assert_eq!(result.employee_paise, 0);
-        assert!(result.errors.iter().any(|e| e.contains("profile is missing")));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.contains("profile is missing")));
     }
 
     #[test]
@@ -3473,7 +3890,7 @@ mod tests {
         let map = best_statutory_rules(&rules);
         let opted_out_pf = profile("", false, true);
         let result = compute_statutory(1_000_000, &map, true, Some(&opted_out_pf));
-        assert_eq!(result.employee_paise, 7_500); // only ESIC (0.75% of 1_000_000) applied, PF skipped
+        assert_eq!(result.employee_paise, 12_500); // only ESIC (0.75%) applied, PF skipped
         assert!(result.errors.iter().any(|e| e.contains("ESIC number")));
         assert!(!result.errors.iter().any(|e| e.contains("UAN")));
     }
@@ -3520,7 +3937,13 @@ mod tests {
             attendance("2026-07-11", "absent"),
             attendance("2026-07-13", "present"),
         ];
-        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        let result = compute_weekend_sandwich(
+            &schedules,
+            &attendance_rows,
+            &HashSet::new(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+        );
         assert_eq!(result.weekend_penalty_count, 1);
         assert_eq!(result.sandwich_penalty_count, 0);
     }
@@ -3532,7 +3955,13 @@ mod tests {
             attendance("2026-07-11", "absent"),
             attendance("2026-07-13", "absent"),
         ];
-        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        let result = compute_weekend_sandwich(
+            &schedules,
+            &attendance_rows,
+            &HashSet::new(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+        );
         assert_eq!(result.sandwich_penalty_count, 1);
         assert_eq!(result.weekend_penalty_count, 0);
     }
@@ -3549,8 +3978,15 @@ mod tests {
             attendance("2026-07-11", "absent"),
             attendance("2026-07-13", "absent"),
         ];
-        let holidays = HashSet::from([chrono::NaiveDate::parse_from_str("2026-07-11", "%Y-%m-%d").unwrap()]);
-        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &holidays);
+        let holidays =
+            HashSet::from([chrono::NaiveDate::parse_from_str("2026-07-11", "%Y-%m-%d").unwrap()]);
+        let result = compute_weekend_sandwich(
+            &schedules,
+            &attendance_rows,
+            &holidays,
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+        );
         assert_eq!(result.weekend_penalty_count, 0);
         assert_eq!(result.sandwich_penalty_count, 0);
     }
@@ -3559,8 +3995,38 @@ mod tests {
     fn weekly_off_worked_triggers_when_staff_attends_their_off_day() {
         let schedules = vec![schedule("2026-07-12", "weekly_off")];
         let attendance_rows = vec![attendance("2026-07-12", "present")];
-        let result = compute_weekend_sandwich(&schedules, &attendance_rows, &HashSet::new());
+        let result = compute_weekend_sandwich(
+            &schedules,
+            &attendance_rows,
+            &HashSet::new(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+        );
         assert_eq!(result.weekly_off_worked_count, 1);
         assert_eq!(result.weekend_penalty_count, 0);
+    }
+
+    #[test]
+    fn month_boundary_uses_adjacent_attendance_context() {
+        let schedules = vec![schedule("2026-07-01", "weekly_off")];
+        let attendance_rows = vec![
+            attendance("2026-06-30", "absent"),
+            attendance("2026-07-02", "present"),
+        ];
+        let result = compute_weekend_sandwich(
+            &schedules,
+            &attendance_rows,
+            &HashSet::new(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+        );
+        assert_eq!(result.weekend_penalty_count, 1);
+    }
+
+    #[test]
+    fn unpaid_week_off_rule_does_not_reuse_unpaid_leave_days() {
+        assert_eq!(unpaid_week_off_occurrences(Some("monthly"), 8), 4);
+        assert_eq!(unpaid_week_off_occurrences(Some("daily"), 8), 0);
+        assert_eq!(unpaid_week_off_occurrences(Some("hourly"), 8), 0);
     }
 }

@@ -20,7 +20,12 @@ type WinBackClient = { clientId: string; clientName: string; lastVisitAt?: strin
 type WinBackResults = { sent: number; booked: number; revenuePaise: number; optOuts: number };
 type ClientIntelligence = { clientId: string; clientName: string; lastVisitAt?: string; inactiveDays: number; visitFrequencyDays?: number; lastService: string; favouriteServices: string; averageSpendPaise: number; lifetimeValuePaise: number; noShowRateBps: number; cancellationRateBps: number; preferredStaffName: string; preferredChannel: string; consentStatus: string; upcomingAppointmentAt?: string; membershipStatus: string; loyaltyPoints: number; previousOfferCount: number; campaignSentCount: number; campaignResponseCount: number; churnRiskScore: number; nextBestAction: string; nextBestActionReason: string; segmentKeys: string[] };
 type MarketingAdvisor = { source: string; scope: 'client' | 'segment'; scopeId: string; probableReason: string; dueService: string; recommendedOffer: string; avoidOffer: string; safeDiscountBps: number; benefitType: string; bestChannel: string; bestSendingTime: string; suggestedMessage: string; expectedOutcome: string; evidence: string[]; requiresApproval: boolean };
-type MarketingOffer = { id: string; code: string; benefitType: string; benefitValue: number; targetClientId?: string; startsAt?: string; endsAt?: string; minimumBillPaise: number; usageLimit?: number; usedCount: number; perClientLimit: number; approvalStatus: string; active: boolean };
+type MarketingOffer = { id: string; code: string; title: string; customerDescription: string; staffInstructions: string; benefitType: string; benefitValue: number; targetClientId?: string; targetServiceIds: string[]; targetPackageIds: string[]; startsAt?: string; endsAt?: string; minimumBillPaise: number; usageLimit?: number; usedCount: number; perClientLimit: number; approvalStatus: string; lifecycleStatus: string; active: boolean; showInStaffApp: boolean; showInCustomerApp: boolean; hasCreative: boolean; creativePath?: string };
+type MarketingOfferCreated = { id: string; approvalStatus: string };
+type OfferSharePack = { offerId: string; title: string; caption: string; instagramBookingUrl: string; whatsappBookingUrl: string; creativeDownloadPath?: string; trackedBookings: number; whatsappPolicy: { consentRequired: boolean; frequencyCapDays: number; consentedClients: number; eligibleClients: number } };
+type OfferPerformanceRow = { offerId: string; code: string; title: string; branchId: string; branchName: string; lifecycleStatus: string; endsAt?: string; appViews: number; linkClicks: number; bookings: number; posRedemptions: number; discountPaise: number; revenueAfterDiscountPaise: number };
+type OfferBranchResult = Omit<OfferPerformanceRow, 'offerId' | 'code' | 'title' | 'lifecycleStatus' | 'endsAt'>;
+type OfferPerformance = { offers: OfferPerformanceRow[]; branchResults: OfferBranchResult[] };
 type ConsentCoverage = { audienceCount: number; whatsapp: number; sms: number; email: number };
 type MarketingAutomation = { id: string; name: string; trigger: string; status: 'active' | 'paused'; template: string; config: { conditions: string[]; exclusions: string[]; offerId?: string; channels: string[]; sendTime: string; frequencyCapDays: number; approvalMode: 'automatic' | 'manual' }; performance: { sent: number; failed: number; blocked: number } };
 type MessageTemplate = { id: string; templateKey: string; name: string; channel: string; audience: string; eventKey: string; body: string; language: string; serviceId: string; occasionKey: string; offerId: string; status: string };
@@ -60,6 +65,7 @@ export class MarketingLeadsPageComponent implements OnInit {
   advisorReview = '';
   advisorLoading = false;
   offers: MarketingOffer[] = [];
+  offerPerformance: OfferPerformance = { offers: [], branchResults: [] };
   coverage: ConsentCoverage = { audienceCount: 0, whatsapp: 0, sms: 0, email: 0 };
   testQueued = false;
   automations: MarketingAutomation[] = [];
@@ -82,11 +88,15 @@ export class MarketingLeadsPageComponent implements OnInit {
   loading = true;
   busy = false;
   error = '';
-  drawer: 'lead' | 'campaign' | 'activity' | 'offer' | 'automation' | 'template' | '' = '';
+  drawer: 'lead' | 'campaign' | 'activity' | 'offer' | 'offer-share' | 'automation' | 'template' | '' = '';
   leadDraft = this.emptyLead();
   campaignDraft = this.emptyCampaign();
   activityDraft = this.emptyActivity();
   offerDraft = this.emptyOffer();
+  offerCreative?: File;
+  offerCreativePreview = '';
+  offerShare?: OfferSharePack;
+  offerShareStatus = '';
   automationDraft = this.emptyAutomation();
   templateDraft = this.emptyTemplate();
   conversionClientId = '';
@@ -120,7 +130,7 @@ export class MarketingLeadsPageComponent implements OnInit {
     this.loading = true;
     this.error = '';
     try {
-      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, automations, templates, attribution, leadAdvice, governance] = await Promise.all([
+      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, offerPerformance, automations, templates, attribution, leadAdvice, governance] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<any>>('/notifications?notificationType=marketing_campaign&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<Lead[]>>('/marketing/leads?page=1&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<LeadOwner[]>>('/marketing/leads/owners')),
@@ -130,6 +140,7 @@ export class MarketingLeadsPageComponent implements OnInit {
         firstValueFrom(this.api.get<ApiEnvelope<WinBackResults>>('/marketing/win-back/results')).catch(() => ({ data: this.winBackResults })),
         firstValueFrom(this.api.get<ApiEnvelope<ClientIntelligence[]>>(`/marketing/client-intelligence?q=${encodeURIComponent(this.clientSearch.trim())}&limit=200`)).catch(() => ({ data: [] as ClientIntelligence[] })),
         firstValueFrom(this.api.get<ApiEnvelope<MarketingOffer[]>>('/marketing/offers')).catch(() => ({ data: [] as MarketingOffer[] })),
+        firstValueFrom(this.api.get<ApiEnvelope<OfferPerformance>>('/marketing/offers/performance')).catch(() => ({ data: this.offerPerformance })),
         firstValueFrom(this.api.get<ApiEnvelope<MarketingAutomation[]>>('/marketing/automations')).catch(() => ({ data: [] as MarketingAutomation[] })),
         firstValueFrom(this.api.get<ApiEnvelope<MessageTemplate[]>>('/message-templates')).catch(() => ({ data: [] as MessageTemplate[] })),
         firstValueFrom(this.api.get<ApiEnvelope<MarketingAttribution>>('/marketing/attribution')).catch(() => ({ data: this.attribution })),
@@ -145,6 +156,7 @@ export class MarketingLeadsPageComponent implements OnInit {
       this.winBackResults = results.data || this.winBackResults;
       this.clientIntelligence = Array.isArray(intelligence.data) ? intelligence.data : [];
       this.offers = Array.isArray(offers.data) ? offers.data : [];
+      this.offerPerformance = offerPerformance.data || this.offerPerformance;
       this.automations = Array.isArray(automations.data) ? automations.data : [];
       this.templates = Array.isArray(templates.data) ? templates.data : [];
       this.attribution = attribution.data || this.attribution;
@@ -157,7 +169,12 @@ export class MarketingLeadsPageComponent implements OnInit {
   }
 
   openLead() { this.leadDraft = this.emptyLead(); this.drawer = 'lead'; }
-  openOffer() { this.offerDraft = this.emptyOffer(); this.drawer = 'offer'; }
+  openOffer() {
+    this.offerDraft = this.emptyOffer();
+    this.offerCreative = undefined;
+    this.clearOfferCreativePreview();
+    this.drawer = 'offer';
+  }
   openAutomation(rule: MarketingAutomation) {
     this.selectedAutomation = rule;
     this.automationDraft = { conditions: rule.config.conditions.join(', '), exclusions: rule.config.exclusions.join(', '), offerId: rule.config.offerId || '', whatsapp: rule.config.channels.includes('whatsapp'), sms: rule.config.channels.includes('sms'), email: rule.config.channels.includes('email'), sendTime: rule.config.sendTime, frequencyCapDays: String(rule.config.frequencyCapDays), approvalMode: rule.config.approvalMode };
@@ -204,25 +221,63 @@ export class MarketingLeadsPageComponent implements OnInit {
     } catch (error) { this.error = this.message(error, 'AI recommendation review could not be saved'); }
     finally { this.busy = false; }
   }
-  async saveOffer() {
-    if (!this.offerDraft.code.trim() || !this.offerDraft.benefitType || this.busy) return;
+  async saveOffer(submitForApproval: boolean) {
+    if (!this.offerDraft.title.trim() || !this.offerDraft.code.trim() || !this.offerDraft.benefitType || this.busy) return;
     this.busy = true; this.error = '';
     try {
-      await firstValueFrom(this.api.post('/marketing/offers', {
+      const response = await firstValueFrom(this.api.post<ApiEnvelope<MarketingOfferCreated>>('/marketing/offers', {
         code: this.offerDraft.code.trim().toUpperCase(), benefitType: this.offerDraft.benefitType,
+        title: this.titleCase(this.offerDraft.title),
+        customerDescription: this.offerDraft.customerDescription.trim(),
+        staffInstructions: this.offerDraft.staffInstructions.trim(),
         benefitValue: this.offerDraft.benefitValue === '' ? undefined : Number(this.offerDraft.benefitValue),
         targetClientId: this.offerDraft.targetClientId.trim() || undefined,
         complimentaryServiceId: this.offerDraft.complimentaryServiceId.trim() || undefined,
-        targetServiceIds: this.offerDraft.targetServiceId.trim() ? [this.offerDraft.targetServiceId.trim()] : [],
+        targetServiceIds: this.splitList(this.offerDraft.serviceIds),
+        targetPackageIds: this.splitList(this.offerDraft.packageIds),
         startsAt: this.offerDate(this.offerDraft.startsAt), endsAt: this.offerDate(this.offerDraft.endsAt, true),
         minimumBillPaise: this.offerDraft.minimumBill === '' ? undefined : Math.round(Number(this.offerDraft.minimumBill) * 100),
         usageLimit: this.offerDraft.usageLimit === '' ? undefined : Number(this.offerDraft.usageLimit),
         perClientLimit: this.offerDraft.perClientLimit === '' ? 1 : Number(this.offerDraft.perClientLimit),
         allowMembershipStacking: this.offerDraft.allowMembershipStacking, allowPackageStacking: this.offerDraft.allowPackageStacking,
+        showInStaffApp: this.offerDraft.showInStaffApp,
+        showInCustomerApp: this.offerDraft.showInCustomerApp,
+        submitForApproval: false,
       }));
+      const offerId = response.data?.id;
+      if (!offerId) throw new Error('Offer ID was not returned');
+      if (this.offerCreative) {
+        await firstValueFrom(this.api.putBytes(
+          `/marketing/offers/${offerId}/creative?fileName=${encodeURIComponent(this.offerCreative.name)}`,
+          this.offerCreative,
+        ));
+      }
+      if (submitForApproval) await firstValueFrom(this.api.post(`/marketing/offers/${offerId}/submit`, {}));
+      this.clearOfferCreativePreview();
       this.drawer = ''; await this.reload();
     } catch (error) { this.error = this.message(error, 'Offer could not be saved'); }
     finally { this.busy = false; }
+  }
+  async submitOffer(offer: MarketingOffer) {
+    if (this.busy || offer.approvalStatus !== 'draft') return;
+    this.busy = true; this.error = '';
+    try { await firstValueFrom(this.api.post(`/marketing/offers/${offer.id}/submit`, {})); await this.reload(); }
+    catch (error) { this.error = this.message(error, 'Offer could not be submitted'); }
+    finally { this.busy = false; }
+  }
+  selectOfferCreative(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    this.error = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      input.value = '';
+      this.error = 'Creative must be a JPG, PNG or WebP file up to 5 MB';
+      return;
+    }
+    this.offerCreative = file;
+    this.clearOfferCreativePreview();
+    this.offerCreativePreview = URL.createObjectURL(file);
   }
   async approveOffer(offer: MarketingOffer) {
     if (this.busy || offer.approvalStatus !== 'pending') return;
@@ -230,6 +285,45 @@ export class MarketingLeadsPageComponent implements OnInit {
     try { await firstValueFrom(this.api.post(`/marketing/offers/${offer.id}/approve`, {})); await this.reload(); }
     catch (error) { this.error = this.message(error, 'Offer could not be approved'); }
     finally { this.busy = false; }
+  }
+  async openOfferShare(offer: MarketingOffer) {
+    if (this.busy || offer.lifecycleStatus !== 'live') return;
+    this.busy = true; this.error = ''; this.offerShareStatus = '';
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<OfferSharePack>>(`/marketing/offers/${offer.id}/share-pack`));
+      if (!response.data) throw new Error('Offer share pack was empty');
+      this.offerShare = response.data;
+      this.drawer = 'offer-share';
+    } catch (error) { this.error = this.message(error, 'Offer sharing details could not be loaded'); }
+    finally { this.busy = false; }
+  }
+  async copyOfferCaption() {
+    if (!this.offerShare) return;
+    await this.copyText(`${this.offerShare.caption}\n${this.offerShare.instagramBookingUrl}`);
+    this.offerShareStatus = 'Caption copied';
+  }
+  shareOfferWhatsApp() {
+    if (!this.offerShare) return;
+    const message = encodeURIComponent(`${this.offerShare.caption}\n${this.offerShare.whatsappBookingUrl}`);
+    window.open(`https://wa.me/?text=${message}`, '_blank', 'noopener,noreferrer');
+  }
+  async shareOfferInstagram() {
+    if (!this.offerShare) return;
+    window.open('https://www.instagram.com/', '_blank', 'noopener,noreferrer');
+    await this.copyText(`${this.offerShare.caption}\n${this.offerShare.instagramBookingUrl}`);
+    this.offerShareStatus = 'Caption copied';
+  }
+  async downloadOfferCreative() {
+    if (!this.offerShare?.creativeDownloadPath) return;
+    try {
+      const blob = await firstValueFrom(this.api.getBlob(this.offerShare.creativeDownloadPath));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${this.offerShare.title.replace(/[^a-z0-9._-]+/gi, '-') || 'offer'}.${blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg'}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { this.error = this.message(error, 'Offer creative could not be downloaded'); }
   }
   closeDrawer() { if (!this.busy) this.drawer = ''; }
 
@@ -437,10 +531,16 @@ export class MarketingLeadsPageComponent implements OnInit {
   private emptyCampaign() { return { name: '', goal: 'win_back', whatsapp: true, sms: false, email: false, audience: 'inactive_60', offerId: '', message: '', scheduledDate: '', scheduledTime: '09:00', recurrence: 'once', deliveryMode: 'or', smsFallback: true, testClientId: '' }; }
   private campaignChannels() { return [this.campaignDraft.whatsapp && 'whatsapp', this.campaignDraft.sms && 'sms', this.campaignDraft.email && 'email'].filter(Boolean) as string[]; }
   private emptyActivity() { return { activityType: 'note', body: '', nextFollowUpDate: '' }; }
-  private emptyOffer() { return { code: '', benefitType: 'percentage_discount', benefitValue: '', targetClientId: '', complimentaryServiceId: '', targetServiceId: '', startsAt: '', endsAt: '', minimumBill: '', usageLimit: '', perClientLimit: '1', allowMembershipStacking: false, allowPackageStacking: false }; }
+  private emptyOffer() { return { title: '', code: '', customerDescription: '', staffInstructions: '', benefitType: 'percentage_discount', benefitValue: '', targetClientId: '', complimentaryServiceId: '', serviceIds: '', packageIds: '', startsAt: '', endsAt: '', minimumBill: '', usageLimit: '', perClientLimit: '1', allowMembershipStacking: false, allowPackageStacking: false, showInStaffApp: true, showInCustomerApp: true }; }
   private emptyAutomation() { return { conditions: '', exclusions: '', offerId: '', whatsapp: true, sms: false, email: false, sendTime: '09:00', frequencyCapDays: '7', approvalMode: 'manual' as 'automatic' | 'manual' }; }
   private emptyTemplate() { return { key: '', name: '', channel: 'whatsapp', language: 'english', branchSpecific: true, segment: 'all', serviceId: '', occasionKey: '', offerId: '', targetClientId: '', body: '' }; }
   private splitList(value: string) { return value.split(',').map((item) => item.trim()).filter(Boolean); }
   private offerDate(value: string, end = false) { const iso = this.toIsoDate(value); return iso ? new Date(`${iso}T${end ? '23:59:59' : '00:00:00'}`).toISOString() : undefined; }
+  private clearOfferCreativePreview() { if (this.offerCreativePreview) URL.revokeObjectURL(this.offerCreativePreview); this.offerCreativePreview = ''; }
+  private async copyText(value: string) {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); return; }
+    const input = document.createElement('textarea'); input.value = value; input.style.position = 'fixed'; input.style.opacity = '0';
+    document.body.appendChild(input); input.select(); document.execCommand('copy'); input.remove();
+  }
   private message(error: any, fallback: string) { return error?.error?.error?.message || error?.error?.message || fallback; }
 }

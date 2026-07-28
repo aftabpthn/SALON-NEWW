@@ -165,6 +165,7 @@ dependencies = [
  "hmac",
  "jsonwebtoken",
  "passkey-auth",
+ "percent-encoding",
  "qrcodegen",
  "rand_core 0.6.4",
  "redis",

@@ -45,13 +45,16 @@
       @for (person of staff; track person) {
         <div class="employee-cell"><input type="checkbox" [checked]="selectedStaff.has(person.id)" (change)="toggleStaff(person.id, $any($event.target).checked)" [attr.aria-label]="'Select ' + person.name" /><span><strong>{{ person.name }}</strong><small>{{ totalHours(person) | number:'1.0-2' }} Hrs</small></span></div>
         @for (date of days; track date) {
-          <button class="schedule-cell" type="button" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" [class.has-operation]="operationsFor(person.id,date).length > 0" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span>@if (cell(person.id,date)?.notes) {
-          <small>Note added</small>
-          }@for (block of operationsFor(person.id,date); track block) {
-          <small class="operation-chip">{{ operationLabel(block) }}@if (block.scheduledTime) {
-            · {{ block.scheduledTime.slice(0,5) }}
-          }</small>
-        }</button>
+          <div class="schedule-cell" [class.working]="cell(person.id,date)?.status === 'working'" [class.away]="cell(person.id,date) && cell(person.id,date)?.status !== 'working' && cell(person.id,date)?.status !== 'not_set'" [class.has-operation]="operationsFor(person.id,date).length > 0">
+            <button class="schedule-cell-main" type="button" (click)="openEditor(person,date)"><span>{{ shiftLabel(cell(person.id,date)) }}</span>@if (cell(person.id,date)?.notes) {
+            <small>Note added</small>
+            }@for (block of operationsFor(person.id,date); track block) {
+            <small class="operation-chip">{{ operationLabel(block) }}@if (block.scheduledTime) {
+              · {{ block.scheduledTime.slice(0,5) }}
+            }</small>
+          }</button>
+          <button class="time-copy-toggle" type="button" [class.active]="hasTemplateTime(person.id,date)" [disabled]="!timeTemplateFor(person.id)" title="Copy first shift time" [attr.aria-label]="'Copy first shift time to ' + person.name + ' on ' + dayLabel(date)" (click)="applyTemplateTime($event,person,date)">✓</button>
+        </div>
       }
     }
   </div>
@@ -69,7 +72,11 @@
     <header><div><span class="section-label">{{ dayLabel(editorDate) }}</span><h2>{{ editorStaff?.name }}</h2></div><button type="button" aria-label="Close" (click)="closeEditor()">Close</button></header>
     <div class="drawer-body">
       <section class="shift-card"><h3>Shift 1</h3><div class="time-grid"><label>Start<input type="time" [(ngModel)]="editorDraft.shift1Start" /></label><label>End<input type="time" [(ngModel)]="editorDraft.shift1End" /></label></div></section>
-      <section class="shift-card"><h3>Shift 2</h3><div class="time-grid"><label>Start<input type="time" [(ngModel)]="editorDraft.shift2Start" /></label><label>End<input type="time" [(ngModel)]="editorDraft.shift2End" /></label></div></section>
+      @if (hasSecondShift(editorDraft)) {
+        <section class="shift-card"><header><h3>Shift 2</h3><button class="link-button" type="button" (click)="removeSecondShift()">Remove</button></header><div class="time-grid"><label>Start<input type="time" [(ngModel)]="editorDraft.shift2Start" /></label><label>End<input type="time" [(ngModel)]="editorDraft.shift2End" /></label></div></section>
+      } @else {
+        <button class="add-shift-button" type="button" (click)="addSecondShift()"><i class="bi bi-plus-lg"></i>Add shift</button>
+      }
       <label>Status<select [(ngModel)]="editorDraft.status">@for (option of statusOptions; track option) {
         <option [value]="option.value">{{ option.label }}</option>
       }</select></label>

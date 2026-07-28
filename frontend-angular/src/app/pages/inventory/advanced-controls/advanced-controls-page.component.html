@@ -2,7 +2,7 @@
   <header class="command-bar">
     <div class="command-title"><h1>{{ 'inventory.ui.6dc3c7ac80' | translate }}</h1><span class="api-state" [class.error]="!!error">{{ loading ? 'Loading' : error ? 'Unavailable' : 'Live' }}</span></div>
     <span></span>
-    <select aria-label="Inventory branch scope" [(ngModel)]="allBranches"><option [ngValue]="true">All accessible branches</option><option [ngValue]="false">Current branch</option></select>
+    <select aria-label="Inventory branch scope" [(ngModel)]="allBranches" (ngModelChange)="onBranchScopeChange()"><option [ngValue]="true">All accessible branches</option><option [ngValue]="false">Current branch</option></select>
     <select [attr.aria-label]="'inventory.ui.e66bd46a34' | translate" [(ngModel)]="severity">
       <option value="all">{{ 'inventory.ui.068616a640' | translate }}</option>
       <option value="critical">{{ 'inventory.ui.04b7b26c8c' | translate }}</option>
@@ -19,9 +19,55 @@
 
   <nav class="tabs" [attr.aria-label]="'inventory.ui.9a8e647829' | translate">
     @for (tab of tabs; track tab) {
-      <button type="button" [class.active]="activeTab === tab.id" (click)="activeTab = tab.id">{{ tab.label }}</button>
+      <button type="button" [class.active]="activeTab === tab.id" (click)="selectTab(tab.id)">{{ tab.label }}</button>
     }
   </nav>
+
+  @if (activeTab === 'exceptions') {
+    <section class="command-strip" aria-label="Exception actions">
+      <button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">Export evidence</button>
+      <button type="button" [disabled]="!filteredExceptions.length" (click)="reviewException()">Review exception</button>
+      <button type="button" [disabled]="!filteredExceptions.length" (click)="openActionRoute(filteredExceptions[0])">Open action route</button>
+    </section>
+  }
+  @if (activeTab === 'approvals') {
+    <section class="command-strip" aria-label="Approval matrix actions">
+      <button type="button" (click)="createApprovalRule()">Create approval rule</button>
+      <button type="button" [disabled]="!controls.approvalMatrix.length" (click)="reviewPendingApproval()">Review pending approval</button>
+    </section>
+  }
+  @if (activeTab === 'locks') {
+    <section class="command-strip" aria-label="Audit lock actions">
+      <button type="button" [disabled]="!controls.auditLocks.length" (click)="openLockedItem()">Open locked item</button>
+      <button type="button" [disabled]="!controls.auditLocks.length" (click)="resolveLock()">Resolve lock</button>
+    </section>
+  }
+  @if (activeTab === 'expiry') {
+    <section class="command-strip" aria-label="Expiry actions">
+      <button type="button" [disabled]="automationBusy" (click)="createExpiryRescueAction()">Create expiry rescue action</button>
+      <button type="button" (click)="transferNearExpiryStock()">Transfer near-expiry stock</button>
+    </section>
+  }
+  @if (activeTab === 'dead-stock') {
+    <section class="command-strip" aria-label="Dead stock actions">
+      <button type="button" [disabled]="automationBusy" (click)="createClearanceAction()">Create clearance action</button>
+      <button type="button" (click)="createDiscountOffer()">Create discount/offer</button>
+    </section>
+  }
+  @if (activeTab === 'policy') {
+    <section class="command-strip" aria-label="Policy actions">
+      <button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">Save policy</button>
+    </section>
+  }
+  @if (activeTab === 'operations') {
+    <section class="command-strip" aria-label="Operations actions">
+      @if (canRunAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.policy.enabled" (click)="runAutomation()">Run automation</button> }
+      @if (canManageAutomationPolicy) { <button type="button" [disabled]="automationBusy" (click)="saveAutomationPolicy()">Save controls</button> }
+      @if (canApproveAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.actions.length" (click)="reviewAutomation(autonomous.actions[0],'approve')">Approve action</button> }
+      @if (canApproveAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.actions.length" (click)="reviewAutomation(autonomous.actions[0],'reject')">Reject action</button> }
+      <button type="button" [disabled]="!operations.failedJobs.length || !!retryingJobId" (click)="retryCommunication(operations.failedJobs[0].id)">Retry failed job</button>
+    </section>
+  }
 
   <section class="metrics" [attr.aria-label]="'inventory.ui.7088f8447e' | translate">
     <article class="critical"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.04b7b26c8c' | translate }}</span><strong>{{ controls.summary.critical }}</strong></article>
@@ -45,7 +91,7 @@
                 <tr>
                   <td><span class="status" [class.critical]="row.severity === 'critical'">{{ row.severity }}</span></td>
                   <td>{{ row.control }}</td><td><strong>{{ row.title }}</strong><small>{{ row.branchName }}</small></td><td>{{ money(row.valuePaise) }}</td><td>{{ row.evidence || '—' }}</td><td>{{ row.owner }}</td><td>{{ row.status }}</td>
-                  <td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td>
+                  <td><div class="panel-actions"><button type="button" (click)="reviewException(row)">Review exception</button><a [routerLink]="row.route">Open action route</a></div></td>
                 </tr>
               }
             </tbody>
@@ -63,7 +109,7 @@
       <header><h2>{{ 'inventory.ui.f2bb844c2c' | translate }}</h2></header>
       <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.ea1d3df298' | translate }}</th><th>{{ 'inventory.ui.1d8dbcf82e' | translate }}</th><th>{{ 'inventory.ui.96f608c16c' | translate }}</th><th>{{ 'inventory.ui.5701b5f6fe' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
       @for (row of controls.approvalMatrix; track row) {
-        <tr><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+        <tr><td><strong>{{ row.control }}</strong></td><td>{{ row.requiredRole }}</td><td>{{ row.pending }}</td><td>{{ row.gate }}</td><td><button type="button" (click)="reviewPendingApproval(row)">Review pending approval</button></td></tr>
       }
       @if (!controls.approvalMatrix.length) {
         <tr><td class="empty-state" colspan="5">{{ 'inventory.ui.235a2a357f' | translate }}</td></tr>
@@ -77,7 +123,7 @@
     <header><h2>{{ 'inventory.ui.8a053eb92a' | translate }}</h2></header>
     <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.891ebccd5b' | translate }}</th><th>{{ 'inventory.ui.160507bf60' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
     @for (row of controls.auditLocks; track row) {
-      <tr><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><a [routerLink]="row.route">{{ 'inventory.ui.cf9b77061f' | translate }}</a></td></tr>
+      <tr><td><strong>{{ row.lock }}</strong></td><td>{{ row.locked }}</td><td>{{ row.reason }}</td><td><div class="panel-actions"><button type="button" (click)="openLockedItem(row)">Open locked item</button><button type="button" (click)="resolveLock(row)">Resolve lock</button></div></td></tr>
     }
     @if (!controls.auditLocks.length) {
       <tr><td class="empty-state" colspan="4">{{ 'inventory.ui.162fea976c' | translate }}</td></tr>
@@ -149,7 +195,7 @@
 
 @if (activeTab === 'operations') {
   <section class="panel">
-    <header><h2>Autonomous Inventory Operations</h2><div class="panel-actions">@if (canManageAutomationPolicy) { <button type="button" [disabled]="automationBusy" (click)="saveAutomationPolicy()">{{ automationBusy ? 'Working…' : 'Save controls' }}</button> } @if (canRunAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.policy.enabled" (click)="runAutomation()">Run now</button> }<button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.a58cdd4aac' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+    <header><h2>Autonomous Inventory Operations</h2><div class="panel-actions">@if (canManageAutomationPolicy) { <button type="button" [disabled]="automationBusy" (click)="saveAutomationPolicy()">{{ automationBusy ? 'Working…' : 'Save controls' }}</button> } @if (canRunAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.policy.enabled" (click)="runAutomation()">Run automation</button> }<button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.a58cdd4aac' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
     <div class="automation-policy">
       <label class="toggle"><input type="checkbox" [(ngModel)]="autonomous.policy.enabled" [disabled]="!canManageAutomationPolicy" />Enabled</label>
       <label class="toggle"><input type="checkbox" [(ngModel)]="autonomous.policy.autoTransferDrafts" [disabled]="!canManageAutomationPolicy" />Auto transfer drafts</label>
@@ -182,7 +228,7 @@
     </dl>
     <div class="table-scroll"><table><thead><tr><th>Action</th><th>Reason</th><th>Confidence</th><th>Cost</th><th>Status</th><th>Created</th><th>Control</th></tr></thead><tbody>
       @for (row of autonomous.actions; track row.id) {
-        <tr><td><strong>{{ row.title }}</strong><small>{{ row.actionType }}</small></td><td>{{ row.lastError || row.rationale }}</td><td>{{ row.confidenceBps / 100 }}%</td><td>{{ money(row.estimatedCostPaise) }}</td><td><span class="status" [class.critical]="row.status === 'failed'">{{ row.status }}</span></td><td>{{ date(row.createdAt) }}</td><td><div class="panel-actions">@if (canApproveAutomation && (row.status === 'pending_approval' || row.status === 'failed')) { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'approve')">{{ row.status === 'failed' ? 'Retry' : 'Approve' }}</button> } @if (canApproveAutomation && row.status === 'pending_approval') { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'reject')">Reject</button> }<a [routerLink]="automationRoute(row)">Open</a></div></td></tr>
+        <tr><td><strong>{{ row.title }}</strong><small>{{ row.actionType }}</small></td><td>{{ row.lastError || row.rationale }}</td><td>{{ row.confidenceBps / 100 }}%</td><td>{{ money(row.estimatedCostPaise) }}</td><td><span class="status" [class.critical]="row.status === 'failed'">{{ row.status }}</span></td><td>{{ date(row.createdAt) }}</td><td><div class="panel-actions">@if (canApproveAutomation && (row.status === 'pending_approval' || row.status === 'failed')) { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'approve')">{{ row.status === 'failed' ? 'Retry' : 'Approve action' }}</button> } @if (canApproveAutomation && row.status === 'pending_approval') { <button type="button" [disabled]="automationBusy" (click)="reviewAutomation(row,'reject')">Reject action</button> }<a [routerLink]="automationRoute(row)">Open</a></div></td></tr>
       } @empty { <tr><td class="empty-state" colspan="7">No records yet</td></tr> }
     </tbody></table></div>
   </section>
@@ -204,7 +250,7 @@
     </div>
     <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.879f0b1bef' | translate }}</th><th>{{ 'inventory.ui.d42713493c' | translate }}</th><th>{{ 'inventory.ui.5a29585e3f' | translate }}</th><th>{{ 'inventory.ui.5e4df866b2' | translate }}</th><th>{{ 'inventory.ui.f2f8570ddd' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>
     @for (row of operations.failedJobs; track row) {
-      <tr><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry' }}</button></td></tr>
+      <tr><td>{{ row.channel }}</td><td>{{ row.destination }}</td><td>{{ row.attempts }} / {{ row.maxAttempts }}</td><td>{{ row.lastError }}</td><td>{{ date(row.updatedAt) }}</td><td><button type="button" [disabled]="retryingJobId === row.id" (click)="retryCommunication(row.id)">{{ retryingJobId === row.id ? 'Retrying…' : 'Retry failed job' }}</button></td></tr>
     }
     @if (!operations.failedJobs.length) {
       <tr><td class="empty-state" colspan="6">{{ 'inventory.ui.8633a2b8bc' | translate }}</td></tr>

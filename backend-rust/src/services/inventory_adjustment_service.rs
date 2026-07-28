@@ -24,6 +24,7 @@ pub struct InventoryUpdateInput<'a> {
     pub gst_percent: Option<i32>,
     pub barcode: Option<&'a str>,
     pub batch_tracked: Option<bool>,
+    pub dual_use_stock: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<&'a str>,
     pub idempotency_key: Option<&'a str>,
@@ -118,6 +119,11 @@ pub async fn record_backbar_usage(
     .map_err(|_| AppError::internal("failed to lock inventory item"))?
     .filter(|item| item.active)
     .ok_or_else(|| AppError::validation("inventory item is not available"))?;
+    if item.dual_use_stock {
+        return Err(AppError::validation(
+            "dual-use backbar consumption must be posted against the open container",
+        ));
+    }
     if item.stock_quantity < input.actual_quantity {
         return Err(AppError::validation(
             "insufficient inventory for backbar usage",
@@ -141,6 +147,11 @@ pub async fn record_backbar_usage(
             "clientId is required with appointmentId",
         ));
     }
+    if input.appointment_id.is_some() && (input.service_id.is_none() || input.staff_id.is_none()) {
+        return Err(AppError::validation(
+            "serviceId and staffId are required with appointmentId",
+        ));
+    }
     if let Some(client_id) = input.client_id {
         let exists = inventory_repository::client_attribution_exists(
             &mut tx,
@@ -148,6 +159,7 @@ pub async fn record_backbar_usage(
             input.branch_id,
             client_id,
             input.appointment_id,
+            input.service_id,
         )
         .await
         .map_err(|_| AppError::internal("failed to validate client attribution"))?;
@@ -305,6 +317,7 @@ pub async fn review_backbar_usage(
     if usage.status != "pending_approval" {
         return Err(AppError::conflict("backbar usage is not pending approval"));
     }
+    enforce_distinct_backbar_reviewer(&usage.actor_user_id, input.actor_user_id)?;
     let status = if input.decision == "approve" {
         let item = inventory_repository::lock_for_adjustment(
             &mut tx,
@@ -316,6 +329,11 @@ pub async fn review_backbar_usage(
         .map_err(|_| AppError::internal("failed to lock inventory item"))?
         .filter(|item| item.active)
         .ok_or_else(|| AppError::validation("inventory item is not available"))?;
+        if item.dual_use_stock {
+            return Err(AppError::validation(
+                "dual-use backbar consumption must be posted against the open container",
+            ));
+        }
         if item.stock_quantity < usage.actual_quantity {
             return Err(AppError::validation(
                 "insufficient inventory for approved backbar usage",
@@ -436,13 +454,30 @@ fn recipe_usage_policy(
     let approval_threshold_percent = recipe_number(entry.get("ownerApprovalPercent"))
         .unwrap_or(25.0)
         .clamp(0.0, 100.0);
+    let variance_percent = if actual_quantity > expected && expected > 0 {
+        (f64::from(actual_quantity - expected) / f64::from(expected)) * 100.0
+    } else {
+        0.0
+    };
     Ok(RecipeUsagePolicy {
         expected_quantity: expected,
         max_quantity,
         wastage_percent,
         approval_threshold_percent,
-        approval_required: wastage_percent > approval_threshold_percent,
+        approval_required: variance_percent > approval_threshold_percent,
     })
+}
+
+fn enforce_distinct_backbar_reviewer(
+    requested_by: &str,
+    reviewed_by: &str,
+) -> Result<(), AppError> {
+    if requested_by == reviewed_by {
+        return Err(AppError::forbidden(
+            "backbar usage requester cannot approve their own variance",
+        ));
+    }
+    Ok(())
 }
 
 fn recipe_number(value: Option<&Value>) -> Option<f64> {
@@ -832,7 +867,10 @@ fn map_backbar_error(error: sqlx::Error) -> AppError {
 
 #[cfg(test)]
 mod recipe_tests {
-    use super::{enforce_pos_recipe, recipe_quantities, recipe_usage_policy};
+    use super::{
+        enforce_distinct_backbar_reviewer, enforce_pos_recipe, recipe_quantities,
+        recipe_usage_policy,
+    };
     use std::collections::HashMap;
 
     #[test]
@@ -856,6 +894,19 @@ mod recipe_tests {
         assert!(excessive.approval_required);
         assert_eq!(excessive.max_quantity, 12);
         assert_eq!(excessive.wastage_percent, 25.0);
+    }
+
+    #[test]
+    fn approval_uses_expected_variance_and_enforces_maker_checker() {
+        let recipe =
+            r#"[{"productId":"a","standardQty":10,"maxQty":12,"ownerApprovalPercent":20}]"#;
+        assert!(
+            recipe_usage_policy(recipe, "a", 13)
+                .expect("policy should parse")
+                .approval_required
+        );
+        assert!(enforce_distinct_backbar_reviewer("stylist-1", "stylist-1").is_err());
+        assert!(enforce_distinct_backbar_reviewer("stylist-1", "manager-1").is_ok());
     }
 
     #[test]
@@ -1079,11 +1130,17 @@ async fn update_in_tx(
             gst_percent: input.gst_percent,
             barcode: input.barcode,
             batch_tracked: input.batch_tracked,
+            dual_use_stock: input.dual_use_stock,
             active: input.active,
         },
     )
     .await
-    .map_err(|_| AppError::internal("failed to update inventory item"))?;
+    .map_err(|error| match error {
+        sqlx::Error::Database(ref database) if database.code().as_deref() == Some("23514") => {
+            AppError::validation("retail stock cannot be lower than sealed backbar stock")
+        }
+        _ => AppError::internal("failed to update inventory item"),
+    })?;
     inventory_repository::record_franchise_overrides(
         tx,
         input.tenant_id,
@@ -1741,6 +1798,7 @@ mod tests {
             gst_percent: None,
             barcode: None,
             batch_tracked: None,
+            dual_use_stock: None,
             active: None,
             adjustment_reason: Some("Cycle count correction"),
             idempotency_key: Some(key),
@@ -1758,7 +1816,7 @@ mod tests {
               reorder_point INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
               hsn_code TEXT NOT NULL DEFAULT '', gst_percent INTEGER NOT NULL DEFAULT 0,
               barcode TEXT NOT NULL DEFAULT '', batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,
-              active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
+              dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE, active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
               franchise_override_fields TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ
             )

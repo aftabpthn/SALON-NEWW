@@ -17,7 +17,6 @@ use crate::{
         ai_concierge_service::{
             self, ConciergeMessageRequest, ConciergeResponse, GovernanceRequest, OpenSessionRequest,
         },
-        ai_copilot_tools,
         auth_service::AuthClaims,
     },
     state::AppState,
@@ -29,8 +28,6 @@ pub fn router() -> Router<AppState> {
         .route("/ai/concierge/sessions", post(open_session))
         .route("/ai/concierge/sessions/:id/messages", post(send_message))
         .route("/ai/concierge/sessions/:id/transcript", get(get_transcript))
-        .route("/ai/concierge/suggestions", get(get_suggestions))
-        .route("/ai/concierge/sessions/:id/feedback", post(save_feedback))
         .route("/ai/concierge/calls/report", get(call_report))
 }
 
@@ -125,60 +122,6 @@ async fn get_transcript(
     Ok(Json(ApiResponse::ok(
         ai_concierge_service::transcript(&state.db, &tenant_id, &branch_id, &session_id).await?,
     )))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SuggestionsQuery {
-    locale: Option<String>,
-}
-
-/// Starter questions this role may actually have answered.
-async fn get_suggestions(
-    Extension(claims): Extension<AuthClaims>,
-    Query(query): Query<SuggestionsQuery>,
-) -> ApiResult<Vec<ai_copilot_tools::SuggestedQuestion>> {
-    require_ai_read(&claims)?;
-    let actor = ai_copilot_tools::ToolActor::new(&claims.sub, &claims.role);
-    Ok(Json(ApiResponse::ok(
-        ai_copilot_tools::suggested_questions(&actor, query.locale.as_deref().unwrap_or("en-IN")),
-    )))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FeedbackRequest {
-    message_id: String,
-    helpful: bool,
-    note: Option<String>,
-    tool: Option<String>,
-}
-
-/// Records whether an answer was useful. Voting twice replaces the first vote.
-async fn save_feedback(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Path(session_id): Path<String>,
-    Json(payload): Json<FeedbackRequest>,
-) -> ApiResult<Value> {
-    require_ai_read(&claims)?;
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    ai_concierge_service::record_feedback(
-        &state.db,
-        &tenant_id,
-        &branch_id,
-        &session_id,
-        &claims.sub,
-        ai_concierge_service::FeedbackRequest {
-            message_id: payload.message_id,
-            helpful: payload.helpful,
-            note: payload.note,
-            tool: payload.tool,
-        },
-    )
-    .await?;
-    Ok(Json(ApiResponse::ok(serde_json::json!({"recorded": true}))))
 }
 
 #[derive(Debug, Deserialize)]

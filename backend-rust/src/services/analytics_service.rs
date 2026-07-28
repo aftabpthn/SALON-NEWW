@@ -1458,8 +1458,7 @@ pub async fn micro_profit_reconciliation(
     let payroll_variance_paise = row
         .ledger_payroll_paise
         .saturating_sub(row.payroll_source_paise);
-    let allocation_ready = row.reportable_line_count == 0
-        || (row.allocation_rule_count > 0 && row.unallocated_overhead_paise == 0);
+    let allocation_ready = row.allocation_rule_count > 0 && row.unallocated_overhead_paise == 0;
     let complete_line_count = if allocation_ready {
         row.complete_line_count
     } else {
@@ -1484,7 +1483,8 @@ pub async fn micro_profit_reconciliation(
         .ledger_revenue_paise
         .saturating_add(row.missing_invoice_journal_paise)
         .saturating_sub(row.micro_revenue_paise);
-    let reconciled = revenue_variance_paise == 0
+    let reconciled = row.reportable_line_count > 0
+        && revenue_variance_paise == 0
         && cogs_variance_paise == 0
         && payroll_variance_paise == 0
         && row.missing_invoice_journal_count == 0

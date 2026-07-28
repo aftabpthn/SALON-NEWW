@@ -11,9 +11,11 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from purchase_bill_extraction import router as purchase_bill_router
+from staff_ai import router as staff_ai_router
 
 app = FastAPI(title="AuraShine AI Service", version="0.2.0")
 app.include_router(purchase_bill_router)
+app.include_router(staff_ai_router)
 
 
 @app.middleware("http")

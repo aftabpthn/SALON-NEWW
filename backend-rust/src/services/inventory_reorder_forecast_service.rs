@@ -134,10 +134,13 @@ pub async fn approve_to_po(
                 "AI reorder forecast {} recommendation {}",
                 recommendation.forecast_run_id, recommendation.id
             ),
+            shipping_paise: 0,
+            handling_paise: 0,
             lines: vec![OrderLineInput {
                 inventory_item_id: recommendation.inventory_item_id.clone(),
                 quantity: recommendation.suggested_quantity,
                 unit_cost_paise: recommendation.unit_cost_paise,
+                discount_bps: 0,
                 gst_percent: gst,
             }],
         },

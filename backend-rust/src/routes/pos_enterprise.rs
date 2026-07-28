@@ -742,15 +742,21 @@ async fn float_suggestion(State(state): State<AppState>, headers: HeaderMap) -> 
 }
 
 async fn payment_providers(State(state): State<AppState>) -> ApiResult<Value> {
-    let rows = crate::config::PAYMENT_PROVIDERS
+    let rows = crate::config::PAYMENT_PROVIDER_CATALOG
         .iter()
-        .copied()
-        .map(|provider| {
+        .map(|entry| {
             json!({
-                "provider": provider,
-                "enabled": state.settings.payment_provider_enabled(provider),
-                "webhookConfigured": state.settings.payment_provider_webhook_configured(provider),
-                "environment": state.settings.payment_provider_environment,
+                "provider": entry.provider,
+                "displayName": entry.display_name,
+                "regions": entry.regions,
+                "countries": entry.countries,
+                "currencies": entry.currencies,
+                "documentationUrl": entry.documentation_url,
+                "recommended": entry.recommended,
+                "integrationStatus": if entry.implemented { "available" } else { "planned" },
+                "enabled": entry.implemented && state.settings.payment_provider_enabled(entry.provider),
+                "webhookConfigured": entry.implemented && state.settings.payment_provider_webhook_configured(entry.provider),
+                "environment": if entry.implemented { Some(state.settings.payment_provider_environment.as_str()) } else { None },
             })
         })
         .collect::<Vec<_>>();

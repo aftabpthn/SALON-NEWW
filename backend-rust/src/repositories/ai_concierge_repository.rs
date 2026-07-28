@@ -126,7 +126,11 @@ pub struct AiOperationalContext {
     pub today_appointments: i64,
     pub open_appointments: i64,
     pub active_clients: i64,
+    pub active_staff: i64,
     pub active_services: i64,
+    pub top_service_name: Option<String>,
+    pub top_service_quantity: Option<i64>,
+    pub top_service_sales_paise: Option<i64>,
     pub today_sales_paise: i64,
     pub open_sales: i64,
     pub recent_completed_appointments: i64,
@@ -297,8 +301,12 @@ pub async fn operational_context(
           (SELECT COUNT(*) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND (start_at AT TIME ZONE 'Asia/Kolkata')::DATE=(NOW() AT TIME ZONE 'Asia/Kolkata')::DATE) AS today_appointments,
           (SELECT COUNT(*) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND LOWER(status) IN ('booked','confirmed','arrived','waiting','in-service','in_service')) AS open_appointments,
           (SELECT COUNT(*) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND merged_into_client_id IS NULL) AS active_clients,
+          (SELECT COUNT(*) FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE) AS active_staff,
           (SELECT COUNT(*) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE) AS active_services,
-          (SELECT COALESCE(SUM(total_paise),0) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND (created_at AT TIME ZONE 'Asia/Kolkata')::DATE=(NOW() AT TIME ZONE 'Asia/Kolkata')::DATE) AS today_sales_paise,
+          (SELECT NULLIF(line.item_name,'') FROM pos_sale_lines line JOIN pos_sales sale ON sale.id=line.sale_id AND sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service' AND LOWER(sale.status) IN ('completed','paid','closed') GROUP BY line.item_id,line.item_name ORDER BY SUM(line.quantity) DESC,SUM(line.line_total_paise) DESC LIMIT 1) AS top_service_name,
+          (SELECT COALESCE(SUM(line.quantity),0)::BIGINT FROM pos_sale_lines line JOIN pos_sales sale ON sale.id=line.sale_id AND sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service' AND LOWER(sale.status) IN ('completed','paid','closed') GROUP BY line.item_id,line.item_name ORDER BY SUM(line.quantity) DESC,SUM(line.line_total_paise) DESC LIMIT 1) AS top_service_quantity,
+          (SELECT COALESCE(SUM(line.line_total_paise),0)::BIGINT FROM pos_sale_lines line JOIN pos_sales sale ON sale.id=line.sale_id AND sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service' AND LOWER(sale.status) IN ('completed','paid','closed') GROUP BY line.item_id,line.item_name ORDER BY SUM(line.quantity) DESC,SUM(line.line_total_paise) DESC LIMIT 1) AS top_service_sales_paise,
+          (SELECT COALESCE(SUM(total_paise),0)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND (created_at AT TIME ZONE 'Asia/Kolkata')::DATE=(NOW() AT TIME ZONE 'Asia/Kolkata')::DATE) AS today_sales_paise,
           (SELECT COUNT(*) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND LOWER(status) IN ('open','partial')) AS open_sales,
           (SELECT COUNT(*) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND LOWER(status)='completed' AND updated_at>=NOW()-INTERVAL '7 days') AS recent_completed_appointments,
           (SELECT COUNT(*) FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND stock_quantity<=reorder_point) AS low_stock_items"#,
@@ -572,94 +580,5 @@ pub async fn recent_voice_calls(
     .bind(end_at)
     .bind(limit)
     .fetch_all(db)
-    .await
-}
-
-/// Records one copilot tool call. Called for every attempt, allowed or refused,
-/// so the audit trail shows what was asked as well as what was answered.
-#[allow(clippy::too_many_arguments)]
-pub async fn record_tool_audit(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    user_id: &str,
-    user_role: &str,
-    session_id: &str,
-    tool: &str,
-    outcome: &str,
-    redacted_question: &str,
-    row_count: i32,
-    duration_ms: i32,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO ai_copilot_tool_audit(tenant_id,branch_id,user_id,user_role,session_id,tool,outcome,redacted_question,row_count,duration_ms) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(user_id)
-    .bind(user_role)
-    .bind(session_id)
-    .bind(tool)
-    .bind(outcome)
-    .bind(redacted_question)
-    .bind(row_count)
-    .bind(duration_ms)
-    .execute(db)
-    .await
-    .map(|_| ())
-}
-
-/// Stores whether an answer was useful. A second vote by the same user on the
-/// same message replaces the first rather than stacking.
-#[allow(clippy::too_many_arguments)]
-pub async fn save_feedback(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    session_id: &str,
-    message_id: &str,
-    user_id: &str,
-    helpful: bool,
-    note: &str,
-    tool: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO ai_copilot_feedback(tenant_id,branch_id,session_id,message_id,user_id,helpful,note,tool) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) \
-         ON CONFLICT (message_id,user_id) DO UPDATE \
-           SET helpful=EXCLUDED.helpful, note=EXCLUDED.note, updated_at=NOW()",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(session_id)
-    .bind(message_id)
-    .bind(user_id)
-    .bind(helpful)
-    .bind(note)
-    .bind(tool)
-    .execute(db)
-    .await
-    .map(|_| ())
-}
-
-/// Confirms an assistant message belongs to this tenant, branch and session
-/// before feedback is attached to it.
-pub async fn message_belongs_to_session(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    session_id: &str,
-    message_id: &str,
-) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM ai_concierge_messages \
-          WHERE tenant_id=$1 AND branch_id=$2 AND session_id=$3 AND id=$4 AND role='assistant')",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(session_id)
-    .bind(message_id)
-    .fetch_one(db)
     .await
 }
