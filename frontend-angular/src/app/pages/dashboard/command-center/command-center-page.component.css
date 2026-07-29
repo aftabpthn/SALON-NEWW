@@ -168,10 +168,11 @@ button:disabled { cursor: wait; opacity: .65; }
 .priority-dot { width: 8px; height: 8px; border-radius: 99px; background: #f59e0b; }
 .priority-dot.critical, .priority-dot.high { background: #dc2626; }
 
-.profit-grid, .inventory-grid, .payment-grid, .location-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section { min-width: 0; padding: 14px 16px 16px; border-right: 1px solid #e8edf4; }
-.profit-grid > section:last-child, .inventory-grid > section:last-child, .payment-grid > section:last-child, .location-grid > section:last-child { border-right: 0; }
-.profit-grid h3, .inventory-grid h3, .payment-grid h3, .location-grid h3 { margin: 0 0 9px; color: var(--cc-muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.profit-grid, .inventory-grid, .payment-grid, .location-grid, .growth-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.growth-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section, .growth-grid > section { min-width: 0; padding: 14px 16px 16px; border-right: 1px solid #e8edf4; }
+.profit-grid > section:last-child, .inventory-grid > section:last-child, .payment-grid > section:last-child, .location-grid > section:last-child, .growth-grid > section:last-child { border-right: 0; }
+.profit-grid h3, .inventory-grid h3, .payment-grid h3, .location-grid h3, .growth-grid h3 { margin: 0 0 9px; color: var(--cc-muted); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .metric-list { margin: 0; }
 .metric-list > div, .rank-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; border-top: 1px solid #e8edf4; }
 .metric-list > div:first-child, .rank-list > div:first-child { border-top: 0; }
@@ -181,6 +182,30 @@ button:disabled { cursor: wait; opacity: .65; }
 .rank-list strong { font-size: 11px; white-space: nowrap; }
 .rank-list.leaks strong { color: #b42318; }
 .section-empty { display: grid; min-height: 112px; place-items: center; color: var(--cc-muted); font-size: 12px; font-weight: 600; }
+.growth-list { display: grid; }
+.growth-list article { display: flex; min-height: 42px; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid #e8edf4; }
+.growth-list article:first-child { border-top: 0; }
+.growth-list strong, .growth-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.growth-list span { min-width: 0; }
+.growth-list strong { font-size: 12px; }
+.growth-list small { margin-top: 3px; color: var(--cc-muted); font-size: 10px; }
+.growth-list b { color: var(--cc-green); font-size: 11px; white-space: nowrap; }
+.growth-list b.risk { color: #b42318; }
+.growth-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.growth-row-actions button { min-height: 27px; padding: 0 8px; border: 1px solid var(--cc-line); border-radius: 6px; background: #fff; color: var(--cc-ink); font-size: 10px; font-weight: 600; }
+.growth-row-actions button:hover, .growth-row-actions button:focus-visible { border-color: #1473e6; background: #eef6ff; }
+.growth-row-actions button:disabled { cursor: not-allowed; opacity: .55; }
+.digital-twin-lite { border-top: 1px solid #e8edf4; }
+.digital-twin-lite > header { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--cc-soft); }
+.digital-twin-lite h3 { margin: 2px 0 0; font-size: 13px; }
+.scenario-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.scenario-list article { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; min-width: 0; padding: 12px 16px; border-right: 1px solid #e8edf4; }
+.scenario-list article:last-child { border-right: 0; }
+.scenario-list strong, .scenario-list small, .scenario-list b, .scenario-list em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scenario-list strong { font-size: 12px; }
+.scenario-list small { color: var(--cc-muted); font-size: 10px; }
+.scenario-list b { font-size: 13px; }
+.scenario-list em { color: #8a3b12; font-size: 10px; font-style: normal; font-weight: 700; }
 .signal-list { display: grid; }
 .signal-list a { display: grid; grid-template-columns: minmax(0, 1fr) auto 12px; gap: 9px; align-items: center; min-height: 54px; padding: 7px 0; border-top: 1px solid #e8edf4; color: var(--cc-ink); text-decoration: none; }
 .signal-list a:first-child { border-top: 0; }
@@ -284,13 +309,16 @@ button:disabled { cursor: wait; opacity: .65; }
 
 @media (max-width: 1280px) {
   .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .growth-grid, .scenario-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .growth-grid > section:nth-child(2n), .scenario-list article:nth-child(2n) { border-right: 0; }
+  .growth-grid > section:nth-child(n + 3), .scenario-list article:nth-child(n + 3) { border-top: 1px solid #e8edf4; }
 }
 
 @media (max-width: 900px) {
   .primary-grid { grid-template-columns: 1fr; }
-  .profit-grid, .inventory-grid, .payment-grid, .location-grid { grid-template-columns: 1fr; }
-  .profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section { border-right: 0; border-top: 1px solid #e8edf4; }
-  .profit-grid > section:first-child, .inventory-grid > section:first-child, .payment-grid > section:first-child, .location-grid > section:first-child { border-top: 0; }
+  .profit-grid, .inventory-grid, .payment-grid, .location-grid, .growth-grid, .scenario-list { grid-template-columns: 1fr; }
+  .profit-grid > section, .inventory-grid > section, .payment-grid > section, .location-grid > section, .growth-grid > section, .scenario-list article { border-right: 0; border-top: 1px solid #e8edf4; }
+  .profit-grid > section:first-child, .inventory-grid > section:first-child, .payment-grid > section:first-child, .location-grid > section:first-child, .growth-grid > section:first-child, .scenario-list article:first-child { border-top: 0; }
   .location-operations-grid { grid-template-columns: 1fr; }
   .location-operations-grid > section { border-right: 0; border-top: 1px solid #e8edf4; }
   .location-operations-grid > section:first-child { border-top: 0; }

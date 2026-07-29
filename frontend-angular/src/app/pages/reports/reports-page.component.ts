@@ -1,12 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
+import { LanguageService } from '../../core/i18n/language.service';
+import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 
 type ReportItem = {
   id: string;
@@ -21,8 +23,7 @@ type ReportCategory = { name: string; reports: ReportItem[] };
 type ProfitTab = 'overview' | 'executive' | 'reconciliation' | 'service' | 'category' | 'staff' | 'customer' | 'product' | 'appointment' | 'branch' | 'channel' | 'booking' | 'liability' | 'scenario' | 'guard' | 'leaks' | 'pricing' | 'recipe' | 'copilot' | 'actions' | 'rules' | 'approvals' | 'audit';
 type ProfitScope = 'branch' | 'tenant';
 type ProfitLevel = 'contribution' | 'fullyLoaded';
-type ProfitMetrics = { revenuePaise: number; costOfGoodsPaise: number; operatingExpensePaise: number; totalExpensePaise: number; netProfitPaise: number; netMarginBps: number };
-type ProfitSummary = { fromDate: string; toDate: string; source: string; branchScope: ProfitScope; branchCount: number; metrics: ProfitMetrics; breakdown: Array<{ key: string; metrics: ProfitMetrics }> };
+type ProfitGroup = 'overview' | 'dimensions' | 'insights' | 'governance' | 'tools';
 type ProfitDimension = { dimension: string; entityId: string; entityName: string; unitCount: number; revenuePaise: number; discountPaise: number; productCostPaise: number; staffCostPaise: number; staffTimeCostPaise: number; gatewayFeePaise: number; refundFeePaise: number; overheadCostPaise: number; totalCostPaise: number; netProfitPaise: number; marginBps: number; fullyLoadedCostPaise: number; fullyLoadedProfitPaise: number; fullyLoadedMarginBps: number; lineCount: number; incompleteCostLineCount: number; costCompletenessBps: number };
 type ProfitLeak = { kind: string; sourceType: string; sourceId: string; title: string; message: string; impactPaise: number; severity: string };
 type PricingRecommendation = { serviceId: string; serviceName: string; currentAveragePricePaise: number; suggestedPricePaise: number; currentMarginBps: number; targetMarginBps: number; expectedProfitLiftPaise: number };
@@ -53,13 +54,14 @@ type MicroProfitLine = { branchId: string; branchName: string; saleId: string; s
 type MicroProfitPage = { total: number; rows: MicroProfitLine[] };
 type ActionDraft = { actionType: string; title: string; message: string; impactPaise: number | null; expectedImpactPaise: number | null; priority: string; sourceType: string; sourceId: string; periodStart: string; periodEnd: string; slaMinutes: number | null; notes: string; evidence: string };
 type PosGuardDecision = { decision: { decision: string; status: string; estimatedProfitPaise: number; marginBps: number; discountBps: number; message: string; reasonCodes: string[] }; approval?: { id: string; status: string } };
-type CustomReportDefinition = { dataset: string; rowDimension: string; columnDimension: string; metric: string; dateRange: string; fromDate?: string; toDate?: string; status?: string };
+type CustomReportDefinition = { dataset: string; rowDimension: string; columnDimension: string; metric: string; dateRange: string; fromDate?: string; toDate?: string; status?: string; profitView?: { tab: ProfitTab; level: ProfitLevel; scope: ProfitScope; comparePrevious: boolean; actionStatus: string; actionPriority: string } };
 type CustomReportDraft = { id?: string; version?: number; name: string; definition: CustomReportDefinition; scheduleFrequency: string; scheduleDay: number; scheduleTime: string; recipientEmail: string };
-type CustomReport = CustomReportDraft & { nextRunAt?: string; lastRunAt?: string; lastStatus: string; lastError: string; createdAt: string; updatedAt: string };
+type CustomReport = CustomReportDraft & { nextRunAt?: string; lastRunAt?: string; lastStatus: string; lastError: string; active: boolean; createdAt: string; updatedAt: string };
 type CustomDataset = { id: string; label: string; dimensions: string[]; metrics: string[] };
 type CustomReportOptions = { datasets: CustomDataset[]; dateRanges: string[]; schedules: string[] };
 type PivotReport = { dataset: string; metric: string; fromDate: string; toDate: string; rows: string[]; columns: string[]; cells: Array<{ rowKey: string; columnKey: string; value: number }>; total: number };
 type LiveReportState = { report: ReportItem; rows: Array<Record<string, unknown>>; columns: string[]; summary: Record<string, unknown> };
+type ProfitDialog = { kind: 'saveView' | 'actionTransition' | 'governanceReview' | 'periodClose'; titleKey: string; name: string; note: string; evidence: string; realizedImpactInr: number | null; action?: ProfitAction; transition?: 'approve' | 'complete' | 'dismiss'; approval?: GovernanceApproval; decision?: 'approve' | 'reject' };
 
 const LEGACY_REPORT_METADATA: Record<string, Pick<ReportItem, 'category' | 'description' | 'icon'>> = {
   dashboard: { category: 'Overview', description: "Appointments, clients, services and today's sales at a glance.", icon: 'dashboard' },
@@ -79,15 +81,23 @@ const LEGACY_REPORT_METADATA: Record<string, Pick<ReportItem, 'category' | 'desc
 
 @Component({
     selector: 'page-reports',
-    imports: [CommonModule, FormsModule, DatePickerComponent, BranchNamePipe],
+    imports: [CommonModule, FormsModule, DatePickerComponent, BranchNamePipe, TranslatePipe],
     templateUrl: './reports-page.component.html',
     styleUrls: ['./reports-page.component.css']
 })
-export class ReportsPageComponent implements OnInit {
+export class ReportsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  readonly language = inject(LanguageService);
   private readonly favouritesKey = 'aurashine_report_favourites';
+  private readonly profitReload$ = new Subject<void>();
+  private readonly profitTabReload$ = new Subject<void>();
+  private readonly actionReload$ = new Subject<void>();
+  private profitRequestId = 0;
+  private profitTabRequestId = 0;
+  private actionRequestId = 0;
+  private advancedView: ProfitTab | '' = '';
 
   reports: ReportItem[] = [];
   favourites = new Set<string>(this.readFavourites());
@@ -118,7 +128,6 @@ export class ReportsPageComponent implements OnInit {
   comparePrevious = false;
   fromDate = this.dateOffset(-29);
   toDate = this.dateOffset(0);
-  profitSummary: ProfitSummary | null = null;
   advanced: AdvancedProfit | null = null;
   previousAdvanced: AdvancedProfit | null = null;
   reconciliation: MicroProfitReconciliation | null = null;
@@ -133,11 +142,13 @@ export class ReportsPageComponent implements OnInit {
   governanceRules: GovernanceRule[] = [];
   governanceApprovals: GovernanceApproval[] = [];
   governanceAudit: GovernanceAudit[] = [];
+  governanceError = '';
   governanceBusyId = '';
   profitSavedViews: CustomReport[] = [];
   selectedDimensionRow: ProfitDimension | null = null;
   drillLines: MicroProfitLine[] = [];
   drillTotal = 0;
+  drillPage = 1;
   drillBusy = false;
   actionStatus = 'active';
   actionPriority = '';
@@ -148,6 +159,9 @@ export class ReportsPageComponent implements OnInit {
   posGuardDraft = { grossAmountPaise: null as number | null, discountPaise: null as number | null, productCostPaise: null as number | null, staffCostPaise: null as number | null, membershipRedemptionPaise: null as number | null };
   posGuardDecision: PosGuardDecision | null = null;
   posGuardBusy = false;
+  copilotFeedback: Record<string, 'accepted' | 'rejected'> = {};
+  profitDialog: ProfitDialog | null = null;
+  periodCloseBusy = false;
 
   readonly profitTabs: Array<{ id: ProfitTab; label: string }> = [
     { id: 'overview', label: 'Overview' },
@@ -173,6 +187,13 @@ export class ReportsPageComponent implements OnInit {
     { id: 'rules', label: 'Governance Rules' },
     { id: 'approvals', label: 'Approvals' },
     { id: 'audit', label: 'Audit' },
+  ];
+  readonly profitGroups: Array<{ id: ProfitGroup; label: string; tabs: ProfitTab[] }> = [
+    { id: 'overview', label: 'Overview', tabs: ['overview', 'executive'] },
+    { id: 'dimensions', label: 'Dimensions', tabs: ['service', 'category', 'staff', 'customer', 'product', 'appointment', 'branch', 'channel'] },
+    { id: 'insights', label: 'Insights', tabs: ['booking', 'liability', 'leaks', 'pricing', 'recipe', 'copilot', 'actions'] },
+    { id: 'governance', label: 'Governance', tabs: ['rules', 'approvals', 'audit'] },
+    { id: 'tools', label: 'Tools', tabs: ['scenario', 'guard', 'reconciliation'] },
   ];
   readonly weekdays = [
     { value: 1, label: 'Monday' }, { value: 2, label: 'Tuesday' }, { value: 3, label: 'Wednesday' },
@@ -275,6 +296,9 @@ export class ReportsPageComponent implements OnInit {
   }
 
   get isDimensionTab(): boolean { return ['service', 'category', 'staff', 'customer', 'product', 'appointment', 'branch', 'channel'].includes(this.profitTab); }
+  get isGovernanceTab(): boolean { return ['rules', 'approvals', 'audit'].includes(this.profitTab); }
+
+  get profitCostsComplete(): boolean { return this.reconciliation?.costCompletenessBps === 10_000; }
 
   get microOverview(): { revenue: number; cost: number; profit: number; margin: number; previousProfit: number } {
     const rows = this.advanced?.branchProfit ?? [];
@@ -320,6 +344,43 @@ export class ReportsPageComponent implements OnInit {
 
   get canViewTenantProfit(): boolean {
     return this.auth.hasRole('owner', 'admin', 'manager', 'analyst');
+  }
+
+  get periodCloseBlockers(): string[] {
+    const row = this.reconciliation;
+    if (!row) return ['Reconciliation data is unavailable'];
+    const blockers: string[] = [];
+    if (!row.reportableLineCount) blockers.push('No reportable sale lines');
+    if (row.costCompletenessBps !== 10_000) blockers.push(`${row.reportableLineCount - row.costCompleteLineCount} lines have incomplete costs`);
+    if (row.missingInvoiceJournalCount) blockers.push(`${row.missingInvoiceJournalCount} invoice journals are missing`);
+    if (row.revenueVariancePaise) blockers.push(`Revenue variance ${this.money(row.revenueVariancePaise)}`);
+    if (row.cogsVariancePaise) blockers.push(`COGS variance ${this.money(row.cogsVariancePaise)}`);
+    if (row.payrollVariancePaise) blockers.push(`Payroll variance ${this.money(row.payrollVariancePaise)}`);
+    if (row.unallocatedOverheadPaise) blockers.push(`Unallocated overhead ${this.money(row.unallocatedOverheadPaise)}`);
+    return blockers;
+  }
+
+  get rankedProfitLeaks(): ProfitLeak[] {
+    return [...(this.advanced?.leaks ?? [])].sort((left, right) => Math.abs(right.impactPaise) - Math.abs(left.impactPaise));
+  }
+
+  get activeProfitGroup(): ProfitGroup {
+    return this.profitGroups.find((group) => group.tabs.includes(this.profitTab))?.id ?? 'overview';
+  }
+
+  get activeProfitGroupTabs(): Array<{ id: ProfitTab; label: string }> {
+    const tabs = this.profitGroups.find((group) => group.id === this.activeProfitGroup)?.tabs ?? ['overview'];
+    return tabs.map((id) => this.profitTabs.find((tab) => tab.id === id)!).filter(Boolean);
+  }
+
+  selectProfitGroup(group: ProfitGroup): void {
+    const tabs = this.profitGroups.find((item) => item.id === group)?.tabs ?? ['overview'];
+    if (!tabs.includes(this.profitTab)) this.selectProfitTab(tabs[0]);
+  }
+
+  selectProfitTab(tab: ProfitTab): void {
+    this.profitTab = tab;
+    void this.loadProfitTabData();
   }
 
   get customDataset(): CustomDataset | undefined {
@@ -426,6 +487,7 @@ export class ReportsPageComponent implements OnInit {
   }
 
   async runSavedCustomReport(report: CustomReport): Promise<void> {
+    if (!report.active) return;
     this.customBusy = true;
     this.customError = '';
     this.editCustomReport(report);
@@ -468,52 +530,116 @@ export class ReportsPageComponent implements OnInit {
   }
 
   async loadProfitWorkspace(): Promise<void> {
+    if (!this.validateProfitDateRange()) return;
+    const requestId = ++this.profitRequestId;
+    this.profitReload$.next();
     this.profitLoading = true;
     this.profitError = '';
-    const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope });
+    const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, view: this.profitTab });
     const previous = this.previousPeriod();
-    const previousQuery = new URLSearchParams({ fromDate: previous.fromDate, toDate: previous.toDate, scope: this.profitScope });
+    const previousQuery = new URLSearchParams({ fromDate: previous.fromDate, toDate: previous.toDate, scope: this.profitScope, view: this.profitTab });
+    const get = (path: string) => firstValueFrom(this.api.get<any>(path).pipe(takeUntil(this.profitReload$)));
     try {
-      const [summary, advanced, reconciliation, repairQueue, allocationRules, accounts, actions, governance, rules, approvals, audit, savedViews, previousAdvanced] = await Promise.all([
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/summary?${query}`)),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/advanced?${query}`)),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/reconciliation?${query}`)),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/reconciliation/invoice-repair-queue?${query}&pageSize=100`)),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/allocation-rules?${query}`)),
-        firstValueFrom(this.api.get<any>('/api/v1/balance-sheet/accounts')).catch(() => null),
-        firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/actions?status=${this.actionStatus}&priority=${this.actionPriority}&limit=200`)).catch(() => null),
-        firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/summary')).catch(() => null),
-        firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/rules')).catch(() => null),
-        this.canManageProfit ? firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/approvals?limit=200')).catch(() => null) : Promise.resolve(null),
-        this.canManageProfit ? firstValueFrom(this.api.get<any>('/api/v1/profit-intelligence/governance/audit?limit=200')).catch(() => null) : Promise.resolve(null),
-        firstValueFrom(this.api.get<any>('/api/v1/reports/custom')).catch(() => null),
-        this.comparePrevious ? firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/advanced?${previousQuery}`)).catch(() => null) : Promise.resolve(null),
+      const [advanced, reconciliation, savedViews, previousAdvanced] = await Promise.all([
+        get(`/api/v1/profit-intelligence/advanced?${query}`),
+        get(`/api/v1/profit-intelligence/reconciliation?${query}`),
+        get('/api/v1/reports/custom').catch(() => null),
+        this.comparePrevious ? get(`/api/v1/profit-intelligence/advanced?${previousQuery}`).catch(() => null) : Promise.resolve(null),
       ]);
-      this.profitSummary = this.data<ProfitSummary>(summary);
+      if (requestId !== this.profitRequestId) return;
       this.advanced = this.data<AdvancedProfit>(advanced);
+      this.advancedView = this.profitTab;
       this.reconciliation = this.data<MicroProfitReconciliation>(reconciliation);
-      this.invoiceRepairQueue = this.data<InvoiceJournalRepairItem[]>(repairQueue) ?? [];
-      this.allocationRules = this.data<MicroProfitAllocationRule[]>(allocationRules) ?? [];
-      const excludedAccounts = new Set(['SALES_RETURNS', 'COST_OF_GOODS_SOLD', 'PAYROLL_EXPENSE', 'ROUNDING_EXPENSE']);
-      this.allocationAccounts = (accounts ? this.data<AccountDefinition[]>(accounts) ?? [] : [])
-        .filter((account) => account.group === 'expense' && !excludedAccounts.has(account.code));
-      this.actions = actions ? this.data<ProfitAction[]>(actions) ?? [] : [];
-      this.governance = governance ? this.data<GovernanceSummary>(governance) : null;
-      this.governanceRules = rules ? this.data<GovernanceRule[]>(rules) ?? [] : [];
-      this.governanceApprovals = approvals ? this.data<GovernanceApproval[]>(approvals) ?? [] : [];
-      this.governanceAudit = audit ? this.data<GovernanceAudit[]>(audit) ?? [] : [];
       const saved = savedViews ? this.data<{ reports: CustomReport[] }>(savedViews)?.reports ?? [] : [];
-      this.profitSavedViews = saved.filter((report) => this.isProfitSavedView(report));
+      this.profitSavedViews = saved.filter((report) => report.active && this.isProfitSavedView(report));
       this.previousAdvanced = previousAdvanced ? this.data<AdvancedProfit>(previousAdvanced) : null;
+      await this.loadProfitTabData();
     } catch (error: any) {
+      if (requestId !== this.profitRequestId) return;
       this.profitError = error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? 'Unable to load Profit Intelligence';
     } finally {
-      this.profitLoading = false;
+      if (requestId === this.profitRequestId) this.profitLoading = false;
+    }
+  }
+
+  async updateCustomReportLifecycle(report: CustomReport, action: 'stopSchedule' | 'archive' | 'restore'): Promise<void> {
+    if (!this.canManageProfit || this.customBusy) return;
+    const label = action === 'stopSchedule' ? 'Stop schedule' : action === 'archive' ? 'Archive' : 'Restore';
+    if (!confirm(`${label} ${report.name}?`)) return;
+    this.customBusy = true;
+    this.customError = '';
+    try {
+      await firstValueFrom(this.api.post(`/api/v1/reports/custom/${report.id}/lifecycle`, { action, version: report.version }));
+      if (action === 'archive' && this.customDraft.id === report.id) this.customDraft = this.blankCustomReport();
+      await this.loadCustomReports();
+    } catch (error: any) {
+      this.customError = error?.error?.error?.message ?? error?.error?.message ?? `Unable to ${label.toLowerCase()} report`;
+    } finally {
+      this.customBusy = false;
+    }
+  }
+
+  async loadProfitTabData(): Promise<void> {
+    const requestId = ++this.profitTabRequestId;
+    this.profitTabReload$.next();
+    const get = (path: string) => firstValueFrom(this.api.get<any>(path).pipe(takeUntil(this.profitTabReload$)));
+    try {
+      if (this.advancedView !== this.profitTab && !['actions', 'rules', 'approvals', 'audit', 'reconciliation'].includes(this.profitTab)) {
+        const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, view: this.profitTab });
+        const advanced = await get(`/api/v1/profit-intelligence/advanced?${query}`);
+        if (requestId !== this.profitTabRequestId) return;
+        this.advanced = this.data<AdvancedProfit>(advanced);
+        this.advancedView = this.profitTab;
+      }
+      if (this.profitTab === 'reconciliation') {
+        const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope });
+        const [repairQueue, allocationRules, accounts] = await Promise.all([
+          get(`/api/v1/profit-intelligence/reconciliation/invoice-repair-queue?${query}&pageSize=100`),
+          get(`/api/v1/profit-intelligence/allocation-rules?${query}`),
+          get('/api/v1/balance-sheet/accounts'),
+        ]);
+        if (requestId !== this.profitTabRequestId) return;
+        this.invoiceRepairQueue = this.data<InvoiceJournalRepairItem[]>(repairQueue) ?? [];
+        this.allocationRules = this.data<MicroProfitAllocationRule[]>(allocationRules) ?? [];
+        const excluded = new Set(['SALES_RETURNS', 'COST_OF_GOODS_SOLD', 'PAYROLL_EXPENSE', 'ROUNDING_EXPENSE']);
+        this.allocationAccounts = (this.data<AccountDefinition[]>(accounts) ?? []).filter((account) => account.group === 'expense' && !excluded.has(account.code));
+        return;
+      }
+      if (this.profitTab === 'actions') {
+        await this.loadActions();
+        return;
+      }
+      if (!['rules', 'approvals', 'audit'].includes(this.profitTab)) return;
+      if (!this.canManageProfit) {
+        this.governanceError = this.language.text('profit.permissionGovernance');
+        this.governance = null;
+        this.governanceRules = [];
+        this.governanceApprovals = [];
+        this.governanceAudit = [];
+        return;
+      }
+      this.governanceError = '';
+      const detailPath = this.profitTab === 'rules' ? 'rules' : this.profitTab === 'approvals' ? 'approvals?limit=200' : 'audit?limit=200';
+      const [summary, detail] = await Promise.all([
+        get('/api/v1/profit-intelligence/governance/summary'),
+        get(`/api/v1/profit-intelligence/governance/${detailPath}`),
+      ]);
+      if (requestId !== this.profitTabRequestId) return;
+      this.governance = this.data<GovernanceSummary>(summary);
+      if (this.profitTab === 'rules') this.governanceRules = this.data<GovernanceRule[]>(detail) ?? [];
+      if (this.profitTab === 'approvals') this.governanceApprovals = this.data<GovernanceApproval[]>(detail) ?? [];
+      if (this.profitTab === 'audit') this.governanceAudit = this.data<GovernanceAudit[]>(detail) ?? [];
+    } catch (error: any) {
+      if (requestId !== this.profitTabRequestId) return;
+      const message = error?.status === 403 ? 'You are not permitted to view governance data' : error?.error?.error?.message ?? error?.error?.message ?? 'Unable to load this Profit Intelligence view';
+      if (['rules', 'approvals', 'audit'].includes(this.profitTab)) this.governanceError = message;
+      else this.profitError = message;
     }
   }
 
   async repairInvoiceJournals(): Promise<void> {
     if (!this.canManageProfit || this.repairBusy) return;
+    if (!this.validateProfitDateRange()) return;
     this.repairBusy = true;
     this.profitError = '';
     const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, pageSize: '100' });
@@ -554,13 +680,26 @@ export class ReportsPageComponent implements OnInit {
   }
 
   async loadActions(): Promise<void> {
+    const requestId = ++this.actionRequestId;
+    this.actionReload$.next();
     this.profitError = '';
     try {
-      const response = await firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/actions?status=${this.actionStatus}&priority=${this.actionPriority}&limit=200`));
+      const response = await firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/actions?status=${this.actionStatus}&priority=${this.actionPriority}&limit=200`).pipe(takeUntil(this.actionReload$)));
+      if (requestId !== this.actionRequestId) return;
       this.actions = this.data<ProfitAction[]>(response) ?? [];
     } catch (error: any) {
+      if (requestId !== this.actionRequestId) return;
       this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to load Profit Action Queue';
     }
+  }
+
+  ngOnDestroy(): void {
+    this.profitReload$.next();
+    this.profitReload$.complete();
+    this.profitTabReload$.next();
+    this.profitTabReload$.complete();
+    this.actionReload$.next();
+    this.actionReload$.complete();
   }
 
   addExpense(): void {
@@ -595,7 +734,7 @@ export class ReportsPageComponent implements OnInit {
   }
 
   openReconciliation(): void {
-    this.profitTab = 'reconciliation';
+    this.selectProfitTab('reconciliation');
   }
 
   async runPosMarginCheck(): Promise<void> {
@@ -631,8 +770,10 @@ export class ReportsPageComponent implements OnInit {
 
   openActionDrawer(source?: Partial<ActionDraft>): void {
     if (!this.canManageProfit) return;
+    if (!this.validateProfitDateRange()) return;
     this.actionDraft = { ...this.blankAction(), ...source };
     this.actionDrawerOpen = true;
+    this.focusActiveDialog();
   }
 
   closeActionDrawer(): void {
@@ -654,6 +795,7 @@ export class ReportsPageComponent implements OnInit {
 
   async markLeakReviewed(leak: ProfitLeak): Promise<void> {
     if (!this.canManageProfit || this.actionBusyId) return;
+    if (!this.validateProfitDateRange()) return;
     this.actionBusyId = `leak:${leak.sourceType}:${leak.sourceId}`;
     this.profitError = '';
     try {
@@ -720,6 +862,7 @@ export class ReportsPageComponent implements OnInit {
     this.profitError = '';
     try {
       await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/copilot/recommendations/${row.recommendationVersionId}/feedback`, { decision }));
+      this.copilotFeedback = { ...this.copilotFeedback, [row.recommendationVersionId]: decision };
     } catch (error: any) {
       this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to save Copilot feedback';
     } finally {
@@ -764,36 +907,10 @@ export class ReportsPageComponent implements OnInit {
     }
   }
 
-  async transitionAction(action: ProfitAction, transition: 'approve' | 'complete' | 'dismiss'): Promise<void> {
+  transitionAction(action: ProfitAction, transition: 'approve' | 'complete' | 'dismiss'): void {
     if (!this.canManageProfit) return;
-    const note = window.prompt(`${this.titleCase(transition)} note`)?.trim();
-    if (note === undefined) return;
-    let realizedImpactPaise: number | undefined;
-    let evidence = '';
-    if (transition === 'complete') {
-      const realized = window.prompt('Realized impact (paise)', action.realizedImpactPaise ? String(action.realizedImpactPaise) : '')?.trim();
-      if (realized === undefined) return;
-      if (realized && (!Number.isFinite(Number(realized)) || Number(realized) < 0)) {
-        this.profitError = 'Realized impact must be a non-negative amount';
-        return;
-      }
-      realizedImpactPaise = realized ? Number(realized) : undefined;
-      evidence = window.prompt('Completion evidence')?.trim() ?? '';
-    }
-    this.actionBusyId = action.id;
-    this.profitError = '';
-    try {
-      await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/actions/${action.id}/${transition}`, {
-        note,
-        realizedImpactPaise,
-        evidence: evidence ? { completionEvidence: evidence } : undefined,
-      }));
-      await this.loadActions();
-    } catch (error: any) {
-      this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to update profit action';
-    } finally {
-      this.actionBusyId = '';
-    }
+    this.profitDialog = { kind: 'actionTransition', titleKey: `profit.dialog.${transition}Action`, name: '', note: '', evidence: '', realizedImpactInr: action.realizedImpactPaise ? action.realizedImpactPaise / 100 : null, action, transition };
+    this.focusActiveDialog();
   }
 
   rowCost(row: ProfitDimension): number {
@@ -814,15 +931,29 @@ export class ReportsPageComponent implements OnInit {
   }
 
   async openProfitDrill(row: ProfitDimension): Promise<void> {
+    if (!this.validateProfitDateRange()) return;
     this.selectedDimensionRow = row;
     this.drillLines = [];
     this.drillTotal = 0;
+    this.drillPage = 1;
     this.drillBusy = true;
-    const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, dimension: row.dimension, entityId: row.entityId, pageSize: '200' });
+    this.focusActiveDialog();
+    await this.loadProfitDrillPage(row, false);
+  }
+
+  async loadMoreProfitDrill(): Promise<void> {
+    if (!this.selectedDimensionRow || this.drillBusy || this.drillLines.length >= this.drillTotal) return;
+    this.drillPage += 1;
+    this.drillBusy = true;
+    await this.loadProfitDrillPage(this.selectedDimensionRow, true);
+  }
+
+  private async loadProfitDrillPage(row: ProfitDimension, append: boolean): Promise<void> {
+    const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, dimension: row.dimension, entityId: row.entityId, page: String(this.drillPage), pageSize: '200' });
     try {
       const response = await firstValueFrom(this.api.get<any>(`/api/v1/profit-intelligence/micro-lines?${query}`));
       const page = this.data<MicroProfitPage>(response);
-      this.drillLines = page?.rows ?? [];
+      this.drillLines = append ? [...this.drillLines, ...(page?.rows ?? [])] : page?.rows ?? [];
       this.drillTotal = page?.total ?? 0;
     } catch (error: any) {
       this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to load Micro P&L drill-down';
@@ -835,6 +966,7 @@ export class ReportsPageComponent implements OnInit {
     this.selectedDimensionRow = null;
     this.drillLines = [];
     this.drillTotal = 0;
+    this.drillPage = 1;
   }
 
   async toggleGovernanceRule(rule: GovernanceRule): Promise<void> {
@@ -862,63 +994,107 @@ export class ReportsPageComponent implements OnInit {
     }
   }
 
-  async reviewGovernanceApproval(approval: GovernanceApproval, decision: 'approve' | 'reject'): Promise<void> {
+  reviewGovernanceApproval(approval: GovernanceApproval, decision: 'approve' | 'reject'): void {
     if (!this.canManageProfit || this.governanceBusyId) return;
-    const note = window.prompt(`${this.titleCase(decision)} note`)?.trim();
-    if (note === undefined) return;
-    this.governanceBusyId = approval.id;
-    try {
-      await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/governance/approvals/${approval.id}/${decision}`, { note }));
-      await this.loadProfitWorkspace();
-    } catch (error: any) {
-      this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to review governance approval';
-    } finally {
-      this.governanceBusyId = '';
-    }
+    this.profitDialog = { kind: 'governanceReview', titleKey: `profit.dialog.${decision}Governance`, name: '', note: '', evidence: '', realizedImpactInr: null, approval, decision };
+    this.focusActiveDialog();
   }
 
   auditDetails(value: unknown): string {
     try { return JSON.stringify(value); } catch { return '-'; }
   }
 
-  async saveProfitView(): Promise<void> {
+  saveProfitView(): void {
     if (!this.canManageProfit) return;
-    const name = window.prompt('Saved view name')?.trim();
-    if (!name) return;
+    if (!this.validateProfitDateRange()) return;
+    this.profitDialog = { kind: 'saveView', titleKey: 'profit.dialog.saveView', name: '', note: '', evidence: '', realizedImpactInr: null };
+    this.focusActiveDialog();
+  }
+
+  openPeriodClose(): void {
+    if (!this.canManageProfit || !this.reconciliation) return;
+    this.profitDialog = { kind: 'periodClose', titleKey: this.reconciliation.branchPeriodCloseReady ? 'profit.dialog.closePeriod' : 'profit.dialog.closeBlockers', name: '', note: '', evidence: '', realizedImpactInr: null };
+    this.focusActiveDialog();
+  }
+
+  closeProfitDialog(): void { this.profitDialog = null; }
+
+  async submitProfitDialog(): Promise<void> {
+    const dialog = this.profitDialog;
+    if (!dialog || !this.canManageProfit) return;
+    this.profitError = '';
     try {
-      await firstValueFrom(this.api.post('/api/v1/reports/custom', {
-        name,
-        definition: {
-          dataset: 'sales', rowDimension: 'date', columnDimension: 'none', metric: 'revenuePaise', dateRange: 'custom',
-          fromDate: this.fromDate, toDate: this.toDate, status: this.profitViewStatus(),
-        },
-        scheduleFrequency: 'none', scheduleDay: 1, scheduleTime: '09:00', recipientEmail: '',
-      }));
-      const response = await firstValueFrom(this.api.get<any>('/api/v1/reports/custom'));
-      const reports = this.data<{ reports: CustomReport[] }>(response)?.reports ?? [];
-      this.profitSavedViews = reports.filter((report) => this.isProfitSavedView(report));
+      if (dialog.kind === 'saveView') {
+        const name = dialog.name.trim();
+        if (!name) { this.profitError = 'Saved view name is required'; return; }
+        await firstValueFrom(this.api.post('/api/v1/reports/custom', {
+          name,
+          definition: {
+            dataset: 'sales', rowDimension: 'date', columnDimension: 'none', metric: 'revenuePaise', dateRange: 'custom', fromDate: this.fromDate, toDate: this.toDate,
+            profitView: { tab: this.profitTab, level: this.profitLevel, scope: this.profitScope, comparePrevious: this.comparePrevious, actionStatus: this.actionStatus, actionPriority: this.actionPriority },
+          },
+          scheduleFrequency: 'none', scheduleDay: 1, scheduleTime: '09:00', recipientEmail: '',
+        }));
+        const response = await firstValueFrom(this.api.get<any>('/api/v1/reports/custom'));
+        this.profitSavedViews = (this.data<{ reports: CustomReport[] }>(response)?.reports ?? []).filter((report) => report.active && this.isProfitSavedView(report));
+      }
+      if (dialog.kind === 'actionTransition' && dialog.action && dialog.transition) {
+        const realized = dialog.realizedImpactInr;
+        if (realized != null && (!Number.isFinite(Number(realized)) || Number(realized) < 0)) { this.profitError = 'Realized impact must be a non-negative amount'; return; }
+        this.actionBusyId = dialog.action.id;
+        await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/actions/${dialog.action.id}/${dialog.transition}`, {
+          note: dialog.note.trim(),
+          realizedImpactPaise: realized == null ? undefined : Math.round(Number(realized) * 100),
+          evidence: dialog.evidence.trim() ? { completionEvidence: dialog.evidence.trim() } : undefined,
+        }));
+        await this.loadActions();
+      }
+      if (dialog.kind === 'governanceReview' && dialog.approval && dialog.decision) {
+        this.governanceBusyId = dialog.approval.id;
+        await firstValueFrom(this.api.post(`/api/v1/profit-intelligence/governance/approvals/${dialog.approval.id}/${dialog.decision}`, { note: dialog.note.trim() }));
+        await this.loadProfitTabData();
+      }
+      if (dialog.kind === 'periodClose') {
+        if (!this.reconciliation?.branchPeriodCloseReady || !dialog.note.trim()) { this.profitError = 'Resolve every blocker and enter a close reason'; return; }
+        this.periodCloseBusy = true;
+        await firstValueFrom(this.api.post('/balance-sheet/periods/close', { periodMonth: this.toDate.slice(0, 7), reason: dialog.note.trim() }));
+        await this.loadProfitWorkspace();
+      }
+      this.closeProfitDialog();
     } catch (error: any) {
-      this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to save profit view';
+      this.profitError = error?.error?.error?.message ?? error?.error?.message ?? 'Unable to complete the requested action';
+    } finally {
+      this.actionBusyId = '';
+      this.governanceBusyId = '';
+      this.periodCloseBusy = false;
     }
   }
 
   applyProfitView(id: string): void {
     const view = this.profitSavedViews.find((item) => item.id === id);
     if (!view) return;
-    const [, tab, level, scope] = (view.definition.status ?? '').split('_');
+    const structured = view.definition.profitView;
+    const [, legacyTab, legacyLevel, legacyScope] = (view.definition.status ?? '').split('_');
+    const tab = structured?.tab ?? legacyTab;
     if (this.profitTabs.some((item) => item.id === tab)) this.profitTab = tab as ProfitTab;
-    this.profitLevel = level === 'f' ? 'fullyLoaded' : 'contribution';
-    this.profitScope = scope === 't' && this.canViewTenantProfit ? 'tenant' : 'branch';
+    this.profitLevel = structured?.level ?? (legacyLevel === 'f' ? 'fullyLoaded' : 'contribution');
+    const scope = structured?.scope ?? (legacyScope === 't' ? 'tenant' : 'branch');
+    this.profitScope = scope === 'tenant' && this.canViewTenantProfit ? 'tenant' : 'branch';
+    this.comparePrevious = structured?.comparePrevious ?? this.comparePrevious;
+    this.actionStatus = structured?.actionStatus ?? this.actionStatus;
+    this.actionPriority = structured?.actionPriority ?? this.actionPriority;
     this.fromDate = view.definition.fromDate ?? this.fromDate;
     this.toDate = view.definition.toDate ?? this.toDate;
     void this.loadProfitWorkspace();
   }
 
   exportProfit(format: 'csv' | 'excel'): void {
-    const rows = this.isDimensionTab ? this.currentDimensionRows : this.advanced?.branchProfit ?? [];
-    const headers = ['Dimension', 'Name', 'Units', 'Revenue', 'Cost', this.profitLevel === 'fullyLoaded' ? 'Fully Loaded Profit' : 'Contribution Profit', 'Margin Bps', 'Cost Completeness Bps', 'Incomplete Lines'];
-    const values = rows.map((row) => [row.dimension, row.entityName, row.unitCount, row.revenuePaise, this.rowCost(row), this.rowProfit(row), this.rowMargin(row), row.costCompletenessBps, row.incompleteCostLineCount]);
-    const name = `micro-pnl-${this.fromDate}-${this.toDate}`;
+    if (!this.validateProfitDateRange()) return;
+    const records = this.profitExportRecords();
+    if (!records.length) { this.profitError = 'No data is available for the active view'; return; }
+    const headers = Object.keys(records[0]);
+    const values = records.map((record) => headers.map((header) => record[header]));
+    const name = `micro-pnl-${this.profitTab}-${this.fromDate}-${this.toDate}`;
     if (format === 'csv') {
       const csv = [headers, ...values].map((row) => row.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
       this.download(`\uFEFF${csv}`, `${name}.csv`, 'text/csv;charset=utf-8');
@@ -926,6 +1102,26 @@ export class ReportsPageComponent implements OnInit {
     }
     const html = `<table><thead><tr>${headers.map((value) => `<th>${this.escapeHtml(value)}</th>`).join('')}</tr></thead><tbody>${values.map((row) => `<tr>${row.map((value) => `<td>${this.escapeHtml(String(value ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
     this.download(html, `${name}.xls`, 'application/vnd.ms-excel');
+  }
+
+  private profitExportRecords(): Array<Record<string, string | number>> {
+    const dimensions = this.isDimensionTab ? this.currentDimensionRows : this.profitTab === 'overview' ? this.advanced?.branchProfit ?? [] : [];
+    if (dimensions.length) return dimensions.map((row) => ({ Dimension: row.dimension, Name: row.entityName, Units: row.unitCount, 'Revenue (INR)': row.revenuePaise / 100, 'Cost (INR)': this.rowCost(row) / 100, [`${this.profitLevel === 'fullyLoaded' ? 'Fully Loaded Profit' : 'Contribution Profit'} (INR)`]: row.incompleteCostLineCount ? '' : this.rowProfit(row) / 100, 'Margin (%)': row.incompleteCostLineCount ? '' : this.rowMargin(row) / 100, 'Cost Source Coverage (%)': row.costCompletenessBps / 100, 'Incomplete Lines': row.incompleteCostLineCount }));
+    if (this.profitTab === 'leaks') return this.rankedProfitLeaks.map((row) => ({ Type: row.kind, Title: row.title, Message: row.message, Severity: row.severity, 'Impact (INR)': row.impactPaise / 100 }));
+    if (this.profitTab === 'pricing') return (this.advanced?.pricing ?? []).map((row) => ({ Service: row.serviceName, 'Current (INR)': row.currentAveragePricePaise / 100, 'Suggested (INR)': row.suggestedPricePaise / 100, 'Current Margin (%)': row.currentMarginBps / 100, 'Target Margin (%)': row.targetMarginBps / 100, 'Expected Lift (INR)': row.expectedProfitLiftPaise / 100 }));
+    if (this.profitTab === 'recipe') return (this.advanced?.recipeVariance ?? []).map((row) => ({ Service: row.serviceName, Sold: row.soldQuantity, 'Recipe Items': row.recipeItemCount, 'Expected Cost (INR)': row.expectedCostPaise / 100, 'Actual Cost (INR)': row.actualCostPaise / 100, 'Variance (INR)': row.variancePaise / 100, 'Variance (%)': row.varianceBps / 100 }));
+    if (this.profitTab === 'booking') return (this.advanced?.bookingRecommendations ?? []).map((row) => ({ Service: row.serviceName, Hour: this.bookingHour(row.recommendedHour), Appointments: row.appointmentCount, 'Revenue/Unit (INR)': row.expectedRevenuePaise / 100, 'Cost/Unit (INR)': row.expectedCostPaise / 100, 'Profit/Unit (INR)': row.expectedProfitPaise / 100, 'Margin (%)': row.marginBps / 100, Decision: row.restrictionReason || row.recommendation }));
+    if (this.profitTab === 'liability') return (this.advanced?.liabilityRisks ?? []).map((row) => ({ Plan: row.planName, Type: row.kind, 'Sold (INR)': row.soldValuePaise / 100, 'Recognized (INR)': row.recognizedValuePaise / 100, 'Liability (INR)': row.remainingLiabilityPaise / 100, 'Future Profit (INR)': row.expectedFutureProfitPaise / 100, Risk: row.severity, Action: row.recommendation }));
+    if (this.profitTab === 'copilot') return (this.advanced?.copilot ?? []).map((row) => ({ Type: row.kind, Title: row.title, Message: row.message, 'Impact (INR)': row.impactPaise / 100, Evaluation: row.evaluationStatus, Feedback: this.copilotFeedback[row.recommendationVersionId] ?? '' }));
+    if (this.profitTab === 'actions') return this.actions.map((row) => ({ Title: row.title, Type: row.actionType, Priority: row.priority, Status: row.status, Owner: row.ownerName || row.ownerUserId || '', Period: this.actionPeriod(row), 'Expected (INR)': row.expectedImpactPaise / 100, 'Realized (INR)': row.realizedImpactPaise / 100 }));
+    if (this.profitTab === 'rules') return this.governanceRules.map((row) => ({ Rule: row.title, Severity: row.severity, 'Minimum Margin (%)': row.minMarginBps / 100, 'Maximum Discount (%)': row.maxDiscountBps / 100, Approval: row.approvalRequired ? 'Required' : 'No', Audit: row.auditRequired ? 'Required' : 'No', Status: row.enabled ? 'Enabled' : 'Disabled' }));
+    if (this.profitTab === 'approvals') return this.governanceApprovals.map((row) => ({ Requested: this.formatDate(row.requestedAt), Action: row.actionType, Source: `${row.sourceType} ${row.sourceId}`, Decision: row.message, 'Impact (INR)': row.impactPaise / 100, 'Margin (%)': row.marginBps / 100, Status: row.status }));
+    if (this.profitTab === 'audit') return this.governanceAudit.map((row) => ({ Time: this.formatDate(row.createdAt), Event: row.eventType, Actor: row.actorUserId, Decision: row.decisionId ?? '', Rule: row.ruleId ?? '', Details: this.auditDetails(row.detailsJson) }));
+    if (this.profitTab === 'reconciliation' && this.reconciliation) return [{ 'Complete Lines (%)': this.reconciliation.costCompletenessBps / 100, 'Revenue Variance (INR)': this.reconciliation.revenueVariancePaise / 100, 'COGS Variance (INR)': this.reconciliation.cogsVariancePaise / 100, 'Payroll Variance (INR)': this.reconciliation.payrollVariancePaise / 100, 'Missing Journals': this.reconciliation.missingInvoiceJournalCount, 'Close Ready': this.reconciliation.branchPeriodCloseReady ? 'Yes' : 'No' }];
+    if (this.profitTab === 'scenario') return (this.advanced?.profitDigitalTwin.scenarios ?? []).map((row) => ({ Scenario: row.name, 'Revenue (INR)': row.projectedRevenuePaise / 100, 'Profit (INR)': row.projectedProfitPaise / 100, 'Change (INR)': row.profitDeltaPaise / 100, 'Margin (%)': row.projectedMarginBps / 100 }));
+    if (this.profitTab === 'guard' && this.posGuardDecision) return [{ Decision: this.posGuardDecision.decision.decision, Status: this.posGuardDecision.decision.status, 'Estimated Profit (INR)': this.posGuardDecision.decision.estimatedProfitPaise / 100, 'Margin (%)': this.posGuardDecision.decision.marginBps / 100, Message: this.posGuardDecision.decision.message }];
+    if (this.profitTab === 'executive' && this.advanced) return [{ 'Revenue/Staff (INR)': this.advanced.executiveKpis.revenuePerStaffPaise / 100, 'Revenue/Customer (INR)': this.advanced.executiveKpis.revenuePerCustomerPaise / 100, 'Revenue/Branch (INR)': this.advanced.executiveKpis.revenuePerBranchPaise / 100, 'Forecast Profit (INR)': this.advanced.enterpriseAnalytics.nextMonthForecastProfitPaise / 100, 'Expected Recovery (INR)': this.advanced.boardReport.expectedRecoveryPaise / 100 }];
+    return [];
   }
 
   titleCase(value: string): string {
@@ -945,6 +1141,15 @@ export class ReportsPageComponent implements OnInit {
   }
 
   percent(bps?: number): string { return `${(Number(bps || 0) / 100).toFixed(1)}%`; }
+
+  paiseToInr(paise: number | null): number | null { return paise == null ? null : paise / 100; }
+  inrToPaise(inr: number | null): number | null { return inr == null || inr === ('' as unknown as number) ? null : Math.round(Number(inr) * 100); }
+
+  trendPoints(field: keyof Pick<ProfitTrendPoint, 'revenuePaise' | 'directCostPaise' | 'contributionProfitPaise'>): string {
+    const trend = this.advanced?.enterpriseAnalytics.trend ?? [];
+    const max = Math.max(1, ...trend.flatMap((row) => [row.revenuePaise, row.directCostPaise, Math.abs(row.contributionProfitPaise)]));
+    return trend.map((row, index) => `${trend.length === 1 ? 50 : index * 100 / (trend.length - 1)},${40 - Math.max(0, Number(row[field])) * 36 / max}`).join(' ');
+  }
 
   bookingHour(hour: number): string { return `${String(hour).padStart(2, '0')}:00`; }
 
@@ -1026,13 +1231,14 @@ export class ReportsPageComponent implements OnInit {
     return { fromDate: previousFrom.toISOString().slice(0, 10), toDate: previousTo.toISOString().slice(0, 10) };
   }
 
-  private profitViewStatus(): string {
-    // ponytail: reuse durable custom-report metadata; add a view table only if sharing/versioning diverges.
-    return `mp_${this.profitTab}_${this.profitLevel === 'fullyLoaded' ? 'f' : 'c'}_${this.profitScope === 'tenant' ? 't' : 'b'}`;
+  private validateProfitDateRange(): boolean {
+    if (this.fromDate && this.toDate && this.fromDate <= this.toDate) return true;
+    this.profitError = 'From date must be on or before To date';
+    return false;
   }
 
   private isProfitSavedView(report: CustomReport): boolean {
-    return report.definition.status?.startsWith('mp_') === true;
+    return !!report.definition.profitView || report.definition.status?.startsWith('mp_') === true;
   }
 
   private download(content: string, fileName: string, type: string): void {
@@ -1040,8 +1246,25 @@ export class ReportsPageComponent implements OnInit {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = fileName;
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url));
+  }
+
+  trapFocus(event: KeyboardEvent): void {
+    if (event.key !== 'Tab') return;
+    const container = event.currentTarget as HTMLElement;
+    const focusable = [...container.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  private focusActiveDialog(): void {
+    setTimeout(() => document.querySelector<HTMLElement>('.profit-dialog button, .action-drawer button, .action-drawer input, .action-drawer select')?.focus());
   }
 
   private escapeHtml(value: string): string {

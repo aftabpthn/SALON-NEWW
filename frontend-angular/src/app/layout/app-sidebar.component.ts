@@ -3,6 +3,7 @@ import { Component, ElementRef, EventEmitter, HostListener, Input, Output } from
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../core/services/auth.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
+import { navigationAccessForUrl } from '../core/auth/navigation-access';
 
 @Component({
     selector: 'app-sidebar',
@@ -14,6 +15,7 @@ import { TranslatePipe } from '../shared/pipes/translate.pipe';
 export class AppSidebarComponent {
   openGroup: string | null = null;
   private mobileNavOpen = false;
+
 
   @Input()
   set mobileOpen(value: boolean) {
@@ -37,33 +39,36 @@ export class AppSidebarComponent {
     { label: 'Staff', icon: 'bi-person-badge', route: '/staff', exact: false, links: [
       { label: 'Staff', icon: 'bi-person-badge', route: '/staff', exact: false },
       { label: 'Control Center', icon: 'bi-speedometer2', route: '/staff/control-center', exact: false },
-      { label: 'Availability', icon: 'bi-calendar-week', route: '/availability', exact: false },
+      { label: 'Availability', icon: 'bi-calendar-week', route: '/staff/availability', exact: false },
       { label: 'Attendance Summary', icon: 'bi-calendar-check', route: '/staff/attendance-summary', exact: false },
-      { label: 'Face Punch', icon: 'bi-fingerprint', route: '/staff-os/face-punch', exact: false },
-      { label: 'Heatmaps', icon: 'bi-grid-3x3-gap', route: '/staff-os/heatmaps', exact: false },
+      { label: 'Face Punch', icon: 'bi-fingerprint', route: '/staff/face-punch', exact: false },
+      { label: 'Heatmaps', icon: 'bi-grid-3x3-gap', route: '/staff/heatmaps', exact: false },
       { label: 'Leave', icon: 'bi-calendar2-check', route: '/staff/leave-management', exact: false },
       { label: 'Payroll', icon: 'bi-wallet2', route: '/staff/payroll', exact: false },
-      { label: 'Salary Structure', icon: 'bi-cash-coin', route: '/staff-os/salary-structure', exact: false },
-      { label: 'Salary Rules', icon: 'bi-sliders', route: '/staff-os/salary-rules', exact: false },
-      { label: 'Salary History', icon: 'bi-clock-history', route: '/staff-os/salary-history', exact: false },
-      { label: 'Fines & Deductions', icon: 'bi-receipt-cutoff', route: '/staff-os/fines-deductions', exact: false },
-      { label: 'Target Incentive', icon: 'bi-bullseye', route: '/staff-os/target-incentive', exact: false },
-      { label: 'Leaderboard', icon: 'bi-trophy', route: '/staff-os/leaderboard', exact: false },
-      { label: 'Training', icon: 'bi-mortarboard', route: '/staff-os/training', exact: false },
-      { label: 'Tasks', icon: 'bi-list-check', route: '/staff-os/tasks', exact: false },
-      { label: 'Mobile Preview', icon: 'bi-phone', route: '/staff-os/mobile-preview', exact: false },
+      { label: 'Salary Structure', icon: 'bi-cash-coin', route: '/staff/salary-structure', exact: false },
+      { label: 'Salary Rules', icon: 'bi-sliders', route: '/staff/salary-rules', exact: false },
+      { label: 'Salary History', icon: 'bi-clock-history', route: '/staff/salary-history', exact: false },
+      { label: 'Fines & Deductions', icon: 'bi-receipt-cutoff', route: '/staff/fines-deductions', exact: false },
+      { label: 'Target Incentive', icon: 'bi-bullseye', route: '/staff/target-incentive', exact: false },
+      { label: 'Leaderboard', icon: 'bi-trophy', route: '/staff/leaderboard', exact: false },
+      { label: 'Training', icon: 'bi-mortarboard', route: '/staff/training', exact: false },
+      { label: 'Tasks', icon: 'bi-list-check', route: '/staff/tasks', exact: false },
+      { label: 'Mobile Preview', icon: 'bi-phone', route: '/staff/mobile-preview', exact: false },
     ] },
     { label: 'Services', icon: 'bi-scissors', route: '/services', exact: false, links: [
       { label: 'Services', icon: 'bi-scissors', route: '/services', exact: false },
     ] },
     { label: 'Appointments', icon: 'bi-calendar3', route: '/appointments', exact: false, links: [
-      { label: 'Appointments', icon: 'bi-calendar3', route: '/appointments', exact: false },
+      { label: 'Appointments', icon: 'bi-calendar3', route: '/appointments', exact: true },
+      { label: 'Activities', icon: 'bi-clock-history', route: '/appointments/activities', exact: false },
+      { label: 'Reports', icon: 'bi-file-earmark-bar-graph', route: '/appointment-reports', exact: false },
+      { label: 'Settings', icon: 'bi-sliders', route: '/settings', exact: false },
     ] },
     { label: 'POS', icon: 'bi-receipt', route: '/pos', exact: false, links: [
       { label: 'POS Billing', icon: 'bi-receipt', route: '/pos', exact: true },
       { label: 'Invoices & Refunds', icon: 'bi-receipt-cutoff', route: '/pos/invoices', exact: false },
       { label: 'Held Invoices', icon: 'bi-pause-circle', route: '/pos/holds', exact: false },
-      { label: 'Payments Integrations', icon: 'bi-plug', route: '/payments/integrations', exact: false },
+      { label: 'Payments Integrations', icon: 'bi-plug', route: '/pos/payment-integrations', exact: false },
       { label: 'Payment Modes', icon: 'bi-credit-card', route: '/pos/payment-modes', exact: false },
       { label: 'Tips', icon: 'bi-cash-coin', route: '/pos/tips', exact: false },
       { label: 'Cash Drawer & Reconciliation', icon: 'bi-cash-stack', route: '/pos/cash-drawer', exact: false },
@@ -90,7 +95,11 @@ export class AppSidebarComponent {
     ] },
     { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false, links: [
       { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false },
+      { label: 'Profit Intelligence', icon: 'bi-graph-up-arrow', route: '/reports/profit-intelligence', exact: false },
       { label: 'Invoice Reports', icon: 'bi-file-earmark-bar-graph', route: '/reports/invoices', exact: false },
+    ] },
+    { label: 'Activity & Recovery', icon: 'bi-clock-history', route: '/activity-recovery', exact: false, links: [
+      { label: 'Activity & Recovery', icon: 'bi-clock-history', route: '/activity-recovery', exact: false },
     ] },
     { label: 'Marketing', icon: 'bi-megaphone', route: '/marketing', exact: false, links: [
       { label: 'Marketing & Leads', icon: 'bi-megaphone', route: '/marketing', exact: true },
@@ -109,6 +118,7 @@ export class AppSidebarComponent {
     { label: 'Settings', icon: 'bi-gear', route: '/settings', exact: false, links: [
       { label: 'Settings', icon: 'bi-gear', route: '/settings', exact: false },
       { label: 'Invoice Settings', icon: 'bi-receipt-cutoff', route: '/settings/invoice', exact: false },
+      { label: 'Data Migration', icon: 'bi-database-up', route: '/settings/integrations-data', exact: false },
       { label: 'Subscription & Support', icon: 'bi-headset', route: '/saas', exact: false },
     ] },
     { label: 'SaaS Admin', icon: 'bi-cloud-check', route: '/platform/saas-admin', exact: false, links: [
@@ -127,17 +137,21 @@ export class AppSidebarComponent {
 
   get visibleGroups() {
     const isPlatformAdmin = this.auth.hasRole('superadmin', 'super-admin');
-    if (isPlatformAdmin) return this.groups.filter((group) => group.label === 'SaaS Admin');
-    const canOpenCommandCenter = this.auth.hasRole('owner', 'admin', 'super-admin', 'manager', 'analyst')
-      || this.auth.hasPermission('reports.read');
-    const canManageEnterprise = this.auth.hasRole('owner', 'admin', 'manager');
-    const tenantGroups = this.groups
-      .filter((group) => group.label !== 'SaaS Admin')
-      .map((group) => canManageEnterprise ? group : {
+    const available = this.groups.filter((group) => isPlatformAdmin
+      ? group.label === 'SaaS Admin'
+      : group.label !== 'SaaS Admin');
+    return available
+      .filter((group) => this.canNavigate(group.route))
+      .map((group) => ({
         ...group,
-        links: group.links.filter((link) => link.route !== '/pos/enterprise'),
-      });
-    return canOpenCommandCenter ? tenantGroups : tenantGroups.filter((group) => group.label !== 'Command Center');
+        links: group.links.filter((link) => this.canNavigate(link.route)),
+      }))
+      .filter((group) => group.links.length > 0);
+  }
+
+  private canNavigate(url: string): boolean {
+    const access = navigationAccessForUrl(url);
+    return !access || this.auth.hasAccess(access.roles, access.permissions);
   }
 
   toggleGroup(label: string) { this.openGroup = this.openGroup === label ? null : label; }

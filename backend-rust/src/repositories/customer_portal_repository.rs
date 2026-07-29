@@ -510,7 +510,11 @@ pub async fn business_services(db: &PgPool, branch_id: &str) -> Result<Vec<Value
         .bind(branch_id).fetch_all(db).await
 }
 
-pub async fn marketplace_offers(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
+pub async fn marketplace_offers(
+    db: &PgPool,
+    branch_id: &str,
+    account_id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar(
         r#"SELECT JSONB_BUILD_OBJECT(
           'id',offer.id,'branchId',branch.id::TEXT,'businessSlug',branch.id::TEXT,
@@ -524,6 +528,7 @@ pub async fn marketplace_offers(db: &PgPool, branch_id: &str) -> Result<Vec<Valu
               AND service.active=TRUE AND service.id=ANY(offer.target_service_ids)),'[]'::JSONB),
           'startsAt',offer.starts_at,'endsAt',offer.ends_at,
           'minimumBillPaise',offer.min_subtotal_paise,'perClientLimit',offer.per_client_limit,
+          'personal',offer.target_client_id IS NOT NULL,
           'hasCreative',EXISTS(SELECT 1 FROM marketing_offer_creatives creative
             WHERE creative.tenant_id=offer.tenant_id AND creative.branch_id=offer.branch_id AND creative.offer_id=offer.id)
         )
@@ -533,11 +538,14 @@ pub async fn marketplace_offers(db: &PgPool, branch_id: &str) -> Result<Vec<Valu
         WHERE branch.active=TRUE AND tenant.status='active'
           AND ($1='' OR $1 IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name))
           AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+          AND (offer.target_client_id IS NULL OR ($2<>'' AND EXISTS(SELECT 1 FROM customer_account_clients link
+            WHERE link.account_id=$2 AND link.tenant_id=offer.tenant_id AND link.branch_id=offer.branch_id AND link.client_id=offer.target_client_id)))
           AND (offer.starts_at IS NULL OR offer.starts_at<=NOW())
           AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())
         ORDER BY COALESCE(offer.ends_at,offer.starts_at,offer.created_at),offer.title,offer.code"#,
     )
     .bind(branch_id)
+    .bind(account_id)
     .fetch_all(db)
     .await
 }
@@ -545,6 +553,7 @@ pub async fn marketplace_offers(db: &PgPool, branch_id: &str) -> Result<Vec<Valu
 pub async fn marketplace_offer_creative(
     db: &PgPool,
     offer_id: &str,
+    account_id: &str,
 ) -> Result<Option<(String, Vec<u8>)>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT creative.content_type,creative.content_bytes
@@ -554,10 +563,13 @@ pub async fn marketplace_offer_creative(
         JOIN tenants tenant ON tenant.id=branch.tenant_id AND offer.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name)
         WHERE creative.offer_id=$1 AND branch.active=TRUE AND tenant.status='active'
           AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+          AND (offer.target_client_id IS NULL OR ($2<>'' AND EXISTS(SELECT 1 FROM customer_account_clients link
+            WHERE link.account_id=$2 AND link.tenant_id=offer.tenant_id AND link.branch_id=offer.branch_id AND link.client_id=offer.target_client_id)))
           AND (offer.starts_at IS NULL OR offer.starts_at<=NOW())
           AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())"#,
     )
     .bind(offer_id)
+    .bind(account_id)
     .fetch_optional(db)
     .await
 }

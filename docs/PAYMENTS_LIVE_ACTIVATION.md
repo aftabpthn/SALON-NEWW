@@ -36,6 +36,10 @@ POST /webhooks/adyen
 - Saved payment-instrument references without storing PAN or CVC
 - Settlement and dispute records, including 3DS, AVS, CVC, and fraud metadata
 
+## Branch Provider Controls
+
+Owners, admins, and users with `pos.manage` can disable or re-enable a configured provider for the current branch. Disabling blocks new payment requests but preserves credentials, merchant accounts, settlements, disputes, and audit history; no provider record is deleted.
+
 ## Production Gates
 
 Production activation requires provider contracts and approved merchant accounts. Before enabling a provider:

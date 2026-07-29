@@ -278,6 +278,72 @@
     }
   </section>
 
+  <section class="panel growth-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">10X Growth</span><h2>Owner Intelligence OS</h2></div>
+      <a routerLink="/messaging/whatsapp">Campaigns <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </header>
+    @if (growthActionStatus) { <div class="inline-status">{{ growthActionStatus }}</div> }
+    @if (growthActionError) { <div class="inline-status error">{{ growthActionError }}</div> }
+    @if (growthLoading) {
+      <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading growth intelligence</div>
+    } @else if (errors.has('growth')) {
+      <div class="compact-state">Growth intelligence unavailable</div>
+    } @else {
+      <div class="growth-grid">
+        <section aria-label="Owner command center">
+          <h3>Owner Command</h3>
+          <dl class="metric-list">
+            <div><dt>Attention</dt><dd>{{ growth?.owner?.attentionCount || 0 }}</dd></div>
+            <div><dt>30-day revenue</dt><dd>{{ money(growth?.owner?.revenue30dPaise || 0) }}</dd></div>
+            <div><dt>Open dues</dt><dd>{{ growth?.owner?.openDueCount || 0 }} · {{ money(growth?.owner?.outstandingPaise || 0) }}</dd></div>
+            <div><dt>Low stock</dt><dd>{{ growth?.owner?.lowStockCount || 0 }}</dd></div>
+          </dl>
+        </section>
+        <section aria-label="Revenue leak detection">
+          <h3>Revenue Leaks</h3>
+          <div class="growth-list">
+            @for (leak of revenueLeakHighlights; track leak.kind + leak.title) {
+              <article><span><strong>{{ leak.title }}</strong><small>{{ leak.message }}</small></span><b [class.risk]="leak.severity === 'high' || leak.severity === 'critical'">{{ money(leak.impactPaise) }}</b></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+        <section aria-label="Client memory graph">
+          <h3>Client Memory</h3>
+          <div class="growth-list">
+            @for (client of clientMemoryHighlights; track client.clientId) {
+              <article><span><strong>{{ client.clientName || client.clientId }}</strong><small>{{ client.visitCount }} visits · risk {{ client.riskScore }}</small></span><b>{{ money(client.revenuePaise) }}</b></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+        <section aria-label="WhatsApp campaign planner">
+          <h3>Campaign Planner</h3>
+          <div class="growth-list">
+            @for (plan of campaignPlannerHighlights; track plan.key) {
+              <article><span><strong>{{ plan.title }}</strong><small>{{ label(plan.segmentKey) }} · {{ plan.actionLabel }}</small></span><div class="growth-row-actions"><b>{{ plan.audienceCount }}</b><button type="button" [disabled]="growthActionBusy" (click)="createCampaignDraft(plan)">Create draft</button></div></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+        <section aria-label="Staff coach">
+          <h3>Staff Coach</h3>
+          <div class="growth-list">
+            @for (staff of staffCoachHighlights; track staff.staffId) {
+              <article><span><strong>{{ staff.staffName || staff.staffId }}</strong><small>{{ staff.coachingFocus }} · {{ staff.serviceCount }} services</small></span><div class="growth-row-actions"><b [class.risk]="staff.priority === 'high'">{{ label(staff.priority) }}</b><button type="button" [disabled]="growthActionBusy" (click)="createStaffGoal(staff)">Create goal</button></div></article>
+            } @empty { <div class="mini-empty">No records yet</div> }
+          </div>
+        </section>
+      </div>
+      <section class="digital-twin-lite" aria-label="Digital twin lite">
+        <header><div><span class="eyebrow">Simulation</span><h3>Digital Twin Lite</h3></div></header>
+        <div class="scenario-list">
+          @for (scenario of digitalTwinScenarios; track scenario.key) {
+            <article><span><strong>{{ scenario.title }}</strong><small>{{ scenario.recommendation }}</small></span><b>{{ twinMetric(scenario) }}</b><em>{{ scenario.impactPaise > 0 ? money(scenario.impactPaise) : 'Read only' }}</em></article>
+          } @empty { <div class="mini-empty">No records yet</div> }
+        </div>
+      </section>
+    }
+  </section>
+
   <section class="panel location-panel">
     <header class="panel-header">
       <div><span class="eyebrow">Locations</span><h2>Multi-Branch Command Center</h2></div>

@@ -218,7 +218,7 @@ export class ServicesPageComponent implements OnInit {
     this.actionsOpen = !this.actionsOpen;
   }
 
-  trackByIndex(index: number) {
+  trackByIndex(index: number, _item?: unknown) {
     return index;
   }
 

@@ -20,7 +20,7 @@ use crate::{
     routes::pos::{
         append_pos_invoice_event_from_gateway, settle_deferred_customer_commerce_benefits,
     },
-    services::{accounting_service, ai_concierge_service, pos_enterprise_service},
+    services::{accounting_service, ai_concierge_service, pos_enterprise_service, saas_service},
     state::AppState,
 };
 
@@ -33,6 +33,14 @@ pub fn router() -> Router<AppState> {
             get(verify_whatsapp_webhook).post(receive_whatsapp_webhook),
         )
         .route("/webhooks/sms", axum::routing::post(receive_sms_webhook))
+        .route(
+            "/webhooks/email",
+            axum::routing::post(receive_email_webhook),
+        )
+        .route(
+            "/webhooks/support/email",
+            axum::routing::post(receive_support_email_webhook),
+        )
         .route(
             "/webhooks/razorpay",
             axum::routing::post(receive_razorpay_webhook),
@@ -184,6 +192,90 @@ struct SmsWebhookPayload {
     reply_to_message_id: Option<String>,
     status: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EmailWebhookPayload {
+    message_id: String,
+    status: String,
+    error: Option<String>,
+}
+
+async fn receive_email_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<EmailWebhookPayload>,
+) -> Result<Json<Value>, AppError> {
+    let token = state
+        .settings
+        .invoice_delivery_webhook_token
+        .as_deref()
+        .ok_or_else(|| {
+            AppError::service_unavailable("EMAIL_NOT_CONFIGURED", "email webhook is not configured")
+        })?;
+    let supplied = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .unwrap_or_default();
+    if supplied != token {
+        return Err(AppError::forbidden("email webhook authorization failed"));
+    }
+    let status = match payload.status.trim().to_ascii_lowercase().as_str() {
+        "accepted" | "queued" | "sent" => "sent",
+        "delivered" | "read" => "delivered",
+        "bounced" | "undelivered" => "bounced",
+        "failed" => "failed",
+        _ => return Err(AppError::validation("email delivery status is invalid")),
+    };
+    let updated = sqlx::query(
+        r#"UPDATE staff_login_invitations
+           SET delivery_status=CASE WHEN delivery_status='delivered' AND $2='sent' THEN delivery_status ELSE $2 END,
+               delivered_at=CASE WHEN $2='delivered' THEN COALESCE(delivered_at,NOW()) ELSE delivered_at END,
+               bounced_at=CASE WHEN $2='bounced' THEN COALESCE(bounced_at,NOW()) ELSE bounced_at END,
+               last_delivery_error=CASE WHEN $2 IN ('bounced','failed') THEN $3 ELSE '' END,
+               updated_at=NOW()
+           WHERE provider_message_id=$1"#,
+    )
+    .bind(payload.message_id.trim())
+    .bind(status)
+    .bind(payload.error.as_deref().unwrap_or_default().chars().take(500).collect::<String>())
+    .execute(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to record email delivery status"))?
+    .rows_affected();
+    Ok(Json(serde_json::json!({"received":true,"updated":updated})))
+}
+
+async fn receive_support_email_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, AppError> {
+    let secret = state
+        .settings
+        .support_email_webhook_secret
+        .as_deref()
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "SUPPORT_EMAIL_NOT_CONFIGURED",
+                "support email webhook is not configured",
+            )
+        })?;
+    verify_named_hmac(
+        &headers,
+        "x-aurashine-signature",
+        secret,
+        &body,
+        "support email",
+    )?;
+    let payload = serde_json::from_slice::<saas_service::SupportEmailInput>(&body)
+        .map_err(|_| AppError::validation("invalid support email payload"))?;
+    let payload_sha256 = format!("{:x}", Sha256::digest(&body));
+    Ok(Json(
+        saas_service::ingest_support_email(&state.db, &payload_sha256, payload).await?,
+    ))
 }
 
 async fn receive_sms_webhook(
@@ -676,6 +768,27 @@ fn verify_signature(headers: &HeaderMap, secret: &str, body: &[u8]) -> Result<()
         .map_err(|_| AppError::forbidden("WhatsApp webhook signature verification failed"))
 }
 
+fn verify_named_hmac(
+    headers: &HeaderMap,
+    header_name: &'static str,
+    secret: &str,
+    body: &[u8],
+    label: &str,
+) -> Result<(), AppError> {
+    let signature = headers
+        .get(header_name)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| hex_decode(value.strip_prefix("sha256=").unwrap_or(value)))
+        .ok_or_else(|| {
+            AppError::forbidden(format!("{label} webhook signature is missing or invalid"))
+        })?;
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|_| AppError::internal(format!("invalid {label} webhook secret")))?;
+    mac.update(body);
+    mac.verify_slice(&signature)
+        .map_err(|_| AppError::forbidden(format!("{label} webhook signature verification failed")))
+}
+
 fn hex_decode(value: &str) -> Option<Vec<u8>> {
     if value.len() % 2 != 0 {
         return None;
@@ -1087,6 +1200,32 @@ pub(crate) async fn receive_razorpay_webhook(
     let payload = serde_json::from_slice::<Value>(&body)
         .map_err(|_| AppError::validation("invalid Razorpay webhook payload"))?;
     let event_type = json_string(&payload, &["event"]);
+    let payload_sha256 = format!("{:x}", Sha256::digest(&body));
+    let provider_event_id = headers
+        .get("x-razorpay-event-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 200)
+        .unwrap_or(&payload_sha256);
+    let subscription_payment = !json_string(
+        &payload,
+        &["payload", "payment", "entity", "subscription_id"],
+    )
+    .is_empty();
+    if event_type.starts_with("subscription.")
+        || event_type.starts_with("refund.")
+        || subscription_payment
+    {
+        return Ok(Json(serde_json::json!({"received":true,"data":
+            saas_service::reconcile_razorpay_webhook(
+                &state.db,
+                provider_event_id,
+                &payload_sha256,
+                &event_type,
+                &payload,
+            ).await?
+        })));
+    }
     if event_type.starts_with("payment.dispute.") {
         return process_razorpay_dispute(&state, &event_type, payload).await;
     }

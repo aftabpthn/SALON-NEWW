@@ -64,6 +64,21 @@ async fn main() -> Result<()> {
     {
         let worker_state = state.clone();
         tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if services::saas_service::escalate_due_tickets(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("support SLA escalation cycle failed");
+                }
+            }
+        });
+    }
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(15));
             loop {
                 interval.tick().await;
@@ -178,6 +193,15 @@ async fn main() -> Result<()> {
                     .is_err()
                 {
                     tracing::warn!("invoice delivery worker cycle failed");
+                }
+                if services::saas_service::process_support_email_outbox(
+                    &worker_state.db,
+                    &worker_state.settings,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("support email delivery worker cycle failed");
                 }
                 if routes::pos_legacy_completion::process_due_daily_reports_worker(&worker_state)
                     .await

@@ -307,7 +307,8 @@ h2 {
 }
 
 .primary-action,
-.secondary-action {
+.secondary-action,
+.danger-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -329,8 +330,14 @@ h2 {
   color: #fff;
 }
 
+.danger-action {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
 .primary-action:disabled,
-.secondary-action:disabled {
+.secondary-action:disabled,
+.danger-action:disabled {
   opacity: 0.65;
   cursor: progress;
 }
@@ -353,6 +360,10 @@ h2 {
 
 .error {
   color: var(--danger, #b42318);
+}
+
+.success {
+  color: #0f7a4f;
 }
 
 .stats-card,
@@ -481,6 +492,16 @@ h2 {
 
 .status-pill.connected::before {
   background: #0f7a4f;
+}
+
+.status-pill.disabled {
+  border-color: #fecaca;
+  background: #fff7f6;
+  color: #b42318;
+}
+
+.status-pill.disabled::before {
+  background: #b42318;
 }
 
 .status-pill.planned {

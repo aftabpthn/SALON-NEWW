@@ -28,6 +28,7 @@ test('all eight inventory completion contracts are wired to real persistence and
 
   assert.match(inventoryRepo, /'branchStocks'/);
   assert.match(inventoryRepo, /'clientUsage'/);
+  assert.match(inventoryRepo, /pub async fn exception_evidence[\s\S]*inventory_backbar_usage[\s\S]*purchase_bill_drafts[\s\S]*inventory_digital_twin_ledger[\s\S]*inventory_backbar_containers/);
   assert.match(governanceRepo, /qualityEvents/);
   assert.match(governanceRepo, /replacementOptions/);
 

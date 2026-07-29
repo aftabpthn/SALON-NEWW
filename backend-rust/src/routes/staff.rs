@@ -73,6 +73,12 @@ pub fn router() -> Router<AppState> {
             get(get_staff_branch_access).put(update_staff_branch_access),
         )
         .route("/staff/:id/login", post(provision_staff_login))
+        .route(
+            "/staff/:id/invite",
+            get(get_staff_login_invite).post(create_staff_login_invite),
+        )
+        .route("/staff/:id/invite/resend", post(resend_staff_login_invite))
+        .route("/staff/:id/invite/revoke", post(revoke_staff_login_invite))
         .route("/staff/:id/password", post(set_staff_password))
         .route("/staff/:id/terminate", post(terminate_staff))
         .route("/staff/:id", get(get_staff).patch(update_staff))
@@ -338,11 +344,18 @@ pub struct StaffPasswordRequest {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StaffLoginProvisionRequest {
     pub login_id: String,
     pub email: String,
     pub initial_password: String,
+    pub role_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffLoginInviteRequest {
+    pub email: String,
     pub role_id: String,
 }
 
@@ -1354,6 +1367,7 @@ async fn provision_staff_login(
     require_auth_admin(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let login_id = payload.login_id.trim().to_string();
+    let role_id = payload.role_id.trim().to_string();
     let access = staff_service::provision_login(
         &state.db,
         &tenant_id,
@@ -1379,11 +1393,134 @@ async fn provision_staff_login(
             outcome: "success",
             ip_address: None,
             user_agent: None,
-            details: json!({ "staffId": id, "mustChangePassword": true }),
+            details: json!({
+                "staffId": id,
+                "roleId": role_id,
+                "provisioningMethod": "temporary_password",
+                "mustChangePassword": true
+            }),
         },
     )
     .await;
     Ok(Json(ApiResponse::ok(access)))
+}
+
+async fn get_staff_login_invite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Option<staff_service::StaffLoginInvite>> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_service::load_login_invite(&state.db, &tenant_id, &branch_id, &id).await?,
+    )))
+}
+
+async fn create_staff_login_invite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StaffLoginInviteRequest>,
+) -> ApiResult<staff_service::StaffLoginInvite> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let invite = staff_service::issue_login_invite(
+        &state.db,
+        &state.settings,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        &payload.email,
+        &payload.role_id,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: Some(&invite.email),
+            event_type: "staff.login_invite.created",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"staffId":id,"roleId":invite.role_id,"expiresAt":invite.expires_at,"deliveryStatus":invite.delivery_status}),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(invite)))
+}
+
+async fn resend_staff_login_invite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<staff_service::StaffLoginInvite> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let invite = staff_service::resend_login_invite(
+        &state.db,
+        &state.settings,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: Some(&invite.email),
+            event_type: "staff.login_invite.resent",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"staffId":id,"roleId":invite.role_id,"expiresAt":invite.expires_at,"deliveryStatus":invite.delivery_status}),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(invite)))
+}
+
+async fn revoke_staff_login_invite(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<staff_service::StaffLoginInvite> {
+    require_auth_admin(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let invite =
+        staff_service::revoke_login_invite(&state.db, &tenant_id, &branch_id, &id, &claims.sub)
+            .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: Some(&invite.email),
+            event_type: "staff.login_invite.revoked",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"staffId":id,"roleId":invite.role_id}),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(invite)))
 }
 
 async fn update_staff_branch_access(

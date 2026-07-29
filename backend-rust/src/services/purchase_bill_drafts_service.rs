@@ -27,6 +27,11 @@ pub struct UploadInput {
     pub bytes: Vec<u8>,
 }
 
+pub struct SourceDocument {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+}
+
 pub struct HeaderInput {
     pub supplier_id: Option<String>,
     pub purchase_order_id: Option<String>,
@@ -195,6 +200,22 @@ pub async fn details(
         extractions,
         matches,
         events,
+    })
+}
+
+pub async fn source(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<SourceDocument, AppError> {
+    let source = repo::source(&state.db, tenant, branch, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase bill source"))?
+        .ok_or_else(|| AppError::not_found("purchase bill draft was not found"))?;
+    Ok(SourceDocument {
+        content_type: source.content_type,
+        bytes: source.bytes,
     })
 }
 
@@ -754,6 +775,23 @@ pub async fn confirm(
             "bill number and fully matched positive lines are required",
         ));
     }
+    let header_expected = current
+        .draft
+        .subtotal_paise
+        .checked_sub(current.draft.discount_paise)
+        .and_then(|value| value.checked_add(current.draft.cgst_paise))
+        .and_then(|value| value.checked_add(current.draft.sgst_paise))
+        .and_then(|value| value.checked_add(current.draft.igst_paise))
+        .ok_or_else(|| AppError::validation("purchase bill totals are too large"))?;
+    if differs(current.draft.total_paise, header_expected)
+        || current.lines.iter().any(|line| {
+            expected_line_total(line).map_or(true, |value| differs(line.total_paise, value))
+        })
+    {
+        return Err(AppError::validation(
+            "purchase bill calculated totals must match before confirmation",
+        ));
+    }
     if let Some(order_id) = current.draft.purchase_order_id.as_deref() {
         let order = purchase_service::order_details(state, tenant, branch, order_id).await?;
         if order.order.supplier_id != supplier
@@ -807,7 +845,7 @@ pub async fn confirm(
                     inventory_item_id: line.inventory_item_id.clone().unwrap_or_default(),
                     quantity: line.quantity,
                     unit_cost_paise: line.unit_cost_paise,
-                    discount_bps: 0,
+                    discount_bps: line.discount_bps,
                     gst_percent: Some(line.gst_percent),
                     damaged_quantity: 0,
                     rejected_quantity: 0,
@@ -978,6 +1016,22 @@ fn amount(value: i64) -> Result<i64, AppError> {
         Ok(value)
     }
 }
+fn expected_line_total(line: &repo::DraftLineRecord) -> Option<i64> {
+    let gross = i128::from(line.quantity).checked_mul(i128::from(line.unit_cost_paise))?;
+    let discount = gross
+        .checked_mul(i128::from(line.discount_bps))?
+        .checked_add(5000)?
+        .checked_div(10000)?;
+    let taxable = gross.checked_sub(discount)?;
+    let tax = taxable
+        .checked_mul(i128::from(line.gst_percent))?
+        .checked_add(50)?
+        .checked_div(100)?;
+    i64::try_from(taxable.checked_add(tax)?).ok()
+}
+fn differs(actual: i64, expected: i64) -> bool {
+    (i128::from(actual) - i128::from(expected)).abs() > 100
+}
 fn date(value: &str, field: &str) -> Result<Option<NaiveDate>, AppError> {
     let value = value.trim();
     if value.is_empty() {
@@ -991,7 +1045,7 @@ fn date(value: &str, field: &str) -> Result<Option<NaiveDate>, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_upload, UploadInput};
+    use super::{differs, validate_upload, UploadInput};
     #[test]
     fn upload_validation_accepts_pdf_and_rejects_text() {
         assert!(validate_upload(&UploadInput {
@@ -1006,5 +1060,10 @@ mod tests {
             bytes: vec![1]
         })
         .is_err());
+    }
+    #[test]
+    fn confirmation_total_tolerance_is_one_rupee() {
+        assert!(!differs(10_100, 10_000));
+        assert!(differs(10_101, 10_000));
     }
 }

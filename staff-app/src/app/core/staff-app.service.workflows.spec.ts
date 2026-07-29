@@ -85,7 +85,7 @@ describe("StaffAppService staff workflows", () => {
   it("maps payroll paise and payslip data from the self dashboard", async () => {
     const { service } = createService(({ method, url }) => {
       if (method === "GET" && url.endsWith("/staff/self/dashboard")) {
-        return of({ payroll: [{ run_id: "run-1", period_start: "2026-07-01", period_end: "2026-07-31", gross_paise: 120000, net_paise: 105000, status: "finalized", payslip_path: "/staff/self/payslips/run-1" }] });
+        return of({ payrollProfile: { rate_type: "monthly", amount_paise: 4000000, effective_from: "2026-07-01" }, payroll: [{ run_id: "run-1", period_start: "2026-07-01", period_end: "2026-07-31", earned_salary_paise: 90000, overtime_paise: 5000, commission_paise: 25000, adjustment_paise: 0, gross_paise: 120000, deductions_paise: 15000, net_paise: 105000, status: "finalized", payment_method: "bank", reference: "pay-ref-1", paid_at: "2026-08-01T10:00:00Z", payslip_path: "/staff/self/payslips/run-1" }] });
       }
       return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
     });
@@ -94,9 +94,16 @@ describe("StaffAppService staff workflows", () => {
     await expect(service.payroll()).resolves.toEqual([expect.objectContaining({
       id: "run-1",
       grossPay: 120000,
+      salaryPay: 90000,
+      commissionPay: 25000,
+      deductionsPay: 15000,
       netPay: 105000,
+      paymentMethod: "bank",
       payslipPath: "/staff/self/payslips/run-1"
     })]);
+    await expect(service.payrollOverview()).resolves.toEqual(expect.objectContaining({
+      profile: { rateType: "monthly", amountPaise: 4000000, effectiveFrom: "2026-07-01" }
+    }));
   });
 
   it("uses only the routed team-chat contract and preserves idempotency", async () => {

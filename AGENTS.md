@@ -50,6 +50,7 @@
 
 ## 10X Completion Rule
 
+- For every page, workflow, business-logic, API, report, setting, or automation task, follow the mandatory [End-to-End Feature Contract and Dependency Rule](docs/END_TO_END_FEATURE_CONTRACT_RULE.md).
 - Every requested task must be completed to a 10X production-ready standard within the approved scope.
 - Treat a task as complete only when all applicable backend, database, frontend, security, permission, real-data, error-handling, reload, and verification requirements are finished and correctly wired.
 - Do not mark partial, demo-only, placeholder, mock-backed, disconnected, or unverified work as complete.

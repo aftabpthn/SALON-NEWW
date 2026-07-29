@@ -3,7 +3,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::Response,
-    routing::{get, post},
+    routing::{get, patch, post},
     Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -40,6 +40,11 @@ pub fn router() -> Router<AppState> {
             post(approve_marketing_offer),
         )
         .route("/marketing/offers/:id/submit", post(submit_marketing_offer))
+        .route("/marketing/offers/:id/stop", post(stop_marketing_offer))
+        .route(
+            "/marketing/offers/:id",
+            patch(update_marketing_offer).delete(delete_marketing_offer),
+        )
         .route(
             "/marketing/offers/:id/share-pack",
             get(marketing_offer_share_pack),
@@ -151,6 +156,22 @@ struct MarketingOfferRequest {
     show_in_staff_app: Option<bool>,
     show_in_customer_app: Option<bool>,
     submit_for_approval: Option<bool>,
+}
+
+struct ValidatedMarketingOffer {
+    code: String,
+    title: String,
+    customer_description: String,
+    staff_instructions: String,
+    benefit_type: String,
+    benefit_value: i64,
+    target_client_id: Option<String>,
+    complimentary_service_id: Option<String>,
+    service_ids: Vec<String>,
+    package_ids: Vec<String>,
+    discount_type: &'static str,
+    discount_value: i64,
+    discount_bps: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -555,14 +576,12 @@ async fn marketing_offer_share_pack(
     }))))
 }
 
-async fn create_marketing_offer(
-    State(state): State<AppState>,
-    Extension(claims): Extension<AuthClaims>,
-    headers: HeaderMap,
-    Json(body): Json<MarketingOfferRequest>,
-) -> ApiResult<Value> {
-    require_permission(&claims, true)?;
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+async fn validate_marketing_offer(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    body: &MarketingOfferRequest,
+) -> Result<ValidatedMarketingOffer, AppError> {
     let code = body.code.trim().to_ascii_uppercase();
     let title = clean_offer_text(body.title.as_deref().unwrap_or(&code), 120, "offer title")?;
     let customer_description = clean_offer_text(
@@ -595,7 +614,8 @@ async fn create_marketing_offer(
     }
     if body
         .starts_at
-        .zip(body.ends_at)
+        .as_ref()
+        .zip(body.ends_at.as_ref())
         .is_some_and(|(start, end)| end <= start)
     {
         return Err(AppError::validation("offer expiry must be after its start"));
@@ -622,12 +642,13 @@ async fn create_marketing_offer(
     {
         return Err(AppError::validation("complimentary service is required"));
     }
-    let target_client = body
+    let target_client_id = body
         .target_client_id
         .as_deref()
         .map(str::trim)
-        .filter(|v| !v.is_empty());
-    if let Some(client_id) = target_client {
+        .filter(|v| !v.is_empty())
+        .map(str::to_owned);
+    if let Some(client_id) = target_client_id.as_deref() {
         let exists = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND merged_into_client_id IS NULL)")
             .bind(&tenant_id).bind(&branch_id).bind(client_id).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to validate offer client"))?;
         if !exists {
@@ -636,8 +657,8 @@ async fn create_marketing_offer(
             ));
         }
     }
-    let service_ids = clean_offer_ids(body.target_service_ids.unwrap_or_default());
-    let package_ids = clean_offer_ids(body.target_package_ids.unwrap_or_default());
+    let service_ids = clean_offer_ids(body.target_service_ids.clone().unwrap_or_default());
+    let package_ids = clean_offer_ids(body.target_package_ids.clone().unwrap_or_default());
     validate_offer_scope_ids(&state, &tenant_id, &branch_id, &service_ids, &package_ids).await?;
     let discount_type = if benefit_type == "percentage_discount" {
         "percent"
@@ -659,6 +680,37 @@ async fn create_marketing_offer(
             "percentage discount cannot exceed 100%",
         ));
     }
+    Ok(ValidatedMarketingOffer {
+        code,
+        title,
+        customer_description,
+        staff_instructions,
+        benefit_type,
+        benefit_value: value,
+        target_client_id,
+        complimentary_service_id: body
+            .complimentary_service_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned),
+        service_ids,
+        package_ids,
+        discount_type,
+        discount_value,
+        discount_bps,
+    })
+}
+
+async fn create_marketing_offer(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(body): Json<MarketingOfferRequest>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let offer = validate_marketing_offer(&state, &tenant_id, &branch_id, &body).await?;
     let id = uuid::Uuid::new_v4().to_string();
     let approval_status = if body.submit_for_approval.unwrap_or(true) {
         "pending"
@@ -671,12 +723,12 @@ async fn create_marketing_offer(
       allow_membership_stacking,allow_package_stacking,title,customer_description,staff_instructions,
       target_package_ids,show_in_staff_app,show_in_customer_app)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)"#)
-      .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&code).bind(discount_type).bind(discount_value).bind(discount_bps)
+      .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&offer.code).bind(offer.discount_type).bind(offer.discount_value).bind(offer.discount_bps)
       .bind(body.minimum_bill_paise.unwrap_or(0).max(0)).bind(body.starts_at).bind(body.ends_at).bind(body.usage_limit)
-      .bind(body.per_client_limit.unwrap_or(1)).bind(if service_ids.is_empty() { "generic" } else { "service_specific" }).bind(service_ids)
-      .bind(&benefit_type).bind(value).bind(target_client).bind(body.complimentary_service_id.as_deref().map(str::trim).filter(|v| !v.is_empty()))
+      .bind(body.per_client_limit.unwrap_or(1)).bind(if offer.service_ids.is_empty() { "generic" } else { "service_specific" }).bind(offer.service_ids)
+      .bind(&offer.benefit_type).bind(offer.benefit_value).bind(offer.target_client_id).bind(offer.complimentary_service_id)
       .bind(approval_status).bind(&claims.sub).bind(body.allow_membership_stacking.unwrap_or(false)).bind(body.allow_package_stacking.unwrap_or(false))
-      .bind(&title).bind(&customer_description).bind(&staff_instructions).bind(package_ids)
+      .bind(&offer.title).bind(&offer.customer_description).bind(&offer.staff_instructions).bind(offer.package_ids)
       .bind(body.show_in_staff_app.unwrap_or(true)).bind(body.show_in_customer_app.unwrap_or(false))
       .execute(&state.db).await.map_err(|_| AppError::validation("offer code already exists or offer is invalid"))?;
     security_service::record_audit(
@@ -685,11 +737,55 @@ async fn create_marketing_offer(
         &branch_id,
         &claims.sub,
         "marketing.offer.created",
-        json!({"offerId":id,"code":code,"benefitType":benefit_type,"approvalStatus":approval_status}),
+        json!({"offerId":id,"code":offer.code,"benefitType":offer.benefit_type,"approvalStatus":approval_status}),
     )
     .await?;
     Ok(Json(ApiResponse::ok(
         json!({"id":id,"approvalStatus":approval_status}),
+    )))
+}
+
+async fn update_marketing_offer(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<MarketingOfferRequest>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let offer = validate_marketing_offer(&state, &tenant_id, &branch_id, &body).await?;
+    let updated = sqlx::query_scalar::<_, String>(r#"UPDATE pos_coupons offer SET
+      code=$4,discount_type=$5,discount_value_paise=$6,discount_bps=$7,min_subtotal_paise=$8,
+      starts_at=$9,ends_at=$10,usage_limit=$11,per_client_limit=$12,offer_type=$13,target_service_ids=$14,
+      marketing_benefit_type=$15,benefit_value=$16,target_client_id=$17,complimentary_service_id=$18,
+      approval_status='draft',approved_by=NULL,approved_at=NULL,allow_membership_stacking=$19,
+      allow_package_stacking=$20,title=$21,customer_description=$22,staff_instructions=$23,
+      target_package_ids=$24,show_in_staff_app=$25,show_in_customer_app=$26,updated_at=NOW()
+      WHERE offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=$3 AND offer.active=FALSE AND offer.used_count=0
+        AND NOT EXISTS(SELECT 1 FROM pos_sales sale WHERE sale.tenant_id=offer.tenant_id AND sale.branch_id=offer.branch_id AND sale.coupon_code=offer.code AND sale.finalized_at IS NOT NULL)
+      RETURNING offer.id"#)
+      .bind(&tenant_id).bind(&branch_id).bind(id.trim()).bind(&offer.code).bind(offer.discount_type)
+      .bind(offer.discount_value).bind(offer.discount_bps).bind(body.minimum_bill_paise.unwrap_or(0).max(0))
+      .bind(body.starts_at).bind(body.ends_at).bind(body.usage_limit).bind(body.per_client_limit.unwrap_or(1))
+      .bind(if offer.service_ids.is_empty() { "generic" } else { "service_specific" }).bind(offer.service_ids)
+      .bind(&offer.benefit_type).bind(offer.benefit_value).bind(offer.target_client_id).bind(offer.complimentary_service_id)
+      .bind(body.allow_membership_stacking.unwrap_or(false)).bind(body.allow_package_stacking.unwrap_or(false))
+      .bind(&offer.title).bind(&offer.customer_description).bind(&offer.staff_instructions).bind(offer.package_ids)
+      .bind(body.show_in_staff_app.unwrap_or(true)).bind(body.show_in_customer_app.unwrap_or(false))
+      .fetch_optional(&state.db).await.map_err(|_| AppError::validation("offer code already exists or offer is invalid"))?
+      .ok_or_else(|| AppError::validation("stop the offer first; redeemed offers cannot be edited"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.offer.updated",
+        json!({"offerId":updated,"code":offer.code,"approvalStatus":"draft"}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        json!({"id":updated,"approvalStatus":"draft"}),
     )))
 }
 
@@ -929,6 +1025,72 @@ async fn approve_marketing_offer(
     Ok(Json(ApiResponse::ok(
         json!({"id":id,"approvalStatus":"approved"}),
     )))
+}
+
+async fn stop_marketing_offer(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let stopped = sqlx::query_scalar::<_, String>("UPDATE pos_coupons SET active=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE RETURNING id")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to stop offer"))?
+        .ok_or_else(|| AppError::not_found("active offer was not found"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.offer.stopped",
+        json!({"offerId":stopped}),
+    )
+    .await?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "offer",
+        &stopped,
+        "marketing.offer.stopped",
+    );
+    Ok(Json(ApiResponse::ok(json!({"id":stopped,"active":false}))))
+}
+
+async fn delete_marketing_offer(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let deleted = sqlx::query_as::<_, (String, String)>(r#"DELETE FROM pos_coupons offer
+      WHERE offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=$3 AND offer.active=FALSE AND offer.used_count=0
+        AND NOT EXISTS(SELECT 1 FROM pos_sales sale WHERE sale.tenant_id=offer.tenant_id AND sale.branch_id=offer.branch_id AND sale.coupon_code=offer.code AND sale.finalized_at IS NOT NULL)
+        AND NOT EXISTS(SELECT 1 FROM birthday_anniversary_client_offers issued WHERE issued.coupon_id=offer.id)
+      RETURNING offer.id,offer.code"#)
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to delete offer"))?
+        .ok_or_else(|| AppError::validation("stop the offer first; redeemed or issued offers cannot be deleted"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "marketing.offer.deleted",
+        json!({"offerId":deleted.0,"code":deleted.1}),
+    )
+    .await?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "offer",
+        &deleted.0,
+        "marketing.offer.deleted",
+    );
+    Ok(Json(ApiResponse::ok(json!({"id":deleted.0}))))
 }
 
 async fn marketing_advisor(

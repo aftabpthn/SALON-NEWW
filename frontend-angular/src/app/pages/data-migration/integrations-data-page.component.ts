@@ -5,16 +5,18 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { parseCsv } from './csv-import';
-import { DataMigrationStore, ImportAnalysis, ImportAnalysisRow, ImportEntity, ImportJob, ImportMapping, SourceFile } from './data-migration.store';
+import { DataMigrationStore, ImportAnalysis, ImportAnalysisRow, ImportEntity, ImportJob, ImportMapping, MigrationSourceProfile, SourceFile } from './data-migration.store';
 
 type Tab = 'Overview' | 'Integrations' | 'API Keys' | 'Webhooks' | 'Imports' | 'Exports';
 type Provider = { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string };
-type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
+type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier' | 'zenoti' | 'dingg'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
 type ConnectorSyncJob = { id: string; provider: string; triggerSource: string; status: string; attempts: number; lastError: string; createdAt: string; completedAt?: string };
 type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; ipAllowlistJson: string[]; rateLimitPerMinute: number; status: string; lastUsedAt?: string; createdAt: string };
 type WebhookRow = { id: string; name: string; endpointUrl: string; events: string[]; active: boolean; updatedAt: string };
 type UploadSession = { id: string; missingParts: number[]; receivedBytes: number; expectedSizeBytes: number; status: string };
-type MappingSuggestions = { source: string; suggestions: Record<string, string>; unmatchedColumns: string[] };
+type MappingAlternative = { targetField: string; confidencePercentage: number; reasons: string[]; rejectionReasons: string[]; requiredTransformation: string };
+type MappingDecision = { sourceColumn: string; targetField?: string; candidates: string[]; aliasLevel: string; confidence: 'green' | 'yellow' | 'red'; confidencePercentage: number; collision: boolean; reason: string; alternativeTargets: MappingAlternative[]; suggestionReasons: string[]; rejectionReasons: string[]; detectedDataType: string; sampleEvidence: string[]; requiredTransformation?: string; approved: boolean; approvalId?: string; approvedBy?: string; approvedAt?: string };
+type MappingSuggestions = { source: string; ruleVersion: string; fingerprint: string; semanticSource: string; semanticAdvisory: Record<string, string>; suggestions: Record<string, string>; unmatchedColumns: string[]; decisions: MappingDecision[]; approvalRequiredIssues: string[]; hardBlockingIssues: string[]; blockingIssues: string[] };
 
 @Component({
     selector: 'page-integrations-data', imports: [CommonModule, FormsModule],
@@ -27,12 +29,15 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   readonly tabs: Tab[] = ['Overview', 'Integrations', 'API Keys', 'Webhooks', 'Imports', 'Exports'];
   readonly apiScopes = ['clients.read', 'appointments.read', 'sales.read', 'staff.read'];
   readonly webhookEvents = ['client.created', 'appointment.created', 'appointment.status_changed', 'sale.status_changed'];
+  readonly migrationProviders = ['auto', 'zenoti', 'dingg', 'salonist', 'fresha', 'tally', 'busy', 'marg', 'excel', 'csv', 'manual'];
   activeTab: Tab = 'Imports'; providers: Provider[] = []; connectors: ConnectorRow[] = []; connectorJobs: ConnectorSyncJob[] = []; apiKeys: ApiKeyRow[] = []; webhooks: WebhookRow[] = [];
   drawer: 'import' | 'api-key' | 'webhook' | 'governance' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; selectedJob: ImportJob | null = null;
-  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; suggestedMapping: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, 'merge' | 'keep' | 'link'> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[], ipAllowlist: '', rateLimitPerMinute: 60 };
+  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; mappingRuleVersion = ''; mappingFingerprint = ''; mappingSemanticSource = ''; semanticAdvisory: Record<string, string> = {}; suggestedMapping: Record<string, string> = {}; mappingOverrides: Record<string, string> = {}; mappingDecisions: MappingDecision[] = []; approvalRequiredIssues: string[] = []; hardBlockingIssues: string[] = []; blockingMappingIssues: string[] = []; approvedAliasTargets: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, 'merge' | 'keep' | 'link'> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[], ipAllowlist: '', rateLimitPerMinute: 60 };
   webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] as string[] }; revealedSecret = '';
   netsuiteAccountId = '';
+  migrationConnectorDraft = { credential: '', authScheme: 'api_key', centerIds: '', startDate: '', endDate: '', exportUrl: '', sourceFileName: 'dingg-export.xlsx', mode: 'dry-run' as 'dry-run' | 'commit' };
   selectedSourceFile: File | null = null; selectedSourceFileId = ''; uploadSessionId = ''; uploadProgress = 0; uploadStatus = '';
+  sourceProvider = 'auto'; evidenceRetentionDays = 90; sourceProfile: MigrationSourceProfile | null = null; selectedSourceSheet = '';
   private refreshTimer = 0;
   busy = false; loading = true; error = '';
 
@@ -43,6 +48,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   get governance() { return this.migration.governance(); }
   get canViewApiClients() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('security.read', 'security.manage'); }
   get canManageApiClients() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('security.manage'); }
+  get canManageMigrations() { return this.auth.hasAccess(['owner', 'admin', 'manager', 'superadmin', 'super-admin'], ['data_migration.manage']); }
   get visibleTabs() { return this.canViewApiClients ? this.tabs : this.tabs.filter((tab) => tab !== 'API Keys'); }
 
   async ngOnInit() { if (new URL(location.href).searchParams.get('connector')) this.activeTab = 'Integrations'; await this.reload(); this.refreshTimer = window.setInterval(() => { if (!this.busy && this.jobs.some((job) => ['staging', 'queued', 'processing'].includes(job.status))) void this.reloadImportData(); }, 5000); }
@@ -66,8 +72,8 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     finally { this.loading = false; }
   }
 
-  openImport() { this.entity = ''; this.mode = 'dry-run'; this.fileName = ''; this.csvText = ''; this.rowCount = 0; this.selectedMappingId = ''; this.mappingName = ''; this.mappingSource = ''; this.suggestedMapping = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.chunkSize = 5000; this.allowPartialImport = false; this.selectedSourceFile = null; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = ''; this.selectedJob = null; this.migration.clearGovernance(); this.drawer = 'import'; }
-  queueEvidence(file: SourceFile) { this.openImport(); this.fileName = file.originalFileName; this.selectedSourceFileId = file.id; this.uploadStatus = 'Evidence verified'; }
+  openImport() { this.entity = ''; this.mode = 'dry-run'; this.fileName = ''; this.csvText = ''; this.rowCount = 0; this.selectedMappingId = ''; this.mappingName = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.chunkSize = 5000; this.allowPartialImport = false; this.selectedSourceFile = null; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = ''; this.sourceProvider = 'auto'; this.evidenceRetentionDays = 90; this.sourceProfile = null; this.selectedSourceSheet = ''; this.selectedJob = null; this.migration.clearGovernance(); this.drawer = 'import'; }
+  queueEvidence(file: SourceFile) { this.openImport(); this.fileName = file.originalFileName; this.selectedSourceFileId = file.id; this.uploadStatus = 'Evidence verified'; void this.action(() => this.profileSource(), 'Source profile could not be loaded'); }
   openApiKey() { if (!this.canManageApiClients) return; this.apiKeyDraft = { name: '', scopes: ['clients.read'], ipAllowlist: '', rateLimitPerMinute: 60 }; this.revealedSecret = ''; this.drawer = 'api-key'; }
   openWebhook() { this.webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] }; this.revealedSecret = ''; this.drawer = 'webhook'; }
   closeDrawer() { if (!this.busy) { this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); } }
@@ -75,46 +81,60 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   toggleEvent(event: string) { this.webhookDraft.events = this.toggle(this.webhookDraft.events, event); }
 
   async chooseFile(event: Event) {
-    const input = event.target as HTMLInputElement; const file = input.files?.[0]; this.error = ''; this.csvText = ''; this.fileName = ''; this.rowCount = 0; this.mappingSource = ''; this.suggestedMapping = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = '';
+    const input = event.target as HTMLInputElement; const file = input.files?.[0]; this.error = ''; this.csvText = ''; this.fileName = ''; this.rowCount = 0; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = '';
     if (!file) return;
     this.selectedSourceFile = file;
     this.busy = true;
-    try { if (!this.entity) throw new Error('Select entity before choosing a file'); await this.uploadSourceFile(file); }
+    try { await this.uploadSourceFile(file); }
     catch (error) { this.error = this.message(error, error instanceof Error ? error.message : 'Source file could not be uploaded'); if (this.uploadStatus !== 'Evidence verified') this.uploadStatus = 'Upload paused'; }
     finally { this.busy = false; input.value = ''; }
   }
   async resumeSourceUpload() { if (!this.selectedSourceFile || !this.uploadSessionId) return; await this.action(() => this.uploadSourceFile(this.selectedSourceFile!), 'Source upload could not be resumed'); }
-  entityChanged() { this.selectedMappingId = ''; this.mappingSource = ''; this.suggestedMapping = {}; this.importAnalysis = null; this.duplicateDecisions = {}; }
+  entityChanged() { this.selectedMappingId = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; const match = this.sourceProfile?.sheets.find((sheet) => sheet.targets.includes(this.entity as ImportEntity)); this.selectedSourceSheet = match?.id || ''; }
+  get sourceSheets() { return (this.sourceProfile?.sheets || []).filter((sheet) => sheet.importable && (!this.entity || sheet.targets.includes(this.entity as ImportEntity))); }
   get availableMappings() { return this.importMappings.filter((mapping) => mapping.entity === this.entity); }
   get activeTemplate() { return this.importTemplates.find((template) => template.entity === this.entity); }
+  get mappingReviewDecisions() { return this.mappingDecisions; }
+  get greenMappingCount() { return this.mappingDecisions.filter((decision) => decision.confidence === 'green').length; }
+  get yellowMappingCount() { return this.mappingDecisions.filter((decision) => decision.confidence === 'yellow' && !decision.approved).length; }
+  get redMappingCount() { return this.mappingDecisions.filter((decision) => decision.confidence === 'red').length; }
   get analysisRows() { return (this.importAnalysis?.rows || []).slice(0, 100); }
   duplicateDecisionKey(row: ImportAnalysisRow) { return row.sourceExternalId || String(row.sourceRowNumber); }
   hasUnresolvedDuplicates() { return !!this.importAnalysis?.rows.some((row) => row.status === 'duplicate' && !this.duplicateDecisions[this.duplicateDecisionKey(row)]); }
   async analyzeImport() {
     if (!this.entity || (!this.csvText && !this.selectedSourceFileId)) return;
-    if (!this.csvText) {
+    if (this.selectedSourceFileId) {
       await this.action(async () => {
-        await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, entity: this.entity, mode: 'dry-run', mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: false }));
+        await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, entity: this.entity, mode: 'dry-run', mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: false }));
         this.drawer = '';
         await this.reloadImportData();
       }, 'Import analysis could not be queued');
       return;
     }
     await this.action(async () => {
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<ImportAnalysis>>('/settings/integrations/import-jobs/analyze', { entity: this.entity, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions }));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<ImportAnalysis>>('/settings/integrations/import-jobs/analyze', { entity: this.entity, sourceProvider: this.sourceProvider, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions }));
       this.importAnalysis = result.data || null;
     }, 'Import analysis failed');
   }
   async suggestMapping() {
     if (!this.entity || (!this.csvText && !this.selectedSourceFileId)) return;
     await this.action(async () => {
-      const sourceColumns = parseCsv(this.csvText)[0] || [];
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<MappingSuggestions>>('/settings/integrations/import-mapping-suggestions', this.csvText ? { entity: this.entity, sourceColumns } : { entity: this.entity, sourceFileId: this.selectedSourceFileId }));
+      const request = this.mappingEvaluationRequest();
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<MappingSuggestions>>('/settings/integrations/import-mapping-suggestions', request));
       this.selectedMappingId = '';
       this.suggestedMapping = result.data?.suggestions || {};
+      this.mappingDecisions = result.data?.decisions || [];
+      this.approvalRequiredIssues = result.data?.approvalRequiredIssues || [];
+      this.hardBlockingIssues = result.data?.hardBlockingIssues || [];
+      this.blockingMappingIssues = result.data?.blockingIssues || [];
+      this.approvedAliasTargets = {};
       this.mappingSource = result.data?.source || 'rust_deterministic';
-      if (this.csvText) {
-        const analysis = await firstValueFrom(this.api.post<ApiEnvelope<ImportAnalysis>>('/settings/integrations/import-jobs/analyze', { entity: this.entity, csv: this.csvText, mapping: this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions }));
+      this.mappingRuleVersion = result.data?.ruleVersion || '';
+      this.mappingFingerprint = result.data?.fingerprint || '';
+      this.mappingSemanticSource = result.data?.semanticSource || '';
+      this.semanticAdvisory = result.data?.semanticAdvisory || {};
+      if (this.csvText && !this.selectedSourceFileId) {
+        const analysis = await firstValueFrom(this.api.post<ApiEnvelope<ImportAnalysis>>('/settings/integrations/import-jobs/analyze', { entity: this.entity, sourceProvider: this.sourceProvider, csv: this.csvText, mapping: this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions }));
         this.importAnalysis = analysis.data || null;
       } else {
         this.importAnalysis = null;
@@ -122,6 +142,17 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
       }
     }, 'Mapping suggestions could not be generated');
   }
+  aliasTargets(decision: MappingDecision) { return decision.candidates.length ? decision.candidates : (this.activeTemplate?.columns || []).map((column) => column.field); }
+  async approveYellowMapping(decision: MappingDecision) {
+    const targetField = this.approvedAliasTargets[decision.sourceColumn];
+    if (!this.canManageMigrations || decision.confidence !== 'yellow' || decision.approved || !targetField || !this.mappingFingerprint) return;
+    await this.action(async () => {
+      await firstValueFrom(this.api.post('/settings/integrations/import-mapping-approvals', { evaluation: this.mappingEvaluationRequest(), sourceColumn: decision.sourceColumn, targetField, fingerprint: this.mappingFingerprint }));
+      this.mappingOverrides[decision.sourceColumn] = targetField;
+      await this.suggestMapping();
+    }, 'Yellow mapping could not be approved');
+  }
+  async ignoreMappingColumn(decision: MappingDecision) { if (!this.canManageMigrations) return; this.mappingOverrides[decision.sourceColumn] = '__ignore'; await this.suggestMapping(); }
   async chooseDuplicateDecision(row: ImportAnalysisRow, decision: string) {
     const key = this.duplicateDecisionKey(row);
     if (!decision) delete this.duplicateDecisions[key]; else this.duplicateDecisions[key] = decision as 'merge' | 'keep' | 'link';
@@ -137,13 +168,15 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   }
   async applyImport() {
     if (!this.entity || (!this.csvText && !this.selectedSourceFileId)) return;
-    if (!this.csvText) {
-      await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, entity: this.entity, mode: this.mode, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: this.allowPartialImport })); this.drawer = ''; await this.reloadImportData(); }, 'Large import job could not be created');
+    if (!this.canManageMigrations) { this.error = 'Data migration manage permission is required'; return; }
+    if (this.blockingMappingIssues.length) { this.error = 'Resolve Yellow approvals and Red blockers before creating the import job'; return; }
+    if (this.selectedSourceFileId) {
+      await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, entity: this.entity, mode: this.mode, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: this.allowPartialImport })); this.drawer = ''; await this.reloadImportData(); }, 'Large import job could not be created');
       return;
     }
     if (!this.importAnalysis) { await this.analyzeImport(); if (!this.importAnalysis) return; }
     if (this.importAnalysis.summary.errorRows || this.hasUnresolvedDuplicates()) { this.error = 'Resolve row errors and duplicate decisions before creating the job'; return; }
-    await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs', { entity: this.entity, fileName: this.fileName, mode: this.mode, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions })); this.drawer = ''; await this.reloadImportData(); }, 'Import job could not be created');
+    await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs', { entity: this.entity, sourceProvider: this.sourceProvider, fileName: this.fileName, mode: this.mode, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions })); this.drawer = ''; await this.reloadImportData(); }, 'Import job could not be created');
   }
   async downloadEvidence(file: SourceFile) { await this.action(async () => this.downloadBlob(await firstValueFrom(this.api.getBlob(`/settings/integrations/import-source-files/${file.id}/evidence`)), file.originalFileName), 'Source evidence could not be downloaded'); }
   async saveApiKey() { if (!this.canManageApiClients || !this.apiKeyDraft.name.trim() || !this.apiKeyDraft.scopes.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/api-keys', { ...this.apiKeyDraft, ipAllowlist: this.apiKeyDraft.ipAllowlist.split(/[\s,]+/).filter(Boolean) })); this.revealedSecret = result.data?.apiKey || ''; await this.reload(); }, 'API key could not be created'); }
@@ -155,6 +188,26 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   async connectConnector(row: ConnectorRow) {
     if (row.provider === 'zapier') { this.activeTab = 'API Keys'; return; }
     if (!row.configured) { this.error = `${row.label} credentials are not configured`; return; }
+    if (row.provider === 'zenoti' || row.provider === 'dingg') {
+      const draft = this.migrationConnectorDraft;
+      if (!draft.credential.trim()) { this.error = `${row.label} credential is required`; return; }
+      if (row.provider === 'zenoti' && !draft.centerIds.trim()) { this.error = 'At least one Zenoti center ID is required'; return; }
+      if (row.provider === 'dingg' && !draft.exportUrl.trim()) { this.error = 'DINGG HTTPS export URL is required'; return; }
+      await this.action(async () => {
+        await firstValueFrom(this.api.post(`/settings/integrations/connectors/${row.provider}/credentials`, {
+          credential: draft.credential.trim(), authScheme: draft.authScheme,
+          centerIds: row.provider === 'zenoti' ? draft.centerIds.split(/[\s,]+/).filter(Boolean) : [],
+          startDate: row.provider === 'zenoti' ? this.migrationDateIso(draft.startDate) : null,
+          endDate: row.provider === 'zenoti' ? this.migrationDateIso(draft.endDate) : null,
+          exportUrl: row.provider === 'dingg' ? draft.exportUrl.trim() : null,
+          sourceFileName: row.provider === 'dingg' ? draft.sourceFileName.trim() : null,
+          mode: draft.mode, autoQueue: true,
+        }));
+        draft.credential = '';
+        await this.reload();
+      }, `${row.label} migration could not be queued`);
+      return;
+    }
     if (row.provider === 'netsuite' && !this.netsuiteAccountId.trim()) { this.error = 'NetSuite account ID is required'; return; }
     await this.action(async () => {
       const returnUrl = `${location.origin}${location.pathname}`;
@@ -187,7 +240,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     const partSize = 8 * 1024 * 1024; const totalParts = Math.ceil(file.size / partSize);
     let session: UploadSession;
     if (!this.uploadSessionId) {
-      const created = await firstValueFrom(this.api.post<ApiEnvelope<UploadSession>>('/settings/integrations/import-uploads', { fileName: file.name, contentType: file.type || 'application/octet-stream', sizeBytes: file.size, totalParts }));
+      const created = await firstValueFrom(this.api.post<ApiEnvelope<UploadSession>>('/settings/integrations/import-uploads', { fileName: file.name, provider: this.sourceProvider, contentType: file.type || 'application/octet-stream', sizeBytes: file.size, totalParts, retentionDays: this.evidenceRetentionDays }));
       if (!created.data) throw new Error('Upload session was not created'); this.uploadSessionId = created.data.id; session = created.data;
     } else {
       const existing = await firstValueFrom(this.api.get<ApiEnvelope<UploadSession>>(`/settings/integrations/import-uploads/${this.uploadSessionId}`));
@@ -203,14 +256,24 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     const completed = await firstValueFrom(this.api.post<ApiEnvelope<{ sourceFile: SourceFile }>>(`/settings/integrations/import-uploads/${this.uploadSessionId}/complete`, {}));
     if (!completed.data?.sourceFile) throw new Error('Source evidence was not finalized');
     this.fileName = file.name; this.selectedSourceFileId = completed.data.sourceFile.id; this.uploadProgress = 100; this.uploadStatus = 'Evidence verified';
+    await this.profileSource();
     await this.reloadImportData();
     if (extension === 'csv' && file.size <= 5_000_000) {
       this.csvText = await file.text(); const table = parseCsv(this.csvText); if (table.length < 2) throw new Error('CSV has no data rows'); this.rowCount = table.length - 1;
     }
   }
+
+  private mappingEvaluationRequest() {
+    const sourceColumns = parseCsv(this.csvText)[0] || [];
+    return this.selectedSourceFileId
+      ? { entity: this.entity, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, sourceFileId: this.selectedSourceFileId, mapping: this.mappingOverrides }
+      : { entity: this.entity, sourceProvider: this.sourceProvider, sourceColumns, mapping: this.mappingOverrides };
+  }
+  private async profileSource() { if (!this.selectedSourceFileId) return; const result = await firstValueFrom(this.api.get<ApiEnvelope<MigrationSourceProfile>>(`/settings/integrations/import-source-files/${this.selectedSourceFileId}/profile`)); this.sourceProfile = result.data || null; if (this.sourceProvider === 'auto' && result.data?.provider) this.sourceProvider = result.data.provider; const match = result.data?.sheets.find((sheet) => sheet.importable && (!this.entity || sheet.targets.includes(this.entity as ImportEntity))); this.selectedSourceSheet = match?.id || ''; if (!this.entity && match?.targets.length) this.entity = match.targets[0]; }
   private async reloadImportData() { await this.migration.reload(); }
   private async sha256(blob: Blob) { const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''); }
   private toggle(values: string[], value: string) { return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]; }
+  private migrationDateIso(value: string) { const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : null; }
   private downloadBlob(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); }
   private download(content: string, name: string, type: string) { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); }
   private message(error: any, fallback: string) { return error?.error?.error?.message || error?.error?.message || error?.message || fallback; }

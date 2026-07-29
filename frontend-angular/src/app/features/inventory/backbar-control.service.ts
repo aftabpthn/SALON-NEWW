@@ -90,6 +90,10 @@ export type BackbarContainer = {
   remainingQuantity: number;
   unit: string;
   status: string;
+  dualUseStock: boolean;
+  retailShelfQuantity: number;
+  sealedBackbarQuantity: number;
+  openContainerBalance: number;
   openedAt?: string;
   closedAt?: string;
   pendingOverrideId?: string;

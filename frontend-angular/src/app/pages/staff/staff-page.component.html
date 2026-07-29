@@ -4,16 +4,31 @@
       <header class="page-header">
         <div><span class="section-label">{{ 'staff.ui.218887269a' | translate }}</span><h1>{{ 'staff.ui.d920d4623d' | translate }}</h1></div>
         <div class="header-actions">
-          <button class="filter-button payroll-link" type="button" (click)="openControlCenter()"><i class="bi bi-speedometer2"></i>{{ 'staff.ui.817971873a' | translate }}</button>
-          <button class="filter-button payroll-link" type="button" (click)="openMasters()"><i class="bi bi-sliders"></i>{{ 'staff.ui.59a8bfd7bb' | translate }}</button>
+          @if (canReadStaffOperations) {
+            <button class="filter-button payroll-link" type="button" (click)="openControlCenter()"><i class="bi bi-speedometer2"></i>{{ 'staff.ui.817971873a' | translate }}</button>
+          }
+          @if (canManageStaff) {
+            <button class="filter-button payroll-link" type="button" (click)="openMasters()"><i class="bi bi-sliders"></i>{{ 'staff.ui.59a8bfd7bb' | translate }}</button>
+          }
           <button class="filter-button payroll-link" type="button" (click)="openLeaveManagement()"><i class="bi bi-calendar2-check"></i>{{ 'staff.ui.7e3520a973' | translate }}</button>
-          <button class="filter-button payroll-link" type="button" (click)="openPayroll()"><i class="bi bi-wallet2"></i>{{ 'staff.ui.d45987441a' | translate }}</button>
-          <button class="filter-button payroll-link" type="button" (click)="bulkFile.click()"><i class="bi bi-file-earmark-arrow-up"></i>{{ 'staff.ui.1b4a506d5d' | translate }}</button>
-          <input #bulkFile class="visually-hidden" type="file" accept=".csv,text/csv" (change)="selectBulkFile($event)" />
+          @if (canManagePayroll) {
+            <button class="filter-button payroll-link" type="button" (click)="openPayroll()"><i class="bi bi-wallet2"></i>{{ 'staff.ui.d45987441a' | translate }}</button>
+          }
+          @if (canManageStaff) {
+            <button class="filter-button payroll-link" type="button" (click)="bulkFile.click()"><i class="bi bi-file-earmark-arrow-up"></i>{{ 'staff.ui.1b4a506d5d' | translate }}</button>
+            <input #bulkFile class="visually-hidden" type="file" accept=".csv,text/csv" (change)="selectBulkFile($event)" />
+          }
           <label class="search-control"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><input type="search" [(ngModel)]="search" (keyup.enter)="applyFilters()" [attr.placeholder]="'staff.ui.fc3143d894' | translate" [attr.aria-label]="'staff.ui.fc3143d894' | translate" /></label>
-          <button class="primary" type="button" (click)="openCreate()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>{{ 'staff.ui.61cc55aa04' | translate }}</button>
+          @if (canManageStaff) {
+            <button class="primary" type="button" (click)="openCreate()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>{{ 'staff.ui.61cc55aa04' | translate }}</button>
+          }
         </div>
       </header>
+      <nav class="staff-shortcuts" aria-label="Staff pages">
+        @for (link of staffQuickLinks; track link.route) {
+          <a [routerLink]="link.route" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: link.route === '/staff' }"><i class="bi" [ngClass]="link.icon" aria-hidden="true"></i>{{ link.label }}</a>
+        }
+      </nav>
       <section class="staff-toolbar" [attr.aria-label]="'staff.ui.4488d77c4e' | translate">
         <label>{{ 'staff.ui.437736fdb5' | translate }}<select [(ngModel)]="jobFilter" (ngModelChange)="applyFilters()"><option value="">{{ 'staff.ui.d2262656d7' | translate }}</option>@for (job of jobTitles; track job) {
         <option [value]="job">{{ job }}</option>
@@ -25,7 +40,7 @@
         <button type="button" [attr.aria-label]="'staff.ui.47f9a0af2d' | translate" [attr.title]="'staff.ui.47f9a0af2d' | translate" [disabled]="employees.length === 0" (click)="exportVisible()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg></button>
         <button type="button" [attr.aria-label]="'staff.ui.fe77a45a73' | translate" [attr.title]="'staff.ui.fe77a45a73' | translate" (click)="columnMenuOpen = !columnMenuOpen"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M12 4v16M4 12h16"></path></svg></button>
         @if (columnMenuOpen) {
-          <div class="column-menu">@for (column of columns; track column) {
+          <div class="column-menu">@for (column of columns; track column.key) {
             <label><input type="checkbox" [checked]="isColumnVisible(column.key)" (change)="toggleColumn(column.key)" />{{ column.label }}</label>
           }</div>
         }
@@ -93,7 +108,9 @@
     }</div><button class="icon-button" [class.back-button]="detailPage" type="button" [attr.aria-label]="detailPage ? 'Back to employees' : 'Close'" (click)="closeDrawer()">{{ detailPage ? 'Back' : '×' }}</button></header>
     <div class="drawer-body">
       @if (editingId) {
-        <div class="profile-actions"><button type="button" (click)="cloneEmployee()">{{ 'staff.ui.d8cdb57335' | translate }}</button><button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('update')">{{ 'staff.ui.350c355e16' | translate }}</button><button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('reset')">{{ 'staff.ui.5c4bc97ee5' | translate }}</button><button class="danger" type="button" (click)="terminateEmployee()">{{ 'staff.ui.77517bd07e' | translate }}</button></div>
+        @if (canManageStaff) {
+          <div class="profile-actions"><button type="button" (click)="cloneEmployee()">{{ 'staff.ui.d8cdb57335' | translate }}</button>@if (canManageAuthAccess) {<button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('update')">{{ 'staff.ui.350c355e16' | translate }}</button><button type="button" [disabled]="!profileForm.linkedLogin" (click)="openPassword('reset')">{{ 'staff.ui.5c4bc97ee5' | translate }}</button>}<button class="danger" type="button" (click)="terminateEmployee()">{{ 'staff.ui.77517bd07e' | translate }}</button></div>
+        }
       }
       @if (editingId) {
         <nav class="employee-tabs" [attr.aria-label]="'staff.ui.22ef602ffe' | translate">@for (tab of staffTabs; track tab) {
@@ -105,9 +122,9 @@
           <section class="form-section"><h3>{{ 'staff.ui.9239ee2cda' | translate }}</h3><div class="form-grid"><label>{{ 'staff.ui.9b5a639e8c' | translate }}<input [value]="selectedBranchId | branchName" readonly /></label><label>{{ 'staff.ui.cea5fb88c9' | translate }}<input name="employeeCode" [(ngModel)]="form.employeeCode" [readonly]="!editingId" [placeholder]="editingId ? '' : 'Generated on save'" /></label><label>{{ 'staff.ui.7e568a9022' | translate }}<input name="firstName" [(ngModel)]="form.firstName" (ngModelChange)="form.firstName = titleCase($event)" /></label><label>{{ 'staff.ui.17dbdb8662' | translate }}<input name="middleName" [(ngModel)]="form.middleName" (ngModelChange)="form.middleName = titleCase($event)" /></label><label>{{ 'staff.ui.adec36a821' | translate }}<input name="lastName" [(ngModel)]="form.lastName" (ngModelChange)="form.lastName = titleCase($event)" /></label><label>{{ 'staff.ui.c7874aaa0f' | translate }}<input name="displayName" [(ngModel)]="form.appointmentDisplayName" (ngModelChange)="form.appointmentDisplayName = titleCase($event)" /></label><label>{{ 'staff.ui.84add5b295' | translate }}<input type="email" name="email" [(ngModel)]="form.email" /></label><label>{{ 'staff.ui.e59c8a1b88' | translate }}<input type="tel" name="mobilePhone" [(ngModel)]="form.mobilePhone" /></label><label>{{ 'staff.ui.16bc6c2ec5' | translate }}<input type="tel" name="workPhone" [(ngModel)]="form.workPhone" /></label><label>{{ 'staff.ui.240398b1ea' | translate }}<input type="tel" name="homePhone" [(ngModel)]="form.homePhone" /></label><label>{{ 'staff.ui.30c8cb83b9' | translate }}<input name="jobTitle" [(ngModel)]="form.jobTitle" (ngModelChange)="form.jobTitle = titleCase($event)" /></label>@if (editingId) {
           <label class="checkbox-row"><input type="checkbox" name="active" [(ngModel)]="form.active" />{{ 'staff.ui.bfb3981aa6' | translate }}</label>
         }</div></section>
-        <section class="form-section"><h3>{{ 'staff.ui.964460305f' | translate }}</h3><div class="form-grid"><label>{{ 'staff.ui.9de52f9d4e' | translate }}<select name="categoryId" [(ngModel)]="profileForm.categoryId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (item of activeCategories; track item) {
+        <section class="form-section"><h3>{{ 'staff.ui.964460305f' | translate }}</h3><div class="form-grid"><label>{{ 'staff.ui.9de52f9d4e' | translate }}<select name="categoryId" [(ngModel)]="profileForm.categoryId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (item of activeCategories; track item.id) {
         <option [value]="item.id">{{ item.name }}</option>
-        }</select></label><label>{{ 'staff.ui.08cd81e747' | translate }}<select name="shiftTemplateId" [(ngModel)]="profileForm.shiftTemplateId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (item of activeShiftTemplates; track item) {
+        }</select></label><label>{{ 'staff.ui.08cd81e747' | translate }}<select name="shiftTemplateId" [(ngModel)]="profileForm.shiftTemplateId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (item of activeShiftTemplates; track item.id) {
         <option [value]="item.id">{{ item.name }}</option>
         }</select></label><label>{{ 'staff.ui.b2797c752d' | translate }}<input name="designation" [(ngModel)]="profileForm.designation" (ngModelChange)="profileForm.designation = titleCase($event)" /></label><label>{{ 'staff.ui.7a1994999d' | translate }}<input name="companyName" [(ngModel)]="profileForm.companyName" (ngModelChange)="profileForm.companyName = titleCase($event)" /></label><label>{{ 'staff.ui.309c03abfa' | translate }}<input type="number" min="0" name="mandatoryBreakMinutes" [(ngModel)]="profileForm.mandatoryBreakMinutes" /></label><label>{{ 'staff.ui.0c8bb84fa5' | translate }}<input name="workTasks" [(ngModel)]="profileForm.workTasks" /></label><label>{{ 'staff.ui.0d242297c9' | translate }}<input type="number" min="0" name="maxWorkHours" [(ngModel)]="profileForm.maxWorkHours" /></label><label>{{ 'staff.ui.5f014c9235' | translate }}<input type="number" min="0" step="0.01" name="targetRevenue" [(ngModel)]="profileForm.targetRevenue" /></label><label>{{ 'staff.ui.1b1e403513' | translate }}<as-date-picker ariaLabel="Tenure start date" [(value)]="profileForm.tenureStartDate"></as-date-picker></label><label>{{ 'staff.ui.e894e09536' | translate }}<input type="number" min="0" name="bookingIntervalMinutes" [(ngModel)]="profileForm.bookingIntervalMinutes" /></label><label class="checkbox-row wide"><input type="checkbox" name="restrictBooking" [(ngModel)]="profileForm.restrictBookingToReturningGuests" />{{ 'staff.ui.b2644b02ec' | translate }}</label></div></section>
         <section class="form-section"><h3>{{ 'staff.ui.7e3520a973' | translate }}</h3><div class="form-grid"><label>{{ 'staff.ui.0e4d9cd89f' | translate }}<input type="number" min="0" name="vacationDays" [(ngModel)]="profileForm.vacationDays" /></label><label>{{ 'staff.ui.5006dfa2e6' | translate }}<input type="number" min="0" name="specialLeaveDays" [(ngModel)]="profileForm.specialLeaveDays" /></label></div></section>
@@ -137,7 +154,7 @@
           <label>{{ 'staff.ui.8a754c61c2' | translate }}<select [(ngModel)]="profileForm.gender"><option value="">{{ 'staff.ui.60f1e913db' | translate }}</option><option value="female">{{ 'staff.ui.b7c17e97d3' | translate }}</option><option value="male">{{ 'staff.ui.3f3a489c72' | translate }}</option><option value="non_binary">{{ 'staff.ui.dc82a40cd1' | translate }}</option><option value="prefer_not_to_say">{{ 'staff.ui.0e4b2056bc' | translate }}</option></select></label>
           <label>{{ 'staff.ui.b11d80ec2f' | translate }}<select [(ngModel)]="profileForm.employmentType"><option value="">{{ 'staff.ui.60f1e913db' | translate }}</option><option value="full_time">{{ 'staff.ui.4b45bd0521' | translate }}</option><option value="part_time">{{ 'staff.ui.5d37002798' | translate }}</option><option value="contract">{{ 'staff.ui.5a0ba3bb83' | translate }}</option><option value="intern">{{ 'staff.ui.f841f9842a' | translate }}</option></select></label>
           <label>{{ 'staff.ui.db40106a40' | translate }}<input [(ngModel)]="profileForm.department" (ngModelChange)="profileForm.department = titleCase($event)" /></label>
-          <label>{{ 'staff.ui.c148fed093' | translate }}<select [(ngModel)]="profileForm.reportingManagerId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (manager of managerOptions; track manager) {
+          <label>{{ 'staff.ui.c148fed093' | translate }}<select [(ngModel)]="profileForm.reportingManagerId"><option value="">{{ 'staff.ui.b781e616a9' | translate }}</option>@for (manager of managerOptions; track manager.id) {
           <option [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }}</option>
         }</select></label>
       </div>
@@ -170,19 +187,23 @@
       <label>{{ 'staff.ui.300b6ef0cd' | translate }}<input [(ngModel)]="documentForm.documentType" (ngModelChange)="documentForm.documentType = titleCase($event)" /></label>
       <label>{{ 'staff.ui.2159ccf54c' | translate }}<input [(ngModel)]="documentForm.documentName" (ngModelChange)="documentForm.documentName = titleCase($event)" /></label>
       <label class="wide">{{ 'staff.ui.8270ef7045' | translate }}<input type="url" [(ngModel)]="documentForm.documentUrl" [attr.placeholder]="'staff.ui.a9a13761cc' | translate" /></label>
-      <div class="wide upload-row"><button type="button" [disabled]="fileUploading" (click)="documentFile.click()"><i class="bi bi-upload"></i>{{ fileUploading ? 'Uploading…' : 'Upload file' }}</button><input #documentFile class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx" (change)="uploadDocumentFile($event)" /></div>
+      @if (canManageStaff) {
+        <div class="wide upload-row"><button type="button" [disabled]="fileUploading" (click)="documentFile.click()"><i class="bi bi-upload"></i>{{ fileUploading ? 'Uploading…' : 'Upload file' }}</button><input #documentFile class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx" (change)="uploadDocumentFile($event)" /></div>
+      }
       <label>{{ 'staff.ui.03128bed90' | translate }}<select [(ngModel)]="documentForm.verificationStatus"><option value="pending">{{ 'staff.ui.96f608c16c' | translate }}</option><option value="verified">{{ 'staff.ui.aed3b8c6a7' | translate }}</option><option value="rejected">{{ 'staff.ui.27eeb7a291' | translate }}</option></select></label>
       <label>{{ 'staff.ui.6b440cd506' | translate }}<as-date-picker ariaLabel="Document expiry date" [(value)]="documentForm.expiryDate"></as-date-picker></label>
       <label class="wide">{{ 'staff.ui.70440046a3' | translate }}<textarea rows="2" [(ngModel)]="documentForm.notes"></textarea></label>
     </div>
+    @if (canManageStaff) {
     <div class="panel-actions"><button class="primary" type="button" [disabled]="documentSaving" (click)="saveDocument()">{{ documentSaving ? 'Saving…' : 'Save document' }}</button></div>
+  }
     @if (documentError) {
       <p class="form-error">{{ documentError }}</p>
     }
     @if (documentsLoading) {
       <div class="config-empty">{{ 'staff.ui.33ce417454' | translate }}</div>
     }
-    @for (document of documents; track document) {
+    @for (document of documents; track document.id) {
       <div class="document-row">
         <span><strong>{{ document.documentName }}</strong><small>{{ document.documentType }}</small></span>
         <span class="status" [class.inactive]="document.verificationStatus === 'rejected'">{{ document.verificationStatus | titlecase }}</span>
@@ -201,7 +222,7 @@
     @if (historyLoading) {
       <div class="config-empty">{{ 'staff.ui.33ce417454' | translate }}</div>
     }
-    @for (entry of history; track entry) {
+    @for (entry of history; track entry.id) {
       <div class="history-row">
         <span class="history-icon"><i class="bi bi-clock-history"></i></span>
         <span><strong>{{ entry.eventType }}</strong><small>{{ formatDateTime(entry.createdAt) }}</small></span>
@@ -240,14 +261,14 @@
     @if (operationReport) {
       <section class="operation-report-panel">
         <div class="operation-report-cards">
-          @for (card of operationReportCards; track card) {
+          @for (card of operationReportCards; track card.label) {
             <article><span>{{ card.label }}</span><strong>{{ card.value }}</strong></article>
           }
         </div>
         <div class="operation-report-tables">
           <div class="mini-report-table">
             <h4>{{ 'staff.ui.6ac383a960' | translate }}</h4>
-            @for (item of operationReport.pendingApprovals.slice(0, 4); track item) {
+            @for (item of operationReport.pendingApprovals.slice(0, 4); track item.id) {
               <div class="mini-report-row"><span>{{ item.title }}</span><small>{{ formatDate(item.scheduledDate) }} · {{ item.pendingApprovalCount }}</small></div>
             }
             @if (operationReport.pendingApprovals.length === 0) {
@@ -256,7 +277,7 @@
           </div>
           <div class="mini-report-table">
             <h4>{{ 'staff.ui.11c4b58cae' | translate }}</h4>
-            @for (item of operationReport.cleaningScores.slice(0, 4); track item) {
+            @for (item of operationReport.cleaningScores.slice(0, 4); track item.staffId) {
               <div class="mini-report-row"><span>{{ item.staffName }}</span><small>{{ item.completedCount }} done · {{ item.missedCount }} missed · {{ item.score }}%</small></div>
             }
             @if (operationReport.cleaningScores.length === 0) {
@@ -265,7 +286,7 @@
           </div>
           <div class="mini-report-table">
             <h4>{{ 'staff.ui.572ee3c233' | translate }}</h4>
-            @for (item of operationReport.hygieneCompliance.slice(0, 4); track item) {
+            @for (item of operationReport.hygieneCompliance.slice(0, 4); track item.operationType) {
               <div class="mini-report-row"><span>{{ operationTypeLabel(item.operationType) }}</span><small>{{ item.completedCount }}/{{ item.plannedCount }} · {{ item.compliancePercent }}%</small></div>
             }
             @if (operationReport.hygieneCompliance.length === 0) {
@@ -284,7 +305,7 @@
     @if (operationsLoading) {
       <div class="config-empty">{{ 'staff.ui.33ce417454' | translate }}</div>
     }
-    @for (operation of selectedOperationSchedules; track operation) {
+    @for (operation of selectedOperationSchedules; track operation.id) {
       <div class="operation-card">
         <div class="operation-card-main">
           <span><strong>{{ operation.title }}</strong><small>{{ operationTypeLabel(operation.operationType) }} · {{ formatDate(operation.scheduledDate) }}@if (operation.scheduledTime) {
@@ -294,17 +315,17 @@
       </div>
       <div class="operation-actions">
         <input [attr.aria-label]="'staff.ui.624d94d824' | translate" [attr.placeholder]="'staff.ui.624d94d824' | translate" [(ngModel)]="operationTaskTitle" />
-        <button type="button" [disabled]="operationsSaving" (click)="assignOperationTask(operation.id)">{{ 'staff.ui.62905e779c' | translate }}</button>
-        <button type="button" [disabled]="operationsSaving" (click)="markOperationAttendance(operation.id, 'present')">{{ 'staff.ui.4e9f7a31ee' | translate }}</button>
-        <button type="button" [disabled]="operationsSaving" (click)="markOperationAttendance(operation.id, 'absent')">{{ 'staff.ui.e92452c8d3' | translate }}</button>
+        @if (canManageStaff) {<button type="button" [disabled]="operationsSaving" (click)="assignOperationTask(operation.id)">{{ 'staff.ui.62905e779c' | translate }}</button>}
+        @if (canManageStaff) {<button type="button" [disabled]="operationsSaving" (click)="markOperationAttendance(operation.id, 'present')">{{ 'staff.ui.4e9f7a31ee' | translate }}</button>}
+        @if (canManageStaff) {<button type="button" [disabled]="operationsSaving" (click)="markOperationAttendance(operation.id, 'absent')">{{ 'staff.ui.e92452c8d3' | translate }}</button>}
       </div>
       <div class="operation-meta"><span>{{ operation.frequency | titlecase }}</span><span>Attendance: {{ operationAttendanceStatus(operation.id) | titlecase }}</span><span>{{ operationTaskCount(operation.id) }} tasks</span></div>
-      @for (task of operationScheduleTasks(operation.id); track task) {
+      @for (task of operationScheduleTasks(operation.id); track task.id) {
         <div class="operation-task">
           <span><strong>{{ task.taskTitle }}</strong><small>{{ task.staffName || 'Assigned staff' }}</small></span>
           <input [attr.aria-label]="'staff.ui.e113ac76e6' | translate" [attr.placeholder]="'staff.ui.e113ac76e6' | translate" [(ngModel)]="task.proofUrl" />
           <span class="status" [class.inactive]="task.status === 'missed' || task.status === 'cancelled'">{{ operationStatusLabel(task.status) }}</span>
-          <button type="button" [disabled]="operationsSaving || task.status === 'completed' || task.status === 'approved'" (click)="completeOperationTask(task)">{{ 'staff.ui.1f5a1abf2f' | translate }}</button>
+          @if (canManageStaff) {<button type="button" [disabled]="operationsSaving || task.status === 'completed' || task.status === 'approved'" (click)="completeOperationTask(task)">{{ 'staff.ui.1f5a1abf2f' | translate }}</button>}
           <button type="button" [disabled]="operationsSaving || task.status === 'approved'" (click)="approveOperationTask(task)">{{ 'staff.ui.7b2c7f146a' | translate }}</button>
         </div>
       }
@@ -320,7 +341,7 @@
 }
 @if (activeTab === 'Employee Roles') {
   <section class="configuration-panel">
-    @for (role of configuration.roles; track role) {
+    @for (role of configuration.roles; track role.id) {
       <div class="assignment-row"><label><input type="checkbox" [(ngModel)]="role.assigned" />{{ role.name }}</label></div>
     }
     @if (!configurationLoading && configuration.roles.length === 0) {
@@ -338,7 +359,7 @@
         <label>{{ 'staff.ui.e72a8fbe25' | translate }}<input autocomplete="off" [(ngModel)]="loginProvision.loginId" /></label>
         <label>{{ 'staff.ui.84add5b295' | translate }}<input type="email" autocomplete="off" [(ngModel)]="loginProvision.email" /></label>
         <label>{{ 'staff.ui.2278be8ced' | translate }}<input type="password" autocomplete="new-password" [(ngModel)]="loginProvision.initialPassword" /></label>
-        <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="loginProvision.roleId"><option value="">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role) {
+        <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="loginProvision.roleId"><option value="">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role.id) {
         <option [value]="role.id">{{ role.name }}</option>
       }</select></label>
       <label class="wide">{{ 'staff.ui.80f8aa6ac7' | translate }}<input [value]="loginDefaultBranch?.branchName || (selectedBranchId | branchName)" readonly /></label>
@@ -346,6 +367,34 @@
         <div class="config-empty wide">{{ 'staff.ui.13c08cc6f8' | translate }}</div>
       }
     </div>
+    <div class="profile-actions">
+      <button class="primary" type="button" [disabled]="branchAccessSaving || branchAccess.roles.length === 0" (click)="createLoginInvite()">Create secure invitation link</button>
+      @if (loginInvite) {
+        <span class="status" [class.inactive]="loginInvite.status !== 'pending'">{{ loginInvite.status | titlecase }} · {{ loginInvite.roleName }} · expires {{ formatDateTime(loginInvite.expiresAt) }}</span>
+      }
+      @if (loginInviteLink) {
+        <button type="button" (click)="copyLoginInviteLink()">Copy invitation link</button>
+      }
+      @if (loginInvite) {
+        <button type="button" [disabled]="branchAccessSaving" (click)="resendLoginInvite()">Create replacement link</button>
+      }
+      @if (loginInvite?.status === 'pending') {
+        <button class="danger" type="button" [disabled]="branchAccessSaving" (click)="revokeLoginInvite()">Revoke invitation</button>
+      }
+    </div>
+    @if (loginInvite) {
+      <p class="config-empty">
+        Email delivery: {{ loginInvite.deliveryStatus | titlecase }}
+        @if (loginInvite.deliveredAt) { · delivered {{ formatDateTime(loginInvite.deliveredAt) }} }
+        @if (loginInvite.bouncedAt) { · bounced {{ formatDateTime(loginInvite.bouncedAt) }} }
+        @if (loginInvite.lastDeliveryError) { · {{ loginInvite.lastDeliveryError }} }
+        @if (loginInvite.deliveryStatus === 'manual' || loginInvite.deliveryStatus === 'failed') {
+          · Use Copy invitation link for manual delivery.
+        }
+      </p>
+    } @else {
+      <p class="config-empty">Email delivery uses the configured provider. Without provider configuration, use the secure copy-link fallback.</p>
+    }
   }
   @if (!branchAccessLoading && branchAccess.linkedLogin) {
     <div class="login-access-summary"><span><strong>{{ branchAccess.loginId }}</strong><small>{{ branchAccess.email }}</small></span><span class="status" [class.inactive]="!branchAccess.mustChangePassword">{{ branchAccess.mustChangePassword ? 'Password change required' : 'Active login' }}</span></div>
@@ -362,7 +411,7 @@
 <input type="search" [attr.aria-label]="'staff.ui.3dd426990a' | translate" [attr.placeholder]="'staff.ui.ab2f8364dc' | translate" [(ngModel)]="branchAccessSearch" />
 </div>
 <div class="branch-access-bulk">
-  <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="bulkBranchRoleId"><option value="">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role) {
+  <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="bulkBranchRoleId"><option value="">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role.id) {
   <option [value]="role.id">{{ role.name }}</option>
 }</select></label>
 <label>{{ 'staff.ui.2f81a22de0' | translate }}<select [(ngModel)]="bulkBranchAccessType"><option value="permanent">{{ 'staff.ui.af0fa7cd4e' | translate }}</option><option value="deputation">{{ 'staff.ui.12d7722dda' | translate }}</option></select></label>
@@ -375,7 +424,7 @@
 <button type="button" (click)="applyFilteredBranchAccess()">{{ 'staff.ui.1c3b2c9956' | translate }}</button>
 <button type="button" (click)="clearFilteredBranchAccess()">{{ 'staff.ui.84fb904ecd' | translate }}</button>
 </div>
-@for (branch of filteredBranchAccess; track branch) {
+@for (branch of filteredBranchAccess; track branch.branchId) {
   <div class="branch-access-row">
     <label class="branch-active"><input type="checkbox" [(ngModel)]="branch.active" (ngModelChange)="toggleBranchAccess(branch)" />{{ 'staff.ui.a733b809d2' | translate }}</label>
     <span class="branch-access-name"><strong>{{ branch.branchName }}</strong><small>{{ branch.regionName || 'Unassigned' }}@if (branch.zoneName) {
@@ -383,7 +432,7 @@
     }@if (branch.clusterName) {
     · {{ branch.clusterName }}
     }</small><small>{{ branch.effective ? 'Effective now' : branch.active ? 'Scheduled or expired' : 'Inactive' }}</small></span>
-    <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="branch.roleId" [disabled]="!branch.active"><option [ngValue]="null">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role) {
+    <label>{{ 'staff.ui.c3f104d136' | translate }}<select [(ngModel)]="branch.roleId" [disabled]="!branch.active"><option [ngValue]="null">{{ 'staff.ui.04fa02bbb0' | translate }}</option>@for (role of branchAccess.roles; track role.id) {
     <option [value]="role.id">{{ role.name }}</option>
   }</select></label>
   <label>{{ 'staff.ui.2f81a22de0' | translate }}<select [(ngModel)]="branch.accessType" [disabled]="!branch.active" (ngModelChange)="setBranchAccessType(branch)"><option value="permanent">{{ 'staff.ui.af0fa7cd4e' | translate }}</option><option value="deputation">{{ 'staff.ui.12d7722dda' | translate }}</option></select></label>
@@ -413,14 +462,14 @@
     <section class="form-section">
       <h3>Provider pricing level</h3>
       <div class="form-grid">
-        <label>Pricing level<select [(ngModel)]="profileForm.pricingLevelId"><option value="">No level</option>@for (level of activePricingLevels; track level) {
+        <label>Pricing level<select [(ngModel)]="profileForm.pricingLevelId"><option value="">No level</option>@for (level of activePricingLevels; track level.id) {
           <option [value]="level.id">{{ level.name }}</option>
         }</select></label>
         <label>Current level<input [value]="activePricingLevelName || 'Base price only'" readonly /></label>
       </div>
     </section>
-    <div class="panel-heading"><h3>Service skills and level prices</h3><button type="button" (click)="openMasters()">Manage levels</button></div>
-    @for (item of serviceCatalog; track item) {
+    <div class="panel-heading"><h3>Service skills and level prices</h3>@if (canManageStaff) {<button type="button" (click)="openMasters()">Manage levels</button>}</div>
+    @for (item of serviceCatalog; track item.id) {
       <div class="assignment-row catalog-row pricing-skill-row">
         <label><input type="checkbox" [(ngModel)]="item.assigned" /> <span>{{ item.name }}@if (item.category) {
           <small>{{ item.category }}</small>
@@ -453,7 +502,7 @@
 }
 @if (activeTab === 'Products' || activeTab === 'Memberships' || activeTab === 'Packages') {
   <section class="configuration-panel">
-    @for (item of catalogFor(activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package'); track item) {
+    @for (item of catalogFor(activeTab === 'Products' ? 'product' : activeTab === 'Memberships' ? 'membership' : 'package'); track item.id) {
       <div class="assignment-row catalog-row"><label><input type="checkbox" [(ngModel)]="item.assigned" /> <span>{{ item.name }}@if (item.category) {
         <small>{{ item.category }}</small>
         }</span></label><label class="mini-field">{{ 'staff.ui.b26786b048' | translate }}<input type="number" min="0" max="100" [(ngModel)]="item.commissionPercent" [disabled]="!item.assigned" /></label></div>
@@ -466,7 +515,7 @@
   @if (activeTab === 'Commissions') {
     <section class="configuration-panel">
       <div class="panel-heading"><h3>{{ 'staff.ui.73841b044a' | translate }}</h3><button type="button" (click)="addCommissionRule()">{{ 'staff.ui.11cc2bfc04' | translate }}</button></div>
-      @for (rule of configuration.commissionRules; track rule; let index = $index) {
+      @for (rule of configuration.commissionRules; track rule.id || index; let index = $index) {
         <div class="config-grid commission-grid">
           <label>{{ 'staff.ui.709a23220f' | translate }}<input [(ngModel)]="rule.name" (ngModelChange)="rule.name = titleCase($event)" /></label><label>{{ 'staff.ui.0c9d314d2b' | translate }}<select [(ngModel)]="rule.appliesTo"><option value="all">{{ 'staff.ui.6a72085653' | translate }}</option><option value="service">{{ 'staff.ui.5cbd584046' | translate }}</option><option value="product">{{ 'staff.ui.fe0a091fdb' | translate }}</option><option value="membership">{{ 'staff.ui.e351fc5073' | translate }}</option><option value="package">{{ 'staff.ui.0a999012ff' | translate }}</option></select></label><label>{{ 'staff.ui.312e389674' | translate }}<input type="number" min="0" max="100" [(ngModel)]="rule.ratePercent" /></label><label>{{ 'staff.ui.ede7a19cd5' | translate }}<as-date-picker ariaLabel="Commission effective date" [(value)]="rule.effectiveFrom"></as-date-picker></label><label class="inline-check"><input type="checkbox" [(ngModel)]="rule.active" />{{ 'staff.ui.a733b809d2' | translate }}</label><button class="remove-button" type="button" (click)="removeCommissionRule(index)">{{ 'staff.ui.e963907dac' | translate }}</button>
         </div>
@@ -479,7 +528,7 @@
   @if (activeTab === 'Payrates') {
     <section class="configuration-panel">
       <div class="panel-heading"><h3>{{ 'staff.ui.6fe79bb927' | translate }}</h3><button type="button" (click)="addPayRate()">{{ 'staff.ui.c22753ae68' | translate }}</button></div>
-      @for (rate of configuration.payRates; track rate; let index = $index) {
+      @for (rate of configuration.payRates; track rate.id || index; let index = $index) {
         <div class="config-grid pay-grid">
           <label>{{ 'staff.ui.c23309930f' | translate }}<select [(ngModel)]="rate.rateType"><option value="hourly">{{ 'staff.ui.d9362548c2' | translate }}</option><option value="daily">{{ 'staff.ui.728298d3db' | translate }}</option><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option></select></label><label>{{ 'staff.ui.4ecd3f6465' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="rate.amount" /></label><label>{{ 'staff.ui.ede7a19cd5' | translate }}<as-date-picker ariaLabel="Pay rate effective date" [(value)]="rate.effectiveFrom"></as-date-picker></label><label class="inline-check"><input type="checkbox" [(ngModel)]="rate.active" />{{ 'staff.ui.a733b809d2' | translate }}</label><button class="remove-button" type="button" (click)="removePayRate(index)">{{ 'staff.ui.e963907dac' | translate }}</button>
         </div>
@@ -491,7 +540,7 @@
   }
   @if (activeTab === 'Catalog') {
     <section class="configuration-panel">
-      @for (item of assignedCatalog; track item) {
+      @for (item of assignedCatalog; track item.itemType + ':' + item.id) {
         <div class="catalog-summary"><span class="type-badge">{{ item.itemType }}</span><strong>{{ item.name }}</strong><span>{{ item.category || '—' }}</span><span>{{ item.commissionPercent === null ? 'No commission' : item.commissionPercent + '%' }}</span></div>
       }
       @if (assignedCatalog.length === 0) {
@@ -502,7 +551,7 @@
   @if (activeTab === 'Leave Policies') {
     <section class="configuration-panel">
       <div class="panel-heading"><h3>{{ 'staff.ui.93cff67dbb' | translate }}</h3><button type="button" (click)="addLeavePolicy()">{{ 'staff.ui.775623db0d' | translate }}</button></div>
-      @for (policy of configuration.leavePolicies; track policy; let index = $index) {
+      @for (policy of configuration.leavePolicies; track policy.id || index; let index = $index) {
         <div class="config-grid leave-grid">
           <label>{{ 'staff.ui.709a23220f' | translate }}<input [(ngModel)]="policy.name" (ngModelChange)="policy.name = titleCase($event)" /></label><label>{{ 'staff.ui.95f7c209f3' | translate }}<select [(ngModel)]="policy.leaveType"><option value="annual">{{ 'staff.ui.0930f3f899' | translate }}</option><option value="sick">{{ 'staff.ui.630aa21093' | translate }}</option><option value="casual">{{ 'staff.ui.1001e6a796' | translate }}</option><option value="special">{{ 'staff.ui.942078ca2d' | translate }}</option><option value="unpaid">{{ 'staff.ui.50cc12f69e' | translate }}</option></select></label><label>{{ 'staff.ui.1a5ecb6478' | translate }}<input type="number" min="0" [(ngModel)]="policy.annualDays" /></label><label class="inline-check"><input type="checkbox" [(ngModel)]="policy.active" />{{ 'staff.ui.a733b809d2' | translate }}</label><button class="remove-button" type="button" (click)="removeLeavePolicy(index)">{{ 'staff.ui.e963907dac' | translate }}</button>
         </div>
@@ -516,8 +565,8 @@
     <p class="form-error">{{ configurationError }}</p>
   }
 </div>
-<footer><button type="button" (click)="closeDrawer()">{{ detailPage ? 'Back to employees' : 'Cancel' }}</button>@if (activeTab !== 'Documents' && activeTab !== 'History' && activeTab !== 'Operations') {
-<button class="primary" type="button" [disabled]="saving || profileLoading || configurationLoading || configurationSaving || branchAccessLoading || branchAccessSaving" (click)="saveCurrentTab()">{{ saving || configurationSaving || branchAccessSaving ? 'Saving…' : isProfileTab() ? 'Save employee' : activeTab === 'Branch Access' ? (branchAccess.linkedLogin ? 'Save branch access' : 'Create login') : 'Save configuration' }}</button>
+<footer><button type="button" (click)="closeDrawer()">{{ detailPage ? 'Back to employees' : 'Cancel' }}</button>@if (canManageStaff && (activeTab !== 'Branch Access' || canManageAuthAccess) && activeTab !== 'Documents' && activeTab !== 'History' && activeTab !== 'Operations') {
+<button class="primary" type="button" [disabled]="saving || profileLoading || configurationLoading || configurationSaving || branchAccessLoading || branchAccessSaving" (click)="saveCurrentTab()">{{ saving || configurationSaving || branchAccessSaving ? 'Saving…' : isProfileTab() ? 'Save employee' : activeTab === 'Branch Access' ? (branchAccess.linkedLogin ? 'Save branch access' : 'Create temporary login') : 'Save configuration' }}</button>
 }</footer>
 </aside>
 }
@@ -538,7 +587,7 @@
       @if (bulkRows.length) {
         <div class="bulk-table">
           <div class="bulk-table-head"><span>{{ 'staff.ui.adac69379a' | translate }}</span><span>{{ 'staff.ui.709a23220f' | translate }}</span><span>{{ 'staff.ui.30c8cb83b9' | translate }}</span><span>{{ 'staff.ui.bae7d5be70' | translate }}</span></div>
-          @for (row of bulkRows | slice:0:50; track row) {
+          @for (row of bulkRows | slice:0:50; track row.employeeCode + ':' + row.firstName) {
             <div class="bulk-table-row"><span>{{ row.employeeCode }}</span><span>{{ row.firstName }} {{ row.lastName || '' }}</span><span>{{ row.jobTitle || '—' }}</span><span>{{ row.active === false ? 'Inactive' : 'Active' }}</span></div>
           }
         </div>
@@ -570,7 +619,7 @@
       @if (!mastersLoading && masterTab === 'Categories') {
         <section class="configuration-panel">
           <div class="panel-heading"><h3>{{ 'staff.ui.36f5cf3040' | translate }}</h3><button type="button" (click)="addCategory()">{{ 'staff.ui.d169b7f3d5' | translate }}</button></div>
-          @for (item of masters.categories; track item) {
+          @for (item of masters.categories; track item.id || item.code) {
             <div class="config-grid master-category-grid">
               <label>{{ 'staff.ui.adac69379a' | translate }}<input [(ngModel)]="item.code" /></label>
               <label>{{ 'staff.ui.709a23220f' | translate }}<input [(ngModel)]="item.name" (ngModelChange)="item.name = titleCase($event)" /></label>
@@ -586,7 +635,7 @@
       @if (!mastersLoading && masterTab === 'Pricing Levels') {
         <section class="configuration-panel">
           <div class="panel-heading"><h3>Pricing levels</h3><button type="button" (click)="addPricingLevel()">Add level</button></div>
-          @for (level of masters.pricingLevels; track level) {
+          @for (level of masters.pricingLevels; track level.id || level.code) {
             <div class="config-grid master-category-grid">
               <label>Code<input [(ngModel)]="level.code" /></label>
               <label>Name<input [(ngModel)]="level.name" (ngModelChange)="level.name = titleCase($event)" /></label>
@@ -602,7 +651,7 @@
       @if (!mastersLoading && masterTab === 'Leave Policies') {
         <section class="configuration-panel">
           <div class="panel-heading"><h3>{{ 'staff.ui.8cb5fda1fb' | translate }}</h3></div>
-          @for (policy of masters.leavePolicies; track policy) {
+          @for (policy of masters.leavePolicies; track policy.id || policy.name) {
             <div class="master-policy-row">
               <span><strong>{{ policy.staffName }}</strong><small>{{ policy.employeeCode || '—' }}</small></span>
               <span>{{ policy.name }}</span><span>{{ policy.leaveType | titlecase }}</span><span>{{ policy.annualDays }} days</span>
@@ -635,7 +684,7 @@
       @if (!mastersLoading && masterTab === 'Shift Templates') {
         <section class="configuration-panel">
           <div class="panel-heading"><h3>{{ 'staff.ui.b996e3c0a8' | translate }}</h3><button type="button" (click)="addShiftTemplate()">{{ 'staff.ui.402f0f9825' | translate }}</button></div>
-          @for (shift of masters.shiftTemplates; track shift) {
+          @for (shift of masters.shiftTemplates; track shift.id || shift.code) {
             <div class="config-grid master-shift-grid">
               <label>{{ 'staff.ui.adac69379a' | translate }}<input [(ngModel)]="shift.code" /></label><label>{{ 'staff.ui.709a23220f' | translate }}<input [(ngModel)]="shift.name" (ngModelChange)="shift.name = titleCase($event)" /></label>
               <label>{{ 'staff.ui.21cbb4e381' | translate }}<input type="time" [(ngModel)]="shift.shift1Start" /></label><label>{{ 'staff.ui.5f90b2d80f' | translate }}<input type="time" [(ngModel)]="shift.shift1End" /></label>

@@ -1,37 +1,147 @@
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, HostListener, OnInit, signal } from "@angular/core";
 import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
+import { businessDate, businessDateOffset } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 import { StaffPageStateComponent } from "./staff-page-state.component";
+
+type PerformanceReportRow = { key: string; value: { days: number; revenue: number | null; services: number; productivityScore: number | null; rating: number | null } };
 
 @Component({
   standalone: true,
   imports: [PaiseInrPipe, StaffPageStateComponent],
   template: `
-    <section class="page"><header class="page-head"><div><p class="eyebrow">Performance</p><h1>Performance intelligence</h1><p>Productivity, utilization, rating and improvement signals.</p></div></header>
+    <section class="page">
+      <header class="page-head"><div><p class="eyebrow">Performance</p><h1>Performance intelligence</h1><p>Productivity, utilization, rating and improvement signals.</p></div></header>
       @if (!canReadPerformance()) { <section staffPageState class="notice">You do not have permission to view performance.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading performance...</section> }
-      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (loading() && !os()) {
+        <section class="performance-skeleton" aria-label="Loading performance">
+          <div class="skeleton-grid"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
+          <span class="skeleton performance-list-skeleton"></span>
+        </section>
+      }
+      @if (loadError()) { <section staffPageState class="notice performance-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
+      @if (staff.error() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+
+      @if (canReadPerformance()) {
+        <nav class="performance-periods" aria-label="Performance period">
+          @for (days of [7, 30, 60]; track days) {
+            <button type="button" [class.active]="periodDays() === days" [attr.aria-pressed]="periodDays() === days" [disabled]="loading()" (click)="setPeriod(days)">Last {{ days }} days</button>
+          }
+        </nav>
+      }
+
       @if (canReadPerformance() && os(); as data) {
-        <section class="grid four"><article class="kpi"><span>Score</span><strong>{{ scoreLabel(data.performance.productivityScore) }}</strong></article><article class="kpi"><span>Services</span><strong>{{ data.performance.completedServices }}</strong></article><article class="kpi"><span>Utilization</span><strong>{{ percentLabel(data.performance.avgUtilization) }}</strong></article><article class="kpi"><span>Rating</span><strong>{{ ratingLabel(data.performance.avgRating) }}</strong></article></section>
-        <section class="panel"><div class="panel-title"><h2>Trend board</h2><span>{{ reportRows(data).length }}</span></div><div class="trend-grid">@for (row of reportRows(data); track row.key) { <article><span>{{ row.key }}</span><strong>{{ scoreLabel(row.value.productivityScore) }}</strong>@if (row.value.productivityScore !== null && row.value.productivityScore !== undefined) { <div class="timer-track"><span [style.width.%]="cap(row.value.productivityScore)"></span></div> }<small>{{ row.value.services }} services · {{ ratingLabel(row.value.rating) }}</small></article> } @empty { <p class="empty">No records yet.</p> }</div></section>
-        <section class="grid two"><article class="panel"><div class="panel-title"><h2>Strengths</h2><span>{{ data.performance.strengths.length }}</span></div>@for (item of data.performance.strengths; track item) { <p class="insight">{{ item }}</p> } @empty { <p class="empty">No records yet.</p> }</article><article class="panel"><div class="panel-title"><h2>Opportunities</h2><span>{{ data.performance.opportunities.length }}</span></div>@for (item of data.performance.opportunities; track item) { <p class="insight">{{ item }}</p> } @empty { <p class="empty">No records yet.</p> }</article></section>
-        @if (canSeeRevenue()) { <section class="panel"><div class="panel-title"><h2>Revenue impact</h2><span>connected</span></div><h2>{{ data.performance.revenue | paiseInr }}</h2></section> }
+        <section class="grid four performance-kpis">
+          <article class="kpi"><span>Score</span><strong>{{ scoreLabel(data.performance.productivityScore) }}</strong><small>{{ refreshing() ? 'Refreshing...' : scoreHint(data.performance.productivityScore) }}</small></article>
+          <article class="kpi"><span>Services</span><strong>{{ data.performance.completedServices || 0 }}</strong><small>Completed services</small></article>
+          <article class="kpi"><span>Utilization</span><strong>{{ percentLabel(data.performance.avgUtilization) }}</strong><small>Worked vs scheduled</small></article>
+          <article class="kpi"><span>Rating</span><strong>{{ ratingLabel(data.performance.avgRating) }}</strong><small>CRM review score</small></article>
+        </section>
+        @if (!hasPerformanceEvidence(data)) { <section staffPageState class="notice performance-empty-notice">No completed services, rating, utilization, or target evidence is available yet.</section> }
+        <section class="panel">
+          <div class="panel-title"><h2>Trend board</h2><span>{{ refreshing() ? 'Refreshing...' : reportRows(data).length }}</span></div>
+          <div class="trend-grid performance-trend-grid">
+            @for (row of reportRows(data); track row.key) {
+              <article>
+                <span>{{ label(row) }}</span>
+                <strong>{{ scoreLabel(row.value.productivityScore) }}</strong>
+                @if (row.value.productivityScore !== null && row.value.productivityScore !== undefined) { <div class="timer-track"><span [style.width.%]="cap(row.value.productivityScore)"></span></div> }
+                <small>{{ row.value.services || 0 }} services · {{ ratingLabel(row.value.rating) }}</small>
+                @if (canSeeRevenue() && row.value.revenue !== null && row.value.revenue !== undefined) { <small>{{ row.value.revenue | paiseInr }} revenue</small> }
+              </article>
+            } @empty { <div class="performance-empty"><p>No trend records yet.</p><small>Daily, weekly, monthly, and yearly CRM summaries will appear when data exists.</small></div> }
+          </div>
+        </section>
+        <section class="grid two performance-insights">
+          <article class="panel"><div class="panel-title"><h2>Strengths</h2><span>{{ data.performance.strengths.length }}</span></div>@for (item of data.performance.strengths; track item) { <p class="insight">{{ item }}</p> } @empty { <div class="performance-empty compact"><p>No strengths recorded.</p><small>CRM review or productivity signals are required.</small></div> }</article>
+          <article class="panel"><div class="panel-title"><h2>Opportunities</h2><span>{{ data.performance.opportunities.length }}</span></div>@for (item of data.performance.opportunities; track item) { <p class="insight">{{ item }}</p> } @empty { <div class="performance-empty compact"><p>No opportunities recorded.</p><small>Manager reviews or system signals will appear here.</small></div> }</article>
+        </section>
+        @if (canSeeRevenue()) {
+          <section class="panel revenue-impact"><div class="panel-title"><h2>Revenue impact</h2><span>{{ data.performance.revenue === null || data.performance.revenue === undefined ? 'No records' : 'Connected' }}</span></div><h2>{{ data.performance.revenue | paiseInr }}</h2></section>
+        } @else {
+          <section staffPageState class="notice performance-empty-notice">Revenue impact is hidden by your role permissions.</section>
+        }
       }
     </section>
   `,
-  styleUrls: ["./staff-app.styles.css"]
+  styleUrls: ["./staff-app.styles.css"],
+  styles: [`
+    .performance-skeleton { display: grid; gap: 12px; }
+    .performance-list-skeleton { min-height: 280px; }
+    .performance-error { justify-content: space-between; }
+    .performance-kpis .kpi strong { font-size: clamp(1.2rem, 2.4vw, 1.75rem); }
+    .performance-empty-notice { background: var(--staff-surface); color: var(--staff-text-secondary); border-color: var(--staff-border); }
+    .performance-empty { display: grid; justify-items: center; gap: 5px; grid-column: 1 / -1; padding: 26px 10px; color: var(--staff-text-secondary); font-weight: 600; text-align: center; }
+    .performance-empty.compact { padding: 18px 8px; }
+    .performance-empty p { margin: 0; }
+    .performance-empty small { font-weight: 600; line-height: 1.4; }
+    .performance-periods { display: flex; flex-wrap: wrap; gap: 8px; }
+    .performance-periods button { min-height: 38px; border: 1px solid var(--staff-border); border-radius: 12px; padding: 8px 12px; color: var(--staff-text); background: var(--staff-surface); font-weight: 700; }
+    .performance-periods button:hover, .performance-periods button:focus-visible, .performance-periods button.active { border-color: var(--staff-primary); color: var(--staff-primary-hover); background: var(--staff-primary-light); }
+    .performance-trend-grid article { min-width: 0; }
+    .performance-trend-grid small { line-height: 1.35; }
+    .revenue-impact h2 { margin: 0; color: var(--staff-text); font-size: clamp(1.5rem, 3vw, 2.1rem); }
+    @media (max-width: 700px) {
+      .performance-error { align-items: stretch; flex-direction: column; }
+      .performance-error button { width: 100%; }
+      .performance-trend-grid, .performance-insights { grid-template-columns: 1fr; }
+    }
+  `]
 })
 export class StaffPerformancePage implements OnInit {
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly loading = signal(false);
+  readonly refreshing = signal(false);
+  readonly loadError = signal("");
+  readonly periodDays = signal(30);
+
   constructor(readonly staff: StaffAppService) {}
+
   ngOnInit() { if (this.canReadPerformance()) void this.load(); }
-  async load() { this.loading.set(true); try { this.os.set(await this.staff.enterpriseOs()); } finally { this.loading.set(false); } }
+
+  async load(silent = false) {
+    if (!this.canReadPerformance()) {
+      this.os.set(null);
+      return;
+    }
+    if (silent) this.refreshing.set(true); else this.loading.set(true);
+    this.loadError.set("");
+    try {
+      const to = businessDate();
+      this.os.set(await this.staff.enterpriseOs({ from: businessDateOffset(1 - this.periodDays(), to), to }));
+    } catch {
+      this.loadError.set(this.staff.error() || "Unable to load performance.");
+    } finally {
+      this.loading.set(false);
+      this.refreshing.set(false);
+    }
+  }
+
+  @HostListener("window:aura:performance-updated")
+  onPerformanceUpdated() { if (this.canReadPerformance()) void this.load(true); }
+
+  @HostListener("document:visibilitychange")
+  onVisibilityChange() {
+    if (document.visibilityState === "visible" && this.canReadPerformance()) void this.load(true);
+  }
+
+  setPeriod(days: number) {
+    if (days === this.periodDays()) return;
+    this.periodDays.set(days);
+    void this.load();
+  }
+
   canReadPerformance(): boolean { return this.staff.hasPermission("staff.app.performance.read"); }
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["staff.app.business.service_amount.read", "read:finance", "read:sales", "read:payments", "read:invoices"]); }
-  reportRows(data: StaffEnterpriseOs) { return Object.entries(data.reports || {}).map(([key, value]) => ({ key, value })); }
-  scoreLabel(value: number | null): string { return value === null || value === undefined ? "No records yet" : `${value}/100`; }
-  percentLabel(value: number | null): string { return value === null || value === undefined ? "No records yet" : `${value}%`; }
-  ratingLabel(value: number | null): string { return value === null || value === undefined ? "No records yet" : `${value}/5`; }
+  reportRows(data: StaffEnterpriseOs): PerformanceReportRow[] { return Object.entries(data.reports || {}).map(([key, value]) => ({ key, value })).filter((row) => !!row.value); }
+  hasPerformanceEvidence(data: StaffEnterpriseOs): boolean {
+    const performance = data.performance || {} as StaffEnterpriseOs["performance"];
+    return !!(performance.completedServices || performance.revenue || performance.productivityScore !== null && performance.productivityScore !== undefined || performance.avgUtilization !== null && performance.avgUtilization !== undefined || performance.avgRating !== null && performance.avgRating !== undefined || performance.strengths?.length || performance.opportunities?.length);
+  }
+  scoreLabel(value: number | null): string { return value === null || value === undefined ? "No records" : `${value}/100`; }
+  scoreHint(value: number | null): string { return value === null || value === undefined ? "Waiting for CRM data" : "Connected score"; }
+  percentLabel(value: number | null): string { return value === null || value === undefined ? "No records" : `${value}%`; }
+  ratingLabel(value: number | null): string { return value === null || value === undefined ? "No records" : `${value}/5`; }
+  label(row: PerformanceReportRow): string { return row.key === "selected" ? `Last ${row.value.days} Days` : row.key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   cap(value: number): number { return Math.max(0, Math.min(100, Number(value || 0))); }
 }

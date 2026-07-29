@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
+use sqlx::PgPool;
 
 use crate::{
     config::Settings,
@@ -16,6 +17,29 @@ pub struct CreatePaymentLink {
     pub customer_name: String,
     pub customer_phone: String,
     pub customer_email: String,
+}
+
+pub async fn provider_enabled_for_branch(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+) -> Result<bool, AppError> {
+    if !settings.payment_provider_enabled(provider) {
+        return Ok(false);
+    }
+    let enabled = sqlx::query_scalar::<_, bool>(
+        "SELECT enabled FROM payment_provider_branch_controls WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .fetch_optional(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load payment provider control"))?
+    .unwrap_or(true);
+    Ok(enabled)
 }
 
 pub async fn create_payment_link(

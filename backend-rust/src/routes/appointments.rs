@@ -2,9 +2,10 @@ use crate::{
     repositories::{payment_methods_repository, services_repository},
     routes::{context::current_business_date, pos},
     services::{
-        accounting_service, auth_service::AuthClaims, benefit_notification_service,
-        booking_intelligence_service, cash_drawer_service, service_pricing_service,
-        staff_enterprise_service, wallet_service,
+        accounting_service,
+        auth_service::{self, AuthClaims},
+        benefit_notification_service, booking_intelligence_service, cash_drawer_service,
+        service_pricing_service, staff_enterprise_service, wallet_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -14,7 +15,7 @@ use axum::{
     response::{IntoResponse, Response},
     Extension, Json, Router,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -427,6 +428,10 @@ pub(crate) struct AppointmentBatchLinePayload {
     pub(crate) staff_change_approval: String,
     #[serde(default)]
     pub(crate) staff_change_reason: String,
+    #[serde(default)]
+    pub(crate) recommended_staff_id: String,
+    #[serde(default)]
+    pub(crate) recommendation_override_reason: String,
     #[serde(default)]
     pub(crate) service_id: String,
     #[serde(default)]
@@ -1030,6 +1035,36 @@ fn validate_staff_reassignment(
             "Choose client approval or manager override before changing preferred staff",
         )),
         _ => Ok(()),
+    }
+}
+
+fn recommendation_override_allowed(claims: Option<&AuthClaims>) -> bool {
+    claims.is_some_and(|claims| {
+        auth_service::staff_app_permission_allowed(
+            claims,
+            "appointments.manage",
+            &["owner", "admin", "manager"],
+            &["write:appointments"],
+        )
+    })
+}
+
+fn recommendation_audit_reason(
+    selected_staff_id: &str,
+    recommended_staff_id: &str,
+    override_reason: &str,
+) -> Option<String> {
+    if recommended_staff_id.is_empty() {
+        None
+    } else if selected_staff_id == recommended_staff_id {
+        Some(format!(
+            "Recommended staff selected: {recommended_staff_id}"
+        ))
+    } else {
+        Some(format!(
+            "Manager override from recommended staff {recommended_staff_id}: {}",
+            override_reason.trim()
+        ))
     }
 }
 
@@ -2954,7 +2989,7 @@ async fn save_appointment_batch_authenticated(
     Extension(claims): Extension<AuthClaims>,
     Json(payload): Json<AppointmentBatchPayload>,
 ) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
-    save_appointment_batch_inner(state, headers, payload, Some(claims.sub)).await
+    save_appointment_batch_inner(state, headers, payload, Some(claims)).await
 }
 
 pub(crate) async fn save_appointment_batch(
@@ -3027,8 +3062,9 @@ async fn save_appointment_batch_inner(
     state: AppState,
     headers: HeaderMap,
     payload: AppointmentBatchPayload,
-    actor_user_id: Option<String>,
+    actor_claims: Option<AuthClaims>,
 ) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
+    let actor_user_id = actor_claims.as_ref().map(|claims| claims.sub.as_str());
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let client_id = payload.client_id.trim();
     if payload.lines.is_empty()
@@ -3085,7 +3121,7 @@ async fn save_appointment_batch_inner(
         &tenant_id,
         &branch_id,
         payload.advance_payment.as_ref(),
-        actor_user_id.as_deref(),
+        actor_user_id,
         recurrence_count,
         &payload,
     )
@@ -3117,6 +3153,7 @@ async fn save_appointment_batch_inner(
     }
     let mut planned_slots: Vec<(String, String, DateTime<Utc>, DateTime<Utc>)> = Vec::new();
     let mut planned_prices = Vec::with_capacity(payload.lines.len() * recurrence_count as usize);
+    let mut authoritative_recommendations = Vec::with_capacity(payload.lines.len());
     for line in &payload.lines {
         let line_client_id = booking_line_client_id(client_id, line.client_id.trim());
         if line.staff_id.trim().is_empty()
@@ -3153,6 +3190,55 @@ async fn save_appointment_batch_inner(
         if base_end <= base_start {
             return Err(ApiError::bad_request("end_at must be after start_at"));
         }
+        let recommendation = if line.recommended_staff_id.trim().is_empty() {
+            None
+        } else {
+            let india = FixedOffset::east_opt(19_800).expect("India offset is valid");
+            let local_start = base_start.with_timezone(&india);
+            let local_end = base_end.with_timezone(&india);
+            let ranked = staff_enterprise_service::best_staff(
+                &state.db,
+                &tenant_id,
+                &branch_id,
+                staff_enterprise_service::BestStaffRequest {
+                    date: local_start.date_naive(),
+                    start_time: local_start.time(),
+                    end_time: local_end.time(),
+                    service_ids: Some(vec![line.service_id.trim().to_string()]),
+                    client_id: line_client_id.to_string(),
+                    appointment_id: line.appointment_id.trim().to_string(),
+                },
+            )
+            .await
+            .map_err(|error| ApiError::with_status(error.status_code(), error.message()))?;
+            let recommended = ranked
+                .first()
+                .map(|candidate| candidate.staff_id.as_str())
+                .ok_or_else(|| {
+                    ApiError::conflict("staff recommendation is no longer available; refresh")
+                })?;
+            if recommended != line.recommended_staff_id.trim() {
+                return Err(ApiError::conflict(
+                    "staff recommendation changed; refresh and choose again",
+                ));
+            }
+            if recommended != line.staff_id.trim() {
+                if !recommendation_override_allowed(actor_claims.as_ref()) {
+                    return Err(ApiError::with_status(
+                        StatusCode::FORBIDDEN,
+                        "manager permission is required to override recommended staff",
+                    ));
+                }
+                if !(3..=500).contains(&line.recommendation_override_reason.trim().chars().count())
+                {
+                    return Err(ApiError::bad_request(
+                        "manager override reason must be between 3 and 500 characters",
+                    ));
+                }
+            }
+            Some(recommended.to_string())
+        };
+        authoritative_recommendations.push(recommendation);
         let selection = AppointmentServiceSelection {
             service_id: line.service_id.trim().to_string(),
             variant_id: line.variant_id.trim().to_string(),
@@ -3410,21 +3496,30 @@ async fn save_appointment_batch_inner(
             .map_err(|_| ApiError::internal("failed to create appointment service"))?
             };
             let updated = build_appointment(&row)?;
-            let activity_reason = if current
-                .map(|item| {
-                    item.staff_id != line.staff_id.trim()
-                        && item.requested_staff_id != line.staff_id.trim()
-                })
-                .unwrap_or(false)
-            {
-                if line.staff_change_reason.trim().is_empty() {
-                    line.staff_change_approval.trim().to_string()
+            let activity_reason = recommendation_audit_reason(
+                line.staff_id.trim(),
+                authoritative_recommendations[line_index]
+                    .as_deref()
+                    .unwrap_or_default(),
+                &line.recommendation_override_reason,
+            )
+            .unwrap_or_else(|| {
+                if current
+                    .map(|item| {
+                        item.staff_id != line.staff_id.trim()
+                            && item.requested_staff_id != line.staff_id.trim()
+                    })
+                    .unwrap_or(false)
+                {
+                    if line.staff_change_reason.trim().is_empty() {
+                        line.staff_change_approval.trim().to_string()
+                    } else {
+                        line.staff_change_reason.trim().to_string()
+                    }
                 } else {
-                    line.staff_change_reason.trim().to_string()
+                    booking_activity_reason(&updated)
                 }
-            } else {
-                booking_activity_reason(&updated)
-            };
+            });
             changes.push((
                 current.cloned(),
                 updated,
@@ -3459,7 +3554,7 @@ async fn save_appointment_batch_inner(
         .bind(format!("crm-booking-advance:{appointment_id}"))
         .bind(json!({
             "source": "crm_appointment_booking",
-            "collectedByUserId": actor_user_id.as_deref().unwrap_or_default(),
+            "collectedByUserId": actor_user_id.unwrap_or_default(),
             "settlementType": payment.settlement_type,
             "accountedAtCollection": true,
         }))
@@ -3471,7 +3566,7 @@ async fn save_appointment_batch_inner(
                 &mut tx,
                 &tenant_id,
                 &branch_id,
-                actor_user_id.as_deref().unwrap_or_default(),
+                actor_user_id.unwrap_or_default(),
                 current_business_date(),
                 &payment_id,
                 payment.amount_paise,

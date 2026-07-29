@@ -4,8 +4,10 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 use serde::Deserialize;
+use serde_json::{json, Value};
+use sqlx::FromRow;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -32,6 +34,26 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff-attendance/:staff_id/details", get(get_details))
         .route("/staff-attendance/clock-in", post(clock_in))
+        .route(
+            "/staff-attendance/early-departure-requests",
+            get(list_early_departure_requests).post(create_early_departure_request),
+        )
+        .route(
+            "/staff-attendance/face-policy",
+            get(get_face_policy).put(save_face_policy),
+        )
+        .route(
+            "/staff-attendance/face-exceptions",
+            get(list_face_exceptions),
+        )
+        .route(
+            "/staff-attendance/face-exceptions/:id/approve",
+            post(approve_face_exception),
+        )
+        .route(
+            "/staff-attendance/face-devices/:device_uid/approve",
+            post(approve_face_device),
+        )
         .route("/staff-attendance/clock-out", post(clock_out))
         .route("/staff-attendance/break-start", post(start_break))
         .route("/staff-attendance/break-end", post(end_break))
@@ -80,6 +102,100 @@ struct ClockInRequest {
     clock_in_at: Option<DateTime<Utc>>,
     source: Option<String>,
     comments: Option<String>,
+    face_scan: Option<FaceScanEvidence>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FaceScanEvidence {
+    device_uid: String,
+    latitude: f64,
+    longitude: f64,
+    accuracy_meters: Option<f64>,
+    liveness_prompt: Option<String>,
+    liveness_response: Option<String>,
+    provider_event_id: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
+struct FaceAttendancePolicy {
+    enabled: bool,
+    allowed_radius_meters: i32,
+    device_mode: String,
+    network_mode: String,
+    ip_allowlist_json: Value,
+    liveness_mode: String,
+    branch_latitude: Option<f64>,
+    branch_longitude: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FacePolicyRequest {
+    enabled: bool,
+    allowed_radius_meters: i32,
+    device_mode: String,
+    network_mode: String,
+    ip_allowlist: Vec<String>,
+    liveness_mode: String,
+}
+
+#[derive(Debug, FromRow)]
+struct FaceExceptionApprovalRow {
+    staff_id: String,
+    created_at: DateTime<Utc>,
+}
+
+async fn list_early_departure_requests(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::staff_enterprise_repository::ApprovalRequestRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::list_self_early_departures(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+        )
+        .await?,
+    )))
+}
+
+async fn create_early_departure_request(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_enterprise_service::EarlyDepartureRequest>,
+) -> ApiResult<crate::repositories::staff_enterprise_repository::ApprovalRequestRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::request_early_departure(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.role,
+        payload,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.early_departure.requested",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"requestId":row.id,"staffId":row.entity_id}),
+        },
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,6 +323,460 @@ async fn get_details(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
+async fn enforce_face_attendance_policy(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    evidence: Option<&FaceScanEvidence>,
+) -> Result<(), AppError> {
+    let Some(evidence) = evidence else {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            "",
+            "",
+            "missing_face_evidence",
+            None,
+            None,
+            None,
+            None,
+            json!({}),
+        )
+        .await;
+        return Err(AppError::validation("face attendance evidence is required"));
+    };
+    let source_ip = headers
+        .get("x-aurashine-source-ip")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .trim();
+    if evidence.device_uid.trim().is_empty()
+        || evidence.device_uid.chars().count() > 200
+        || !valid_geo(evidence.latitude, evidence.longitude)
+    {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "invalid_face_evidence",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            None,
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::validation("face attendance evidence is invalid"));
+    }
+    let policy = load_face_policy(state, tenant_id, branch_id).await?;
+    if !policy.enabled {
+        return Err(AppError::forbidden(
+            "face attendance is disabled for this branch",
+        ));
+    }
+    let (Some(branch_lat), Some(branch_lng)) = (policy.branch_latitude, policy.branch_longitude)
+    else {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "branch_location_not_configured",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            None,
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::validation("branch location is not configured"));
+    };
+    let distance = distance_meters(
+        branch_lat,
+        branch_lng,
+        evidence.latitude,
+        evidence.longitude,
+    );
+    let accuracy = evidence.accuracy_meters.unwrap_or(9999.0);
+    if !accuracy.is_finite()
+        || accuracy > 100.0
+        || distance > f64::from(policy.allowed_radius_meters)
+    {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "outside_branch_radius",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            Some(distance),
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::validation(
+            "face attendance is allowed only inside the branch radius",
+        ));
+    }
+    if policy.device_mode != "off" {
+        let trust_status = ensure_face_device(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+        )
+        .await?;
+        if policy.device_mode == "approved" && trust_status != "approved" {
+            record_face_exception(
+                state,
+                tenant_id,
+                branch_id,
+                staff_id,
+                evidence.device_uid.trim(),
+                source_ip,
+                "device_not_approved",
+                Some(evidence.latitude),
+                Some(evidence.longitude),
+                evidence.accuracy_meters,
+                Some(distance),
+                face_evidence_json(evidence),
+            )
+            .await;
+            return Err(AppError::forbidden(
+                "this device is not approved for face attendance",
+            ));
+        }
+    }
+    if policy.network_mode != "off" && !ip_allowed(&policy.ip_allowlist_json, source_ip) {
+        if policy.network_mode == "required" || !ip_allowlist_empty(&policy.ip_allowlist_json) {
+            record_face_exception(
+                state,
+                tenant_id,
+                branch_id,
+                staff_id,
+                evidence.device_uid.trim(),
+                source_ip,
+                "network_not_allowed",
+                Some(evidence.latitude),
+                Some(evidence.longitude),
+                evidence.accuracy_meters,
+                Some(distance),
+                face_evidence_json(evidence),
+            )
+            .await;
+            return Err(AppError::forbidden(
+                "face attendance is allowed only from the branch network",
+            ));
+        }
+    }
+    let prompt = evidence.liveness_prompt.as_deref().unwrap_or("").trim();
+    let response = evidence.liveness_response.as_deref().unwrap_or("").trim();
+    if policy.liveness_mode == "basic"
+        && (prompt.is_empty() || response.is_empty() || prompt != response)
+    {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "liveness_failed",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            Some(distance),
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::validation("face liveness check failed"));
+    }
+    if policy.liveness_mode == "provider"
+        && evidence
+            .provider_event_id
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+    {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "provider_liveness_required",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            Some(distance),
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::validation(
+            "provider liveness verification is required",
+        ));
+    }
+    Ok(())
+}
+
+async fn load_face_policy(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<FaceAttendancePolicy, AppError> {
+    sqlx::query_as::<_, FaceAttendancePolicy>(r#"SELECT COALESCE(policy.enabled, TRUE) AS enabled, COALESCE(policy.allowed_radius_meters, 200) AS allowed_radius_meters, COALESCE(policy.device_mode, 'approved') AS device_mode, COALESCE(policy.network_mode, 'optional') AS network_mode, COALESCE(policy.ip_allowlist_json, '[]'::jsonb) AS ip_allowlist_json, COALESCE(policy.liveness_mode, 'basic') AS liveness_mode, branch.latitude AS branch_latitude, branch.longitude AS branch_longitude FROM branches branch LEFT JOIN staff_face_attendance_policies policy ON policy.tenant_id=branch.tenant_id AND policy.branch_id=COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT) WHERE branch.tenant_id=$1 AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=$2 LIMIT 1"#)
+        .bind(tenant_id).bind(branch_id).fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to load face attendance policy"))?.ok_or_else(|| AppError::validation("branch is invalid"))
+}
+
+async fn ensure_face_device(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    device_uid: &str,
+) -> Result<String, AppError> {
+    let row = sqlx::query_as::<_, (String, String)>("SELECT staff_id, trust_status FROM staff_mobile_devices WHERE tenant_id=$1 AND device_uid=$2 AND active=TRUE")
+        .bind(tenant_id).bind(device_uid).fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to verify face attendance device"))?;
+    if let Some((owner_staff_id, trust_status)) = row {
+        if owner_staff_id != staff_id {
+            return Err(AppError::forbidden(
+                "this device belongs to another staff profile",
+            ));
+        }
+        return Ok(trust_status);
+    }
+    sqlx::query_scalar::<_, String>("INSERT INTO staff_mobile_devices(tenant_id,branch_id,staff_id,device_uid,platform,sync_token_hash,trust_status) VALUES($1,$2,$3,$4,'web','', 'pending') RETURNING trust_status")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(device_uid).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to register face attendance device"))
+}
+
+async fn record_face_exception(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    device_uid: &str,
+    source_ip: &str,
+    reason_code: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    accuracy: Option<f64>,
+    distance: Option<f64>,
+    evidence: Value,
+) {
+    let _ = sqlx::query("INSERT INTO staff_face_attendance_exceptions(tenant_id,branch_id,staff_id,device_uid,source_ip,latitude,longitude,accuracy_meters,distance_meters,reason_code,evidence_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(device_uid).bind(source_ip).bind(latitude).bind(longitude).bind(accuracy).bind(distance).bind(reason_code).bind(evidence).execute(&state.db).await;
+}
+
+fn face_evidence_json(evidence: &FaceScanEvidence) -> Value {
+    json!({"accuracyMeters": evidence.accuracy_meters, "hasProviderEvent": evidence.provider_event_id.as_deref().unwrap_or("").trim() != "", "livenessPrompt": evidence.liveness_prompt})
+}
+fn valid_geo(latitude: f64, longitude: f64) -> bool {
+    latitude.is_finite()
+        && longitude.is_finite()
+        && (-90.0..=90.0).contains(&latitude)
+        && (-180.0..=180.0).contains(&longitude)
+}
+fn distance_meters(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let r = 6_371_000.0_f64;
+    let dlat = (lat2 - lat1).to_radians();
+    let dlon = (lon2 - lon1).to_radians();
+    let a = (dlat / 2.0).sin().powi(2)
+        + lat1.to_radians().cos() * lat2.to_radians().cos() * (dlon / 2.0).sin().powi(2);
+    2.0 * r * a.sqrt().asin()
+}
+fn ip_allowlist_empty(value: &Value) -> bool {
+    value
+        .as_array()
+        .map(|items| items.is_empty())
+        .unwrap_or(true)
+}
+fn ip_allowed(value: &Value, source_ip: &str) -> bool {
+    !source_ip.is_empty()
+        && value
+            .as_array()
+            .map(|items| {
+                items.iter().any(|item| {
+                    item.as_str()
+                        .map(|ip| ip.trim() == source_ip)
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+}
+async fn get_face_policy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.app.attendance.manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let policy = load_face_policy(&state, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(json!({
+        "enabled": policy.enabled,
+        "allowedRadiusMeters": policy.allowed_radius_meters,
+        "deviceMode": policy.device_mode,
+        "networkMode": policy.network_mode,
+        "ipAllowlist": policy.ip_allowlist_json,
+        "livenessMode": policy.liveness_mode
+    }))))
+}
+
+async fn save_face_policy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<FacePolicyRequest>,
+) -> ApiResult<Value> {
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.app.attendance.manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if !(25..=5000).contains(&payload.allowed_radius_meters) {
+        return Err(AppError::validation(
+            "allowed radius must be 25-5000 meters",
+        ));
+    }
+    if !["off", "pending", "approved"].contains(&payload.device_mode.as_str())
+        || !["off", "optional", "required"].contains(&payload.network_mode.as_str())
+        || !["none", "basic", "provider"].contains(&payload.liveness_mode.as_str())
+        || payload
+            .ip_allowlist
+            .iter()
+            .any(|ip| ip.trim().is_empty() || ip.chars().count() > 64)
+    {
+        return Err(AppError::validation("face attendance policy is invalid"));
+    }
+    let ips: Vec<String> = payload
+        .ip_allowlist
+        .into_iter()
+        .map(|ip| ip.trim().to_string())
+        .filter(|ip| !ip.is_empty())
+        .collect();
+    let row = sqlx::query_scalar::<_, Value>(
+        r#"INSERT INTO staff_face_attendance_policies(tenant_id,branch_id,enabled,allowed_radius_meters,device_mode,network_mode,ip_allowlist_json,liveness_mode,updated_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT(tenant_id,branch_id) DO UPDATE SET enabled=EXCLUDED.enabled,allowed_radius_meters=EXCLUDED.allowed_radius_meters,device_mode=EXCLUDED.device_mode,network_mode=EXCLUDED.network_mode,ip_allowlist_json=EXCLUDED.ip_allowlist_json,liveness_mode=EXCLUDED.liveness_mode,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+           RETURNING jsonb_build_object('enabled',enabled,'allowedRadiusMeters',allowed_radius_meters,'deviceMode',device_mode,'networkMode',network_mode,'ipAllowlist',ip_allowlist_json,'livenessMode',liveness_mode)"#,
+    )
+    .bind(&tenant_id).bind(&branch_id).bind(payload.enabled).bind(payload.allowed_radius_meters).bind(&payload.device_mode).bind(&payload.network_mode).bind(json!(ips)).bind(&payload.liveness_mode).bind(&claims.sub)
+    .fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to save face attendance policy"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn approve_face_exception(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.app.attendance.manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = sqlx::query_as::<_, FaceExceptionApprovalRow>("SELECT staff_id,created_at FROM staff_face_attendance_exceptions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending'")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to load face attendance exception"))?.ok_or_else(|| AppError::not_found("face attendance exception was not found"))?;
+    let ist = FixedOffset::east_opt(19_800).expect("valid IST offset");
+    let business_date = row.created_at.with_timezone(&ist).date_naive();
+    let attendance = staff_attendance_service::clock_in(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &row.staff_id,
+        business_date,
+        Some(row.created_at),
+        "staff-app-face-approved",
+        "approved from face attendance exception",
+    )
+    .await?;
+    sqlx::query("UPDATE staff_face_attendance_exceptions SET status='approved',reviewed_by=$4,reviewed_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(&tenant_id).bind(&branch_id).bind(id.trim()).bind(&claims.sub).execute(&state.db).await.map_err(|_| AppError::internal("failed to approve face attendance exception"))?;
+    Ok(Json(ApiResponse::ok(
+        json!({"attendanceId": attendance.id, "status": "approved"}),
+    )))
+}
+async fn approve_face_device(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(device_uid): Path<String>,
+) -> ApiResult<Value> {
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.app.attendance.manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let device_uid = device_uid.trim();
+    if device_uid.is_empty() || device_uid.chars().count() > 200 {
+        return Err(AppError::validation("face device is invalid"));
+    }
+    let row = sqlx::query_scalar::<_, Value>(
+        "UPDATE staff_mobile_devices SET trust_status='approved',trusted_by=$4,trusted_at=NOW(),updated_at=NOW(),version=version+1 WHERE tenant_id=$1 AND branch_id=$2 AND device_uid=$3 AND active=TRUE RETURNING jsonb_build_object('deviceUid',device_uid,'trustStatus',trust_status,'trustedAt',trusted_at)",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(device_uid)
+    .bind(&claims.sub)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to approve face attendance device"))?
+    .ok_or_else(|| AppError::not_found("face attendance device was not found"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+async fn list_face_exceptions(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<Value>> {
+    ensure_overtime_access(
+        &claims,
+        &["staff.attendance.manage", "staff.app.attendance.manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_scalar::<_, Value>(
+        r#"SELECT jsonb_build_object(
+          'id', exception.id,
+          'staffId', exception.staff_id,
+          'staffName', COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),exception.staff_id),
+          'deviceUid', exception.device_uid,
+          'sourceIp', exception.source_ip,
+          'reasonCode', exception.reason_code,
+          'status', exception.status,
+          'distanceMeters', exception.distance_meters,
+          'accuracyMeters', exception.accuracy_meters,
+          'createdAt', exception.created_at
+        )
+        FROM staff_face_attendance_exceptions exception
+        LEFT JOIN staff ON staff.tenant_id=exception.tenant_id AND staff.branch_id=exception.branch_id AND staff.id=exception.staff_id
+        WHERE exception.tenant_id=$1 AND exception.branch_id=$2
+        ORDER BY exception.created_at DESC LIMIT 100"#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load face attendance exceptions"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
 async fn clock_in(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -222,6 +792,18 @@ async fn clock_in(
         payload.staff_id.trim(),
     )
     .await?;
+    let source = payload.source.as_deref().unwrap_or("manual").trim();
+    if source == "staff-app-face" {
+        enforce_face_attendance_policy(
+            &state,
+            &headers,
+            &tenant_id,
+            &branch_id,
+            &staff_id,
+            payload.face_scan.as_ref(),
+        )
+        .await?;
+    }
     let row = staff_attendance_service::clock_in(
         &state.db,
         &tenant_id,
@@ -229,7 +811,7 @@ async fn clock_in(
         &staff_id,
         payload.business_date,
         payload.clock_in_at,
-        payload.source.as_deref().unwrap_or("manual").trim(),
+        source,
         payload.comments.as_deref().unwrap_or("").trim(),
     )
     .await?;

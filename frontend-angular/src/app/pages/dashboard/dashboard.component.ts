@@ -141,7 +141,7 @@ export class DashboardComponent implements OnInit {
       .subscribe({
         next: (snapshot) => {
           this.snapshot = this.unwrap(snapshot) ?? EMPTY_SNAPSHOT;
-          this.status = 'ok';
+          this.status = this.sectionErrors.size ? 'degraded' : 'ok';
           this.loadedAt = new Date();
         },
         error: (error) => {
@@ -275,17 +275,21 @@ export class DashboardComponent implements OnInit {
   }
 
   private rangeQuery(): string {
-    const end = new Date();
-    const start = new Date(end);
+    const end = this.isoBusinessDate(new Date());
+    const start = new Date(`${end}T00:00:00+05:30`);
     start.setDate(start.getDate() - (this.periodDays - 1));
-    return `startDate=${this.isoDate(start)}&endDate=${this.isoDate(end)}`;
+    return `startDate=${this.isoBusinessDate(start)}&endDate=${end}`;
   }
 
-  private isoDate(value: Date): string {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  private isoBusinessDate(value: Date): string {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(value);
+    const byType = new Map(parts.map((part) => [part.type, part.value]));
+    return `${byType.get('year')}-${byType.get('month')}-${byType.get('day')}`;
   }
 
   private groupAppointmentsByDate(rows: AppointmentGroup[]): TrendPoint[] {

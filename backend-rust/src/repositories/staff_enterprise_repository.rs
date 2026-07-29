@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool};
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -37,6 +37,14 @@ pub struct ApprovalRequestRecord {
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct EarlyDepartureSchedule {
+    pub staff_id: String,
+    pub staff_name: String,
+    pub shift_start: NaiveTime,
+    pub shift_end: NaiveTime,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -157,6 +165,7 @@ pub struct SelfDashboardRecord {
     pub appointments: Value,
     pub sales: Value,
     pub leave_requests: Value,
+    pub payroll_profile: Value,
     pub payroll: Value,
     pub payroll_rules: Value,
     pub holidays: Value,
@@ -236,6 +245,7 @@ pub struct ManpowerForecastRecord {
 pub struct ReplacementContextRecord {
     pub appointment_id: String,
     pub absent_staff_id: String,
+    pub client_id: String,
     pub business_date: NaiveDate,
     pub start_time: NaiveTime,
     pub end_time: NaiveTime,
@@ -251,7 +261,12 @@ pub struct ReplacementCandidateRecord {
     pub leave_free: bool,
     pub slot_free: bool,
     pub service_match: bool,
+    pub department: String,
+    pub department_match: bool,
+    pub preferred_client: bool,
+    pub blackout_free: bool,
     pub workload_count: i64,
+    pub workload_minutes: i64,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -513,6 +528,47 @@ pub async fn list_approval_requests(
         .bind(tenant).bind(branch).bind(status).fetch_all(db).await
 }
 
+pub async fn list_self_early_departure_requests(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+) -> Result<Vec<ApprovalRequestRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,policy_id,request_type,entity_type,entity_id,amount_paise,status,current_step,steps,payload_json,requested_by,expires_at,version,created_at,updated_at FROM staff_approval_requests WHERE tenant_id=$1 AND branch_id=$2 AND requested_by=$3 AND request_type='early_departure' ORDER BY created_at DESC LIMIT 50")
+        .bind(tenant).bind(branch).bind(actor).fetch_all(db).await
+}
+
+pub async fn early_departure_schedule(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    business_date: NaiveDate,
+) -> Result<Option<EarlyDepartureSchedule>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT s.id staff_id,
+                  COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) staff_name,
+                  COALESCE(sc.shift1_start,sc.shift2_start) shift_start,
+                  COALESCE(sc.shift2_end,sc.shift1_end) shift_end
+             FROM staff s
+             JOIN users u ON u.tenant_id=s.tenant_id AND u.id=s.user_id AND u.active=TRUE
+             JOIN staff_schedules sc ON sc.tenant_id=s.tenant_id AND sc.branch_id=s.branch_id AND sc.staff_id=s.id AND sc.schedule_date=$4 AND sc.status='working'
+            WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.user_id=$3 AND s.active=TRUE"#,
+    )
+    .bind(tenant).bind(branch).bind(actor).bind(business_date).fetch_optional(db).await
+}
+
+pub async fn has_open_early_departure_request(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    business_date: NaiveDate,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM staff_approval_requests WHERE tenant_id=$1 AND branch_id=$2 AND requested_by=$3 AND request_type='early_departure' AND status IN ('pending','escalated','approved') AND payload_json->>'businessDate'=$4)")
+        .bind(tenant).bind(branch).bind(actor).bind(business_date.to_string()).fetch_one(db).await
+}
+
 pub async fn create_approval_request(
     db: &PgPool,
     tenant: &str,
@@ -533,6 +589,39 @@ pub async fn create_approval_request(
         .bind(tenant).bind(branch).bind(policy_id).bind(request_type).bind(entity_type).bind(entity_id).bind(amount).bind(steps).bind(payload).bind(actor).bind(expires_at).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO staff_approval_actions(tenant_id,branch_id,approval_request_id,step_order,action,actor_user_id,actor_role) VALUES($1,$2,$3,1,'requested',$4,$5)")
         .bind(tenant).bind(branch).bind(&row.id).bind(actor).bind(role).execute(&mut *tx).await?;
+    let permission = if request_type == "early_departure" {
+        "staff.attendance.manage"
+    } else {
+        "staff.governance.manage"
+    };
+    let alternate_permission = if request_type == "early_departure" {
+        "staff.app.attendance.manage"
+    } else {
+        "staff.manage"
+    };
+    let request_label = request_type.replace('_', " ");
+    let staff_name = payload
+        .get("staffName")
+        .and_then(Value::as_str)
+        .unwrap_or("A staff member");
+    let title = format!("{} request", request_label);
+    let body = format!("{staff_name} submitted a {request_label} request for approval.");
+    let metadata = json!({"deepLink":"/staff/control-center?tab=governance","status":"pending","requestType":request_type});
+    sqlx::query(
+        r#"INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json)
+           SELECT $1,$2,u.id,$3,'staff_approval',$5,$6,'staff_approval_request',$7,$8
+             FROM users u
+             LEFT JOIN user_branch_roles ubr ON ubr.tenant_id=u.tenant_id AND ubr.user_id=u.id AND ubr.branch_id=$2 AND ubr.active=TRUE
+             LEFT JOIN roles r ON r.tenant_id=u.tenant_id AND r.id=COALESCE(ubr.role_id,u.role_id)
+            WHERE u.tenant_id=$1 AND u.active=TRUE AND u.id<>$3
+              AND COALESCE(ubr.branch_id,u.branch_id)=$2
+              AND (REGEXP_REPLACE(LOWER(COALESCE(ubr.role_name,u.role_name)), '[-_ ]', '', 'g') IN ('owner','admin','manager','regionalhead')
+                   OR ((COALESCE(r.permissions_json,'[]'::jsonb) ? $4 OR COALESCE(r.permissions_json,'[]'::jsonb) ? $9)
+                       AND NOT (COALESCE(r.denied_permissions_json,'[]'::jsonb) ? $4)
+                       AND NOT (COALESCE(r.denied_permissions_json,'[]'::jsonb) ? $9)))"#,
+    )
+    .bind(tenant).bind(branch).bind(actor).bind(permission).bind(title).bind(body).bind(&row.id).bind(metadata).bind(alternate_permission)
+    .execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(row)
 }
@@ -570,6 +659,21 @@ pub async fn decide_approval(
     if row.is_some() {
         sqlx::query("INSERT INTO staff_approval_actions(tenant_id,branch_id,approval_request_id,step_order,action,actor_user_id,actor_role,comments) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(tenant).bind(branch).bind(id).bind(next_step.map(|step|step-1).or_else(||row.as_ref().map(|r|r.current_step))).bind(decision).bind(actor).bind(role).bind(comments).execute(&mut *tx).await?;
+        if let Some(request) = row.as_ref().filter(|request| request.status != "pending") {
+            sqlx::query("UPDATE notifications SET is_read=TRUE,metadata_json=jsonb_set(metadata_json,'{status}',to_jsonb($4::TEXT),TRUE),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND resource_type='staff_approval_request' AND resource_id=$3")
+                .bind(tenant).bind(branch).bind(id).bind(&request.status).execute(&mut *tx).await?;
+            let label = request.request_type.replace('_', " ");
+            let title = format!("{label} {}", request.status);
+            let body = format!("Your {label} request was {}.", request.status);
+            let deep_link = if request.request_type == "early_departure" {
+                "/staff/attendance"
+            } else {
+                "/staff/dashboard"
+            };
+            sqlx::query("INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json) VALUES($1,$2,$3,$4,'staff_approval_decision',$5,$6,'staff_approval_request',$7,$8)")
+                .bind(tenant).bind(branch).bind(&request.requested_by).bind(actor).bind(title).bind(body).bind(id)
+                .bind(json!({"deepLink":deep_link,"status":request.status,"requestType":request.request_type})).execute(&mut *tx).await?;
+        }
     }
     tx.commit().await?;
     Ok(row)
@@ -635,7 +739,40 @@ pub async fn self_dashboard(
           AND (sale.staff_id=s.id OR attribution.sale_id IS NOT NULL)
       ),'[]'::jsonb) sales,
       COALESCE((SELECT jsonb_agg(to_jsonb(l)-'tenant_id'-'branch_id' ORDER BY l.created_at DESC) FROM (SELECT * FROM staff_leave_requests lr WHERE lr.tenant_id=s.tenant_id AND lr.branch_id=s.branch_id AND lr.staff_id=s.id ORDER BY lr.created_at DESC LIMIT 20) l),'[]'::jsonb) leave_requests,
-      COALESCE((SELECT jsonb_agg(jsonb_build_object('runId',r.id,'periodStart',r.period_start,'periodEnd',r.period_end,'status',r.status,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'payslipPath','/staff/self/payslips/'||r.id) ORDER BY r.period_end DESC) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id LEFT JOIN staff_payroll_payouts p ON p.payroll_item_id=i.id AND p.tenant_id=i.tenant_id AND p.branch_id=i.branch_id WHERE i.tenant_id=s.tenant_id AND i.branch_id=s.branch_id AND i.staff_id=s.id AND r.status IN ('finalized','partially_paid','paid')),'[]'::jsonb) payroll,
+      COALESCE((SELECT jsonb_build_object('rateType',pr.rate_type,'amountPaise',pr.amount_paise,'effectiveFrom',pr.effective_from) FROM staff_pay_rates pr WHERE pr.tenant_id=s.tenant_id AND pr.branch_id=s.branch_id AND pr.staff_id=s.id AND pr.active=TRUE AND pr.effective_from<=$4 ORDER BY pr.effective_from DESC,pr.created_at DESC LIMIT 1),'{}'::jsonb) payroll_profile,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'runId',r.id,'periodStart',r.period_start,'periodEnd',r.period_end,'status',r.status,
+        'presentDaysX2',COALESCE((i.calculation_json->'salaryRow'->>'presentDaysX2')::INTEGER,i.attendance_days_x2),
+        'absentDaysX2',COALESCE((i.calculation_json->'salaryRow'->>'absentDaysX2')::INTEGER,0),
+        'halfDayCount',COALESCE((i.calculation_json->'salaryRow'->>'halfDayCount')::INTEGER,0),
+        'paidLeaveDaysX2',i.paid_leave_days_x2,
+        'workedMinutes',i.worked_minutes,'scheduledMinutes',COALESCE((i.calculation_json->'salaryRow'->>'scheduledMinutes')::INTEGER,0),
+        'lateMinutes',COALESCE((i.calculation_json->'salaryRow'->>'lateMinutes')::INTEGER,0),
+        'earlyLeaveMinutes',COALESCE((i.calculation_json->'salaryRow'->>'earlyLeaveMinutes')::INTEGER,0),
+        'earnedSalaryPaise',i.earned_salary_paise,'overtimePaise',i.overtime_paise,
+        'approvedOvertimeMinutes',COALESCE((i.calculation_json->'salaryRow'->>'approvedOvertimeMinutes')::INTEGER,0),
+        'overtimeRatePaisePerHour',COALESCE((i.calculation_json->'salaryRow'->>'overtimeRatePaisePerHour')::BIGINT,0),
+        'commissionPaise',i.commission_paise,
+        'serviceCommissionPaise',COALESCE((i.calculation_json->'salaryRow'->>'serviceCommissionPaise')::BIGINT,0),
+        'productCommissionPaise',COALESCE((i.calculation_json->'salaryRow'->>'productCommissionPaise')::BIGINT,0),
+        'membershipCommissionPaise',COALESCE((i.calculation_json->'salaryRow'->>'membershipCommissionPaise')::BIGINT,0),
+        'packageCommissionPaise',COALESCE((i.calculation_json->'salaryRow'->>'packageCommissionPaise')::BIGINT,0),
+        'serviceSalesPaise',COALESCE((i.calculation_json->'salaryRow'->>'serviceSalesPaise')::BIGINT,0),
+        'productSalesPaise',COALESCE((i.calculation_json->'salaryRow'->>'productSalesPaise')::BIGINT,0),
+        'membershipSalesPaise',COALESCE((i.calculation_json->'salaryRow'->>'membershipSalesPaise')::BIGINT,0),
+        'packageSalesPaise',COALESCE((i.calculation_json->'salaryRow'->>'packageSalesPaise')::BIGINT,0),
+        'attendancePenaltyPaise',COALESCE((i.calculation_json->'salaryRow'->>'attendancePenaltyPaise')::BIGINT,i.penalty_paise),
+        'ruleFinePaise',COALESCE((i.calculation_json->'salaryRow'->>'ruleFinePaise')::BIGINT,0),
+        'ruleDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'ruleDeductionPaise')::BIGINT,0),
+        'lateDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'lateDeductionPaise')::BIGINT,0),
+        'absenceDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'absenceDeductionPaise')::BIGINT,0),
+        'fineDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'fineDeductionPaise')::BIGINT,(i.calculation_json->'salaryRow'->>'ruleFinePaise')::BIGINT,0),
+        'statutoryEmployeePaise',COALESCE((i.calculation_json->'salaryRow'->>'statutoryEmployeePaise')::BIGINT,0),
+        'advanceRecoveryPaise',COALESCE((i.calculation_json->'salaryRow'->>'advanceRecoveryPaise')::BIGINT,0),
+        'adjustmentPaise',i.adjustment_paise,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,
+        'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'paidAt',p.paid_at,'finalizedAt',r.finalized_at,
+        'payslipPath','/staff/self/payslips/'||r.id
+      ) ORDER BY r.period_end DESC) FROM staff_payroll_items i JOIN staff_payroll_runs r ON r.id=i.payroll_run_id AND r.tenant_id=i.tenant_id AND r.branch_id=i.branch_id LEFT JOIN staff_payroll_payouts p ON p.payroll_item_id=i.id AND p.tenant_id=i.tenant_id AND p.branch_id=i.branch_id WHERE i.tenant_id=s.tenant_id AND i.branch_id=s.branch_id AND i.staff_id=s.id AND r.status IN ('finalized','partially_paid','paid')),'[]'::jsonb) payroll,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',pr.id,'name',pr.name,'kind',pr.kind,'amountPaise',pr.amount_paise,'triggerType',pr.trigger_type,'triggerCount',pr.trigger_count,'applicationMode',pr.application_mode,'autoApply',pr.auto_apply,'notes',pr.notes) ORDER BY pr.name,pr.id) FROM staff_payroll_adjustment_rules pr WHERE pr.tenant_id=s.tenant_id AND pr.branch_id=s.branch_id AND pr.active=TRUE),'[]'::jsonb) payroll_rules,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',h.id,'holidayDate',h.holiday_date,'name',h.name,'isPaid',h.is_paid) ORDER BY h.holiday_date) FROM staff_holidays h WHERE h.tenant_id=s.tenant_id AND h.branch_id=s.branch_id AND h.active=TRUE AND h.holiday_date BETWEEN $4-INTERVAL '30 days' AND $4+INTERVAL '365 days'),'[]'::jsonb) holidays
       FROM staff s
@@ -1031,7 +1168,7 @@ pub async fn replacement_context(
     branch: &str,
     appointment: &str,
 ) -> Result<Option<ReplacementContextRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id appointment_id,staff_id absent_staff_id,(start_at AT TIME ZONE 'Asia/Kolkata')::DATE business_date,(start_at AT TIME ZONE 'Asia/Kolkata')::TIME start_time,(end_at AT TIME ZONE 'Asia/Kolkata')::TIME end_time,service_ids_json FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND LOWER(status) NOT IN ('cancelled','canceled','void','completed','paid','closed')")
+    sqlx::query_as("SELECT id appointment_id,staff_id absent_staff_id,client_id,(start_at AT TIME ZONE 'Asia/Kolkata')::DATE business_date,(start_at AT TIME ZONE 'Asia/Kolkata')::TIME start_time,(end_at AT TIME ZONE 'Asia/Kolkata')::TIME end_time,service_ids_json FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND LOWER(status) NOT IN ('cancelled','canceled','void','completed','paid','closed')")
         .bind(tenant).bind(branch).bind(appointment).fetch_optional(db).await
 }
 
@@ -1045,19 +1182,26 @@ pub async fn replacement_candidates(
     start: NaiveTime,
     end: NaiveTime,
     service_ids: &[String],
+    client_id: &str,
 ) -> Result<Vec<ReplacementCandidateRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT s.id staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name)),s.id) staff_name,
-          EXISTS(SELECT 1 FROM staff_schedules sc WHERE sc.tenant_id=$1 AND sc.branch_id=$2 AND sc.staff_id=s.id AND sc.schedule_date=$5 AND sc.status='working' AND ((sc.shift1_start<=$6 AND sc.shift1_end>=$7) OR (sc.shift2_start<=$6 AND sc.shift2_end>=$7))) schedule_match,
+          (NOT EXISTS(SELECT 1 FROM staff_schedules sc WHERE sc.tenant_id=$1 AND sc.branch_id=$2 AND sc.staff_id=s.id AND sc.schedule_date=$5)
+            OR EXISTS(SELECT 1 FROM staff_schedules sc WHERE sc.tenant_id=$1 AND sc.branch_id=$2 AND sc.staff_id=s.id AND sc.schedule_date=$5 AND sc.status='working' AND ((sc.shift1_start<=$6 AND sc.shift1_end>=$7) OR (sc.shift2_start<=$6 AND sc.shift2_end>=$7)))) schedule_match,
           NOT EXISTS(SELECT 1 FROM staff_leave_requests lr WHERE lr.tenant_id=$1 AND lr.branch_id=$2 AND lr.staff_id=s.id AND lr.status='approved' AND $5 BETWEEN lr.start_date AND lr.end_date) leave_free,
           NOT EXISTS(SELECT 1 FROM appointments ap WHERE ap.tenant_id=$1 AND ap.branch_id=$2 AND ap.staff_id=s.id AND ap.id<>$4 AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show') AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE=$5 AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::TIME<$7 AND (ap.end_at AT TIME ZONE 'Asia/Kolkata')::TIME>$6) slot_free,
-          NOT EXISTS(SELECT requested.service_id FROM UNNEST($8::TEXT[]) requested(service_id) WHERE NOT EXISTS(SELECT 1 FROM staff_catalog_assignments ca WHERE ca.tenant_id=$1 AND ca.branch_id=$2 AND ca.staff_id=s.id AND ca.item_type='service' AND ca.item_id=requested.service_id)) service_match,
-          (SELECT COUNT(*) FROM appointments ap WHERE ap.tenant_id=$1 AND ap.branch_id=$2 AND ap.staff_id=s.id AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE=$5 AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show'))::BIGINT workload_count
+          NOT EXISTS(SELECT requested.service_id FROM UNNEST($8::TEXT[]) requested(service_id) WHERE NOT EXISTS(SELECT 1 FROM staff_catalog_assignments ca WHERE ca.tenant_id=$1 AND ca.branch_id=$2 AND ca.staff_id=s.id AND ca.item_type='service' AND ca.item_id=requested.service_id) AND NOT EXISTS(SELECT 1 FROM staff_service_assignments sa WHERE sa.tenant_id=$1 AND sa.branch_id=$2 AND sa.staff_id=s.id AND sa.service_id=requested.service_id)) service_match,
+          COALESCE((SELECT TRIM(profile.department) FROM staff_profiles profile WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.staff_id=s.id),'') department,
+          NOT EXISTS(SELECT 1 FROM services requested WHERE requested.tenant_id=$1 AND requested.branch_id=$2 AND requested.id=ANY($8::TEXT[]) AND TRIM(requested.category)<>'' AND LOWER(TRIM(requested.category))<>LOWER(COALESCE((SELECT TRIM(profile.department) FROM staff_profiles profile WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.staff_id=s.id),''))) department_match,
+          EXISTS(SELECT 1 FROM clients client WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$9 AND client.preferred_staff_id=s.id) preferred_client,
+          NOT EXISTS(SELECT 1 FROM appointment_blackouts blackout WHERE blackout.tenant_id=$1 AND blackout.branch_id=$2 AND (blackout.staff_id='' OR blackout.staff_id=s.id) AND (((blackout.blocked_from AT TIME ZONE 'Asia/Kolkata')::DATE=$5 AND (blackout.blocked_from AT TIME ZONE 'Asia/Kolkata')::TIME<$7 AND (blackout.blocked_until AT TIME ZONE 'Asia/Kolkata')::TIME>$6) OR (blackout.blocked_from IS NULL AND blackout.blocked_until IS NULL AND blackout.blackout_date=$5::TEXT))) blackout_free,
+          (SELECT COUNT(*) FROM appointments ap WHERE ap.tenant_id=$1 AND ap.branch_id=$2 AND ap.staff_id=s.id AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE=$5 AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show'))::BIGINT workload_count,
+          COALESCE((SELECT SUM(GREATEST(0,EXTRACT(EPOCH FROM (ap.end_at-ap.start_at))/60)) FROM appointments ap WHERE ap.tenant_id=$1 AND ap.branch_id=$2 AND ap.staff_id=s.id AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE=$5 AND LOWER(ap.status) NOT IN ('cancelled','canceled','void','no_show')),0)::BIGINT workload_minutes
         FROM staff s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.active=TRUE AND s.id<>$3
         ORDER BY workload_count,staff_name,s.id"#,
     )
-    .bind(tenant).bind(branch).bind(absent_staff).bind(appointment).bind(date).bind(start).bind(end).bind(service_ids).fetch_all(db).await
+    .bind(tenant).bind(branch).bind(absent_staff).bind(appointment).bind(date).bind(start).bind(end).bind(service_ids).bind(client_id).fetch_all(db).await
 }
 
 pub async fn create_replacement_recommendation(
@@ -1609,4 +1753,35 @@ pub async fn complete_coaching_action(
         .bind(tenant).bind(branch).bind(&row.coaching_goal_id).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(Some(row))
+}
+
+pub async fn management_recommendations(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Value, sqlx::Error> {
+    let (products, brands, resources, unassigned) = tokio::try_join!(
+        sqlx::query_as::<_, (String, String, String, i32, i32)>(
+            "SELECT id,name,brand,stock_quantity,reorder_point FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND stock_quantity<=reorder_point ORDER BY (reorder_point-stock_quantity) DESC,name LIMIT 8",
+        ).bind(tenant).bind(branch).fetch_all(db),
+        sqlx::query_as::<_, (String, i64, i64, i64)>(
+            "SELECT item.brand,SUM(line.quantity)::BIGINT,SUM(line.line_total_paise)::BIGINT,COUNT(DISTINCT item.id)::BIGINT FROM inventory_items item JOIN pos_sale_lines line ON line.tenant_id=item.tenant_id AND line.branch_id=item.branch_id AND line.item_id=item.id AND line.line_type='product' JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.brand<>'' AND sale.business_date BETWEEN $3 AND $4 AND sale.status NOT IN ('draft','open','voided','cancelled','refunded') GROUP BY item.brand ORDER BY SUM(line.line_total_paise) DESC LIMIT 5",
+        ).bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db),
+        sqlx::query_as::<_, (String, String, i64, i64)>(
+            "SELECT resource.name,resource.kind,COUNT(appointment.id)::BIGINT,COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))/60),0)::BIGINT FROM appointment_resources resource LEFT JOIN appointments appointment ON appointment.tenant_id=resource.tenant_id AND appointment.branch_id=resource.branch_id AND appointment.chair_room_id=resource.id AND appointment.start_at >= $3::DATE AND appointment.start_at < ($4::DATE + 1) AND appointment.status NOT IN ('cancelled','canceled','void','voided','no_show','no-show') WHERE resource.tenant_id=$1 AND resource.branch_id=$2 AND resource.active=TRUE GROUP BY resource.id,resource.name,resource.kind HAVING COUNT(appointment.id)>0 ORDER BY COUNT(appointment.id) DESC LIMIT 5",
+        ).bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db),
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::BIGINT FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND chair_room_id IS NULL AND start_at >= $3::DATE AND start_at < ($4::DATE + 1) AND status NOT IN ('cancelled','canceled','void','voided','no_show','no-show')",
+        ).bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db),
+    )?;
+    let mut rows = Vec::new();
+    rows.extend(products.into_iter().map(|(id, name, brand, stock, reorder)| json!({"type":"product","title":format!("Reorder {name}"),"reason":if stock == 0 { "Out of stock" } else { "Stock reached reorder point" },"priority":if stock == 0 { "critical" } else { "high" },"evidence":{"inventoryItemId":id,"brand":brand,"stock":stock,"reorderPoint":reorder},"route":"/inventory"})));
+    rows.extend(brands.into_iter().map(|(brand, quantity, revenue, products)| json!({"type":"brand","title":format!("Prioritize {brand}"),"reason":"Highest product demand in the selected period","priority":"medium","evidence":{"quantitySold":quantity,"revenuePaise":revenue,"products":products},"route":"/inventory"})));
+    if unassigned > 0 {
+        rows.push(json!({"type":"equipment","title":"Assign chairs or rooms","reason":"Appointments are not linked to a resource","priority":"high","evidence":{"unassignedAppointments":unassigned},"route":"/appointments"}));
+    }
+    rows.extend(resources.into_iter().map(|(name, kind, appointments, minutes)| json!({"type":"equipment","title":format!("Review {name} capacity"),"reason":"Most-used active resource in the selected period","priority":"medium","evidence":{"kind":kind,"appointments":appointments,"bookedMinutes":minutes},"route":"/appointments"})));
+    Ok(Value::Array(rows))
 }

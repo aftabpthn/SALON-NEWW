@@ -123,11 +123,15 @@
         @if (rows.length) {
           <table><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th>@if (activeTab === 'approvals') {
           <th>{{ 'inventory.ui.c51f7b7227' | translate }}</th>
-          }<th>{{ 'inventory.ui.bae7d5be70' | translate }}</th></tr></thead>
+          }<th>{{ 'inventory.ui.bae7d5be70' | translate }}</th>@if (activeTab === 'approvals' && canReview) {
+          <th>Actions</th>
+          }</tr></thead>
           <tbody>@for (row of rows; track row) {
             <tr><td>{{ date(row.createdAt) }}</td><td>{{ row.serviceName || '—' }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.staffName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td>@if (activeTab === 'approvals') {
             <td>{{ approvalThreshold(row) }}%</td>
-            }<td><span class="status">{{ activeTab === 'approvals' ? 'Pending review' : 'Recorded' }}</span></td></tr>
+            }<td><span class="status">{{ activeTab === 'approvals' ? 'Pending review' : 'Recorded' }}</span></td>@if (activeTab === 'approvals' && canReview) {
+            <td><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">Approve</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">Reject</button></div></td>
+            }</tr>
           }</tbody>
         </table>
       } @else {

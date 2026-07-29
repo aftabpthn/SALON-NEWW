@@ -120,6 +120,15 @@ pub fn router() -> Router<AppState> {
         )
         .route("/customer/referrals", get(customer_referrals))
         .route("/customer/offers", get(customer_offers))
+        .route("/customer/marketing-offers", get(customer_marketing_offers))
+        .route(
+            "/customer/marketing-offers/events",
+            post(customer_marketing_offer_event),
+        )
+        .route(
+            "/customer/marketing-offers/:id/creative",
+            get(customer_marketing_offer_creative),
+        )
         .route(
             "/customer/referrals/code",
             post(create_customer_referral_code),
@@ -336,6 +345,7 @@ struct BookingRequest {
     notes: Option<String>,
     rebook_from_booking_id: Option<String>,
     source: Option<String>,
+    offer_code: Option<String>,
     #[serde(default = "default_payment_mode")]
     payment_mode: String,
     #[serde(default)]
@@ -1346,9 +1356,16 @@ async fn customer_invoice_payment_link(
     {
         return Err(AppError::validation("customer invoice is not payable"));
     }
-    let provider = body
-        .provider
-        .or_else(|| pos::configured_customer_payment_provider(&state).map(str::to_string));
+    let provider = match body.provider {
+        Some(provider) => Some(provider),
+        None => pos::configured_customer_payment_provider(
+            &state,
+            &invoice.tenant_id,
+            &invoice.branch_id,
+        )
+        .await?
+        .map(str::to_string),
+    };
     if provider.is_none() {
         return Err(AppError::service_unavailable(
             "PAYMENT_PROVIDER_NOT_CONFIGURED",
@@ -1895,7 +1912,7 @@ async fn marketplace_offers(
     if branch_id.len() > 120 {
         return Err(AppError::validation("branchId is invalid"));
     }
-    let rows = repo::marketplace_offers(&state.db, branch_id)
+    let rows = repo::marketplace_offers(&state.db, branch_id, "")
         .await
         .map_err(|_| AppError::internal("failed to load marketplace offers"))?;
     let offer_ids = rows
@@ -1914,6 +1931,14 @@ async fn marketplace_offer_event(
     State(state): State<AppState>,
     Json(body): Json<MarketplaceOfferEventRequest>,
 ) -> ApiResult<Value> {
+    record_marketing_offer_click(&state, &body, "").await
+}
+
+async fn record_marketing_offer_click(
+    state: &AppState,
+    body: &MarketplaceOfferEventRequest,
+    account_id: &str,
+) -> ApiResult<Value> {
     let channel = body.channel.trim().to_ascii_lowercase();
     if body.offer_id.trim().is_empty()
         || body.offer_id.trim().len() > 120
@@ -1924,8 +1949,10 @@ async fn marketplace_offer_event(
     let recorded = sqlx::query_scalar::<_, String>(r#"INSERT INTO marketing_offer_events(tenant_id,branch_id,offer_id,event_type,channel)
       SELECT tenant_id,branch_id,id,'click',$2 FROM pos_coupons
       WHERE id=$1 AND active=TRUE AND approval_status='approved' AND show_in_customer_app=TRUE
+        AND (target_client_id IS NULL OR ($3<>'' AND EXISTS(SELECT 1 FROM customer_account_clients link
+          WHERE link.account_id=$3 AND link.tenant_id=pos_coupons.tenant_id AND link.branch_id=pos_coupons.branch_id AND link.client_id=pos_coupons.target_client_id)))
         AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW()) RETURNING id"#)
-        .bind(body.offer_id.trim()).bind(&channel).fetch_optional(&state.db).await
+        .bind(body.offer_id.trim()).bind(&channel).bind(account_id).fetch_optional(&state.db).await
         .map_err(|_| AppError::internal("failed to track offer click"))?
         .ok_or_else(|| AppError::not_found("active offer was not found"))?;
     Ok(Json(ApiResponse::ok(
@@ -1937,7 +1964,7 @@ async fn marketplace_offer_creative(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Response<Body>, AppError> {
-    let row = repo::marketplace_offer_creative(&state.db, id.trim())
+    let row = repo::marketplace_offer_creative(&state.db, id.trim(), "")
         .await
         .map_err(|_| AppError::internal("failed to load marketplace offer creative"))?
         .ok_or_else(|| AppError::not_found("offer creative was not found"))?;
@@ -1946,6 +1973,48 @@ async fn marketplace_offer_creative(
         .header(header::CACHE_CONTROL, "public, max-age=300")
         .body(Body::from(row.1))
         .map_err(|_| AppError::internal("failed to stream marketplace offer creative"))
+}
+
+async fn customer_marketing_offers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<MarketplaceOffersQuery>,
+) -> ApiResult<Vec<Value>> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    let branch_id = query.branch_id.as_deref().unwrap_or("").trim();
+    if branch_id.len() > 120 {
+        return Err(AppError::validation("branchId is invalid"));
+    }
+    let rows = repo::marketplace_offers(&state.db, branch_id, &claims.sub)
+        .await
+        .map_err(|_| AppError::internal("failed to load customer offers"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn customer_marketing_offer_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<MarketplaceOfferEventRequest>,
+) -> ApiResult<Value> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    record_marketing_offer_click(&state, &body, &claims.sub).await
+}
+
+async fn customer_marketing_offer_creative(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    let row = repo::marketplace_offer_creative(&state.db, id.trim(), &claims.sub)
+        .await
+        .map_err(|_| AppError::internal("failed to load customer offer creative"))?
+        .ok_or_else(|| AppError::not_found("offer creative was not found"))?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, row.0)
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .body(Body::from(row.1))
+        .map_err(|_| AppError::internal("failed to stream customer offer creative"))
 }
 async fn business(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Value> {
     let mut profile = repo::business(&state.db, &id)
@@ -2168,12 +2237,19 @@ async fn create_customer_booking(
                 "booking source is invalid",
             ));
         }
+        let offer_code = body.offer_code.as_deref().unwrap_or("").trim();
+        if offer_code.len() > 120 {
+            return Err(appointments::ApiError::bad_request("offerCode is invalid"));
+        }
         let valid = sqlx::query_scalar::<_, bool>(r#"SELECT EXISTS(SELECT 1 FROM pos_coupons offer
           WHERE offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=$3
             AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_customer_app=TRUE
+            AND (offer.target_client_id IS NULL OR EXISTS(SELECT 1 FROM customer_account_clients link
+              WHERE link.account_id=$6 AND link.tenant_id=offer.tenant_id AND link.branch_id=offer.branch_id AND link.client_id=offer.target_client_id))
             AND (offer.starts_at IS NULL OR offer.starts_at<=NOW()) AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())
-            AND (CARDINALITY(offer.target_service_ids)=0 OR offer.target_service_ids && $4))"#)
-            .bind(booking_tenant_id).bind(booking_branch_id).bind(parts[1]).bind(&service_ids)
+            AND (CARDINALITY(offer.target_service_ids)=0 OR offer.target_service_ids && $4)
+            AND ($5='' OR UPPER(offer.code)=UPPER($5)))"#)
+            .bind(booking_tenant_id).bind(booking_branch_id).bind(parts[1]).bind(&service_ids).bind(offer_code).bind(&claims.sub)
             .fetch_one(&state.db).await
             .map_err(|_| appointments::ApiError::internal("failed to validate booking source"))?;
         if !valid {
@@ -2609,9 +2685,16 @@ async fn customer_booking_self_pay_link(
             "customer booking invoice is not payable",
         ));
     }
-    let provider = body
-        .provider
-        .or_else(|| pos::configured_customer_payment_provider(&state).map(str::to_string));
+    let provider = match body.provider {
+        Some(provider) => Some(provider),
+        None => pos::configured_customer_payment_provider(
+            &state,
+            &invoice.tenant_id,
+            &invoice.branch_id,
+        )
+        .await?
+        .map(str::to_string),
+    };
     if provider.is_none() {
         return Err(AppError::service_unavailable(
             "PAYMENT_PROVIDER_NOT_CONFIGURED",

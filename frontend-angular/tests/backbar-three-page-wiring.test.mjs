@@ -19,7 +19,7 @@ test('8th-point inventory workflow exposes the three approved page views', () =>
   assert.match(recipes, /Service Recipe Command Center/);
   assert.match(recipes, /Demand 15 Days/);
   assert.match(consume, /Live Product Consume/);
-  assert.match(consume, /Over-limit usage requires owner approval/);
+  assert.match(consume, /Over-limit usage requires (owner|manager) approval/);
   assert.match(containers, /Backbar Container Control/);
   assert.match(containers, /Product 360/);
 });
@@ -33,6 +33,23 @@ test('backbar pages share one API service and reload real server data after writ
   assert.match(consume, /BackbarControlService/);
   assert.match(containers, /await this\.load\(\)/);
   assert.doesNotMatch(service, /mock|dummy|sample/i);
+});
+
+test('service recipe approval queue exposes permission-gated approve and reject actions', () => {
+  const component = readFrontend('src/app/pages/inventory/service-recipes/service-recipes-page.component.ts');
+  const template = readFrontend('src/app/pages/inventory/service-recipes/service-recipes-page.component.html');
+  const service = readFrontend('src/app/features/inventory/backbar-control.service.ts');
+  const route = readBackend('src/routes/inventory.rs');
+  const adjustment = readBackend('src/services/inventory_adjustment_service.rs');
+
+  assert.match(component, /hasRole\('owner'\).*hasPermission\('inventory\.approve'\)/);
+  assert.match(component, /reviewUsage\(row\.id, \{ decision, reviewNote:/);
+  assert.match(component, /this\.usage = await this\.get<Usage\[]>\('\/inventory\/backbar-usage\?limit=500'\)/);
+  assert.match(template, /\(click\)="review\(row, 'approve'\)"/);
+  assert.match(template, /\(click\)="review\(row, 'reject'\)"/);
+  assert.match(service, /\/inventory\/backbar-usage\/\$\{id\}\/review/);
+  assert.match(route, /permission == "inventory\.approve"/);
+  assert.match(adjustment, /backbar usage requester cannot approve their own variance/);
 });
 
 test('backend rejects a second open container for the same product', () => {

@@ -23,3 +23,20 @@ export function addBusinessDays(value: string, days: number): string {
 export function businessDateOffset(days: number, value = businessDate()): string {
   return addBusinessDays(value, days);
 }
+
+export function displayBusinessDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
+
+export function parseDisplayBusinessDate(value: string): string {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return "";
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
+    ? `${match[3]}-${match[2]}-${match[1]}`
+    : "";
+}

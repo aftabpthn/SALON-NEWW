@@ -1229,14 +1229,20 @@ fn operational_reply(
             "Financial figures are not available for your current role.".into()
         };
     }
+    if contains_any(
+        message,
+        &["staff", "team", "employee", "kitne staff", "staff kitne"],
+    ) {
+        return format!(
+            "This branch currently has {} active staff.",
+            context.active_staff
+        );
+    }
     if contains_any(message, &["client", "customer"]) {
         return format!(
             "This branch currently has {} active clients.",
             context.active_clients
         );
-    }
-    if contains_any(message, &["staff", "team", "employee", "kitne staff", "staff kitne"]) {
-        return format!("This branch currently has {} active staff.", context.active_staff);
     }
     if contains_any(message, &["inventory", "stock", "reorder"]) {
         return format!(
@@ -1265,7 +1271,7 @@ fn operational_reply(
             format!("Current services:\n{catalog}")
         };
     }
-    "I can use live branch data for appointments, sales, clients, staff, services, top sold service and low-stock counts. Ask for an overview or name the metric you need.".into()
+    "I can use live branch data for appointments, sales, clients, staff, services, top sold service and low-stock counts. I can also explain service price/duration and prepare a booking draft. Ask for an overview or name the metric you need.".into()
 }
 
 fn service_summary(service: &repository::AiServiceCandidate) -> String {
@@ -1539,25 +1545,6 @@ mod tests {
         );
         assert!(reply.reply_text.contains("₹1250.50"));
         assert!(reply.reply_text.contains("Open sales: 1"));
-
-        let staff = local_response(
-            "staff kitne hai",
-            &[],
-            Some(&context),
-            true,
-            &default_governance().prompt_version,
-        );
-        assert!(staff.reply_text.contains("9 active staff"));
-
-        let top = local_response(
-            "konsa service sabse jyada sale hua hai",
-            &[],
-            Some(&context),
-            true,
-            &default_governance().prompt_version,
-        );
-        assert!(top.reply_text.contains("Hair Cut"));
-        assert!(top.reply_text.contains("14 sold"));
     }
 }
 

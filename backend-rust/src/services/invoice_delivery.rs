@@ -1,3 +1,8 @@
+use lettre::{
+    message::{header::ContentType, MultiPart, SinglePart},
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
+};
 use serde_json::Value;
 
 use crate::{config::Settings, models::common::AppError};
@@ -7,6 +12,11 @@ pub async fn deliver(settings: &Settings, payload: &Value) -> Result<String, App
         && (settings.whatsapp_cloud_enabled() || settings.whatsapp_benefit_enabled())
     {
         return deliver_whatsapp_cloud(settings, payload).await;
+    }
+    if payload.get("channel").and_then(Value::as_str) == Some("email")
+        && settings.smtp_email_enabled()
+    {
+        return deliver_smtp(settings, payload).await;
     }
     let url = settings
         .invoice_delivery_webhook_url
@@ -40,6 +50,103 @@ pub async fn deliver(settings: &Settings, payload: &Value) -> Result<String, App
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_string())
+}
+
+async fn deliver_smtp(settings: &Settings, payload: &Value) -> Result<String, AppError> {
+    let required = |name| {
+        payload
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| AppError::validation(format!("email {name} is required")))
+    };
+    let recipient = required("recipient")?;
+    let subject = required("subject")?;
+    let body = required("message")?;
+    let from = settings.smtp_from.as_deref().unwrap_or_default();
+    let mut builder = Message::builder()
+        .from(
+            from.parse()
+                .map_err(|_| AppError::validation("SMTP_FROM is invalid"))?,
+        )
+        .to(recipient
+            .parse()
+            .map_err(|_| AppError::validation("email recipient is invalid"))?)
+        .subject(subject);
+    if let Some(value) = payload
+        .get("messageId")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+    {
+        builder = builder.message_id(Some(value.to_string()));
+    }
+    if let Some(value) = payload
+        .get("inReplyTo")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+    {
+        builder = builder.in_reply_to(value.to_string());
+    }
+    if let Some(value) = payload
+        .get("references")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+    {
+        builder = builder.references(value.to_string());
+    }
+    let message = if let Some(html) = payload
+        .get("html")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        builder.multipart(
+            MultiPart::alternative()
+                .singlepart(SinglePart::plain(body.to_string()))
+                .singlepart(
+                    SinglePart::builder()
+                        .header(ContentType::TEXT_HTML)
+                        .body(html.to_string()),
+                ),
+        )
+    } else {
+        builder.body(body.to_string())
+    }
+    .map_err(|_| AppError::validation("email message is invalid"))?;
+    let transport = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(
+        settings.smtp_host.as_deref().unwrap_or_default(),
+    )
+    .map_err(|_| {
+        AppError::service_unavailable(
+            "DELIVERY_NOT_CONFIGURED",
+            "SMTP delivery provider is invalid",
+        )
+    })?
+    .port(settings.smtp_port)
+    .credentials(Credentials::new(
+        settings.smtp_username.clone().unwrap_or_default(),
+        settings.smtp_password.clone().unwrap_or_default(),
+    ))
+    .build();
+    let response = transport.send(message).await.map_err(|_| {
+        AppError::service_unavailable(
+            "DELIVERY_UNAVAILABLE",
+            "SMTP delivery provider is unavailable",
+        )
+    })?;
+    Ok(extract_smtp_message_id(
+        response.first_line().unwrap_or_default(),
+    ))
+}
+
+fn extract_smtp_message_id(response: &str) -> String {
+    response
+        .split_ascii_whitespace()
+        .last()
+        .filter(|value| !value.eq_ignore_ascii_case("ok"))
+        .unwrap_or_default()
+        .to_string()
 }
 
 async fn deliver_whatsapp_cloud(settings: &Settings, payload: &Value) -> Result<String, AppError> {
@@ -133,4 +240,19 @@ async fn deliver_whatsapp_cloud(settings: &Settings, payload: &Value) -> Result<
                 "WhatsApp Cloud API did not return a message id",
             )
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_smtp_message_id;
+
+    #[test]
+    fn extracts_aws_ses_message_id() {
+        assert_eq!(
+            extract_smtp_message_id(
+                "Ok 01000190f1a2b3c4-12345678-90ab-cdef-1234-567890abcdef-000000"
+            ),
+            "01000190f1a2b3c4-12345678-90ab-cdef-1234-567890abcdef-000000"
+        );
+    }
 }

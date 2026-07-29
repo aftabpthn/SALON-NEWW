@@ -98,7 +98,11 @@ pub async fn add_security_headers(
     );
     headers.insert(
         HeaderName::from_static("permissions-policy"),
-        HeaderValue::from_static("camera=(), microphone=(), geolocation=()"),
+        HeaderValue::from_static(if path.starts_with("/staff") {
+            "camera=(self), microphone=(), geolocation=(self)"
+        } else {
+            "camera=(), microphone=(), geolocation=()"
+        }),
     );
     headers.insert(
         HeaderName::from_static("content-security-policy"),

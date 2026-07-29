@@ -459,7 +459,7 @@ export class BookingFlowPage implements OnInit {
   ngOnInit() {
     const source = this.route.snapshot.queryParamMap.get("source")?.split(":") ?? [];
     if (source.length === 3 && source[0] === "marketing_offer") {
-      this.api.trackPublicOfferClick(source[1], source[2]).subscribe({ error: () => undefined });
+      this.api.trackMarketingOfferClick(source[1], source[2]).subscribe({ error: () => undefined });
     }
     this.reload();
   }
@@ -629,6 +629,7 @@ export class BookingFlowPage implements OnInit {
       endAt,
       rebookFromBookingId: this.rebookFromBookingId() || undefined,
       source: this.route.snapshot.queryParamMap.get("source") || undefined,
+      offerCode: this.route.snapshot.queryParamMap.get("offer") || undefined,
       paymentMode: this.onlinePaymentAvailable() ? this.paymentMode() : "pay_at_venue",
       cardGuaranteeAccepted: this.paymentMode() === "online" && this.cardGuaranteeAccepted()
     });

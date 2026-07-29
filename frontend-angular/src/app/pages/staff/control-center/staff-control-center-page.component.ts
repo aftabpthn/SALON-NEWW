@@ -58,6 +58,8 @@ export class StaffControlCenterPageComponent implements OnInit {
   mappings: Row[] = [];
   consents: Row[] = [];
   biometricExceptions: Row[] = [];
+  faceExceptions: Row[] = [];
+  facePolicy: Row | null = null;
   mobileConflicts: Row[] = [];
   approvals: Row[] = [];
   feedbackRows: Row[] = [];
@@ -117,6 +119,8 @@ export class StaffControlCenterPageComponent implements OnInit {
       this.section('biometric mappings', this.loadList('/staff/biometric/mappings', (value) => this.mappings = value)),
       this.section('biometric consents', this.loadList('/staff/biometric/consents', (value) => this.consents = value)),
       this.section('biometric exceptions', this.loadList('/staff/biometric/exceptions', (value) => this.biometricExceptions = value)),
+      this.section('face attendance policy', this.loadOne('/staff-attendance/face-policy', (value) => this.facePolicy = value)),
+      this.section('face attendance exceptions', this.loadList('/staff-attendance/face-exceptions', (value) => this.faceExceptions = value)),
       this.section('mobile conflicts', this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value)),
       this.section('staff self dashboard', this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value).catch((error) => {
         if ((error as { status?: number }).status === 404) this.selfService = null;
@@ -297,6 +301,19 @@ export class StaffControlCenterPageComponent implements OnInit {
     await this.action('/staff/biometric/devices', { provider, deviceCode, deviceName, connectionMode: this.askOptional('Connection mode') });
   }
 
+  async addCctvCamera() {
+    const deviceCode = this.ask('CCTV camera code');
+    const deviceName = this.ask('CCTV camera name');
+    if (!deviceCode || !deviceName) return;
+    await this.action('/staff/biometric/devices', { provider: 'camera', deviceCode, deviceName, connectionMode: 'gateway' }, false);
+    const gatewayCode = this.askOptional('CCTV gateway code');
+    if (gatewayCode) {
+      const row = await this.action<Row>('/staff/biometric/gateways', { gatewayCode, displayName: gatewayCode, providers: ['camera'] });
+      if (row?.['apiKey']) window.alert(`Gateway API key - copy now: ${row['apiKey']}`);
+    } else {
+      await this.refresh();
+    }
+  }
   async registerGateway() {
     const gatewayCode = this.ask('Gateway code');
     if (!gatewayCode) return;
@@ -344,6 +361,33 @@ export class StaffControlCenterPageComponent implements OnInit {
     await this.action(`/staff/biometric/consents/${row['id']}/deletion-request`, { version: row['version'] || 1 });
   }
 
+  async saveFacePolicy() {
+    const current = this.facePolicy || {};
+    const allowedRadiusMeters = Number(this.ask('Allowed radius meters', current['allowedRadiusMeters'] || 200));
+    const networkMode = this.askChoice('Network mode', ['required', 'optional', 'off']) || String(current['networkMode'] || 'required');
+    const currentIps = this.arrayValue(current['ipAllowlist']).join(',');
+    const ipPrompt = 'Branch public IPs comma separated' + (currentIps ? ' (' + currentIps + ')' : '');
+    const ipAllowlist = (this.askOptional(ipPrompt) || currentIps).split(',').map((ip) => ip.trim()).filter(Boolean);
+    const livenessMode = this.askChoice('Liveness mode', ['basic', 'provider', 'none']) || String(current['livenessMode'] || 'basic');
+    if (!Number.isFinite(allowedRadiusMeters)) return;
+    await this.action('/staff-attendance/face-policy', {
+      enabled: true,
+      allowedRadiusMeters,
+      deviceMode: String(current['deviceMode'] || 'approved'),
+      networkMode,
+      ipAllowlist,
+      livenessMode,
+    }, true, 'put');
+  }
+
+  async approveFaceException(row: Row) {
+    await this.action(`/staff-attendance/face-exceptions/${row['id']}/approve`, {});
+  }
+  async approveFaceDevice(row: Row) {
+    const deviceUid = String(row['deviceUid'] || '').trim();
+    if (!deviceUid) return;
+    await this.action(`/staff-attendance/face-devices/${encodeURIComponent(deviceUid)}/approve`, {});
+  }
   async registerMobileDevice() {
     const staffId = this.ask('Staff ID');
     const deviceUid = this.ask('Device UID');
@@ -427,6 +471,19 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   async createContentTask() {
     await this.router.navigate(['/staff-os/tasks'], { queryParams: { create: 1 } });
+  }
+
+  async createStaffGuidance(taskType: 'training' | 'compliance') {
+    const staffId = this.ask('Staff ID');
+    const title = this.ask(taskType === 'training' ? 'SOP title' : 'Rule title');
+    const description = this.ask(taskType === 'training' ? 'SOP steps' : 'Rule details');
+    if (!staffId || !title || !description) return;
+    const dueDate = this.toIsoDate(this.askOptional('Due date YYYY-MM-DD') || '');
+    await this.action('/staff/tasks', {
+      staffId, title, description, taskType, priority: 'high',
+      dueAt: dueDate ? `${dueDate}T23:59:00+05:30` : undefined,
+      status: 'open',
+    });
   }
 
   async createContentOffer() {
@@ -553,6 +610,8 @@ export class StaffControlCenterPageComponent implements OnInit {
   openPayroll() { void this.router.navigate(['/staff/payroll']); }
   openAttendance() { void this.router.navigate(['/staff/attendance-summary']); }
   openLeave() { void this.router.navigate(['/staff/leave-management']); }
+  openRecommendation(row: Row) { if (String(row['route'] || '').startsWith('/')) void this.router.navigateByUrl(row['route']); }
+  recommendationEvidence(row: Row) { return this.objectEntries(row['evidence']).map((item) => `${item.key}: ${this.text(item.value)}`).join(' · '); }
 
   objectEntries(value: unknown): Array<{ key: string; value: unknown }> {
     if (!value || Array.isArray(value) || typeof value !== 'object') return [];

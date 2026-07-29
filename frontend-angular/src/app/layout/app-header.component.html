@@ -113,11 +113,29 @@
           <span>{{ loadingTicker.requestSummary() }} · {{ loadingTicker.elapsedLabel() }}</span>
         </span>
       }
-<span class="notification-button" role="img" [attr.aria-label]="'header.notifications' | translate">
-        <i class="bi bi-bell" aria-hidden="true"></i>
+      <div class="notification-center">
+        <button class="notification-button" type="button" [class.active]="notificationOpen" [attr.aria-label]="'header.notifications' | translate" [attr.aria-expanded]="notificationOpen" (click)="toggleNotifications()">
+          <i class="bi bi-bell" aria-hidden="true"></i>
+          @if (notificationUnread > 0) { <span class="notification-badge">{{ notificationUnread > 99 ? '99+' : notificationUnread }}</span> }
+        </button>
+        @if (notificationOpen) {
+          <section class="notification-menu" aria-label="Notifications">
+            <header><strong>Notifications</strong><span>{{ notificationUnread }} unread</span></header>
+            @if (notificationError) { <p class="notification-error" role="alert">{{ notificationError }}</p> }
+            <div class="notification-list">
+              @for (notification of notificationItems; track notification.id) {
+                <button type="button" [class.unread]="!notification.isRead" (click)="openNotification(notification)"><span><strong>{{ notification.title }}</strong><small>{{ notification.body }}</small></span><time>{{ formatTime(notification.createdAt) }}</time></button>
+              } @empty { @if (!notificationLoading) { <p class="notification-empty">No notifications yet.</p> } }
+              @if (notificationLoading && notificationItems.length === 0) { <p class="notification-empty">Loading...</p> }
+            </div>
+          </section>
+        }
+      </div>
+      <span class="user-pill" aria-hidden="true">{{ currentRoleInitials }}</span>
+      <span class="user-role" [attr.aria-label]="('header.currentRole' | translate) + ': ' + currentRoleLabel">
+        <small>{{ 'header.currentRole' | translate }}</small>
+        <strong>{{ currentRoleLabel }}</strong>
       </span>
-      <span class="user-pill">AA</span>
-      <b class="topbar-brand-name">{{ appName }}</b>
       <button class="ai-assistant-button" type="button" [attr.aria-label]="'header.aiAssistant' | translate" [title]="'header.aiAssistant' | translate" [attr.aria-expanded]="assistantOpen" (click)="toggleAssistant()">
         <img src="/assets/ai-assistant-sidebar.png" alt="" aria-hidden="true" />
       </button>

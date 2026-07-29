@@ -349,10 +349,7 @@ fn staff_control_center_parity_matrix_is_routed() {
             .unwrap_or_else(|err| panic!("failed to read {}: {}", path.display(), err));
         for (route_path, method) in parse_routes(&source) {
             let normalized = normalize_path(&route_path);
-            route_map
-                .entry(normalized)
-                .or_default()
-                .insert(method);
+            route_map.entry(normalized).or_default().insert(method);
         }
     }
 
@@ -366,10 +363,7 @@ fn staff_control_center_parity_matrix_is_routed() {
             let methods: Vec<_> = available.iter().map(String::as_str).collect();
             missing.push(format!(
                 "[{}] {} {} is missing (available: {:?})",
-                check.group,
-                check.method,
-                check.path,
-                methods,
+                check.group, check.method, check.path, methods,
             ));
         }
     }
@@ -482,7 +476,9 @@ fn detect_methods(handlers: &str) -> Vec<String> {
 
 fn normalize_path(value: &str) -> String {
     let value = value.trim().to_ascii_lowercase();
-    let without_query = value.split_once('?').map_or(value.as_str(), |(path, _)| path);
+    let without_query = value
+        .split_once('?')
+        .map_or(value.as_str(), |(path, _)| path);
     let mut normalized = without_query.trim_end_matches('/').to_string();
     if normalized.is_empty() {
         normalized.push('/');

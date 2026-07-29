@@ -1,7 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgConnection, PgPool};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct StaffRecord {
@@ -96,6 +96,56 @@ pub struct ProvisionStaffLoginInput<'a> {
     pub password_hash: &'a str,
     pub full_name: &'a str,
     pub role_id: &'a str,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct StaffLoginInviteRecord {
+    pub id: String,
+    pub email: String,
+    pub role_id: String,
+    pub role_name: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub delivery_status: String,
+    pub delivery_provider: String,
+    pub provider_message_id: String,
+    pub delivery_attempts: i32,
+    pub last_delivery_error: String,
+    pub last_sent_at: Option<DateTime<Utc>>,
+    pub delivered_at: Option<DateTime<Utc>>,
+    pub bounced_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct StaffLoginInvitePreviewRecord {
+    pub tenant_name: String,
+    pub branch_name: String,
+    pub staff_name: String,
+    pub email: String,
+    pub role_name: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+pub struct CreateStaffLoginInviteInput<'a> {
+    pub tenant_id: &'a str,
+    pub branch_id: &'a str,
+    pub staff_id: &'a str,
+    pub role_id: &'a str,
+    pub email: &'a str,
+    pub token_hash: &'a str,
+    pub expires_at: DateTime<Utc>,
+    pub actor_user_id: &'a str,
+}
+
+#[derive(Debug)]
+pub struct AcceptedStaffLoginInvite {
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub staff_id: String,
+    pub user_id: String,
 }
 
 pub struct CreateStaff<'a> {
@@ -437,16 +487,33 @@ pub async fn provision_staff_login(
     input: &ProvisionStaffLoginInput<'_>,
 ) -> Result<String, sqlx::Error> {
     let mut tx = db.begin().await?;
+    let user_id = insert_staff_login(tx.as_mut(), input, true).await?;
+    sqlx::query(
+        "UPDATE staff_login_invitations SET revoked_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND accepted_at IS NULL AND revoked_at IS NULL",
+    )
+    .bind(input.tenant_id)
+    .bind(input.branch_id)
+    .bind(input.staff_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(user_id)
+}
+
+async fn insert_staff_login(
+    connection: &mut PgConnection,
+    input: &ProvisionStaffLoginInput<'_>,
+    must_change_password: bool,
+) -> Result<String, sqlx::Error> {
     let staff_exists = sqlx::query_scalar::<_, String>(
         "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND user_id IS NULL FOR UPDATE",
     )
     .bind(input.tenant_id)
     .bind(input.branch_id)
     .bind(input.staff_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *connection)
     .await?;
     if staff_exists.is_none() {
-        tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     }
 
@@ -463,10 +530,9 @@ pub async fn provision_staff_login(
     )
     .bind(input.tenant_id)
     .bind(input.branch_id)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *connection)
     .await?;
     if !branch_exists {
-        tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     }
 
@@ -475,14 +541,12 @@ pub async fn provision_staff_login(
     )
     .bind(input.tenant_id)
     .bind(input.role_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *connection)
     .await?;
     let Some(role_name) = role_name else {
-        tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     };
     if !is_staff_assignable_role_name(&role_name) {
-        tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     }
 
@@ -491,7 +555,7 @@ pub async fn provision_staff_login(
         INSERT INTO users (
           tenant_id, branch_id, role_id, role_name, login_id, email, password_hash,
           full_name, active, must_change_password
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,TRUE)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9)
         RETURNING id
         "#,
     )
@@ -503,7 +567,8 @@ pub async fn provision_staff_login(
     .bind(input.email)
     .bind(input.password_hash)
     .bind(input.full_name)
-    .fetch_one(&mut *tx)
+    .bind(must_change_password)
+    .fetch_one(&mut *connection)
     .await?;
 
     sqlx::query(
@@ -513,7 +578,7 @@ pub async fn provision_staff_login(
     .bind(input.branch_id)
     .bind(input.staff_id)
     .bind(&user_id)
-    .execute(&mut *tx)
+    .execute(&mut *connection)
     .await?;
 
     sqlx::query(
@@ -528,10 +593,259 @@ pub async fn provision_staff_login(
     .bind(input.branch_id)
     .bind(input.role_id)
     .bind(&role_name)
+    .execute(&mut *connection)
+    .await?;
+    Ok(user_id)
+}
+
+pub async fn create_staff_login_invite(
+    db: &PgPool,
+    input: &CreateStaffLoginInviteInput<'_>,
+) -> Result<String, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query(
+        "UPDATE staff_login_invitations SET revoked_at=NOW(),revoked_by=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND accepted_at IS NULL AND revoked_at IS NULL",
+    )
+    .bind(input.tenant_id)
+    .bind(input.branch_id)
+    .bind(input.staff_id)
+    .bind(input.actor_user_id)
     .execute(&mut *tx)
     .await?;
+
+    let staff_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND user_id IS NULL FOR UPDATE)",
+    )
+    .bind(input.tenant_id)
+    .bind(input.branch_id)
+    .bind(input.staff_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let role_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM roles WHERE tenant_id=$1 AND id=$2 LIMIT 1",
+    )
+    .bind(input.tenant_id)
+    .bind(input.role_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if !staff_exists
+        || !role_name
+            .as_deref()
+            .is_some_and(is_staff_assignable_role_name)
+    {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    let id = sqlx::query_scalar::<_, String>(
+        r#"
+        INSERT INTO staff_login_invitations (
+          tenant_id,branch_id,staff_id,role_id,email,token_hash,expires_at,created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        RETURNING id
+        "#,
+    )
+    .bind(input.tenant_id)
+    .bind(input.branch_id)
+    .bind(input.staff_id)
+    .bind(input.role_id)
+    .bind(input.email)
+    .bind(input.token_hash)
+    .bind(&input.expires_at)
+    .bind(input.actor_user_id)
+    .fetch_one(&mut *tx)
+    .await?;
     tx.commit().await?;
-    Ok(user_id)
+    Ok(id)
+}
+
+pub async fn latest_staff_login_invite(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<Option<StaffLoginInviteRecord>, sqlx::Error> {
+    sqlx::query_as::<_, StaffLoginInviteRecord>(
+        r#"
+        SELECT i.id,i.email,i.role_id,r.name role_name,
+          CASE WHEN i.accepted_at IS NOT NULL THEN 'accepted'
+               WHEN i.revoked_at IS NOT NULL THEN 'revoked'
+               WHEN i.expires_at<=NOW() THEN 'expired' ELSE 'pending' END status,
+          i.expires_at,i.created_at,i.accepted_at,i.revoked_at,
+          i.delivery_status,i.delivery_provider,i.provider_message_id,i.delivery_attempts,
+          i.last_delivery_error,i.last_sent_at,i.delivered_at,i.bounced_at
+        FROM staff_login_invitations i
+        JOIN roles r ON r.tenant_id=i.tenant_id AND r.id=i.role_id
+        WHERE i.tenant_id=$1 AND i.branch_id=$2 AND i.staff_id=$3
+        ORDER BY i.created_at DESC LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn staff_login_invite_by_id(
+    db: &PgPool,
+    tenant_id: &str,
+    id: &str,
+) -> Result<Option<StaffLoginInviteRecord>, sqlx::Error> {
+    sqlx::query_as::<_, StaffLoginInviteRecord>(
+        r#"
+        SELECT i.id,i.email,i.role_id,r.name role_name,
+          CASE WHEN i.accepted_at IS NOT NULL THEN 'accepted'
+               WHEN i.revoked_at IS NOT NULL THEN 'revoked'
+               WHEN i.expires_at<=NOW() THEN 'expired' ELSE 'pending' END status,
+          i.expires_at,i.created_at,i.accepted_at,i.revoked_at,
+          i.delivery_status,i.delivery_provider,i.provider_message_id,i.delivery_attempts,
+          i.last_delivery_error,i.last_sent_at,i.delivered_at,i.bounced_at
+        FROM staff_login_invitations i
+        JOIN roles r ON r.tenant_id=i.tenant_id AND r.id=i.role_id
+        WHERE i.tenant_id=$1 AND i.id=$2
+        LIMIT 1
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn record_staff_login_invite_delivery_attempt(
+    db: &PgPool,
+    tenant_id: &str,
+    id: &str,
+    status: &str,
+    provider_message_id: &str,
+    error: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE staff_login_invitations
+           SET delivery_status=$3,delivery_provider='webhook',provider_message_id=$4,
+               delivery_attempts=delivery_attempts+1,last_delivery_error=$5,
+               last_sent_at=CASE WHEN $3='sent' THEN NOW() ELSE last_sent_at END,updated_at=NOW()
+           WHERE tenant_id=$1 AND id=$2"#,
+    )
+    .bind(tenant_id)
+    .bind(id)
+    .bind(status)
+    .bind(provider_message_id)
+    .bind(error)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn revoke_staff_login_invite(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query(
+        "UPDATE staff_login_invitations SET revoked_at=NOW(),revoked_by=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND accepted_at IS NULL AND revoked_at IS NULL",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(actor_user_id)
+    .execute(db)
+    .await?
+    .rows_affected()
+        > 0)
+}
+
+pub async fn preview_staff_login_invite(
+    db: &PgPool,
+    token_hash: &str,
+) -> Result<Option<StaffLoginInvitePreviewRecord>, sqlx::Error> {
+    sqlx::query_as::<_, StaffLoginInvitePreviewRecord>(
+        r#"
+        SELECT t.name tenant_name,b.name branch_name,
+          COALESCE(NULLIF(CONCAT_WS(' ',s.first_name,NULLIF(s.middle_name,''),NULLIF(s.last_name,'')),''),'Staff') staff_name,
+          i.email,r.name role_name,i.expires_at
+        FROM staff_login_invitations i
+        JOIN staff s ON s.tenant_id=i.tenant_id AND s.branch_id=i.branch_id AND s.id=i.staff_id
+        JOIN roles r ON r.tenant_id=i.tenant_id AND r.id=i.role_id
+        JOIN tenants t ON COALESCE(NULLIF(t.scope_id,''),t.id::TEXT)=i.tenant_id
+        JOIN branches b ON b.tenant_id=t.id AND COALESCE(NULLIF(b.scope_id,''),b.id::TEXT)=i.branch_id
+        WHERE i.token_hash=$1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+          AND i.expires_at>NOW() AND s.active=TRUE AND s.user_id IS NULL
+        LIMIT 1
+        "#,
+    )
+    .bind(token_hash)
+    .fetch_optional(db)
+    .await
+}
+
+#[derive(FromRow)]
+struct AcceptableStaffLoginInvite {
+    id: String,
+    tenant_id: String,
+    branch_id: String,
+    staff_id: String,
+    role_id: String,
+    email: String,
+    full_name: String,
+}
+
+pub async fn accept_staff_login_invite(
+    db: &PgPool,
+    token_hash: &str,
+    login_id: &str,
+    password_hash: &str,
+) -> Result<AcceptedStaffLoginInvite, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let invite = sqlx::query_as::<_, AcceptableStaffLoginInvite>(
+        r#"
+        SELECT i.id,i.tenant_id,i.branch_id,i.staff_id,i.role_id,i.email,
+          COALESCE(NULLIF(CONCAT_WS(' ',s.first_name,NULLIF(s.middle_name,''),NULLIF(s.last_name,'')),''),'Staff') full_name
+        FROM staff_login_invitations i
+        JOIN staff s ON s.tenant_id=i.tenant_id AND s.branch_id=i.branch_id AND s.id=i.staff_id
+        WHERE i.token_hash=$1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL
+          AND i.expires_at>NOW()
+        FOR UPDATE OF i
+        "#,
+    )
+    .bind(token_hash)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(sqlx::Error::RowNotFound)?;
+    let user_id = insert_staff_login(
+        tx.as_mut(),
+        &ProvisionStaffLoginInput {
+            tenant_id: &invite.tenant_id,
+            branch_id: &invite.branch_id,
+            staff_id: &invite.staff_id,
+            login_id,
+            email: &invite.email,
+            password_hash,
+            full_name: &invite.full_name,
+            role_id: &invite.role_id,
+        },
+        false,
+    )
+    .await?;
+    let consumed = sqlx::query(
+        "UPDATE staff_login_invitations SET accepted_at=NOW(),accepted_user_id=$2,updated_at=NOW() WHERE id=$1 AND accepted_at IS NULL AND revoked_at IS NULL",
+    )
+    .bind(&invite.id)
+    .bind(&user_id)
+    .execute(&mut *tx)
+    .await?;
+    if consumed.rows_affected() != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    tx.commit().await?;
+    Ok(AcceptedStaffLoginInvite {
+        tenant_id: invite.tenant_id,
+        branch_id: invite.branch_id,
+        staff_id: invite.staff_id,
+        user_id,
+    })
 }
 
 pub async fn list_managed_auth_roles(

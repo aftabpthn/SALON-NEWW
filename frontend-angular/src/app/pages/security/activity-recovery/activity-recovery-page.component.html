@@ -1,0 +1,39 @@
+<main class="recovery-page">
+  <header class="page-header"><div><span class="eyebrow">Security</span><h1>Activity & Recovery</h1></div><button type="button" class="icon-button" aria-label="Refresh activity" (click)="reload()" [disabled]="loading"><i class="bi bi-arrow-clockwise"></i></button></header>
+  <nav class="tabs" aria-label="Lifecycle filters">@for (tab of tabs; track tab.key) { <button type="button" [class.active]="activeTab === tab.key" (click)="setTab(tab.key)">{{ tab.label }}</button> }</nav>
+  <section class="filters" aria-label="Activity filters">
+    <label class="search"><i class="bi bi-search"></i><input [(ngModel)]="search" (keyup.enter)="reload()" placeholder="Search activity" aria-label="Search activity"></label>
+    <select [(ngModel)]="module" aria-label="Module"><option value="all">All modules</option>@for (item of modules; track item) { <option [value]="item">{{ item }}</option> }</select>
+    <select [(ngModel)]="action" aria-label="Action"><option value="all">All actions</option>@for (item of actions.slice(1); track item) { <option [value]="item">{{ item | titlecase }}</option> }</select>
+    <select [(ngModel)]="status" aria-label="Status"><option value="all">All status</option><option value="success">Recorded</option><option value="failed">Failed</option></select>
+    <as-date-picker [value]="fromDate" [rangeEnd]="toDate" [rangeMode]="true" ariaLabel="Activity date range" (valueChange)="fromDate = $event" (rangeEndChange)="toDate = $event"></as-date-picker>
+  </section>
+  @if (notice) { <div class="message success" role="status">{{ notice }}</div> }
+  @if (error) { <div class="message error" role="alert">{{ error }} <button type="button" (click)="reload()">Retry</button></div> }
+  <section class="table-card" [attr.aria-busy]="loading">
+    @if (loading) { <div class="loading-state"><span></span><span></span><span></span></div> }
+    @else if (!filteredEvents.length) { <div class="empty-state"><i class="bi bi-clock-history"></i><h2>No activity records yet</h2></div> }
+    @else { <div class="table-wrap"><table>
+      <thead><tr><th>Module</th><th>Action</th><th>Record</th><th>Performed by</th><th>Date & Time</th><th>Reason</th><th>Status</th><th class="actions">Actions</th></tr></thead>
+      <tbody>@for (event of visibleEvents; track event.id) { <tr>
+        <td>{{ moduleName(event) }}</td><td><span class="action-pill">{{ actionName(event) | titlecase }}</span></td>
+        <td><strong>{{ recordName(event) }}</strong><small>{{ recordId(event) }}</small></td><td>{{ event.actorName || event.identity || 'System' }}</td>
+        <td>{{ formatDate(event.createdAt) }}</td><td>{{ reason(event) }}</td><td><span class="status-dot" [class.failed]="event.outcome !== 'success'"></span>{{ event.outcome === 'success' ? 'Recorded' : event.outcome }}</td>
+        <td class="actions"><button type="button" class="link-button" (click)="openDetails(event)">View Details</button>@if (canRestore(event)) { <button type="button" class="restore-button" (click)="restore(event)" [disabled]="restoringId === event.id">{{ restoringId === event.id ? 'Restoring…' : 'Restore' }}</button> }</td>
+      </tr> }</tbody>
+    </table></div>
+    @if (filteredEvents.length > 8) { <footer class="table-footer"><span>Showing {{ visibleEvents.length }} of {{ filteredEvents.length }}</span>@if (visibleEvents.length < filteredEvents.length) { <button type="button" class="link-button" (click)="showMore()">Show more</button> } @else { <button type="button" class="link-button" (click)="showLess()">Show less</button> }</footer> } }
+  </section>
+  @if (selected) {
+    <button type="button" class="drawer-backdrop" aria-label="Close details" (click)="closeDetails()"></button>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="activity-title">
+      <header><div><span class="eyebrow">Audit record</span><h2 id="activity-title">{{ recordName(selected) }}</h2></div><button type="button" class="icon-button" aria-label="Close details" (click)="closeDetails()"><i class="bi bi-x-lg"></i></button></header>
+      <div class="drawer-body">
+        <dl><div><dt>Module</dt><dd>{{ moduleName(selected) }}</dd></div><div><dt>Action</dt><dd>{{ actionName(selected) | titlecase }}</dd></div><div><dt>Performed by</dt><dd>{{ selected.actorName || selected.identity || 'System' }}</dd></div><div><dt>Date & Time</dt><dd>{{ formatDate(selected.createdAt) }}</dd></div><div><dt>Status</dt><dd>{{ selected.outcome }}</dd></div><div><dt>Reason</dt><dd>{{ reason(selected) }}</dd></div><div><dt>Record ID</dt><dd>{{ recordId(selected) || '—' }}</dd></div><div><dt>IP address</dt><dd>{{ selected.ipAddress || '—' }}</dd></div></dl>
+        <section class="timeline"><h3>Audit timeline</h3>@for (event of relatedEvents; track event.id) { <div class="timeline-item"><span></span><div><strong>{{ actionName(event) | titlecase }}</strong><small>{{ formatDate(event.createdAt) }} · {{ event.actorName || 'System' }}</small></div></div> }</section>
+        @if (!canRestore(selected) && (actionName(selected) === 'revoked' || actionName(selected) === 'disconnected' || actionName(selected) === 'voided' || actionName(selected) === 'reversed')) { <p class="safe-note">Automatic restore is unavailable for this action. Use its owning page when a safe reverse workflow exists.</p> }
+      </div>
+      <footer><button type="button" class="secondary-button" (click)="closeDetails()">Close</button>@if (canRestore(selected)) { <button type="button" class="restore-button" (click)="restore(selected)" [disabled]="restoringId === selected.id">{{ restoringId === selected.id ? 'Restoring…' : 'Restore' }}</button> }</footer>
+    </aside>
+  }
+</main>

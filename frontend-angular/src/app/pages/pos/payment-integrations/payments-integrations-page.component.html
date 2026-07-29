@@ -15,6 +15,9 @@
   @if (error) {
     <p class="message error" role="alert">{{ error }}</p>
   }
+  @if (notice) {
+    <p class="message success" role="status">{{ notice }}</p>
+  }
 
   <section class="stats-card" aria-label="Payment integration summary">
     <div>
@@ -139,6 +142,7 @@
 
         @if (accountFor(selectedProvider); as account) {
           <dl class="account-status">
+            <div><dt>Status</dt><dd>{{ account.status }}</dd></div>
             <div><dt>KYC/KYB</dt><dd>{{ account.kycStatus }}</dd></div>
             <div><dt>Charges</dt><dd>{{ account.chargesEnabled ? 'Enabled' : 'Pending' }}</dd></div>
             <div><dt>Payouts</dt><dd>{{ account.payoutsEnabled ? 'Enabled' : 'Pending' }}</dd></div>
@@ -178,7 +182,7 @@
 
       <footer class="drawer-actions">
         <button type="button" class="secondary-action" (click)="closeProvider()" [disabled]="actionLoading">Cancel</button>
-        @if (accountFor(selectedProvider)) {
+        @if (accountFor(selectedProvider) && selectedProvider.enabled) {
           <button type="button" class="secondary-action" (click)="refreshSelectedAccount()" [disabled]="actionLoading">Refresh status</button>
         }
         @if (selectedProvider.documentationUrl) {
@@ -186,6 +190,9 @@
         }
         @if (canStartHostedOnboarding(selectedProvider)) {
           <button type="button" class="primary-action" (click)="beginOnboarding()" [disabled]="actionLoading">{{ actionLoading ? 'Opening…' : 'Continue onboarding' }}</button>
+        }
+        @if (canManageProviders && selectedProvider.configured) {
+          <button type="button" [class.danger-action]="selectedProvider.enabled" [class.primary-action]="!selectedProvider.enabled" [class.secondary-action]="selectedProvider.enabled" (click)="setProviderEnabled(selectedProvider, !selectedProvider.enabled)" [disabled]="actionLoading">{{ selectedProvider.enabled ? 'Disable provider' : 'Enable provider' }}</button>
         }
       </footer>
     </aside>

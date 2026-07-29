@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,10 @@ use crate::{
     repositories::packages_repository::{self, PackageRecord},
     routes::context::tenant_branch,
     services::{
+        auth_service::AuthClaims,
         invoice_pdf,
         package_service::{self, PackageInput},
+        security_service,
     },
     state::AppState,
 };
@@ -29,7 +31,11 @@ pub fn router() -> Router<AppState> {
             "/packages/:id",
             axum::routing::get(get_package)
                 .patch(update_package)
-                .delete(delete_package),
+                .delete(archive_package),
+        )
+        .route(
+            "/packages/:id/restore",
+            axum::routing::post(restore_package),
         )
         .route(
             "/package-enterprise/settings",
@@ -154,45 +160,116 @@ async fn get_package(
 
 async fn create_package(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<PackageWriteRequest>,
 ) -> ApiResult<PackageResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = package_service::create(&state.db, &tenant_id, &branch_id, payload.into()).await?;
 
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "package.added",
+        serde_json::json!({"packageId":row.id,"recordName":row.name}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(PackageResponse::from(row))))
 }
 
 async fn update_package(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<PackageWriteRequest>,
 ) -> ApiResult<PackageResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let previous = packages_repository::get(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load package"))?
+        .ok_or_else(|| AppError::not_found("package was not found"))?;
+    let requested_active = payload.active;
     let row = package_service::update(&state.db, &tenant_id, &branch_id, &id, payload.into())
         .await?
         .ok_or_else(|| AppError::not_found("package was not found"))?;
 
+    let (action, restorable) = match (previous.active, requested_active) {
+        (true, Some(false)) => ("package.archived", true),
+        (false, Some(true)) => ("package.restored", false),
+        _ => ("package.edited", false),
+    };
+
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        action,
+        serde_json::json!({"packageId":row.id,"recordName":row.name,"restorable":restorable}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(PackageResponse::from(row))))
 }
 
-async fn delete_package(
+async fn archive_package(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let deleted = packages_repository::delete(&state.db, &tenant_id, &branch_id, &id)
+    let record = packages_repository::get(&state.db, &tenant_id, &branch_id, &id)
         .await
-        .map_err(|_| AppError::internal("failed to delete package"))?;
+        .map_err(|_| AppError::internal("failed to load package"))?
+        .ok_or_else(|| AppError::not_found("package was not found"))?;
+    let archived = packages_repository::archive(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to archive package"))?;
 
-    if !deleted {
-        return Err(AppError::not_found("package was not found"));
+    if !archived {
+        return Err(AppError::conflict("package is already archived"));
     }
 
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "package.archived",
+        serde_json::json!({"packageId":id,"recordName":record.name,"restorable":true}),
+    )
+    .await?;
+
     Ok(Json(ApiResponse::ok(
-        serde_json::json!({ "deleted": true, "id": id }),
+        serde_json::json!({ "deleted": false, "archived": true, "id": id }),
+    )))
+}
+
+async fn restore_package(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let name = packages_repository::restore(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to restore package"))?
+        .ok_or_else(|| AppError::conflict("package is not archived"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "package.restored",
+        serde_json::json!({"packageId":id,"recordName":name,"restored":true}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"restored":true,"id":id}),
     )))
 }
 

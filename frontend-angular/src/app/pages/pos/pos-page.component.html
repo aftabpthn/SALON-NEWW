@@ -17,6 +17,7 @@
       <a class="secondary-action" routerLink="/pos/tips">Tip register</a>
       <a class="secondary-action" routerLink="/pos/payment-modes">Payment modes</a>
       <a class="secondary-action" routerLink="/pos/cash-drawer">Cash drawer</a>
+      <a class="secondary-action" routerLink="/pos/enterprise">Enterprise controls</a>
       <button type="button" class="secondary-action" [disabled]="!selectedSale" (click)="printSelectedSale()">Print invoice</button>
     </div>
   </nav>
@@ -99,7 +100,7 @@
 
       <div class="form-grid compact">
         <label class="smart-field client-search-field">
-          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [ngModel]="clientSearchText" (ngModelChange)="setClientSearch($event)" (focus)="clientSearchActive = true" (blur)="closeClientSearchSoon()" placeholder="Search client by name, mobile, email or ID" /></div>
+          <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M16 16l4 4"></path></svg></span><input type="search" [ngModel]="clientSearchText" (ngModelChange)="setClientSearch($event)" (focus)="clientSearchActive = true" (blur)="closeClientSearchSoon()" (keydown)="handleClientSearchKey($event)" placeholder="Search client by name, mobile, email or ID" /></div>
           @if (showClientResults()) {
             <div class="search-results client-results">
               <div class="client-results-head"><strong>{{ clientSearchHeading() }}</strong><span>{{ filteredClients().length }} shown</span></div>
@@ -109,8 +110,14 @@
                     <strong>{{ recordName(client) }}</strong><span>{{ client.phone || client.mobile || client.whatsapp || '-' }}</span>@if (client.email) {
                     <small>{{ client.email }}</small>
                   }
-                  <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em>@if (clientHasDuplicates(client)) {
-                  <em>Duplicate</em>
+                  <em>Wallet {{ clientWalletPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em>@if (clientUnpaidPaise(client) > 0) {
+                  <em class="danger">Unpaid {{ clientUnpaidPaise(client) / 100 | currency:'INR':'symbol':'1.0-2' }}</em>
+                }@if (clientMembershipLabel(client)) {
+                  <em class="success">{{ clientMembershipLabel(client) }}</em>
+                }@if (clientLastVisitLabel(client)) {
+                  <em>{{ clientLastVisitLabel(client) }}</em>
+                }@if (clientHasDuplicates(client)) {
+                  <em class="warning">Possible duplicate</em>
                 }
               </button>
               <div class="client-result-actions">
@@ -123,6 +130,14 @@
               </div>
             </article>
           }
+        </div>
+      }
+      @if (showAddClient()) {
+        <div class="search-results client-add-suggestion">
+          <button type="button" (mousedown)="$event.preventDefault()" (click)="openQuickClient()">
+            <strong>Client not found in CRM</strong>
+            <span>Add as new client</span>
+          </button>
         </div>
       }
     </label>

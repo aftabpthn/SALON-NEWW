@@ -46,6 +46,7 @@
   @if (activeTab === 'systems') {
     <section class="command-strip" aria-label="Systems actions">
       @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="createDevice()">Add biometric device</button> }
+      @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="addCctvCamera()">Add CCTV camera</button> }
       @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="registerGateway()">Register gateway</button> }
       @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="createMapping()">Add device mapping</button> }
       @if (canManage('staff.systems.manage', 'staff.app.notifications.manage')) { <button type="button" (click)="registerMobileDevice()">Register mobile device</button> }
@@ -60,7 +61,7 @@
   }
   @if (activeTab === 'content') {
     <section class="command-strip" aria-label="Content actions">
-      @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createContentTask()">Add task</button> }
+      @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createStaffGuidance('training')">Assign SOP</button><button type="button" (click)="createStaffGuidance('compliance')">Assign rule</button><button type="button" (click)="createContentTask()">Add task</button> }
       @if (canManage('marketing.offers.manage', 'marketing.manage')) { <button type="button" (click)="createContentOffer()">Add offer</button> }
       @if (canManage('staff.payroll.manage', 'payroll.manage')) { <button type="button" (click)="createPenaltyRule()">Add penalty/payroll rule</button> }
     </section>
@@ -68,7 +69,7 @@
 
   @if (activeTab === 'command') {
     <section class="summary-strip">
-      @for (item of objectEntries(command?.['kpis']); track item) {
+      @for (item of objectEntries(command?.['kpis']); track item.key) {
         <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
       }
       @if (objectEntries(command?.['kpis']).length === 0) {
@@ -86,7 +87,7 @@
   }
 </section>
 <section class="data-card"><header><div><h2>{{ 'staff.ui.1656a7a295' | translate }}</h2><span>{{ 'staff.ui.8454441e76' | translate }}</span></div></header>
-<div class="key-list">@for (item of objectEntries(command?.['attentionQueue']); track item) {
+<div class="key-list">@for (item of objectEntries(command?.['attentionQueue']); track item.key) {
   <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
 }</div>
 @if (objectEntries(command?.['attentionQueue']).length === 0) {
@@ -94,6 +95,13 @@
 }
 </section>
 </div>
+<section class="data-card"><header><div><h2>Product, brand and equipment recommendations</h2><span>{{ arrayValue(command?.['recommendations']).length }} live signals</span></div></header>
+@for (row of arrayValue(command?.['recommendations']); track trackById($index, row)) {
+  <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ label(row['type']) }} · {{ row['reason'] }}</small><small>{{ recommendationEvidence(row) }}</small></div><span class="status" [ngClass]="statusClass(row['priority'])">{{ row['priority'] }}</span><div class="row-actions"><button type="button" (click)="openRecommendation(row)">Review</button></div></article>
+}@if (arrayValue(command?.['recommendations']).length === 0) {
+  <div class="empty">No recommendation signals for this period</div>
+}
+</section>
 <section class="data-card"><header><div><h2>{{ 'staff.ui.edcd62dd59' | translate }}</h2><span>{{ formatDate(periodEnd) }}</span></div></header>
 <div class="table-wrap"><table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.0a8adac9d6' | translate }}</th><th scope="col">{{ 'staff.ui.469d5b183f' | translate }}</th><th scope="col">{{ 'staff.ui.b689313fc1' | translate }}</th><th scope="col">{{ 'staff.ui.4310ed540c' | translate }}</th><th scope="col">{{ 'staff.ui.b758d32ce6' | translate }}</th><th scope="col">{{ 'staff.ui.1f3f4957c5' | translate }}</th></tr></thead><tbody>
 @for (row of floor; track trackById($index, row)) {
@@ -132,14 +140,14 @@
 }
 </section>
 </div>
-<div class="two-column"><section class="data-card"><header><div><h2>{{ 'staff.ui.cd593d2208' | translate }}</h2></div><div class="row-actions"><button type="button" (click)="optimizeRoster()">{{ 'staff.ui.a8cdd9eaea' | translate }}</button><button class="primary" type="button" [disabled]="!rosterDraft" (click)="applyRoster()">{{ 'staff.ui.cfea419c3b' | translate }}</button></div></header><div class="key-list">@for (item of objectEntries(coverage); track item) {
+<div class="two-column"><section class="data-card"><header><div><h2>{{ 'staff.ui.cd593d2208' | translate }}</h2></div><div class="row-actions"><button type="button" (click)="optimizeRoster()">{{ 'staff.ui.a8cdd9eaea' | translate }}</button><button class="primary" type="button" [disabled]="!rosterDraft" (click)="applyRoster()">{{ 'staff.ui.cfea419c3b' | translate }}</button></div></header><div class="key-list">@for (item of objectEntries(coverage); track item.key) {
 <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
-}@for (item of objectEntries(rosterDraft); track item) {
+}@for (item of objectEntries(rosterDraft); track item.key) {
 <div><span>Draft {{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
 }</div>@if (objectEntries(coverage).length === 0 && !rosterDraft) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
-<section class="data-card"><header><div><h2>{{ 'staff.ui.0bb4ab80f5' | translate }}</h2></div></header><div class="key-list">@for (item of objectEntries(manpower); track item) {
+<section class="data-card"><header><div><h2>{{ 'staff.ui.0bb4ab80f5' | translate }}</h2></div></header><div class="key-list">@for (item of objectEntries(manpower); track item.key) {
 <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
 }</div>@if (objectEntries(manpower).length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
@@ -231,12 +239,18 @@
 }@if (biometricExceptions.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
+<section class="data-card"><header><div><h2>Face attendance policy</h2><span>{{ facePolicy?.['networkMode'] || 'optional' }} · {{ facePolicy?.['allowedRadiusMeters'] || 200 }}m</span></div><button type="button" (click)="saveFacePolicy()">Edit policy</button></header><div class="key-list"><div><span>Network</span><strong>{{ facePolicy?.['networkMode'] || 'optional' }}</strong></div><div><span>Branch IPs</span><strong>{{ text(facePolicy?.['ipAllowlist']) }}</strong></div><div><span>Liveness</span><strong>{{ facePolicy?.['livenessMode'] || 'basic' }}</strong></div><div><span>Device</span><strong>{{ facePolicy?.['deviceMode'] || 'approved' }}</strong></div></div></section>
+<section class="data-card"><header><div><h2>Face attendance exceptions</h2><span>GPS, device, network and liveness rejects</span></div></header>@for (row of faceExceptions; track trackById($index, row)) {
+<article class="record"><div><strong>{{ staffName(row) }}</strong><small>{{ row['reasonCode'] }} · {{ text(row['distanceMeters']) }}m · {{ formatDateTime(row['createdAt']) }}</small></div><span class="status bad">{{ row['status'] }}</span><div class="row-actions">@if (row['reasonCode'] === 'device_not_approved') { <button type="button" (click)="approveFaceDevice(row)">Approve device</button> }<button class="primary" type="button" (click)="approveFaceException(row)">Approve attendance</button></div></article>
+}@if (faceExceptions.length === 0) {
+<div class="empty">No face attendance exceptions</div>
+}</section>
 <section class="data-card"><header><div><h2>{{ 'staff.ui.13f06a9b79' | translate }}</h2></div><div class="row-actions"><button type="button" (click)="registerMobileDevice()">{{ 'staff.ui.7f995095af' | translate }}</button><button class="primary" type="button" (click)="syncMobileMutation()">{{ 'staff.ui.905f63092f' | translate }}</button></div></header>@for (row of mobileConflicts; track trackById($index, row)) {
 <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['conflictType'] }} · {{ row['reasonCode'] }}</small></div><span class="status bad">{{ row['status'] }}</span><div class="row-actions"><button class="primary" type="button" (click)="resolveConflict(row)">{{ 'staff.ui.ac7f958cc0' | translate }}</button></div></article>
 }@if (mobileConflicts.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section></div>
-<section class="data-card"><header><div><h2>{{ 'staff.ui.392b7c102c' | translate }}</h2></div></header><div class="key-list">@for (item of objectEntries(selfService); track item) {
+<section class="data-card"><header><div><h2>{{ 'staff.ui.392b7c102c' | translate }}</h2></div></header><div class="key-list">@for (item of objectEntries(selfService); track item.key) {
 <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
 }</div>@if (objectEntries(selfService).length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
@@ -251,11 +265,11 @@
   <div class="empty">No staff feedback yet</div>
 }</section>
   <div class="two-column"><section class="data-card"><header><div><h2>{{ 'staff.ui.deb9d03cf0' | translate }}</h2></div></header>@for (row of approvals; track trackById($index, row)) {
-  <article class="record"><div><strong>{{ label(row['requestType'] || 'Approval') }}</strong><small>{{ row['entityType'] }} · {{ formatDateTime(row['createdAt']) }}</small></div><span class="status">{{ row['status'] }}</span><div class="row-actions"><button type="button" (click)="decideApproval(row, 'rejected')">{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" (click)="decideApproval(row, 'approved')">{{ 'staff.ui.7b2c7f146a' | translate }}</button></div></article>
+  <article class="record"><div><strong>{{ row['payloadJson']?.['staffName'] || label(row['requestType'] || 'Approval') }}</strong><small>{{ label(row['requestType'] || 'Approval') }} · {{ formatDateTime(row['createdAt']) }}</small>@if (row['requestType'] === 'early_departure') { <small>{{ formatDate(row['payloadJson']?.['businessDate']) }} · {{ row['payloadJson']?.['requestedDepartureTime'] }} instead of {{ row['payloadJson']?.['scheduledEndTime'] }} · {{ row['payloadJson']?.['earlyMinutes'] }} minutes early</small><small>{{ row['payloadJson']?.['reason'] || '—' }}</small> }</div><span class="status">{{ row['status'] }}</span><div class="row-actions"><button type="button" (click)="decideApproval(row, 'rejected')">{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" (click)="decideApproval(row, 'approved')">{{ 'staff.ui.7b2c7f146a' | translate }}</button></div></article>
   }@if (approvals.length === 0) {
   <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
-<section class="data-card"><header><div><h2>{{ 'staff.ui.7b8a5ebddd' | translate }}</h2></div><div class="row-actions"><button type="button" (click)="calculateCompliance()">{{ 'staff.ui.8e5903a8e4' | translate }}</button><button class="primary" type="button" (click)="exportCompliance()">{{ 'staff.ui.f3e4fadb9e' | translate }}</button></div></header><div class="key-list">@for (item of objectEntries(compliance); track item) {
+<section class="data-card"><header><div><h2>{{ 'staff.ui.7b8a5ebddd' | translate }}</h2></div><div class="row-actions"><button type="button" (click)="calculateCompliance()">{{ 'staff.ui.8e5903a8e4' | translate }}</button><button class="primary" type="button" (click)="exportCompliance()">{{ 'staff.ui.f3e4fadb9e' | translate }}</button></div></header><div class="key-list">@for (item of objectEntries(compliance); track item.key) {
 <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
 }</div>@if (objectEntries(compliance).length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>

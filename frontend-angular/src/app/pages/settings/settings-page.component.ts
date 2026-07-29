@@ -197,7 +197,6 @@ export class SettingsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   readonly language = inject(LanguageService);
-  private readonly appointmentSettingsKey = 'aurashine.appointment.settings';
   search = '';
   activePanel: SettingsPanel | '' = '';
   saveStatus = '';
@@ -335,7 +334,7 @@ export class SettingsPageComponent implements OnInit {
         overlapTimeSlot: Boolean(body?.allowOverlap ?? body?.allow_overlap),
       });
     } catch {
-      // Keep the saved local calendar preference while the backend is unavailable.
+      this.appointmentSettings = this.defaultAppointmentSettings();
     }
     await this.loadChairRooms();
   }
@@ -1074,7 +1073,6 @@ export class SettingsPageComponent implements OnInit {
         allow_overlap: cleaned.overlapTimeSlot,
         settings: cleaned,
       }));
-      localStorage.setItem(this.appointmentSettingsKey, JSON.stringify(cleaned));
       window.dispatchEvent(new Event('aurashine:appointment-settings-updated'));
       this.saveStatus = 'Saved';
     } catch (error: any) {
@@ -1121,12 +1119,7 @@ export class SettingsPageComponent implements OnInit {
   }
 
   private loadAppointmentSettings(): AppointmentSettings {
-    try {
-      const saved = JSON.parse(localStorage.getItem(this.appointmentSettingsKey) || '{}');
-      return this.mergeAppointmentSettings(saved);
-    } catch {
-      return this.defaultAppointmentSettings();
-    }
+    return this.defaultAppointmentSettings();
   }
 
   private mergeAppointmentSettings(source: Partial<AppointmentSettings>): AppointmentSettings {

@@ -275,7 +275,7 @@ paymentModeRows: PaymentModeReportRow[] = [];
     if (this.activeTab === 'payment-wallet') return ['payment-collection', 'wallet-ledger'];
     if (this.activeTab === 'staff-service-360') return ['staff-service-discount', 'service-trends', 'service-clients'];
     if (this.activeTab === 'finance-control') return ['product-sales', 'product-movements', 'balance-sheet', 'working-capital'];
-    return ['detailed-invoice', 'invoice-activity'];
+    return ['detailed-invoice'];
   }
 
   private pathFor(tab: SourceReportTab): string {

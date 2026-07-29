@@ -1,5 +1,6 @@
 use crate::models::migration::{
     ClaimedImportJob, ImportJob, MigrationEntity, MigrationImportChunk, MigrationMode,
+    MigrationProvider,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -11,12 +12,14 @@ struct LargeStagingJobRow {
     tenant_id: String,
     branch_id: String,
     source_file_id: String,
+    source_type: String,
     entity: String,
     mode: String,
     chunk_size: i32,
     allow_partial_import: bool,
     mapping_json: Value,
     duplicate_decisions_json: Value,
+    transformation_version: String,
     created_by: String,
 }
 
@@ -25,12 +28,15 @@ pub struct LargeStagingJob {
     pub tenant_id: String,
     pub branch_id: String,
     pub source_file_id: String,
+    pub source_provider: MigrationProvider,
+    pub source_sheet: String,
     pub entity: MigrationEntity,
     pub mode: MigrationMode,
     pub chunk_size: i32,
     pub allow_partial_import: bool,
     pub mapping_json: Value,
     pub duplicate_decisions_json: Value,
+    pub transformation_version: String,
     pub created_by: String,
 }
 
@@ -39,12 +45,12 @@ struct ClaimedChunkRow {
     chunk_id: String,
     chunk_number: i32,
     checksum: String,
+    start_offset: i64,
     id: String,
     tenant_id: String,
     branch_id: String,
     entity: String,
     total_rows: i32,
-    processed_rows: i32,
     created_by: String,
     rows_json: Value,
 }
@@ -88,16 +94,19 @@ pub async fn create_job(
     mode: MigrationMode,
     file_name: &str,
     source_hash: &str,
+    source_provider: MigrationProvider,
+    source_sheet: &str,
     chunk_size: i32,
     allow_partial_import: bool,
     mapping_id: Option<&str>,
     mapping: &Value,
     duplicate_decisions: &Value,
+    transformation_version: &str,
     actor: &str,
 ) -> Result<ImportJob, sqlx::Error> {
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, super::migration_repository::ImportJobRow>(&format!(
-        "INSERT INTO integration_import_jobs(tenant_id,branch_id,entity,file_name,mode,status,source_hash,source_type,source_file_id,chunk_size,allow_partial_import,mapping_id,mapping_json,duplicate_decisions_json,worker_phase,created_by,owner_user_id,approval_status,approval_requested_at) VALUES($1,$2,$3,$4,$5,'staging',$6,'server-file',$7,$8,$9,$10,$11,$12,'staging',$13,$13,CASE WHEN $5='commit' THEN 'pending' ELSE 'not_required' END,CASE WHEN $5='commit' THEN NOW() ELSE NULL END) RETURNING {}",
+        "INSERT INTO integration_import_jobs(tenant_id,branch_id,entity,file_name,mode,status,source_hash,source_type,source_file_id,chunk_size,allow_partial_import,mapping_id,mapping_json,duplicate_decisions_json,analysis_json,worker_phase,created_by,owner_user_id,approval_status,approval_requested_at) VALUES($1,$2,$3,$4,$5,'staging',$6,$7,$8,$9,$10,$11,$12,$13,JSONB_BUILD_OBJECT('transformationVersion',$14),'staging',$15,$15,CASE WHEN $5='commit' THEN 'pending' ELSE 'not_required' END,CASE WHEN $5='commit' THEN NOW() ELSE NULL END) RETURNING {}",
         super::migration_repository::COLUMNS
     ))
     .bind(tenant)
@@ -106,18 +115,31 @@ pub async fn create_job(
     .bind(file_name)
     .bind(mode.as_str())
     .bind(source_hash)
+    .bind(format!("{}|{}", source_provider.as_str(), source_sheet))
     .bind(source_file_id)
     .bind(chunk_size)
     .bind(allow_partial_import)
     .bind(mapping_id)
     .bind(mapping)
     .bind(duplicate_decisions)
+    .bind(transformation_version)
     .bind(actor)
     .fetch_one(&mut *tx)
     .await?;
+    if mode == MigrationMode::Commit {
+        super::migration_repository::sync_job_dependencies(
+            &mut tx,
+            tenant,
+            branch,
+            &row.id,
+            entity,
+            source_hash,
+        )
+        .await?;
+    }
     sqlx::query("INSERT INTO integration_import_audit_events(tenant_id,branch_id,job_id,event_type,outcome,actor_user_id,details_json) VALUES($1,$2,$3,'migration.large_job.created','success',$4,$5)")
         .bind(tenant).bind(branch).bind(&row.id).bind(actor)
-        .bind(json!({"sourceFileId":source_file_id,"sourceHash":source_hash,"entity":entity,"mode":mode,"chunkSize":chunk_size,"allowPartialImport":allow_partial_import}))
+        .bind(json!({"sourceFileId":source_file_id,"sourceHash":source_hash,"sourceProvider":source_provider,"sourceSheet":source_sheet,"entity":entity,"mode":mode,"chunkSize":chunk_size,"allowPartialImport":allow_partial_import,"transformationVersion":transformation_version}))
         .execute(&mut *tx).await?;
     tx.commit().await?;
     super::migration_repository::into_import_job(row)
@@ -126,16 +148,20 @@ pub async fn create_job(
 pub async fn claim_staging_job(
     db: &PgPool,
     worker_id: &str,
+    transformation_version: &str,
 ) -> Result<Option<LargeStagingJob>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, LargeStagingJobRow>(
-        r#"SELECT id,tenant_id,branch_id,source_file_id,entity,mode,chunk_size,
-                  allow_partial_import,mapping_json,duplicate_decisions_json,created_by
+        r#"SELECT id,tenant_id,branch_id,source_file_id,source_type,entity,mode,chunk_size,
+                  allow_partial_import,mapping_json,duplicate_decisions_json,
+                  COALESCE(NULLIF(analysis_json->>'transformationVersion',''),$1) transformation_version,
+                  created_by
            FROM integration_import_jobs
            WHERE source_file_id IS NOT NULL AND worker_phase='staging'
              AND (status='staging' OR (status='processing' AND lease_expires_at<NOW()))
            ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1"#,
     )
+    .bind(transformation_version)
     .fetch_optional(&mut *tx)
     .await?;
     let Some(row) = row else {
@@ -152,20 +178,24 @@ pub async fn claim_staging_job(
     .await?;
     sqlx::query("DELETE FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3")
         .bind(&row.tenant_id).bind(&row.branch_id).bind(&row.id).execute(&mut *tx).await?;
-    sqlx::query("UPDATE integration_import_jobs SET status='processing',worker_id=$4,heartbeat_at=NOW(),lease_expires_at=NOW()+INTERVAL '2 minutes',source_row_count=0,valid_row_count=0,error_row_count=0,warning_row_count=0,duplicate_row_count=0,total_rows=0,processed_rows=0,next_row=0,total_chunks=0,completed_chunks=0,failed_chunks=0,errors_json='[]'::JSONB,last_error='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-        .bind(&row.tenant_id).bind(&row.branch_id).bind(&row.id).bind(worker_id).execute(&mut *tx).await?;
+    sqlx::query("UPDATE integration_import_jobs SET status='processing',worker_id=$4,heartbeat_at=NOW(),lease_expires_at=NOW()+INTERVAL '2 minutes',source_row_count=0,valid_row_count=0,error_row_count=0,warning_row_count=0,duplicate_row_count=0,total_rows=0,processed_rows=0,next_row=0,total_chunks=0,completed_chunks=0,failed_chunks=0,errors_json='[]'::JSONB,last_error='',analysis_json=COALESCE(analysis_json,'{}'::JSONB)||JSONB_BUILD_OBJECT('transformationVersion',$5),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(&row.tenant_id).bind(&row.branch_id).bind(&row.id).bind(worker_id).bind(&row.transformation_version).execute(&mut *tx).await?;
     tx.commit().await?;
+    let (provider, source_sheet) = row.source_type.split_once('|').unwrap_or(("auto", ""));
     Ok(Some(LargeStagingJob {
         id: row.id,
         tenant_id: row.tenant_id,
         branch_id: row.branch_id,
         source_file_id: row.source_file_id,
+        source_provider: MigrationProvider::try_from(provider).map_err(decode_error)?,
+        source_sheet: source_sheet.to_string(),
         entity: MigrationEntity::try_from(row.entity.as_str()).map_err(decode_error)?,
         mode: MigrationMode::try_from(row.mode.as_str()).map_err(decode_error)?,
         chunk_size: row.chunk_size,
         allow_partial_import: row.allow_partial_import,
         mapping_json: row.mapping_json,
         duplicate_decisions_json: row.duplicate_decisions_json,
+        transformation_version: row.transformation_version,
         created_by: row.created_by,
     }))
 }
@@ -308,6 +338,11 @@ pub async fn claim_chunk(
              SELECT chunk.id FROM integration_import_chunks chunk
              JOIN integration_import_jobs job ON job.id=chunk.job_id
              WHERE job.worker_phase='import' AND job.status IN ('queued','processing')
+               AND NOT EXISTS(
+                 SELECT 1 FROM integration_import_job_dependencies dependency
+                 JOIN integration_import_jobs required ON required.id=dependency.depends_on_job_id
+                 WHERE dependency.job_id=job.id AND required.status<>'completed'
+               )
                AND (chunk.status='pending' OR (chunk.status='processing' AND chunk.lease_expires_at<NOW()))
              ORDER BY job.created_at,chunk.chunk_number FOR UPDATE OF chunk SKIP LOCKED LIMIT 1
            ), claimed AS (
@@ -317,7 +352,9 @@ pub async fn claim_chunk(
              FROM due WHERE chunk.id=due.id RETURNING chunk.*
            )
            SELECT claimed.id chunk_id,claimed.chunk_number,claimed.checksum,job.id,job.tenant_id,job.branch_id,
-                  job.entity,job.total_rows,job.processed_rows,job.created_by,
+                  job.entity,job.total_rows,job.created_by,
+                  COALESCE((SELECT SUM(previous.ready_rows) FROM integration_import_chunks previous
+                    WHERE previous.job_id=job.id AND previous.chunk_number<claimed.chunk_number),0)::BIGINT start_offset,
                   COALESCE((SELECT JSONB_AGG(row.payload_json ORDER BY row.source_row_number)
                     FROM integration_import_staging_rows row WHERE row.chunk_id=claimed.id AND row.ready),'[]'::JSONB) rows_json
            FROM claimed JOIN integration_import_jobs job ON job.id=claimed.job_id"#,
@@ -331,7 +368,7 @@ pub async fn claim_chunk(
         .bind(&row.id).bind(worker_id).execute(&mut *tx).await?;
     tx.commit().await?;
     let rows = row.rows_json.as_array().cloned().unwrap_or_default();
-    let start = row.processed_rows.max(0) as usize;
+    let start = row.start_offset.max(0) as usize;
     let end = start + rows.len();
     Ok(Some(ClaimedLargeChunk {
         chunk_id: row.chunk_id,
@@ -351,16 +388,6 @@ pub async fn claim_chunk(
             created_by: row.created_by,
         },
     }))
-}
-
-pub async fn complete_chunk(db: &PgPool, chunk: &ClaimedLargeChunk) -> Result<(), sqlx::Error> {
-    let processed = chunk.rows.as_array().map_or(0, |rows| rows.len() as i32);
-    let mut tx = db.begin().await?;
-    sqlx::query("UPDATE integration_import_chunks SET status='completed',processed_rows=$2,worker_id='',heartbeat_at=NOW(),lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() WHERE id=$1")
-        .bind(&chunk.chunk_id).bind(processed).execute(&mut *tx).await?;
-    sqlx::query("UPDATE integration_import_jobs SET completed_chunks=(SELECT COUNT(*)::INTEGER FROM integration_import_chunks WHERE job_id=$1 AND status='completed'),failed_chunks=(SELECT COUNT(*)::INTEGER FROM integration_import_chunks WHERE job_id=$1 AND status='failed'),worker_id='',heartbeat_at=NOW(),lease_expires_at=NULL,updated_at=NOW() WHERE id=$1")
-        .bind(&chunk.job.id).execute(&mut *tx).await?;
-    tx.commit().await
 }
 
 pub async fn fail_chunk(

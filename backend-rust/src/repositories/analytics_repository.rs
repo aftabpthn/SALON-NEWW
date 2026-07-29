@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde_json::Value;
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct RevenuePointRecord {
@@ -215,6 +215,7 @@ pub struct CustomReportRecord {
     pub last_status: String,
     pub last_error: String,
     pub consecutive_failures: i32,
+    pub active: bool,
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -580,22 +581,12 @@ pub async fn daily_micro_profit(
 ) -> Result<Vec<DailyProfitRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
-        WITH event AS (
-          SELECT business_date,SUM(recognized_revenue_paise)::BIGINT AS revenue_paise,
-                 SUM(product_cost_paise+staff_cost_paise)::BIGINT AS event_cost_paise
-            FROM micro_profit_events
-           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND business_date BETWEEN $3 AND $4
-           GROUP BY business_date
-        ), cost AS (
-          SELECT business_date,SUM(cost_paise)::BIGINT AS controllable_cost_paise
-            FROM micro_profit_cost_events
-           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND business_date BETWEEN $3 AND $4
-           GROUP BY business_date
-        )
-        SELECT COALESCE(event.business_date,cost.business_date) AS business_date,
-               COALESCE(event.revenue_paise,0)::BIGINT AS revenue_paise,
-               (COALESCE(event.event_cost_paise,0)+COALESCE(cost.controllable_cost_paise,0))::BIGINT AS direct_cost_paise
-          FROM event FULL JOIN cost USING(business_date)
+        SELECT business_date,SUM(recognized_revenue_paise)::BIGINT AS revenue_paise,
+               SUM(product_cost_paise+staff_cost_paise+staff_time_cost_paise
+                   +gateway_fee_paise+refund_fee_paise)::BIGINT AS direct_cost_paise
+          FROM micro_profit_daily_rollup
+         WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND business_date BETWEEN $3 AND $4
+         GROUP BY business_date
          ORDER BY business_date
         "#,
     )
@@ -605,6 +596,22 @@ pub async fn daily_micro_profit(
     .bind(to_date)
     .fetch_all(db)
     .await
+}
+
+pub async fn ensure_micro_profit_daily_rollup(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    from_date: NaiveDate,
+    to_date: NaiveDate,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT refresh_micro_profit_daily_rollup($1,$2::TEXT[],$3,$4)")
+        .bind(tenant_id)
+        .bind(branch_ids.to_vec())
+        .bind(from_date)
+        .bind(to_date)
+        .fetch_one(db)
+        .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -623,25 +630,18 @@ pub async fn micro_profit_lines(
         r#"
         WITH aggregated AS (
           SELECT tenant_id,branch_id,sale_id,sale_line_id,
-                 MIN(business_date) AS first_event_date,
-                 MAX(business_date) AS last_event_date,
+                 MIN(business_date) AS first_event_date,MAX(business_date) AS last_event_date,
                  SUM(recognized_revenue_paise)::BIGINT AS recognized_revenue_paise,
                  SUM(product_cost_paise)::BIGINT AS product_cost_paise,
                  SUM(staff_cost_paise)::BIGINT AS staff_cost_paise,
-                 COUNT(*)::BIGINT AS event_count
-            FROM micro_profit_events
-           WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
-             AND business_date BETWEEN $3 AND $4
-           GROUP BY tenant_id,branch_id,sale_id,sale_line_id
-        ), controllable_cost AS (
-          SELECT tenant_id,branch_id,sale_id,sale_line_id,
-                 COALESCE(SUM(cost_paise) FILTER (WHERE cost_type='staff_time'),0)::BIGINT AS staff_time_cost_paise,
-                 COALESCE(SUM(cost_paise) FILTER (WHERE cost_type='gateway_fee'),0)::BIGINT AS gateway_fee_paise,
-                 COALESCE(SUM(cost_paise) FILTER (WHERE cost_type='refund_gateway_fee'),0)::BIGINT AS refund_fee_paise,
-                 BOOL_OR(cost_type='staff_time') AS has_staff_time_cost,
-                 BOOL_OR(cost_type='gateway_fee') AS has_gateway_fee,
-                 BOOL_OR(cost_type='refund_gateway_fee') AS has_refund_fee
-            FROM micro_profit_cost_events
+                 SUM(staff_time_cost_paise)::BIGINT AS staff_time_cost_paise,
+                 SUM(gateway_fee_paise)::BIGINT AS gateway_fee_paise,
+                 SUM(refund_fee_paise)::BIGINT AS refund_fee_paise,
+                 BOOL_OR(has_staff_time_cost) AS has_staff_time_cost,
+                 BOOL_OR(has_gateway_fee) AS has_gateway_fee,
+                 BOOL_OR(has_refund_fee) AS has_refund_fee,
+                 SUM(event_count)::BIGINT AS event_count
+            FROM micro_profit_daily_rollup
            WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
              AND business_date BETWEEN $3 AND $4
            GROUP BY tenant_id,branch_id,sale_id,sale_line_id
@@ -671,12 +671,6 @@ pub async fn micro_profit_lines(
                  COALESCE(NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.middle_name,''),NULLIF(staff.last_name,''))),''),'Unassigned') AS staff_name,
                  COALESCE(sale.client_id,'') AS client_id,
                  COALESCE(NULLIF(TRIM(CONCAT_WS(' ',client.first_name,NULLIF(client.last_name,''))),''),'Walk-in') AS client_name,
-                 COALESCE(controllable_cost.staff_time_cost_paise,0)::BIGINT AS staff_time_cost_paise,
-                 COALESCE(controllable_cost.gateway_fee_paise,0)::BIGINT AS gateway_fee_paise,
-                 COALESCE(controllable_cost.refund_fee_paise,0)::BIGINT AS refund_fee_paise,
-                 COALESCE(controllable_cost.has_staff_time_cost,FALSE) AS has_staff_time_cost,
-                 COALESCE(controllable_cost.has_gateway_fee,FALSE) AS has_gateway_fee,
-                 COALESCE(controllable_cost.has_refund_fee,FALSE) AS has_refund_fee,
                  COALESCE(service.duration_minutes,0)::BIGINT*GREATEST(line.quantity,1) AS service_minutes,
                   CASE WHEN appointment.chair_room_id IS NOT NULL THEN
                     COALESCE(service.duration_minutes,0)::BIGINT*GREATEST(line.quantity,1)
@@ -752,11 +746,6 @@ pub async fn micro_profit_lines(
               ON COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=sale.tenant_id
             LEFT JOIN branches branch ON branch.tenant_id=tenant.id
              AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=sale.branch_id
-            LEFT JOIN controllable_cost
-              ON controllable_cost.tenant_id=aggregated.tenant_id
-             AND controllable_cost.branch_id=aggregated.branch_id
-             AND controllable_cost.sale_id=aggregated.sale_id
-             AND controllable_cost.sale_line_id=aggregated.sale_line_id
         ), weighted_facts AS (
           SELECT facts.*,
                  COUNT(*) OVER (PARTITION BY tenant_id,branch_id,sale_id)::NUMERIC AS sale_line_count,
@@ -1500,8 +1489,53 @@ pub async fn list_custom_reports(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<CustomReportRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,tenant_id,branch_id,name,definition_json,schedule_frequency,schedule_day,schedule_time,recipient_email,next_run_at,last_run_at,last_status,last_error,last_result_json,consecutive_failures,active,version,created_at,updated_at FROM custom_reports WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY updated_at DESC,id")
+    sqlx::query_as("SELECT id,tenant_id,branch_id,name,definition_json,schedule_frequency,schedule_day,schedule_time,recipient_email,next_run_at,last_run_at,last_status,last_error,last_result_json,consecutive_failures,active,version,created_at,updated_at FROM custom_reports WHERE tenant_id=$1 AND branch_id=$2 ORDER BY active DESC,updated_at DESC,id")
         .bind(tenant_id).bind(branch_id).fetch_all(db).await
+}
+
+pub async fn get_custom_report_any(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<CustomReportRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,tenant_id,branch_id,name,definition_json,schedule_frequency,schedule_day,schedule_time,recipient_email,next_run_at,last_run_at,last_status,last_error,last_result_json,consecutive_failures,active,version,created_at,updated_at FROM custom_reports WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn update_custom_report_lifecycle(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    expected_version: i32,
+    action: &str,
+    next_run_at: Option<DateTime<Utc>>,
+    actor: &str,
+) -> Result<Option<CustomReportRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE custom_reports SET
+             schedule_frequency=CASE WHEN $5='stopSchedule' THEN 'none' ELSE schedule_frequency END,
+             active=CASE WHEN $5='archive' THEN FALSE WHEN $5='restore' THEN TRUE ELSE active END,
+             next_run_at=CASE WHEN $5 IN ('stopSchedule','archive') THEN NULL ELSE $6 END,
+             updated_by=$7,version=version+1,updated_at=NOW()
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4
+             AND (($5='stopSchedule' AND active=TRUE AND schedule_frequency<>'none')
+               OR ($5='archive' AND active=TRUE) OR ($5='restore' AND active=FALSE))
+           RETURNING id,tenant_id,branch_id,name,definition_json,schedule_frequency,schedule_day,
+             schedule_time,recipient_email,next_run_at,last_run_at,last_status,last_error,
+             last_result_json,consecutive_failures,active,version,created_at,updated_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(expected_version)
+    .bind(action)
+    .bind(next_run_at)
+    .bind(actor)
+    .fetch_optional(&mut **tx)
+    .await
 }
 
 pub async fn get_custom_report(
@@ -1588,7 +1622,7 @@ pub async fn finish_scheduled_custom_report(
     next_run_at: DateTime<Utc>,
 ) -> Result<(), sqlx::Error> {
     let completed = error.is_empty();
-    sqlx::query("UPDATE custom_reports SET last_status=CASE WHEN $2 THEN 'completed' ELSE 'failed' END,last_error=$3,last_result_json=CASE WHEN $2 THEN $4 ELSE last_result_json END,consecutive_failures=CASE WHEN $2 THEN 0 ELSE consecutive_failures+1 END,next_run_at=$5,updated_at=NOW() WHERE id=$1 AND active=TRUE")
+    sqlx::query("UPDATE custom_reports SET last_status=CASE WHEN $2 THEN 'completed' ELSE 'failed' END,last_error=$3,last_result_json=CASE WHEN $2 THEN $4 ELSE last_result_json END,consecutive_failures=CASE WHEN $2 THEN 0 ELSE consecutive_failures+1 END,next_run_at=CASE WHEN schedule_frequency='none' THEN NULL ELSE $5 END,updated_at=NOW() WHERE id=$1 AND active=TRUE")
         .bind(id).bind(completed).bind(error).bind(result).bind(next_run_at).execute(db).await?;
     Ok(())
 }

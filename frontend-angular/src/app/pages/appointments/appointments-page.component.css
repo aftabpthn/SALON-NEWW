@@ -2099,6 +2099,61 @@ button.active {
   padding-right: 42px;
 }
 
+.staff-recommendations {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 7px;
+}
+
+.staff-recommendations > strong {
+  color: #1d2b41;
+  font-size: 12px;
+}
+
+.staff-recommendations button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--as-line);
+  border-radius: 9px;
+  background: #fff;
+  color: #1d2b41;
+  text-align: left;
+}
+
+.staff-recommendations button:hover,
+.staff-recommendations button.selected {
+  border-color: #2f6db2;
+  background: #eef6ff;
+}
+
+.staff-recommendations button span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.staff-recommendations em {
+  color: #067647;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.staff-recommendations small {
+  color: var(--as-muted);
+  line-height: 1.35;
+}
+
+.service-card .recommendation-override-field {
+  grid-column: 1 / -1;
+}
+
+.recommendation-override-field textarea {
+  resize: vertical;
+}
+
 .requested-staff-heart {
   position: absolute;
   top: 50%;

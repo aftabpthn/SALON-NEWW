@@ -3,11 +3,14 @@ use crate::{
     models::{
         common::AppError,
         migration::{
-            AnalyzeMigrationRequest, CreateImportJobRequest, ImportJob, MigrationAnalysisReport,
-            MigrationApprovalRequest, MigrationEntity, MigrationJobStatus, MigrationMapping,
-            MigrationMappingSuggestionRequest, MigrationMode, MigrationRecoveryReport,
-            MigrationTemplate, SaveMigrationMappingRequest,
+            AnalyzeMigrationRequest, ApproveMigrationMappingRequest, CreateImportJobRequest,
+            ImportJob, MigrationAlias, MigrationAnalysisReport, MigrationApprovalRequest,
+            MigrationEntity, MigrationJobStatus, MigrationMapping, MigrationMappingApproval,
+            MigrationMappingSuggestionRequest, MigrationMode, MigrationProvider,
+            MigrationRecoveryReport, MigrationTemplate, SaveMigrationAliasRequest,
+            SaveMigrationMappingRequest,
         },
+        migration_file::MigrationSourceColumnProfile,
     },
     repositories::{auth_repository, migration_repository},
     services::{migration_adapter_service, migration_file_service, migration_large_import_service},
@@ -20,6 +23,15 @@ use std::collections::{BTreeMap, HashSet};
 
 pub fn templates() -> Vec<MigrationTemplate> {
     migration_adapter_service::templates()
+}
+
+struct MappingEvaluation {
+    columns: Vec<String>,
+    profiles: Vec<MigrationSourceColumnProfile>,
+    source_provider: MigrationProvider,
+    template: MigrationTemplate,
+    resolution: migration_adapter_service::MappingResolution,
+    fingerprint: String,
 }
 
 pub async fn save_mapping(
@@ -60,6 +72,42 @@ pub async fn list_mappings(
         .map_err(|_| AppError::internal("failed to list import mappings"))
 }
 
+pub async fn save_alias(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: SaveMigrationAliasRequest,
+) -> Result<MigrationAlias, AppError> {
+    let target = migration_adapter_service::validate_tenant_alias(
+        request.entity,
+        &request.alias,
+        &request.target_field,
+    )?;
+    migration_repository::save_alias(
+        db,
+        tenant,
+        branch,
+        request.entity,
+        request.source_provider,
+        request.alias.trim(),
+        &target,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save tenant migration alias"))
+}
+
+pub async fn list_aliases(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+) -> Result<Vec<MigrationAlias>, AppError> {
+    migration_repository::list_aliases(db, tenant, branch, None)
+        .await
+        .map_err(|_| AppError::internal("failed to list tenant migration aliases"))
+}
+
 pub async fn analyze(
     db: &PgPool,
     tenant: &str,
@@ -70,11 +118,20 @@ pub async fn analyze(
         .mapping_id
         .as_deref()
         .filter(|id| !id.trim().is_empty());
-    let mapping = effective_mapping(
+    let (headers, profiles, row_count) =
+        migration_file_service::profile_csv_mapping_evidence(&request.csv, request.entity)?;
+    let mapping = resolved_mapping(
         db,
         tenant,
         branch,
         request.entity,
+        request.source_provider,
+        &headers,
+        &profiles,
+        row_count,
+        None,
+        "",
+        None,
         mapping_id,
         request.mapping,
     )
@@ -84,6 +141,7 @@ pub async fn analyze(
         tenant,
         branch,
         request.entity,
+        request.source_provider,
         &request.csv,
         &mapping,
         &request.duplicate_decisions,
@@ -131,11 +189,20 @@ pub async fn create_job(
         .mapping_id
         .as_deref()
         .filter(|id| !id.trim().is_empty());
-    let mapping = effective_mapping(
+    let (headers, profiles, row_count) =
+        migration_file_service::profile_csv_mapping_evidence(&request.csv, request.entity)?;
+    let mapping = resolved_mapping(
         db,
         tenant,
         branch,
         request.entity,
+        request.source_provider,
+        &headers,
+        &profiles,
+        row_count,
+        None,
+        "",
+        None,
         mapping_id,
         request.mapping,
     )
@@ -145,6 +212,7 @@ pub async fn create_job(
         tenant,
         branch,
         request.entity,
+        request.source_provider,
         &request.csv,
         &mapping,
         &request.duplicate_decisions,
@@ -292,14 +360,26 @@ pub async fn governance_report(
 
 pub async fn proof_pack(
     db: &PgPool,
+    settings: &Settings,
     tenant: &str,
     branch: &str,
     id: &str,
 ) -> Result<serde_json::Value, AppError> {
-    migration_repository::proof_pack(db, tenant, branch, id)
+    let mut pack = migration_repository::proof_pack(db, tenant, branch, id)
         .await
         .map_err(|_| AppError::internal("failed to build import proof pack"))?
-        .ok_or_else(|| AppError::not_found("import job not found"))
+        .ok_or_else(|| AppError::not_found("import job not found"))?;
+    let signing_key = settings
+        .migration_proof_signing_key
+        .as_deref()
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "MIGRATION_SIGNING_NOT_CONFIGURED",
+                "migration proof-pack signing is not configured",
+            )
+        })?;
+    crate::services::migration_proof_service::sign(&mut pack, signing_key)?;
+    Ok(pack)
 }
 
 pub async fn failed_rows_csv(
@@ -346,6 +426,171 @@ pub async fn mapping_suggestions(
     actor: &str,
     request: MigrationMappingSuggestionRequest,
 ) -> Result<Value, AppError> {
+    let mut evaluation = evaluate_mapping(db, tenant, branch, actor, &request).await?;
+    apply_mapping_approvals(
+        db,
+        tenant,
+        branch,
+        &evaluation.fingerprint,
+        &mut evaluation.resolution,
+    )
+    .await?;
+    let mut suggestions = evaluation.resolution.mapping.clone();
+    suggestions.extend(
+        request
+            .mapping
+            .iter()
+            .filter(|(_, target)| target.as_str() == "__ignore")
+            .map(|(source, target)| (source.clone(), target.clone())),
+    );
+    let supported_targets = evaluation
+        .template
+        .columns
+        .iter()
+        .map(|column| column.field.clone())
+        .collect::<HashSet<_>>();
+    let semantic_targets = evaluation
+        .template
+        .columns
+        .iter()
+        .map(|column| json!({"field":&column.field,"aliases":&column.aliases}))
+        .collect::<Vec<_>>();
+    let semantic = call_migration_ai(
+        settings,
+        "/api/v1/migrations/mapping-suggestions",
+        json!({
+            "tenant_id":tenant,
+            "branch_id":branch,
+            "entity":request.entity.as_str(),
+            "source_provider":evaluation.source_provider.as_str(),
+            "source_columns":&evaluation.columns,
+            "targets":semantic_targets,
+            "profile":&evaluation.profiles
+        }),
+    )
+    .await;
+    let semantic_source = semantic
+        .as_ref()
+        .and_then(|value| value.get("source"))
+        .and_then(Value::as_str)
+        .filter(|source| matches!(*source, "python_deterministic" | "openai_responses"))
+        .unwrap_or("unavailable");
+    let semantic_advisory = semantic
+        .as_ref()
+        .and_then(|value| value.get("suggestions"))
+        .cloned()
+        .and_then(|value| serde_json::from_value::<BTreeMap<String, String>>(value).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|(source, target)| {
+            evaluation.columns.contains(source) && supported_targets.contains(target)
+        })
+        .collect::<BTreeMap<_, _>>();
+    Ok(json!({
+        "entity":request.entity.as_str(),
+        "sourceProvider":evaluation.source_provider.as_str(),
+        "source":"rust_deterministic_confidence",
+        "model":migration_adapter_service::MIGRATION_CONFIDENCE_RULE_VERSION,
+        "contractVersion":evaluation.template.contract_version,
+        "ruleVersion":migration_adapter_service::MIGRATION_CONFIDENCE_RULE_VERSION,
+        "fingerprint":evaluation.fingerprint,
+        "semanticSource":semantic_source,
+        "semanticAdvisory":semantic_advisory,
+        "suggestions":suggestions,
+        "unmatchedColumns":evaluation.resolution.unmatched,
+        "decisions":evaluation.resolution.decisions,
+        "approvalRequiredIssues":evaluation.resolution.approval_required_reasons.values().collect::<Vec<_>>(),
+        "hardBlockingIssues":evaluation.resolution.hard_blocking_reasons,
+        "blockingIssues":evaluation.resolution.blocking_reasons
+    }))
+}
+
+pub async fn approve_mapping(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: ApproveMigrationMappingRequest,
+) -> Result<MigrationMappingApproval, AppError> {
+    let source_column = request.source_column.trim();
+    let target_field = request.target_field.trim();
+    let fingerprint = request.fingerprint.trim().to_ascii_lowercase();
+    if source_column.is_empty()
+        || source_column.chars().count() > 200
+        || target_field.is_empty()
+        || target_field.chars().count() > 120
+        || fingerprint.len() != 64
+        || !fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(AppError::validation("mapping approval payload is invalid"));
+    }
+    let baseline = evaluate_mapping(db, tenant, branch, actor, &request.evaluation).await?;
+    if baseline.fingerprint != fingerprint {
+        return Err(AppError::conflict(
+            "mapping evidence changed; refresh suggestions before approval",
+        ));
+    }
+    if !baseline
+        .resolution
+        .decisions
+        .iter()
+        .any(|decision| decision.source_column == source_column)
+    {
+        return Err(AppError::validation(
+            "source column is not part of this mapping evaluation",
+        ));
+    }
+    let mut selected_request = request.evaluation;
+    selected_request
+        .mapping
+        .insert(source_column.to_string(), target_field.to_string());
+    let selected = evaluate_mapping(db, tenant, branch, actor, &selected_request).await?;
+    let decision = selected
+        .resolution
+        .decisions
+        .iter()
+        .find(|decision| decision.source_column == source_column)
+        .filter(|decision| decision.target_field.as_deref() == Some(target_field))
+        .ok_or_else(|| AppError::validation("selected CRM target is not supported"))?;
+    if decision.confidence == "red" {
+        return Err(AppError::validation(
+            "Red mapping is a hard failure and cannot be approved or overridden",
+        ));
+    }
+    if decision.confidence != "yellow" {
+        return Err(AppError::conflict(
+            "only Yellow mappings require governance approval",
+        ));
+    }
+    let decision_json = serde_json::to_value(decision)
+        .map_err(|_| AppError::internal("failed to serialize mapping approval evidence"))?;
+    migration_repository::approve_mapping(
+        db,
+        tenant,
+        branch,
+        selected_request.entity,
+        selected.source_provider,
+        migration_adapter_service::MIGRATION_CONFIDENCE_RULE_VERSION,
+        &selected.fingerprint,
+        selected_request.source_file_id.as_deref(),
+        selected_request.source_sheet.trim(),
+        source_column,
+        target_field,
+        decision.confidence_percentage,
+        &decision_json,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record Yellow mapping approval"))
+}
+
+async fn evaluate_mapping(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: &MigrationMappingSuggestionRequest,
+) -> Result<MappingEvaluation, AppError> {
     let source_file_id = request
         .source_file_id
         .as_deref()
@@ -356,10 +601,58 @@ pub async fn mapping_suggestions(
             "provide sourceColumns or sourceFileId, not both",
         ));
     }
-    let source_columns = if let Some(id) = source_file_id {
-        migration_file_service::source_columns(db, tenant, branch, actor, id).await?
+    let source_evidence_sha256 = if let Some(id) = source_file_id {
+        Some(
+            migration_file_service::get_source_file(db, tenant, branch, id)
+                .await?
+                .sha256,
+        )
     } else {
-        request.source_columns
+        None
+    };
+    let (source_columns, profiles, row_count, source_provider) = if let Some(id) = source_file_id {
+        let profile = migration_file_service::source_profile(db, tenant, branch, actor, id).await?;
+        let importable = profile
+            .sheets
+            .iter()
+            .filter(|sheet| sheet.importable)
+            .collect::<Vec<_>>();
+        let sheet = if request.source_sheet.trim().is_empty() {
+            if importable.len() != 1 {
+                return Err(AppError::validation(
+                    "select one source sheet before requesting mapping suggestions",
+                ));
+            }
+            importable[0]
+        } else {
+            profile
+                .sheets
+                .iter()
+                .find(|sheet| sheet.id == request.source_sheet.trim())
+                .ok_or_else(|| AppError::validation("selected source sheet was not found"))?
+        };
+        if !sheet.targets.is_empty() && !sheet.targets.contains(&request.entity) {
+            return Err(AppError::validation(
+                "selected source sheet does not contain the chosen entity",
+            ));
+        }
+        (
+            sheet.columns.clone(),
+            sheet.column_profiles.clone(),
+            sheet.row_count,
+            if request.source_provider == crate::models::migration::MigrationProvider::Auto {
+                profile.provider
+            } else {
+                request.source_provider
+            },
+        )
+    } else {
+        (
+            request.source_columns.clone(),
+            Vec::new(),
+            0,
+            request.source_provider,
+        )
     };
     if source_columns.is_empty() || source_columns.len() > 500 {
         return Err(AppError::validation(
@@ -380,50 +673,121 @@ pub async fn mapping_suggestions(
             "source columns contain invalid or duplicate values",
         ));
     }
-    let fallback = mapping_suggestion_result(
-        request.entity,
-        &columns,
-        &BTreeMap::new(),
-        "rust_deterministic",
-        "local-mapping-policy-v1",
-    )?;
-    let Some(template) = templates()
+    let template = templates()
         .into_iter()
         .find(|item| item.entity == request.entity)
-    else {
-        return Ok(fallback);
-    };
-    let payload = json!({
-        "tenant_id":tenant,"branch_id":branch,"entity":request.entity.as_str(),"source_columns":columns,
-        "targets":template.columns.into_iter().map(|column|json!({"field":column.field,"aliases":column.aliases})).collect::<Vec<_>>()
-    });
-    let Some(ai) =
-        call_migration_ai(settings, "/api/v1/migrations/mapping-suggestions", payload).await
-    else {
-        return Ok(fallback);
-    };
-    let source = ai.get("source").and_then(Value::as_str).unwrap_or_default();
-    if !matches!(source, "python_deterministic" | "openai_responses") {
-        return Ok(fallback);
-    }
-    let Ok(provided) = serde_json::from_value::<BTreeMap<String, String>>(
-        ai.get("suggestions").cloned().unwrap_or_default(),
-    ) else {
-        return Ok(fallback);
-    };
-    if provided.keys().any(|source| !columns.contains(source)) {
-        return Ok(fallback);
-    }
-    mapping_suggestion_result(
+        .ok_or_else(|| AppError::validation("migration entity is not supported"))?;
+    let aliases = migration_repository::list_aliases(db, tenant, branch, Some(request.entity))
+        .await
+        .map_err(|_| AppError::internal("failed to load tenant migration aliases"))?;
+    let resolution = migration_adapter_service::resolve_mapping_with_confidence(
         request.entity,
+        source_provider,
         &columns,
-        &provided,
-        source,
-        ai.get("model")
-            .and_then(Value::as_str)
-            .unwrap_or("local-mapping-policy-v1"),
-    )
-    .or(Ok(fallback))
+        &request.mapping,
+        &aliases,
+        &profiles,
+        row_count,
+    )?;
+    let fingerprint = mapping_fingerprint(
+        request.entity,
+        source_provider,
+        source_file_id,
+        request.source_sheet.trim(),
+        source_evidence_sha256.as_deref(),
+        &columns,
+        &resolution,
+    )?;
+    Ok(MappingEvaluation {
+        columns,
+        profiles,
+        source_provider,
+        template,
+        resolution,
+        fingerprint,
+    })
+}
+
+async fn apply_mapping_approvals(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    fingerprint: &str,
+    resolution: &mut migration_adapter_service::MappingResolution,
+) -> Result<(), AppError> {
+    let approvals = migration_repository::list_mapping_approvals(db, tenant, branch, fingerprint)
+        .await
+        .map_err(|_| AppError::internal("failed to load mapping approvals"))?;
+    for approval in approvals {
+        let Some(decision) = resolution.decisions.iter_mut().find(|decision| {
+            decision.confidence == "yellow"
+                && decision.source_column == approval.source_column
+                && decision.target_field.as_deref() == Some(approval.target_field.as_str())
+                && decision.confidence_percentage == approval.confidence_percentage
+        }) else {
+            continue;
+        };
+        decision.approved = true;
+        decision.approval_id = Some(approval.id);
+        decision.approved_by = Some(approval.approved_by);
+        decision.approved_at = Some(approval.approved_at);
+        resolution.mapping.insert(
+            decision.source_column.clone(),
+            approval.target_field.clone(),
+        );
+        resolution
+            .approval_required_reasons
+            .remove(&decision.source_column);
+    }
+    resolution.blocking_reasons = resolution.hard_blocking_reasons.clone();
+    resolution
+        .blocking_reasons
+        .extend(resolution.approval_required_reasons.values().cloned());
+    resolution.blocking_reasons.sort();
+    resolution.blocking_reasons.dedup();
+    let matched = resolution
+        .mapping
+        .keys()
+        .map(|source| source.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    resolution.unmatched = resolution
+        .decisions
+        .iter()
+        .filter(|decision| {
+            decision.reason != "explicitly_ignored"
+                && !matched.contains(&decision.source_column.to_ascii_lowercase())
+        })
+        .map(|decision| decision.source_column.clone())
+        .collect();
+    Ok(())
+}
+
+fn mapping_fingerprint(
+    entity: MigrationEntity,
+    source_provider: MigrationProvider,
+    source_file_id: Option<&str>,
+    source_sheet: &str,
+    source_evidence_sha256: Option<&str>,
+    columns: &[String],
+    resolution: &migration_adapter_service::MappingResolution,
+) -> Result<String, AppError> {
+    let payload = json!({
+        "ruleVersion":migration_adapter_service::MIGRATION_CONFIDENCE_RULE_VERSION,
+        "entity":entity.as_str(),
+        "sourceProvider":source_provider.as_str(),
+        "sourceFileId":source_file_id,
+        "sourceSheet":source_sheet,
+        "sourceEvidenceSha256":source_evidence_sha256,
+        "columns":columns,
+        "decisions":&resolution.decisions
+    });
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(&payload)
+                .map_err(|_| AppError::internal("failed to fingerprint mapping suggestions"))?
+        )
+    ))
 }
 
 pub async fn failure_assistant(
@@ -593,22 +957,57 @@ pub(crate) async fn effective_mapping(
     Ok(mapping)
 }
 
-fn source_hash(csv: &str) -> String {
-    format!("{:x}", Sha256::digest(csv.as_bytes()))
+pub(crate) async fn resolved_mapping(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: MigrationEntity,
+    source_provider: crate::models::migration::MigrationProvider,
+    source_columns: &[String],
+    profiles: &[crate::models::migration_file::MigrationSourceColumnProfile],
+    row_count: i64,
+    source_file_id: Option<&str>,
+    source_sheet: &str,
+    source_evidence_sha256: Option<&str>,
+    mapping_id: Option<&str>,
+    overrides: BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, AppError> {
+    let explicit = effective_mapping(db, tenant, branch, entity, mapping_id, overrides).await?;
+    let aliases = migration_repository::list_aliases(db, tenant, branch, Some(entity))
+        .await
+        .map_err(|_| AppError::internal("failed to load tenant migration aliases"))?;
+    let mut resolution = migration_adapter_service::resolve_mapping_with_confidence(
+        entity,
+        source_provider,
+        source_columns,
+        &explicit,
+        &aliases,
+        profiles,
+        row_count,
+    )?;
+    let fingerprint = mapping_fingerprint(
+        entity,
+        source_provider,
+        source_file_id,
+        source_sheet,
+        source_evidence_sha256,
+        source_columns,
+        &resolution,
+    )?;
+    apply_mapping_approvals(db, tenant, branch, &fingerprint, &mut resolution).await?;
+    if !resolution.blocking_reasons.is_empty() {
+        return Err(AppError::validation(resolution.blocking_reasons.join("; ")));
+    }
+    resolution.mapping.extend(
+        explicit
+            .into_iter()
+            .filter(|(_, target)| target == "__ignore"),
+    );
+    Ok(resolution.mapping)
 }
 
-fn mapping_suggestion_result(
-    entity: MigrationEntity,
-    columns: &[String],
-    provided: &BTreeMap<String, String>,
-    source: &str,
-    model: &str,
-) -> Result<Value, AppError> {
-    let (suggestions, unmatched) =
-        migration_adapter_service::suggest_mapping(entity, columns, provided)?;
-    Ok(
-        json!({"entity":entity.as_str(),"source":source,"model":model,"suggestions":suggestions,"unmatchedColumns":unmatched}),
-    )
+fn source_hash(csv: &str) -> String {
+    format!("{:x}", Sha256::digest(csv.as_bytes()))
 }
 
 async fn call_migration_ai(settings: &Settings, path: &str, payload: Value) -> Option<Value> {

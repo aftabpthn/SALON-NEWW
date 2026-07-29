@@ -2295,6 +2295,13 @@ fn format_invoice_date(date: &DateTime<Utc>) -> String {
     date.format("%d/%m/%Y").to_string()
 }
 
+fn format_invoice_date_text(value: &str) -> String {
+    let date_text = value.get(0..10).unwrap_or(value);
+    NaiveDate::parse_from_str(date_text, "%Y-%m-%d")
+        .map(|date| date.format("%d/%m/%Y").to_string())
+        .unwrap_or_else(|_| value.to_string())
+}
+
 fn invoice_print_file_name(invoice_number: &str, extension: &str) -> String {
     let mut safe = invoice_number
         .chars()
@@ -2310,6 +2317,109 @@ fn invoice_print_file_name(invoice_number: &str, extension: &str) -> String {
         safe = "invoice".to_string();
     }
     format!("{}.{}", safe, extension)
+}
+
+fn invoice_json_string(row: &Value, keys: &[&str]) -> String {
+    keys.iter()
+        .find_map(|key| row.get(*key))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+fn invoice_json_i64(row: &Value, keys: &[&str]) -> i64 {
+    keys.iter()
+        .find_map(|key| row.get(*key))
+        .and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_str().and_then(|raw| raw.trim().parse().ok()))
+        })
+        .unwrap_or(0)
+}
+
+fn invoice_package_redemption_rows(raw: &Value) -> String {
+    raw.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let quantity = invoice_json_i64(row, &["quantity", "qty"]);
+            if quantity <= 0 {
+                return None;
+            }
+            let package = invoice_json_string(row, &["packageName", "package_name"]);
+            let service = invoice_json_string(row, &["serviceName", "service_name"]);
+            Some(format!(
+                "<tr><td>{}</td><td>{}</td><td class=\"num strong\">{} used</td></tr>",
+                escape_invoice_html(&package),
+                escape_invoice_html(&service),
+                quantity
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn invoice_package_balance_rows(raw: &Value) -> String {
+    raw.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let pending = invoice_json_i64(row, &["pendingQty", "pending_qty", "remainingQty", "remaining_qty"]);
+            if pending <= 0 {
+                return None;
+            }
+            let package = invoice_json_string(row, &["packageName", "package_name"]);
+            let service = invoice_json_string(row, &["serviceName", "service_name"]);
+            let expiry = row
+                .get("expiresAt")
+                .or_else(|| row.get("expires_at"))
+                .and_then(Value::as_str)
+                .map(format_invoice_date_text)
+                .unwrap_or_else(|| "-".to_string());
+            Some(format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td class=\"num strong\">{} pending</td></tr>",
+                escape_invoice_html(&package),
+                escape_invoice_html(&service),
+                escape_invoice_html(&expiry),
+                pending
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn invoice_package_section(details: &PosSaleDetailsResponse) -> String {
+    let redeemed_rows = invoice_package_redemption_rows(&details.sale.package_redemptions);
+    let balance_rows = details
+        .client_kpi
+        .as_ref()
+        .map(|kpi| invoice_package_balance_rows(&kpi.package_credits))
+        .unwrap_or_default();
+    if redeemed_rows.is_empty() && balance_rows.is_empty() {
+        return String::new();
+    }
+    let redeemed_table = if redeemed_rows.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div class=\"benefit-block\"><div class=\"label\">Package used in this invoice</div><table><thead><tr><th>Package</th><th>Service</th><th class=\"num\">Qty</th></tr></thead><tbody>{}</tbody></table></div>",
+            redeemed_rows
+        )
+    };
+    let balance_table = if balance_rows.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<div class=\"benefit-block\"><div class=\"label\">Package balance remaining</div><table><thead><tr><th>Package</th><th>Service</th><th>Expiry</th><th class=\"num\">Pending</th></tr></thead><tbody>{}</tbody></table></div>",
+            balance_rows
+        )
+    };
+    format!(
+        "<section class=\"benefits\">{}{}</section>",
+        redeemed_table, balance_table
+    )
 }
 
 fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
@@ -2378,6 +2488,8 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
             .join("")
     };
 
+    let package_section = invoice_package_section(details);
+
     let finalized_date = invoice
         .finalized_at
         .as_ref()
@@ -2410,6 +2522,9 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
     .summary {{ display: grid; grid-template-columns: 1fr 320px; gap: 18px; padding: 22px 28px 28px; }}
     .totals .row {{ display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5edf6; }}
     .totals .total {{ font-size: 18px; font-weight: 700; border-top: 2px solid #0f172a; margin-top: 8px; padding-top: 12px; }}
+    .benefits {{ display: grid; gap: 14px; margin-top: 18px; }}
+    .benefit-block {{ border: 1px solid #e5edf6; border-radius: 14px; overflow: hidden; }}
+    .benefit-block .label {{ padding: 12px 14px; background: #f8fafc; border-bottom: 1px solid #e5edf6; }}
     @media print {{ body {{ background: #fff; padding: 0; }} .invoice {{ border: 0; border-radius: 0; max-width: none; }} }}
   </style>
 </head>
@@ -2443,6 +2558,7 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
           <thead><tr><th>Mode</th><th>Reference</th><th class="num">Amount</th></tr></thead>
           <tbody>{payment_rows}</tbody>
         </table>
+        {package_section}
       </div>
       <div class="totals">
         <div class="row"><span>Subtotal</span><strong>{subtotal}</strong></div>
@@ -2483,6 +2599,7 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
         ),
         line_rows = line_rows,
         payment_rows = payment_rows,
+        package_section = package_section,
         subtotal = format_invoice_money_html(invoice.subtotal_paise),
         bill_discount = format_invoice_money_html(invoice.bill_discount_paise),
         coupon_code = escape_invoice_html(&invoice.coupon_code),
@@ -2728,7 +2845,11 @@ fn normalize_line_type(value: String) -> Result<String, AppError> {
         "package_redeem" | "package-redeem" => "package_redeem",
         "membership_redeem" | "membership-redeem" => "membership_redeem",
         "redemption" => "redemption",
-        _ => return Err(AppError::validation("line type must be service, product, custom, membership, package, gift_card, or redemption")),
+        _ => {
+            return Err(AppError::validation(
+                "line type must be service, product, custom, membership, package, gift_card, or redemption",
+            ));
+        }
     };
     Ok(line_type.to_string())
 }
@@ -7279,14 +7400,26 @@ fn should_defer_customer_commerce_benefits(source: &str, status: &str) -> bool {
     customer_commerce_source(source) && status != "paid"
 }
 
-pub(crate) fn configured_customer_payment_provider(state: &AppState) -> Option<&'static str> {
-    crate::config::PAYMENT_PROVIDERS
-        .iter()
-        .copied()
-        .find(|provider| {
-            state.settings.payment_provider_enabled(provider)
-                && state.settings.payment_provider_webhook_configured(provider)
-        })
+pub(crate) async fn configured_customer_payment_provider(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<&'static str>, AppError> {
+    for provider in crate::config::PAYMENT_PROVIDERS {
+        if state.settings.payment_provider_webhook_configured(provider)
+            && payment_gateway_service::provider_enabled_for_branch(
+                &state.db,
+                &state.settings,
+                tenant_id,
+                branch_id,
+                provider,
+            )
+            .await?
+        {
+            return Ok(Some(provider));
+        }
+    }
+    Ok(None)
 }
 
 pub(crate) async fn customer_membership_checkout_line(
@@ -7434,7 +7567,7 @@ pub(crate) async fn create_customer_commerce_checkout(
     )
     .await?;
     let payment_required = details.sale.paid_paise < details.sale.total_paise;
-    let provider = configured_customer_payment_provider(state);
+    let provider = configured_customer_payment_provider(state, tenant_id, branch_id).await?;
     let payment_link = if payment_required {
         if let Some(provider) = provider {
             Some(
@@ -9773,7 +9906,14 @@ pub(crate) async fn create_payment_link_for_invoice(
             "provider must be razorpay, cashfree, or phonepe",
         ));
     }
-    if !state.settings.payment_provider_enabled(&provider)
+    if !payment_gateway_service::provider_enabled_for_branch(
+        &state.db,
+        &state.settings,
+        tenant_id,
+        branch_id,
+        &provider,
+    )
+    .await?
         || !state
             .settings
             .payment_provider_webhook_configured(&provider)
@@ -12005,7 +12145,9 @@ async fn refund_pos_invoice(
                 character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
             })
         {
-            return Err(AppError::validation("idempotencyKey must be at least 10 characters and contain only letters, numbers, hyphens, or underscores for gateway refunds"));
+            return Err(AppError::validation(
+                "idempotencyKey must be at least 10 characters and contain only letters, numbers, hyphens, or underscores for gateway refunds",
+            ));
         }
         if !state.settings.razorpay_payment_links_enabled() {
             return Err(AppError::service_unavailable(
@@ -12450,7 +12592,7 @@ async fn create_pos_discount_rule(
         _ => {
             return Err(AppError::validation(
                 "ruleType must be profit_guard or happy_hours",
-            ))
+            ));
         }
     };
     let max_bps = payload.max_discount_bps.unwrap_or(0).clamp(0, 10_000);
@@ -13057,7 +13199,9 @@ async fn lifecycle_key_exists(
     key: &str,
 ) -> Result<bool, AppError> {
     let table = lifecycle_table(table)?;
-    let query = format!("SELECT id FROM {table} WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND idempotency_key=$4");
+    let query = format!(
+        "SELECT id FROM {table} WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND idempotency_key=$4"
+    );
     let found = sqlx::query_scalar::<_, String>(&query)
         .bind(tenant_id)
         .bind(branch_id)
@@ -13077,7 +13221,9 @@ async fn sum_lifecycle_amount(
     sale_id: &str,
 ) -> Result<i64, AppError> {
     let table = lifecycle_table(table)?;
-    let query = format!("SELECT COALESCE(SUM(amount_paise), 0)::BIGINT FROM {table} WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3");
+    let query = format!(
+        "SELECT COALESCE(SUM(amount_paise), 0)::BIGINT FROM {table} WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3"
+    );
     sqlx::query_scalar::<_, i64>(&query)
         .bind(tenant_id)
         .bind(branch_id)
@@ -15040,12 +15186,12 @@ async fn consume_package_redemptions(
                 "approval" => {
                     return Err(AppError::validation(
                         "staff approval is required for expired package redemption",
-                    ))
+                    ));
                 }
                 _ => {
                     return Err(AppError::validation(
                         "expired package redemption is blocked",
-                    ))
+                    ));
                 }
             }
         }

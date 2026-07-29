@@ -26,7 +26,7 @@ use crate::{
     routes::context::{current_business_date, tenant_branch},
     services::{
         analytics_service, auth_service::AuthClaims, branch_service, profit_governance_service,
-        report_export_service,
+        report_export_service, staff_app_service,
     },
     state::AppState,
 };
@@ -46,6 +46,10 @@ pub fn router() -> Router<AppState> {
             "/reports/custom/:id/run",
             axum::routing::post(run_custom_report),
         )
+        .route(
+            "/reports/custom/:id/lifecycle",
+            axum::routing::post(update_custom_report_lifecycle),
+        )
         .route("/reports/exports", axum::routing::post(queue_report_export))
         .route(
             "/reports/exports/:id",
@@ -56,6 +60,18 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(download_report_export),
         )
         .route("/reports/dashboard", axum::routing::get(report_dashboard))
+        .route(
+            "/reports/growth-intelligence",
+            axum::routing::get(report_growth_intelligence),
+        )
+        .route(
+            "/reports/growth-intelligence/campaign-plans/:key/draft",
+            axum::routing::post(draft_growth_campaign_plan),
+        )
+        .route(
+            "/reports/growth-intelligence/staff/:staff_id/coaching-goal",
+            axum::routing::post(draft_growth_staff_goal),
+        )
         .route(
             "/reports/advanced-summary",
             axum::routing::get(report_advanced_summary),
@@ -222,6 +238,10 @@ pub fn router() -> Router<AppState> {
             "/reports/staff-bookings",
             axum::routing::get(report_staff_bookings),
         )
+        .route(
+            "/reports/staff-service-history",
+            axum::routing::get(report_staff_service_history),
+        )
 }
 
 async fn list_custom_reports(
@@ -379,6 +399,40 @@ async fn run_custom_report(
     Ok(Json(ApiResponse::ok(report)))
 }
 
+async fn update_custom_report_lifecycle(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<analytics_service::CustomReportLifecycleRequest>,
+) -> ApiResult<analytics_service::CustomReportView> {
+    require_custom_report_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let report = analytics_service::update_custom_report_lifecycle(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &id,
+        request,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(report)))
+}
+
+fn require_custom_report_manage(claims: &AuthClaims) -> Result<(), AppError> {
+    if matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager" | "super-admin" | "superadmin"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "custom report management permission is required",
+        ))
+    }
+}
+
 fn can_run_organization_report(claims: &AuthClaims) -> bool {
     matches!(
         claims.role.to_ascii_lowercase().as_str(),
@@ -394,6 +448,21 @@ pub struct ReportRangeQuery {
     pub status: Option<String>,
     pub page: Option<i64>,
     pub page_size: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StaffServiceHistoryQuery {
+    start_date: Option<NaiveDate>,
+    end_date: Option<NaiveDate>,
+    staff_id: Option<String>,
+    page: Option<i64>,
+    page_size: Option<i64>,
+    q: Option<String>,
+    status: Option<String>,
+    service: Option<String>,
+    department: Option<String>,
+    sort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,6 +517,7 @@ pub struct ProfitIntelligenceQuery {
     pub page_size: Option<i64>,
     pub dimension: Option<String>,
     pub entity_id: Option<String>,
+    pub view: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1366,7 +1436,7 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load total appointments"))
     };
 
     let today_appointments = async {
@@ -1378,7 +1448,7 @@ async fn report_dashboard(
         .bind(today)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load today appointments"))
     };
 
     let open_appointments = async {
@@ -1389,7 +1459,7 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load open appointments"))
     };
 
     let total_clients = async {
@@ -1400,7 +1470,7 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load total clients"))
     };
 
     let total_services = async {
@@ -1411,19 +1481,19 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load total services"))
     };
 
     let today_sales = async {
         sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(SUM(total_paise),0) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND COALESCE(business_date,(created_at AT TIME ZONE 'Asia/Kolkata')::DATE)=$3 AND status NOT IN ('draft','voided','cancelled','refunded')",
+            "SELECT COALESCE(SUM(total_paise),0)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND COALESCE(business_date,(created_at AT TIME ZONE 'Asia/Kolkata')::DATE)=$3 AND status NOT IN ('draft','voided','cancelled','refunded')",
         )
         .bind(&tenant_id)
         .bind(&branch_id)
         .bind(today)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load today sales"))
     };
 
     let open_sales = async {
@@ -1434,7 +1504,7 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load open sales"))
     };
 
     let completed_recent = async {
@@ -1445,7 +1515,7 @@ async fn report_dashboard(
         .bind(&branch_id)
         .fetch_one(&state.db)
         .await
-        .unwrap_or(0)
+        .map_err(|_| AppError::internal("failed to load recent completed appointments"))
     };
 
     let (
@@ -1469,17 +1539,64 @@ async fn report_dashboard(
     );
 
     Ok(Json(ApiResponse::ok(ReportDashboard {
-        total_appointments,
-        today_appointments,
-        open_appointments,
-        total_clients,
-        total_services,
-        today_sales_paise: today_sales,
-        open_sales,
-        recent_completed_appointments: completed_recent,
+        total_appointments: total_appointments?,
+        today_appointments: today_appointments?,
+        open_appointments: open_appointments?,
+        total_clients: total_clients?,
+        total_services: total_services?,
+        today_sales_paise: today_sales?,
+        open_sales: open_sales?,
+        recent_completed_appointments: completed_recent?,
     })))
 }
 
+async fn report_growth_intelligence(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> ApiResult<crate::services::growth_intelligence_service::GrowthIntelligence> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let report = crate::services::growth_intelligence_service::command_center(
+        &state.db, &tenant_id, &branch_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(report)))
+}
+
+async fn draft_growth_campaign_plan(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(key): Path<String>,
+) -> ApiResult<crate::repositories::whatsapp_repository::WhatsAppCampaignPlan> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let actor = headers
+        .get("x-user-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("system");
+    let row = crate::services::growth_intelligence_service::draft_campaign_plan(
+        &state.db, &tenant_id, &branch_id, actor, &key,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn draft_growth_staff_goal(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(staff_id): Path<String>,
+) -> ApiResult<crate::repositories::staff_enterprise_repository::CoachingGoalRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let actor = headers
+        .get("x-user-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("system");
+    let row = crate::services::growth_intelligence_service::draft_staff_goal(
+        &state.db, &tenant_id, &branch_id, actor, &staff_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
 async fn report_advanced_summary(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1586,23 +1703,29 @@ async fn report_advanced_profit_intelligence(
         .map(parse_profit_date)
         .transpose()?
         .unwrap_or(today);
-    let report = analytics_service::advanced_profit_intelligence(
+    let view = query.view.as_deref().unwrap_or("overview");
+    let report = analytics_service::advanced_profit_intelligence_for_view(
         &state.db,
         &tenant_id,
         &branch_ids,
         branch_scope,
         from_date,
         to_date,
+        view,
     )
     .await?;
-    let report = analytics_service::enhance_profit_copilot(
-        &state.db,
-        &state.settings,
-        &tenant_id,
-        &branch_ids,
-        report,
-    )
-    .await;
+    let report = if view == "copilot" {
+        analytics_service::enhance_profit_copilot(
+            &state.db,
+            &state.settings,
+            &tenant_id,
+            &branch_ids,
+            report,
+        )
+        .await
+    } else {
+        report
+    };
     Ok(Json(ApiResponse::ok(report)))
 }
 
@@ -1741,6 +1864,7 @@ async fn repair_missing_invoice_journals(
     headers: HeaderMap,
     Query(query): Query<ProfitIntelligenceQuery>,
 ) -> ApiResult<analytics_service::InvoiceJournalRepairRun> {
+    ensure_profit_governance_approver(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let branch_scope = query.scope.as_deref().unwrap_or("branch");
     let branch_ids =
@@ -1793,6 +1917,7 @@ async fn create_micro_profit_allocation_rule(
     headers: HeaderMap,
     Json(payload): Json<analytics_service::MicroProfitAllocationRuleCreateRequest>,
 ) -> ApiResult<analytics_service::MicroProfitAllocationRule> {
+    ensure_profit_governance_approver(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rule = analytics_service::create_micro_profit_allocation_rule(
         &state.db,
@@ -3649,6 +3774,44 @@ async fn report_staff_bookings(
     ).bind(&tenant_id).bind(&branch_id).bind(&query.start_date).bind(&query.end_date).fetch_all(&state.db).await
         .map_err(|_| AppError::internal("failed to load staff booking report"))?;
     Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn report_staff_service_history(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffServiceHistoryQuery>,
+) -> ApiResult<Value> {
+    if !matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager" | "super-admin" | "superadmin"
+    ) {
+        return Err(AppError::forbidden(
+            "staff service history requires a manager role",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let history = staff_app_service::appointment_history(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        staff_app_service::AppointmentHistoryQuery {
+            staff_id: query.staff_id.as_deref().unwrap_or(""),
+            from: query.start_date,
+            to: query.end_date,
+            page: query.page.unwrap_or(1),
+            page_size: query.page_size.unwrap_or(50),
+            query: query.q.as_deref().unwrap_or(""),
+            status: query.status.as_deref().unwrap_or(""),
+            service_id: "",
+            service: query.service.as_deref().unwrap_or(""),
+            department: query.department.as_deref().unwrap_or(""),
+            sort: query.sort.as_deref().unwrap_or("desc"),
+            include_client_names: true,
+        },
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(history)))
 }
 
 async fn report_staff_performance(

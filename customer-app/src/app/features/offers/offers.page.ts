@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { IonButton, IonContent } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
@@ -21,11 +21,11 @@ import { CustomerApiService } from "../../core/customer-api.service";
         <div class="offer-grid">
           @for (offer of offers(); track offer.id) {
             <article class="offer-card premium-card">
-              @if (offer.hasCreative) {
-                <img class="offer-image" [src]="creativeUrl(offer)" [alt]="offer.title" />
+              @if (creativeUrls()[offer.id]; as creativeUrl) {
+                <img class="offer-image" [src]="creativeUrl" [alt]="offer.title" />
               }
               <div class="offer-body">
-                <div class="offer-top"><span>{{ offer.branchName || offer.businessName }}</span><b>{{ statusLabel(offer) }}</b></div>
+                <div class="offer-top"><span>{{ offer.branchName || offer.businessName }}</span><b>{{ offer.personal ? 'Personal offer' : statusLabel(offer) }}</b></div>
                 <h2>{{ offer.title }}</h2>
                 <strong class="benefit">{{ benefitLabel(offer) }}</strong>
                 @if (offer.customerDescription) { <p>{{ offer.customerDescription }}</p> }
@@ -71,10 +71,12 @@ import { CustomerApiService } from "../../core/customer-api.service";
     @media (min-width: 1200px) { .offer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   `]
 })
-export class OffersPage implements OnInit {
+export class OffersPage implements OnInit, OnDestroy {
   readonly offers = signal<CustomerMarketingOffer[]>([]);
   readonly loading = signal(false);
   readonly error = signal("");
+  readonly creativeUrls = signal<Record<string, string>>({});
+  private loadGeneration = 0;
 
   constructor(private readonly api: CustomerApiService) {}
 
@@ -82,15 +84,22 @@ export class OffersPage implements OnInit {
     this.reload();
   }
 
+  ngOnDestroy() { this.revokeCreatives(); }
+
   async reload() {
+    const generation = ++this.loadGeneration;
     this.loading.set(true);
     this.error.set("");
-    try { this.offers.set(await firstValueFrom(this.api.listPublicOffers())); }
+    try {
+      const offers = await firstValueFrom(this.api.listMarketingOffers());
+      if (generation !== this.loadGeneration) return;
+      this.offers.set(offers);
+      void this.loadCreatives(offers, generation);
+    }
     catch { this.error.set("Unable to load offers"); }
     finally { this.loading.set(false); }
   }
 
-  creativeUrl(offer: CustomerMarketingOffer): string { return this.api.publicOfferCreativeUrl(offer.id); }
   bookingParams(offer: CustomerMarketingOffer): Record<string, string> {
     return { serviceIds: offer.targetServiceIds.join(","), offer: offer.code, source: `marketing_offer:${offer.id}:customer_app` };
   }
@@ -105,5 +114,20 @@ export class OffersPage implements OnInit {
     const start = offer.startsAt ? new Date(offer.startsAt).toLocaleDateString("en-IN") : "Now";
     const end = offer.endsAt ? new Date(offer.endsAt).toLocaleDateString("en-IN") : "No expiry";
     return `${start} - ${end}`;
+  }
+
+  private async loadCreatives(offers: CustomerMarketingOffer[], generation: number) {
+    this.revokeCreatives();
+    const entries = await Promise.all(offers.filter((offer) => offer.hasCreative).map(async (offer) => {
+      try { return [offer.id, URL.createObjectURL(await firstValueFrom(this.api.marketingOfferCreative(offer.id)))] as const; }
+      catch { return null; }
+    }));
+    if (generation !== this.loadGeneration) { entries.forEach((entry) => entry && URL.revokeObjectURL(entry[1])); return; }
+    this.creativeUrls.set(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => !!entry)));
+  }
+
+  private revokeCreatives() {
+    Object.values(this.creativeUrls()).forEach((url) => URL.revokeObjectURL(url));
+    this.creativeUrls.set({});
   }
 }

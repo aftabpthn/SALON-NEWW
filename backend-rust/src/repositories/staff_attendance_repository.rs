@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
@@ -31,6 +31,10 @@ pub struct AttendanceDetailRecord {
     pub id: Option<String>,
     pub business_date: NaiveDate,
     pub scheduled_status: Option<String>,
+    pub scheduled_shift1_start: Option<NaiveTime>,
+    pub scheduled_shift1_end: Option<NaiveTime>,
+    pub scheduled_shift2_start: Option<NaiveTime>,
+    pub scheduled_shift2_end: Option<NaiveTime>,
     pub attendance_status: Option<String>,
     pub manual_status: Option<String>,
     pub clock_in_at: Option<DateTime<Utc>>,
@@ -253,6 +257,8 @@ pub async fn detail_rows(
         r#"
         SELECT a.id,COALESCE(a.business_date,s.schedule_date) AS business_date,
                s.status AS scheduled_status,
+               s.shift1_start AS scheduled_shift1_start,s.shift1_end AS scheduled_shift1_end,
+               s.shift2_start AS scheduled_shift2_start,s.shift2_end AS scheduled_shift2_end,
                a.status AS attendance_status,a.manual_status,
                a.clock_in_at,a.clock_out_at,COALESCE(a.worked_minutes,0) AS worked_minutes,
                COALESCE(a.late_minutes,0) AS late_minutes,

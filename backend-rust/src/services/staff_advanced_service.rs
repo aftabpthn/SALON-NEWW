@@ -191,6 +191,7 @@ pub struct StaffPerformanceRow {
     pub unique_clients: i64,
     pub repeat_clients: i64,
     pub repeat_client_percent: Option<i32>,
+    pub rating: Option<f64>,
     pub present_days: i64,
     pub absent_days: i64,
     pub worked_minutes: i64,
@@ -199,6 +200,8 @@ pub struct StaffPerformanceRow {
     pub early_leave_minutes: i64,
     pub operation_task_completed: i64,
     pub operation_task_missed: i64,
+    pub strengths: Vec<String>,
+    pub opportunities: Vec<String>,
     pub burnout_risk: Option<RiskSignal>,
     pub retention_risk: Option<RiskSignal>,
 }
@@ -1757,6 +1760,59 @@ fn performance_row(source: PerformanceSourceRecord) -> StaffPerformanceRow {
             ],
         }
     });
+    let mut strengths = Vec::new();
+    let mut opportunities = Vec::new();
+    if let Some(value) = completion_percent {
+        if value >= 80 {
+            strengths.push(format!("{value}% appointment completion"));
+        } else {
+            opportunities.push(format!("Improve appointment completion from {value}%"));
+        }
+    }
+    if let Some(value) = utilization_percent {
+        if value >= 70 {
+            strengths.push(format!("{value}% scheduled-time utilization"));
+        } else {
+            opportunities.push(format!("Improve scheduled-time utilization from {value}%"));
+        }
+    }
+    if let Some(value) = repeat_client_percent {
+        if value >= 40 {
+            strengths.push(format!("{value}% repeat-client rate"));
+        } else {
+            opportunities.push(format!("Build repeat-client visits from {value}%"));
+        }
+    }
+    if source.present_days > 0
+        && source.absent_days == 0
+        && source.late_minutes == 0
+        && source.early_leave_minutes == 0
+    {
+        strengths.push(format!(
+            "Reliable attendance across {} days",
+            source.present_days
+        ));
+    } else if source.absent_days > 0 || source.late_minutes > 0 || source.early_leave_minutes > 0 {
+        opportunities.push("Reduce attendance exceptions".to_string());
+    }
+    if let Some(value) = revenue_target_percent {
+        if value >= 100 {
+            strengths.push(format!("Revenue target achieved at {value}%"));
+        } else {
+            opportunities.push(format!("Close the revenue target gap from {value}%"));
+        }
+    }
+    if source.operation_task_missed > 0 {
+        opportunities.push(format!(
+            "Complete {} missed operation task{}",
+            source.operation_task_missed,
+            if source.operation_task_missed == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ));
+    }
     StaffPerformanceRow {
         staff_id: source.staff_id,
         staff_name: source.staff_name,
@@ -1772,6 +1828,7 @@ fn performance_row(source: PerformanceSourceRecord) -> StaffPerformanceRow {
         unique_clients: source.unique_clients,
         repeat_clients: source.repeat_clients,
         repeat_client_percent,
+        rating: source.rating,
         present_days: source.present_days,
         absent_days: source.absent_days,
         worked_minutes: source.worked_minutes,
@@ -1780,6 +1837,8 @@ fn performance_row(source: PerformanceSourceRecord) -> StaffPerformanceRow {
         early_leave_minutes: source.early_leave_minutes,
         operation_task_completed: source.operation_task_completed,
         operation_task_missed: source.operation_task_missed,
+        strengths,
+        opportunities,
         burnout_risk,
         retention_risk,
     }
@@ -2020,9 +2079,10 @@ fn database_write_error(
 #[cfg(test)]
 mod tests {
     use super::{
-        adjustment_input, incentive_input, mobile_business_date, sha256_text, weighted_score,
-        IncentiveRuleRequest, IncentiveSlabRequest, PayrollAdjustmentRuleRequest,
+        adjustment_input, incentive_input, mobile_business_date, performance_row, sha256_text,
+        weighted_score, IncentiveRuleRequest, IncentiveSlabRequest, PayrollAdjustmentRuleRequest,
     };
+    use crate::repositories::staff_advanced_repository::PerformanceSourceRecord;
     use chrono::{DateTime, NaiveDate, Utc};
 
     #[test]
@@ -2062,6 +2122,37 @@ mod tests {
     fn performance_score_uses_only_available_evidence() {
         assert_eq!(weighted_score(&[(Some(80), 25), (None, 75)]), Some(80));
         assert_eq!(weighted_score(&[(None, 100)]), None);
+    }
+
+    #[test]
+    fn performance_signals_use_persisted_metrics() {
+        let row = performance_row(PerformanceSourceRecord {
+            staff_id: "staff-1".into(),
+            staff_name: "Staff".into(),
+            target_revenue_paise: Some(10_000),
+            appointments_count: 10,
+            completed_appointments: 8,
+            unique_clients: 10,
+            repeat_clients: 4,
+            revenue_paise: 10_000,
+            rating: Some(4.5),
+            present_days: 2,
+            absent_days: 0,
+            worked_minutes: 420,
+            overtime_minutes: 0,
+            late_minutes: 0,
+            early_leave_minutes: 0,
+            scheduled_minutes: 600,
+            operation_task_completed: 3,
+            operation_task_missed: 1,
+        });
+
+        assert_eq!(row.score, Some(80));
+        assert_eq!(row.rating, Some(4.5));
+        assert!(row
+            .strengths
+            .contains(&"80% appointment completion".to_string()));
+        assert_eq!(row.opportunities, ["Complete 1 missed operation task"]);
     }
 
     #[test]

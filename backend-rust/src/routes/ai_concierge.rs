@@ -472,7 +472,11 @@ fn verify_voice_provider(state: &AppState, headers: &HeaderMap) -> Result<(), Ap
 }
 
 fn require_ai_read(claims: &AuthClaims) -> Result<(), AppError> {
-    if matches!(
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|permission| permission == "ai.concierge.read");
+    let default_role = matches!(
         claims.role.to_ascii_lowercase().as_str(),
         "owner"
             | "admin"
@@ -483,7 +487,19 @@ fn require_ai_read(claims: &AuthClaims) -> Result<(), AppError> {
             | "accountant"
             | "analyst"
             | "inventorymanager"
-    ) {
+    );
+    let granted = claims.permissions.iter().any(|permission| {
+        matches!(
+            permission.as_str(),
+            "ai.concierge.read"
+                | "reports.read"
+                | "clients.read"
+                | "staff.analytics.read"
+                | "memberships.read"
+                | "pos.read"
+        )
+    });
+    if !denied && (default_role || granted) {
         Ok(())
     } else {
         Err(AppError::forbidden("AI concierge access is restricted"))
@@ -491,10 +507,18 @@ fn require_ai_read(claims: &AuthClaims) -> Result<(), AppError> {
 }
 
 fn require_ai_manage(claims: &AuthClaims) -> Result<(), AppError> {
-    if matches!(
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|permission| permission == "ai.concierge.manage");
+    let allowed = matches!(
         claims.role.to_ascii_lowercase().as_str(),
         "owner" | "admin" | "manager"
-    ) {
+    ) || claims
+        .permissions
+        .iter()
+        .any(|permission| permission == "ai.concierge.manage");
+    if !denied && allowed {
         Ok(())
     } else {
         Err(AppError::forbidden("AI governance access is restricted"))

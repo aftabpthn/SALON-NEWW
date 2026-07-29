@@ -181,6 +181,7 @@ pub struct PerformanceSourceRecord {
     pub unique_clients: i64,
     pub repeat_clients: i64,
     pub revenue_paise: i64,
+    pub rating: Option<f64>,
     pub present_days: i64,
     pub absent_days: i64,
     pub worked_minutes: i64,
@@ -1013,9 +1014,10 @@ pub async fn performance_sources(
         WITH appointment_metrics AS (
           SELECT staff_id,
             COUNT(*)::BIGINT AS appointments_count,
-            COUNT(*) FILTER (WHERE LOWER(status) IN ('completed','paid','closed'))::BIGINT AS completed_appointments
+            COUNT(*) FILTER (WHERE LOWER(status) IN ('completed','billed','paid','closed'))::BIGINT AS completed_appointments
           FROM appointments
-          WHERE tenant_id=$1 AND branch_id=$2 AND start_at::DATE BETWEEN $3 AND $4
+          WHERE tenant_id=$1 AND branch_id=$2
+            AND (start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
             AND staff_id<>''
           GROUP BY staff_id
         ),
@@ -1040,6 +1042,13 @@ pub async fn performance_sources(
             GROUP BY l.staff_id,s.client_id
             HAVING COUNT(DISTINCT s.id)>1
           ) repeated
+          GROUP BY staff_id
+        ),
+        review_metrics AS (
+          SELECT staff_id,ROUND(AVG(score)::NUMERIC/20,1)::DOUBLE PRECISION AS rating
+          FROM staff_performance_reviews
+          WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('shared','acknowledged','closed')
+            AND period_start<=$4 AND period_end>=$3
           GROUP BY staff_id
         ),
         attendance_metrics AS (
@@ -1081,6 +1090,7 @@ pub async fn performance_sources(
           COALESCE(sm.unique_clients,0)::BIGINT AS unique_clients,
           COALESCE(rm.repeat_clients,0)::BIGINT AS repeat_clients,
           COALESCE(sm.revenue_paise,0)::BIGINT AS revenue_paise,
+          review.rating,
           COALESCE(am.present_days,0)::BIGINT AS present_days,
           COALESCE(am.absent_days,0)::BIGINT AS absent_days,
           COALESCE(am.worked_minutes,0)::BIGINT AS worked_minutes,
@@ -1095,6 +1105,7 @@ pub async fn performance_sources(
         LEFT JOIN appointment_metrics a ON a.staff_id=s.id
         LEFT JOIN sale_metrics sm ON sm.staff_id=s.id
         LEFT JOIN repeat_metrics rm ON rm.staff_id=s.id
+        LEFT JOIN review_metrics review ON review.staff_id=s.id
         LEFT JOIN attendance_metrics am ON am.staff_id=s.id
         LEFT JOIN schedule_metrics scm ON scm.staff_id=s.id
         LEFT JOIN operation_task_metrics otm ON otm.staff_id=s.id

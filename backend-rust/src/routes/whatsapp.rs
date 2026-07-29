@@ -11,7 +11,7 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::whatsapp_repository,
     routes::context::tenant_branch,
-    services::auth_service::AuthClaims,
+    services::{auth_service::AuthClaims, security_service},
     state::AppState,
 };
 
@@ -34,12 +34,36 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(campaign_plans).post(create_campaign_plan),
         )
         .route(
+            "/whatsapp-campaign-planner/plans/:id",
+            axum::routing::patch(edit_campaign_plan),
+        )
+        .route(
+            "/whatsapp-campaign-planner/plans/:id/submit",
+            axum::routing::post(submit_campaign_plan),
+        )
+        .route(
             "/whatsapp-campaign-planner/plans/:id/approve",
             axum::routing::post(approve_campaign_plan),
         )
         .route(
+            "/whatsapp-campaign-planner/plans/:id/reject",
+            axum::routing::post(reject_campaign_plan),
+        )
+        .route(
             "/whatsapp-campaign-planner/plans/:id/schedule",
             axum::routing::post(schedule_campaign_plan),
+        )
+        .route(
+            "/whatsapp-campaign-planner/plans/:id/stop",
+            axum::routing::post(stop_campaign_plan),
+        )
+        .route(
+            "/whatsapp-campaign-planner/plans/:id/archive",
+            axum::routing::post(archive_campaign_plan),
+        )
+        .route(
+            "/whatsapp-campaign-planner/plans/:id/restore",
+            axum::routing::post(restore_campaign_plan),
         )
         .route(
             "/whatsapp-campaign-planner/outcomes",
@@ -102,7 +126,26 @@ struct CampaignPlanRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct CampaignPlanUpdateRequest {
+    version: i32,
+    campaign_type: String,
+    title: String,
+    objective: Option<String>,
+    message_text: String,
+    segment_key: Option<String>,
+    criteria: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionRequest {
+    version: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ScheduleRequest {
+    version: i32,
     scheduled_for: Option<String>,
 }
 
@@ -309,21 +352,19 @@ async fn campaign_plans(
 
 async fn create_campaign_plan(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<CampaignPlanRequest>,
 ) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    if payload.campaign_type.trim().is_empty()
-        || payload.title.trim().is_empty()
-        || payload.message_text.trim().is_empty()
-    {
-        return Err(AppError::validation(
-            "campaign type, title and messageText are required",
-        ));
-    }
-    if payload.message_text.chars().count() > 4000 {
-        return Err(AppError::validation("messageText is too long"));
-    }
+    validate_campaign_plan(
+        &payload.campaign_type,
+        &payload.title,
+        payload.objective.as_deref(),
+        &payload.message_text,
+        payload.segment_key.as_deref(),
+    )?;
     let row = whatsapp_repository::create_campaign_plan(
         &state.db,
         &tenant_id,
@@ -334,42 +375,199 @@ async fn create_campaign_plan(
         payload.message_text.trim(),
         payload.segment_key.as_deref().unwrap_or(""),
         payload.criteria.as_ref().unwrap_or(&json!({})),
-        &actor(&headers),
+        &claims.sub,
     )
     .await
     .map_err(|_| AppError::internal("failed to create WhatsApp campaign plan"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "whatsapp.campaign.created",
+        json!({"campaignPlanId": row.id, "status": row.status}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn edit_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<CampaignPlanUpdateRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    validate_campaign_plan(
+        &payload.campaign_type,
+        &payload.title,
+        payload.objective.as_deref(),
+        &payload.message_text,
+        payload.segment_key.as_deref(),
+    )?;
+    let row = whatsapp_repository::edit_campaign_plan(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        payload.version,
+        payload.campaign_type.trim(),
+        payload.title.trim(),
+        payload.objective.as_deref().unwrap_or(""),
+        payload.message_text.trim(),
+        payload.segment_key.as_deref().unwrap_or(""),
+        payload.criteria.as_ref().unwrap_or(&json!({})),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to edit WhatsApp campaign plan"))?
+    .ok_or_else(|| {
+        AppError::conflict("campaign changed or cannot be edited in its current state")
+    })?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "whatsapp.campaign.edited",
+        json!({"campaignPlanId": row.id, "version": row.version}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn submit_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
+    change_campaign_status(state, claims, headers, id, "pending", None, payload.version).await
 }
 
 async fn approve_campaign_plan(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
 ) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
-    change_campaign_status(state, headers, id, "approved", None).await
+    require_campaign_permission(&claims, "marketing.approve")?;
+    change_campaign_status(
+        state,
+        claims,
+        headers,
+        id,
+        "approved",
+        None,
+        payload.version,
+    )
+    .await
+}
+
+async fn reject_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.approve")?;
+    change_campaign_status(
+        state,
+        claims,
+        headers,
+        id,
+        "rejected",
+        None,
+        payload.version,
+    )
+    .await
 }
 
 async fn schedule_campaign_plan(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ScheduleRequest>,
 ) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.send")?;
     let scheduled = payload
         .scheduled_for
         .as_deref()
         .map(|value| DateTime::parse_from_rfc3339(value).map(|v| v.with_timezone(&Utc)))
         .transpose()
-        .map_err(|_| AppError::validation("scheduledFor must be ISO-8601"))?;
-    change_campaign_status(state, headers, id, "scheduled", scheduled).await
+        .map_err(|_| AppError::validation("scheduledFor must be ISO-8601"))?
+        .ok_or_else(|| AppError::validation("scheduledFor is required"))?;
+    if scheduled < Utc::now() {
+        return Err(AppError::validation("scheduledFor cannot be in the past"));
+    }
+    change_campaign_status(
+        state,
+        claims,
+        headers,
+        id,
+        "scheduled",
+        Some(scheduled),
+        payload.version,
+    )
+    .await
+}
+
+async fn stop_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
+    change_campaign_status(state, claims, headers, id, "stopped", None, payload.version).await
+}
+
+async fn archive_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
+    change_campaign_status(
+        state,
+        claims,
+        headers,
+        id,
+        "archived",
+        None,
+        payload.version,
+    )
+    .await
+}
+
+async fn restore_campaign_plan(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<VersionRequest>,
+) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
+    require_campaign_permission(&claims, "marketing.manage")?;
+    change_campaign_status(state, claims, headers, id, "draft", None, payload.version).await
 }
 
 async fn change_campaign_status(
     state: AppState,
+    claims: AuthClaims,
     headers: HeaderMap,
     id: String,
     status: &str,
     scheduled: Option<DateTime<Utc>>,
+    version: i32,
 ) -> ApiResult<whatsapp_repository::WhatsAppCampaignPlan> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = whatsapp_repository::update_campaign_status(
@@ -378,13 +576,79 @@ async fn change_campaign_status(
         &branch_id,
         &id,
         status,
-        &actor(&headers),
+        &claims.sub,
         scheduled,
+        version,
     )
     .await
     .map_err(|_| AppError::internal("failed to update WhatsApp campaign plan"))?
-    .ok_or_else(|| AppError::not_found("WhatsApp campaign plan was not found"))?;
+    .ok_or_else(|| AppError::conflict("campaign changed or cannot move to the requested status"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &format!(
+            "whatsapp.campaign.{}",
+            match status {
+                "pending" => "submitted",
+                "draft" => "restored",
+                value => value,
+            }
+        ),
+        json!({"campaignPlanId": row.id, "recordName": row.title, "status": row.status, "version": row.version, "restorable": status == "archived"}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+fn validate_campaign_plan(
+    campaign_type: &str,
+    title: &str,
+    objective: Option<&str>,
+    message_text: &str,
+    segment_key: Option<&str>,
+) -> Result<(), AppError> {
+    if campaign_type.trim().is_empty() || title.trim().is_empty() || message_text.trim().is_empty()
+    {
+        return Err(AppError::validation(
+            "campaign type, title and messageText are required",
+        ));
+    }
+    if campaign_type.chars().count() > 120
+        || title.chars().count() > 200
+        || objective.unwrap_or("").chars().count() > 500
+        || message_text.chars().count() > 4_000
+        || segment_key.unwrap_or("").chars().count() > 120
+    {
+        return Err(AppError::validation(
+            "campaign title or messageText is too long",
+        ));
+    }
+    Ok(())
+}
+
+fn require_campaign_permission(claims: &AuthClaims, permission: &str) -> Result<(), AppError> {
+    if claims
+        .denied_permissions
+        .iter()
+        .any(|value| value == permission)
+    {
+        return Err(AppError::forbidden(format!(
+            "{permission} permission is required"
+        )));
+    }
+    if matches!(claims.role.as_str(), "owner" | "admin" | "manager")
+        || claims.permissions.iter().any(|value| {
+            value == permission || value == "marketing.manage" || value == "management.write"
+        })
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(format!(
+            "{permission} permission is required"
+        )))
+    }
 }
 
 async fn campaign_outcomes(

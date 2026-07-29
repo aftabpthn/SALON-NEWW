@@ -16,7 +16,10 @@ pub struct InventoryUpdateInput<'a> {
     pub sku: Option<&'a str>,
     pub name: Option<&'a str>,
     pub category: Option<&'a str>,
+    pub brand: Option<&'a str>,
     pub unit: Option<&'a str>,
+    pub package_unit: Option<&'a str>,
+    pub units_per_package: Option<i32>,
     pub stock_quantity: Option<i32>,
     pub reorder_point: Option<i32>,
     pub unit_cost_paise: Option<i64>,
@@ -981,6 +984,18 @@ async fn update_in_tx(
                     .is_some_and(|value| value != current.unit.as_str()),
             ),
             (
+                "packageUnit",
+                input
+                    .package_unit
+                    .is_some_and(|value| value != current.package_unit.as_str()),
+            ),
+            (
+                "unitsPerPackage",
+                input
+                    .units_per_package
+                    .is_some_and(|value| value != current.units_per_package),
+            ),
+            (
                 "hsnCode",
                 input
                     .hsn_code
@@ -1020,6 +1035,12 @@ async fn update_in_tx(
             }
             changed_master_fields.push(field.to_string());
         }
+    }
+
+    if input.unit.is_some_and(|value| value != current.unit) && current.stock_quantity != 0 {
+        return Err(AppError::conflict(
+            "stock unit can change only when stock is zero",
+        ));
     }
 
     if input.batch_tracked != Some(current.batch_tracked) {
@@ -1123,7 +1144,10 @@ async fn update_in_tx(
             sku: input.sku,
             name: input.name,
             category: input.category,
+            brand: input.brand,
             unit: input.unit,
+            package_unit: input.package_unit,
+            units_per_package: input.units_per_package,
             reorder_point: input.reorder_point,
             unit_cost_paise: input.unit_cost_paise,
             hsn_code: input.hsn_code,
@@ -1790,7 +1814,10 @@ mod tests {
             sku: None,
             name: None,
             category: None,
+            brand: None,
             unit: None,
+            package_unit: None,
+            units_per_package: None,
             stock_quantity: Some(target),
             reorder_point: None,
             unit_cost_paise: None,
@@ -1812,7 +1839,8 @@ mod tests {
             CREATE TABLE inventory_items (
               id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
               sku TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '',
-              unit TEXT NOT NULL DEFAULT 'pcs', stock_quantity INTEGER NOT NULL DEFAULT 0,
+              unit TEXT NOT NULL DEFAULT 'pcs', package_unit TEXT NOT NULL DEFAULT 'pcs',
+              units_per_package INTEGER NOT NULL DEFAULT 1, stock_quantity INTEGER NOT NULL DEFAULT 0,
               reorder_point INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
               hsn_code TEXT NOT NULL DEFAULT '', gst_percent INTEGER NOT NULL DEFAULT 0,
               barcode TEXT NOT NULL DEFAULT '', batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,

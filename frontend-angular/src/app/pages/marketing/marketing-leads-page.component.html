@@ -140,7 +140,18 @@
 }
 
 @if (activeSection === 'campaigns') {
-  <section class="tab-workspace"><header><h2>Campaigns</h2><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header>@for (campaign of filteredCampaigns; track campaign) {
+  <section class="tab-workspace"><header><h2>WhatsApp campaign lifecycle</h2>@if (canManageCampaigns) {<button class="primary" type="button" (click)="openWhatsAppPlan()">Create WhatsApp plan</button>}</header>
+  <div class="whatsapp-plan-table"><header><span>Campaign</span><span>Type</span><span>Status</span><span>Scheduled</span><span>Actions</span></header>@for (plan of whatsappPlans; track plan.id) {
+    <div><strong>{{ plan.title }}</strong><span>{{ plan.campaignType.replaceAll('_', ' ') }}</span><b [class.approved]="plan.status === 'approved' || plan.status === 'scheduled'">{{ plan.status }}</b><span>{{ plan.scheduledFor ? formatDate(plan.scheduledFor) : '—' }}</span><span class="campaign-actions">
+      @if (canManageCampaigns && ['draft', 'rejected', 'stopped'].includes(plan.status)) {<button type="button" [disabled]="busy" (click)="openWhatsAppPlan(plan)">Edit</button><button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'submit')">Submit</button>}
+      @if (canApproveCampaigns && plan.status === 'pending') {<button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'approve')">Approve</button><button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'reject')">Reject</button>}
+      @if (canSendCampaigns && plan.status === 'approved') {<button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'schedule')">Schedule</button>}
+      @if (canManageCampaigns && ['approved', 'scheduled'].includes(plan.status)) {<button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'stop')">Stop</button>}
+      @if (canManageCampaigns && !['sent', 'archived'].includes(plan.status)) {<button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'archive')">Archive</button>}
+      @if (canManageCampaigns && plan.status === 'archived') {<button type="button" [disabled]="busy" (click)="whatsappPlanAction(plan, 'restore')">Restore</button>}
+    </span></div>
+  }@if (!whatsappPlans.length) {<div class="empty">No WhatsApp campaign plans yet</div>}</div>
+  <header class="campaign-list-head"><h2>Omnichannel campaigns</h2><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Audience</span><span>Status</span></header>@for (campaign of filteredCampaigns; track campaign) {
   <div><strong>{{ campaign.title }}</strong><span>{{ campaign.metadata?.channels?.join(', ') || campaign.metadata?.channel || '—' }}</span><span>{{ campaign.metadata?.audience || '—' }}</span><span>{{ campaign.metadata?.status || campaign.metadata?.approvalStatus || 'draft' }} @if (campaign.metadata?.approvalStatus === 'pending') {
   <button type="button" [disabled]="busy" (click)="approveCampaign(campaign)">Approve</button>
   }@if (campaign.metadata?.approvalStatus === 'approved' && campaign.metadata?.status === 'approved') {
@@ -159,7 +170,7 @@
 }
 @if (activeSection === 'offers') {
   <section class="tab-workspace"><header><h2>Offers</h2><button class="primary" type="button" (click)="openOffer()">Create offer</button></header><div class="offer-table"><header><span>Code</span><span>Benefit</span><span>Client</span><span>Validity</span><span>Usage</span><span>Status</span><span>Action</span></header>@for (offer of offers; track offer) {
-  <div><strong>{{ offer.title || offer.code }}<small>{{ offer.code }}</small></strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.showInStaffApp ? 'Staff' : '' }}{{ offer.showInStaffApp && offer.showInCustomerApp ? ' + ' : '' }}{{ offer.showInCustomerApp ? 'Customer' : '' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.lifecycleStatus === 'live'">{{ offer.lifecycleStatus }}</b><span class="offer-actions">@if (offer.approvalStatus === 'draft') {<button type="button" [disabled]="busy" (click)="submitOffer(offer)">Submit</button>} @if (offer.approvalStatus === 'pending') {<button type="button" [disabled]="busy" (click)="approveOffer(offer)">Approve</button>} @if (offer.lifecycleStatus === 'live') {<button type="button" [disabled]="busy" (click)="openOfferShare(offer)">Share</button>}</span></div>
+  <div><strong>{{ offer.title || offer.code }}<small>{{ offer.code }}</small></strong><span>{{ offer.benefitType.replaceAll('_', ' ') }} · {{ offer.benefitValue }}</span><span>{{ offer.showInStaffApp ? 'Staff' : '' }}{{ offer.showInStaffApp && offer.showInCustomerApp ? ' + ' : '' }}{{ offer.showInCustomerApp ? 'Customer' : '' }}</span><span>{{ offer.endsAt ? formatDate(offer.endsAt) : 'No expiry' }}</span><span>{{ offer.usedCount }} / {{ offer.usageLimit || '∞' }}</span><b [class.approved]="offer.lifecycleStatus === 'live'">{{ offer.lifecycleStatus }}</b><span class="offer-actions">@if (offer.approvalStatus === 'draft') {<button type="button" [disabled]="busy" (click)="submitOffer(offer)">Submit</button>} @if (offer.approvalStatus === 'pending') {<button type="button" [disabled]="busy" (click)="approveOffer(offer)">Approve</button>} @if (offer.lifecycleStatus === 'live') {<button type="button" [disabled]="busy" (click)="openOfferShare(offer)">Share</button>} @if (offer.active) {<button type="button" [disabled]="busy" (click)="stopOffer(offer)">Stop</button>} @else {<button type="button" [disabled]="busy" (click)="editOffer(offer)">Edit</button><button type="button" [disabled]="busy" (click)="deleteOffer(offer)">Delete</button>}</span></div>
   }@if (!offers.length) {
   <div class="empty">No offers yet</div>
 }</div>
@@ -211,6 +222,20 @@
 }
 </section>
 
+@if (drawer === 'whatsapp-plan') {
+  <aside class="drawer">
+    <header><h2>{{ editingWhatsAppPlanId ? 'Edit WhatsApp plan' : 'Create WhatsApp plan' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+    <div class="drawer-body">
+      <label>Campaign type<select [(ngModel)]="whatsappPlanDraft.campaignType"><option value="empty_slot_fill">Empty slot fill</option><option value="inactive_client_recovery">Inactive client recovery</option><option value="membership_renewal">Membership renewal</option><option value="vip_retention">VIP retention</option></select></label>
+      <label>Title<input [ngModel]="whatsappPlanDraft.title" (ngModelChange)="whatsappPlanDraft.title = titleCase($event)" maxlength="200" /></label>
+      <label>Objective<input [(ngModel)]="whatsappPlanDraft.objective" maxlength="500" /></label>
+      <label>Segment key<input [(ngModel)]="whatsappPlanDraft.segmentKey" maxlength="120" /></label>
+      <label>Message<textarea [(ngModel)]="whatsappPlanDraft.messageText" rows="8" maxlength="4000"></textarea></label>
+    </div>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || !whatsappPlanDraft.title.trim() || !whatsappPlanDraft.messageText.trim()" (click)="saveWhatsAppPlan()">{{ busy ? 'Saving…' : (editingWhatsAppPlanId ? 'Save changes' : 'Save draft') }}</button></footer>
+  </aside>
+}
+
 @if (drawer === 'campaign') {
   <aside class="drawer">
     <header><h2>Campaign builder</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
@@ -260,28 +285,35 @@
 
 @if (drawer === 'offer') {
   <aside class="drawer">
-    <header><h2>Create controlled offer</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+    <header><h2>{{ editingOfferId ? 'Edit offer' : 'Create controlled offer' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
     <div class="drawer-body">
+      <section class="offer-branch"><span>Publishing branch</span><strong>{{ offerBranchName }}</strong><small>Automatically selected from your CRM session.</small></section>
       <label>Offer title<input [(ngModel)]="offerDraft.title" placeholder="Offer title" /></label>
       <label>Offer code<input [(ngModel)]="offerDraft.code" placeholder="Single-use code" /></label>
       <label>Canva creative<input type="file" accept=".jpg,.jpeg,.png,.webp" (change)="selectOfferCreative($event)" /></label>
       @if (offerCreativePreview) {<img class="offer-creative-preview" [src]="offerCreativePreview" alt="Selected offer creative" />}
       <label>Customer description<textarea [(ngModel)]="offerDraft.customerDescription" rows="3" maxlength="1000"></textarea></label>
       <label>Staff instructions<textarea [(ngModel)]="offerDraft.staffInstructions" rows="4" maxlength="2000"></textarea></label>
-      <label>Benefit<select [(ngModel)]="offerDraft.benefitType"><option value="percentage_discount">Percentage discount (basis points)</option><option value="fixed_discount">Fixed discount (paise)</option><option value="complimentary_add_on">Complimentary add-on</option><option value="loyalty_points">Loyalty points</option><option value="wallet_credit">Wallet credit</option><option value="gift_card">Gift card</option><option value="package_upgrade">Package upgrade</option><option value="priority_appointment">Priority appointment</option><option value="off_peak_deal">Off-peak deal</option><option value="last_minute_slot">Last-minute slot</option></select></label>
-      <label>Benefit value<input [(ngModel)]="offerDraft.benefitValue" type="number" min="0" placeholder="Enter value" /></label>
-      <label>Client ID<input [(ngModel)]="offerDraft.targetClientId" placeholder="Optional personal offer" /></label>
-      <label>Service IDs<input [(ngModel)]="offerDraft.serviceIds" placeholder="Comma separated" /></label>
-      <label>Package IDs<input [(ngModel)]="offerDraft.packageIds" placeholder="Comma separated" /></label>
+      <label>Benefit<select [(ngModel)]="offerDraft.benefitType"><option value="percentage_discount">Percentage discount</option><option value="fixed_discount">Fixed discount (paise)</option><option value="complimentary_add_on">Complimentary add-on</option><option value="loyalty_points">Loyalty points</option><option value="wallet_credit">Wallet credit</option><option value="gift_card">Gift card</option><option value="package_upgrade">Package upgrade</option><option value="priority_appointment">Priority appointment</option><option value="off_peak_deal">Off-peak deal</option><option value="last_minute_slot">Last-minute slot</option></select></label>
+      @if (offerDraft.benefitType === 'percentage_discount') {
+        <label>Discount (%)<input [(ngModel)]="offerDraft.benefitValue" type="number" min="0.01" max="100" step="0.01" placeholder="For example, 20" /></label>
+      } @else {
+        <label>Benefit value<input [(ngModel)]="offerDraft.benefitValue" type="number" min="0" placeholder="Enter value" /></label>
+      }
+      <label>Customer (optional)<select [(ngModel)]="offerDraft.targetClientId" [disabled]="offerOptionsLoading || !!offerOptionsError"><option value="">Public offer · all eligible customers</option>@for (client of offerClients; track client.id) {<option [value]="client.id">{{ client.name }}</option>}</select><small>Select one customer to make this a private personal offer.</small></label>
+      @if (offerOptionsLoading) {<section class="offer-options-state">Loading services, packages and customers…</section>}
+      @if (offerOptionsError) {<section class="offer-options-state error"><span>{{ offerOptionsError }}</span><button type="button" (click)="loadOfferOptions()">Retry</button></section>}
+      <label>Applicable services<select multiple size="6" [(ngModel)]="offerDraft.serviceIds" [disabled]="offerOptionsLoading || !!offerOptionsError">@for (service of offerServices; track service.id) {<option [value]="service.id">{{ service.name }}</option>}</select><small>Select none to apply to all services.</small></label>
+      <label>Applicable packages<select multiple size="5" [(ngModel)]="offerDraft.packageIds" [disabled]="offerOptionsLoading || !!offerOptionsError">@for (itemPackage of offerPackages; track itemPackage.id) {<option [value]="itemPackage.id">{{ itemPackage.name }}</option>}</select><small>Select none if the offer is not package-specific.</small></label>
       @if (offerDraft.benefitType === 'complimentary_add_on') {
         <label>Complimentary service ID<input [(ngModel)]="offerDraft.complimentaryServiceId" placeholder="Required" /></label>
       }
       <label>Start date<as-date-picker [(value)]="offerDraft.startsAt" ariaLabel="Offer start date" /></label><label>Expiry date<as-date-picker [(value)]="offerDraft.endsAt" ariaLabel="Offer expiry date" /></label>
       <label>Minimum bill (₹)<input [(ngModel)]="offerDraft.minimumBill" type="number" min="0" placeholder="Optional" /></label><label>Total usage limit<input [(ngModel)]="offerDraft.usageLimit" type="number" min="1" placeholder="Optional" /></label><label>Per-client limit<input [(ngModel)]="offerDraft.perClientLimit" type="number" min="1" /></label>
-      <label class="check"><input [(ngModel)]="offerDraft.showInStaffApp" type="checkbox" /> Show in Staff App</label><label class="check"><input [(ngModel)]="offerDraft.showInCustomerApp" type="checkbox" /> Show in Customer App</label>
+      <fieldset class="offer-visibility"><legend>App visibility</legend><label><input [(ngModel)]="offerDraft.showInStaffApp" type="checkbox" /><span><strong>Staff App</strong><small>Show instructions and eligible services to this branch's staff.</small></span></label><label><input [(ngModel)]="offerDraft.showInCustomerApp" type="checkbox" /><span><strong>Customer App</strong><small>Show this offer to customers after approval.</small></span></label></fieldset>
       <label class="check"><input [(ngModel)]="offerDraft.allowMembershipStacking" type="checkbox" /> Allow membership stacking</label><label class="check"><input [(ngModel)]="offerDraft.allowPackageStacking" type="checkbox" /> Allow package stacking</label>
     </div>
-    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button type="button" [disabled]="busy || !offerDraft.title || !offerDraft.code" (click)="saveOffer(false)">Save draft</button><button class="primary" type="button" [disabled]="busy || !offerDraft.title || !offerDraft.code" (click)="saveOffer(true)">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button type="button" [disabled]="busy || offerOptionsLoading || !!offerOptionsError || !offerDraft.title || !offerDraft.code" (click)="saveOffer(false)">Save draft</button><button class="primary" type="button" [disabled]="busy || offerOptionsLoading || !!offerOptionsError || !offerDraft.title || !offerDraft.code" (click)="saveOffer(true)">{{ busy ? 'Saving…' : 'Submit for approval' }}</button></footer>
   </aside>
 }
 

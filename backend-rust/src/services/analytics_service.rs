@@ -13,7 +13,7 @@ use crate::{
     config::Settings,
     models::{balance_sheet::AccountGroup, common::AppError},
     repositories::analytics_repository,
-    services::{accounting_service, balance_sheet_service, invoice_delivery},
+    services::{accounting_service, balance_sheet_service, invoice_delivery, security_service},
     state::AppState,
 };
 
@@ -510,6 +510,19 @@ pub struct CustomReportDefinition {
     pub from_date: Option<String>,
     pub to_date: Option<String>,
     pub status: Option<String>,
+    #[serde(default)]
+    pub profit_view: Option<ProfitSavedViewDefinition>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfitSavedViewDefinition {
+    pub tab: String,
+    pub level: String,
+    pub scope: String,
+    pub compare_previous: bool,
+    pub action_status: String,
+    pub action_priority: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -523,6 +536,13 @@ pub struct CustomReportSaveRequest {
     pub schedule_day: Option<i16>,
     pub schedule_time: Option<String>,
     pub recipient_email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomReportLifecycleRequest {
+    pub action: String,
+    pub version: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -560,6 +580,7 @@ pub struct CustomReportView {
     pub last_run_at: Option<DateTime<Utc>>,
     pub last_status: String,
     pub last_error: String,
+    pub active: bool,
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -663,7 +684,12 @@ pub async fn save_custom_report(
     let next_run_at = next_custom_report_run(frequency, day, time, Utc::now());
     let definition = serde_json::to_value(&request.definition)
         .map_err(|_| AppError::internal("failed to save report definition"))?;
-    analytics_repository::save_custom_report(
+    let action = if request.id.is_some() {
+        "custom-report.edited"
+    } else {
+        "custom-report.saved"
+    };
+    let row = analytics_repository::save_custom_report(
         db,
         tenant_id,
         branch_id,
@@ -680,8 +706,17 @@ pub async fn save_custom_report(
     )
     .await
     .map_err(|_| AppError::internal("failed to save custom report"))?
-    .ok_or_else(|| AppError::conflict("saved report changed; reload and retry"))
-    .and_then(custom_report_view)
+    .ok_or_else(|| AppError::conflict("saved report changed; reload and retry"))?;
+    security_service::record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor,
+        action,
+        json!({"reportId":row.id,"reportName":row.name,"version":row.version}),
+    )
+    .await?;
+    custom_report_view(row)
 }
 
 pub async fn run_saved_custom_report(
@@ -705,6 +740,73 @@ pub async fn run_saved_custom_report(
         .await
         .map_err(|_| AppError::internal("failed to record report result"))?;
     Ok(report)
+}
+
+pub async fn update_custom_report_lifecycle(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+    request: CustomReportLifecycleRequest,
+) -> Result<CustomReportView, AppError> {
+    if !matches!(
+        request.action.as_str(),
+        "stopSchedule" | "archive" | "restore"
+    ) {
+        return Err(AppError::validation(
+            "custom report lifecycle action is invalid",
+        ));
+    }
+    let current = analytics_repository::get_custom_report_any(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load saved report"))?
+        .ok_or_else(|| AppError::not_found("saved report was not found"))?;
+    let next_run_at = if request.action == "restore" {
+        next_custom_report_run(
+            &current.schedule_frequency,
+            current.schedule_day,
+            current.schedule_time,
+            Utc::now(),
+        )
+    } else {
+        None
+    };
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to update custom report"))?;
+    let updated = analytics_repository::update_custom_report_lifecycle(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        request.version,
+        &request.action,
+        next_run_at,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to update custom report"))?
+    .ok_or_else(|| AppError::conflict("saved report changed; reload and retry"))?;
+    let audit_action = match request.action.as_str() {
+        "stopSchedule" => "custom-report.schedule.stopped",
+        "archive" => "custom-report.archived",
+        _ => "custom-report.restored",
+    };
+    security_service::record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        actor,
+        audit_action,
+        json!({"reportId":id,"reportName":updated.name,"version":updated.version,"restorable":request.action == "archive"}),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to update custom report"))?;
+    custom_report_view(updated)
 }
 
 pub async fn process_due_custom_reports(state: &AppState) -> Result<usize, AppError> {
@@ -860,6 +962,48 @@ fn validate_custom_definition(
     }) {
         return Err(AppError::validation("custom report status is invalid"));
     }
+    if let Some(view) = &definition.profit_view {
+        const TABS: &[&str] = &[
+            "overview",
+            "executive",
+            "reconciliation",
+            "service",
+            "category",
+            "staff",
+            "customer",
+            "product",
+            "appointment",
+            "branch",
+            "channel",
+            "booking",
+            "liability",
+            "scenario",
+            "guard",
+            "leaks",
+            "pricing",
+            "recipe",
+            "copilot",
+            "actions",
+            "rules",
+            "approvals",
+            "audit",
+        ];
+        if definition.dataset != "sales"
+            || !TABS.contains(&view.tab.as_str())
+            || !matches!(view.level.as_str(), "contribution" | "fullyLoaded")
+            || !matches!(view.scope.as_str(), "branch" | "tenant")
+            || !matches!(
+                view.action_status.as_str(),
+                "active" | "all" | "pending" | "approved" | "completed" | "dismissed"
+            )
+            || !matches!(
+                view.action_priority.as_str(),
+                "" | "high" | "medium" | "low"
+            )
+        {
+            return Err(AppError::validation("profit saved view is invalid"));
+        }
+    }
     Ok(())
 }
 
@@ -977,6 +1121,7 @@ fn custom_report_view(
         last_run_at: record.last_run_at,
         last_status: record.last_status,
         last_error: record.last_error,
+        active: record.active,
         version: record.version,
         created_at: record.created_at,
         updated_at: record.updated_at,
@@ -1085,6 +1230,28 @@ pub async fn advanced_profit_intelligence(
     from_date: NaiveDate,
     to_date: NaiveDate,
 ) -> Result<AdvancedProfitIntelligence, AppError> {
+    advanced_profit_intelligence_for_view(
+        db,
+        tenant_id,
+        branch_ids,
+        branch_scope,
+        from_date,
+        to_date,
+        "all",
+    )
+    .await
+}
+
+pub async fn advanced_profit_intelligence_for_view(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    branch_scope: &str,
+    from_date: NaiveDate,
+    to_date: NaiveDate,
+    view: &str,
+) -> Result<AdvancedProfitIntelligence, AppError> {
+    let started = Instant::now();
     if from_date > to_date || (to_date - from_date).num_days() > 366 {
         return Err(AppError::validation(
             "profit report date range must be 367 days or less",
@@ -1093,10 +1260,51 @@ pub async fn advanced_profit_intelligence(
     if branch_ids.is_empty() {
         return Err(AppError::forbidden("no authorized branches are available"));
     }
+    const VIEWS: &[&str] = &[
+        "all",
+        "overview",
+        "executive",
+        "reconciliation",
+        "service",
+        "category",
+        "staff",
+        "customer",
+        "product",
+        "appointment",
+        "branch",
+        "channel",
+        "booking",
+        "liability",
+        "scenario",
+        "guard",
+        "leaks",
+        "pricing",
+        "recipe",
+        "copilot",
+        "actions",
+        "rules",
+        "approvals",
+        "audit",
+    ];
+    if !VIEWS.contains(&view) {
+        return Err(AppError::validation("profit view is invalid"));
+    }
+    analytics_repository::ensure_micro_profit_daily_rollup(
+        db, tenant_id, branch_ids, from_date, to_date,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to refresh daily Micro P&L rollup"))?;
+    let needs_recipe = matches!(view, "all" | "recipe" | "leaks" | "copilot");
+    let needs_booking = matches!(view, "all" | "booking");
+    let needs_liability = matches!(view, "all" | "executive" | "liability");
+    let needs_daily = matches!(view, "all" | "overview" | "executive");
     let (dimension_rows, recipe_records, quality, booking_demand, liability_records, daily_records) =
         tokio::try_join!(
             micro_profit_dimension_rows(db, tenant_id, branch_ids, from_date, to_date),
             async {
+                if !needs_recipe {
+                    return Ok(Vec::new());
+                }
                 analytics_repository::recipe_variance(db, tenant_id, branch_ids, from_date, to_date)
                     .await
                     .map_err(|_| AppError::internal("failed to load recipe variance"))
@@ -1110,6 +1318,9 @@ pub async fn advanced_profit_intelligence(
                 to_date,
             ),
             async {
+                if !needs_booking {
+                    return Ok(Vec::new());
+                }
                 analytics_repository::profit_booking_demand(
                     db, tenant_id, branch_ids, from_date, to_date,
                 )
@@ -1117,11 +1328,17 @@ pub async fn advanced_profit_intelligence(
                 .map_err(|_| AppError::internal("failed to load profit booking demand"))
             },
             async {
+                if !needs_liability {
+                    return Ok(Vec::new());
+                }
                 analytics_repository::profit_liability_exposure(db, tenant_id, branch_ids, to_date)
                     .await
                     .map_err(|_| AppError::internal("failed to load profit liability exposure"))
             },
             async {
+                if !needs_daily {
+                    return Ok(Vec::new());
+                }
                 analytics_repository::daily_micro_profit(
                     db, tenant_id, branch_ids, from_date, to_date,
                 )
@@ -1141,6 +1358,13 @@ pub async fn advanced_profit_intelligence(
         branch_ids.len(),
     );
     apply_recommendation_quality_gate(&mut report, &quality);
+    tracing::info!(
+        tenant_id,
+        view,
+        branch_count = branch_ids.len(),
+        duration_ms = started.elapsed().as_millis() as u64,
+        "advanced profit intelligence completed"
+    );
     Ok(report)
 }
 
@@ -1158,6 +1382,11 @@ pub async fn micro_profit_lines(
     entity_id: &str,
 ) -> Result<MicroProfitPage, AppError> {
     validate_micro_profit_request(branch_ids, from_date, to_date)?;
+    analytics_repository::ensure_micro_profit_daily_rollup(
+        db, tenant_id, branch_ids, from_date, to_date,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to refresh daily Micro P&L rollup"))?;
     if !dimension.is_empty()
         && !matches!(
             dimension,
@@ -1305,7 +1534,7 @@ pub async fn micro_profit_lines(
         to_date,
         branch_scope: branch_scope.to_string(),
         branch_count: branch_ids.len(),
-        source: "micro_profit_events+micro_profit_cost_events",
+        source: "micro_profit_daily_rollup+micro_profit_allocation_rules",
         profit_levels: ["contribution", "controllable", "fully_loaded"],
         commission_double_count_protected: true,
         page,
@@ -1722,7 +1951,7 @@ async fn micro_profit_dimension_rows(
     from_date: NaiveDate,
     to_date: NaiveDate,
 ) -> Result<Vec<ProfitDimensionRow>, AppError> {
-    // ponytail: reuse the canonical line engine; add a DB rollup only if 367-day reports miss the latency SLO.
+    // Daily facts are materialized; this loop preserves the canonical allocation/completeness engine.
     let mut dimensions = BTreeMap::new();
     let mut offset = 0_i64;
     loop {
@@ -1936,7 +2165,7 @@ fn build_advanced_insights(
     AdvancedProfitIntelligence {
         from_date: from_date.to_string(),
         to_date: to_date.to_string(),
-        source: "micro_profit_events+micro_profit_cost_events",
+        source: "micro_profit_daily_rollup+micro_profit_allocation_rules",
         branch_scope: branch_scope.to_string(),
         branch_count,
         copilot_source: "rust_deterministic".to_string(),
@@ -3051,6 +3280,7 @@ mod tests {
             from_date: None,
             to_date: None,
             status: None,
+            profit_view: None,
         };
         let report = build_pivot(
             &definition,

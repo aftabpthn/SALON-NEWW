@@ -3,27 +3,38 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
+    pin::Pin,
+    task::{Context, Poll},
 };
 
+use aes_gcm::{
+    aead::{Aead, KeyInit, Payload},
+    Aes256Gcm, Nonce,
+};
 use axum::body::Bytes;
 use calamine::{open_workbook_auto, Reader as CalamineReader};
+use chrono::{DateTime, NaiveDate, Utc};
+use rand_core::{OsRng, RngCore};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncWriteExt, ReadBuf};
 use uuid::Uuid;
 use zip::ZipArchive;
 
 use crate::{
     models::{
         common::AppError,
+        migration::{MigrationEntity, MigrationProvider},
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
-            CreateMigrationUploadRequest, MigrationSourceArtifact, MigrationSourceFile,
+            CreateMigrationUploadRequest, MigrationSourceArtifact, MigrationSourceColumnProfile,
+            MigrationSourceFile, MigrationSourceProfile, MigrationSourceSheet,
             MigrationUploadPartReceipt, MigrationUploadSession,
         },
     },
     repositories::migration_file_repository::{self, NewSourceArtifact, NewSourceFile},
+    services::migration_adapter_service,
 };
 
 pub const MAX_PART_BYTES: usize = 8 * 1024 * 1024;
@@ -34,6 +45,11 @@ const MAX_ZIP_ENTRY_BYTES: u64 = 250 * 1024 * 1024;
 const MAX_ZIP_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 200;
 const MAX_MAPPING_PREVIEW_XLSX_BYTES: u64 = 64 * 1024 * 1024;
+const PROFILE_UNIQUE_SAMPLE_LIMIT: usize = 100_000;
+const PROFILE_VALUE_SAMPLE_LIMIT: usize = 5;
+const EVIDENCE_ENCRYPTION_SCHEME: &str = "aes-256-gcm-chunked-v1";
+const EVIDENCE_MAGIC: &[u8; 8] = b"AURAMIG1";
+const EVIDENCE_CHUNK_BYTES: usize = 1024 * 1024;
 
 struct PreparedArtifact {
     id: String,
@@ -55,18 +71,55 @@ struct PreparedEvidence {
 }
 
 pub struct EvidenceDownload {
-    pub file: tokio::fs::File,
+    pub file: TemporaryEvidenceFile,
     pub file_name: String,
     pub content_type: String,
     pub sha256: String,
     pub size_bytes: i64,
 }
 
-#[derive(Debug, Clone)]
+pub struct TemporaryEvidenceFile {
+    file: tokio::fs::File,
+    cleanup_path: Option<PathBuf>,
+}
+
+impl AsyncRead for TemporaryEvidenceFile {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().file).poll_read(context, buffer)
+    }
+}
+
+impl Drop for TemporaryEvidenceFile {
+    fn drop(&mut self) {
+        if let Some(path) = self.cleanup_path.take() {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct WorkerSource {
     pub name: String,
     pub format: String,
     pub path: PathBuf,
+    cleanup_on_drop: bool,
+}
+
+impl Drop for WorkerSource {
+    fn drop(&mut self) {
+        if self.cleanup_on_drop {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+struct MaterializedSource {
+    path: PathBuf,
+    cleanup_on_drop: bool,
 }
 
 pub async fn create_upload(
@@ -85,6 +138,11 @@ pub async fn create_upload(
     if !(1..=MAX_PARTS).contains(&request.total_parts) {
         return Err(AppError::validation(
             "totalParts must be between 1 and 1000",
+        ));
+    }
+    if !(1..=3650).contains(&request.retention_days) {
+        return Err(AppError::validation(
+            "retentionDays must be between 1 and 3650",
         ));
     }
     let minimum_parts = (request.size_bytes + MAX_PART_BYTES as i64 - 1) / MAX_PART_BYTES as i64;
@@ -108,6 +166,8 @@ pub async fn create_upload(
         request.size_bytes,
         request.total_parts,
         &expected_sha256,
+        request.provider.as_str(),
+        request.retention_days,
     )
     .await
     .map_err(|_| AppError::internal("failed to create migration upload session"))?;
@@ -247,6 +307,7 @@ pub async fn complete_upload(
         request_hash
     };
     let root = storage_root()?;
+    let encryption_key = evidence_encryption_key()?;
     let tenant = tenant_id.to_string();
     let branch = branch_id.to_string();
     let blocking_session = session.clone();
@@ -258,6 +319,7 @@ pub async fn complete_upload(
             &blocking_session,
             &parts,
             &expected_hash,
+            &encryption_key,
         )
     })
     .await
@@ -282,6 +344,7 @@ pub async fn complete_upload(
         size_bytes: session.expected_size_bytes,
         sha256: &prepared.sha256,
         storage_key: &prepared.storage_key,
+        encryption_scheme: EVIDENCE_ENCRYPTION_SCHEME,
         manifest_json: &prepared.manifest,
     };
     let artifacts = prepared
@@ -360,6 +423,17 @@ pub async fn get_source_file(
         .await
         .map_err(|_| AppError::internal("failed to load migration source evidence"))?
         .ok_or_else(|| AppError::not_found("migration source evidence was not found"))?;
+    if row.evidence_status != "verified" || !row.read_only {
+        return Err(AppError::conflict(
+            "migration source evidence is unavailable",
+        ));
+    }
+    if row.retention_until <= Utc::now() {
+        purge_expired_evidence(db, &row).await?;
+        return Err(AppError::conflict(
+            "migration source evidence retention period has expired",
+        ));
+    }
     let artifacts = migration_file_repository::list_artifacts(db, tenant_id, branch_id, id)
         .await
         .map_err(|_| AppError::internal("failed to load migration source artifacts"))?;
@@ -377,15 +451,54 @@ pub async fn open_evidence(
         .await
         .map_err(|_| AppError::internal("failed to load migration source evidence"))?
         .ok_or_else(|| AppError::not_found("migration source evidence was not found"))?;
-    let path = storage_path(&row.storage_key, true)?;
-    let file = tokio::fs::File::open(path)
-        .await
-        .map_err(|_| AppError::not_found("migration source evidence file is unavailable"))?;
+    if row.evidence_status != "verified" || !row.read_only {
+        return Err(AppError::conflict(
+            "migration source evidence is unavailable",
+        ));
+    }
+    if row.retention_until <= Utc::now() {
+        purge_expired_evidence(db, &row).await?;
+        return Err(AppError::conflict(
+            "migration source evidence retention period has expired",
+        ));
+    }
+    let encrypted_path = storage_path(&row.storage_key, true)?;
+    let scheme = row.encryption_scheme.clone();
+    let expected_hash = row.sha256.clone();
+    let tenant = tenant_id.to_string();
+    let branch = branch_id.to_string();
+    let extension = row.file_extension.clone();
+    let materialized = tokio::task::spawn_blocking(move || {
+        materialize_verified_source(
+            &encrypted_path,
+            &scheme,
+            &tenant,
+            &branch,
+            &extension,
+            &expected_hash,
+        )
+    })
+    .await
+    .map_err(|_| AppError::internal("migration evidence reader stopped"))??;
+    let file = match tokio::fs::File::open(&materialized.path).await {
+        Ok(file) => file,
+        Err(_) => {
+            if materialized.cleanup_on_drop {
+                let _ = fs::remove_file(&materialized.path);
+            }
+            return Err(AppError::not_found(
+                "migration source evidence file is unavailable",
+            ));
+        }
+    };
     migration_file_repository::audit_evidence_read(db, tenant_id, branch_id, actor, id)
         .await
         .map_err(|_| AppError::internal("failed to audit migration evidence access"))?;
     Ok(EvidenceDownload {
-        file,
+        file: TemporaryEvidenceFile {
+            file,
+            cleanup_path: materialized.cleanup_on_drop.then_some(materialized.path),
+        },
         file_name: row.original_file_name,
         content_type: row.detected_content_type,
         sha256: row.sha256,
@@ -398,7 +511,7 @@ pub async fn worker_sources(
     tenant_id: &str,
     branch_id: &str,
     id: &str,
-) -> Result<(String, String, Vec<WorkerSource>), AppError> {
+) -> Result<(String, String, MigrationProvider, Vec<WorkerSource>), AppError> {
     let row = migration_file_repository::get_source_file(db, tenant_id, branch_id, id)
         .await
         .map_err(|_| AppError::internal("failed to load migration source evidence"))?
@@ -408,32 +521,93 @@ pub async fn worker_sources(
             "migration source evidence is not verified",
         ));
     }
-    let sources = if row.file_format == "zip" {
+    if row.retention_until <= Utc::now() {
+        purge_expired_evidence(db, &row).await?;
+        return Err(AppError::conflict(
+            "migration source evidence retention period has expired",
+        ));
+    }
+    let provider = MigrationProvider::try_from(row.source_provider.as_str())
+        .unwrap_or(MigrationProvider::Auto);
+    let source_name = row.original_file_name.clone();
+    let source_hash = row.sha256.clone();
+    let scheme = row.encryption_scheme.clone();
+    let inputs = if row.file_format == "zip" {
         migration_file_repository::list_artifacts(db, tenant_id, branch_id, id)
             .await
             .map_err(|_| AppError::internal("failed to load migration source artifacts"))?
             .into_iter()
             .map(|item| {
+                (
+                    item.entry_name,
+                    item.file_format,
+                    item.storage_key,
+                    item.sha256,
+                )
+            })
+            .collect::<Vec<_>>()
+    } else {
+        vec![(
+            row.original_file_name.clone(),
+            row.file_format.clone(),
+            row.storage_key.clone(),
+            row.sha256.clone(),
+        )]
+    };
+    let tenant = tenant_id.to_string();
+    let branch = branch_id.to_string();
+    let sources = tokio::task::spawn_blocking(move || {
+        inputs
+            .into_iter()
+            .map(|(name, format, storage_key, expected_hash)| {
+                let path = storage_path(&storage_key, true)?;
+                let source = materialize_verified_source(
+                    &path,
+                    &scheme,
+                    &tenant,
+                    &branch,
+                    &format,
+                    &expected_hash,
+                )?;
                 Ok(WorkerSource {
-                    name: item.entry_name,
-                    format: item.file_format,
-                    path: storage_path(&item.storage_key, true)?,
+                    name,
+                    format,
+                    path: source.path,
+                    cleanup_on_drop: source.cleanup_on_drop,
                 })
             })
-            .collect::<Result<Vec<_>, AppError>>()?
-    } else {
-        vec![WorkerSource {
-            name: row.original_file_name.clone(),
-            format: row.file_format.clone(),
-            path: storage_path(&row.storage_key, true)?,
-        }]
-    };
+            .collect::<Result<Vec<_>, AppError>>()
+    })
+    .await
+    .map_err(|_| AppError::internal("migration evidence verification worker stopped"))??;
     if sources.is_empty() {
         return Err(AppError::validation(
             "migration source contains no importable files",
         ));
     }
-    Ok((row.original_file_name, row.sha256, sources))
+    Ok((source_name, source_hash, provider, sources))
+}
+
+async fn purge_expired_evidence(
+    db: &PgPool,
+    row: &migration_file_repository::SourceFileRow,
+) -> Result<(), AppError> {
+    let artifacts =
+        migration_file_repository::list_artifacts(db, &row.tenant_id, &row.branch_id, &row.id)
+            .await
+            .map_err(|_| AppError::internal("failed to load expired migration artifacts"))?;
+    for key in std::iter::once(row.storage_key.as_str()).chain(
+        artifacts
+            .iter()
+            .map(|artifact| artifact.storage_key.as_str()),
+    ) {
+        if let Ok(path) = storage_path(key, false) {
+            remove_read_only_file(&path);
+        }
+    }
+    migration_file_repository::mark_evidence_expired(db, &row.tenant_id, &row.branch_id, &row.id)
+        .await
+        .map_err(|_| AppError::internal("failed to record migration evidence retention purge"))
 }
 
 pub async fn source_columns(
@@ -443,7 +617,7 @@ pub async fn source_columns(
     actor: &str,
     id: &str,
 ) -> Result<Vec<String>, AppError> {
-    let (_, _, sources) = worker_sources(db, tenant_id, branch_id, id).await?;
+    let (_, _, _, sources) = worker_sources(db, tenant_id, branch_id, id).await?;
     let columns = tokio::task::spawn_blocking(move || source_columns_blocking(&sources))
         .await
         .map_err(|_| AppError::internal("migration source header reader stopped"))??;
@@ -451,6 +625,680 @@ pub async fn source_columns(
         .await
         .map_err(|_| AppError::internal("failed to audit migration source header access"))?;
     Ok(columns)
+}
+
+pub async fn source_profile(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+) -> Result<MigrationSourceProfile, AppError> {
+    let (_, _, declared_provider, sources) = worker_sources(db, tenant_id, branch_id, id).await?;
+    let profile =
+        tokio::task::spawn_blocking(move || source_profile_blocking(&sources, declared_provider))
+            .await
+            .map_err(|_| AppError::internal("migration source profiler stopped"))??;
+    migration_file_repository::audit_evidence_read(db, tenant_id, branch_id, actor, id)
+        .await
+        .map_err(|_| AppError::internal("failed to audit migration source profile access"))?;
+    Ok(profile)
+}
+
+pub(crate) fn profile_csv_mapping_evidence(
+    csv: &str,
+    entity: MigrationEntity,
+) -> Result<(Vec<String>, Vec<MigrationSourceColumnProfile>, i64), AppError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(csv.as_bytes());
+    let columns = reader
+        .headers()
+        .map_err(|_| AppError::validation("CSV source header is invalid"))?
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if columns.is_empty() || columns.len() > 500 {
+        return Err(AppError::validation("CSV must contain 1 to 500 columns"));
+    }
+    let mut profilers = columns
+        .iter()
+        .map(|header| ColumnProfiler::new(header))
+        .collect::<Vec<_>>();
+    let mut row_count = 0_i64;
+    for record in reader.records() {
+        let record =
+            record.map_err(|_| AppError::validation("CSV source contains a corrupt row"))?;
+        row_count += 1;
+        if row_count > 5_000 {
+            return Err(AppError::validation("CSV must contain 1 to 5000 data rows"));
+        }
+        for (index, profiler) in profilers.iter_mut().enumerate() {
+            profiler.observe(record.get(index).unwrap_or(""));
+        }
+    }
+    if row_count == 0 {
+        return Err(AppError::validation("CSV contains no data rows"));
+    }
+    Ok((
+        columns,
+        profilers
+            .into_iter()
+            .map(|profiler| profiler.finish(&[entity]))
+            .collect(),
+        row_count,
+    ))
+}
+
+fn source_profile_blocking(
+    sources: &[WorkerSource],
+    declared_provider: MigrationProvider,
+) -> Result<MigrationSourceProfile, AppError> {
+    let mut sheets = Vec::new();
+    for source in sources {
+        match source.format.as_str() {
+            "csv" => {
+                let mut reader = csv::ReaderBuilder::new()
+                    .flexible(true)
+                    .from_path(&source.path)
+                    .map_err(|_| AppError::validation("CSV source could not be profiled"))?;
+                let columns = reader
+                    .headers()
+                    .map_err(|_| AppError::validation("CSV source header is invalid"))?
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>();
+                let targets = infer_source_targets(&source.name, &columns);
+                let mut profilers = columns
+                    .iter()
+                    .map(|header| ColumnProfiler::new(header))
+                    .collect::<Vec<_>>();
+                let mut row_count = 0_i64;
+                for record in reader.records() {
+                    let record = record
+                        .map_err(|_| AppError::validation("CSV source contains a corrupt row"))?;
+                    row_count += 1;
+                    for (index, profiler) in profilers.iter_mut().enumerate() {
+                        profiler.observe(record.get(index).unwrap_or(""));
+                    }
+                }
+                let column_profiles = profilers
+                    .into_iter()
+                    .map(|profiler| profiler.finish(&targets))
+                    .collect::<Vec<_>>();
+                sheets.push(MigrationSourceSheet {
+                    id: source.name.clone(),
+                    name: source.name.clone(),
+                    file_name: source.name.clone(),
+                    row_count,
+                    column_count: columns.len() as i32,
+                    column_profiles,
+                    importable: !targets.is_empty(),
+                    targets,
+                    columns,
+                });
+            }
+            "xlsx" => {
+                // ponytail: calamine decodes one worksheet at a time; replace it with a SAX OOXML
+                // reader only if production workbook benchmarks exceed the approved memory budget.
+                if fs::metadata(&source.path)
+                    .map_err(|_| AppError::not_found("XLSX source is unavailable"))?
+                    .len()
+                    > MAX_FILE_BYTES as u64
+                {
+                    return Err(AppError::validation(
+                        "XLSX source profiling is limited to 500 MB",
+                    ));
+                }
+                let mut workbook = open_workbook_auto(&source.path)
+                    .map_err(|_| AppError::validation("XLSX source could not be profiled"))?;
+                for sheet_name in workbook.sheet_names().to_vec() {
+                    let range = workbook
+                        .worksheet_range(&sheet_name)
+                        .map_err(|_| AppError::validation("XLSX worksheet is corrupt"))?;
+                    let Some(header) = range.rows().next() else {
+                        continue;
+                    };
+                    let columns = header.iter().map(ToString::to_string).collect::<Vec<_>>();
+                    if columns.iter().all(|value| value.trim().is_empty()) {
+                        continue;
+                    }
+                    let targets = infer_source_targets(&sheet_name, &columns);
+                    let mut profilers = columns
+                        .iter()
+                        .map(|header| ColumnProfiler::new(header))
+                        .collect::<Vec<_>>();
+                    let mut row_count = 0_i64;
+                    for row in range.rows().skip(1) {
+                        row_count += 1;
+                        for (index, profiler) in profilers.iter_mut().enumerate() {
+                            profiler.observe(
+                                &row.get(index).map(ToString::to_string).unwrap_or_default(),
+                            );
+                        }
+                    }
+                    let column_profiles = profilers
+                        .into_iter()
+                        .map(|profiler| profiler.finish(&targets))
+                        .collect::<Vec<_>>();
+                    sheets.push(MigrationSourceSheet {
+                        id: format!("{}:{}", source.name, sheet_name),
+                        name: sheet_name,
+                        file_name: source.name.clone(),
+                        row_count,
+                        column_count: columns.len() as i32,
+                        column_profiles,
+                        importable: !targets.is_empty(),
+                        targets,
+                        columns,
+                    });
+                }
+            }
+            _ => return Err(AppError::validation("unsupported migration source format")),
+        }
+    }
+    if sheets.is_empty() {
+        return Err(AppError::validation(
+            "migration source contains no readable sheets",
+        ));
+    }
+    let provider = if declared_provider == MigrationProvider::Auto {
+        detect_provider(sources, &sheets)
+    } else {
+        declared_provider
+    };
+    Ok(MigrationSourceProfile { provider, sheets })
+}
+
+struct ColumnProfiler {
+    header: String,
+    total: i64,
+    empty: i64,
+    sampled_non_empty: i64,
+    unique_sample: HashSet<String>,
+    samples: Vec<String>,
+    minimum: Option<String>,
+    maximum: Option<String>,
+    phone: i64,
+    email: i64,
+    date: i64,
+    date_ambiguous: i64,
+    datetime: i64,
+    currency: i64,
+    uuid: i64,
+    status: i64,
+    boolean: i64,
+    integer: i64,
+    decimal: i64,
+}
+
+impl ColumnProfiler {
+    fn new(header: &str) -> Self {
+        Self {
+            header: header.to_string(),
+            total: 0,
+            empty: 0,
+            sampled_non_empty: 0,
+            unique_sample: HashSet::new(),
+            samples: Vec::new(),
+            minimum: None,
+            maximum: None,
+            phone: 0,
+            email: 0,
+            date: 0,
+            date_ambiguous: 0,
+            datetime: 0,
+            currency: 0,
+            uuid: 0,
+            status: 0,
+            boolean: 0,
+            integer: 0,
+            decimal: 0,
+        }
+    }
+
+    fn observe(&mut self, value: &str) {
+        self.total += 1;
+        let value = value.trim();
+        if value.is_empty() {
+            self.empty += 1;
+            return;
+        }
+        if self.sampled_non_empty < PROFILE_UNIQUE_SAMPLE_LIMIT as i64 {
+            self.sampled_non_empty += 1;
+            self.unique_sample.insert(value.to_string());
+        }
+        if self.samples.len() < PROFILE_VALUE_SAMPLE_LIMIT
+            && !self.samples.iter().any(|sample| sample == value)
+        {
+            self.samples.push(value.chars().take(128).collect());
+        }
+        if self
+            .minimum
+            .as_deref()
+            .is_none_or(|current| value < current)
+        {
+            self.minimum = Some(value.to_string());
+        }
+        if self
+            .maximum
+            .as_deref()
+            .is_none_or(|current| value > current)
+        {
+            self.maximum = Some(value.to_string());
+        }
+        self.phone += i64::from(is_phone(value));
+        self.email += i64::from(is_email(value));
+        self.datetime += i64::from(DateTime::parse_from_rfc3339(value).is_ok());
+        self.date += i64::from(parse_profile_date(value).is_some());
+        self.date_ambiguous += i64::from(profile_date_is_ambiguous(value));
+        self.currency += i64::from(parse_currency(value).is_some());
+        self.uuid += i64::from(Uuid::parse_str(value).is_ok());
+        self.status += i64::from(is_status(value));
+        self.boolean += i64::from(matches!(
+            value.to_ascii_lowercase().as_str(),
+            "true" | "false" | "yes" | "no" | "1" | "0" | "active" | "inactive"
+        ));
+        self.integer += i64::from(value.parse::<i64>().is_ok());
+        self.decimal += i64::from(value.parse::<f64>().is_ok());
+    }
+
+    fn finish(self, targets: &[MigrationEntity]) -> MigrationSourceColumnProfile {
+        let non_empty = self.total - self.empty;
+        let normalized = normalize_profile_header(&self.header);
+        let header = normalized.as_str();
+        let ratio = |count: i64| {
+            if non_empty == 0 {
+                0.0
+            } else {
+                count as f64 / non_empty as f64
+            }
+        };
+        let (detected_data_type, valid_count) = if non_empty == 0 {
+            ("empty", 0)
+        } else if (header.contains("phone") || header.contains("mobile"))
+            && ratio(self.phone) >= 0.5
+        {
+            ("phone", self.phone)
+        } else if header.contains("email") && ratio(self.email) >= 0.5 {
+            ("email", self.email)
+        } else if header.contains("uuid") && ratio(self.uuid) >= 0.8 {
+            ("uuid", self.uuid)
+        } else if header.contains("status") && ratio(self.status) >= 0.5 {
+            ("status", self.status)
+        } else if ratio(self.boolean) >= 0.95 {
+            ("boolean", self.boolean)
+        } else if ratio(self.uuid) >= 0.95 {
+            ("uuid", self.uuid)
+        } else if ratio(self.email) >= 0.95 {
+            ("email", self.email)
+        } else if ratio(self.phone) >= 0.95 {
+            ("phone", self.phone)
+        } else if ratio(self.datetime) >= 0.95 {
+            ("datetime", self.datetime)
+        } else if ratio(self.date) >= 0.95 {
+            ("date", self.date)
+        } else if (header.contains("amount")
+            || header.contains("price")
+            || header.contains("cost")
+            || header.contains("balance"))
+            && ratio(self.currency) >= 0.8
+        {
+            ("currency", self.currency)
+        } else if ratio(self.integer) >= 0.95 {
+            ("integer", self.integer)
+        } else if ratio(self.decimal) >= 0.95 || ratio(self.currency) >= 0.95 {
+            ("decimal", self.decimal.max(self.currency))
+        } else {
+            ("string", non_empty)
+        };
+        let statistics_exact = non_empty <= PROFILE_UNIQUE_SAMPLE_LIMIT as i64;
+        let sample_unique_percentage = if self.sampled_non_empty == 0 {
+            0.0
+        } else {
+            self.unique_sample.len() as f64 * 100.0 / self.sampled_non_empty as f64
+        };
+        let estimated_unique = if statistics_exact {
+            self.unique_sample.len() as i64
+        } else {
+            (sample_unique_percentage * non_empty as f64 / 100.0).round() as i64
+        }
+        .min(non_empty);
+        let mut patterns = Vec::new();
+        for (name, count) in [
+            ("phone", self.phone),
+            ("email", self.email),
+            ("date", self.date),
+            ("currency", self.currency),
+            ("uuid", self.uuid),
+            ("status", self.status),
+        ] {
+            if ratio(count) >= 0.8 {
+                patterns.push(name.to_string());
+            }
+        }
+        if self.date_ambiguous > 0 {
+            patterns.push("date_format_ambiguous".to_string());
+        }
+        let (possible_crm_entity, possible_crm_field) =
+            possible_crm_match(&self.header, targets).unwrap_or((None, None));
+        let pii = matches!(detected_data_type, "phone" | "email");
+        MigrationSourceColumnProfile {
+            original_header: self.header,
+            normalized_header: normalized,
+            sample_values: self
+                .samples
+                .into_iter()
+                .map(|value| mask_profile_value(&value, detected_data_type))
+                .collect(),
+            detected_data_type: detected_data_type.to_string(),
+            empty_percentage: percentage(self.empty, self.total),
+            unique_percentage: round_percentage(sample_unique_percentage),
+            duplicate_count: non_empty.saturating_sub(estimated_unique),
+            minimum: self.minimum.map(|value| {
+                if pii {
+                    mask_profile_value(&value, detected_data_type)
+                } else {
+                    value
+                }
+            }),
+            maximum: self.maximum.map(|value| {
+                if pii {
+                    mask_profile_value(&value, detected_data_type)
+                } else {
+                    value
+                }
+            }),
+            patterns,
+            possible_crm_entity,
+            possible_crm_field,
+            invalid_value_count: non_empty.saturating_sub(valid_count),
+            statistics_exact,
+        }
+    }
+}
+
+fn percentage(value: i64, total: i64) -> f64 {
+    if total == 0 {
+        0.0
+    } else {
+        round_percentage(value as f64 * 100.0 / total as f64)
+    }
+}
+
+fn round_percentage(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+fn normalize_profile_header(value: &str) -> String {
+    let mut normalized = String::new();
+    for character in value.trim().chars() {
+        if character.is_ascii_alphanumeric() {
+            normalized.push(character.to_ascii_lowercase());
+        } else if !normalized.ends_with('_') && !normalized.is_empty() {
+            normalized.push('_');
+        }
+    }
+    normalized.trim_end_matches('_').to_string()
+}
+
+fn is_phone(value: &str) -> bool {
+    let digits = value.chars().filter(char::is_ascii_digit).count();
+    (7..=15).contains(&digits)
+        && value
+            .chars()
+            .all(|character| character.is_ascii_digit() || "+-() ".contains(character))
+}
+
+fn is_email(value: &str) -> bool {
+    let Some((local, domain)) = value.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && !value.chars().any(char::is_whitespace)
+}
+
+fn parse_profile_date(value: &str) -> Option<NaiveDate> {
+    ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"]
+        .into_iter()
+        .find_map(|format| NaiveDate::parse_from_str(value, format).ok())
+}
+
+fn profile_date_is_ambiguous(value: &str) -> bool {
+    let dmy = NaiveDate::parse_from_str(value, "%d/%m/%Y").ok();
+    let mdy = NaiveDate::parse_from_str(value, "%m/%d/%Y").ok();
+    matches!((dmy, mdy), (Some(left), Some(right)) if left != right)
+}
+
+fn parse_currency(value: &str) -> Option<f64> {
+    value
+        .trim()
+        .trim_start_matches(['₹', '$', '€', '£'])
+        .replace(',', "")
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
+fn is_status(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "active"
+            | "inactive"
+            | "draft"
+            | "booked"
+            | "confirmed"
+            | "arrived"
+            | "waiting"
+            | "in-service"
+            | "completed"
+            | "billed"
+            | "paid"
+            | "cancelled"
+            | "no-show"
+            | "rescheduled"
+            | "open"
+            | "voided"
+            | "blocked"
+            | "expired"
+            | "redeemed"
+            | "calculated"
+            | "reviewed"
+            | "finalized"
+            | "partially_paid"
+    )
+}
+
+fn mask_profile_value(value: &str, data_type: &str) -> String {
+    match data_type {
+        "phone" => {
+            let digits = value
+                .chars()
+                .filter(char::is_ascii_digit)
+                .collect::<String>();
+            format!(
+                "***{}",
+                digits
+                    .chars()
+                    .rev()
+                    .take(4)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>()
+            )
+        }
+        "email" => value
+            .split_once('@')
+            .map(|(local, domain)| format!("{}***@{domain}", local.chars().next().unwrap_or('*')))
+            .unwrap_or_else(|| "***".into()),
+        _ => value.to_string(),
+    }
+}
+
+fn possible_crm_match(
+    header: &str,
+    preferred_entities: &[MigrationEntity],
+) -> Option<(Option<MigrationEntity>, Option<String>)> {
+    let templates = migration_adapter_service::templates();
+    preferred_entities
+        .iter()
+        .copied()
+        .chain(templates.iter().map(|template| template.entity))
+        .find_map(|entity| {
+            migration_adapter_service::suggest_static_field(entity, MigrationProvider::Auto, header)
+                .map(|field| (Some(entity), Some(field)))
+        })
+}
+
+fn detect_provider(sources: &[WorkerSource], sheets: &[MigrationSourceSheet]) -> MigrationProvider {
+    let haystack = sources
+        .iter()
+        .map(|source| source.name.as_str())
+        .chain(sheets.iter().map(|sheet| sheet.name.as_str()))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    if haystack.contains("dingg")
+        || ["service history", "clint unpadie", "mship type"]
+            .iter()
+            .any(|needle| haystack.contains(needle))
+    {
+        MigrationProvider::Dingg
+    } else if haystack.contains("zenoti")
+        || sheets.iter().any(|sheet| {
+            sheet.columns.iter().any(|column| {
+                matches!(
+                    column.trim().to_ascii_lowercase().as_str(),
+                    "guest code" | "center name"
+                )
+            })
+        })
+    {
+        MigrationProvider::Zenoti
+    } else if haystack.contains("salonist") {
+        MigrationProvider::Salonist
+    } else if haystack.contains("fresha") {
+        MigrationProvider::Fresha
+    } else if haystack.contains("tally") {
+        MigrationProvider::Tally
+    } else if haystack.contains("busy") {
+        MigrationProvider::Busy
+    } else if haystack.contains("marg") {
+        MigrationProvider::Marg
+    } else if sources.iter().all(|source| source.format == "csv") {
+        MigrationProvider::Csv
+    } else {
+        MigrationProvider::Excel
+    }
+}
+
+fn infer_source_targets(name: &str, columns: &[String]) -> Vec<MigrationEntity> {
+    let name = name.trim().to_ascii_lowercase();
+    let columns = columns
+        .iter()
+        .map(|column| column.trim().to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    if name.contains("misc") || columns.len() < 2 {
+        return Vec::new();
+    }
+    if name.contains("refund") {
+        return vec![MigrationEntity::Refunds];
+    }
+    if name.contains("gift card") || name.contains("voucher") || name.contains("prepaid") {
+        return vec![MigrationEntity::GiftCards];
+    }
+    if name.contains("loyalty") || name.contains("reward point") {
+        return vec![MigrationEntity::Loyalty];
+    }
+    if name.contains("payroll") || name.contains("salary") {
+        return vec![MigrationEntity::Payroll];
+    }
+    if name.contains("commission") {
+        return vec![MigrationEntity::Commissions];
+    }
+    if name.contains("client note") || name.contains("customer note") || name.contains("guest note")
+    {
+        return vec![MigrationEntity::ClientNotes];
+    }
+    if name.contains("attachment")
+        || name.contains("document")
+        || name.contains("file manifest")
+        || name.contains("photo")
+    {
+        return vec![MigrationEntity::Files];
+    }
+    if name.contains("stock movement")
+        || name.contains("inventory movement")
+        || name.contains("stock adjustment")
+    {
+        return vec![MigrationEntity::StockMovements];
+    }
+    if name.contains("service history") {
+        return vec![MigrationEntity::Sales];
+    }
+    if name.contains("unpadie") || name.contains("unpaid") {
+        return vec![MigrationEntity::Invoices];
+    }
+    if name.contains("invoice") || name.contains("receipt") || name.contains("sale") {
+        return vec![MigrationEntity::Invoices, MigrationEntity::Payments];
+    }
+    if name.contains("customer")
+        || name.contains("client")
+        || name.contains("guest")
+        || name == "clint"
+    {
+        return vec![MigrationEntity::Clients];
+    }
+    if name.contains("staff") || name.contains("employee") || name.contains("therapist") {
+        return vec![MigrationEntity::Staff];
+    }
+    if name.contains("service") {
+        return vec![MigrationEntity::Services];
+    }
+    if name.contains("product") || name.contains("item") {
+        return vec![MigrationEntity::Products, MigrationEntity::Inventory];
+    }
+    if name.contains("membership") || name.contains("mship") {
+        return if columns.contains("mobile")
+            || columns.contains("client name")
+            || columns.contains("guest code")
+        {
+            vec![MigrationEntity::ClientMemberships]
+        } else {
+            vec![MigrationEntity::Memberships]
+        };
+    }
+    if name.contains("appointment") || name.contains("booking") {
+        return vec![MigrationEntity::Appointments];
+    }
+    if columns.contains("mobile") && (columns.contains("name") || columns.contains("guest name")) {
+        return vec![MigrationEntity::Clients];
+    }
+    Vec::new()
+}
+
+pub async fn source_columns_for_sheet(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+    source_sheet: &str,
+) -> Result<Vec<String>, AppError> {
+    if source_sheet.trim().is_empty() {
+        return source_columns(db, tenant_id, branch_id, actor, id).await;
+    }
+    let profile = source_profile(db, tenant_id, branch_id, actor, id).await?;
+    profile
+        .sheets
+        .into_iter()
+        .find(|sheet| sheet.id == source_sheet)
+        .map(|sheet| sheet.columns)
+        .ok_or_else(|| AppError::validation("selected source sheet was not found"))
 }
 
 fn source_columns_blocking(sources: &[WorkerSource]) -> Result<Vec<String>, AppError> {
@@ -556,6 +1404,11 @@ fn session_model(
         row.status == "open" && !missing_parts.is_empty() && row.expires_at > chrono::Utc::now();
     MigrationUploadSession {
         id: row.id,
+        tenant_id: row.tenant_id,
+        branch_id: row.branch_id,
+        provider: MigrationProvider::try_from(row.source_provider.as_str())
+            .unwrap_or(MigrationProvider::Auto),
+        uploaded_by: row.created_by,
         file_name: row.original_file_name,
         extension: row.file_extension,
         declared_content_type: row.declared_content_type,
@@ -573,6 +1426,7 @@ fn session_model(
         created_at: row.created_at,
         updated_at: row.updated_at,
         completed_at: row.completed_at,
+        retention_days: row.retention_days,
     }
 }
 
@@ -582,6 +1436,11 @@ fn source_model(
 ) -> MigrationSourceFile {
     MigrationSourceFile {
         id: row.id,
+        tenant_id: row.tenant_id,
+        branch_id: row.branch_id,
+        provider: MigrationProvider::try_from(row.source_provider.as_str())
+            .unwrap_or(MigrationProvider::Auto),
+        uploaded_by: row.created_by,
         upload_session_id: row.upload_session_id,
         original_file_name: row.original_file_name,
         extension: row.file_extension,
@@ -592,6 +1451,10 @@ fn source_model(
         sha256: row.sha256,
         evidence_status: row.evidence_status,
         read_only: row.read_only,
+        encrypted: row.encryption_scheme != "none",
+        encryption_scheme: row.encryption_scheme,
+        retention_until: row.retention_until,
+        purged_at: row.purged_at,
         manifest: row.manifest_json,
         artifacts: artifacts
             .into_iter()
@@ -834,6 +1697,7 @@ fn prepare_evidence(
     session: &migration_file_repository::UploadSessionRow,
     parts: &[migration_file_repository::UploadPartRow],
     expected_sha256: &str,
+    encryption_key: &str,
 ) -> Result<PreparedEvidence, String> {
     if parts.len() != session.total_parts as usize {
         return Err("migration upload is missing parts".into());
@@ -845,7 +1709,7 @@ fn prepare_evidence(
     fs::create_dir_all(&evidence_dir)
         .map_err(|_| "source evidence directory could not be created")?;
     let temp_path = evidence_dir.join(format!(".{source_id}.assembling"));
-    let final_path = evidence_dir.join(format!("{source_id}.{}", session.file_extension));
+    let final_path = evidence_dir.join(format!("{source_id}.enc"));
     let result = (|| {
         let mut output = OpenOptions::new()
             .create_new(true)
@@ -897,17 +1761,38 @@ fn prepare_evidence(
         if !expected_sha256.is_empty() && sha256 != expected_sha256 {
             return Err("source file SHA-256 does not match the upload manifest".into());
         }
-        let (detected_content_type, manifest, artifacts) = inspect_source(
+        let (detected_content_type, mut manifest, mut artifacts) = inspect_source(
             &temp_path,
             &session.file_extension,
             &artifact_dir,
             &format!("{scope}/artifacts/{source_id}"),
         )?;
-        fs::rename(&temp_path, &final_path)
-            .map_err(|_| "source evidence could not be finalized")?;
+        encrypt_evidence_file(
+            &temp_path,
+            &final_path,
+            encryption_key,
+            tenant_id,
+            branch_id,
+        )?;
+        fs::remove_file(&temp_path).map_err(|_| "plaintext evidence could not be removed")?;
         set_read_only(&final_path)?;
+        for artifact in &mut artifacts {
+            let plaintext = root.join(&artifact.storage_key);
+            let encrypted_key = format!("{}.enc", artifact.storage_key);
+            let encrypted = root.join(&encrypted_key);
+            encrypt_evidence_file(&plaintext, &encrypted, encryption_key, tenant_id, branch_id)?;
+            fs::remove_file(&plaintext)
+                .map_err(|_| "plaintext ZIP artifact could not be removed")?;
+            set_read_only(&encrypted)?;
+            artifact.storage_key = encrypted_key;
+        }
+        manifest["encryption"] = json!({
+            "scheme": EVIDENCE_ENCRYPTION_SCHEME,
+            "chunkBytes": EVIDENCE_CHUNK_BYTES,
+            "tenantScopedKey": true
+        });
         Ok(PreparedEvidence {
-            storage_key: format!("{scope}/evidence/{source_id}.{}", session.file_extension),
+            storage_key: format!("{scope}/evidence/{source_id}.enc"),
             source_id,
             sha256,
             detected_content_type,
@@ -917,6 +1802,7 @@ fn prepare_evidence(
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temp_path);
+        remove_read_only_file(&final_path);
         remove_read_only_dir(&artifact_dir);
     }
     result
@@ -998,6 +1884,22 @@ fn validate_csv(path: &Path) -> Result<(), String> {
     if !carry.is_empty() || !saw_content {
         return Err("CSV content is empty or not valid UTF-8".into());
     }
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_path(path)
+        .map_err(|_| "CSV content could not be parsed")?;
+    let headers = reader.headers().map_err(|_| "CSV header is invalid")?;
+    if headers.is_empty() || headers.iter().all(|value| value.trim().is_empty()) {
+        return Err("CSV source has no header columns".into());
+    }
+    let mut has_row = false;
+    for record in reader.records() {
+        let record = record.map_err(|_| "CSV contains a corrupt row")?;
+        has_row |= record.iter().any(|value| !value.trim().is_empty());
+    }
+    if !has_row {
+        return Err("CSV source contains no data rows".into());
+    }
     Ok(())
 }
 
@@ -1059,13 +1961,43 @@ fn validate_xlsx(path: &Path) -> Result<(usize, u64), String> {
         assert_safe_ratio(entry.size(), entry.compressed_size())?;
         names.insert(name);
     }
+    if names.iter().any(|name| {
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "encryptioninfo" | "encryptedpackage"
+        )
+    }) {
+        return Err("password-protected XLSX files are not supported".into());
+    }
     if !names.contains("[Content_Types].xml")
         || !names.contains("_rels/.rels")
         || !names.contains("xl/workbook.xml")
     {
         return Err("XLSX content is missing required workbook records".into());
     }
-    Ok((archive.len(), total))
+    let entry_count = archive.len();
+    drop(archive);
+    let mut workbook =
+        open_workbook_auto(path).map_err(|_| "XLSX workbook is corrupt or password-protected")?;
+    let mut has_data = false;
+    for sheet_name in workbook.sheet_names().to_vec() {
+        let range = workbook
+            .worksheet_range(&sheet_name)
+            .map_err(|_| "XLSX worksheet is corrupt or password-protected")?;
+        if range.height() > 1
+            && range
+                .rows()
+                .next()
+                .is_some_and(|row| row.iter().any(|value| !value.to_string().trim().is_empty()))
+        {
+            has_data = true;
+            break;
+        }
+    }
+    if !has_data {
+        return Err("XLSX source contains no data rows".into());
+    }
+    Ok((entry_count, total))
 }
 
 fn extract_zip(
@@ -1152,7 +2084,6 @@ fn extract_zip(
             )
         };
         let sha256 = hash_file(&output_path)?;
-        set_read_only(&output_path)?;
         artifacts.push(PreparedArtifact {
             id: id.clone(),
             entry_name,
@@ -1174,6 +2105,247 @@ fn assert_safe_ratio(size: u64, compressed: u64) -> Result<(), String> {
         Err("archive compression ratio exceeds the safety limit".into())
     } else {
         Ok(())
+    }
+}
+
+fn evidence_encryption_key() -> Result<String, AppError> {
+    std::env::var("MIGRATION_EVIDENCE_ENCRYPTION_KEY")
+        .or_else(|_| std::env::var("SECURITY_ENCRYPTION_KEY"))
+        .ok()
+        .filter(|value| value.trim().len() >= 32)
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "MIGRATION_EVIDENCE_ENCRYPTION_NOT_CONFIGURED",
+                "migration evidence encryption key is not configured",
+            )
+        })
+}
+
+fn evidence_cipher(key: &str, tenant_id: &str, branch_id: &str) -> Result<Aes256Gcm, String> {
+    let digest = Sha256::digest(format!("{key}\0{tenant_id}\0{branch_id}").as_bytes());
+    Aes256Gcm::new_from_slice(&digest).map_err(|_| "evidence encryption key is invalid".into())
+}
+
+fn evidence_nonce(prefix: &[u8; 8], counter: u32) -> [u8; 12] {
+    let mut nonce = [0_u8; 12];
+    nonce[..8].copy_from_slice(prefix);
+    nonce[8..].copy_from_slice(&counter.to_be_bytes());
+    nonce
+}
+
+fn evidence_aad(tenant_id: &str, branch_id: &str, counter: u32) -> Vec<u8> {
+    format!("{tenant_id}\0{branch_id}\0{counter}").into_bytes()
+}
+
+fn encrypt_evidence_file(
+    input_path: &Path,
+    output_path: &Path,
+    key: &str,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<(), String> {
+    let cipher = evidence_cipher(key, tenant_id, branch_id)?;
+    let mut input = File::open(input_path).map_err(|_| "plaintext evidence could not be opened")?;
+    let mut output = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(output_path)
+        .map_err(|_| "encrypted evidence could not be created")?;
+    let result = (|| -> Result<(), String> {
+        let mut prefix = [0_u8; 8];
+        OsRng.fill_bytes(&mut prefix);
+        output
+            .write_all(EVIDENCE_MAGIC)
+            .map_err(|_| "encrypted evidence header could not be written")?;
+        output
+            .write_all(&prefix)
+            .map_err(|_| "encrypted evidence nonce could not be written")?;
+        let mut buffer = vec![0_u8; EVIDENCE_CHUNK_BYTES];
+        let mut counter = 0_u32;
+        loop {
+            let read = input
+                .read(&mut buffer)
+                .map_err(|_| "plaintext evidence could not be read")?;
+            if read == 0 {
+                break;
+            }
+            let nonce = Nonce::from(evidence_nonce(&prefix, counter));
+            let aad = evidence_aad(tenant_id, branch_id, counter);
+            let encrypted = cipher
+                .encrypt(
+                    &nonce,
+                    Payload {
+                        msg: &buffer[..read],
+                        aad: &aad,
+                    },
+                )
+                .map_err(|_| "evidence encryption failed")?;
+            output
+                .write_all(&(read as u32).to_be_bytes())
+                .map_err(|_| "encrypted evidence length could not be written")?;
+            output
+                .write_all(&encrypted)
+                .map_err(|_| "encrypted evidence chunk could not be written")?;
+            counter = counter
+                .checked_add(1)
+                .ok_or("evidence has too many encryption chunks")?;
+        }
+        output
+            .write_all(&0_u32.to_be_bytes())
+            .map_err(|_| "encrypted evidence terminator could not be written")?;
+        output
+            .sync_all()
+            .map_err(|_| "encrypted evidence could not be synced".to_string())
+    })();
+    if result.is_err() {
+        drop(output);
+        let _ = fs::remove_file(output_path);
+    }
+    result
+}
+
+fn decrypt_evidence_file(
+    input_path: &Path,
+    output_path: &Path,
+    key: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    expected_sha256: &str,
+) -> Result<(), String> {
+    let cipher = evidence_cipher(key, tenant_id, branch_id)?;
+    let mut input = File::open(input_path).map_err(|_| "encrypted evidence could not be opened")?;
+    let mut output = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(output_path)
+        .map_err(|_| "temporary evidence could not be created")?;
+    let result = (|| -> Result<(), String> {
+        let mut magic = [0_u8; 8];
+        let mut prefix = [0_u8; 8];
+        input
+            .read_exact(&mut magic)
+            .map_err(|_| "encrypted evidence header is missing")?;
+        input
+            .read_exact(&mut prefix)
+            .map_err(|_| "encrypted evidence nonce is missing")?;
+        if &magic != EVIDENCE_MAGIC {
+            return Err("encrypted evidence header is invalid".into());
+        }
+        let mut hasher = Sha256::new();
+        let mut counter = 0_u32;
+        loop {
+            let mut length = [0_u8; 4];
+            input
+                .read_exact(&mut length)
+                .map_err(|_| "encrypted evidence chunk length is missing")?;
+            let plaintext_len = u32::from_be_bytes(length) as usize;
+            if plaintext_len == 0 {
+                break;
+            }
+            if plaintext_len > EVIDENCE_CHUNK_BYTES {
+                return Err("encrypted evidence chunk exceeds its limit".into());
+            }
+            let mut encrypted = vec![0_u8; plaintext_len + 16];
+            input
+                .read_exact(&mut encrypted)
+                .map_err(|_| "encrypted evidence chunk is truncated")?;
+            let nonce = Nonce::from(evidence_nonce(&prefix, counter));
+            let aad = evidence_aad(tenant_id, branch_id, counter);
+            let plaintext = cipher
+                .decrypt(
+                    &nonce,
+                    Payload {
+                        msg: &encrypted,
+                        aad: &aad,
+                    },
+                )
+                .map_err(|_| "encrypted evidence authentication failed")?;
+            if plaintext.len() != plaintext_len {
+                return Err("encrypted evidence chunk length does not match".into());
+            }
+            hasher.update(&plaintext);
+            output
+                .write_all(&plaintext)
+                .map_err(|_| "temporary evidence could not be written")?;
+            counter = counter
+                .checked_add(1)
+                .ok_or("evidence has too many encrypted chunks")?;
+        }
+        let actual_hash = format!("{:x}", hasher.finalize());
+        if actual_hash != expected_sha256 {
+            return Err("source evidence SHA-256 recheck failed".into());
+        }
+        output
+            .sync_all()
+            .map_err(|_| "temporary evidence could not be synced".to_string())
+    })();
+    if result.is_err() {
+        drop(output);
+        let _ = fs::remove_file(output_path);
+    }
+    result
+}
+
+fn materialize_verified_source(
+    stored_path: &Path,
+    encryption_scheme: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    extension: &str,
+    expected_sha256: &str,
+) -> Result<MaterializedSource, AppError> {
+    if encryption_scheme == "none" {
+        if hash_file(stored_path).map_err(AppError::validation)? != expected_sha256 {
+            return Err(AppError::conflict("source evidence SHA-256 recheck failed"));
+        }
+        return Ok(MaterializedSource {
+            path: stored_path.to_path_buf(),
+            cleanup_on_drop: false,
+        });
+    }
+    if encryption_scheme != EVIDENCE_ENCRYPTION_SCHEME {
+        return Err(AppError::conflict(
+            "source evidence encryption scheme is unsupported",
+        ));
+    }
+    let key = evidence_encryption_key()?;
+    let runtime_dir = storage_root()?
+        .join(scope_key(tenant_id, branch_id))
+        .join("runtime");
+    fs::create_dir_all(&runtime_dir)
+        .map_err(|_| AppError::internal("migration runtime directory could not be created"))?;
+    cleanup_stale_runtime_files(&runtime_dir);
+    let path = runtime_dir.join(format!("{}.{}", Uuid::new_v4(), extension));
+    decrypt_evidence_file(
+        stored_path,
+        &path,
+        &key,
+        tenant_id,
+        branch_id,
+        expected_sha256,
+    )
+    .map_err(AppError::conflict)?;
+    Ok(MaterializedSource {
+        path,
+        cleanup_on_drop: true,
+    })
+}
+
+fn cleanup_stale_runtime_files(runtime_dir: &Path) {
+    let Ok(entries) = fs::read_dir(runtime_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let stale = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age.as_secs() > 60 * 60);
+        if stale && path.is_file() {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -1263,9 +2435,11 @@ async fn remove_session_parts(tenant_id: &str, branch_id: &str, id: &str) {
 #[cfg(test)]
 mod tests {
     use super::{
-        assert_safe_ratio, extract_zip, has_binary_magic, normalize_sha256,
-        source_columns_blocking, validate_csv, validate_file_name, validate_xlsx, WorkerSource,
+        assert_safe_ratio, decrypt_evidence_file, encrypt_evidence_file, extract_zip,
+        has_binary_magic, normalize_sha256, sha256_hex, source_columns_blocking,
+        source_profile_blocking, validate_csv, validate_file_name, validate_xlsx, WorkerSource,
     };
+    use crate::models::migration::{MigrationEntity, MigrationProvider};
     use std::{fs, io::Write, path::PathBuf};
     use uuid::Uuid;
     use zip::{write::SimpleFileOptions, ZipWriter};
@@ -1338,6 +2512,7 @@ mod tests {
             name: "headers.csv".into(),
             format: "csv".into(),
             path: path.clone(),
+            cleanup_on_drop: false,
         };
         assert_eq!(
             source_columns_blocking(&[source]).unwrap(),
@@ -1348,8 +2523,115 @@ mod tests {
             name: "headers.csv".into(),
             format: "csv".into(),
             path,
+            cleanup_on_drop: false,
         };
         assert!(source_columns_blocking(&[duplicate]).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn phase_one_profiler_streams_stats_masks_pii_and_suggests_fixed_fields() {
+        let root = test_dir();
+        let path = root.join("clients.csv");
+        fs::write(
+            &path,
+            b"Mobile No,Email,Amount,Status\r\n9876543210,a@example.com,1250.50,active\r\n9876543210,b@example.com,500,inactive\r\n9999999999,,250,active\r\n",
+        )
+        .unwrap();
+        let profile = source_profile_blocking(
+            &[WorkerSource {
+                name: "clients.csv".into(),
+                format: "csv".into(),
+                path: path.clone(),
+                cleanup_on_drop: false,
+            }],
+            MigrationProvider::Auto,
+        )
+        .unwrap();
+        let sheet = &profile.sheets[0];
+        assert_eq!(sheet.row_count, 3);
+        assert_eq!(sheet.column_count, 4);
+        let phone = &sheet.column_profiles[0];
+        assert_eq!(phone.detected_data_type, "phone");
+        assert_eq!(phone.possible_crm_entity, Some(MigrationEntity::Clients));
+        assert_eq!(phone.possible_crm_field.as_deref(), Some("phone"));
+        assert_eq!(phone.duplicate_count, 1);
+        assert!(phone
+            .sample_values
+            .iter()
+            .all(|value| value.starts_with("***")));
+        assert!(phone.statistics_exact);
+        let email = &sheet.column_profiles[1];
+        assert_eq!(email.empty_percentage, 33.33);
+        assert!(email
+            .sample_values
+            .iter()
+            .all(|value| value.contains("***@")));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn phase_four_profiler_marks_day_month_ambiguity() {
+        let root = test_dir();
+        let path = root.join("dates.csv");
+        fs::write(&path, b"DOB\r\n01/02/2026\r\n02/03/2026\r\n").unwrap();
+        let profile = source_profile_blocking(
+            &[WorkerSource {
+                name: "dates.csv".into(),
+                format: "csv".into(),
+                path,
+                cleanup_on_drop: false,
+            }],
+            MigrationProvider::Auto,
+        )
+        .unwrap();
+        assert!(profile.sheets[0].column_profiles[0]
+            .patterns
+            .iter()
+            .any(|pattern| pattern == "date_format_ambiguous"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn phase_one_evidence_encryption_round_trips_and_binds_tenant_scope() {
+        let root = test_dir();
+        let plaintext = root.join("source.csv");
+        let encrypted = root.join("source.enc");
+        let decrypted = root.join("decrypted.csv");
+        let wrong_scope = root.join("wrong.csv");
+        let content = b"name,phone\r\nA,9876543210\r\n";
+        fs::write(&plaintext, content).unwrap();
+        encrypt_evidence_file(
+            &plaintext,
+            &encrypted,
+            "01234567890123456789012345678901",
+            "tenant-a",
+            "branch-a",
+        )
+        .unwrap();
+        assert!(!fs::read(&encrypted)
+            .unwrap()
+            .windows(content.len())
+            .any(|window| window == content));
+        decrypt_evidence_file(
+            &encrypted,
+            &decrypted,
+            "01234567890123456789012345678901",
+            "tenant-a",
+            "branch-a",
+            &sha256_hex(content),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&decrypted).unwrap(), content);
+        assert!(decrypt_evidence_file(
+            &encrypted,
+            &wrong_scope,
+            "01234567890123456789012345678901",
+            "tenant-b",
+            "branch-a",
+            &sha256_hex(content),
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -803,6 +803,7 @@ async fn marketing_insights(State(state): State<AppState>, headers: HeaderMap) -
 
 async fn list_notifications(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<NotificationListQuery>,
 ) -> ApiResult<NotificationSummary> {
@@ -824,8 +825,9 @@ async fn list_notifications(
           AND ($3 = '' OR notification_type = $3)
           AND ($4 = false OR is_read = false)
           AND ($5 = '' OR LOWER(title) LIKE '%' || $5 || '%' OR LOWER(body) LIKE '%' || $5 || '%')
+          AND (user_id = '' OR user_id = $6)
         ORDER BY created_at DESC
-        LIMIT $6 OFFSET $7
+        LIMIT $7 OFFSET $8
         "#,
     )
     .bind(&tenant_id)
@@ -833,6 +835,7 @@ async fn list_notifications(
     .bind(notification_type)
     .bind(unread_only)
     .bind(q)
+    .bind(&claims.sub)
     .bind(page_size)
     .bind((page - 1) * page_size)
     .fetch_all(&state.db)
@@ -840,19 +843,21 @@ async fn list_notifications(
     .map_err(|_| AppError::internal("failed to list notifications"))?;
 
     let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(&claims.sub)
     .fetch_one(&state.db)
     .await
     .unwrap_or(0);
 
     let unread = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read = false",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read = false AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(&claims.sub)
     .fetch_one(&state.db)
     .await
     .unwrap_or(0);
@@ -893,16 +898,18 @@ async fn list_notifications(
 
 async fn get_notification(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<NotificationResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = sqlx::query_as::<_, NotificationRow>(
-        "SELECT id, tenant_id, branch_id, user_id, created_by, notification_type, title, body, resource_type, resource_id, is_read, COALESCE(metadata_json::text, '{}') AS metadata_json, created_at, updated_at FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        "SELECT id, tenant_id, branch_id, user_id, created_by, notification_type, title, body, resource_type, resource_id, is_read, COALESCE(metadata_json::text, '{}') AS metadata_json, created_at, updated_at FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND (user_id='' OR user_id=$4)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
     .bind(&id)
+    .bind(&claims.sub)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to load notification"))?
@@ -1042,6 +1049,7 @@ fn require_marketing_permission(claims: &AuthClaims, permission: &str) -> Result
 
 async fn mark_notification_read(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<NotificationReadPayload>,
@@ -1053,7 +1061,7 @@ async fn mark_notification_read(
         r#"
         UPDATE notifications
            SET is_read = $4, updated_at = NOW()
-         WHERE id = $1 AND tenant_id = $2 AND branch_id = $3
+         WHERE id = $1 AND tenant_id = $2 AND branch_id = $3 AND (user_id='' OR user_id=$5)
         RETURNING id, tenant_id, branch_id, user_id, created_by, notification_type, title, body,
                   resource_type, resource_id, is_read, COALESCE(metadata_json::text, '{}') AS metadata_json, created_at, updated_at
         "#,
@@ -1062,6 +1070,7 @@ async fn mark_notification_read(
     .bind(&tenant_id)
     .bind(&branch_id)
     .bind(is_read)
+    .bind(&claims.sub)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to update notification"))?
@@ -1119,24 +1128,27 @@ async fn update_self_notification(
 
 async fn count_unread_notifications(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<NotificationCount> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
 
     let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(&claims.sub)
     .fetch_one(&state.db)
     .await
     .unwrap_or(0);
 
     let unread = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read=false",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read=false AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
+    .bind(&claims.sub)
     .fetch_one(&state.db)
     .await
     .unwrap_or(0);

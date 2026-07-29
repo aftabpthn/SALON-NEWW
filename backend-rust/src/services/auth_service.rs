@@ -492,6 +492,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff App",
     },
     PermissionDefinition {
+        code: "staff.app.settings.manage",
+        label: "Manage Staff App settings",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "reports.read",
         label: "View reports",
         group: "Finance & reports",
@@ -540,6 +545,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         code: "marketing.send",
         label: "Send marketing campaigns",
         group: "Marketing",
+    },
+    PermissionDefinition {
+        code: "ai.concierge.read",
+        label: "Use AI concierge",
+        group: "AI",
+    },
+    PermissionDefinition {
+        code: "ai.concierge.manage",
+        label: "Manage AI concierge governance",
+        group: "AI",
     },
     PermissionDefinition {
         code: "offers.approve",

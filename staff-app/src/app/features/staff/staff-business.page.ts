@@ -27,8 +27,15 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
 
       @if (!canReadBusiness()) { <section staffPageState class="notice">You do not have permission to read staff business data.</section> }
       @if (message()) { <section staffPageState class="notice">{{ message() }}</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading business report...</section> }
-      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (loading() && !business()) {
+        <section class="business-skeleton" aria-label="Loading business report">
+          <div class="skeleton business-filter-skeleton"></div>
+          <div class="skeleton-grid"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
+          <span class="skeleton business-list-skeleton"></span>
+        </section>
+      }
+      @if (loadError()) { <section staffPageState class="notice business-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" (click)="load(true)">Retry</button></section> }
+      @if (staff.error() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadBusiness()) {
         <section class="panel">
@@ -83,8 +90,8 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             </label>
           </div>
           <div class="row-actions permission-actions">
-            <button class="button primary" type="button" (click)="apply()">Apply</button>
-            <button class="button" type="button" [disabled]="!activeFilterCount()" (click)="clearFilters()">Clear filters</button>
+            <button class="button primary" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="apply()">{{ loading() ? 'Applying...' : 'Apply' }}</button>
+            <button class="button" type="button" [disabled]="!activeFilterCount() || loading()" (click)="clearFilters()">Clear filters</button>
             @if (activeFilterCount()) { <span class="badge">{{ activeFilterCount() }} active {{ activeFilterCount() === 1 ? 'filter' : 'filters' }}</span> }
           </div>
         </section>
@@ -192,7 +199,7 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
         }
 
         <section class="panel">
-          <div class="panel-title"><h2>My service invoices</h2><span>{{ (data.serviceInvoices || []).length }} shown</span></div>
+          <div class="panel-title"><h2>My service invoices</h2><span>{{ loading() ? 'Refreshing...' : ((data.serviceInvoices || []).length + ' shown') }}</span></div>
           <div class="list">
             @for (line of (data.serviceInvoices || []); track line.saleId + ':' + line.id) {
               <div class="row service-invoice-row">
@@ -207,9 +214,9 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
                   @if (data.permissions.serviceAmount && line.refundedPaise) { <small>Refund {{ formatMoney(line.refundedPaise) }} · Net {{ formatMoney(line.netTotalPaise) }}</small> }
                   @if (data.permissions.commission) { <small>Commission {{ formatMoney(line.commissionPaise) }}</small> }
                 </div>
-                @if (data.permissions.invoiceDetail) { <button class="link-button" type="button" (click)="openInvoice(line, $event)">Invoice</button> }
+                @if (data.permissions.invoiceDetail) { <button class="link-button" type="button" [disabled]="invoiceLoading()" [attr.aria-busy]="invoiceLoading()" (click)="openInvoice(line, $event)">Invoice</button> }
               </div>
-            } @empty { <p class="empty">No service invoices found.</p> }
+            } @empty { <div class="business-empty"><p>No service invoices found.</p><small>CRM invoices matching this staff scope and filter will appear here.</small></div> }
           </div>
         </section>
 
@@ -249,7 +256,7 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
         <section class="panel">
           <div class="panel-title">
             <h2>Detailed work</h2>
-            <span>Showing {{ data.appointments.length }} of {{ data.pagination.totalItems }}</span>
+            <span>{{ loading() ? 'Refreshing...' : ('Showing ' + data.appointments.length + ' of ' + data.pagination.totalItems) }}</span>
           </div>
         </section>
 
@@ -295,12 +302,12 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             </details>
           </section>
         } @empty {
-          <section class="panel"><p class="empty">No staff work found for this range and filters.</p></section>
+          <section class="panel"><div class="business-empty"><p>No staff work found for this range and filters.</p><small>Try a wider date range or clear filters. Empty means no matching CRM records were returned.</small></div></section>
         }
 
         @if (data.pagination.hasMore) {
           <div class="row-actions permission-actions">
-            <button class="button" type="button" [disabled]="loadingMore()" (click)="loadMore()">{{ loadingMore() ? 'Loading…' : 'Load More' }}</button>
+            <button class="button" type="button" [disabled]="loadingMore() || loading()" [attr.aria-busy]="loadingMore()" (click)="loadMore()">{{ loadingMore() ? 'Loading...' : 'Load More' }}</button>
           </div>
         }
       }
@@ -329,7 +336,7 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
           <aside id="business-invoice-drawer" class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="business-invoice-title" tabindex="-1">
             <div class="panel-title"><h2 id="business-invoice-title">Invoice detail</h2><button class="link-button" type="button" (click)="closeDrawers()">Close</button></div>
             @if (invoiceLoading()) { <section staffPageState class="state" [loading]="true">Loading invoice...</section> }
-            @if (invoiceError()) { <section staffPageState class="notice">{{ invoiceError() }}</section> }
+            @if (invoiceError()) { <section staffPageState class="notice business-error"><span>{{ invoiceError() }}</span><button class="link-button" type="button" [disabled]="invoiceLoading()" (click)="retryInvoice()">Retry</button></section> }
             @if (invoiceDetail(); as invoice) {
               <section class="grid two compact-grid">
                 @if (invoice.invoiceNumber) { <article class="kpi"><span>Invoice</span><strong>{{ invoice.invoiceNumber }}</strong><small>{{ invoice.status }}</small></article> }
@@ -364,11 +371,22 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
     .search-suggestions button:hover, .search-suggestions button:focus-visible { background: var(--staff-primary-light); }
     .search-suggestions span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .search-suggestions small { flex: 0 0 auto; color: var(--staff-primary-hover); font-size: .62rem; font-weight: 750; text-transform: uppercase; }
+    .business-skeleton { display: grid; gap: 12px; }
+    .business-filter-skeleton { min-height: 148px; }
+    .business-list-skeleton { min-height: 280px; }
+    .business-error { justify-content: space-between; }
+    .business-empty { display: grid; justify-items: center; gap: 5px; padding: 24px 10px; color: var(--staff-text-secondary); font-weight: 600; text-align: center; }
+    .business-empty p { margin: 0; }
+    .business-empty small { font-weight: 600; line-height: 1.4; }
+    .service-invoice-row .link-button { min-width: 112px; }
     @media (max-width: 700px) {
       .grid.four.business-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .business-kpi-grid .kpi { min-height: 68px; padding: 9px 10px; }
       .business-kpi-grid .kpi span { font-size: .62rem; line-height: 1.2; }
       .business-kpi-grid .kpi strong { margin-top: 4px; font-size: 1.18rem; line-height: 1; }
+      .business-error, .service-invoice-row, .service-invoice-row .row-actions { align-items: stretch; flex-direction: column; }
+      .business-error button, .service-invoice-row .link-button, .permission-actions .button { width: 100%; }
+      .permission-actions { align-items: stretch; }
     }
   `]
 })
@@ -384,6 +402,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   readonly sort = signal<"asc" | "desc">("desc");
   readonly loading = signal(false);
   readonly loadingMore = signal(false);
+  readonly loadError = signal("");
   readonly message = signal("");
   readonly clock = signal(Date.now());
   readonly selectedAppointment = signal<StaffBusinessAppointment | null>(null);
@@ -391,6 +410,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   readonly invoiceDetail = signal<StaffBusinessInvoiceDetail | null>(null);
   readonly invoiceLoading = signal(false);
   readonly invoiceError = signal("");
+  readonly lastInvoiceLine = signal<StaffBusinessServiceInvoice | null>(null);
   readonly activeFilterCount = computed(() =>
     Number(Boolean(this.search().trim())) + Number(this.status() !== "all") + Number(this.sort() !== "desc")
   );
@@ -452,6 +472,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     const page = reset ? 1 : Number(current?.pagination.page || 1) + 1;
     reset ? this.loading.set(true) : this.loadingMore.set(true);
     this.message.set("");
+    this.loadError.set("");
     try {
       const data = await this.staff.business(this.query(page));
       if (generation !== this.loadGeneration) return;
@@ -463,7 +484,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
         this.business.set({ ...data, appointments: [...byId.values()], serviceInvoices: [...serviceInvoices.values()] });
       }
     } catch {
-      // StaffAppService exposes the API error message in its error signal.
+      if (generation === this.loadGeneration) this.loadError.set(this.staff.error() || "Unable to load business report.");
     } finally {
       if (generation === this.loadGeneration) {
         this.loading.set(false);
@@ -567,6 +588,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     this.drawerTrigger = event.currentTarget as HTMLElement;
     this.invoiceDrawerOpen.set(false);
     this.invoiceDetail.set(null);
+    this.lastInvoiceLine.set(null);
     this.selectedAppointment.set(item);
     setTimeout(() => document.getElementById("business-appointment-drawer")?.focus());
   }
@@ -577,6 +599,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     this.drawerTrigger = event.currentTarget as HTMLElement;
     this.selectedAppointment.set(null);
     this.invoiceDrawerOpen.set(true);
+    this.lastInvoiceLine.set(item);
     this.invoiceDetail.set(null);
     this.invoiceError.set("");
     this.invoiceLoading.set(true);
@@ -590,6 +613,12 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     }
   }
 
+
+  retryInvoice() {
+    const item = this.lastInvoiceLine();
+    if (!item) return;
+    void this.openInvoice(item, { currentTarget: this.drawerTrigger } as unknown as Event);
+  }
   dismissBackdrop(event: MouseEvent) {
     if (event.target === event.currentTarget) this.closeDrawers();
   }
@@ -598,6 +627,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     this.selectedAppointment.set(null);
     this.invoiceDrawerOpen.set(false);
     this.invoiceDetail.set(null);
+    this.lastInvoiceLine.set(null);
     this.invoiceError.set("");
     const trigger = this.drawerTrigger;
     this.drawerTrigger = null;

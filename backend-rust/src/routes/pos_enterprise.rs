@@ -741,10 +741,21 @@ async fn float_suggestion(State(state): State<AppState>, headers: HeaderMap) -> 
     Ok(Json(ApiResponse::ok(value)))
 }
 
-async fn payment_providers(State(state): State<AppState>) -> ApiResult<Value> {
+async fn payment_providers(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let controls = sqlx::query_as::<_, (String, bool)>(
+        "SELECT provider,enabled FROM payment_provider_branch_controls WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(&tenant)
+    .bind(&branch)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load payment provider controls"))?;
     let rows = crate::config::PAYMENT_PROVIDER_CATALOG
         .iter()
         .map(|entry| {
+            let configured = entry.implemented && state.settings.payment_provider_enabled(entry.provider);
+            let branch_enabled = controls.iter().find(|row| row.0 == entry.provider).map(|row| row.1).unwrap_or(true);
             json!({
                 "provider": entry.provider,
                 "displayName": entry.display_name,
@@ -754,7 +765,8 @@ async fn payment_providers(State(state): State<AppState>) -> ApiResult<Value> {
                 "documentationUrl": entry.documentation_url,
                 "recommended": entry.recommended,
                 "integrationStatus": if entry.implemented { "available" } else { "planned" },
-                "enabled": entry.implemented && state.settings.payment_provider_enabled(entry.provider),
+                "configured": configured,
+                "enabled": configured && branch_enabled,
                 "webhookConfigured": entry.implemented && state.settings.payment_provider_webhook_configured(entry.provider),
                 "environment": if entry.implemented { Some(state.settings.payment_provider_environment.as_str()) } else { None },
             })

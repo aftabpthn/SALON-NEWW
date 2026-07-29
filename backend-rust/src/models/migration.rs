@@ -45,6 +45,7 @@ string_enum!(MigrationEntity {
     Suppliers => "suppliers",
     Inventory => "inventory",
     Memberships => "memberships",
+    ClientMemberships => "client-memberships",
     Packages => "packages",
     Appointments => "appointments",
     Sales => "sales",
@@ -52,12 +53,40 @@ string_enum!(MigrationEntity {
     Payments => "payments",
     Expenses => "expenses",
     PurchaseBills => "purchase-bills",
+    Refunds => "refunds",
+    GiftCards => "gift-cards",
+    Loyalty => "loyalty",
+    Payroll => "payroll",
+    Commissions => "commissions",
+    ClientNotes => "client-notes",
+    Files => "files",
+    StockMovements => "stock-movements",
 });
 
 string_enum!(MigrationMode {
     DryRun => "dry-run",
     Commit => "commit",
 });
+
+string_enum!(MigrationProvider {
+    Auto => "auto",
+    Zenoti => "zenoti",
+    Dingg => "dingg",
+    Salonist => "salonist",
+    Fresha => "fresha",
+    Tally => "tally",
+    Busy => "busy",
+    Marg => "marg",
+    Excel => "excel",
+    Csv => "csv",
+    Manual => "manual",
+});
+
+impl Default for MigrationProvider {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
 
 string_enum!(MigrationJobStatus {
     Staging => "staging",
@@ -103,6 +132,8 @@ pub struct CreateImportJobRequest {
     pub duplicate_decisions: BTreeMap<String, MigrationDuplicateDecision>,
     pub mapping_id: Option<String>,
     pub owner_user_id: Option<String>,
+    #[serde(default)]
+    pub source_provider: MigrationProvider,
 }
 
 fn default_chunk_size() -> i32 {
@@ -125,6 +156,10 @@ pub struct CreateLargeImportJobRequest {
     pub chunk_size: i32,
     #[serde(default)]
     pub allow_partial_import: bool,
+    #[serde(default)]
+    pub source_provider: MigrationProvider,
+    #[serde(default)]
+    pub source_sheet: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -230,11 +265,96 @@ pub struct MigrationTemplateColumn {
     pub field: String,
     pub required: bool,
     pub aliases: Vec<String>,
+    pub global_aliases: Vec<String>,
+    pub provider_aliases: BTreeMap<String, Vec<String>>,
+    pub data_type: String,
+    pub max_length: Option<usize>,
+    pub allowed_values: Vec<String>,
+    pub reference_entity: Option<MigrationEntity>,
+    pub default_behavior: String,
+    pub transformation_rule: String,
+    pub validation_rules: Vec<String>,
+    pub permission: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationMappingDecision {
+    pub source_column: String,
+    pub target_field: Option<String>,
+    pub candidates: Vec<String>,
+    pub alias_level: String,
+    pub confidence: String,
+    pub confidence_percentage: u8,
+    pub collision: bool,
+    pub reason: String,
+    pub alternative_targets: Vec<MigrationTargetAlternative>,
+    pub suggestion_reasons: Vec<String>,
+    pub rejection_reasons: Vec<String>,
+    pub detected_data_type: String,
+    pub sample_evidence: Vec<String>,
+    pub required_transformation: Option<String>,
+    pub approved: bool,
+    pub approval_id: Option<String>,
+    pub approved_by: Option<String>,
+    pub approved_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationTargetAlternative {
+    pub target_field: String,
+    pub confidence_percentage: u8,
+    pub reasons: Vec<String>,
+    pub rejection_reasons: Vec<String>,
+    pub required_transformation: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationMappingApproval {
+    pub id: String,
+    pub entity: MigrationEntity,
+    pub source_provider: MigrationProvider,
+    pub rule_version: String,
+    pub fingerprint: String,
+    pub source_file_id: Option<String>,
+    pub source_sheet: String,
+    pub source_column: String,
+    pub target_field: String,
+    pub confidence_percentage: u8,
+    pub decision: Value,
+    pub approved_by: String,
+    pub approved_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationAlias {
+    pub id: String,
+    pub entity: MigrationEntity,
+    pub source_provider: MigrationProvider,
+    pub alias: String,
+    pub target_field: String,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SaveMigrationAliasRequest {
+    pub entity: MigrationEntity,
+    #[serde(default)]
+    pub source_provider: MigrationProvider,
+    pub alias: String,
+    pub target_field: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MigrationTemplate {
+    pub contract_version: String,
     pub entity: MigrationEntity,
     pub columns: Vec<MigrationTemplateColumn>,
     pub duplicate_decisions: Vec<MigrationDuplicateDecision>,
@@ -272,15 +392,32 @@ pub struct AnalyzeMigrationRequest {
     #[serde(default)]
     pub duplicate_decisions: BTreeMap<String, MigrationDuplicateDecision>,
     pub mapping_id: Option<String>,
+    #[serde(default)]
+    pub source_provider: MigrationProvider,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MigrationMappingSuggestionRequest {
     pub entity: MigrationEntity,
     #[serde(default)]
     pub source_columns: Vec<String>,
+    #[serde(default)]
+    pub mapping: BTreeMap<String, String>,
     pub source_file_id: Option<String>,
+    #[serde(default)]
+    pub source_provider: MigrationProvider,
+    #[serde(default)]
+    pub source_sheet: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApproveMigrationMappingRequest {
+    pub evaluation: MigrationMappingSuggestionRequest,
+    pub source_column: String,
+    pub target_field: String,
+    pub fingerprint: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -288,6 +425,14 @@ pub struct MigrationMappingSuggestionRequest {
 pub struct MigrationRowIssue {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_number: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_pattern: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_target: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -317,6 +462,7 @@ pub struct MigrationAnalysisSummary {
 #[serde(rename_all = "camelCase")]
 pub struct MigrationAnalysisReport {
     pub entity: MigrationEntity,
+    pub transformation_version: String,
     pub mapping: BTreeMap<String, String>,
     pub unmatched_columns: Vec<String>,
     pub rows: Vec<MigrationAnalysisRow>,

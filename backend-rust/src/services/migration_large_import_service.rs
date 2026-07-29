@@ -3,7 +3,7 @@ use crate::{
         common::AppError,
         migration::{
             CreateLargeImportJobRequest, ImportJob, MigrationDuplicateDecision,
-            MigrationImportChunk, MigrationMode,
+            MigrationImportChunk, MigrationMode, MigrationProvider,
         },
     },
     repositories::{migration_large_import_repository, migration_repository},
@@ -14,7 +14,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::PathBuf,
 };
 use tokio::sync::mpsc;
@@ -45,9 +45,47 @@ pub async fn create_job(
         request.owner_user_id.as_deref(),
     )
     .await?;
-    let (file_name, source_hash, _) =
+    let (file_name, source_hash, _, _) =
         migration_file_service::worker_sources(db, tenant, branch, request.source_file_id.trim())
             .await?;
+    let profile = migration_file_service::source_profile(
+        db,
+        tenant,
+        branch,
+        actor,
+        request.source_file_id.trim(),
+    )
+    .await?;
+    let source_provider = if request.source_provider == MigrationProvider::Auto {
+        profile.provider
+    } else {
+        request.source_provider
+    };
+    let importable = profile
+        .sheets
+        .iter()
+        .filter(|sheet| sheet.importable)
+        .collect::<Vec<_>>();
+    let source_sheet = if request.source_sheet.trim().is_empty() {
+        if importable.len() != 1 {
+            return Err(AppError::validation(
+                "select one source sheet before creating this workbook import",
+            ));
+        }
+        importable[0].id.clone()
+    } else {
+        request.source_sheet.trim().to_string()
+    };
+    let selected = profile
+        .sheets
+        .iter()
+        .find(|sheet| sheet.id == source_sheet)
+        .ok_or_else(|| AppError::validation("selected source sheet was not found"))?;
+    if !selected.targets.is_empty() && !selected.targets.contains(&request.entity) {
+        return Err(AppError::validation(
+            "selected source sheet does not contain the chosen entity",
+        ));
+    }
     if request.mode == MigrationMode::Commit
         && migration_repository::find_active_commit_duplicate(
             db,
@@ -68,11 +106,18 @@ pub async fn create_job(
         .mapping_id
         .as_deref()
         .filter(|id| !id.trim().is_empty());
-    let mapping = migration_service::effective_mapping(
+    let mapping = migration_service::resolved_mapping(
         db,
         tenant,
         branch,
         request.entity,
+        source_provider,
+        &selected.columns,
+        &selected.column_profiles,
+        selected.row_count,
+        Some(request.source_file_id.trim()),
+        &source_sheet,
+        Some(&source_hash),
         mapping_id,
         request.mapping,
     )
@@ -90,11 +135,14 @@ pub async fn create_job(
         request.mode,
         &file_name,
         &source_hash,
+        source_provider,
+        &source_sheet,
         request.chunk_size,
         request.allow_partial_import,
         mapping_id,
         &mapping_json,
         &decisions_json,
+        migration_adapter_service::MIGRATION_TRANSFORMER_VERSION,
         actor,
     )
     .await;
@@ -118,9 +166,13 @@ pub async fn create_job(
 pub async fn process_due(db: &PgPool) -> Result<usize, AppError> {
     let worker_id = format!("migration-worker:{}", std::process::id());
     let mut processed = 0;
-    if let Some(job) = migration_large_import_repository::claim_staging_job(db, &worker_id)
-        .await
-        .map_err(|_| AppError::internal("failed to claim source staging job"))?
+    if let Some(job) = migration_large_import_repository::claim_staging_job(
+        db,
+        &worker_id,
+        migration_adapter_service::MIGRATION_TRANSFORMER_VERSION,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to claim source staging job"))?
     {
         if let Err(error) = stage_source(db, &job, &worker_id).await {
             tracing::warn!(job_id = %job.id, error = ?error, "migration source staging failed");
@@ -154,6 +206,7 @@ pub async fn process_due(db: &PgPool) -> Result<usize, AppError> {
             chunk.chunk_number,
             chunk.start,
             chunk.end,
+            Some(&chunk.chunk_id),
         )
         .await
         {
@@ -163,9 +216,6 @@ pub async fn process_due(db: &PgPool) -> Result<usize, AppError> {
                 .map_err(|_| AppError::internal("failed to record chunk failure"))?;
             continue;
         }
-        migration_large_import_repository::complete_chunk(db, &chunk)
-            .await
-            .map_err(|_| AppError::internal("failed to complete migration chunk"))?;
         processed += chunk.rows.as_array().map_or(0, Vec::len);
     }
     Ok(processed)
@@ -176,7 +226,7 @@ async fn stage_source(
     job: &migration_large_import_repository::LargeStagingJob,
     worker_id: &str,
 ) -> Result<(), AppError> {
-    let (_, _, sources) = migration_file_service::worker_sources(
+    let (_, _, _, sources) = migration_file_service::worker_sources(
         db,
         &job.tenant_id,
         &job.branch_id,
@@ -191,9 +241,14 @@ async fn stage_source(
     .map_err(|_| AppError::internal("saved duplicate decisions are invalid"))?;
     let (sender, mut receiver) = mpsc::channel::<Result<RawChunk, String>>(1);
     let chunk_size = job.chunk_size as usize;
-    let producer = tokio::task::spawn_blocking(move || produce_chunks(sources, chunk_size, sender));
+    let selected_sheet = job.source_sheet.clone();
+    let producer = tokio::task::spawn_blocking(move || {
+        produce_chunks(sources, chunk_size, &selected_sheet, sender)
+    });
     let mut chunk_number = 0_i32;
     let mut seen_source_keys = HashSet::new();
+    let mut seen_external_ids = HashSet::new();
+    let mut financial_state = HashMap::new();
     while let Some(item) = receiver.recv().await {
         let raw = item.map_err(AppError::validation)?;
         if raw
@@ -204,21 +259,39 @@ async fn stage_source(
         {
             continue;
         }
-        let mut prepared = migration_adapter_service::prepare_table(
+        let mut prepared = migration_adapter_service::prepare_table_with_version_and_state(
             db,
             &job.tenant_id,
             &job.branch_id,
             job.entity,
+            job.source_provider,
             &raw.table,
             raw.source_row_offset,
             &mapping,
             &decisions,
+            &job.transformation_version,
+            &mut financial_state,
         )
         .await?;
         chunk_number += 1;
         let mut cross_chunk_duplicates = HashSet::new();
+        let mut cross_chunk_external_duplicates = HashSet::new();
+        for result in prepared.row_results.as_array().into_iter().flatten() {
+            let external_id = result
+                .get("source_external_id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            if !external_id.is_empty() && !seen_external_ids.insert(external_id) {
+                if let Some(line) = result.get("source_row_number").and_then(Value::as_i64) {
+                    cross_chunk_duplicates.insert(line);
+                    cross_chunk_external_duplicates.insert(line);
+                }
+            }
+        }
         if let Some(rows) = prepared.rows.as_array_mut() {
-            rows.retain(|row| {
+            rows.retain_mut(|row| {
                 let key = match job.entity {
                     crate::models::migration::MigrationEntity::Clients => row
                         .get("normalized_phone")
@@ -256,6 +329,11 @@ async fn stage_source(
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::ClientMemberships => row
+                        .get("source_external_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
                     crate::models::migration::MigrationEntity::Appointments
                     | crate::models::migration::MigrationEntity::Payments
                     | crate::models::migration::MigrationEntity::Expenses => row
@@ -284,11 +362,55 @@ async fn stage_source(
                             .unwrap_or("")
                     )
                     .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::GiftCards => row
+                        .get("code")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
+                    crate::models::migration::MigrationEntity::Payroll => format!(
+                        "{}:{}",
+                        row.get("period_start")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        row.get("staff_id").and_then(Value::as_str).unwrap_or("")
+                    ),
+                    crate::models::migration::MigrationEntity::Commissions => format!(
+                        "{}:{}",
+                        row.get("sale_line_id")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                        row.get("staff_id").and_then(Value::as_str).unwrap_or("")
+                    ),
+                    crate::models::migration::MigrationEntity::Refunds
+                    | crate::models::migration::MigrationEntity::Loyalty
+                    | crate::models::migration::MigrationEntity::ClientNotes
+                    | crate::models::migration::MigrationEntity::Files
+                    | crate::models::migration::MigrationEntity::StockMovements => row
+                        .get("source_external_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_ascii_lowercase(),
                 };
-                let duplicate = !key.is_empty() && !seen_source_keys.insert(key);
+                let line = row
+                    .get("source_row_number")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0);
+                let duplicate_external = cross_chunk_external_duplicates.contains(&line);
+                let duplicate =
+                    duplicate_external || (!key.is_empty() && !seen_source_keys.insert(key));
                 if duplicate {
-                    if let Some(line) = row.get("source_row_number").and_then(Value::as_i64) {
+                    if let Some(payload) = row.as_object_mut() {
+                        migration_adapter_service::rollback_financial_projection(
+                            job.entity,
+                            payload,
+                            &mut financial_state,
+                        );
+                    }
+                    if line > 0 {
                         cross_chunk_duplicates.insert(line);
+                        if duplicate_external {
+                            cross_chunk_external_duplicates.insert(line);
+                        }
                     }
                 }
                 !duplicate
@@ -317,11 +439,25 @@ async fn stage_source(
                     object.insert("status".into(), Value::String("error".into()));
                     object.insert(
                         "error_code".into(),
-                        Value::String("DUPLICATE_SOURCE_KEY".into()),
+                        Value::String(
+                            if cross_chunk_external_duplicates.contains(&line) {
+                                "DUPLICATE_SOURCE_EXTERNAL_ID"
+                            } else {
+                                "DUPLICATE_SOURCE_KEY"
+                            }
+                            .into(),
+                        ),
                     );
                     object.insert(
                         "message".into(),
-                        Value::String("duplicate source key across chunks".into()),
+                        Value::String(
+                            if cross_chunk_external_duplicates.contains(&line) {
+                                "oldExternalId appears more than once in the source"
+                            } else {
+                                "duplicate source key across chunks"
+                            }
+                            .into(),
+                        ),
                     );
                 }
             }
@@ -364,12 +500,22 @@ async fn stage_source(
 fn produce_chunks(
     sources: Vec<migration_file_service::WorkerSource>,
     chunk_size: usize,
+    selected_sheet: &str,
     sender: mpsc::Sender<Result<RawChunk, String>>,
 ) {
     for source in sources {
         let result = match source.format.as_str() {
-            "csv" => produce_csv(&source.path, &source.name, chunk_size, &sender),
-            "xlsx" => produce_xlsx(&source.path, &source.name, chunk_size, &sender),
+            "csv" if selected_sheet == source.name => {
+                produce_csv(&source.path, &source.name, chunk_size, &sender)
+            }
+            "xlsx" => produce_xlsx(
+                &source.path,
+                &source.name,
+                chunk_size,
+                selected_sheet,
+                &sender,
+            ),
+            "csv" => Ok(()),
             _ => Err("unsupported staged source format".to_string()),
         };
         if let Err(error) = result {
@@ -433,11 +579,15 @@ fn produce_xlsx(
     path: &PathBuf,
     name: &str,
     chunk_size: usize,
+    selected_sheet: &str,
     sender: &mpsc::Sender<Result<RawChunk, String>>,
 ) -> Result<(), String> {
     let mut workbook =
         open_workbook_auto(path).map_err(|_| "XLSX source could not be opened".to_string())?;
     for (sheet_name, range) in workbook.worksheets() {
+        if format!("{name}:{sheet_name}") != selected_sheet {
+            continue;
+        }
         let mut rows = range.rows();
         let Some(header) = rows
             .next()

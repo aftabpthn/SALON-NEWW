@@ -62,13 +62,15 @@
       <span class="status-chip" [attr.data-status]="tenantSubscription.status">{{ label(tenantSubscription.status) }}</span>
     }</header>
     @if (!tenantSubscription) {
-      <div class="empty-state compact">No subscription assigned</div>
+      <div class="section-action"><select [(ngModel)]="checkoutPlanId" aria-label="Select subscription plan"><option value="">Select plan</option>@for (plan of plans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }} · {{ money(plan.basePricePaise) }}</option>}</select><button class="primary-button" type="button" [disabled]="busy || !checkoutPlanId" (click)="startCheckout()">Pay with Razorpay</button></div>
     }
     @if (tenantSubscription) {
       <dl class="detail-grid">
         <div><dt>Plan</dt><dd>{{ tenantSubscription.planName }}</dd></div><div><dt>Provider</dt><dd>{{ label(tenantSubscription.provider) }}</dd></div>
         <div><dt>Period starts</dt><dd>{{ date(tenantSubscription.currentPeriodStart) }}</dd></div><div><dt>Period ends</dt><dd>{{ date(tenantSubscription.currentPeriodEnd) }}</dd></div>
       </dl>
+      <div class="section-action subscription-actions">@if (tenantSubscription.status === 'pending' && tenantSubscription.checkoutUrl) {<button class="primary-button" type="button" (click)="continueCheckout()">Continue payment</button>}@if (tenantSubscription.provider === 'razorpay' && ['active','past_due'].includes(tenantSubscription.status)) {<button class="secondary-button" type="button" (click)="runSubscriptionAction('pause')">Pause</button>}@if (tenantSubscription.provider === 'razorpay' && tenantSubscription.status === 'paused') {<button class="secondary-button" type="button" (click)="runSubscriptionAction('resume')">Resume</button>}@if (tenantSubscription.provider === 'razorpay' && tenantSubscription.status !== 'cancelled') {<button class="secondary-button" type="button" (click)="runSubscriptionAction('cancel',true)">Cancel next cycle</button>}</div>
+      @if (tenantSubscription.provider === 'razorpay' && !['pending','cancelled'].includes(tenantSubscription.status)) {<div class="section-action"><select [(ngModel)]="planChangeId" aria-label="Select new plan"><option value="">Change plan</option>@for (plan of plans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active || plan.id === tenantSubscription.planId">{{ plan.name }}</option>}</select><select [(ngModel)]="planChangeEffective" aria-label="Plan change timing"><option value="cycle_end">Next cycle</option><option value="now">Now with proration</option></select><button class="primary-button" type="button" [disabled]="busy || !planChangeId" (click)="changePlan()">Change</button></div>}
     }
   </section>
   <section class="panel">
@@ -85,6 +87,68 @@
 </div>
 }
 </section>
+}
+@if (tab === 'reports' && isPlatform) {
+  <section class="overview-grid report-grid">
+    <section class="panel">
+      <header class="panel-header"><h2>Recurring revenue</h2><select class="report-period" [(ngModel)]="reportDays" (change)="reloadReport()" [disabled]="busy" aria-label="Reporting period"><option [ngValue]="7">7 days</option><option [ngValue]="30">30 days</option><option [ngValue]="90">90 days</option><option [ngValue]="365">365 days</option></select></header>
+      <div class="report-body"><dl class="detail-grid">
+        <div><dt>MRR</dt><dd>{{ money(report.mrrPaise) }}</dd></div><div><dt>ARR</dt><dd>{{ money(report.arrPaise) }}</dd></div>
+        <div><dt>Overage revenue</dt><dd>{{ money(report.usageOverageRevenuePaise) }}</dd></div><div><dt>At-risk MRR</dt><dd>{{ money(report.renewalRiskMrrPaise) }}</dd></div>
+        <div><dt>Outstanding invoices</dt><dd>{{ report.outstandingInvoiceCount }}</dd></div><div><dt>Outstanding amount</dt><dd>{{ money(report.outstandingPaise) }}</dd></div>
+      </dl></div>
+    </section>
+    <section class="panel">
+      <header class="panel-header"><h2>Customer lifecycle</h2></header>
+      <div class="report-body"><dl class="detail-grid">
+        <div><dt>Trial conversion</dt><dd>{{ report.trialConversionPercent | number:'1.0-2' }}%</dd></div><div><dt>Converted trials</dt><dd>{{ report.trialConverted }} / {{ report.trialEligible }}</dd></div>
+        <div><dt>Churn rate</dt><dd>{{ report.churnRatePercent | number:'1.0-2' }}%</dd></div><div><dt>Churned subscriptions</dt><dd>{{ report.churnedSubscriptions }}</dd></div>
+        <div><dt>Renewal risk</dt><dd>{{ report.renewalRiskCount }}</dd></div><div><dt>Period</dt><dd>{{ report.periodDays }} days</dd></div>
+      </dl></div>
+    </section>
+    <section class="panel report-wide">
+      <header class="panel-header"><h2>Renewal risk</h2></header>
+      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Risk</th><th>Renewal</th><th>Outstanding</th><th>MRR</th></tr></thead><tbody>@for (row of report.renewalRisk; track row.subscriptionId) {
+        <tr><td><strong>{{ row.tenantName }}</strong></td><td>{{ row.planName }}</td><td><span class="status-chip" [attr.data-status]="row.riskLevel === 'high' ? 'past_due' : 'paused'">{{ row.reason }}</span></td><td>{{ date(row.periodEnd) }}</td><td>{{ money(row.outstandingPaise) }}</td><td>{{ money(row.mrrPaise) }}</td></tr>
+      }</tbody></table>@if (!report.renewalRisk.length) {<div class="empty-state compact">No renewal risk found</div>}</div>
+    </section>
+    <section class="panel">
+      <header class="panel-header"><h2>Support operations</h2></header>
+      <div class="report-body"><dl class="detail-grid">
+        <div><dt>Tickets</dt><dd>{{ report.supportTickets }}</dd></div><div><dt>SLA breaches</dt><dd>{{ report.slaBreachedTickets }}</dd></div>
+        <div><dt>SLA breach rate</dt><dd>{{ report.slaBreachPercent | number:'1.0-2' }}%</dd></div><div><dt>First response</dt><dd>{{ minutes(report.averageFirstResponseMinutes) }}</dd></div>
+        <div><dt>Resolution</dt><dd>{{ minutes(report.averageResolutionMinutes) }}</dd></div>
+      </dl></div>
+    </section>
+    <section class="panel report-wide">
+      <header class="panel-header"><h2>Support-agent performance</h2></header>
+      <div class="table-scroll"><table><thead><tr><th>Agent</th><th>Assigned</th><th>Resolved</th><th>First response</th><th>Resolution</th><th>SLA breach</th><th>CSAT</th></tr></thead><tbody>@for (row of report.supportAgents; track row.agentId) {
+        <tr><td><strong>{{ row.agentId }}</strong></td><td>{{ row.assignedTickets }}</td><td>{{ row.resolvedTickets }}</td><td>{{ minutes(row.averageFirstResponseMinutes) }}</td><td>{{ minutes(row.averageResolutionMinutes) }}</td><td [class.breach-text]="row.slaBreachPercent > 0">{{ row.slaBreachPercent | number:'1.0-2' }}%</td><td>{{ row.csatAverage ? (row.csatAverage | number:'1.0-2') + ' / 5' : '—' }}</td></tr>
+      }</tbody></table>@if (!report.supportAgents.length) {<div class="empty-state compact">No assigned support activity</div>}</div>
+    </section>
+  </section>
+}
+@if (tab === 'salons' && isPlatform) {
+  <section class="panel">
+    <header class="panel-header toolbar-header"><h2>Salons</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search salons" /><button class="primary-button" type="button" (click)="openOnboarding()"><i class="bi bi-plus-lg"></i> Onboard salon</button></div></header>
+    <div class="table-scroll"><table><thead><tr><th>Salon</th><th>Subscription</th><th>Plan</th><th>Branches</th><th>Admins</th><th>Staff</th><th>Status</th></tr></thead><tbody>@for (row of filteredTenants; track row) {
+    <tr><td><strong>{{ row.name }}</strong><small>{{ row.slug || row.id }}</small></td><td><span class="status-chip" [attr.data-status]="row.subscriptionStatus">{{ label(row.subscriptionStatus) }}</span><small>Ends {{ date(row.subscriptionPeriodEnd) }}</small></td><td>{{ row.subscriptionPlan || 'No plan' }}</td><td>{{ row.branchCount }} active<small>{{ row.subBranchCount }} sub-branches{{ row.centralBranchName ? ' · Central ' + row.centralBranchName : '' }}</small></td><td>{{ row.ownerCount }} owner · {{ row.adminCount }} admin<small>{{ row.branchAdminCount }} branch admins</small></td><td>{{ row.staffCount }} staff<small>{{ row.activeUserCount }} active users</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td></tr>
+  }</tbody></table>@if (!filteredTenants.length) {
+  <div class="empty-state">No salons found</div>
+}</div>
+</section>
+}
+@if (tab === 'admins' && !isPlatform) {
+  <section class="panel">
+    <header class="panel-header"><h2>Tenant Admin accounts</h2>@if (isOwner) {
+      <button class="primary-button" type="button" (click)="openTenantAdmin()"><i class="bi bi-plus-lg"></i> Create Tenant Admin</button>
+    }</header>
+    <div class="table-scroll"><table><thead><tr><th>Name</th><th>Login ID</th><th>Email</th><th>Branches</th><th>Password</th><th>Status</th></tr></thead><tbody>@for (row of tenantAdmins; track row.id) {
+      <tr><td><strong>{{ row.fullName }}</strong></td><td>{{ row.loginId }}</td><td>{{ row.email }}</td><td>{{ row.branchCount }}</td><td>{{ row.mustChangePassword ? 'Change required' : 'Set' }}</td><td><span class="status-chip" [attr.data-status]="row.active ? 'active' : 'cancelled'">{{ row.active ? 'Active' : 'Inactive' }}</span></td></tr>
+    }</tbody></table>@if (!tenantAdmins.length) {
+      <div class="empty-state">No Tenant Admin accounts yet</div>
+    }</div>
+  </section>
 }
 @if (tab === 'plans' && isPlatform) {
   <section class="panel">
@@ -120,7 +184,7 @@
   <td>{{ row.tenantName }}</td>
   }<td>{{ row.planName }}</td><td>{{ date(row.periodStart) }}<small>to {{ date(row.periodEnd) }}</small></td><td>{{ money(row.totalPaise) }}<small>Usage {{ money(row.usageAmountPaise) }} · Tax {{ money(row.taxAmountPaise) }}</small></td><td>{{ money(row.paidPaise) }}<small>{{ money(remaining(row)) }} due</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td><td>@if (isPlatform && remaining(row) > 0 && !['void','paid'].includes(row.status)) {
   <button class="secondary-button small" type="button" (click)="openPayment(row)">Payment</button>
-}</td></tr>
+}@if (isPlatform) {@for (payment of row.providerPayments || []; track payment.id) {@if (payment.status === 'captured' && payment.amountPaise > payment.refundedPaise) {<button class="secondary-button small" type="button" (click)="openRefund(row,payment)">Refund</button>}}}</td></tr>
 }</tbody></table>@if (!filteredInvoices.length) {
 <div class="empty-state">No invoices yet</div>
 }</div>
@@ -146,15 +210,17 @@
 }
 @if (tab === 'support') {
   <section class="panel">
-    <header class="panel-header toolbar-header"><h2>Support tickets</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search tickets" />@if (!isPlatform) {
+    <header class="panel-header toolbar-header"><h2>Support tickets</h2><div>@if (isPlatform) {
+    <select [(ngModel)]="queueFilter" aria-label="Support queue"><option value="">All queues</option>@for (queue of queueOptions; track queue) {<option [value]="queue">{{ label(queue) }}</option>}</select>
+    }<input class="search-input" [(ngModel)]="search" placeholder="Search tickets" />@if (!isPlatform) {
     <button class="primary-button" type="button" (click)="openTicket()"><i class="bi bi-plus-lg"></i> New ticket</button>
   }</div></header>
   <div class="table-scroll"><table><thead><tr><th>Ticket</th>@if (isPlatform) {
   <th>Tenant</th>
-  }<th>Severity</th><th>Status</th><th>First response</th><th>Resolution SLA</th><th></th></tr></thead><tbody>@for (row of filteredTickets; track row) {
-  <tr [class.breached-row]="row.resolutionBreached"><td><strong>{{ row.ticketNumber }}</strong><small>{{ row.subject }}</small></td>@if (isPlatform) {
+  }<th>Queue</th><th>Severity</th><th>Status</th><th>First response</th><th>Resolution SLA</th><th></th></tr></thead><tbody>@for (row of filteredTickets; track row) {
+  <tr [class.breached-row]="row.resolutionBreached"><td><strong>{{ row.ticketNumber }}</strong><small>{{ row.subject }} · {{ label(row.source) }}</small></td>@if (isPlatform) {
   <td>{{ row.tenantName }}</td>
-  }<td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ label(row.status) }}</td><td [class.breach-text]="row.responseBreached">{{ row.firstRespondedAt ? date(row.firstRespondedAt) : date(row.firstResponseDueAt) }}</td><td [class.breach-text]="row.resolutionBreached">{{ row.resolvedAt ? date(row.resolvedAt) : date(row.resolutionDueAt) }}</td><td><button class="utility-button" type="button" (click)="openTicketDetail(row)" aria-label="Open ticket"><i class="bi bi-chevron-right"></i></button></td></tr>
+  }<td>{{ label(row.queueKey) }}@if (row.escalationLevel) {<small class="breach-text">Escalation L{{ row.escalationLevel }}</small>}</td><td><span class="severity" [attr.data-severity]="row.severity">{{ label(row.severity) }}</span></td><td>{{ label(row.status) }}</td><td [class.breach-text]="row.responseBreached">{{ row.firstRespondedAt ? date(row.firstRespondedAt) : date(row.firstResponseDueAt) }}</td><td [class.breach-text]="row.resolutionBreached">{{ row.resolvedAt ? date(row.resolvedAt) : date(row.resolutionDueAt) }}</td><td><button class="utility-button" type="button" (click)="openTicketDetail(row)" aria-label="Open ticket"><i class="bi bi-chevron-right"></i></button></td></tr>
 }</tbody></table>@if (!filteredTickets.length) {
 <div class="empty-state">No support tickets yet</div>
 }</div>
@@ -177,6 +243,37 @@
 
 @if (drawer) {
   <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+}
+
+@if (drawer === 'onboarding' && isPlatform) {
+  <aside class="drawer">
+    <header class="drawer-header"><h2>Onboard salon</h2><button class="utility-button" type="button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-form" (ngSubmit)="onboardSalon()"><div class="drawer-body"><section class="form-section"><h3>Salon and first branch</h3><div class="field-grid">
+      <label>Salon name<input [(ngModel)]="onboardingDraft.salonName" name="salonName" required minlength="2" maxlength="120" /></label>
+      <label>Salon slug<input [(ngModel)]="onboardingDraft.salonSlug" name="salonSlug" required minlength="2" maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" /></label>
+      <label>Plan<select [(ngModel)]="onboardingDraft.planId" name="onboardingPlan" required><option value="">Select plan</option>@for (plan of plans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }}</option>}</select></label>
+      <label>Domain (optional)<input [(ngModel)]="onboardingDraft.domain" name="domain" placeholder="salon.example.com" /></label>
+      <label>Branch name<input [(ngModel)]="onboardingDraft.branchName" name="branchName" required minlength="2" maxlength="120" /></label>
+      <label>Branch code<input [(ngModel)]="onboardingDraft.branchCode" name="branchCode" required minlength="2" maxlength="40" /></label>
+      <label class="wide-field">Branch address<input [(ngModel)]="onboardingDraft.branchAddress" name="branchAddress" maxlength="500" /></label>
+    </div></section><section class="form-section"><h3>Initial Salon Owner</h3><div class="field-grid">
+      <label>Full name<input [(ngModel)]="onboardingDraft.ownerFullName" name="ownerFullName" required minlength="2" maxlength="120" /></label>
+      <label>Email / Login ID<input type="email" [(ngModel)]="onboardingDraft.ownerEmail" name="ownerEmail" required autocomplete="off" /></label>
+      <label class="wide-field">Temporary password<input type="password" [(ngModel)]="onboardingDraft.ownerPassword" name="ownerPassword" required minlength="12" maxlength="128" autocomplete="new-password" /><small>Owner must change this password after first login.</small></label>
+    </div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Creating…' : 'Create salon & Owner' }}</button></footer></form>
+  </aside>
+}
+
+@if (drawer === 'tenantAdmin' && !isPlatform && isOwner) {
+  <aside class="drawer narrow">
+    <header class="drawer-header"><h2>Create Tenant Admin</h2><button class="utility-button" type="button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-form" (ngSubmit)="createTenantAdmin()"><div class="drawer-body"><section class="form-section"><div class="field-grid one">
+      <label>Full name<input [(ngModel)]="tenantAdminDraft.fullName" name="adminFullName" required minlength="2" maxlength="120" /></label>
+      <label>Login ID<input [(ngModel)]="tenantAdminDraft.loginId" name="adminLoginId" required minlength="3" maxlength="80" pattern="[A-Za-z0-9._-]+" autocomplete="off" /></label>
+      <label>Email<input type="email" [(ngModel)]="tenantAdminDraft.email" name="adminEmail" required autocomplete="off" /></label>
+      <label>Temporary password<input type="password" [(ngModel)]="tenantAdminDraft.initialPassword" name="adminPassword" required minlength="12" maxlength="128" autocomplete="new-password" /><small>Tenant Admin receives every active branch and must change this password after first login.</small></label>
+    </div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Creating…' : 'Create Tenant Admin' }}</button></footer></form>
+  </aside>
 }
 
 @if (drawer === 'plan' && isPlatform) {
@@ -251,10 +348,15 @@
     <header class="drawer-header"><h2>Record payment</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="recordPayment()"><div class="drawer-body"><section class="form-section"><p class="balance-line">Balance <strong>{{ money(remaining(selectedInvoice)) }}</strong></p><div class="field-grid one"><label>Amount<input type="number" min="0.01" step="0.01" [(ngModel)]="paymentDraft.amountRupees" name="paymentAmount" placeholder="Enter amount" required /></label><label>Method<select [(ngModel)]="paymentDraft.paymentMethod" name="paymentMethod"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="provider">Provider</option></select></label><label>Reference<input [(ngModel)]="paymentDraft.reference" name="paymentReference" /></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Record payment</button></footer></form>
   </aside>
 }
+@if (drawer === 'refund' && selectedInvoice && selectedProviderPayment) {
+  <div class="drawer-backdrop" (click)="closeDrawer()"></div><aside class="drawer narrow" role="dialog" aria-modal="true" aria-label="Refund provider payment">
+    <header class="drawer-header"><h2>Refund & credit note</h2><button class="utility-button" type="button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="refundPayment()"><div class="drawer-body"><section class="form-section"><p class="balance-line">Available <strong>{{ money(selectedProviderPayment.amountPaise-selectedProviderPayment.refundedPaise) }}</strong></p><div class="field-grid one"><label>Amount<input type="number" min="0.01" step="0.01" [(ngModel)]="refundDraft.amountRupees" name="refundAmount" placeholder="Enter amount" required /></label><label>Reason<textarea [(ngModel)]="refundDraft.reason" name="refundReason" minlength="3" maxlength="500" rows="4" required></textarea></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Create refund</button></footer></form>
+  </aside>
+}
 
 @if (drawer === 'ticket' && !isPlatform) {
   <aside class="drawer narrow">
-    <header class="drawer-header"><h2>New support ticket</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="createTicket()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subject<input [(ngModel)]="ticketDraft.subject" name="ticketSubject" maxlength="160" required /></label><label>Category<select [(ngModel)]="ticketDraft.category" name="ticketCategory"><option value="billing">Billing</option><option value="technical">Technical</option><option value="account">Account</option><option value="data">Data</option><option value="security">Security</option><option value="other">Other</option></select></label><label>Severity<select [(ngModel)]="ticketDraft.severity" name="ticketSeverity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><label>Priority<select [(ngModel)]="ticketDraft.priority" name="ticketPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label>Message<textarea [(ngModel)]="ticketDraft.message" name="ticketMessage" rows="6" maxlength="5000" required></textarea></label></div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Create ticket</button></footer></form>
+    <header class="drawer-header"><h2>New support ticket</h2><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header><form class="drawer-form" (ngSubmit)="createTicket()"><div class="drawer-body"><section class="form-section"><div class="field-grid one"><label>Subject<input [(ngModel)]="ticketDraft.subject" name="ticketSubject" maxlength="160" required /></label><label>Category<select [(ngModel)]="ticketDraft.category" name="ticketCategory"><option value="billing">Billing</option><option value="technical">Technical</option><option value="account">Account</option><option value="data">Data</option><option value="security">Security</option><option value="other">Other</option></select></label><label>Severity<select [(ngModel)]="ticketDraft.severity" name="ticketSeverity"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></label><label>Priority<select [(ngModel)]="ticketDraft.priority" name="ticketPriority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label>Message<textarea [(ngModel)]="ticketDraft.message" name="ticketMessage" rows="6" maxlength="5000" required></textarea></label><label>Attachments<input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.docx,.xlsx" (change)="selectAttachments($event,'ticket')" /></label>@for (file of ticketDraft.attachments; track file; let index=$index) {<div class="attachment-row"><span>{{ file.fileName }} · {{ file.sizeBytes | number }} bytes</span><button type="button" class="utility-button" (click)="removeAttachment('ticket',index)"><i class="bi bi-x"></i></button></div>}</div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">Create ticket</button></footer></form>
   </aside>
 }
 
@@ -262,17 +364,19 @@
   <aside class="drawer detail-drawer">
     <header class="drawer-header"><div><h2>{{ ticketDetail.ticket.ticketNumber }}</h2><span class="status-chip" [attr.data-status]="ticketDetail.ticket.status">{{ label(ticketDetail.ticket.status) }}</span></div><button class="utility-button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
     <div class="drawer-body">
-      <section class="form-section"><h3>{{ ticketDetail.ticket.subject }}</h3><dl class="detail-grid"><div><dt>Severity</dt><dd>{{ label(ticketDetail.ticket.severity) }}</dd></div><div><dt>Priority</dt><dd>{{ label(ticketDetail.ticket.priority) }}</dd></div><div><dt>First response due</dt><dd>{{ date(ticketDetail.ticket.firstResponseDueAt) }}</dd></div><div><dt>Resolution due</dt><dd>{{ date(ticketDetail.ticket.resolutionDueAt) }}</dd></div></dl></section>
+      <section class="form-section"><h3>{{ ticketDetail.ticket.subject }}</h3><dl class="detail-grid"><div><dt>Queue</dt><dd>{{ label(ticketDetail.ticket.queueKey) }}</dd></div><div><dt>Source</dt><dd>{{ label(ticketDetail.ticket.source) }}</dd></div><div><dt>Severity</dt><dd>{{ label(ticketDetail.ticket.severity) }}</dd></div><div><dt>Priority</dt><dd>{{ label(ticketDetail.ticket.priority) }}</dd></div><div><dt>First response due</dt><dd>{{ date(ticketDetail.ticket.firstResponseDueAt) }}</dd></div><div><dt>Resolution due</dt><dd>{{ date(ticketDetail.ticket.resolutionDueAt) }}</dd></div></dl></section>
       @if (isPlatform) {
         <section class="form-section"><h3>Support control</h3><div class="field-grid"><label>Status<select [(ngModel)]="ticketUpdate.status">@for (status of ticketStatuses; track status) {
         <option [value]="status">{{ label(status) }}</option>
-        }</select></label><label>Priority<select [(ngModel)]="ticketUpdate.priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label class="wide-field">Assigned to<input [(ngModel)]="ticketUpdate.assignedTo" maxlength="120" /></label></div><button class="secondary-button section-action" type="button" (click)="updateTicket()" [disabled]="busy">Update ticket</button></section>
+        }</select></label><label>Priority<select [(ngModel)]="ticketUpdate.priority"><option value="normal">Normal</option><option value="urgent">Urgent</option></select></label><label class="wide-field">Assigned to<input [(ngModel)]="ticketUpdate.assignedTo" maxlength="120" /></label></div><div class="section-action"><button class="secondary-button" type="button" (click)="updateTicket()" [disabled]="busy">Update ticket</button>@if (ticketDetail.ticket.status === 'resolved' || ticketDetail.ticket.status === 'closed') {<button class="secondary-button" type="button" (click)="reopenTicket()" [disabled]="busy">Reopen</button>}</div></section>
+        <section class="form-section"><h3>Merge or duplicate</h3><div class="field-grid"><label>Action<select [(ngModel)]="ticketAction.action"><option value="duplicate">Mark duplicate</option><option value="merge">Merge</option></select></label><label>Target ticket<select [(ngModel)]="ticketAction.targetTicketId"><option value="">Select ticket</option>@for (row of mergeTargets; track row.id) {<option [value]="row.id">{{ row.ticketNumber }} · {{ row.subject }}</option>}</select></label><label class="wide-field">Reason<textarea [(ngModel)]="ticketAction.reason" rows="2" maxlength="500"></textarea></label></div><button class="secondary-button section-action" type="button" (click)="consolidateTicket()" [disabled]="busy || !ticketAction.targetTicketId || ticketAction.reason.trim().length < 3">Consolidate</button></section>
       }
       <section class="form-section"><h3>Conversation</h3><div class="conversation">@for (row of ticketDetail.messages; track row) {
-      <article [class.support-message]="row.authorType === 'support'" [class.internal-message]="row.visibility === 'internal'"><header><strong>{{ row.authorType === 'support' ? 'Support' : 'Customer' }}</strong><span>{{ row.visibility === 'internal' ? 'Internal' : date(row.createdAt) }}</span></header><p>{{ row.body }}</p></article>
-      }</div><div class="reply-box"><textarea [(ngModel)]="replyDraft.body" rows="4" maxlength="5000" placeholder="Write reply"></textarea><div>@if (isPlatform) {
+      <article [class.support-message]="row.authorType === 'support'" [class.internal-message]="row.visibility === 'internal'"><header><strong>{{ row.authorType === 'support' ? 'Support' : 'Customer' }}</strong><span>{{ row.visibility === 'internal' ? 'Internal' : date(row.createdAt) }}</span></header><p>{{ row.body }}</p>@if (row.attachments.length) {<div class="message-attachments">@for (file of row.attachments; track file.id) {<button type="button" class="text-button" (click)="downloadAttachment(file)"><i class="bi bi-paperclip"></i> {{ file.fileName }}</button>}</div>}</article>
+      }</div><div class="reply-box"><textarea [(ngModel)]="replyDraft.body" rows="4" maxlength="5000" placeholder="Write reply"></textarea><input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.docx,.xlsx" (change)="selectAttachments($event,'reply')" />@for (file of replyDraft.attachments; track file; let index=$index) {<div class="attachment-row"><span>{{ file.fileName }}</span><button type="button" class="utility-button" (click)="removeAttachment('reply',index)"><i class="bi bi-x"></i></button></div>}<div>@if (isPlatform) {
       <select [(ngModel)]="replyDraft.visibility"><option value="customer">Customer reply</option><option value="internal">Internal note</option></select>
-      }<button class="primary-button" type="button" (click)="reply()" [disabled]="busy || !replyDraft.body.trim()">Send</button></div></div></section>
+      }<button class="primary-button" type="button" (click)="reply()" [disabled]="busy || (!replyDraft.body.trim() && !replyDraft.attachments.length)">Send</button></div></div></section>
+      @if (!isPlatform && (ticketDetail.ticket.status === 'resolved' || ticketDetail.ticket.status === 'closed')) {<section class="form-section"><h3>Rate support</h3>@if (ticketDetail.ticket.csat) {<p>{{ ticketDetail.ticket.csat.rating }}/5 · {{ ticketDetail.ticket.csat.comment || 'No comment' }}</p>} @else {<div class="field-grid"><label>Rating<select [(ngModel)]="csatDraft.rating"><option value="">Select</option><option value="5">5 - Excellent</option><option value="4">4 - Good</option><option value="3">3 - Average</option><option value="2">2 - Poor</option><option value="1">1 - Very poor</option></select></label><label>Comment<textarea [(ngModel)]="csatDraft.comment" rows="2" maxlength="1000"></textarea></label></div><button class="secondary-button section-action" type="button" (click)="submitCsat()" [disabled]="busy || !csatDraft.rating">Submit rating</button>}</section>}
     </div>
   </aside>
 }

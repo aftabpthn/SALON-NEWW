@@ -1,7 +1,8 @@
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, Query, State},
-    http::{header, HeaderMap},
+    http::{header, HeaderMap, HeaderValue},
+    response::Response,
     routing::{get, post},
     Extension, Json, Router,
 };
@@ -27,6 +28,7 @@ pub fn router() -> Router<AppState> {
             post(upload).layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
         )
         .route("/purchases/bill-drafts/:id", get(detail).patch(save_header))
+        .route("/purchases/bill-drafts/:id/source", get(source))
         .route("/purchases/bill-drafts/:id/match", post(run_match))
         .route("/purchases/bill-drafts/:id/confirm", post(confirm))
         .route("/purchases/bill-drafts/:id/cancel", post(cancel))
@@ -107,6 +109,29 @@ async fn detail(
     Ok(Json(ApiResponse::ok(
         drafts::details(&state, &t, &b, &id).await?,
     )))
+}
+async fn source(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    let (t, b) = tenant_branch(&headers)?;
+    let source = drafts::source(&state, &t, &b, &id).await?;
+    let content_type = HeaderValue::from_str(&source.content_type)
+        .map_err(|_| AppError::internal("purchase bill content type is invalid"))?;
+    let mut response = Response::new(Body::from(source.bytes));
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, content_type);
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("inline"),
+    );
+    Ok(response)
 }
 async fn upload(
     State(state): State<AppState>,

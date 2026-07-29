@@ -151,7 +151,15 @@
   <div class="panel-heading"><div><span>SAVED</span><h2>Saved Reports</h2></div><small>{{ customReports.length }}</small></div>
   @if (customReports.length) {
     <div class="saved-list">@for (report of customReports; track report) {
-      <button type="button" (click)="runSavedCustomReport(report)" [disabled]="customBusy"><span><strong>{{ report.name }}</strong><small>{{ customLabel(report.definition.dataset) }} · {{ customLabel(report.scheduleFrequency) }}</small></span><span class="status-pill" [class]="report.lastStatus">{{ customLabel(report.lastStatus) }}</span></button>
+      <div class="saved-report-row" [class.archived]="!report.active"><button type="button" class="saved-report-main" (click)="runSavedCustomReport(report)" [disabled]="customBusy || !report.active"><span><strong>{{ report.name }}</strong><small>{{ customLabel(report.definition.dataset) }} · {{ customLabel(report.scheduleFrequency) }}</small></span><span class="status-pill" [class]="report.active ? report.lastStatus : 'archived'">{{ report.active ? customLabel(report.lastStatus) : 'Archived' }}</span></button>@if (canManageProfit) {
+        <div class="saved-report-actions">@if (report.active && report.scheduleFrequency !== 'none') {
+          <button type="button" (click)="updateCustomReportLifecycle(report, 'stopSchedule')" [disabled]="customBusy">Stop schedule</button>
+        }@if (report.active) {
+          <button type="button" class="archive-action" (click)="updateCustomReportLifecycle(report, 'archive')" [disabled]="customBusy">Archive</button>
+        } @else {
+          <button type="button" (click)="updateCustomReportLifecycle(report, 'restore')" [disabled]="customBusy">Restore</button>
+        }</div>
+      }</div>
     }</div>
   } @else {
     <div class="compact-empty">No saved reports yet</div>
@@ -160,58 +168,64 @@
 </section>
 </section>
 } @else {
-  <section class="profit-workspace">
+  <section class="profit-workspace" [attr.aria-hidden]="actionDrawerOpen || selectedDimensionRow || profitDialog ? 'true' : null" [attr.inert]="actionDrawerOpen || selectedDimensionRow || profitDialog ? '' : null">
     <header class="profit-command">
-      <div class="profit-title"><button type="button" class="back-button" (click)="closeProfitWorkspace()">Back</button><div><span>REPORTS</span><h1>Profit Intelligence</h1></div></div>
+      <div class="profit-title"><button type="button" class="back-button" (click)="closeProfitWorkspace()">{{ 'profit.back' | translate }}</button><div><span>{{ 'profit.reports' | translate }}</span><h1>{{ 'profit.title' | translate }}</h1></div></div>
       <div class="profit-filters">@if (canViewTenantProfit) {
-        <select [(ngModel)]="profitScope" aria-label="Profit branch scope"><option value="branch">Selected branch</option><option value="tenant">All authorized branches</option></select>
-        }<select [(ngModel)]="profitLevel" aria-label="Profit level"><option value="contribution">Contribution</option><option value="fullyLoaded">Fully loaded</option></select><select [(ngModel)]="comparePrevious" aria-label="Period comparison"><option [ngValue]="false">No comparison</option><option [ngValue]="true">Previous period</option></select><as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker><select #savedView aria-label="Saved profit views" (change)="applyProfitView(savedView.value)"><option value="">Saved views</option>@for (view of profitSavedViews; track view) {
+        <select [(ngModel)]="profitScope" aria-label="Profit branch scope"><option value="branch">{{ 'profit.selectedBranch' | translate }}</option><option value="tenant">{{ 'profit.allBranches' | translate }}</option></select>
+        }<select [(ngModel)]="profitLevel" aria-label="Profit level"><option value="contribution">{{ 'profit.contribution' | translate }}</option><option value="fullyLoaded">{{ 'profit.fullyLoaded' | translate }}</option></select><select [(ngModel)]="comparePrevious" aria-label="Period comparison"><option [ngValue]="false">{{ 'profit.noComparison' | translate }}</option><option [ngValue]="true">{{ 'profit.previousPeriod' | translate }}</option></select><as-date-picker ariaLabel="From date" [(value)]="fromDate"></as-date-picker><as-date-picker ariaLabel="To date" [(value)]="toDate"></as-date-picker><select #savedView aria-label="Saved profit views" (change)="applyProfitView(savedView.value)"><option value="">{{ 'profit.savedViews' | translate }}</option>@for (view of profitSavedViews; track view) {
         <option [value]="view.id">{{ view.name }}</option>
       }</select>@if (canManageProfit) {
-      <button type="button" (click)="saveProfitView()">Save view</button>
-      }<button type="button" (click)="exportProfit('csv')">CSV</button><button type="button" (click)="exportProfit('excel')">Excel</button><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ profitLoading ? 'Loading...' : 'Run Report' }}</button></div>
+      <button type="button" (click)="saveProfitView()">{{ 'profit.saveView' | translate }}</button>
+      }<button type="button" (click)="exportProfit('csv')">CSV</button><button type="button" (click)="exportProfit('excel')">Excel</button><button type="button" class="primary-button" (click)="loadProfitWorkspace()" [disabled]="profitLoading">{{ (profitLoading ? 'common.loading' : 'profit.run') | translate }}</button></div>
     </header>
     <div class="profit-command-strip">
       @if (canManageProfit) {
-        <button type="button" (click)="addExpense()">Add expense</button>
-        <button type="button" (click)="addCostOfGoods()">Add cost of goods</button>
-        <button type="button" (click)="addAdjustment()">Add adjustment</button>
-        <button type="button" (click)="createProfitLeakAction()">Create profit leak action</button>
+        <button type="button" (click)="addExpense()">{{ 'profit.action.addExpense' | translate }}</button>
+        <button type="button" (click)="addCostOfGoods()">{{ 'profit.action.addCogs' | translate }}</button>
+        <button type="button" (click)="addAdjustment()">{{ 'profit.action.addAdjustment' | translate }}</button>
+        <button type="button" (click)="createProfitLeakAction()">{{ 'profit.action.createLeak' | translate }}</button>
       }
-      <button type="button" (click)="exportProfit('csv')">Export P&amp;L</button>
-      <button type="button" (click)="openReconciliation()">Open reconciliation</button>
+      <button type="button" (click)="openReconciliation()">{{ 'profit.openReconciliation' | translate }}</button>
     </div>
-    <nav class="profit-tabs" aria-label="Profit Intelligence views">
-      @for (tab of profitTabs; track tab) {
-        <button type="button" [class.active]="profitTab === tab.id" (click)="profitTab = tab.id">{{ tab.label }}@if (tab.id === 'actions' && actionCounts.active) {
+    <nav class="profit-tabs" role="tablist" aria-label="Profit Intelligence sections">
+      @for (group of profitGroups; track group.id) {
+        <button type="button" role="tab" [attr.aria-selected]="activeProfitGroup === group.id" [class.active]="activeProfitGroup === group.id" (click)="selectProfitGroup(group.id)">{{ ('profit.group.' + group.id) | translate }}@if (group.id === 'insights' && actionCounts.active) {
           <span>{{ actionCounts.active }}</span>
-          }@if (tab.id === 'approvals' && governance?.pendingApprovals) {
+          }@if (group.id === 'governance' && governance?.pendingApprovals) {
           <span>{{ governance?.pendingApprovals }}</span>
         }</button>
       }
+      <label class="profit-view-select"><span>{{ 'profit.view' | translate }}</span><select [ngModel]="profitTab" (ngModelChange)="selectProfitTab($event)" aria-label="Profit Intelligence view">@for (tab of activeProfitGroupTabs; track tab.id) {<option [ngValue]="tab.id">{{ ('profit.tab.' + tab.id) | translate }}</option>}</select></label>
     </nav>
     @if (reconciliation; as quality) {
-      <div class="quality-badges"><span class="status-pill" [class.completed]="quality.branchPeriodCloseReady" [class.dismissed]="!quality.branchPeriodCloseReady">{{ quality.branchPeriodCloseReady ? 'Close ready' : 'Close blocked' }}</span><span class="status-pill" [class.completed]="quality.costCompletenessBps === 10000" [class.pending]="quality.costCompletenessBps !== 10000">Cost {{ percent(quality.costCompletenessBps) }}</span><span class="status-pill" [class.completed]="quality.missingInvoiceJournalCount === 0" [class.pending]="quality.missingInvoiceJournalCount > 0">{{ quality.missingInvoiceJournalCount }} missing journals</span>@if (advanced?.recommendationsBlocked) {
-      <span class="status-pill dismissed">Recommendations blocked</span>
+      <div class="quality-badges"><button type="button" class="status-pill" [class.completed]="quality.branchPeriodCloseReady" [class.dismissed]="!quality.branchPeriodCloseReady" (click)="openPeriodClose()" [disabled]="!canManageProfit">{{ (quality.branchPeriodCloseReady ? 'profit.closeReady' : 'profit.closeBlocked') | translate }}</button><span class="status-pill" [class.completed]="quality.costCompletenessBps === 10000" [class.pending]="quality.costCompletenessBps !== 10000">Cost {{ percent(quality.costCompletenessBps) }}</span><span class="status-pill" [class.completed]="quality.missingInvoiceJournalCount === 0" [class.pending]="quality.missingInvoiceJournalCount > 0">{{ quality.missingInvoiceJournalCount }} missing journals</span>@if (advanced?.recommendationsBlocked) {
+      <span class="status-pill dismissed">{{ 'profit.recommendationsBlocked' | translate }}</span>
     }</div>
   }
   @if (profitError) {
     <p class="inline-error">{{ profitError }}</p>
   }
   @if (profitLoading) {
-    <p class="profit-state">Loading Profit Intelligence...</p>
+    <p class="profit-state">{{ 'profit.loading' | translate }}</p>
   }
   @if (!profitLoading) {
     @if (profitTab === 'overview' && advanced; as current) {
       <section class="profit-panel">
-        <dl class="profit-strip"><div><dt>Micro revenue</dt><dd>{{ money(microOverview.revenue) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</dt><dd>{{ money(microOverview.cost) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</dt><dd [class.negative]="microOverview.profit < 0">{{ money(microOverview.profit) }}</dd></div><div><dt>Margin</dt><dd [class.negative]="microOverview.margin < 0">{{ percent(microOverview.margin) }}</dd></div><div><dt>Previous change</dt><dd [class.negative]="comparePrevious && microOverview.profit - microOverview.previousProfit < 0">{{ comparePrevious ? money(microOverview.profit - microOverview.previousProfit) : '-' }}</dd></div><div><dt>Cost complete</dt><dd>{{ percent(reconciliation?.costCompletenessBps) }}</dd></div></dl>
+        <dl class="profit-strip"><div><dt>Micro revenue</dt><dd>{{ money(microOverview.revenue) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</dt><dd>{{ money(microOverview.cost) }}</dd></div><div><dt>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</dt><dd [class.negative]="profitCostsComplete && microOverview.profit < 0">{{ profitCostsComplete ? money(microOverview.profit) : '—' }}</dd></div><div><dt>Margin</dt><dd [class.negative]="profitCostsComplete && microOverview.margin < 0">{{ profitCostsComplete ? percent(microOverview.margin) : '—' }}</dd></div><div><dt>Previous change</dt><dd [class.negative]="profitCostsComplete && comparePrevious && microOverview.profit - microOverview.previousProfit < 0">{{ profitCostsComplete && comparePrevious ? money(microOverview.profit - microOverview.previousProfit) : '—' }}</dd></div><div><dt>Complete lines</dt><dd>{{ percent(reconciliation?.costCompletenessBps) }} @if (!profitCostsComplete) { <span class="status-pill pending">Costs incomplete</span> }</dd></div></dl>
         <div class="panel-heading"><div><span>MICRO P&amp;L</span><h2>Micro Overview</h2></div><small>{{ current.branchCount }} branch{{ current.branchCount === 1 ? '' : 'es' }} · {{ reportDate(current.fromDate) }} to {{ reportDate(current.toDate) }}</small></div>
-        @if (current.branchProfit?.length) {
-          <div class="table-wrap"><table><thead><tr><th>Branch</th><th>Lines</th><th>Revenue</th><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Fees</th><th>Overhead</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Quality</th></tr></thead><tbody>@for (row of current.branchProfit; track row) {
-          <tr class="clickable-row" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.lineCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(row.staffTimeCostPaise) }}</td><td>{{ money(row.gatewayFeePaise + row.refundFeePaise) }}</td><td>{{ money(row.overheadCostPaise) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ percent(row.costCompletenessBps) }}</span></td></tr>
+        @if (current.enterpriseAnalytics.alerts.length) {
+          <div class="profit-alerts" role="status" aria-label="Profit alerts">@for (alert of current.enterpriseAnalytics.alerts; track alert) {<span>{{ alert }}</span>}</div>
+        }
+        @if (current.enterpriseAnalytics.trend.length) {
+          <figure class="profit-trend"><figcaption><strong>Revenue, cost and contribution trend</strong><span><i class="revenue"></i>Revenue <i class="cost"></i>Cost <i class="profit"></i>Contribution</span></figcaption><svg viewBox="0 0 100 42" preserveAspectRatio="none" role="img" aria-label="Profit trend chart"><polyline class="revenue" [attr.points]="trendPoints('revenuePaise')"></polyline><polyline class="cost" [attr.points]="trendPoints('directCostPaise')"></polyline><polyline class="profit" [attr.points]="trendPoints('contributionProfitPaise')"></polyline></svg></figure>
+        }
+        @if (current.branchProfit.length) {
+          <div class="table-wrap"><table><thead><tr><th>Branch</th><th>Lines</th><th>Revenue</th><th>Product cost</th><th>Commission</th><th>Staff time</th><th>Fees</th><th>Overhead</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Cost source coverage</th></tr></thead><tbody>@for (row of current.branchProfit; track row) {
+          <tr class="clickable-row" role="button" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)" (keydown.space)="$event.preventDefault(); openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.lineCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(row.staffTimeCostPaise) }}</td><td>{{ money(row.gatewayFeePaise + row.refundFeePaise) }}</td><td>{{ money(row.overheadCostPaise) }}</td><td [class.negative]="!row.incompleteCostLineCount && rowProfit(row) < 0">{{ row.incompleteCostLineCount ? '—' : money(rowProfit(row)) }}</td><td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ percent(row.costCompletenessBps) }}</span></td></tr>
         }</tbody></table></div>
       } @else {
-        <div class="compact-empty">No Micro P&amp;L records yet</div>
+        <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
       }
     </section>
   }
@@ -223,11 +237,11 @@
       <div class="board-grid"><article><h3>Top wins</h3>@for (item of current.boardReport.topWins; track item) {
       <p>{{ item }}</p>
       }@if (!current.boardReport.topWins.length) {
-      <div class="compact-empty">No wins yet</div>
+      <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
       }</article><article><h3>Top risks</h3>@for (item of current.boardReport.topRisks; track item) {
       <p>{{ item }}</p>
       }@if (!current.boardReport.topRisks.length) {
-      <div class="compact-empty">No risks detected</div>
+      <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
       }</article><article><h3>Next actions</h3>@for (item of current.boardReport.nextActions; track item) {
       <p>{{ item }}</p>
       }@if (!current.boardReport.nextActions.length) {
@@ -239,7 +253,7 @@
       <tr><td><strong>{{ row.customerName }}</strong></td><td>{{ row.tier }}</td><td>{{ row.profitScore }}</td><td>{{ money(row.revenuePaise) }}</td><td [class.negative]="row.profitPaise < 0">{{ money(row.profitPaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ row.unitCount }}</td><td>{{ percent(row.marginBps) }}</td></tr>
     }</tbody></table></div>
   } @else {
-    <div class="compact-empty">No customer profit records yet</div>
+    <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
   }
 </section>
 }
@@ -263,7 +277,7 @@
       <tr><td><strong>{{ row.planName }}</strong></td><td>{{ titleCase(row.kind) }}</td><td>{{ money(row.soldValuePaise) }}</td><td>{{ money(row.recognizedValuePaise) }}</td><td>{{ money(row.remainingLiabilityPaise) }}</td><td>{{ money(row.projectedCostPaise) }}</td><td [class.negative]="row.expectedFutureProfitPaise < 0">{{ money(row.expectedFutureProfitPaise) }}</td><td><span class="status-pill" [class.dismissed]="row.severity === 'high'" [class.pending]="row.severity === 'medium'" [class.completed]="row.severity === 'low'">{{ titleCase(row.severity) }}</span></td><td>{{ row.recommendation }}</td></tr>
     }</tbody></table></div>
   } @else {
-    <div class="compact-empty">No deferred membership or package liability yet</div>
+    <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
   }
 </section>
 }
@@ -277,14 +291,14 @@
       <tr><td><strong>{{ row.name }}</strong></td><td>{{ money(row.projectedRevenuePaise) }}</td><td>{{ money(row.projectedProfitPaise) }}</td><td>{{ money(row.profitDeltaPaise) }}</td><td>{{ percent(row.projectedMarginBps) }}</td></tr>
     }</tbody></table></div>
   } @else {
-    <div class="compact-empty">Incomplete costs; scenario recommendations blocked</div>
+    <div class="compact-empty">{{ 'profit.recommendationsBlocked' | translate }}</div>
   }
 </section>
 }
 @if (profitTab === 'guard') {
   <section class="profit-panel">
     <div class="panel-heading"><div><span>PRE-INVOICE CONTROL</span><h2>POS negative-margin guard</h2></div><small>Recorded or checkout-preview costs only</small></div>
-    <div class="scenario-controls"><label>Gross (paise)<input type="number" min="1" [(ngModel)]="posGuardDraft.grossAmountPaise" /></label><label>Discount (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.discountPaise" /></label><label>Product cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.productCostPaise" /></label><label>Staff cost (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.staffCostPaise" /></label><label>Redemption (paise)<input type="number" min="0" [(ngModel)]="posGuardDraft.membershipRedemptionPaise" /></label>@if (canManageProfit) {
+    <div class="scenario-controls"><label>Gross (INR)<input type="number" min="0.01" step="0.01" [ngModel]="paiseToInr(posGuardDraft.grossAmountPaise)" (ngModelChange)="posGuardDraft.grossAmountPaise = inrToPaise($event)" /></label><label>Discount (INR)<input type="number" min="0" step="0.01" [ngModel]="paiseToInr(posGuardDraft.discountPaise)" (ngModelChange)="posGuardDraft.discountPaise = inrToPaise($event)" /></label><label>Product cost (INR)<input type="number" min="0" step="0.01" [ngModel]="paiseToInr(posGuardDraft.productCostPaise)" (ngModelChange)="posGuardDraft.productCostPaise = inrToPaise($event)" /></label><label>Staff cost (INR)<input type="number" min="0" step="0.01" [ngModel]="paiseToInr(posGuardDraft.staffCostPaise)" (ngModelChange)="posGuardDraft.staffCostPaise = inrToPaise($event)" /></label><label>Redemption (INR)<input type="number" min="0" step="0.01" [ngModel]="paiseToInr(posGuardDraft.membershipRedemptionPaise)" (ngModelChange)="posGuardDraft.membershipRedemptionPaise = inrToPaise($event)" /></label>@if (canManageProfit) {
     <button type="button" class="primary-button" (click)="runPosMarginCheck()" [disabled]="posGuardBusy">{{ posGuardBusy ? 'Checking...' : 'Check margin' }}</button>
   }</div>
   @if (posGuardDecision; as result) {
@@ -296,7 +310,7 @@
 }
 @if (profitTab === 'reconciliation' && reconciliation; as recon) {
   <section class="profit-panel">
-    <dl class="profit-strip"><div><dt>Cost complete</dt><dd>{{ percent(recon.costCompletenessBps) }}</dd></div><div><dt>Close readiness</dt><dd>{{ recon.branchPeriodCloseReady ? 'Ready' : 'Blocked' }}</dd></div><div><dt>Revenue variance</dt><dd [class.negative]="recon.revenueVariancePaise !== 0">{{ money(recon.revenueVariancePaise) }}</dd></div><div><dt>COGS variance</dt><dd [class.negative]="recon.cogsVariancePaise !== 0">{{ money(recon.cogsVariancePaise) }}</dd></div><div><dt>Payroll variance</dt><dd [class.negative]="recon.payrollVariancePaise !== 0">{{ money(recon.payrollVariancePaise) }}</dd></div><div><dt>Missing journals</dt><dd>{{ recon.missingInvoiceJournalCount }}</dd></div></dl>
+    <dl class="profit-strip"><div><dt>Complete lines</dt><dd>{{ percent(recon.costCompletenessBps) }}</dd></div><div><dt>Close readiness</dt><dd>{{ recon.branchPeriodCloseReady ? 'Ready' : 'Blocked' }}</dd></div><div><dt>Revenue variance</dt><dd [class.negative]="recon.revenueVariancePaise !== 0">{{ money(recon.revenueVariancePaise) }}</dd></div><div><dt>COGS variance</dt><dd [class.negative]="recon.cogsVariancePaise !== 0">{{ money(recon.cogsVariancePaise) }}</dd></div><div><dt>Payroll variance</dt><dd [class.negative]="recon.payrollVariancePaise !== 0">{{ money(recon.payrollVariancePaise) }}</dd></div><div><dt>Missing journals</dt><dd>{{ recon.missingInvoiceJournalCount }}</dd></div></dl>
     <div class="panel-heading"><div><span>LEDGER TO MICRO</span><h2>Revenue bridge</h2></div><small>{{ recon.costCompleteLineCount }}/{{ recon.reportableLineCount }} cost-complete lines</small></div>
     <div class="table-wrap"><table><thead><tr><th>Ledger revenue</th><th>Missing invoice bridge</th><th>Micro revenue</th><th>Unexplained variance</th></tr></thead><tbody><tr><td>{{ money(recon.revenueBridge.ledgerRevenuePaise) }}</td><td>{{ money(recon.revenueBridge.missingInvoiceJournalPaise) }}</td><td>{{ money(recon.revenueBridge.microRevenuePaise) }}</td><td [class.negative]="recon.revenueBridge.unexplainedVariancePaise !== 0">{{ money(recon.revenueBridge.unexplainedVariancePaise) }}</td></tr></tbody></table></div>
     <div class="panel-heading"><div><span>DATA QUALITY</span><h2>Cost source gaps</h2></div><small>{{ recon.allocationRuleCount }} allocation rule{{ recon.allocationRuleCount === 1 ? '' : 's' }}</small></div>
@@ -319,7 +333,7 @@
       <tr><td><strong>{{ rule.name }}</strong></td><td>v{{ rule.version }}</td><td>{{ titleCase(rule.driver.split('_').join(' ')) }}</td><td>{{ rule.accountCodes.join(', ') }}</td><td>{{ reportDate(rule.effectiveFrom) }}</td><td>{{ reportDate(rule.effectiveTo) }}</td></tr>
     }</tbody></table></div>
   } @else {
-    <div class="compact-empty">No allocation rules yet</div>
+    <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
   }
   <div class="panel-heading"><div><span>BACKFILL QUEUE</span><h2>Missing invoice journals</h2></div>@if (canManageProfit && invoiceRepairQueue.length) {
   <button type="button" class="primary-button" (click)="repairInvoiceJournals()" [disabled]="repairBusy">{{ repairBusy ? 'Repairing...' : 'Repair open periods' }}</button>
@@ -329,7 +343,7 @@
   <tr><td><strong>{{ row.invoiceNumber }}</strong></td><td>{{ row.branchId | branchName }}</td><td>{{ reportDate(row.businessDate) }}</td><td>{{ money(row.totalPaise) }}</td><td><span class="status-pill" [class.completed]="row.periodStatus === 'open'" [class.dismissed]="row.periodStatus === 'closed'">{{ titleCase(row.periodStatus) }}</span></td></tr>
 }</tbody></table></div>
 } @else {
-  <div class="compact-empty">No missing invoice journals</div>
+  <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
 }
 </section>
 }
@@ -344,12 +358,12 @@
     <div class="table-wrap"><table><thead><tr><th>{{ titleCase(profitTab) }}</th><th>Units</th><th>Revenue</th><th>Discount</th><th>Product cost</th><th>Commission</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded cost' : 'Direct cost' }}</th><th>{{ profitLevel === 'fullyLoaded' ? 'Fully loaded profit' : 'Contribution' }}</th><th>Margin</th>@if (comparePrevious) {
     <th>Change</th>
     }<th>Data quality</th></tr></thead><tbody>@for (row of currentDimensionRows; track row) {
-    <tr class="clickable-row" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.unitCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(rowCost(row)) }}</td><td [class.negative]="rowProfit(row) < 0">{{ money(rowProfit(row)) }}</td><td><span class="margin-pill" [class.negative]="rowMargin(row) < 0">{{ percent(rowMargin(row)) }}</span></td>@if (comparePrevious) {
+    <tr class="clickable-row" role="button" tabindex="0" (click)="openProfitDrill(row)" (keydown.enter)="openProfitDrill(row)" (keydown.space)="$event.preventDefault(); openProfitDrill(row)"><td><strong>{{ row.entityName }}</strong></td><td>{{ row.unitCount }}</td><td>{{ money(row.revenuePaise) }}</td><td>{{ money(row.discountPaise) }}</td><td>{{ money(row.productCostPaise) }}</td><td>{{ money(row.staffCostPaise) }}</td><td>{{ money(rowCost(row)) }}</td><td [class.negative]="!row.incompleteCostLineCount && rowProfit(row) < 0">{{ row.incompleteCostLineCount ? '—' : money(rowProfit(row)) }}</td><td>@if (row.incompleteCostLineCount) { — } @else { <span class="margin-pill" [class.negative]="rowMargin(row) < 0">{{ percent(rowMargin(row)) }}</span> }</td>@if (comparePrevious) {
     <td [class.negative]="rowProfit(row) - comparisonProfit(row) < 0">{{ money(rowProfit(row) - comparisonProfit(row)) }}</td>
     }<td><span class="status-pill" [class.completed]="row.incompleteCostLineCount === 0" [class.pending]="row.incompleteCostLineCount > 0">{{ row.incompleteCostLineCount ? row.incompleteCostLineCount + ' incomplete' : 'Complete' }}</span></td></tr>
   }</tbody></table></div>
 } @else {
-  <div class="compact-empty">No records yet</div>
+  <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
 }
 </section>
 }
@@ -357,9 +371,9 @@
   <section class="profit-panel">
     <div class="panel-heading"><div><span>RECORDED IMPACT</span><h2>Profit leaks</h2></div><small>{{ advanced?.leaks?.length || 0 }} signals</small></div>
     @if (advanced?.leaks?.length) {
-      <div class="insight-list">@for (leak of advanced?.leaks; track leak) {
+      <div class="insight-list">@for (leak of rankedProfitLeaks; track leak) {
         <article [class]="leak.severity"><div><span>{{ titleCase(leak.kind.replace('_',' ')) }}</span><h3>{{ leak.title }}</h3><p>{{ leak.message }}</p></div><strong>{{ money(leak.impactPaise) }}</strong>@if (canManageProfit) {
-        <div class="queue-actions"><button type="button" (click)="queueLeak(leak)">Add action</button><button type="button" (click)="markLeakReviewed(leak)" [disabled]="actionBusyId === 'leak:' + leak.sourceType + ':' + leak.sourceId">Mark reviewed</button></div>
+        <div class="queue-actions"><button type="button" (click)="queueLeak(leak)">{{ 'profit.action.addAction' | translate }}</button><button type="button" (click)="markLeakReviewed(leak)" [disabled]="actionBusyId === 'leak:' + leak.sourceType + ':' + leak.sourceId">{{ 'profit.action.markReviewed' | translate }}</button></div>
       }</article>
     }</div>
   } @else {
@@ -375,7 +389,7 @@
       <th>Action</th>
     }</tr></thead><tbody>@for (row of advanced?.pricing; track row) {
     <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ money(row.currentAveragePricePaise) }}</td><td>{{ money(row.suggestedPricePaise) }}</td><td>{{ percent(row.currentMarginBps) }}</td><td>{{ percent(row.targetMarginBps) }}</td><td>{{ money(row.expectedProfitLiftPaise) }}</td>@if (canManageProfit) {
-    <td><button type="button" class="table-action" (click)="queuePricing(row)">Add action</button></td>
+    <td><button type="button" class="table-action" (click)="queuePricing(row)">{{ 'profit.action.addAction' | translate }}</button></td>
   }</tr>
 }</tbody></table></div>
 } @else {
@@ -391,7 +405,7 @@
       <tr><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.soldQuantity }}</td><td>{{ row.recipeItemCount }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td [class.negative]="row.variancePaise > 0">{{ money(row.variancePaise) }}</td><td>{{ percent(row.varianceBps) }}</td></tr>
     }</tbody></table></div>
   } @else {
-    <div class="compact-empty">No recipe cost records yet</div>
+    <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
   }
 </section>
 }
@@ -401,7 +415,7 @@
     @if (advanced?.copilot?.length) {
       <div class="copilot-list">@for (insight of advanced?.copilot; track insight) {
         <article><div class="copilot-icon">↗</div><div><span>{{ titleCase(insight.kind.replace('_',' ')) }} · {{ insight.recommendationVersion }} · {{ titleCase(insight.evaluationStatus) }}</span><h3>{{ insight.title }}</h3><p>{{ insight.message }}</p></div><strong>{{ money(insight.impactPaise) }}</strong>@if (canManageProfit) {
-        <div class="queue-actions"><button type="button" (click)="submitCopilotFeedback(insight,'accepted')" [disabled]="actionBusyId === insight.recommendationVersionId">Useful</button><button type="button" (click)="submitCopilotFeedback(insight,'rejected')" [disabled]="actionBusyId === insight.recommendationVersionId">Not useful</button><button type="button" (click)="queueCopilot(insight)">Add action</button></div>
+        <div class="queue-actions"><button type="button" (click)="submitCopilotFeedback(insight,'accepted')" [disabled]="actionBusyId === insight.recommendationVersionId" [class.feedback-selected]="copilotFeedback[insight.recommendationVersionId] === 'accepted'">{{ 'profit.action.useful' | translate }}</button><button type="button" (click)="submitCopilotFeedback(insight,'rejected')" [disabled]="actionBusyId === insight.recommendationVersionId" [class.feedback-selected]="copilotFeedback[insight.recommendationVersionId] === 'rejected'">{{ 'profit.action.notUseful' | translate }}</button><button type="button" (click)="queueCopilot(insight)">{{ 'profit.action.addAction' | translate }}</button></div>
       }</article>
     }</div>
   } @else {
@@ -412,7 +426,7 @@
 @if (profitTab === 'actions') {
   <section class="profit-panel">
     <div class="queue-toolbar"><div><span>WORK QUEUE</span><h2>Profit Action Queue</h2></div><select [(ngModel)]="actionStatus" (change)="loadActions()"><option value="active">Active</option><option value="all">All</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="completed">Completed</option><option value="dismissed">Dismissed</option></select><select [(ngModel)]="actionPriority" (change)="loadActions()"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>@if (canManageProfit) {
-    <button type="button" class="primary-button" (click)="openActionDrawer()">New action</button>
+    <button type="button" class="primary-button" (click)="openActionDrawer()">{{ 'profit.action.new' | translate }}</button>
   }</div>
   @if (actions.length) {
     <div class="queue-list">@for (action of actions; track action) {
@@ -424,23 +438,26 @@
       <small>{{ action.notes }}</small>
       }</div><div class="impact-stack"><span>Baseline <strong>{{ money(action.baselineImpactPaise) }}</strong></span><span>Expected <strong>{{ money(action.expectedImpactPaise) }}</strong></span><span>Realized <strong>{{ money(action.realizedImpactPaise) }}</strong></span></div>@if (canManageProfit) {
       <div class="queue-actions">@if (action.status === 'pending') {
-        <button type="button" (click)="transitionAction(action,'approve')" [disabled]="actionBusyId === action.id">Approve</button>
+        <button type="button" (click)="transitionAction(action,'approve')" [disabled]="actionBusyId === action.id">{{ 'profit.action.approve' | translate }}</button>
         }@if (action.status === 'approved') {
-        <button type="button" (click)="transitionAction(action,'complete')" [disabled]="actionBusyId === action.id">Complete</button>
+        <button type="button" (click)="transitionAction(action,'complete')" [disabled]="actionBusyId === action.id">{{ 'profit.action.complete' | translate }}</button>
         }@if (action.status === 'pending' || action.status === 'approved') {
-        <button type="button" (click)="transitionAction(action,'dismiss')" [disabled]="actionBusyId === action.id">Dismiss</button>
+        <button type="button" (click)="transitionAction(action,'dismiss')" [disabled]="actionBusyId === action.id">{{ 'profit.action.dismiss' | translate }}</button>
       }</div>
     }</article>
   }</div>
 } @else {
-  <div class="compact-empty">No actions yet</div>
+  <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
 }
 </section>
+}
+@if (isGovernanceTab && governanceError) {
+  <p class="inline-error" role="alert">{{ governanceError }}</p>
 }
 @if (profitTab === 'rules') {
   <section class="profit-panel">
     <div class="panel-heading"><div><span>GOVERNANCE</span><h2>Rules</h2></div><small>{{ governance?.enabledRules || 0 }}/{{ governance?.configuredRules || governanceRules.length }} enabled</small></div>
-    @if (governanceRules.length) {
+    @if (!governanceError && governanceRules.length) {
       <div class="table-wrap"><table><thead><tr><th>Rule</th><th>Severity</th><th>Minimum margin</th><th>Maximum discount</th><th>Approval</th><th>Audit</th><th>Status</th>@if (canManageProfit) {
       <th>Action</th>
     }</tr></thead><tbody>@for (rule of governanceRules; track rule) {
@@ -448,60 +465,62 @@
     <td><button type="button" class="table-action" (click)="toggleGovernanceRule(rule)" [disabled]="!!governanceBusyId">{{ rule.enabled ? 'Disable' : 'Enable' }}</button></td>
   }</tr>
 }</tbody></table></div>
-} @else {
-  <div class="compact-empty">No governance rules yet</div>
+} @else if (!governanceError) {
+  <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
 }
 </section>
 }
 @if (profitTab === 'approvals') {
   <section class="profit-panel">
     <div class="panel-heading"><div><span>FOUR-EYES CONTROL</span><h2>Approvals</h2></div><small>{{ governance?.pendingApprovals || 0 }} pending</small></div>
-    @if (governanceApprovals.length) {
+    @if (!governanceError && governanceApprovals.length) {
       <div class="table-wrap"><table><thead><tr><th>Requested</th><th>Action</th><th>Source</th><th>Decision</th><th>Impact</th><th>Margin</th><th>Status</th><th>Review</th></tr></thead><tbody>@for (approval of governanceApprovals; track approval) {
       <tr><td>{{ formatDate(approval.requestedAt) }}</td><td><strong>{{ titleCase(approval.actionType.replace('_',' ')) }}</strong></td><td>{{ approval.sourceType }} · {{ approval.sourceId }}</td><td>{{ approval.message }}</td><td>{{ money(approval.impactPaise) }}</td><td>{{ percent(approval.marginBps) }}</td><td><span class="status-pill" [class]="approval.status">{{ titleCase(approval.status) }}</span></td><td>@if (approval.status === 'pending') {
       <div class="queue-actions"><button type="button" (click)="reviewGovernanceApproval(approval,'approve')" [disabled]="!!governanceBusyId">Approve</button><button type="button" (click)="reviewGovernanceApproval(approval,'reject')" [disabled]="!!governanceBusyId">Reject</button></div>
     }</td></tr>
   }</tbody></table></div>
-} @else {
-  <div class="compact-empty">No governance approvals</div>
+} @else if (!governanceError) {
+  <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
 }
 </section>
 }
 @if (profitTab === 'audit') {
   <section class="profit-panel">
     <div class="panel-heading"><div><span>IMMUTABLE TRAIL</span><h2>Governance audit</h2></div><small>{{ governanceAudit.length }} events</small></div>
-    @if (governanceAudit.length) {
+    @if (!governanceError && governanceAudit.length) {
       <div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>Actor</th><th>Decision</th><th>Rule</th><th>Details</th></tr></thead><tbody>@for (event of governanceAudit; track event) {
       <tr><td>{{ formatDate(event.createdAt) }}</td><td><span class="status-pill">{{ titleCase(event.eventType.replace('_',' ')) }}</span></td><td>{{ event.actorUserId }}</td><td>{{ event.decisionId || '-' }}</td><td>{{ event.ruleId || '-' }}</td><td class="audit-details">{{ auditDetails(event.detailsJson) }}</td></tr>
     }</tbody></table></div>
-  } @else {
-    <div class="compact-empty">No governance audit events</div>
+  } @else if (!governanceError) {
+    <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
   }
 </section>
 }
 }
 </section>
 @if (actionDrawerOpen && canManageProfit) {
-  <aside class="action-drawer" aria-label="Create profit action">
-    <header><div><span>PROFIT ACTION</span><h2>New action</h2></div><button type="button" aria-label="Close" (click)="closeActionDrawer()">×</button></header>
+  <div class="drawer-backdrop" aria-hidden="true" (click)="closeActionDrawer()"></div>
+  <aside class="action-drawer" role="dialog" aria-modal="true" aria-labelledby="profit-action-title" tabindex="-1" (keydown)="trapFocus($event)" (keydown.escape)="closeActionDrawer()">
+    <header><div><span>PROFIT ACTION</span><h2 id="profit-action-title">New action</h2></div><button type="button" aria-label="Close" (click)="closeActionDrawer()">×</button></header>
     <div class="drawer-body">
       <label>Action type<select [(ngModel)]="actionDraft.actionType"><option value="manual_profit_action">Manual profit action</option><option value="pricing_recommendation">Pricing recommendation</option><option value="discount_abuse">Discount review</option><option value="high_wastage">High wastage</option><option value="membership_liability_risk">Membership liability</option><option value="low_margin_service">Low-margin service</option><option value="high_expense">High expense</option></select></label>
       <label>Title<input type="text" [ngModel]="actionDraft.title" (ngModelChange)="actionDraft.title = titleCase($event)" maxlength="120" /></label>
       <label>Message<textarea [(ngModel)]="actionDraft.message" maxlength="500" rows="4"></textarea></label>
-      <label>Impact (paise)<input type="number" [(ngModel)]="actionDraft.impactPaise" min="0" /></label>
-      <label>Expected impact (paise)<input type="number" [(ngModel)]="actionDraft.expectedImpactPaise" min="0" /></label>
+      <label>Impact (INR)<input type="number" [ngModel]="paiseToInr(actionDraft.impactPaise)" (ngModelChange)="actionDraft.impactPaise = inrToPaise($event)" min="0" step="0.01" /></label>
+      <label>Expected impact (INR)<input type="number" [ngModel]="paiseToInr(actionDraft.expectedImpactPaise)" (ngModelChange)="actionDraft.expectedImpactPaise = inrToPaise($event)" min="0" step="0.01" /></label>
       <label>Priority<select [(ngModel)]="actionDraft.priority"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
       <div class="drawer-date-grid"><label>Period start<as-date-picker ariaLabel="Action period start" [(value)]="actionDraft.periodStart"></as-date-picker></label><label>Period end<as-date-picker ariaLabel="Action period end" [(value)]="actionDraft.periodEnd"></as-date-picker></label></div>
       <label>SLA (minutes)<input type="number" [(ngModel)]="actionDraft.slaMinutes" min="1" /></label>
       <label>Notes<textarea [(ngModel)]="actionDraft.notes" maxlength="4000" rows="3"></textarea></label>
       <label>Evidence<textarea [(ngModel)]="actionDraft.evidence" maxlength="1000" rows="3"></textarea></label>
     </div>
-    <footer><button type="button" (click)="closeActionDrawer()">Cancel</button><button type="button" class="primary-button" (click)="createAction()" [disabled]="actionBusyId === 'create'">{{ actionBusyId === 'create' ? 'Saving...' : 'Create action' }}</button></footer>
+    <footer><button type="button" (click)="closeActionDrawer()">{{ 'profit.cancel' | translate }}</button><button type="button" class="primary-button" (click)="createAction()" [disabled]="actionBusyId === 'create'">{{ (actionBusyId === 'create' ? 'profit.saving' : 'profit.action.new') | translate }}</button></footer>
   </aside>
 }
 @if (selectedDimensionRow; as selected) {
-  <aside class="action-drawer drill-drawer" aria-label="Micro P&L drill-down">
-    <header><div><span>{{ titleCase(selected.dimension) }}</span><h2>{{ selected.entityName }}</h2></div><button type="button" aria-label="Close" (click)="closeProfitDrill()">×</button></header>
+  <div class="drawer-backdrop" aria-hidden="true" (click)="closeProfitDrill()"></div>
+  <aside class="action-drawer drill-drawer" role="dialog" aria-modal="true" aria-labelledby="profit-drill-title" tabindex="-1" (keydown)="trapFocus($event)" (keydown.escape)="closeProfitDrill()">
+    <header><div><span>{{ titleCase(selected.dimension) }}</span><h2 id="profit-drill-title">{{ selected.entityName }}</h2></div><button type="button" aria-label="Close" (click)="closeProfitDrill()">×</button></header>
     <div class="drawer-body">@if (drillBusy) {
       <p class="profit-state">Loading drill-down...</p>
       }@if (!drillBusy && drillLines.length) {
@@ -510,11 +529,24 @@
       }</div>
     } @else {
       @if (!drillBusy) {
-        <div class="compact-empty">No sale lines yet</div>
+        <div class="compact-empty">{{ 'profit.noData' | translate }}</div>
       }
     }</div>
-    <footer><small>{{ drillLines.length }}/{{ drillTotal }} lines</small><button type="button" (click)="closeProfitDrill()">Close</button></footer>
+    <footer><small>{{ drillLines.length }}/{{ drillTotal }} lines</small>@if (drillLines.length < drillTotal) {<button type="button" (click)="loadMoreProfitDrill()" [disabled]="drillBusy">{{ (drillBusy ? 'common.loading' : 'profit.loadMore') | translate }}</button>}<button type="button" (click)="closeProfitDrill()">{{ 'profit.close' | translate }}</button></footer>
   </aside>
+}
+@if (profitDialog; as dialog) {
+  <div class="drawer-backdrop" aria-hidden="true" (click)="closeProfitDialog()"></div>
+  <section class="profit-dialog" role="dialog" aria-modal="true" aria-labelledby="profit-dialog-title" tabindex="-1" (keydown)="trapFocus($event)" (keydown.escape)="closeProfitDialog()">
+    <header><h2 id="profit-dialog-title">{{ dialog.titleKey | translate }}</h2><button type="button" [attr.aria-label]="'profit.close' | translate" (click)="closeProfitDialog()">×</button></header>
+    <div class="drawer-body">
+      @if (dialog.kind === 'saveView') {<label>{{ 'profit.dialog.savedViewName' | translate }}<input type="text" [(ngModel)]="dialog.name" maxlength="120" /></label>}
+      @if (dialog.kind === 'periodClose' && periodCloseBlockers.length) {<div class="close-blockers" role="alert"><strong>{{ 'profit.dialog.resolveBeforeClose' | translate }}</strong><ul>@for (blocker of periodCloseBlockers; track blocker) {<li>{{ blocker }}</li>}</ul><button type="button" (click)="openReconciliation(); closeProfitDialog()">{{ 'profit.openReconciliation' | translate }}</button></div>}
+      @if (dialog.kind !== 'saveView') {<label>{{ (dialog.kind === 'periodClose' ? 'profit.dialog.closeReason' : 'profit.dialog.reviewNote') | translate }}<textarea [(ngModel)]="dialog.note" maxlength="1000" rows="4"></textarea></label>}
+      @if (dialog.kind === 'actionTransition' && dialog.transition === 'complete') {<label>{{ 'profit.dialog.realizedImpact' | translate }}<input type="number" min="0" step="0.01" [(ngModel)]="dialog.realizedImpactInr" /></label><label>{{ 'profit.dialog.completionEvidence' | translate }}<textarea [(ngModel)]="dialog.evidence" maxlength="1000" rows="3"></textarea></label>}
+    </div>
+    <footer><button type="button" (click)="closeProfitDialog()">{{ 'profit.cancel' | translate }}</button><button type="button" class="primary-button" (click)="submitProfitDialog()" [disabled]="periodCloseBusy || (dialog.kind === 'periodClose' && (!reconciliation?.branchPeriodCloseReady || !dialog.note.trim())) || (dialog.kind === 'saveView' && !dialog.name.trim())">{{ (periodCloseBusy ? 'profit.saving' : 'profit.confirm') | translate }}</button></footer>
+  </section>
 }
 }
 }
