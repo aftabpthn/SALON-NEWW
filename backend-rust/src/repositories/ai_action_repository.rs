@@ -94,10 +94,18 @@ pub async fn by_idempotency_key(
 
 /// Atomically claims a draft for execution.
 ///
-/// This is the exactly-once gate. The `status='draft'` predicate and the write
-/// happen in one statement, so exactly one concurrent caller can move the row
-/// to `executing` and therefore exactly one caller reaches the CRM write.
-/// Everyone else gets `None` and must treat the confirmation as already taken.
+/// The claim serves two purposes. It takes the draft out of reach of
+/// cancellation, which only touches `status='draft'`, so a confirmation that
+/// has begun cannot be cancelled out from under itself. And it records who is
+/// executing and since when, so a claim that never finished is visible.
+///
+/// `executing` is deliberately re-claimable. A process that crashes between the
+/// CRM write and the approval leaves the row claimed forever otherwise, and a
+/// timeout would only trade that for a guess. Exactly-once does not rest on the
+/// claim being exclusive: it rests on the CRM record carrying the draft's
+/// identity under a unique index, so a re-run finds the existing record instead
+/// of writing a second one. What stays exclusive is the *approval* — only one
+/// caller can move the row to `approved`.
 pub async fn claim_for_execution(
     db: &PgPool,
     tenant_id: &str,
@@ -109,7 +117,7 @@ pub async fn claim_for_execution(
         r#"UPDATE ai_action_drafts
               SET status='executing',claimed_by=$4,claimed_at=NOW()
             WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
-              AND status='draft'
+              AND status IN ('draft','executing')
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)
@@ -191,7 +199,7 @@ pub async fn cancel(
         r#"UPDATE ai_action_drafts
               SET status='cancelled', decided_by=$4, decided_at=NOW()
             WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
-              AND status IN ('draft','executing')
+              AND status='draft'
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)

@@ -14,9 +14,22 @@
 //!   draft time.** A role can be revoked between the two, so the check that
 //!   matters is the one at the moment of approval.
 //!
-//! Confirming twice is safe. The idempotency key is unique per tenant and
-//! branch, so a replayed confirmation returns the first result and records a
-//! `replayed` audit entry instead of acting again.
+//! Confirming twice is safe, and safe in three different ways because there are
+//! three different ways it happens:
+//!
+//! * **The same key, sent again.** The idempotency key is unique per tenant and
+//!   branch, so a replayed confirmation returns the first result and records a
+//!   `replayed` audit entry instead of acting again.
+//! * **Two people at once.** A confirmation claims the draft (`executing`)
+//!   before anything is written, and only one caller can record the approval.
+//! * **A crash mid-flight.** The CRM record carries the draft's id under a
+//!   unique index, so the retry after a crash finds the record the dead run
+//!   created rather than writing a second one.
+//!
+//! Cancellation only touches an unclaimed draft, so a confirmation that has
+//! begun cannot be cancelled out from under itself: either the cancel lands
+//! first and nothing is written, or the claim lands first and the cancel is
+//! refused.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -395,7 +408,11 @@ pub async fn confirm_draft(
             "role may not confirm this action").await;
         return Err(AppError::forbidden("this action is not available for your role"));
     }
-    if record.status != "draft" {
+    // `executing` is undecided: a previous attempt claimed it and did not
+    // finish, so this call is a retry rather than a second decision. It is safe
+    // to proceed because the CRM write is keyed on the draft — the retry finds
+    // the existing record instead of writing another.
+    if !matches!(record.status.as_str(), "draft" | "executing") {
         audit(db, tenant_id, branch_id, Some(&record.id), kind, "refused", user_id, role,
             "draft was already decided").await;
         return Err(AppError::conflict("that action draft was already decided"));
@@ -428,7 +445,17 @@ pub async fn confirm_draft(
         "note": kind.confirmation_note(),
     });
     if kind.executes_on_approval() {
-        match execute_through_crm(db, tenant_id, branch_id, user_id, kind, &claimed.payload).await {
+        match execute_through_crm(
+            db,
+            tenant_id,
+            branch_id,
+            user_id,
+            kind,
+            &claimed.id,
+            &claimed.payload,
+        )
+        .await
+        {
             Ok(execution) => {
                 result = json!({
                     "approved": true,
@@ -490,6 +517,7 @@ async fn execute_through_crm(
     branch_id: &str,
     user_id: &str,
     kind: ActionKind,
+    draft_id: &str,
     payload: &Value,
 ) -> Result<Value, AppError> {
     match kind {
@@ -502,7 +530,9 @@ async fn execute_through_crm(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .ok_or_else(|| AppError::validation("the draft has no task title"))?;
-            let record = staff_advanced_service::create_task(
+            // Stamped with the draft's identity, so this is at most once per
+            // draft however many times it is retried.
+            let record = staff_advanced_service::create_task_for_action(
                 db,
                 tenant_id,
                 branch_id,
@@ -535,6 +565,7 @@ async fn execute_through_crm(
                     status: None,
                     version: None,
                 },
+                draft_id,
             )
             .await?;
             Ok(json!({
@@ -1413,5 +1444,386 @@ mod controlled_action_tests {
             status, "draft",
             "a failed write must leave the draft confirmable, not stuck executing"
         );
+    }
+
+    /// Cancelling and confirming at the same moment must land on one of two
+    /// consistent outcomes, never in between.
+    ///
+    /// The failure this guards against is a real CRM task existing behind an
+    /// action record that says `cancelled` — a task nobody approved, attached
+    /// to a decision that was withdrawn. Cancellation only touches an unclaimed
+    /// draft, so once a confirmation has claimed it the cancel is refused.
+    #[sqlx::test]
+    async fn a_cancel_racing_a_confirm_never_leaves_a_task_behind_a_cancelled_draft(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                    "description": "One approver confirms while another cancels.",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        let confirming = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "cancel-race-key".into(),
+            },
+        );
+        let cancelling = cancel_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "canceller-1",
+            &draft.id,
+        );
+        let (confirmed, cancelled) = tokio::join!(confirming, cancelling);
+
+        let tasks: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND origin_action_draft_id=$2",
+        )
+        .bind(&tenant_id)
+        .bind(&draft.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        // Exactly one of the two decides the draft; both succeeding would mean
+        // the draft was decided twice.
+        assert!(
+            confirmed.is_ok() != cancelled.is_ok(),
+            "exactly one of confirm/cancel may win, got confirm={:?} cancel={:?}",
+            confirmed.as_ref().map(|draft| draft.status.clone()),
+            cancelled.as_ref().map(|draft| draft.status.clone()),
+        );
+
+        if cancelled.is_ok() {
+            // (a) Cancellation won, before anything was written.
+            assert_eq!(status, "cancelled");
+            assert_eq!(tasks, 0, "a cancelled draft must leave no CRM task");
+        } else {
+            // (b) Execution won: one task, and an approved record behind it.
+            assert_eq!(status, "approved");
+            assert_eq!(tasks, 1, "an approved draft owns exactly one CRM task");
+            let approved = confirmed.expect("the confirmation won");
+            assert_eq!(approved.result["executed"], true);
+        }
+
+        // The invariant, stated whichever branch was taken: a task may only
+        // exist behind an approved record.
+        assert!(
+            tasks == 0 || status == "approved",
+            "a CRM task must never sit behind a {status} action record"
+        );
+    }
+
+    /// Crash recovery: the CRM write succeeded, the approval never landed.
+    ///
+    /// This is the state a process leaves behind if it dies between the two —
+    /// the claim alone cannot distinguish it from "not written yet". The
+    /// draft's identity on the task is what makes the retry safe: it finds the
+    /// existing record and finalises against it.
+    #[sqlx::test]
+    async fn a_retry_after_a_crash_finds_the_existing_task_instead_of_creating_another(
+        pool: PgPool,
+    ) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                    "description": "The first attempt died before it could record the approval.",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        // Reproduce the post-crash state exactly: claimed, executed, unapproved.
+        let claimed = action_repository::claim_for_execution(
+            &pool, &tenant_id, &branch_id, &draft.id, "approver-1",
+        )
+        .await
+        .expect("the claim query runs")
+        .expect("the draft is claimable");
+        let crashed_task = execute_through_crm(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "approver-1",
+            ActionKind::CreateCoachingTask,
+            &claimed.id,
+            &claimed.payload,
+        )
+        .await
+        .expect("the CRM write succeeds");
+        let crashed_task_id = crashed_task["recordId"]
+            .as_str()
+            .expect("the write returns a record id")
+            .to_string();
+
+        let stuck: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(stuck, "executing", "the fixture must reproduce a stuck claim");
+
+        // The retry.
+        let recovered = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "recovery-key-1".into(),
+            },
+        )
+        .await
+        .expect("the retry completes rather than stalling on the stuck claim");
+
+        assert_eq!(recovered.status, "approved");
+        assert_eq!(recovered.result["executed"], true);
+        assert_eq!(
+            recovered.result["execution"]["recordId"], crashed_task_id,
+            "the retry must adopt the task the crashed run created"
+        );
+
+        let tasks: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND origin_action_draft_id=$2",
+        )
+        .bind(&tenant_id)
+        .bind(&draft.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(tasks, 1, "recovery must not write a second CRM task");
+    }
+
+    /// The uniqueness is enforced by the database, not only by the read-first
+    /// check — otherwise two runs interleaving between the read and the insert
+    /// would still duplicate.
+    #[sqlx::test]
+    async fn the_crm_task_carries_a_unique_identity_from_its_draft(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        sqlx::query(
+            r#"INSERT INTO staff_tasks(tenant_id,branch_id,staff_id,title,task_type,assigned_by,origin_action_draft_id)
+               VALUES($1,$2,$3,'First','training','user-1','draft-xyz')"#,
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&staff_id)
+        .execute(&pool)
+        .await
+        .expect("the first task is written");
+
+        let duplicate = sqlx::query(
+            r#"INSERT INTO staff_tasks(tenant_id,branch_id,staff_id,title,task_type,assigned_by,origin_action_draft_id)
+               VALUES($1,$2,$3,'Second','training','user-1','draft-xyz')"#,
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(&staff_id)
+        .execute(&pool)
+        .await;
+        assert!(
+            duplicate.is_err(),
+            "the database must refuse a second task for the same action draft"
+        );
+
+        // Tasks with no draft behind them are unaffected by the constraint.
+        for title in ["Manual one", "Manual two"] {
+            sqlx::query(
+                r#"INSERT INTO staff_tasks(tenant_id,branch_id,staff_id,title,task_type,assigned_by)
+                   VALUES($1,$2,$3,$4,'general','user-1')"#,
+            )
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .bind(&staff_id)
+            .bind(title)
+            .execute(&pool)
+            .await
+            .expect("staff-screen tasks are not constrained");
+        }
+    }
+
+    /// The cancel-versus-execute rule, stated without relying on scheduling.
+    ///
+    /// Once a confirmation has claimed the draft, cancellation is refused —
+    /// otherwise the cancel would land on a draft whose CRM write is already
+    /// under way, and the task would end up behind a `cancelled` record.
+    #[sqlx::test]
+    async fn a_claimed_draft_cannot_be_cancelled(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        action_repository::claim_for_execution(
+            &pool, &tenant_id, &branch_id, &draft.id, "approver-1",
+        )
+        .await
+        .expect("the claim query runs")
+        .expect("an unclaimed draft is claimable");
+
+        let refused = cancel_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "canceller-1",
+            &draft.id,
+        )
+        .await
+        .expect_err("a claimed draft must not be cancellable");
+        assert!(
+            format!("{refused:?}").to_lowercase().contains("not found"),
+            "got {refused:?}"
+        );
+
+        let status: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            status, "executing",
+            "the refused cancel must not have moved the draft"
+        );
+
+        // And the confirmation it was competing with still completes.
+        let approved = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "claimed-cancel-key".into(),
+            },
+        )
+        .await
+        .expect("the claimed confirmation finishes");
+        assert_eq!(approved.status, "approved");
+
+        let tasks: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND origin_action_draft_id=$2",
+        )
+        .bind(&tenant_id)
+        .bind(&draft.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(tasks, 1);
+    }
+
+    /// The other order, equally deterministic: cancellation lands first, so the
+    /// confirmation finds nothing to claim and nothing is ever written.
+    #[sqlx::test]
+    async fn a_cancelled_draft_can_no_longer_execute(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        cancel_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "canceller-1",
+            &draft.id,
+        )
+        .await
+        .expect("an unclaimed draft cancels");
+
+        let refused = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "cancelled-confirm-key".into(),
+            },
+        )
+        .await
+        .expect_err("a cancelled draft must not execute");
+        assert!(
+            format!("{refused:?}").to_lowercase().contains("already decided"),
+            "got {refused:?}"
+        );
+
+        let tasks: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND origin_action_draft_id=$2",
+        )
+        .bind(&tenant_id)
+        .bind(&draft.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(tasks, 0, "a cancelled draft must leave no CRM task");
     }
 }

@@ -118,6 +118,12 @@ pub struct StaffTaskInput {
     pub priority: String,
     pub due_at: Option<DateTime<Utc>>,
     pub status: String,
+    /// The AI action draft this task was created from, when there is one.
+    ///
+    /// Carried into a unique index so a retried or crashed approval finds the
+    /// task it already created instead of writing a second one. Tasks created
+    /// from the staff screen leave this `None`.
+    pub origin_action_draft_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -758,13 +764,17 @@ pub async fn create_task(
         WITH inserted AS (
           INSERT INTO staff_tasks(
             tenant_id,branch_id,staff_id,title,description,task_type,priority,due_at,status,
-            assigned_by,completed_at
+            assigned_by,completed_at,origin_action_draft_id
           )
           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                 CASE WHEN $9='completed' THEN NOW() ELSE NULL END
+                 CASE WHEN $9='completed' THEN NOW() ELSE NULL END,$11
           WHERE $3::TEXT IS NULL OR EXISTS(
             SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
           )
+          -- A task already written for this draft is the same task, not a new
+          -- one: a retry after a crash must not duplicate it.
+          ON CONFLICT (origin_action_draft_id) WHERE origin_action_draft_id IS NOT NULL
+            DO NOTHING
           RETURNING *
         )
         SELECT t.id,t.staff_id,
@@ -785,6 +795,35 @@ pub async fn create_task(
     .bind(input.due_at)
     .bind(&input.status)
     .bind(actor_user_id)
+    .bind(&input.origin_action_draft_id)
+    .fetch_optional(db)
+    .await
+}
+
+/// Finds the task an AI action draft already produced, if any.
+///
+/// This is the recovery read: after a crash between the CRM write and the
+/// approval, it is how the retry learns the task exists.
+pub async fn task_by_action_origin(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    draft_id: &str,
+) -> Result<Option<StaffTaskRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT t.id,t.staff_id,
+          COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
+          t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
+          t.completed_at,t.version,t.created_at,t.updated_at
+        FROM staff_tasks t
+        LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
+        WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.origin_action_draft_id=$3
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(draft_id)
     .fetch_optional(db)
     .await
 }

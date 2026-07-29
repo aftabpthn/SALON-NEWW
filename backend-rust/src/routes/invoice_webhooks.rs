@@ -11,7 +11,7 @@ use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use sqlx::FromRow;
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 use crate::{
@@ -377,28 +377,61 @@ fn whatsapp_messages(payload: &Value) -> Vec<WhatsAppMessage> {
 
 /// Resolves the tenant and branch a message was addressed *to*.
 ///
+/// `phone_number_id` is the provider's stable identifier and is authoritative
+/// whenever it is present: if it is supplied and unknown, routing stops rather
+/// than falling back to the display number, because a display number can be
+/// re-pointed and an unrecognised id means the provisioning is wrong.
+///
+/// The two identifiers are looked up separately and then compared. A single
+/// `OR` would happily match the id against one row and the display number
+/// against a *different* row, and answer from whichever the planner reached
+/// first — which is to say, from an arbitrary tenant. When both are supplied
+/// and disagree, nothing is routed.
+///
 /// Returns `None` when the receiving number is not provisioned, which leaves
 /// the caller on the legacy sender-anchored path rather than guessing.
 async fn receiving_branch(
-    state: &AppState,
-    message: &WhatsAppMessage,
+    db: &PgPool,
+    phone_number_id: &str,
+    display_number: &str,
 ) -> Result<Option<(String, String)>, AppError> {
-    if message.receiving_phone_number_id.is_empty() && message.receiving_display_number.is_empty() {
-        return Ok(None);
+    let by_id = if phone_number_id.is_empty() {
+        None
+    } else {
+        lookup_business_number(db, "phone_number_id", phone_number_id).await?
+    };
+    let by_display = if display_number.is_empty() {
+        None
+    } else {
+        lookup_business_number(db, "display_phone_number", display_number).await?
+    };
+
+    match (by_id, by_display) {
+        // Both known and they disagree: the metadata is inconsistent, and
+        // picking either one would be picking a tenant at random.
+        (Some(from_id), Some(from_display)) if from_id != from_display => Ok(None),
+        (Some(from_id), _) => Ok(Some(from_id)),
+        // An id was supplied but is not provisioned. It is the authoritative
+        // identifier, so an unknown one is not overridden by the display number.
+        (None, _) if !phone_number_id.is_empty() => Ok(None),
+        (None, from_display) => Ok(from_display),
     }
-    sqlx::query_as(
-        r#"SELECT tenant_id,branch_id
-             FROM whatsapp_business_numbers
-            WHERE active=TRUE
-              AND (
-                    (phone_number_id<>'' AND phone_number_id=$1)
-                 OR (display_phone_number<>'' AND display_phone_number=$2)
-              )
-            LIMIT 1"#,
-    )
-    .bind(&message.receiving_phone_number_id)
-    .bind(&message.receiving_display_number)
-    .fetch_optional(&state.db)
+}
+
+/// Looks one receiving identifier up. The column name is chosen here, never
+/// taken from the payload, so this stays a fixed query with a bound value.
+async fn lookup_business_number(
+    db: &PgPool,
+    column: &'static str,
+    value: &str,
+) -> Result<Option<(String, String)>, AppError> {
+    sqlx::query_as(&format!(
+        "SELECT tenant_id,branch_id FROM whatsapp_business_numbers
+          WHERE active=TRUE AND {column}<>'' AND {column}=$1
+          LIMIT 1"
+    ))
+    .bind(value)
+    .fetch_optional(db)
     .await
     .map_err(|_| AppError::internal("failed to resolve the receiving business number"))
 }
@@ -409,7 +442,7 @@ async fn receiving_branch(
 /// by the receiving number, and the sender either is a client of that branch or
 /// is not.
 async fn client_in_branch(
-    state: &AppState,
+    db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
     sender: &str,
@@ -426,7 +459,7 @@ async fn client_in_branch(
     .bind(tenant_id)
     .bind(branch_id)
     .bind(&digits)
-    .fetch_all(&state.db)
+    .fetch_all(db)
     .await
     .map_err(|_| AppError::internal("failed to resolve message sender"))?;
     // Two clients on one handset is ambiguity; attributing the message to
@@ -445,8 +478,14 @@ async fn record_provider_message(
     // Preferred anchor: the number the sender wrote to. It is provisioned by
     // the operator and identifies exactly one branch, so the sender cannot
     // influence which tenant's data answers them.
-    if let Some((tenant_id, branch_id)) = receiving_branch(state, message).await? {
-        let client_id = client_in_branch(state, &tenant_id, &branch_id, &message.sender).await?;
+    if let Some((tenant_id, branch_id)) = receiving_branch(
+        &state.db,
+        &message.receiving_phone_number_id,
+        &message.receiving_display_number,
+    )
+    .await?
+    {
+        let client_id = client_in_branch(&state.db, &tenant_id, &branch_id, &message.sender).await?;
         // A client's message is still recorded on their communication history
         // exactly as before. A sender with no client record — a staff member
         // messaging their own branch — is routed without one.
@@ -1678,6 +1717,161 @@ mod payment_compliance_tests {
         assert_eq!(
             normalize_dispute_status("payment.dispute.created", "unknown"),
             "open"
+        );
+    }
+}
+
+#[cfg(test)]
+mod inbound_routing_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    async fn seed_branch(db: &PgPool, tenant_name: &str, branch_name: &str) -> (String, String) {
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES($1,'') RETURNING scope_id",
+        )
+        .bind(tenant_name)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let branch_id: String = sqlx::query_scalar(
+            r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+               VALUES((SELECT id FROM tenants WHERE scope_id=$1),$2,'','South','Hyderabad','Central',TRUE)
+               RETURNING scope_id"#,
+        )
+        .bind(&tenant_id)
+        .bind(branch_name)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        (tenant_id, branch_id)
+    }
+
+    async fn provision(
+        db: &PgPool,
+        tenant_id: &str,
+        branch_id: &str,
+        phone_number_id: &str,
+        display: &str,
+    ) {
+        sqlx::query(
+            r#"INSERT INTO whatsapp_business_numbers(tenant_id,branch_id,phone_number_id,display_phone_number)
+               VALUES($1,$2,$3,$4)"#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(phone_number_id)
+        .bind(display)
+        .execute(db)
+        .await
+        .unwrap();
+    }
+
+    /// The ordinary case: the receiving number names its own branch.
+    #[sqlx::test]
+    async fn a_provisioned_number_routes_to_its_own_branch(pool: PgPool) {
+        let (tenant_id, branch_id) = seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        provision(&pool, &tenant_id, &branch_id, "pn-1", "918000000001").await;
+
+        let routed = receiving_branch(&pool, "pn-1", "918000000001")
+            .await
+            .expect("lookup completes")
+            .expect("a provisioned number routes");
+        assert_eq!(routed, (tenant_id, branch_id));
+    }
+
+    /// The id is authoritative, so an unknown one stops routing instead of
+    /// letting the display number pick a branch.
+    #[sqlx::test]
+    async fn an_unknown_phone_number_id_does_not_fall_back_to_the_display_number(pool: PgPool) {
+        let (tenant_id, branch_id) = seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        provision(&pool, &tenant_id, &branch_id, "pn-1", "918000000001").await;
+
+        let routed = receiving_branch(&pool, "pn-unprovisioned", "918000000001")
+            .await
+            .expect("lookup completes");
+        assert!(
+            routed.is_none(),
+            "an unrecognised authoritative id must not be overridden"
+        );
+    }
+
+    /// The defect a single `OR` would hide: the id belongs to one tenant and
+    /// the display number to another. Either answer would be an arbitrary
+    /// tenant, so nothing is routed.
+    #[sqlx::test]
+    async fn conflicting_receiving_metadata_routes_nowhere(pool: PgPool) {
+        let (first_tenant, first_branch) =
+            seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        let (second_tenant, second_branch) =
+            seed_branch(&pool, "Lumière Studios", "Koramangala").await;
+        // The id is provisioned to one tenant...
+        provision(&pool, &first_tenant, &first_branch, "pn-1", "918000000001").await;
+        // ...and the display number to a different one.
+        provision(
+            &pool,
+            &second_tenant,
+            &second_branch,
+            "pn-2",
+            "918000000002",
+        )
+        .await;
+
+        let routed = receiving_branch(&pool, "pn-1", "918000000002")
+            .await
+            .expect("lookup completes");
+        assert!(
+            routed.is_none(),
+            "conflicting identifiers must select no tenant, got {routed:?}"
+        );
+    }
+
+    /// A channel that reports no receiving identity at all stays on the legacy
+    /// path rather than being routed to an arbitrary branch.
+    #[sqlx::test]
+    async fn a_message_with_no_receiving_identity_routes_nowhere(pool: PgPool) {
+        let (tenant_id, branch_id) = seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        provision(&pool, &tenant_id, &branch_id, "pn-1", "918000000001").await;
+
+        let routed = receiving_branch(&pool, "", "").await.expect("lookup completes");
+        assert!(routed.is_none());
+    }
+
+    /// The display number alone is enough when no id was reported.
+    #[sqlx::test]
+    async fn a_display_number_alone_still_routes(pool: PgPool) {
+        let (tenant_id, branch_id) = seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        provision(&pool, &tenant_id, &branch_id, "pn-1", "918000000001").await;
+
+        let routed = receiving_branch(&pool, "", "918000000001")
+            .await
+            .expect("lookup completes")
+            .expect("the display number routes");
+        assert_eq!(routed, (tenant_id, branch_id));
+    }
+
+    /// The receiving number decides the branch; the sender is then looked up
+    /// inside it. A client of another branch is not this branch's client.
+    #[sqlx::test]
+    async fn a_sender_is_resolved_within_the_receiving_branch_only(pool: PgPool) {
+        let (tenant_id, branch_id) = seed_branch(&pool, "Aura Salon Group", "Banjara Hills").await;
+        let (_, other_branch) = seed_branch(&pool, "Aura Salon Group Two", "Gachibowli").await;
+        sqlx::query(
+            r#"INSERT INTO clients(tenant_id,branch_id,first_name,last_name,phone,active)
+               VALUES($1,$2,'Meera','Nair','+91 98765 43210',TRUE)"#,
+        )
+        .bind(&tenant_id)
+        .bind(&other_branch)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let found = client_in_branch(&pool, &tenant_id, &branch_id, "919876543210")
+            .await
+            .expect("lookup completes");
+        assert!(
+            found.is_none(),
+            "a client of another branch must not be adopted by this one"
         );
     }
 }

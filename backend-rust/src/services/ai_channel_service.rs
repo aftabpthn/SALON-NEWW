@@ -122,8 +122,17 @@ pub async fn resolve_caller(
         return Ok(ResolvedChannelCaller::anonymous());
     };
 
-    // One active staff member, one login, one branch. Anything less specific is
-    // not an identity.
+    // Identity first, access second — and they are separate questions.
+    //
+    // *Who is this number?* is answered across the tenant, not within the
+    // receiving branch. A deputation posts someone to another branch by
+    // granting them access there; it does not create a second staff record for
+    // them at that branch. Scoping the identity lookup to the branch would
+    // therefore make every deputed manager an anonymous caller.
+    //
+    // *May they read this branch?* is answered afterwards by
+    // `find_branch_access`, which is the same grant lookup the browser login
+    // uses — including the deputation's own validity window.
     //
     // The staff record is joined to its login through `staff.user_id`, the
     // explicit link the CRM maintains. Matching on email would authenticate a
@@ -134,7 +143,7 @@ pub async fn resolve_caller(
     // is, so a staff record holding a foreign number cannot be matched by its
     // trailing ten digits.
     let matched: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT account.id, account.tenant_id
+        r#"SELECT DISTINCT account.id, account.tenant_id
              FROM staff member
              JOIN users account
                ON account.id=member.user_id
@@ -144,28 +153,27 @@ pub async fn resolve_caller(
                SELECT REGEXP_REPLACE(COALESCE(member.mobile_phone,''),'[^0-9]','','g') AS d
              ) stored
             WHERE member.tenant_id=$1
-              AND member.branch_id=$2
               AND member.active=TRUE
               AND member.user_id IS NOT NULL
               AND member.user_id<>''
               AND (
-                    (LENGTH(stored.d)=10 AND stored.d=$3)
-                 OR (LENGTH(stored.d)=11 AND LEFT(stored.d,1)='0'  AND RIGHT(stored.d,10)=$3)
-                 OR (LENGTH(stored.d)=12 AND LEFT(stored.d,2)='91' AND RIGHT(stored.d,10)=$3)
-                 OR (LENGTH(stored.d)=14 AND LEFT(stored.d,4)='0091' AND RIGHT(stored.d,10)=$3)
+                    (LENGTH(stored.d)=10 AND stored.d=$2)
+                 OR (LENGTH(stored.d)=11 AND LEFT(stored.d,1)='0'  AND RIGHT(stored.d,10)=$2)
+                 OR (LENGTH(stored.d)=12 AND LEFT(stored.d,2)='91' AND RIGHT(stored.d,10)=$2)
+                 OR (LENGTH(stored.d)=14 AND LEFT(stored.d,4)='0091' AND RIGHT(stored.d,10)=$2)
               )
             LIMIT 2"#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
     .bind(&phone)
     .fetch_all(db)
     .await
     .map_err(|_| AppError::internal("failed to resolve the channel caller"))?;
 
-    // Exactly one match, or nobody. Two people sharing a handset is ambiguity,
+    // Exactly one person, or nobody. Two people sharing a handset is ambiguity,
     // and answering either of them with the other's data is the failure this
-    // guards against.
+    // guards against. `DISTINCT` first, so one person holding staff records at
+    // several branches is one identity rather than an ambiguity.
     if matched.len() != 1 {
         return Ok(ResolvedChannelCaller::anonymous());
     }
@@ -193,7 +201,9 @@ pub async fn resolve_caller(
         .await
         .map_err(|_| AppError::internal("failed to load channel caller permissions"))?
     else {
-        // A staff record without an active branch grant reaches no CRM data.
+        // Known person, no live grant for the branch they wrote to — an expired
+        // deputation, or simply a branch that is not theirs. Either way they
+        // reach no CRM data here.
         return Ok(ResolvedChannelCaller::anonymous());
     };
 
@@ -510,6 +520,12 @@ mod tests {
     }
 
     /// A live deputation is a real posting: it answers for the branch it covers.
+    ///
+    /// Deputation in this CRM grants `user_branch_roles` access at the target
+    /// branch. It does *not* create a staff record there — the person still has
+    /// exactly one staff row, at their home branch. This test uses only that
+    /// real flow, so it fails if identity resolution ever goes back to being
+    /// scoped by the receiving branch.
     #[sqlx::test]
     async fn a_live_deputation_answers_for_the_covered_branch(pool: PgPool) {
         let (tenant_id, home_branch) = seed(&pool).await;
@@ -518,29 +534,33 @@ mod tests {
             &pool, &tenant_id, &home_branch, "Asha", "+91 98765 43210", true, true,
         )
         .await;
-        // The same person also holds a staff record at the covered branch.
-        sqlx::query(
-            r#"INSERT INTO staff(tenant_id,branch_id,user_id,first_name,last_name,email,mobile_phone,job_title,active)
-               VALUES($1,$2,$3,'Asha','Rao','asha.deputed@aurasalon.in','+91 98765 43210','Stylist',TRUE)"#,
-        )
-        .bind(&tenant_id)
-        .bind(&covered_branch)
-        .bind(&user_id)
-        .execute(&pool)
-        .await
-        .unwrap();
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
         grant_deputation(
             &pool, &tenant_id, &user_id, &covered_branch, &role_id, -3, 10,
         )
         .await;
 
+        // One staff row, at the home branch only.
+        let staff_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM staff WHERE tenant_id=$1 AND user_id=$2")
+                .bind(&tenant_id)
+                .bind(&user_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            staff_rows, 1,
+            "deputation must not require a staff record at the covered branch"
+        );
+
         let caller = resolve_caller(&pool, &tenant_id, &covered_branch, "+91 98765 43210")
             .await
             .expect("resolution completes");
         assert_eq!(caller.identity, ChannelIdentity::StaffLogin);
         let claims = caller.claims.expect("a live deputation carries claims");
+        assert_eq!(claims.sub, user_id);
         assert_eq!(claims.branch_id.as_deref(), Some(covered_branch.as_str()));
+        assert!(claims.permissions.iter().any(|value| value == "staff.read"));
     }
 
     /// The day the deputation ends, the access ends. A window that has closed
@@ -553,18 +573,8 @@ mod tests {
             &pool, &tenant_id, &home_branch, "Asha", "+91 98765 43210", true, true,
         )
         .await;
-        sqlx::query(
-            r#"INSERT INTO staff(tenant_id,branch_id,user_id,first_name,last_name,email,mobile_phone,job_title,active)
-               VALUES($1,$2,$3,'Asha','Rao','asha.deputed@aurasalon.in','+91 98765 43210','Stylist',TRUE)"#,
-        )
-        .bind(&tenant_id)
-        .bind(&covered_branch)
-        .bind(&user_id)
-        .execute(&pool)
-        .await
-        .unwrap();
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
-        // Ended yesterday.
+        // Ended yesterday. Same real flow as the live case, one day later.
         grant_deputation(
             &pool, &tenant_id, &user_id, &covered_branch, &role_id, -30, -1,
         )
@@ -578,6 +588,15 @@ mod tests {
             ChannelIdentity::Anonymous,
             "a deputation that has ended must not still answer"
         );
+
+        // The person is still resolvable where they actually work, so the
+        // refusal above is the window closing rather than the identity being
+        // lost.
+        grant(&pool, &tenant_id, &user_id, &home_branch, &role_id).await;
+        let at_home = resolve_caller(&pool, &tenant_id, &home_branch, "+91 98765 43210")
+            .await
+            .expect("resolution completes");
+        assert_eq!(at_home.identity, ChannelIdentity::StaffLogin);
     }
 
     /// An explicit denial beats the role's own grant, on this channel as
