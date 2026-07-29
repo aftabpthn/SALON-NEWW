@@ -88,46 +88,6 @@ interface ConsultationChatMessage {
       </ion-header>
 
       <main class="page home-page">
-
-interface ConsultationChatMessage {
-  role: "customer" | "assistant";
-  text: string;
-}
-
-@Component({
-  standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent, MySalonCardComponent],
-  template: `
-    <ion-content>
-      <ion-header class="ion-no-border">
-        <ion-toolbar>
-          <div class="home-toolbar app-container">
-            <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
-            <div class="location-copy">
-              <span>Near you</span>
-              <div class="location-row">
-                <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
-                @if (!mobileHome()) {
-                <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
-                  <ion-icon name="navigate-outline"></ion-icon>
-                  {{ locating() ? "Detecting" : "Use current location" }}
-                </button>
-                }
-              </div>
-            </div>
-            <div class="toolbar-actions">
-              <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
-                <ion-icon name="notifications-outline"></ion-icon>
-              </ion-button>
-              <ion-button fill="clear" shape="round" routerLink="/tabs/profile" aria-label="Open profile">
-                <ion-icon name="person-circle-outline"></ion-icon>
-              </ion-button>
-            </div>
-          </div>
-        </ion-toolbar>
-      </ion-header>
-
-      <main class="page home-page">
         <section class="hero dashboard-hero">
           <div class="hero-copy">
             <span class="eyebrow">Your day, beautifully planned</span>

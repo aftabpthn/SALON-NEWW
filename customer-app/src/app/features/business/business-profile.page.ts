@@ -192,6 +192,9 @@ import { Subscription } from "rxjs";
             }
 
             <section class="staff-section">
+              <div class="section-heading">
+                <div>
+                  <h2 class="section-title">Choose your professional</h2>
                 </div>
               </div>
               <div class="staff-grid">
