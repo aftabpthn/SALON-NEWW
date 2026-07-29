@@ -1,0 +1,6 @@
+# SQLx hashes migration bytes. Keep the repaired and future migration range
+# byte-stable across Windows and Linux checkouts.
+backend-rust/migrations/028*.sql text eol=lf
+backend-rust/migrations/029*.sql text eol=lf
+backend-rust/migrations/030*.sql text eol=lf
+backend-rust/migrations/031*.sql text eol=lf
