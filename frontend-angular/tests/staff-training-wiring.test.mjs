@@ -9,6 +9,7 @@ test('training page exposes connected assignment and coaching actions', () => {
   const workspace = read('../src/app/pages/staff/staff-os-workspace/staff-os-workspace-page.component.ts');
   const template = read('../src/app/pages/staff/staff-os-workspace/staff-os-workspace-page.component.html');
   const routes = read('../../backend-rust/src/routes/staff_enterprise.rs');
+  const service = read('../../backend-rust/src/services/staff_enterprise_service.rs');
 
   assert.match(models, /training: \{[\s\S]+path: '\/staff-enterprise\/training'/);
   assert.match(models, /training: \{[\s\S]+path: '\/staff\/coach\/goals'/);
@@ -26,7 +27,13 @@ test('training page exposes connected assignment and coaching actions', () => {
   assert.match(workspace, /private async ensureStaffOptions\(\)/);
   assert.doesNotMatch(workspace, /window\.prompt/);
   assert.match(template, /actionDrawerOpen && activeAction/);
+  assert.match(template, /\(ngModelChange\)="actionValues\[field\.key\] = String\(\$event \?\? ''\)"/);
   assert.match(template, /@for \(staff of staffOptions; track staff\.id\)[\s\S]+staffOptionLabel\(staff\)/);
+
+  assert.match(models, /options: \['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom'\]/);
+  assert.match(models, /options: \['count', 'percent', 'minutes', 'paise'\]/);
+  assert.match(service, /&\[\s*"revenue",\s*"appointments",\s*"rebooking",\s*"attendance",\s*"training",\s*"utilization",\s*"custom",?\s*\]/);
+  assert.match(service, /&\["count", "percent", "minutes", "paise"\]/);
 
   assert.match(routes, /route\("\/staff-enterprise\/training", get\(training_assignments\)\)/);
   assert.match(routes, /route\("\/staff-enterprise\/training\/assign", post\(assign_training\)\)/);

@@ -220,8 +220,8 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
         successMessage: 'Coaching goal created',
         fields: [
           { key: 'staffId', label: 'Staff', type: 'staff' },
-          { key: 'goalType', label: 'Goal type', type: 'select', options: ['revenue', 'services', 'retention', 'rebooking', 'upsell', 'attendance', 'training'] },
-          { key: 'metricUnit', label: 'Metric unit', type: 'select', options: ['count', 'percent', 'inr', 'minutes'] },
+          { key: 'goalType', label: 'Goal type', type: 'select', options: ['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom'] },
+          { key: 'metricUnit', label: 'Metric unit', type: 'select', options: ['count', 'percent', 'minutes', 'paise'] },
           { key: 'targetValue', label: 'Target value', type: 'number' },
           { key: 'dueDate', label: 'Due date', type: 'date', value: '{today}' },
           { key: 'actionTitle', label: 'Action title', type: 'text' },
