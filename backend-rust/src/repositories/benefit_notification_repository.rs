@@ -66,7 +66,11 @@ pub async fn ensure_marketing_governance(
 pub async fn enqueue(db: &PgPool, item: NewBenefitDelivery<'_>) -> Result<bool, sqlx::Error> {
     Ok(sqlx::query("INSERT INTO benefit_notification_outbox (tenant_id,branch_id,source_type,source_id,client_id,channel,recipient,payload_json) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (tenant_id,branch_id,source_type,source_id,channel) DO NOTHING")
         .bind(item.tenant_id).bind(item.branch_id).bind(item.source_type).bind(item.source_id)
-        .bind(item.client_id).bind(item.channel).bind(item.recipient).bind(item.payload).execute(db).await?.rows_affected()>0)
+        // An empty client is stored as NULL rather than as a dangling key: the
+        // column is a real foreign key, and not every outbound message belongs
+        // to a client (a reply to a staff member on WhatsApp does not).
+        .bind((!item.client_id.is_empty()).then_some(item.client_id))
+        .bind(item.channel).bind(item.recipient).bind(item.payload).execute(db).await?.rows_affected()>0)
 }
 
 pub async fn due_marketing_campaigns(

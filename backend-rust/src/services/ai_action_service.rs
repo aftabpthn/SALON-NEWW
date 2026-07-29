@@ -401,6 +401,20 @@ pub async fn confirm_draft(
         return Err(AppError::conflict("that action draft was already decided"));
     }
 
+    // Claim the draft *before* touching the CRM. The claim is a single
+    // conditional UPDATE off `status='draft'`, so of two concurrent
+    // confirmations exactly one proceeds past this point and exactly one CRM
+    // record is ever created. The loser is told the draft was already decided.
+    let claimed = action_repository::claim_for_execution(
+        db, tenant_id, branch_id, &record.id, user_id,
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, action = kind.name(), "failed to claim action draft");
+        AppError::internal("failed to approve the action draft")
+    })?
+    .ok_or_else(|| AppError::conflict("that action draft was already decided"))?;
+
     // Task-shaped work is completed here through the CRM's own service. Anything
     // that moves money or reaches a client is handed to the screen that owns it.
     //
@@ -414,7 +428,7 @@ pub async fn confirm_draft(
         "note": kind.confirmation_note(),
     });
     if kind.executes_on_approval() {
-        match execute_through_crm(db, tenant_id, branch_id, user_id, kind, &record.payload).await {
+        match execute_through_crm(db, tenant_id, branch_id, user_id, kind, &claimed.payload).await {
             Ok(execution) => {
                 result = json!({
                     "approved": true,
@@ -425,8 +439,16 @@ pub async fn confirm_draft(
                 });
             }
             Err(error) => {
+                // The authoritative write did not happen, so the draft returns
+                // to `draft` and stays confirmable rather than being stranded
+                // in `executing`.
+                if let Err(release) =
+                    action_repository::release_claim(db, tenant_id, branch_id, &claimed.id).await
+                {
+                    tracing::error!(%release, action = kind.name(), "failed to release action claim");
+                }
                 audit(
-                    db, tenant_id, branch_id, Some(&record.id), kind, "failed", user_id, role,
+                    db, tenant_id, branch_id, Some(&claimed.id), kind, "failed", user_id, role,
                     error.message(),
                 )
                 .await;
@@ -1265,5 +1287,131 @@ mod controlled_action_tests {
         .await
         .expect_err("a role without the right must not confirm");
         assert!(format!("{error:?}").to_lowercase().contains("not available"));
+    }
+
+    /// Two confirmations arriving at once must produce one CRM task, not two.
+    ///
+    /// This is the defect the `executing` claim exists for: the CRM write used
+    /// to happen before the draft transition was won, so both callers could
+    /// pass the "still a draft?" check, both create a real task, and only then
+    /// race for the single approval row — leaving an orphaned task behind.
+    #[sqlx::test]
+    async fn concurrent_confirmations_create_exactly_one_crm_task(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                    "description": "Two approvers pressed confirm at the same moment.",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        // Distinct keys, so the idempotency replay path cannot be what saves
+        // us — the claim has to.
+        let first = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "race-key-a".into(),
+            },
+        );
+        let second = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-2",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "race-key-b".into(),
+            },
+        );
+        let (left, right) = tokio::join!(first, second);
+
+        let winners = usize::from(left.is_ok()) + usize::from(right.is_ok());
+        assert_eq!(winners, 1, "exactly one confirmation may succeed");
+        let loser = left.err().or(right.err()).expect("one confirmation loses");
+        assert!(
+            format!("{loser:?}").to_lowercase().contains("already decided"),
+            "the loser must be told the draft was already decided, got {loser:?}"
+        );
+
+        let tasks: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND task_type='training'",
+        )
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(tasks, 1, "a raced confirmation must not duplicate the CRM task");
+
+        let status: String =
+            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+                .bind(&draft.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(status, "approved", "the winner's approval must be recorded");
+    }
+
+    /// A failed write releases the claim, so the draft is retryable rather than
+    /// stranded in `executing` forever.
+    #[sqlx::test]
+    async fn a_failed_write_releases_the_claim(pool: PgPool) {
+        let (tenant_id, branch_id, _) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_follow_up_task".into(),
+                payload: json!({ "description": "no title supplied" }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "release-key-1".into(),
+            },
+        )
+        .await
+        .expect_err("the CRM write fails");
+
+        let status: String =
+            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+                .bind(&draft.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            status, "draft",
+            "a failed write must leave the draft confirmable, not stuck executing"
+        );
     }
 }

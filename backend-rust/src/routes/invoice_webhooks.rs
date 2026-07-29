@@ -159,12 +159,20 @@ struct WhatsAppMessage {
     sender: String,
     context_message_id: String,
     body: String,
+    /// The provider's identifier for the number the message was *sent to*.
+    /// Empty for channels that do not report one (SMS).
+    receiving_phone_number_id: String,
+    /// The human-readable form of the same receiving number, digits only.
+    receiving_display_number: String,
 }
 
 struct InboundMessageContext {
     tenant_id: String,
     branch_id: String,
-    client_id: String,
+    /// `None` when the sender is not a client of this branch. A staff member
+    /// messaging their own branch has no client record, and inventing one — or
+    /// refusing to answer them — were both wrong.
+    client_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -228,6 +236,10 @@ async fn receive_sms_webhook(
                         sender: sender.to_string(),
                         context_message_id: payload.reply_to_message_id.unwrap_or_default(),
                         body: body.chars().take(4_000).collect(),
+                        // The SMS provider reports no receiving identity, so
+                        // this channel keeps its client-anchored routing.
+                        receiving_phone_number_id: String::new(),
+                        receiving_display_number: String::new(),
                     },
                     "sms",
                 )
@@ -290,14 +302,22 @@ fn whatsapp_messages(payload: &Value) -> Vec<WhatsAppMessage> {
                 .flatten()
         })
         .flat_map(|change| {
-            change
-                .get("value")
+            // The receiving number lives on the change, not on the message, so
+            // it is carried down beside each message rather than looked up
+            // again from the sender.
+            let value = change.get("value");
+            let metadata = value
+                .and_then(|value| value.get("metadata"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            value
                 .and_then(|value| value.get("messages"))
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
+                .map(move |message| (metadata.clone(), message))
         })
-        .filter_map(|message| {
+        .filter_map(|(metadata, message)| {
             let body = message
                 .get("text")
                 .and_then(|value| value.get("body"))
@@ -329,6 +349,18 @@ fn whatsapp_messages(payload: &Value) -> Vec<WhatsAppMessage> {
                         .unwrap_or("message")
                 });
             Some(WhatsAppMessage {
+                receiving_phone_number_id: metadata
+                    .get("phone_number_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                receiving_display_number: metadata
+                    .get("display_phone_number")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .chars()
+                    .filter(char::is_ascii_digit)
+                    .collect(),
                 message_id: message.get("id")?.as_str()?.to_string(),
                 sender: message.get("from")?.as_str()?.to_string(),
                 context_message_id: message
@@ -343,11 +375,99 @@ fn whatsapp_messages(payload: &Value) -> Vec<WhatsAppMessage> {
         .collect()
 }
 
+/// Resolves the tenant and branch a message was addressed *to*.
+///
+/// Returns `None` when the receiving number is not provisioned, which leaves
+/// the caller on the legacy sender-anchored path rather than guessing.
+async fn receiving_branch(
+    state: &AppState,
+    message: &WhatsAppMessage,
+) -> Result<Option<(String, String)>, AppError> {
+    if message.receiving_phone_number_id.is_empty() && message.receiving_display_number.is_empty() {
+        return Ok(None);
+    }
+    sqlx::query_as(
+        r#"SELECT tenant_id,branch_id
+             FROM whatsapp_business_numbers
+            WHERE active=TRUE
+              AND (
+                    (phone_number_id<>'' AND phone_number_id=$1)
+                 OR (display_phone_number<>'' AND display_phone_number=$2)
+              )
+            LIMIT 1"#,
+    )
+    .bind(&message.receiving_phone_number_id)
+    .bind(&message.receiving_display_number)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve the receiving business number"))
+}
+
+/// Finds the client record for a sender *within an already-decided scope*.
+///
+/// Unlike the legacy lookup this never chooses the tenant: the branch is fixed
+/// by the receiving number, and the sender either is a client of that branch or
+/// is not.
+async fn client_in_branch(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sender: &str,
+) -> Result<Option<String>, AppError> {
+    let digits: String = sender.chars().filter(char::is_ascii_digit).collect();
+    let matched: Vec<String> = sqlx::query_scalar(
+        r#"SELECT id FROM clients
+            WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE
+              AND merged_into_client_id IS NULL
+              AND REGEXP_REPLACE(COALESCE(phone,''),'[^0-9]','','g')=$3
+            ORDER BY id
+            LIMIT 2"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&digits)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve message sender"))?;
+    // Two clients on one handset is ambiguity; attributing the message to
+    // either would put it on the wrong person's history, so neither is used.
+    if matched.len() != 1 {
+        return Ok(None);
+    }
+    Ok(matched.into_iter().next())
+}
+
 async fn record_provider_message(
     state: &AppState,
     message: &WhatsAppMessage,
     channel: &str,
 ) -> Result<Option<InboundMessageContext>, AppError> {
+    // Preferred anchor: the number the sender wrote to. It is provisioned by
+    // the operator and identifies exactly one branch, so the sender cannot
+    // influence which tenant's data answers them.
+    if let Some((tenant_id, branch_id)) = receiving_branch(state, message).await? {
+        let client_id = client_in_branch(state, &tenant_id, &branch_id, &message.sender).await?;
+        // A client's message is still recorded on their communication history
+        // exactly as before. A sender with no client record — a staff member
+        // messaging their own branch — is routed without one.
+        if let Some(client_id) = client_id.as_deref() {
+            if !record_client_communication(state, &tenant_id, &branch_id, client_id, message, channel)
+                .await?
+            {
+                return Ok(None);
+            }
+        }
+        return Ok(Some(InboundMessageContext {
+            tenant_id,
+            branch_id,
+            client_id,
+        }));
+    }
+
+    // Fallback for channels that report no receiving identity (SMS) and for
+    // numbers that have not been provisioned yet. This path is client-only: it
+    // cannot resolve a staff sender, because doing so would mean choosing a
+    // tenant from the sender's own phone number.
     let mut scopes: Vec<(String, String, String)> = Vec::new();
     if !message.context_message_id.is_empty() {
         scopes = sqlx::query_as(
@@ -376,6 +496,29 @@ async fn record_provider_message(
         return Ok(None);
     }
     let (tenant_id, branch_id, client_id) = &scopes[0];
+    if !record_client_communication(state, tenant_id, branch_id, client_id, message, channel).await?
+    {
+        return Ok(None);
+    }
+    Ok(Some(InboundMessageContext {
+        tenant_id: tenant_id.clone(),
+        branch_id: branch_id.clone(),
+        client_id: Some(client_id.clone()),
+    }))
+}
+
+/// Writes the inbound message onto a client's communication history.
+///
+/// Returns `false` when the message was already recorded, which is how a
+/// provider replay is dropped instead of answered twice.
+async fn record_client_communication(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    message: &WhatsAppMessage,
+    channel: &str,
+) -> Result<bool, AppError> {
     let communication_id = Uuid::new_v4().to_string();
     let inserted = sqlx::query_scalar::<_, String>(
         r#"INSERT INTO client_communications (
@@ -396,7 +539,7 @@ async fn record_provider_message(
     .await
     .map_err(|_| AppError::internal("failed to record inbound provider message"))?;
     if inserted.is_none() {
-        return Ok(None);
+        return Ok(false);
     }
     sqlx::query(
         r#"INSERT INTO notifications (
@@ -414,11 +557,7 @@ async fn record_provider_message(
     .execute(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to create inbound message notification"))?;
-    Ok(Some(InboundMessageContext {
-        tenant_id: tenant_id.clone(),
-        branch_id: branch_id.clone(),
-        client_id: client_id.clone(),
-    }))
+    Ok(true)
 }
 
 async fn respond_to_inbound_whatsapp(
@@ -431,7 +570,7 @@ async fn respond_to_inbound_whatsapp(
         &state.settings,
         &context.tenant_id,
         &context.branch_id,
-        Some(&context.client_id),
+        context.client_id.as_deref(),
         "whatsapp",
         &message.sender,
         // The sender's number identifies them; unknown numbers stay anonymous.
@@ -464,7 +603,7 @@ async fn respond_to_inbound_whatsapp(
             branch_id: &context.branch_id,
             source_type: "ai_concierge",
             source_id: &response.assistant_message.id,
-            client_id: &context.client_id,
+            client_id: context.client_id.as_deref().unwrap_or_default(),
             channel: "whatsapp",
             recipient: &message.sender,
             payload: &payload,
