@@ -5,7 +5,6 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider";
 import { ScrollProgress } from "@/components/ui/ScrollProgress";
-import { WhatsAppButton } from "@/components/ui/WhatsAppButton";
 import { CommandPalette } from "@/components/ui/CommandPalette";
 import { CookieConsent } from "@/components/ui/CookieConsent";
 import { LanguageProvider } from "@/components/providers/LanguageProvider";

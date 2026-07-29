@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 
-const SITE = "https://aura.example.com";
+const SITE = SITE_URL;
 
 /* ===== PAGE METADATA REGISTRY ===== */
 export const PAGE_SEO: Record<string, Metadata> = {
@@ -17,7 +18,7 @@ export const PAGE_SEO: Record<string, Metadata> = {
     openGraph: {
       title: "Aura — Salon CRM, POS & Booking Software for India",
       description:
-        "Connected CRM, POS, booking, staff and inventory for Indian salons. Start free, pay at salon billing.",
+        "Connected CRM, POS, pay-at-salon booking, staff and inventory for Indian salons. Request a tailored demo.",
       url: SITE,
       images: [{ url: "/og?path=/", width: 1200, height: 630 }],
       type: "website",
@@ -82,19 +83,19 @@ export const PAGE_SEO: Record<string, Metadata> = {
   },
 
   "/customer-app": {
-    title: "Customer App — Online Booking, Loyalty Wallet & Referrals for Salon Clients",
+    title: "Customer App — Pay-at-Salon Booking & Visit History for Salon Clients",
     description:
-      "Let your clients book online, track visit history, earn loyalty points, refer friends, and get WhatsApp reminders — all from their phone.",
+      "A qualified customer journey for discovery, salon profiles, service and professional selection, pay-at-salon booking, visit management and read-only history.",
     openGraph: {
       title: "Customer App — Aura Salon CRM/POS",
-      description: "Online booking, loyalty wallet, referrals and WhatsApp notifications.",
+      description: "Pay-at-salon booking, visit management, saved salons and read-only history.",
       url: `${SITE}/customer-app`,
       images: [{ url: "/og?path=customer-app", width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: "Customer App — Aura Salon CRM/POS",
-      description: "Online booking, loyalty wallet, referrals and WhatsApp.",
+      description: "Pay-at-salon booking, visit management and read-only history.",
       images: ["/og?path=customer-app"],
     },
     alternates: {
@@ -126,7 +127,7 @@ export const PAGE_SEO: Record<string, Metadata> = {
   "/workflows": {
     title: "Connected Workflows — How Booking, Billing & Staff Connect in Aura",
     description:
-      "See how appointment booking flows into billing, staff commissions, inventory deductions and finance records — all connected, zero double entry.",
+      "See the eight-step flow from pay-at-salon booking through schedule, checkout, stock context, staff attribution and owner review.",
     openGraph: {
       title: "Connected Workflows — Aura Salon CRM/POS",
       description: "Booking to billing to staff to inventory — all connected.",
@@ -147,10 +148,10 @@ export const PAGE_SEO: Record<string, Metadata> = {
   "/pricing": {
     title: "Aura Pricing — Salon Software Plans Starting at ₹999/month",
     description:
-      "Transparent pricing for every salon size. Starter at ₹999/mo for single-branch salons, Growth at ₹2,499/mo for multi-branch, Enterprise with custom pricing. 14-day free trial.",
+      "Published plan preview for salon operations: Starter at ₹999/mo, Growth at ₹2,499/mo and Enterprise with proposal-based pricing. Discuss trial access.",
     openGraph: {
       title: "Aura Pricing — Salon Software Plans from ₹999/month",
-      description: "Starter ₹999/mo, Growth ₹2,499/mo, Enterprise custom. 14-day free trial.",
+      description: "Starter ₹999/mo, Growth ₹2,499/mo, Enterprise proposal-based. Discuss trial access.",
       url: `${SITE}/pricing`,
       images: [{ url: "/og?path=pricing", width: 1200, height: 630 }],
     },
@@ -208,19 +209,19 @@ export const PAGE_SEO: Record<string, Metadata> = {
   },
 
   "/demo": {
-    title: "Book a Free Demo — See Aura Salon Software in Action",
+    title: "Request a Demo — See Aura Salon Software with Your Workflow",
     description:
-      "See how Aura works for your salon. Book a free 30-minute demo — we'll walk you through CRM, billing, booking, staff management and inventory.",
+      "Request a focused walkthrough of Aura shaped around your salon, branches and current workflow. Preferred times are confirmed by the team.",
     openGraph: {
-      title: "Book a Free Demo — Aura Salon CRM/POS",
-      description: "Free 30-minute walkthrough of Aura for your salon.",
+      title: "Request a Demo — Aura Salon CRM/POS",
+      description: "A focused walkthrough of Aura for your salon workflow.",
       url: `${SITE}/demo`,
       images: [{ url: "/og?path=demo", width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Book a Free Demo — Aura Salon CRM/POS",
-      description: "Free 30-minute walkthrough.",
+      title: "Request a Demo — Aura Salon CRM/POS",
+      description: "A focused salon workflow walkthrough.",
       images: ["/og?path=demo"],
     },
     alternates: {
@@ -231,7 +232,7 @@ export const PAGE_SEO: Record<string, Metadata> = {
   "/contact": {
     title: "Contact Aura — Get in Touch with Our Salon Software Team",
     description:
-      "Questions about Aura? Reach our team for demos, support, partnerships, or enterprise inquiries. We respond within 24 hours.",
+      "Questions about Aura? Use the contact form for demos, support, partnerships or enterprise enquiries. Response timing is confirmed with your proposal.",
     openGraph: {
       title: "Contact Aura — Salon Software Support",
       description: "Questions, demos, support — reach our team.",
@@ -292,19 +293,19 @@ export const PAGE_SEO: Record<string, Metadata> = {
   },
 
   "/customers": {
-    title: "Aura Customers — Salons Growing with Connected Operations",
+    title: "Aura Proof Framework — What to Verify Before Choosing Salon Software",
     description:
-      "See how salons across India use Aura to manage clients, billing, staff, inventory and marketing from a single platform.",
+      "Review the evidence Aura will publish only with customer permission: identity, workflow, measured outcome and evidence period.",
     openGraph: {
-      title: "Aura Customers — Salons Growing with Aura",
-      description: "How salons across India use Aura.",
+      title: "Aura Proof Framework — Evidence Before Claims",
+      description: "How Aura qualifies customer evidence before publishing it.",
       url: `${SITE}/customers`,
       images: [{ url: "/og?path=customers", width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Aura Customers — Salons Growing with Aura",
-      description: "How salons across India use Aura.",
+      title: "Aura Proof Framework — Evidence Before Claims",
+      description: "Customer evidence is published only after approval.",
       images: ["/og?path=customers"],
     },
     alternates: {
@@ -356,11 +357,11 @@ export function getFeaturePageSEO(slug: string): Metadata {
     },
     "client-crm": {
       title: "Customer 360 CRM — Salon Client Profiles, Loyalty & WhatsApp History",
-      description: "Complete client profiles with purchase history, loyalty points, wallet balance, WhatsApp history and AI-powered recommendations.",
+      description: "Client profiles with visit history, preferences, consent, wallet records and configured follow-up context.",
     },
     compliance: {
       title: "Staff Compliance — PF, ESI, TDS, Gratuity & Bonus Calculation for Salons",
-      description: "Automate PF, ESI, TDS, professional tax, gratuity and bonus calculations — stay compliant without the paperwork.",
+      description: "Support PF, ESI, TDS, professional tax, gratuity and bonus calculation records for owner and professional review.",
     },
     finance: {
       title: "Finance Engine — Daily Closing, Expenses, Balance Sheet & GST Reports",
@@ -368,11 +369,11 @@ export function getFeaturePageSEO(slug: string): Metadata {
     },
     inventory: {
       title: "Inventory Management — Batch Tracking, FIFO, Expiry Alerts & Reorder for Salons",
-      description: "Batch tracking, FIFO costing, expiry alerts, usage-based reorder suggestions and waste records — save 30-60% on product costs.",
+      description: "Batch tracking, FIFO costing, expiry alerts, usage-based reorder context and waste records for stock review.",
     },
     "marketing-ai": {
       title: "Marketing Workflows — WhatsApp, Birthday Campaigns & Re-engagement for Salons",
-      description: "Automated birthday campaigns, WhatsApp sequences, re-engagement workflows and lead follow-up — marketing on autopilot.",
+      description: "Rule-based birthday campaigns, message templates, re-engagement workflows and lead follow-up with provider disclosure.",
     },
     "staff-management": {
       title: "Staff Management — Attendance, Scheduling, Commissions & Payroll for Salons",
@@ -489,7 +490,6 @@ export const softwareAppJsonLd = {
       ],
     },
   ],
-  screenshot: `${SITE}/screenshot.png`,
   featureList: [
     "Smart Booking & Appointments",
     "GST-Ready POS & Billing",
@@ -502,7 +502,7 @@ export const softwareAppJsonLd = {
     "Online Booking Portal",
     "Customer Mobile App",
     "Staff Mobile App",
-    "WhatsApp Integration",
+    "Message Workflow Preparation",
   ],
 };
 

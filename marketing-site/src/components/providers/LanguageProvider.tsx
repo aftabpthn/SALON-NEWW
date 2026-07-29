@@ -9,7 +9,7 @@ export type BusinessType = "salon" | "spa" | "nail" | "bridal" | "multi";
 const baseMessages: Record<Language, Record<string, string>> = {
   en: {
     "nav.features": "Features", "nav.platform": "Platform", "nav.owner-crm": "Owner CRM", "nav.customer-app": "Customer App", "nav.staff-app": "Staff App", "nav.workflows": "Workflows", "nav.pricing": "Pricing", "nav.customers": "Customers", "nav.blog": "Journal", "nav.about": "About",
-    "nav.login": "Log in", "nav.trial": "Book a demo", "nav.open": "Open navigation", "nav.close": "Close navigation", "nav.language": "Language", "nav.primary": "Primary navigation", "nav.home": "Aura home",
+    "nav.login": "Discuss trial access", "nav.trial": "Request a demo", "nav.open": "Open navigation", "nav.close": "Close navigation", "nav.language": "Language", "nav.primary": "Primary navigation", "nav.home": "Aura home",
     "hero.eyebrow": "Salon operations, composed", "hero.title": "The operating system behind a remarkable salon.",
     "hero.body": "Aura connects your appointment book, GST billing, client memory, staff, stock and finance in one calm, real-time workspace built for Indian salons.",
     "hero.primary": "Book a personal demo", "hero.secondary": "Explore the product", "hero.note1": "GST-ready billing", "hero.note2": "UPI & split payments", "hero.note3": "Multi-branch control",
@@ -35,7 +35,7 @@ const baseMessages: Record<Language, Record<string, string>> = {
   },
   hi: {
     "nav.features": "फ़ीचर्स", "nav.platform": "प्लेटफ़ॉर्म", "nav.owner-crm": "Owner CRM", "nav.customer-app": "Customer App", "nav.staff-app": "Staff App", "nav.workflows": "वर्कफ़्लो", "nav.pricing": "प्लान", "nav.customers": "ग्राहक", "nav.blog": "जर्नल", "nav.about": "हमारे बारे में",
-    "nav.login": "लॉग इन", "nav.trial": "डेमो बुक करें", "nav.open": "नेविगेशन खोलें", "nav.close": "नेविगेशन बंद करें", "nav.language": "भाषा", "nav.primary": "मुख्य नेविगेशन", "nav.home": "Aura होम",
+    "nav.login": "ट्रायल एक्सेस पर बात करें", "nav.trial": "डेमो का अनुरोध करें", "nav.open": "नेविगेशन खोलें", "nav.close": "नेविगेशन बंद करें", "nav.language": "भाषा", "nav.primary": "मुख्य नेविगेशन", "nav.home": "Aura होम",
     "hero.eyebrow": "सैलून संचालन, अब व्यवस्थित", "hero.title": "एक शानदार सैलून के पीछे का ऑपरेटिंग सिस्टम।",
     "hero.body": "Aura अपॉइंटमेंट, GST बिलिंग, क्लाइंट हिस्ट्री, स्टाफ, स्टॉक और फाइनेंस को भारतीय सैलून के लिए बने एक शांत, रियल-टाइम वर्कस्पेस में जोड़ता है।",
     "hero.primary": "पर्सनल डेमो बुक करें", "hero.secondary": "प्रोडक्ट देखें", "hero.note1": "GST-रेडी बिलिंग", "hero.note2": "UPI और स्प्लिट पेमेंट", "hero.note3": "मल्टी-ब्रांच कंट्रोल",

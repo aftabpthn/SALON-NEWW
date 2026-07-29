@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Send, CheckCircle, Mail, Phone, MapPin, AlertCircle } from "lucide-react";
+import { Send, CheckCircle, FileCheck2, MessageSquareText, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
@@ -243,11 +243,10 @@ export default function ContactPage() {
               className="md:col-span-2"
             >
               <div className="space-y-6">
-                {[
-                   { icon: Mail, label: t("contact.email"), value: "hello@aurasalon.in" },
-                   { icon: Phone, label: t("contact.phone"), value: "+91 98765 43210" },
-                   { icon: MapPin, label: t("contact.office"), value: "Hitech City, Hyderabad\nTelangana, India 500081" },
-                ].map((item) => (
+                 {[
+                    { icon: MessageSquareText, label: "Contact channel", value: "Use this form until an approved public phone or messaging channel is configured." },
+                    { icon: FileCheck2, label: "Service details", value: "Support hours, languages, response targets and escalation paths are confirmed in the proposal." },
+                 ].map((item) => (
                   <div key={item.label} className="rounded-2xl border border-aura-border bg-aura-bg-warm p-6 hover:shadow-md hover:border-aura-border-strong transition-all duration-300">
                     <div className="flex items-start gap-3">
                       <item.icon className="w-5 h-5 text-neon-violet mt-0.5" />

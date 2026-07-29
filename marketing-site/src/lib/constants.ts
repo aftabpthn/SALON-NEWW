@@ -131,7 +131,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "WhatsApp Notifications",
       "Email Support",
     ],
-    cta: "Start Free Trial",
+    cta: "Discuss Trial Access",
   },
   {
     name: "Growth",
@@ -151,7 +151,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "API Access",
     ],
     highlighted: true,
-    cta: "Start Free Trial",
+    cta: "Discuss Trial Access",
   },
   {
     name: "Enterprise",
@@ -176,12 +176,12 @@ export const PRICING_TIERS: PricingTier[] = [
 
 export const PRICING_FAQ = [
   {
-    question: "Is there a free trial?",
-    answer: "Yes! Every plan comes with a 14-day free trial. No credit card required. You get full access to all features in your chosen plan.",
+    question: "Can we evaluate Aura before committing?",
+    answer: "Yes. Request a demo and discuss trial access for your salon. Trial scope, duration and included modules are confirmed in the proposal rather than promised as a universal instant trial.",
   },
   {
     question: "Can I switch plans later?",
-    answer: "Absolutely. You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate the difference.",
+    answer: "Plan changes can be discussed as your operation evolves. Timing, migration between tiers and any billing adjustment are confirmed in your proposal.",
   },
   {
     question: "How does multi-branch pricing work?",
@@ -189,17 +189,20 @@ export const PRICING_FAQ = [
   },
   {
     question: "Do you offer annual discounts?",
-    answer: "Yes! Annual billing saves you 20% compared to monthly billing. That's 2 months free every year.",
+    answer: "The published monthly and annual-equivalent prices show the current plan structure. Final billing terms and any annual saving are confirmed in the proposal.",
   },
   {
     question: "What payment methods do you accept?",
-    answer: "We accept UPI, credit/debit cards, net banking, and bank transfers. All payments are processed through Razorpay with bank-grade security.",
+    answer: "Subscription payment methods and payment-provider details are confirmed in the proposal. Customer bookings shown on this site use the current pay-at-salon flow.",
   },
   {
     question: "Is my data secure?",
-    answer: "Absolutely. We use enterprise-grade encryption, regular backups, and SOC 2 compliant infrastructure. Your data is always yours.",
+    answer: "Aura is designed around tenant and branch isolation, role-based access and audit trails. Hosting, backup, retention and security commitments are confirmed in the proposal and data-processing terms.",
   },
 ];
+
+/** Canonical plan collection used by pricing pages and previews. */
+export const PRICING_PLANS = PRICING_TIERS;
 
 /* ===== TESTIMONIALS ===== */
 export const TESTIMONIALS: Testimonial[] = [

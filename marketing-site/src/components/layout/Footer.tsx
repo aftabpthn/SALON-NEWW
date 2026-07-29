@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRef } from "react";
 import { motion, useInView } from "motion/react";
 import { FOOTER_LINKS, CTA_LINKS } from "@/lib/constants";
-import { Newsletter } from "./Newsletter";
 import { useLanguage } from "@/components/providers/LanguageProvider";
 
 const footerSections = [
@@ -74,9 +73,7 @@ export function Footer() {
               {t("footer.about")}
             </p>
             <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-[.12em] text-white/45"><span>{t("nav.owner-crm")}</span><span>·</span><span>{t("nav.customer-app")}</span><span>·</span><span>{t("nav.staff-app")}</span></div>
-            <div className="mt-6">
-              <Newsletter />
-            </div>
+            <p className="mt-6 max-w-xs text-xs leading-5 text-white/40">{t("footer.contactNote", "Support channels, hours and response commitments are confirmed in each proposal.")}</p>
           </motion.div>
 
           {/* Link Columns */}
