@@ -92,10 +92,72 @@ pub async fn by_idempotency_key(
     .await
 }
 
-/// Records approval, but only if the row is still a draft.
+/// Atomically claims a draft for execution.
 ///
-/// Returns `None` when the row was already decided, which is how a lost race is
-/// detected rather than silently approving twice.
+/// The claim serves two purposes. It takes the draft out of reach of
+/// cancellation, which only touches `status='draft'`, so a confirmation that
+/// has begun cannot be cancelled out from under itself. And it records who is
+/// executing and since when, so a claim that never finished is visible.
+///
+/// `executing` is deliberately re-claimable. A process that crashes between the
+/// CRM write and the approval leaves the row claimed forever otherwise, and a
+/// timeout would only trade that for a guess. Exactly-once does not rest on the
+/// claim being exclusive: it rests on the CRM record carrying the draft's
+/// identity under a unique index, so a re-run finds the existing record instead
+/// of writing a second one. What stays exclusive is the *approval* — only one
+/// caller can move the row to `approved`.
+pub async fn claim_for_execution(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    draft_id: &str,
+    claimed_by: &str,
+) -> Result<Option<ActionDraftRecord>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"UPDATE ai_action_drafts
+              SET status='executing',claimed_by=$4,claimed_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+              AND status IN ('draft','executing')
+            RETURNING {COLUMNS}"#
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(draft_id)
+    .bind(claimed_by)
+    .fetch_optional(db)
+    .await
+}
+
+/// Release a claim after a failed CRM write, so the draft can be retried.
+///
+/// The draft goes back to `draft` rather than to a failed terminal state: the
+/// write did not happen, so there is nothing to record except that it is once
+/// again undecided.
+pub async fn release_claim(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    draft_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE ai_action_drafts
+              SET status='draft',claimed_by='',claimed_at=NULL
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='executing'"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(draft_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Records approval, but only if the row is still undecided.
+///
+/// Accepts `executing` as well as `draft` so the caller that won
+/// `claim_for_execution` can finalise its own claim. Returns `None` when the
+/// row was already decided, which is how a lost race is detected rather than
+/// silently approving twice.
 pub async fn mark_approved(
     db: &PgPool,
     tenant_id: &str,
@@ -112,7 +174,8 @@ pub async fn mark_approved(
                   result=$5,
                   decided_by=$6,
                   decided_at=NOW()
-            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='draft'
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+              AND status IN ('draft','executing')
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)
@@ -135,7 +198,8 @@ pub async fn cancel(
     sqlx::query_as(&format!(
         r#"UPDATE ai_action_drafts
               SET status='cancelled', decided_by=$4, decided_at=NOW()
-            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='draft'
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+              AND status='draft'
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)

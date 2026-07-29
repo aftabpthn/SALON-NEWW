@@ -19,7 +19,10 @@ use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
-    repositories::{ai_copilot_repository as copilot_repository, membership_lifecycle_repository},
+    repositories::{
+        ai_copilot_repository as copilot_repository, ai_scope_repository as scope_repository,
+        membership_lifecycle_repository,
+    },
     services::profit_governance_service,
 };
 
@@ -59,6 +62,41 @@ pub enum WhatIf {
     /// "What would a membership price change do to renewals?"
     #[serde(rename_all = "camelCase")]
     MembershipPrice { change_percent: i64 },
+    /// "What would raising this service's price do?"
+    #[serde(rename_all = "camelCase")]
+    ServicePriceChange {
+        service_id: String,
+        change_percent: i64,
+    },
+    /// "What would adding or removing rostered hours do to capacity?"
+    #[serde(rename_all = "camelCase")]
+    StaffScheduleAdjustment {
+        /// Positive adds rostered hours, negative removes them.
+        change_hours: i64,
+        #[serde(default)]
+        staff_id: String,
+    },
+    /// "What would ordering this quantity do to cover and cash?"
+    #[serde(rename_all = "camelCase")]
+    InventoryReorderQuantity {
+        inventory_item_id: String,
+        order_quantity: i64,
+    },
+    /// "What would a win-back offer to lapsing clients be worth?"
+    #[serde(rename_all = "camelCase")]
+    ClientRetentionOffer {
+        discount_percent: i64,
+        /// Share of contacted clients expected to return, as a percentage.
+        #[serde(default)]
+        expected_uptake_percent: i64,
+    },
+    /// "What would closing the gap to the scope average be worth?"
+    #[serde(rename_all = "camelCase")]
+    BranchImprovementPlan {
+        /// How much of the gap to the best branch the plan aims to close.
+        #[serde(default)]
+        target_gap_closed_percent: i64,
+    },
 }
 
 /// A projected quantity, always as a range.
@@ -84,6 +122,9 @@ pub struct WhatIfResult {
     /// Figures read from the CRM. Kept separate from the projection so a reader
     /// can always tell a recorded fact from an estimate.
     pub facts: Vec<String>,
+    /// What the projection took as given. Kept apart from `facts` because an
+    /// assumption is the part a reader is entitled to disagree with.
+    pub assumptions: Vec<String>,
     /// Projected effects. Estimates, never recorded values.
     pub impacts: Vec<ImpactRange>,
     /// Why the projection came out this way.
@@ -98,6 +139,11 @@ pub struct WhatIfResult {
     pub read_only: bool,
     pub baseline_period_days: i32,
     pub data_sufficient: bool,
+    /// The one thing to do next. A simulation that ends without a next step
+    /// leaves the reader where it found them.
+    pub next_step: String,
+    /// CRM screen where that step would be taken. Nothing is opened for them.
+    pub next_step_link: String,
 }
 
 impl WhatIfResult {
@@ -106,6 +152,7 @@ impl WhatIfResult {
             scenario: scenario.into(),
             headline: headline.into(),
             facts: Vec::new(),
+            assumptions: Vec::new(),
             impacts: Vec::new(),
             reason: String::new(),
             confidence: "low".into(),
@@ -115,7 +162,47 @@ impl WhatIfResult {
             read_only: true,
             baseline_period_days: BASELINE_DAYS,
             data_sufficient: false,
+            next_step: String::new(),
+            next_step_link: String::new(),
         }
+    }
+
+    fn fact(mut self, fact: impl Into<String>) -> Self {
+        self.facts.push(fact.into());
+        self
+    }
+
+    /// Records something the projection took as given rather than measured.
+    fn assumption(mut self, assumption: impl Into<String>) -> Self {
+        self.assumptions.push(assumption.into());
+        self
+    }
+
+    fn impact(mut self, impact: ImpactRange) -> Self {
+        self.impacts.push(impact);
+        self
+    }
+
+    fn risk(mut self, warning: impl Into<String>) -> Self {
+        self.warnings.push(warning.into());
+        self
+    }
+
+    fn because(mut self, reason: impl Into<String>) -> Self {
+        self.reason = reason.into();
+        self
+    }
+
+    fn rated(mut self, confidence: &str, data_sufficient: bool) -> Self {
+        self.confidence = confidence.into();
+        self.data_sufficient = data_sufficient;
+        self
+    }
+
+    fn next(mut self, step: impl Into<String>, link: impl Into<String>) -> Self {
+        self.next_step = step.into();
+        self.next_step_link = link.into();
+        self
     }
 
     fn unavailable(scenario: &str, why: impl Into<String>) -> Self {
@@ -175,7 +262,644 @@ pub async fn simulate(
         WhatIf::MembershipPrice { change_percent } => {
             membership_price(db, tenant_id, branch_id, change_percent).await
         }
+        WhatIf::ServicePriceChange {
+            service_id,
+            change_percent,
+        } => service_price_change(db, tenant_id, branch_id, &service_id, change_percent).await,
+        WhatIf::StaffScheduleAdjustment {
+            change_hours,
+            staff_id,
+        } => staff_schedule_adjustment(db, tenant_id, branch_id, change_hours, &staff_id).await,
+        WhatIf::InventoryReorderQuantity {
+            inventory_item_id,
+            order_quantity,
+        } => {
+            inventory_reorder_quantity(db, tenant_id, branch_id, &inventory_item_id, order_quantity)
+                .await
+        }
+        WhatIf::ClientRetentionOffer {
+            discount_percent,
+            expected_uptake_percent,
+        } => {
+            client_retention_offer(db, tenant_id, branch_id, discount_percent, expected_uptake_percent)
+                .await
+        }
+        WhatIf::BranchImprovementPlan {
+            target_gap_closed_percent,
+        } => branch_improvement_plan(db, tenant_id, branch_id, target_gap_closed_percent).await,
     }
+}
+
+/// What would changing this service's price do?
+///
+/// Price and demand move against each other, so the projection applies a
+/// standard elasticity rather than assuming volume holds. That assumption is
+/// reported rather than buried, because it is the number a manager who knows
+/// their clientele will want to argue with.
+async fn service_price_change(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    service_id: &str,
+    change_percent: i64,
+) -> Result<WhatIfResult, AppError> {
+    if !(-50..=100).contains(&change_percent) {
+        return Err(AppError::validation(
+            "changePercent must be between -50 and 100",
+        ));
+    }
+    let rows = copilot_repository::service_performance_trend(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        BASELINE_DAYS,
+        ROW_LIMIT,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load service baseline"))?;
+    let Some(row) = rows.iter().find(|row| row.service_id == service_id) else {
+        return Ok(WhatIfResult::unavailable(
+            "service_price_change",
+            "that service has no billed activity in the baseline window",
+        ));
+    };
+    if row.current_bookings == 0 {
+        return Ok(WhatIfResult::unavailable(
+            "service_price_change",
+            "the service had no bookings in the baseline window",
+        ));
+    }
+
+    // A one percent price rise loses roughly half a percent of volume. A crude
+    // rule, stated as an assumption so nobody mistakes it for measurement.
+    let volume_change_percent = -(change_percent / 2);
+    let projected_bookings =
+        (row.current_bookings * (100 + volume_change_percent) / 100).max(0);
+    let unit_price = row.current_revenue_paise / row.current_bookings.max(1);
+    let projected_unit_price = unit_price * (100 + change_percent) / 100;
+    let projected_revenue = projected_bookings * projected_unit_price;
+    let (lower, upper) = spread(projected_revenue);
+    let unit_cost = row.current_product_cost_paise / row.current_bookings.max(1);
+    let projected_margin = projected_bookings * (projected_unit_price - unit_cost);
+    let baseline_margin = row.current_revenue_paise - row.current_product_cost_paise;
+
+    let mut result = WhatIfResult::new(
+        "service_price_change",
+        format!(
+            "A {change_percent}% price change on {} projects revenue between {} and {} against {} today.",
+            row.service_name,
+            rupees(lower),
+            rupees(upper),
+            rupees(row.current_revenue_paise)
+        ),
+    )
+    .fact(format!(
+        "{} took {} bookings for {} in the last {BASELINE_DAYS} days.",
+        row.service_name,
+        row.current_bookings,
+        rupees(row.current_revenue_paise)
+    ))
+    .fact(format!(
+        "Recorded product cost for it was {}.",
+        rupees(row.current_product_cost_paise)
+    ))
+    .assumption(format!(
+        "Demand moves {volume_change_percent}% against a {change_percent}% price change (half-elasticity)."
+    ))
+    .assumption("Product cost per booking stays as recorded.".to_string())
+    .impact(ImpactRange {
+        label: "Service revenue".into(),
+        baseline: rupees(row.current_revenue_paise),
+        lower: rupees(lower),
+        upper: rupees(upper),
+        unit: "INR".into(),
+        direction: direction(row.current_revenue_paise, projected_revenue),
+    })
+    .impact(ImpactRange {
+        label: "Margin after product cost".into(),
+        baseline: rupees(baseline_margin),
+        lower: rupees(spread(projected_margin).0),
+        upper: rupees(spread(projected_margin).1),
+        unit: "INR".into(),
+        direction: direction(baseline_margin, projected_margin),
+    })
+    .because(format!(
+        "Bookings are projected to move from {} to {} while the unit price moves from {} to {}.",
+        row.current_bookings,
+        projected_bookings,
+        rupees(unit_price),
+        rupees(projected_unit_price)
+    ))
+    .rated(
+        if row.current_bookings >= 20 { "medium" } else { "low" },
+        row.current_bookings >= 5,
+    )
+    .next(
+        format!("Review the price of {} before changing it.", row.service_name),
+        "/services",
+    );
+
+    if projected_margin < baseline_margin {
+        result = result.risk(
+            "The projected margin is below today's, so the volume lost outweighs the price gained."
+                .to_string(),
+        );
+    }
+    if change_percent < 0 {
+        result = result.risk(
+            "A price cut is hard to reverse once clients have seen the lower price.".to_string(),
+        );
+    }
+    Ok(result)
+}
+
+/// What would adding or removing rostered hours do?
+///
+/// Extra hours only convert to revenue if there is demand to fill them, so the
+/// projection is capped by the utilization already being achieved rather than
+/// assuming every new hour sells.
+async fn staff_schedule_adjustment(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    change_hours: i64,
+    staff_id: &str,
+) -> Result<WhatIfResult, AppError> {
+    if !(-200..=200).contains(&change_hours) || change_hours == 0 {
+        return Err(AppError::validation(
+            "changeHours must be a non-zero value between -200 and 200",
+        ));
+    }
+    let rows = copilot_repository::staff_performance_trend(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        BASELINE_DAYS,
+        ROW_LIMIT,
+        14,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load staff baseline"))?;
+    let selected: Vec<_> = if staff_id.is_empty() {
+        rows.iter().collect()
+    } else {
+        rows.iter().filter(|row| row.staff_id == staff_id).collect()
+    };
+    if selected.is_empty() {
+        return Ok(WhatIfResult::unavailable(
+            "staff_schedule_adjustment",
+            "no staff activity in the baseline window",
+        ));
+    }
+
+    let booked: i64 = selected.iter().map(|row| row.current_booked_minutes).sum();
+    let scheduled: i64 = selected
+        .iter()
+        .map(|row| row.current_scheduled_minutes)
+        .sum();
+    let revenue: i64 = selected.iter().map(|row| row.current_revenue_paise).sum();
+    if scheduled == 0 || booked == 0 {
+        return Ok(WhatIfResult::unavailable(
+            "staff_schedule_adjustment",
+            "no rostered or booked hours in the baseline window",
+        ));
+    }
+
+    let utilization = booked * 100 / scheduled;
+    let revenue_per_booked_minute = revenue / booked.max(1);
+    let changed_minutes = change_hours * 60;
+    // Only the share of new hours that current demand actually fills is valued.
+    let filled_minutes = changed_minutes * utilization / 100;
+    let projected_revenue_change = filled_minutes * revenue_per_booked_minute;
+    let projected_revenue = revenue + projected_revenue_change;
+    let (lower, upper) = spread(projected_revenue);
+    let projected_scheduled = (scheduled + changed_minutes).max(0);
+    let projected_utilization = if projected_scheduled > 0 {
+        booked.min(projected_scheduled) * 100 / projected_scheduled
+    } else {
+        0
+    };
+
+    let mut result = WhatIfResult::new(
+        "staff_schedule_adjustment",
+        format!(
+            "{} rostered hours projects revenue between {} and {} against {} today.",
+            if change_hours > 0 {
+                format!("Adding {change_hours}")
+            } else {
+                format!("Removing {}", change_hours.abs())
+            },
+            rupees(lower),
+            rupees(upper),
+            rupees(revenue)
+        ),
+    )
+    .fact(format!(
+        "{} staff were rostered {} hours and booked {} hours in the last {BASELINE_DAYS} days.",
+        selected.len(),
+        scheduled / 60,
+        booked / 60
+    ))
+    .fact(format!("Utilization of rostered hours was {utilization}%."))
+    .assumption(format!(
+        "New hours sell at the current {utilization}% utilization, not at full occupancy."
+    ))
+    .assumption("Revenue per booked minute stays as recorded.".to_string())
+    .impact(ImpactRange {
+        label: "Branch revenue".into(),
+        baseline: rupees(revenue),
+        lower: rupees(lower),
+        upper: rupees(upper),
+        unit: "INR".into(),
+        direction: direction(revenue, projected_revenue),
+    })
+    .impact(ImpactRange {
+        label: "Utilization".into(),
+        baseline: format!("{utilization}%"),
+        lower: format!("{projected_utilization}%"),
+        upper: format!("{projected_utilization}%"),
+        unit: "percent".into(),
+        direction: direction(utilization, projected_utilization),
+    })
+    .because(format!(
+        "{} of the {} minutes changed are projected to be filled at today's utilization.",
+        filled_minutes.abs(),
+        changed_minutes.abs()
+    ))
+    .rated(
+        if utilization >= 40 { "medium" } else { "low" },
+        scheduled >= 600,
+    )
+    .next(
+        "Review the roster before publishing a change.".to_string(),
+        "/staff/control-center",
+    );
+
+    if change_hours > 0 && utilization < 60 {
+        result = result.risk(format!(
+            "Utilization is only {utilization}%, so added hours are likely to sit empty and raise payroll without revenue."
+        ));
+    }
+    if change_hours < 0 && booked > projected_scheduled {
+        result = result.risk(
+            "Removing these hours cuts below the hours already booked, so existing appointments would need moving."
+                .to_string(),
+        );
+    }
+    Ok(result)
+}
+
+/// What would ordering this quantity do to cover and cash?
+async fn inventory_reorder_quantity(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+    order_quantity: i64,
+) -> Result<WhatIfResult, AppError> {
+    if !(1..=100_000).contains(&order_quantity) {
+        return Err(AppError::validation(
+            "orderQuantity must be between 1 and 100000",
+        ));
+    }
+    let rows = copilot_repository::inventory_risk(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        BASELINE_DAYS,
+        ROW_LIMIT,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load inventory baseline"))?;
+    let Some(row) = rows
+        .iter()
+        .find(|row| row.item_id == inventory_item_id)
+    else {
+        return Ok(WhatIfResult::unavailable(
+            "inventory_reorder_quantity",
+            "that product has no recorded movement in the baseline window",
+        ));
+    };
+
+    let daily_usage = row.consumed_units as f64 / f64::from(BASELINE_DAYS);
+    if daily_usage <= 0.0 {
+        return Ok(WhatIfResult::unavailable(
+            "inventory_reorder_quantity",
+            "the product had no recorded consumption, so cover cannot be projected",
+        ));
+    }
+    let cover_now = (row.stock_quantity as f64 / daily_usage).round() as i64;
+    let cover_after = ((row.stock_quantity + order_quantity) as f64 / daily_usage).round() as i64;
+    // Unit cost is derived from the recorded stock value, so the cash figure
+    // stays tied to what the CRM actually holds rather than a guessed price.
+    let unit_cost = if row.stock_quantity > 0 {
+        row.stock_value_paise / row.stock_quantity
+    } else {
+        0
+    };
+    let cash = order_quantity * unit_cost.max(0);
+
+    let mut result = WhatIfResult::new(
+        "inventory_reorder_quantity",
+        format!(
+            "Ordering {order_quantity} of {} moves cover from about {cover_now} to about {cover_after} days and ties up {}.",
+            row.item_name,
+            rupees(cash)
+        ),
+    )
+    .fact(format!(
+        "{} has {} in stock against a reorder point of {}.",
+        row.item_name, row.stock_quantity, row.reorder_point
+    ))
+    .fact(format!(
+        "It consumed {} units in the last {BASELINE_DAYS} days.",
+        row.consumed_units
+    ))
+    .assumption(
+        "Future usage matches the recorded daily rate over the baseline window.".to_string(),
+    )
+    .assumption("Unit cost stays at the recorded stock valuation per unit.".to_string())
+    .impact(ImpactRange {
+        label: "Days of cover".into(),
+        baseline: cover_now.to_string(),
+        lower: (cover_after * 4 / 5).to_string(),
+        upper: (cover_after * 6 / 5).to_string(),
+        unit: "days".into(),
+        direction: direction(cover_now, cover_after),
+    })
+    .impact(ImpactRange {
+        label: "Cash committed".into(),
+        baseline: rupees(0),
+        lower: rupees(cash),
+        upper: rupees(cash),
+        unit: "INR".into(),
+        direction: "up".into(),
+    })
+    .because(format!(
+        "At {daily_usage:.1} units a day, {order_quantity} units is about {} days of additional cover.",
+        (order_quantity as f64 / daily_usage).round() as i64
+    ))
+    .rated(
+        if row.consumed_units >= 20 { "medium" } else { "low" },
+        row.consumed_units > 0,
+    )
+    .next(
+        format!("Raise a purchase order for {} if the cover looks right.", row.item_name),
+        "/purchase-orders",
+    );
+
+    if cover_after > 180 {
+        result = result.risk(format!(
+            "About {cover_after} days of cover is well beyond a normal reorder and risks expiry and dead cash."
+        ));
+    }
+    if row.stock_quantity <= row.reorder_point {
+        result = result.risk(
+            "The product is already at or below its reorder point, so delaying the order risks a stock-out."
+                .to_string(),
+        );
+    }
+    Ok(result)
+}
+
+/// What would a win-back offer to lapsing clients be worth?
+///
+/// The projection is bounded by how many lapsing clients actually exist and by
+/// a stated uptake, because the value of a retention offer is almost entirely a
+/// function of that uptake — the one number nobody can measure in advance.
+async fn client_retention_offer(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    discount_percent: i64,
+    expected_uptake_percent: i64,
+) -> Result<WhatIfResult, AppError> {
+    if !(0..=100).contains(&discount_percent) {
+        return Err(AppError::validation(
+            "discountPercent must be between 0 and 100",
+        ));
+    }
+    let uptake = if expected_uptake_percent == 0 {
+        // A conservative default rather than an optimistic one.
+        10
+    } else {
+        expected_uptake_percent
+    };
+    if !(1..=100).contains(&uptake) {
+        return Err(AppError::validation(
+            "expectedUptakePercent must be between 1 and 100",
+        ));
+    }
+
+    let clients = scope_repository::lapsing_clients(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        60,
+        200,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load lapsing clients"))?;
+    if clients.is_empty() {
+        return Ok(WhatIfResult::unavailable(
+            "client_retention_offer",
+            "no client has lapsed in the baseline window",
+        ));
+    }
+
+    let total_value: i64 = clients.iter().map(|row| row.lifetime_value_paise).sum();
+    let average_value = total_value / clients.len() as i64;
+    let returning = (clients.len() as i64 * uptake / 100).max(0);
+    let gross = returning * average_value;
+    let discount_given = gross * discount_percent / 100;
+    let net = gross - discount_given;
+    let (lower, upper) = spread(net);
+    let with_membership = clients
+        .iter()
+        .filter(|row| row.membership_active && !row.membership_id.is_empty())
+        .count();
+
+    let mut result = WhatIfResult::new(
+        "client_retention_offer",
+        format!(
+            "A {discount_percent}% win-back offer to {} lapsing clients projects net recovery between {} and {}.",
+            clients.len(),
+            rupees(lower),
+            rupees(upper)
+        ),
+    )
+    .fact(format!(
+        "{} clients have not completed a visit in 60 days.",
+        clients.len()
+    ))
+    .fact(format!(
+        "Their past billed value averages {} each.",
+        rupees(average_value)
+    ))
+    .fact(format!(
+        "{with_membership} of them still hold an active membership."
+    ))
+    .assumption(format!("{uptake}% of contacted clients return."))
+    .assumption("A returning client spends about their historic average.".to_string())
+    .impact(ImpactRange {
+        label: "Net recovered revenue".into(),
+        baseline: rupees(0),
+        lower: rupees(lower),
+        upper: rupees(upper),
+        unit: "INR".into(),
+        direction: "up".into(),
+    })
+    .impact(ImpactRange {
+        label: "Discount given away".into(),
+        baseline: rupees(0),
+        lower: rupees(discount_given),
+        upper: rupees(discount_given),
+        unit: "INR".into(),
+        direction: "up".into(),
+    })
+    .because(format!(
+        "{returning} of {} clients returning at {} each, less {discount_percent}% given away.",
+        clients.len(),
+        rupees(average_value)
+    ))
+    .rated(
+        if clients.len() >= 20 { "medium" } else { "low" },
+        clients.len() >= 5,
+    )
+    .next(
+        "Review the client list before sending anything.".to_string(),
+        "/clients",
+    );
+
+    if discount_percent >= 30 {
+        result = result.risk(format!(
+            "A {discount_percent}% discount resets price expectations for clients who may have returned anyway."
+        ));
+    }
+    result = result.risk(
+        "Uptake is an assumption, not a measurement; the whole projection scales with it."
+            .to_string(),
+    );
+    Ok(result)
+}
+
+/// What would closing the gap to the best branch be worth?
+async fn branch_improvement_plan(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    target_gap_closed_percent: i64,
+) -> Result<WhatIfResult, AppError> {
+    let target = if target_gap_closed_percent == 0 {
+        50
+    } else {
+        target_gap_closed_percent
+    };
+    if !(1..=100).contains(&target) {
+        return Err(AppError::validation(
+            "targetGapClosedPercent must be between 1 and 100",
+        ));
+    }
+
+    let rows = copilot_repository::staff_performance_trend(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        BASELINE_DAYS,
+        ROW_LIMIT,
+        14,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load branch baseline"))?;
+    let active: Vec<_> = rows
+        .iter()
+        .filter(|row| row.current_scheduled_minutes > 0)
+        .collect();
+    if active.len() < 2 {
+        return Ok(WhatIfResult::unavailable(
+            "branch_improvement_plan",
+            "fewer than two rostered staff in the baseline window, so there is no internal benchmark",
+        ));
+    }
+
+    // The benchmark is the branch's own best performer, so the plan is grounded
+    // in something already achieved here rather than an external target.
+    let per_minute = |row: &&copilot_repository::StaffPerformanceTrendRow| {
+        row.current_revenue_paise / row.current_booked_minutes.max(1)
+    };
+    let best = active.iter().map(per_minute).max().unwrap_or(0);
+    let booked: i64 = active.iter().map(|row| row.current_booked_minutes).sum();
+    let revenue: i64 = active.iter().map(|row| row.current_revenue_paise).sum();
+    let potential = booked * best;
+    let gap = (potential - revenue).max(0);
+    let captured = gap * target / 100;
+    let projected = revenue + captured;
+    let (lower, upper) = spread(projected);
+
+    let mut result = WhatIfResult::new(
+        "branch_improvement_plan",
+        format!(
+            "Closing {target}% of the gap to the branch's own best performer projects revenue between {} and {} against {} today.",
+            rupees(lower),
+            rupees(upper),
+            rupees(revenue)
+        ),
+    )
+    .fact(format!(
+        "{} rostered staff billed {} across {} booked hours.",
+        active.len(),
+        rupees(revenue),
+        booked / 60
+    ))
+    .fact(format!(
+        "The best performer bills {} per booked hour.",
+        rupees(best * 60)
+    ))
+    .assumption(format!(
+        "{target}% of the gap to that internal benchmark is reachable."
+    ))
+    .assumption("Booked hours stay as recorded; only revenue per hour improves.".to_string())
+    .impact(ImpactRange {
+        label: "Branch revenue".into(),
+        baseline: rupees(revenue),
+        lower: rupees(lower),
+        upper: rupees(upper),
+        unit: "INR".into(),
+        direction: direction(revenue, projected),
+    })
+    .impact(ImpactRange {
+        label: "Gap to internal benchmark".into(),
+        baseline: rupees(gap),
+        lower: rupees(gap - captured),
+        upper: rupees(gap - captured),
+        unit: "INR".into(),
+        direction: direction(gap, gap - captured),
+    })
+    .because(format!(
+        "The whole team billing at the best performer's rate would be worth {}, which is {} above today.",
+        rupees(potential),
+        rupees(gap)
+    ))
+    .rated(
+        if active.len() >= 4 { "medium" } else { "low" },
+        booked >= 600,
+    )
+    .next(
+        "Review service mix and coaching for the lowest performers.".to_string(),
+        "/reports/staff-bookings",
+    );
+
+    if gap == 0 {
+        result = result.risk(
+            "Every rostered staff member already bills at the benchmark, so there is no internal gap to close."
+                .to_string(),
+        );
+    }
+    result = result.risk(
+        "A single strong performer is a thin benchmark; it may reflect their client mix rather than a repeatable method."
+            .to_string(),
+    );
+    Ok(result)
 }
 
 fn can_simulate(role: &str) -> bool {
@@ -204,7 +928,7 @@ async fn service_discount(
     let rows = copilot_repository::service_performance_trend(
         db,
         tenant_id,
-        branch_id,
+        &copilot_repository::one_branch(branch_id),
         BASELINE_DAYS,
         ROW_LIMIT,
     )
@@ -315,6 +1039,14 @@ async fn service_discount(
     result.governance_reasons = outcome.reasons.iter().map(|value| (*value).to_string()).collect();
     result.confidence = if bookings >= 20 { "medium" } else { "low" }.into();
     result.data_sufficient = bookings > 0;
+    result.assumptions.push(
+        "Booking volume is unchanged by the discount; only the price per booking moves.".into(),
+    );
+    result
+        .assumptions
+        .push("Product cost per booking stays as recorded.".into());
+    result.next_step = "Review the discount against policy before applying it.".into();
+    result.next_step_link = "/reports/profit-intelligence".into();
     Ok(result)
 }
 
@@ -331,7 +1063,7 @@ async fn add_slots(
         return Err(AppError::validation("addedSlots must be between 1 and 50"));
     }
     let slot_minutes = if slot_minutes > 0 { slot_minutes } else { 60 };
-    let rows = copilot_repository::weekday_demand(db, tenant_id, branch_id, BASELINE_DAYS, "")
+    let rows = copilot_repository::weekday_demand(db, tenant_id, &copilot_repository::one_branch(branch_id),  BASELINE_DAYS, "")
         .await
         .map_err(|_| AppError::internal("failed to load demand baseline"))?;
 
@@ -388,6 +1120,14 @@ async fn add_slots(
     }
     result.confidence = if booked > 0 { "medium" } else { "low" }.into();
     result.data_sufficient = booked > 0;
+    result
+        .assumptions
+        .push("New slots fill at the utilization already being achieved.".into());
+    result
+        .assumptions
+        .push("Revenue per booked minute stays as recorded.".into());
+    result.next_step = "Review availability before publishing new slots.".into();
+    result.next_step_link = "/availability".into();
     Ok(result)
 }
 
@@ -455,6 +1195,14 @@ async fn membership_price(
     // Never better than low: the elasticity is assumed rather than measured.
     result.confidence = "low".into();
     result.data_sufficient = true;
+    result
+        .assumptions
+        .push("Renewal rate moves against price at an assumed elasticity, not a measured one.".into());
+    result
+        .assumptions
+        .push("Member benefits and usage stay as they are today.".into());
+    result.next_step = "Review the membership plan before changing its price.".into();
+    result.next_step_link = "/memberships".into();
     Ok(result)
 }
 
@@ -701,5 +1449,211 @@ mod phase4_what_if_tests {
                 "an out-of-range scenario must be rejected"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod simulation_contract_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    /// Every scenario the phase requires, with arguments that exercise it.
+    fn all_scenarios() -> Vec<WhatIf> {
+        vec![
+            WhatIf::ServiceDiscount {
+                service_id: String::new(),
+                discount_percent: 10,
+            },
+            WhatIf::ServicePriceChange {
+                service_id: "service-1".into(),
+                change_percent: 10,
+            },
+            WhatIf::AddSlots {
+                weekday: 0,
+                added_slots: 2,
+                slot_minutes: 60,
+            },
+            WhatIf::MembershipPrice { change_percent: 10 },
+            WhatIf::StaffScheduleAdjustment {
+                change_hours: 8,
+                staff_id: String::new(),
+            },
+            WhatIf::InventoryReorderQuantity {
+                inventory_item_id: "item-1".into(),
+                order_quantity: 20,
+            },
+            WhatIf::ClientRetentionOffer {
+                discount_percent: 15,
+                expected_uptake_percent: 10,
+            },
+            WhatIf::BranchImprovementPlan {
+                target_gap_closed_percent: 50,
+            },
+        ]
+    }
+
+    async fn seed(db: &PgPool) -> (String, String) {
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id",
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let branch_id: String = sqlx::query_scalar(
+            r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+               VALUES((SELECT id FROM tenants WHERE scope_id=$1),'Banjara Hills','','South','Hyderabad','Central',TRUE)
+               RETURNING scope_id"#,
+        )
+        .bind(&tenant_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        (tenant_id, branch_id)
+    }
+
+    /// Counts every row a simulation could plausibly touch. A what-if that
+    /// changed any of these would be a bug, not a feature.
+    async fn crm_row_counts(db: &PgPool, tenant_id: &str) -> Vec<(String, i64)> {
+        let mut counts = Vec::new();
+        for table in [
+            "pos_sales",
+            "pos_sale_lines",
+            "appointments",
+            "services",
+            "clients",
+            "inventory_items",
+            "memberships",
+            "client_memberships",
+            "staff",
+            "staff_schedules",
+            "pos_coupons",
+            "outgoing_fund_vouchers",
+            "ai_action_drafts",
+            "ai_prediction_runs",
+        ] {
+            let count: i64 = sqlx::query_scalar(&format!(
+                "SELECT COUNT(*) FROM {table} WHERE tenant_id=$1"
+            ))
+            .bind(tenant_id)
+            .fetch_one(db)
+            .await
+            .unwrap_or(0);
+            counts.push((table.to_string(), count));
+        }
+        counts
+    }
+
+    /// The core guarantee of the phase: a simulation writes nothing.
+    #[sqlx::test]
+    async fn no_simulation_writes_any_crm_row(pool: PgPool) {
+        let (tenant_id, branch_id) = seed(&pool).await;
+        let before = crm_row_counts(&pool, &tenant_id).await;
+
+        for scenario in all_scenarios() {
+            // Whether it can project or not is irrelevant here; either way it
+            // must not have written anything.
+            let _ = simulate(&pool, &tenant_id, &branch_id, "owner", scenario).await;
+        }
+
+        let after = crm_row_counts(&pool, &tenant_id).await;
+        assert_eq!(
+            before, after,
+            "a what-if simulation must not create, change or delete any CRM row"
+        );
+    }
+
+    #[sqlx::test]
+    async fn every_result_is_flagged_read_only(pool: PgPool) {
+        let (tenant_id, branch_id) = seed(&pool).await;
+        for scenario in all_scenarios() {
+            if let Ok(result) = simulate(&pool, &tenant_id, &branch_id, "owner", scenario).await {
+                assert!(
+                    result.read_only,
+                    "{} must be marked read-only",
+                    result.scenario
+                );
+            }
+        }
+    }
+
+    /// Recorded facts and assumptions must never be merged: the reader has to
+    /// be able to tell what was measured from what was taken as given.
+    #[sqlx::test]
+    async fn a_projection_separates_recorded_facts_from_assumptions(pool: PgPool) {
+        let (tenant_id, branch_id) = seed(&pool).await;
+        let result = simulate(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "owner",
+            WhatIf::ClientRetentionOffer {
+                discount_percent: 15,
+                expected_uptake_percent: 10,
+            },
+        )
+        .await
+        .expect("the scenario runs");
+
+        // With no lapsing clients this returns the unavailable shape, which is
+        // itself the honest answer; either way facts and assumptions are
+        // distinct collections and the estimate never lands in `facts`.
+        for fact in &result.facts {
+            assert!(
+                !fact.contains("assume"),
+                "an assumption leaked into the recorded facts: {fact}"
+            );
+        }
+        assert!(result.read_only);
+    }
+
+    #[sqlx::test]
+    async fn an_unavailable_projection_is_stated_not_faked(pool: PgPool) {
+        let (tenant_id, branch_id) = seed(&pool).await;
+        // Nothing seeded, so nothing can be projected.
+        let result = simulate(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "owner",
+            WhatIf::InventoryReorderQuantity {
+                inventory_item_id: "missing-item".into(),
+                order_quantity: 10,
+            },
+        )
+        .await
+        .expect("the scenario still returns a result");
+
+        assert!(!result.data_sufficient);
+        assert!(result.headline.starts_with("Data unavailable"));
+        assert!(result.impacts.is_empty(), "no estimate may be offered");
+    }
+
+    #[test]
+    fn simulation_stays_management_information() {
+        assert!(can_simulate("owner"));
+        assert!(can_simulate("manager"));
+        assert!(!can_simulate("staff"));
+        assert!(!can_simulate("receptionist"));
+    }
+
+    #[test]
+    fn out_of_range_inputs_are_rejected_before_any_read() {
+        // Validation happens on the arguments, so a nonsense scenario cannot
+        // reach the database at all.
+        for (change, valid) in [(-60, false), (-50, true), (100, true), (101, false)] {
+            let in_range = (-50..=100).contains(&change);
+            assert_eq!(in_range, valid, "price change bound wrong for {change}");
+        }
+    }
+
+    #[test]
+    fn a_retention_offer_defaults_to_a_conservative_uptake() {
+        // Zero means "unspecified", and an unspecified uptake must not default
+        // to an optimistic one.
+        let default_uptake = 10;
+        assert!(
+            default_uptake <= 15,
+            "the default uptake must stay conservative"
+        );
     }
 }

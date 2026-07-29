@@ -33,6 +33,11 @@ use crate::{
         ai_copilot_repository as copilot_repository, ai_prediction_repository as prediction_repository,
         analytics_repository, clients_repository, membership_lifecycle_repository,
     },
+    services::{
+        ai_scope_service::{self, ScopeRequest},
+        ai_tool_dispatcher,
+        auth_service::AuthClaims,
+    },
 };
 
 /// History window every prediction is built from.
@@ -222,7 +227,72 @@ pub struct PredictionRun {
     pub predictions: Vec<Prediction>,
     /// Subjects held back because their history was too thin to score.
     pub insufficient_subjects: usize,
+    /// Which branches the history was read from, and whether the request was
+    /// narrowed to reach them.
+    pub scope: crate::services::ai_scope_service::ScopeDisclosure,
+    /// Plain statement of which engine produced this, so a fallback result is
+    /// never mistaken for a live model result.
+    pub basis: String,
+    /// Every prediction here is a range from past behaviour, not a commitment.
+    /// Carried on the payload so a client cannot render it without one.
+    pub disclaimer: String,
 }
+
+/// The permission domain a prediction reads, and therefore what the caller must
+/// hold. Money forecasts sit behind finance, not behind a role name.
+pub fn prediction_domain(kind: PredictionKind) -> crate::services::ai_scope_service::AiDomain {
+    use crate::services::ai_scope_service::AiDomain;
+    match kind {
+        PredictionKind::ClientChurnRisk | PredictionKind::ClientReturnWindow => AiDomain::Clients,
+        PredictionKind::NoShowRisk | PredictionKind::AppointmentLoad => AiDomain::Appointments,
+        PredictionKind::ServiceDemand => AiDomain::Services,
+        PredictionKind::StaffUtilization => AiDomain::Staff,
+        PredictionKind::InventoryReorderRisk => AiDomain::Inventory,
+        PredictionKind::MembershipRenewalRisk => AiDomain::Memberships,
+        PredictionKind::RevenueForecast => AiDomain::Finance,
+    }
+}
+
+/// Where the prediction provider lives, if it is configured at all.
+///
+/// Mirrors the concierge's own provider handle so both AI paths describe an
+/// absent provider the same way, and so a test can run the deterministic
+/// fallback without constructing an entire settings object.
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderConfig<'a> {
+    url: Option<&'a str>,
+    token: Option<&'a str>,
+}
+
+impl<'a> ProviderConfig<'a> {
+    pub fn from_settings(settings: &'a Settings) -> Self {
+        Self {
+            url: settings.ai_service_url.as_deref(),
+            token: settings.ai_service_token.as_deref(),
+        }
+    }
+
+    /// No provider: every run is scored by the deterministic fallback.
+    pub fn unconfigured() -> Self {
+        Self {
+            url: None,
+            token: None,
+        }
+    }
+}
+
+/// What produced a run, in words a person can read.
+fn basis_statement(computed_by: &str, model_version: &str) -> String {
+    match computed_by {
+        "python" => format!("Scored by the live prediction service (model {model_version})."),
+        _ => format!(
+            "The live prediction service was unavailable, so this was scored by the deterministic fallback ({model_version})."
+        ),
+    }
+}
+
+/// Stated on every run, so a range is never read as a commitment.
+const PREDICTION_DISCLAIMER: &str = "These are ranges projected from recorded CRM history, not guarantees. Treat them as planning input and re-check as new activity lands.";
 
 #[derive(Debug, Deserialize)]
 struct ProviderPrediction {
@@ -252,18 +322,25 @@ struct ProviderEnvelope<T> {
 /// cannot learn anything about a branch by timing the call.
 pub async fn predict(
     db: &PgPool,
-    settings: &Settings,
+    provider: ProviderConfig<'_>,
     tenant_id: &str,
-    branch_id: &str,
-    role: &str,
-    user_id: &str,
+    claims: &AuthClaims,
     kind: PredictionKind,
+    scope_request: &ScopeRequest,
 ) -> Result<PredictionRun, AppError> {
-    if !kind.permitted_for(role) {
+    // Same order as every other AI surface: identity, then grants, then the
+    // domain permission, and only then any history is read. A denial beats a
+    // role default here exactly as it does for tools.
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, scope_request).await?;
+    ai_scope_service::require_domain(claims, prediction_domain(kind))?;
+    let Some(branch_id) = scope.primary_branch_id() else {
         return Err(AppError::forbidden(
-            "this prediction is not available for your role",
+            "no branch is authorized for this login, so no history can be read",
         ));
-    }
+    };
+    let branch_ids = scope.branch_ids();
+    let role = claims.role.as_str();
+    let user_id = claims.sub.as_str();
     let features = build_features(db, tenant_id, branch_id, kind).await?;
     let digest = features.digest();
 
@@ -275,7 +352,7 @@ pub async fn predict(
         .partition(|subject| subject.sample_size >= kind.min_samples());
 
     let (mut predictions, model_version, computed_by) =
-        match call_provider(settings, tenant_id, branch_id, kind, &features, &scorable).await {
+        match call_provider(provider, tenant_id, branch_id, kind, &features, &scorable).await {
             Some((rows, version)) => (rows, version, "python"),
             None => (
                 fallback_predictions(kind, &scorable),
@@ -324,7 +401,13 @@ pub async fn predict(
     let run_id = prediction_repository::record_run(
         db,
         tenant_id,
-        branch_id,
+        prediction_repository::RunScope {
+            branch_id,
+            level: scope.level.as_str(),
+            label: &scope.label,
+            branch_ids: &branch_ids,
+            requested_role: role,
+        },
         kind.name(),
         &model_version,
         computed_by,
@@ -344,6 +427,7 @@ pub async fn predict(
     Ok(PredictionRun {
         run_id,
         kind: kind.name().into(),
+        basis: basis_statement(computed_by, &model_version),
         model_version,
         computed_by: computed_by.into(),
         history_start: features.history_start.to_string(),
@@ -351,6 +435,8 @@ pub async fn predict(
         feature_digest: digest,
         predictions,
         insufficient_subjects: insufficient.len(),
+        scope: scope.disclosure(),
+        disclaimer: PREDICTION_DISCLAIMER.to_string(),
     })
 }
 
@@ -361,15 +447,17 @@ pub async fn predict(
 pub async fn latest_run(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
-    role: &str,
+    claims: &AuthClaims,
     kind: PredictionKind,
+    scope_request: &ScopeRequest,
 ) -> Result<Option<PredictionRun>, AppError> {
-    if !kind.permitted_for(role) {
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, scope_request).await?;
+    ai_scope_service::require_domain(claims, prediction_domain(kind))?;
+    let Some(branch_id) = scope.primary_branch_id() else {
         return Err(AppError::forbidden(
-            "this prediction is not available for your role",
+            "no branch is authorized for this login",
         ));
-    }
+    };
     let Some(run) = prediction_repository::latest_run(db, tenant_id, branch_id, kind.name())
         .await
         .map_err(|_| AppError::internal("failed to load the prediction run"))?
@@ -380,9 +468,11 @@ pub async fn latest_run(
         .await
         .map_err(|_| AppError::internal("failed to load stored predictions"))?;
     let insufficient = rows.iter().filter(|row| !row.data_sufficient).count();
+    let basis = basis_statement(&run.computed_by, &run.model_version);
     Ok(Some(PredictionRun {
         run_id: run.id,
         kind: run.prediction_kind,
+        basis,
         model_version: run.model_version,
         computed_by: run.computed_by,
         history_start: run.history_start.to_string(),
@@ -413,6 +503,8 @@ pub async fn latest_run(
             })
             .collect(),
         insufficient_subjects: insufficient,
+        scope: scope.disclosure(),
+        disclaimer: PREDICTION_DISCLAIMER.to_string(),
     }))
 }
 
@@ -523,7 +615,7 @@ async fn service_features(
     let rows = copilot_repository::service_performance_trend(
         db,
         tenant_id,
-        branch_id,
+        &copilot_repository::one_branch(branch_id),
         HISTORY_DAYS,
         SUBJECT_LIMIT,
     )
@@ -559,7 +651,7 @@ async fn staff_features(
     let rows = copilot_repository::staff_performance_trend(
         db,
         tenant_id,
-        branch_id,
+        &copilot_repository::one_branch(branch_id),
         HISTORY_DAYS,
         SUBJECT_LIMIT,
         14,
@@ -604,7 +696,7 @@ async fn appointment_load_features(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<SubjectFeatures>, AppError> {
-    let rows = copilot_repository::weekday_demand(db, tenant_id, branch_id, HISTORY_DAYS, "")
+    let rows = copilot_repository::weekday_demand(db, tenant_id, &copilot_repository::one_branch(branch_id),  HISTORY_DAYS, "")
         .await
         .map_err(|_| AppError::internal("failed to load appointment load features"))?;
 
@@ -663,7 +755,7 @@ async fn inventory_features(
     branch_id: &str,
 ) -> Result<Vec<SubjectFeatures>, AppError> {
     let rows =
-        copilot_repository::inventory_risk(db, tenant_id, branch_id, HISTORY_DAYS, SUBJECT_LIMIT)
+        copilot_repository::inventory_risk(db, tenant_id, &copilot_repository::one_branch(branch_id),  HISTORY_DAYS, SUBJECT_LIMIT)
             .await
             .map_err(|_| AppError::internal("failed to load inventory prediction features"))?;
 
@@ -724,7 +816,7 @@ async fn membership_features(
 /// Returns `None` on any failure so the caller falls back rather than failing
 /// the request; a prediction that degrades is more useful than an error.
 async fn call_provider(
-    settings: &Settings,
+    provider: ProviderConfig<'_>,
     tenant_id: &str,
     branch_id: &str,
     kind: PredictionKind,
@@ -734,8 +826,8 @@ async fn call_provider(
     if scorable.is_empty() {
         return None;
     }
-    let url = settings.ai_service_url.as_deref()?;
-    let token = settings.ai_service_token.as_deref()?;
+    let url = provider.url?;
+    let token = provider.token?;
     let payload = json!({
         "tenant_id": tenant_id,
         "branch_id": branch_id,
@@ -1181,7 +1273,13 @@ mod phase3_prediction_tests {
         let run_id = prediction_repository::record_run(
             &db,
             &tenant,
-            branch,
+            prediction_repository::RunScope {
+                branch_id: branch,
+                level: "branch",
+                label: "Test Branch",
+                branch_ids: std::slice::from_ref(&branch.to_string()),
+                requested_role: "owner",
+            },
             PredictionKind::ClientReturnWindow.name(),
             "aurashine-predict-v1",
             "python",
@@ -1276,5 +1374,346 @@ mod phase3_prediction_tests {
             // The digest is still stable and non-empty for an empty branch.
             assert_eq!(features.digest().len(), 64);
         }
+    }
+}
+
+#[cfg(test)]
+mod governed_prediction_tests {
+    use super::*;
+    use crate::services::ai_tool_dispatcher::tests_support::claims;
+    use sqlx::PgPool;
+
+    const ALL_KINDS: &[PredictionKind] = &[
+        PredictionKind::ClientChurnRisk,
+        PredictionKind::ClientReturnWindow,
+        PredictionKind::NoShowRisk,
+        PredictionKind::ServiceDemand,
+        PredictionKind::AppointmentLoad,
+        PredictionKind::StaffUtilization,
+        PredictionKind::InventoryReorderRisk,
+        PredictionKind::MembershipRenewalRisk,
+        PredictionKind::RevenueForecast,
+    ];
+
+    /// Every requested capability must exist as a prediction kind, so the set
+    /// cannot silently lose one.
+    #[test]
+    fn the_governed_prediction_set_is_complete() {
+        for name in [
+            "client_churn_risk",
+            "client_return_window",
+            "no_show_risk",
+            "service_demand",
+            "staff_utilization",
+            "inventory_reorder_risk",
+            "membership_renewal_risk",
+            "revenue_forecast",
+        ] {
+            assert!(
+                PredictionKind::from_name(name).is_some(),
+                "missing prediction kind {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_kind_is_gated_on_a_permission_domain() {
+        for kind in ALL_KINDS {
+            let domain = prediction_domain(*kind);
+            assert!(
+                !domain.required_permission().is_empty(),
+                "{} has no permission behind it",
+                kind.name()
+            );
+        }
+        // Money forecasts sit behind finance, not behind a role name.
+        assert_eq!(
+            prediction_domain(PredictionKind::RevenueForecast).required_permission(),
+            "finance.read"
+        );
+    }
+
+    #[test]
+    fn a_denied_permission_overrides_an_owner_role() {
+        let owner = claims("owner", &[], &[]);
+        assert!(ai_scope_service::domain_allowed(
+            &owner,
+            prediction_domain(PredictionKind::RevenueForecast)
+        ));
+        let denied = claims("owner", &[], &["finance.read"]);
+        assert!(
+            !ai_scope_service::domain_allowed(
+                &denied,
+                prediction_domain(PredictionKind::RevenueForecast)
+            ),
+            "a revoked finance permission must close the revenue forecast"
+        );
+    }
+
+    #[test]
+    fn the_basis_statement_names_the_engine_that_scored_the_run() {
+        let live = basis_statement("python", "churn-v3");
+        assert!(live.contains("live prediction service"));
+        assert!(live.contains("churn-v3"));
+
+        let fallback = basis_statement("rust_fallback", FALLBACK_MODEL_VERSION);
+        assert!(
+            fallback.contains("unavailable") && fallback.contains("deterministic fallback"),
+            "a fallback result must say so plainly: {fallback}"
+        );
+    }
+
+    #[test]
+    fn a_prediction_is_never_presented_as_a_guarantee() {
+        assert!(PREDICTION_DISCLAIMER.contains("not guarantees"));
+        assert!(PREDICTION_DISCLAIMER.contains("ranges"));
+    }
+
+    /// The digest is what makes a stored run reproducible: identical history
+    /// must produce an identical digest, and any change to the inputs must
+    /// change it.
+    #[test]
+    fn identical_features_produce_an_identical_digest() {
+        let build = |sample: i32| FeatureSet {
+            kind: PredictionKind::ClientChurnRisk.name().into(),
+            history_start: NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
+            history_end: NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
+            subjects: vec![SubjectFeatures {
+                subject_id: "client-1".into(),
+                subject_name: "Priya Menon".into(),
+                sample_size: sample,
+                features: BTreeMap::from([
+                    ("visit_gap_days".to_string(), 32.0),
+                    ("days_since_last_visit".to_string(), 61.0),
+                ]),
+            }],
+        };
+
+        assert_eq!(
+            build(6).digest(),
+            build(6).digest(),
+            "the same history must digest identically"
+        );
+        assert_ne!(
+            build(6).digest(),
+            build(7).digest(),
+            "a change in the inputs must change the digest"
+        );
+    }
+
+    #[test]
+    fn feature_order_does_not_change_the_digest() {
+        // Ordered maps are what make this hold; a HashMap here would make runs
+        // irreproducible in a way no test would otherwise catch.
+        let one = FeatureSet {
+            kind: PredictionKind::ServiceDemand.name().into(),
+            history_start: NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
+            history_end: NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
+            subjects: vec![SubjectFeatures {
+                subject_id: "service-1".into(),
+                subject_name: "Hair Colour".into(),
+                sample_size: 9,
+                features: BTreeMap::from([("a".to_string(), 1.0), ("b".to_string(), 2.0)]),
+            }],
+        };
+        let two = FeatureSet {
+            subjects: vec![SubjectFeatures {
+                features: BTreeMap::from([("b".to_string(), 2.0), ("a".to_string(), 1.0)]),
+                ..one.subjects[0].clone()
+            }],
+            ..one.clone()
+        };
+        assert_eq!(one.digest(), two.digest());
+    }
+
+    async fn seed_branch(db: &PgPool) -> (String, String, String) {
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id",
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let branch_id: String = sqlx::query_scalar(
+            r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+               VALUES((SELECT id FROM tenants WHERE scope_id=$1),'Banjara Hills','','South','Hyderabad','Central',TRUE)
+               RETURNING scope_id"#,
+        )
+        .bind(&tenant_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let user_id: String = sqlx::query_scalar(
+            r#"INSERT INTO users(tenant_id,branch_id,role_name,email,password_hash,full_name)
+               VALUES($1,$2,'owner','asha.rao@aurasalon.in','x','Asha Rao') RETURNING id"#,
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO user_branch_roles(tenant_id,user_id,branch_id,role_name,active)
+               VALUES($1,$2,$3,'owner',TRUE)"#,
+        )
+        .bind(&tenant_id)
+        .bind(&user_id)
+        .bind(&branch_id)
+        .execute(db)
+        .await
+        .unwrap();
+        (tenant_id, branch_id, user_id)
+    }
+
+    fn owner_claims(tenant_id: &str, branch_id: &str, user_id: &str) -> AuthClaims {
+        let mut value = claims("owner", &[], &[]);
+        value.sub = user_id.to_string();
+        value.tenant_id = tenant_id.to_string();
+        value.branch_id = Some(branch_id.to_string());
+        value
+    }
+
+    /// With no configured provider the run must still complete, be marked as
+    /// fallback, and say so — a missing provider is not an outage for the user.
+    #[sqlx::test]
+    async fn an_absent_provider_falls_back_and_discloses_it(pool: PgPool) {
+        let (tenant_id, branch_id, user_id) = seed_branch(&pool).await;
+        let run = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &owner_claims(&tenant_id, &branch_id, &user_id),
+            PredictionKind::RevenueForecast,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect("a run completes without a provider");
+
+        assert_eq!(run.computed_by, "rust_fallback");
+        assert_eq!(run.model_version, FALLBACK_MODEL_VERSION);
+        assert!(run.basis.contains("deterministic fallback"));
+        assert!(run.disclaimer.contains("not guarantees"));
+        assert!(!run.feature_digest.is_empty());
+    }
+
+    /// The stored run must say whose data it read, not just which branch id was
+    /// on the request.
+    #[sqlx::test]
+    async fn a_run_persists_the_scope_it_was_produced_under(pool: PgPool) {
+        let (tenant_id, branch_id, user_id) = seed_branch(&pool).await;
+        let run = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &owner_claims(&tenant_id, &branch_id, &user_id),
+            PredictionKind::ClientChurnRisk,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect("a run completes");
+
+        let (level, label, branches, role): (String, String, Vec<String>, String) =
+            sqlx::query_as(
+                r#"SELECT scope_level,scope_label,scope_branch_ids,requested_role
+                     FROM ai_prediction_runs WHERE id=$1"#,
+            )
+            .bind(&run.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        // The seeded tenant has exactly one branch and the caller is an owner,
+        // so the honest scope is the whole tenant, not a single branch.
+        assert_eq!(level, "tenant");
+        assert!(!label.is_empty());
+        assert_eq!(branches, vec![branch_id]);
+        assert_eq!(role, "owner");
+        assert_eq!(run.scope.branch_count, 1);
+    }
+
+    /// A branch with no history must produce a run that scores nobody, rather
+    /// than a run full of confident zeroes.
+    #[sqlx::test]
+    async fn an_empty_history_scores_nobody(pool: PgPool) {
+        let (tenant_id, branch_id, user_id) = seed_branch(&pool).await;
+        let run = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &owner_claims(&tenant_id, &branch_id, &user_id),
+            PredictionKind::ClientChurnRisk,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect("a run completes");
+
+        assert!(
+            run.predictions.iter().all(|row| !row.data_sufficient),
+            "no subject may be scored from an empty history"
+        );
+    }
+
+    /// The same login asking twice must get the same digest: the features are a
+    /// function of stored history, not of when the question was asked.
+    #[sqlx::test]
+    async fn two_runs_over_the_same_history_reproduce_the_digest(pool: PgPool) {
+        let (tenant_id, branch_id, user_id) = seed_branch(&pool).await;
+        let caller = owner_claims(&tenant_id, &branch_id, &user_id);
+
+        let first = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &caller,
+            PredictionKind::ServiceDemand,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect("first run");
+        let second = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &caller,
+            PredictionKind::ServiceDemand,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect("second run");
+
+        assert_eq!(
+            first.feature_digest, second.feature_digest,
+            "unchanged history must reproduce the same feature digest"
+        );
+        assert_ne!(first.run_id, second.run_id, "each run is stored separately");
+    }
+
+    /// A login without the domain permission must be refused before any history
+    /// is read, so the refusal cannot leak whether data exists.
+    #[sqlx::test]
+    async fn a_denied_domain_refuses_before_reading_history(pool: PgPool) {
+        let (tenant_id, branch_id, user_id) = seed_branch(&pool).await;
+        let mut denied = owner_claims(&tenant_id, &branch_id, &user_id);
+        denied.denied_permissions = vec!["finance.read".into()];
+
+        let error = predict(
+            &pool,
+            ProviderConfig::unconfigured(),
+            &tenant_id,
+            &denied,
+            PredictionKind::RevenueForecast,
+            &ScopeRequest::default(),
+        )
+        .await
+        .expect_err("a denied finance permission must refuse the revenue forecast");
+        assert!(format!("{error:?}").to_lowercase().contains("finance"));
+
+        // Nothing was stored for the refused request.
+        let runs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM ai_prediction_runs WHERE tenant_id=$1 AND prediction_kind='revenue_forecast'",
+        )
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(runs, 0, "a refused prediction must not leave a run behind");
     }
 }

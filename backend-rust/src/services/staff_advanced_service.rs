@@ -1421,6 +1421,52 @@ pub async fn create_task(
         .ok_or_else(|| AppError::validation("assigned employee is invalid"))
 }
 
+/// Creates a task on behalf of an approved AI action draft, at most once.
+///
+/// Same validation and same write as `create_task` — the copilot does not get
+/// its own definition of a task. What it gets is the draft's identity stamped
+/// onto the row, so calling this twice for one draft returns the first task
+/// rather than writing a second. That is what survives a crash between the
+/// write and the approval.
+///
+/// The origin is not part of `StaffTaskRequest`, so no API caller can claim a
+/// task was AI-originated or collide with a draft's identity.
+pub async fn create_task_for_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request: StaffTaskRequest,
+    action_draft_id: &str,
+) -> Result<StaffTaskRecord, AppError> {
+    // Recovery first: if a previous attempt already wrote it, that is the task.
+    if let Some(existing) =
+        repository::task_by_action_origin(db, tenant_id, branch_id, action_draft_id)
+            .await
+            .map_err(internal("load staff task"))?
+    {
+        return Ok(existing);
+    }
+
+    let mut input = task_input(request)?;
+    input.origin_action_draft_id = Some(action_draft_id.to_string());
+    let created = repository::create_task(db, tenant_id, branch_id, actor_user_id, &input)
+        .await
+        .map_err(internal("save staff task"))?;
+    match created {
+        Some(record) => Ok(record),
+        // Either the assignee was invalid, or a concurrent run won the unique
+        // index. Re-reading tells the two apart without guessing.
+        None => match repository::task_by_action_origin(db, tenant_id, branch_id, action_draft_id)
+            .await
+            .map_err(internal("load staff task"))?
+        {
+            Some(existing) => Ok(existing),
+            None => Err(AppError::validation("assigned employee is invalid")),
+        },
+    }
+}
+
 pub async fn list_service_targets(
     db: &PgPool,
     tenant_id: &str,
@@ -1661,6 +1707,8 @@ fn task_input(request: StaffTaskRequest) -> Result<StaffTaskInput, AppError> {
             TASK_STATUSES,
             "task status",
         )?,
+        // Set only by `create_task_for_action`, never from a request body.
+        origin_action_draft_id: None,
     })
 }
 

@@ -8,6 +8,14 @@
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 
+/// Wraps a single branch id as a one-branch authorized set.
+///
+/// Callers that legitimately read exactly one branch still go through the same
+/// set-based query, so there is only one branch-filtering shape to audit.
+pub fn one_branch(branch_id: &str) -> [String; 1] {
+    [branch_id.to_string()]
+}
+
 /// A staff member's key metrics for the current period and the one before it.
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -99,7 +107,7 @@ WITH bounds AS (
          COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))/60)
            FILTER (WHERE appointment.status IN ('completed','billed','paid')),0)::BIGINT AS booked_minutes
     FROM appointments appointment CROSS JOIN bounds
-   WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2
+   WHERE appointment.tenant_id=$1 AND appointment.branch_id=ANY($2::TEXT[])
      AND appointment.start_at >= bounds.start_date AND appointment.start_at < bounds.end_date
    GROUP BY 1
 ), schedule_days AS (
@@ -108,7 +116,7 @@ WITH bounds AS (
            COALESCE(EXTRACT(EPOCH FROM (schedule.shift1_end-schedule.shift1_start))/60,0)
          + COALESCE(EXTRACT(EPOCH FROM (schedule.shift2_end-schedule.shift2_start))/60,0)),0)::BIGINT AS scheduled_minutes
     FROM staff_schedules schedule CROSS JOIN bounds
-   WHERE schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.status<>'off'
+   WHERE schedule.tenant_id=$1 AND schedule.branch_id=ANY($2::TEXT[]) AND schedule.status<>'off'
      AND schedule.schedule_date >= bounds.start_date AND schedule.schedule_date < bounds.end_date
    GROUP BY 1
 ), service_days AS (
@@ -118,7 +126,7 @@ WITH bounds AS (
     FROM pos_sale_lines line
     JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id
     CROSS JOIN bounds
-   WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service'
+   WHERE line.tenant_id=$1 AND line.branch_id=ANY($2::TEXT[]) AND line.line_type='service'
      AND sale.status NOT IN ('draft','cancelled','voided','refunded')
      AND COALESCE(sale.is_deleted,FALSE)=FALSE
      AND ($4='' OR line.item_id=$4)
@@ -146,13 +154,13 @@ SELECT weekdays.weekday::INT AS weekday,
 pub async fn weekday_demand(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     days: i32,
     service_id: &str,
 ) -> Result<Vec<WeekdayDemandRow>, sqlx::Error> {
     sqlx::query_as(WEEKDAY_DEMAND_SQL)
         .bind(tenant_id)
-        .bind(branch_id)
+        .bind(branch_ids)
         .bind(days)
         .bind(service_id)
         .fetch_all(db)
@@ -164,14 +172,14 @@ pub async fn weekday_demand(
 pub async fn staff_id_for_user(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     user_id: &str,
 ) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND user_id=$3 AND active=TRUE LIMIT 1",
+        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND user_id=$3 AND active=TRUE LIMIT 1",
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(branch_ids)
     .bind(user_id)
     .fetch_optional(db)
     .await
@@ -234,7 +242,7 @@ WITH bounds AS (
       ) AS rebooked,
       appointment.start_at <= NOW() - MAKE_INTERVAL(days => $5) AS rebook_eligible
     FROM appointments appointment CROSS JOIN bounds
-    WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2
+    WHERE appointment.tenant_id=$1 AND appointment.branch_id=ANY($2::TEXT[])
       AND appointment.start_at >= bounds.previous_start AND appointment.start_at < bounds.current_end
   ) appointment
   GROUP BY appointment.staff_id
@@ -246,7 +254,7 @@ WITH bounds AS (
     SELECT line.staff_id, line.line_total_paise, COALESCE(sale.finalized_at,sale.created_at)::DATE AS sold_at
       FROM pos_sale_lines line
       JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id
-     WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service'
+     WHERE line.tenant_id=$1 AND line.branch_id=ANY($2::TEXT[]) AND line.line_type='service'
        AND sale.status NOT IN ('draft','cancelled','voided','refunded')
        AND COALESCE(sale.is_deleted,FALSE)=FALSE
   ) line CROSS JOIN bounds
@@ -260,7 +268,7 @@ WITH bounds AS (
       COALESCE(EXTRACT(EPOCH FROM (shift1_end-shift1_start))/60,0)
       + COALESCE(EXTRACT(EPOCH FROM (shift2_end-shift2_start))/60,0) AS scheduled_minutes
       FROM staff_schedules
-     WHERE tenant_id=$1 AND branch_id=$2 AND status<>'off'
+     WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND status<>'off'
   ) schedule CROSS JOIN bounds
   GROUP BY schedule.staff_id
 )
@@ -287,7 +295,7 @@ FROM staff
 LEFT JOIN appointment_metrics ON appointment_metrics.staff_id=staff.id
 LEFT JOIN revenue_metrics ON revenue_metrics.staff_id=staff.id
 LEFT JOIN schedule_metrics ON schedule_metrics.staff_id=staff.id
-WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+WHERE staff.tenant_id=$1 AND staff.branch_id=ANY($2::TEXT[]) AND staff.active=TRUE
   AND (COALESCE(appointment_metrics.previous_completed,0) > 0 OR COALESCE(appointment_metrics.current_completed,0) > 0
        OR COALESCE(revenue_metrics.previous_revenue_paise,0) > 0 OR COALESCE(revenue_metrics.current_revenue_paise,0) > 0)
 ORDER BY (COALESCE(revenue_metrics.previous_revenue_paise,0) - COALESCE(revenue_metrics.current_revenue_paise,0)) DESC, staff.id
@@ -303,7 +311,7 @@ WITH bounds AS (
 ), line_cost AS (
   SELECT sale_line_id, COALESCE(SUM(ABS(quantity_delta)::BIGINT * unit_cost_paise),0)::BIGINT AS cost_paise
     FROM inventory_stock_ledger
-   WHERE tenant_id=$1 AND branch_id=$2 AND movement_type='sale' AND sale_line_id IS NOT NULL
+   WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND movement_type='sale' AND sale_line_id IS NOT NULL
    GROUP BY sale_line_id
 ), service_lines AS (
   SELECT line.item_id AS service_id, line.item_name AS service_name, sale.client_id,
@@ -315,7 +323,7 @@ WITH bounds AS (
     JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id
     LEFT JOIN line_cost ON line_cost.sale_line_id=line.id
     CROSS JOIN bounds
-   WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.line_type='service'
+   WHERE line.tenant_id=$1 AND line.branch_id=ANY($2::TEXT[]) AND line.line_type='service'
      AND sale.status NOT IN ('draft','cancelled','voided','refunded')
      AND COALESCE(sale.is_deleted,FALSE)=FALSE
      AND COALESCE(sale.finalized_at,sale.created_at)::DATE >= bounds.previous_start
@@ -343,7 +351,7 @@ WITH bounds AS (
        SELECT 1 FROM pos_sale_lines earlier_line
          JOIN pos_sales earlier_sale ON earlier_sale.tenant_id=earlier_line.tenant_id
           AND earlier_sale.branch_id=earlier_line.branch_id AND earlier_sale.id=earlier_line.sale_id
-        WHERE earlier_line.tenant_id=$1 AND earlier_line.branch_id=$2
+        WHERE earlier_line.tenant_id=$1 AND earlier_line.branch_id=ANY($2::TEXT[])
           AND earlier_line.line_type='service' AND earlier_line.item_id=current_window.service_id
           AND earlier_sale.client_id=current_window.client_id
           AND earlier_sale.status NOT IN ('draft','cancelled','voided','refunded')
@@ -361,7 +369,7 @@ SELECT aggregated.service_id, aggregated.service_name,
        aggregated.current_clients, aggregated.previous_clients,
        COALESCE(repeat_metrics.current_repeat_clients,0)::BIGINT AS current_repeat_clients
   FROM aggregated
-  LEFT JOIN services service ON service.tenant_id=$1 AND service.branch_id=$2 AND service.id=aggregated.service_id
+  LEFT JOIN services service ON service.tenant_id=$1 AND service.branch_id=ANY($2::TEXT[]) AND service.id=aggregated.service_id
   LEFT JOIN repeat_metrics ON repeat_metrics.service_id=aggregated.service_id
  ORDER BY (aggregated.previous_revenue_paise - aggregated.current_revenue_paise) DESC, aggregated.service_id
  LIMIT $4
@@ -371,14 +379,14 @@ SELECT aggregated.service_id, aggregated.service_name,
 pub async fn staff_performance_trend(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     days: i32,
     limit: i64,
     rebook_window_days: i32,
 ) -> Result<Vec<StaffPerformanceTrendRow>, sqlx::Error> {
     sqlx::query_as(STAFF_PERFORMANCE_TREND_SQL)
         .bind(tenant_id)
-        .bind(branch_id)
+        .bind(branch_ids)
         .bind(days)
         .bind(limit)
         .bind(rebook_window_days)
@@ -390,13 +398,13 @@ pub async fn staff_performance_trend(
 pub async fn service_performance_trend(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     days: i32,
     limit: i64,
 ) -> Result<Vec<ServicePerformanceTrendRow>, sqlx::Error> {
     sqlx::query_as(SERVICE_PERFORMANCE_TREND_SQL)
         .bind(tenant_id)
-        .bind(branch_id)
+        .bind(branch_ids)
         .bind(days)
         .bind(limit)
         .fetch_all(db)
@@ -407,7 +415,7 @@ pub async fn service_performance_trend(
 pub async fn find_clients(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     query: &str,
     limit: i64,
 ) -> Result<Vec<CopilotClientMatch>, sqlx::Error> {
@@ -416,7 +424,7 @@ pub async fn find_clients(
                   BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)) AS client_name,
                   COALESCE(client.phone,'') AS phone
              FROM clients client
-            WHERE client.tenant_id=$1 AND client.branch_id=$2
+            WHERE client.tenant_id=$1 AND client.branch_id=ANY($2::TEXT[])
               AND client.active=TRUE AND client.merged_into_client_id IS NULL
               AND (BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)) ILIKE '%'||$3||'%'
                    OR client.phone LIKE '%'||$3||'%'
@@ -425,7 +433,7 @@ pub async fn find_clients(
             LIMIT $4"#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(branch_ids)
     .bind(query)
     .bind(limit)
     .fetch_all(db)
@@ -532,7 +540,7 @@ mod tests {
         cleanup(&db, &tenant).await;
         seed_staff_decline(&db, &tenant, branch).await;
 
-        let rows = staff_performance_trend(&db, &tenant, branch, 30, 10, 14)
+        let rows = staff_performance_trend(&db, &tenant, &one_branch(branch), 30, 10, 14)
             .await
             .expect("staff trend loads");
         assert_eq!(
@@ -576,7 +584,7 @@ mod tests {
              FROM generate_series(1,8) g",
         ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("follow-ups seeded");
 
-        let rows = staff_performance_trend(&db, &tenant, branch, 30, 10, 14)
+        let rows = staff_performance_trend(&db, &tenant, &one_branch(branch), 30, 10, 14)
             .await
             .expect("staff trend loads");
         let worst = rows
@@ -638,7 +646,7 @@ mod tests {
              SELECT 'fac_cur_l'||g,$1,$2,'fac_cur'||g,'service','facial','Facial',1,60000,60000 FROM generate_series(1,3) g",
         ).bind(&tenant).bind(branch).execute(&db).await.expect("facial current lines");
 
-        let rows = service_performance_trend(&db, &tenant, branch, 30, 10)
+        let rows = service_performance_trend(&db, &tenant, &one_branch(branch), 30, 10)
             .await
             .expect("service trend loads");
 
@@ -696,7 +704,7 @@ mod tests {
                     ('ldr',$1,$2,'draft','service','spa','Hair Spa',1,100000,100000)",
         ).bind(&tenant).bind(branch).execute(&db).await.expect("excluded lines seeded");
 
-        let rows = service_performance_trend(&db, &tenant, branch, 30, 10)
+        let rows = service_performance_trend(&db, &tenant, &one_branch(branch), 30, 10)
             .await
             .expect("service trend loads");
         assert!(
@@ -732,7 +740,7 @@ mod tests {
              SELECT $3||'wedl'||g,$1,$2,$3||'wed'||g,'service',$3||'spa','Hair Spa',1,100000,100000 FROM generate_series(1,4) g",
         ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("wednesday lines seeded");
 
-        let rows = weekday_demand(&db, &tenant, branch, 30, "")
+        let rows = weekday_demand(&db, &tenant, &one_branch(branch), 30, "")
             .await
             .expect("weekday demand loads");
         assert_eq!(
@@ -759,7 +767,7 @@ mod tests {
         assert_eq!(other_days, 0, "no bookings leak onto other days");
 
         // Filtering to a service the branch does not sell yields an empty week.
-        let filtered = weekday_demand(&db, &tenant, branch, 30, "no-such-service")
+        let filtered = weekday_demand(&db, &tenant, &one_branch(branch), 30, "no-such-service")
             .await
             .expect("weekday demand loads");
         assert_eq!(filtered.len(), 7);
@@ -855,13 +863,13 @@ mod tests {
                     ('c4',$1,'branch1','Inactive','Person','9833333333','9833333333',FALSE)",
         ).bind(&tenant).execute(&db).await.expect("clients seeded");
 
-        let by_full_name = find_clients(&db, &tenant, "branch1", "Anita Sharma", 5)
+        let by_full_name = find_clients(&db, &tenant, &one_branch("branch1"), "Anita Sharma", 5)
             .await
             .expect("lookup runs");
         assert_eq!(by_full_name.len(), 1, "a full name resolves to one client");
         assert_eq!(by_full_name[0].client_id, "c1");
 
-        let by_given_name = find_clients(&db, &tenant, "branch1", "Anita", 5)
+        let by_given_name = find_clients(&db, &tenant, &one_branch("branch1"), "Anita", 5)
             .await
             .expect("lookup runs");
         assert_eq!(
@@ -870,13 +878,13 @@ mod tests {
             "an ambiguous name returns both candidates instead of guessing"
         );
 
-        let by_phone = find_clients(&db, &tenant, "branch1", "9811111111", 5)
+        let by_phone = find_clients(&db, &tenant, &one_branch("branch1"), "9811111111", 5)
             .await
             .expect("lookup runs");
         assert_eq!(by_phone.len(), 1);
         assert_eq!(by_phone[0].client_id, "c2");
 
-        let inactive = find_clients(&db, &tenant, "branch1", "Inactive", 5)
+        let inactive = find_clients(&db, &tenant, &one_branch("branch1"), "Inactive", 5)
             .await
             .expect("lookup runs");
         assert!(inactive.is_empty(), "inactive clients are not offered");
@@ -910,7 +918,7 @@ pub struct InventoryRiskRow {
 pub async fn inventory_risk(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     window_days: i32,
     limit: i64,
 ) -> Result<Vec<InventoryRiskRow>, sqlx::Error> {
@@ -920,7 +928,7 @@ pub async fn inventory_risk(
           SELECT inventory_item_id,
                  COALESCE(SUM(ABS(quantity_delta)),0)::BIGINT AS consumed_units
           FROM inventory_stock_ledger
-          WHERE tenant_id=$1 AND branch_id=$2
+          WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
             AND movement_type='sale'
             AND created_at >= NOW() - MAKE_INTERVAL(days => $3)
           GROUP BY inventory_item_id
@@ -936,7 +944,7 @@ pub async fn inventory_risk(
                (item.stock_quantity::BIGINT * item.unit_cost_paise)::BIGINT AS stock_value_paise
         FROM inventory_items item
         LEFT JOIN consumption ON consumption.inventory_item_id=item.id
-        WHERE item.tenant_id=$1 AND item.branch_id=$2
+        WHERE item.tenant_id=$1 AND item.branch_id=ANY($2::TEXT[])
           AND item.active=TRUE
           AND item.stock_quantity <= item.reorder_point
         ORDER BY (item.reorder_point - item.stock_quantity) DESC,
@@ -946,7 +954,7 @@ pub async fn inventory_risk(
         "#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(branch_ids)
     .bind(window_days)
     .bind(limit)
     .fetch_all(db)
@@ -975,7 +983,7 @@ pub struct OfferPerformanceRow {
 pub async fn offer_performance(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    branch_ids: &[String],
     window_days: i32,
     limit: i64,
 ) -> Result<Vec<OfferPerformanceRow>, sqlx::Error> {
@@ -988,7 +996,7 @@ pub async fn offer_performance(
                  COUNT(*) FILTER (WHERE event_type='view')::BIGINT  AS views,
                  COUNT(*) FILTER (WHERE event_type='click')::BIGINT AS clicks
           FROM marketing_offer_events, bounds
-          WHERE tenant_id=$1 AND branch_id=$2 AND created_at >= bounds.since
+          WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND created_at >= bounds.since
           GROUP BY offer_id
         ), redemptions AS (
           -- Sales carry the coupon by code, not by id.
@@ -997,7 +1005,7 @@ pub async fn offer_performance(
                  COALESCE(SUM(sale.coupon_discount_paise),0)::BIGINT   AS discount_paise,
                  COALESCE(SUM(sale.total_paise),0)::BIGINT             AS revenue_paise
           FROM pos_sales sale, bounds
-          WHERE sale.tenant_id=$1 AND sale.branch_id=$2
+          WHERE sale.tenant_id=$1 AND sale.branch_id=ANY($2::TEXT[])
             AND COALESCE(BTRIM(sale.coupon_code),'')<>''
             AND sale.status NOT IN ('draft','open','voided','cancelled')
             AND sale.created_at >= bounds.since
@@ -1015,7 +1023,7 @@ pub async fn offer_performance(
         FROM pos_coupons coupon
         LEFT JOIN events ON events.offer_id=coupon.id
         LEFT JOIN redemptions ON redemptions.coupon_code=UPPER(BTRIM(coupon.code))
-        WHERE coupon.tenant_id=$1 AND coupon.branch_id=$2
+        WHERE coupon.tenant_id=$1 AND coupon.branch_id=ANY($2::TEXT[])
         ORDER BY COALESCE(redemptions.redemptions,0) DESC,
                  COALESCE(events.views,0) DESC,
                  coupon.code
@@ -1023,7 +1031,7 @@ pub async fn offer_performance(
         "#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(branch_ids)
     .bind(window_days)
     .bind(limit)
     .fetch_all(db)

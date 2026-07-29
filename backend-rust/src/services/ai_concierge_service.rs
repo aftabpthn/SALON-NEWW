@@ -11,7 +11,13 @@ use crate::{
         self as repository, AiGovernanceRecord, AiMessageRecord, AiOperationalContext,
         AiSessionRecord, AiVoiceCallOpportunity, AiVoiceCallRecord, AiVoiceCallReportSummary,
     },
-    services::ai_copilot_tools::{self, CopilotAnswer},
+    services::{
+        ai_copilot_tools::{self, CopilotAnswer},
+        ai_channel_service,
+        ai_scope_service::{self, ScopeRequest},
+        ai_tool_dispatcher,
+        auth_service::AuthClaims,
+    },
 };
 
 const CHANNELS: &[&str] = &["web", "whatsapp", "voice"];
@@ -135,6 +141,7 @@ struct ProviderEnvelope<T> {
 }
 
 /// What the CRM tool layer produced for this message.
+#[derive(Debug)]
 enum CopilotOutcome {
     /// A tool ran and produced grounded evidence.
     Answered(Box<CopilotAnswer>),
@@ -153,17 +160,23 @@ impl CopilotOutcome {
     }
 }
 
-/// Detects the intent, checks the role, and runs the one matching read tool.
+/// Detects the intent and runs the one matching read tool through the shared
+/// dispatcher.
+///
+/// Access is not decided here. `ai_tool_dispatcher::dispatch` resolves the
+/// login's branch scope and checks the domain permission, so the header
+/// concierge and `/ai/copilot/ask` cannot drift apart on who may read what.
 #[allow(clippy::too_many_arguments)]
 async fn run_copilot_tool(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    user_id: &str,
-    role: &str,
+    claims: &AuthClaims,
     session_id: &str,
     message: &str,
 ) -> CopilotOutcome {
+    let user_id = claims.sub.as_str();
+    let role = claims.role.as_str();
     // A bare "why?" continues the previous answer instead of matching nothing.
     let matched = match ai_copilot_tools::detect(message) {
         Some(matched) => matched,
@@ -177,7 +190,17 @@ async fn run_copilot_tool(
     };
     let actor = ai_copilot_tools::ToolActor::new(user_id, role);
     let started = std::time::Instant::now();
-    let outcome = ai_copilot_tools::run(db, tenant_id, branch_id, &actor, &matched).await;
+    // The branch scope comes from the login's grants, never from the request
+    // header, so a header branch cannot widen what this answer reads.
+    let outcome = ai_tool_dispatcher::dispatch(
+        db,
+        tenant_id,
+        claims,
+        &actor,
+        &matched,
+        &ScopeRequest::default(),
+    )
+    .await;
     let elapsed_ms = started.elapsed().as_millis().min(i32::MAX as u128) as i32;
 
     // Every tool call is audited, allowed or not. The question is stored with
@@ -374,11 +397,11 @@ pub async fn process_web_message(
     settings: &Settings,
     tenant_id: &str,
     branch_id: &str,
-    user_id: &str,
-    user_role: &str,
+    claims: &AuthClaims,
     session_id: &str,
     request: ConciergeMessageRequest,
 ) -> Result<ConciergeResponse, AppError> {
+    let user_id = claims.sub.as_str();
     let session = repository::session(db, tenant_id, branch_id, session_id)
         .await
         .map_err(|_| AppError::internal("failed to validate AI session"))?
@@ -391,7 +414,7 @@ pub async fn process_web_message(
         branch_id,
         session,
         request,
-        Some(user_role),
+        Some(claims),
     )
     .await
 }
@@ -405,10 +428,18 @@ pub async fn process_external_message(
     client_id: Option<&str>,
     channel: &str,
     external_thread_id: &str,
+    // `from_phone` is used only to resolve a CRM identity, never stored raw.
+    from_phone: &str,
     locale: &str,
     body: &str,
     provider_message_id: Option<&str>,
 ) -> Result<ConciergeResponse, AppError> {
+    // Resolve who is on the other end before anything is read. A recognised
+    // staff phone carries the same grants and denials that login has in the
+    // browser; anything else stays anonymous and reaches no CRM tool. The
+    // resolution happens here rather than at each webhook so WhatsApp and voice
+    // cannot drift apart on who is allowed to ask what.
+    let caller = ai_channel_service::resolve_caller(db, tenant_id, branch_id, from_phone).await?;
     let external_thread_id = sha256_text(external_thread_id);
     let session = repository::open_session(
         db,
@@ -433,7 +464,7 @@ pub async fn process_external_message(
             body: body.to_string(),
             provider_message_id: provider_message_id.map(str::to_string),
         },
-        None,
+        caller.claims.as_ref(),
     )
     .await
 }
@@ -483,7 +514,7 @@ async fn process_message(
     branch_id: &str,
     session: AiSessionRecord,
     request: ConciergeMessageRequest,
-    web_role: Option<&str>,
+    web_claims: Option<&AuthClaims>,
 ) -> Result<ConciergeResponse, AppError> {
     let governance = governance(db, tenant_id, branch_id).await?;
     ensure_channel(&governance, &session.channel)?;
@@ -527,18 +558,9 @@ async fn process_message(
     };
     // CRM tools only run for signed-in web users, because every tool is
     // permission-checked against the caller's role.
-    let copilot = match web_role {
-        Some(role) => {
-            run_copilot_tool(
-                db,
-                tenant_id,
-                branch_id,
-                session.user_id.as_deref().unwrap_or_default(),
-                role,
-                &session.id,
-                &raw_body,
-            )
-            .await
+    let copilot = match web_claims {
+        Some(claims) => {
+            run_copilot_tool(db, tenant_id, branch_id, claims, &session.id, &raw_body).await
         }
         None => CopilotOutcome::NotApplicable,
     };
@@ -559,7 +581,7 @@ async fn process_message(
             &history,
             &services,
             operational_context.as_ref(),
-            web_role,
+            web_claims,
             &governance,
             copilot.answer(),
         )
@@ -703,6 +725,8 @@ pub async fn record_voice_call_event(
             client_id.as_deref(),
             "voice",
             &call_id,
+            // The caller's number is what identifies them on this channel.
+            &request.from,
             request.locale.as_deref().unwrap_or("en-IN"),
             &transcript,
             Some(if event_id.is_empty() {
@@ -827,11 +851,13 @@ async fn call_provider(
     history: &[AiMessageRecord],
     services: &[repository::AiServiceCandidate],
     operational_context: Option<&AiOperationalContext>,
-    web_role: Option<&str>,
+    web_claims: Option<&AuthClaims>,
     governance: &AiGovernanceRecord,
     copilot: Option<&CopilotAnswer>,
 ) -> (ProviderResponse, &'static str) {
-    let financials_visible = web_role.is_some_and(can_view_financials);
+    let financials_visible = web_claims.is_some_and(|claims| {
+        ai_scope_service::domain_allowed(claims, ai_scope_service::AiDomain::Finance)
+    });
     // A tool answer is already grounded in CRM data, so it is the fallback reply
     // whenever the provider cannot be reached.
     let fallback = match copilot {
@@ -1259,12 +1285,6 @@ fn contains_any(value: &str, words: &[&str]) -> bool {
     words.iter().any(|word| value.contains(word))
 }
 
-fn can_view_financials(role: &str) -> bool {
-    matches!(
-        role.to_ascii_lowercase().as_str(),
-        "owner" | "admin" | "manager" | "accountant" | "analyst"
-    )
-}
 
 fn ensure_channel(governance: &AiGovernanceRecord, channel: &str) -> Result<(), AppError> {
     let allowed = governance
@@ -1398,11 +1418,39 @@ fn call_report_insights(
 }
 
 #[cfg(test)]
+/// An owner login for concierge tests. Concierge access is now decided from
+/// permissions, so tests supply claims rather than a role string.
+fn owner_claims() -> AuthClaims {
+    AuthClaims {
+        sub: "user1".into(),
+        tenant_id: "tenant1".into(),
+        branch_id: Some("branch1".into()),
+        role: "owner".into(),
+        role_id: None,
+        permissions: Vec::new(),
+        denied_permissions: Vec::new(),
+        masked_fields: Vec::new(),
+        max_discount_paise: None,
+        max_refund_paise: None,
+        max_cash_movement_paise: None,
+        permission_version: 1,
+        session_id: String::new(),
+        mfa_enrollment_required: false,
+        token_type: "access".into(),
+        jti: "jti".into(),
+        iat: 0,
+        exp: 0,
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::{
-        default_governance, local_response, provider_payload, redact, ProviderEnvelope,
-        ProviderResponse,
+        default_governance, local_response, provider_payload, redact, AuthClaims,
+        ProviderEnvelope, ProviderResponse,
     };
+
+
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
 
     fn provider_reply() -> ProviderResponse {
@@ -1688,7 +1736,7 @@ mod phase0_flow_tests {
                 body: "Hi".into(),
                 provider_message_id: None,
             },
-            Some("owner"),
+            Some(&owner_claims()),
         )
         .await
         .expect("a message is answered even with no AI provider configured");
@@ -1788,7 +1836,7 @@ mod phase0_flow_tests {
                 body: "I want to book Hair Spa".into(),
                 provider_message_id: None,
             },
-            Some("owner"),
+            Some(&owner_claims()),
         )
         .await
         .expect("booking intent is answered");
@@ -1812,7 +1860,7 @@ mod phase0_flow_tests {
                 body: "I need a refund for my treatment".into(),
                 provider_message_id: None,
             },
-            Some("owner"),
+            Some(&owner_claims()),
         )
         .await
         .expect("a sensitive request is answered");
@@ -1845,6 +1893,7 @@ mod phase0_flow_tests {
         .expect("session opens");
 
         let submission = format!("submit_{}", Uuid::new_v4().simple());
+        let claims = owner_claims();
         let send_once = || {
             process_message(
                 &db,
@@ -1856,7 +1905,7 @@ mod phase0_flow_tests {
                     body: "Hi".into(),
                     provider_message_id: Some(submission.clone()),
                 },
-                Some("owner"),
+                Some(&claims),
             )
         };
 
@@ -1910,7 +1959,7 @@ mod phase0_flow_tests {
                 body: "Hi".into(),
                 provider_message_id: None,
             },
-            Some("owner"),
+            Some(&owner_claims()),
         )
         .await
         .expect("an unreachable provider must not fail the request");
@@ -2001,6 +2050,106 @@ mod phase7_channel_language_tests {
         assert_eq!(
             redact("call 9876543210 or mail me@example.com"),
             "call [redacted] or mail [redacted]"
+        );
+    }
+}
+
+#[cfg(test)]
+mod header_path_scope_tests {
+    use super::{run_copilot_tool, CopilotOutcome};
+    use crate::services::ai_tool_dispatcher::tests_support::claims;
+    use sqlx::PgPool;
+
+    /// Proves the header drawer's own code path is scope-enforced.
+    ///
+    /// `run_copilot_tool` is what `process_web_message` calls for every message
+    /// typed into the header drawer. Driving it directly with a login that holds
+    /// one of two branches shows the answer is built from the grants, not from
+    /// the branch id the client happened to send.
+    #[sqlx::test]
+    async fn a_header_message_is_answered_through_the_scoped_dispatcher(pool: PgPool) {
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let mut branches = Vec::new();
+        for name in ["Banjara Hills", "Andheri West"] {
+            let id: String = sqlx::query_scalar(
+                r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+                   VALUES((SELECT id FROM tenants WHERE scope_id=$1),$2,'','South','Hyderabad','Central',TRUE)
+                   RETURNING scope_id"#,
+            )
+            .bind(&tenant_id)
+            .bind(name)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            branches.push((id, name.to_string()));
+        }
+
+        let user_id: String = sqlx::query_scalar(
+            r#"INSERT INTO users(tenant_id,branch_id,role_name,email,password_hash,full_name)
+               VALUES($1,$2,'manager','asha.rao@aurasalon.in','x','Asha Rao') RETURNING id"#,
+        )
+        .bind(&tenant_id)
+        .bind(&branches[0].0)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO user_branch_roles(tenant_id,user_id,branch_id,role_name,active)
+               VALUES($1,$2,$3,'manager',TRUE)"#,
+        )
+        .bind(&tenant_id)
+        .bind(&user_id)
+        .bind(&branches[0].0)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        for (branch_id, _) in &branches {
+            sqlx::query(
+                r#"INSERT INTO services(tenant_id,branch_id,name,category,duration_minutes,price_paise,active)
+                   VALUES($1,$2,'Hair Colour','Hair',60,250000,TRUE)"#,
+            )
+            .bind(&tenant_id)
+            .bind(branch_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let mut header_claims = claims("manager", &[], &[]);
+        header_claims.sub = user_id.clone();
+        header_claims.tenant_id = tenant_id.clone();
+        header_claims.branch_id = Some(branches[0].0.clone());
+
+        // The second branch is passed as the request's branch context. The
+        // dispatcher must still answer from the grants, not from this value.
+        let outcome = run_copilot_tool(
+            &pool,
+            &tenant_id,
+            &branches[1].0,
+            &header_claims,
+            "session-1",
+            "which services are declining",
+        )
+        .await;
+
+        let CopilotOutcome::Answered(answer) = outcome else {
+            panic!("the header path must produce a grounded answer: {outcome:?}");
+        };
+        assert_eq!(
+            answer.branch_id, branches[0].0,
+            "the answer must read the granted branch, not the requested one"
+        );
+        assert_eq!(answer.scope.branches_read, vec![branches[0].1.clone()]);
+        assert!(
+            !answer.scope.branches_read.contains(&branches[1].1),
+            "an ungranted branch must never appear in a header answer"
         );
     }
 }

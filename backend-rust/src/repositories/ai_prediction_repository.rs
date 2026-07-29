@@ -64,10 +64,20 @@ pub struct NewPrediction {
 /// predictions without their run would have no model version, so both land in
 /// one transaction or neither does.
 #[allow(clippy::too_many_arguments)]
+pub struct RunScope<'a> {
+    /// The branch the run is filed under, always inside `branch_ids`.
+    pub branch_id: &'a str,
+    pub level: &'a str,
+    pub label: &'a str,
+    /// Every branch whose history the features were built from.
+    pub branch_ids: &'a [String],
+    pub requested_role: &'a str,
+}
+
 pub async fn record_run(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: RunScope<'_>,
     prediction_kind: &str,
     model_version: &str,
     computed_by: &str,
@@ -82,12 +92,13 @@ pub async fn record_run(
     let run_id: String = sqlx::query_scalar(
         r#"INSERT INTO ai_prediction_runs(
               tenant_id,branch_id,prediction_kind,model_version,computed_by,
-              history_start,history_end,feature_digest,features,requested_by
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+              history_start,history_end,feature_digest,features,requested_by,
+              scope_level,scope_label,scope_branch_ids,requested_role
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
             RETURNING id"#,
     )
     .bind(tenant_id)
-    .bind(branch_id)
+    .bind(scope.branch_id)
     .bind(prediction_kind)
     .bind(model_version)
     .bind(computed_by)
@@ -96,6 +107,10 @@ pub async fn record_run(
     .bind(feature_digest)
     .bind(features)
     .bind(requested_by)
+    .bind(scope.level)
+    .bind(scope.label)
+    .bind(scope.branch_ids)
+    .bind(scope.requested_role)
     .fetch_one(&mut *tx)
     .await?;
 
@@ -107,7 +122,7 @@ pub async fn record_run(
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)"#,
         )
         .bind(tenant_id)
-        .bind(branch_id)
+        .bind(scope.branch_id)
         .bind(&run_id)
         .bind(&prediction.subject_kind)
         .bind(&prediction.subject_id)
