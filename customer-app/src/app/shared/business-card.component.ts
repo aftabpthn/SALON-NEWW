@@ -793,24 +793,40 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
+      :host-context(.continue-rail) .business-card.variant-personal .rating-pill,
+      :host-context(.continue-rail) .business-card.variant-personal .cover-actions,
+      :host-context(.continue-rail) .business-card.variant-personal .offer-pill,
+      :host-context(.continue-rail) .business-card.variant-personal .topline,
       :host-context(.continue-rail) .business-card.variant-personal .service-row,
       :host-context(.continue-rail) .business-card.variant-personal .footer-row,
+      :host-context(.favourites-rail) .business-card.variant-personal .rating-pill,
+      :host-context(.favourites-rail) .business-card.variant-personal .cover-actions,
+      :host-context(.favourites-rail) .business-card.variant-personal .offer-pill,
+      :host-context(.favourites-rail) .business-card.variant-personal .topline,
       :host-context(.favourites-rail) .business-card.variant-personal .service-row,
       :host-context(.favourites-rail) .business-card.variant-personal .footer-row {
-        display: none;
+        display: none !important;
+      }
+
+      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback,
+      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback {
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+        padding: 0;
       }
 
       :host-context(.continue-rail) .business-card.variant-personal .cover-fallback span,
       :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback span {
-        width: 34px;
-        height: 34px;
-        border-radius: 12px;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
         font-size: 0.85rem;
       }
 
       :host-context(.continue-rail) .business-card.variant-personal .cover-fallback small,
       :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback small {
-        display: none;
+        display: none !important;
       }
     }
 
