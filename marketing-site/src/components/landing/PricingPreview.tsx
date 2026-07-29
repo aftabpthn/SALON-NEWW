@@ -50,7 +50,7 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_PLANS[number]; inde
         <>
           <div className="absolute -inset-[1px] rounded-2xl animate-breathe pointer-events-none" />
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full bg-gradient-to-r from-aura-burgundy to-aura-rose text-white text-xs font-bold shadow-lg">
-            {t("pricing.popular")}
+             {language === "hi" ? "Growth प्लान" : "Growth plan"}
           </div>
         </>
       )}

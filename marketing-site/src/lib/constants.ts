@@ -89,10 +89,10 @@ export const FEATURES_OVERVIEW: Feature[] = [
 
 /* ===== LANDING PAGE STATS ===== */
 export const STATS = [
-  { value: 10000, suffix: "+", label: "Appointments Booked" },
-  { value: 500, suffix: "+", label: "Salons Trust Aura" },
-  { value: 50, suffix: "Cr+", prefix: "₹", label: "Transactions Processed" },
-  { value: 99.9, suffix: "%", label: "Uptime Guarantee" },
+  { value: 0, suffix: "", label: "Approved appointments metric pending" },
+  { value: 0, suffix: "", label: "Approved customer count pending" },
+  { value: 0, suffix: "", prefix: "", label: "Approved transaction metric pending" },
+  { value: 0, suffix: "", label: "Service commitment confirmed in proposal" },
 ];
 
 /* ===== HOW IT WORKS ===== */

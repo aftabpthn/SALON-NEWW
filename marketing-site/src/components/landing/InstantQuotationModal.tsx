@@ -19,7 +19,7 @@ export function InstantQuotationModal() {
   const handleShareQuote = () => {
     soundEngine.playSuccess();
     const text = `Hi Aura Team! I configured a plan for ${branches} branch(es), ${chairs} styling chairs. Estimated Monthly: ₹${Math.round(baseMonthly)}. Please send official onboarding details.`;
-    window.open(`https://wa.me/919999999999?text=${encodeURIComponent(text)}`, "_blank");
+    window.location.href = `/contact?subject=${encodeURIComponent(text)}`;
   };
 
   return (

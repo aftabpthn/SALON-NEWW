@@ -107,7 +107,7 @@ function FloatingTextarea({
 }
 
 export default function ContactPage() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitError, setSubmitError] = useState("");
@@ -148,7 +148,9 @@ export default function ContactPage() {
         setErrors({});
       } else {
         const payload = await res.json().catch(() => null) as { code?: string } | null;
-        setSubmitError(payload?.code === "DELIVERY_NOT_CONFIGURED" ? t("contact.deliveryMissing") : t("common.error"));
+        setSubmitError(payload?.code === "DELIVERY_NOT_CONFIGURED"
+          ? (language === "hi" ? "Contact delivery अभी configured नहीं है। Approved public channel configure होने के बाद यहाँ दिखेगा।" : "Contact delivery is not configured yet. An approved public channel will be shown here once configured.")
+          : t("common.error"));
         setStatus("error");
       }
     } catch {

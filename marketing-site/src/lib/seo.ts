@@ -415,13 +415,7 @@ export const organizationJsonLd = {
   "@type": "Organization",
   name: "Aura Salon CRM/POS",
   url: SITE,
-  logo: `${SITE}/logo.png`,
   description: "Connected salon operating system for Indian salons — CRM, POS, booking, staff, inventory and finance.",
-  contactPoint: {
-    "@type": "ContactPoint",
-    contactType: "customer support",
-    availableLanguage: ["English", "Hindi"],
-  },
   address: {
     "@type": "PostalAddress",
     addressCountry: "IN",

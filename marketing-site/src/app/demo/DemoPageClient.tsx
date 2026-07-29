@@ -48,7 +48,9 @@ export default function DemoPage() {
       });
       const payload = await response.json().catch(() => null) as { code?: string; error?: string } | null;
       if (!response.ok) {
-        setErrorMessage(payload?.code === "DELIVERY_NOT_CONFIGURED" ? t("demo.deliveryMissing") : t("demo.error"));
+        setErrorMessage(payload?.code === "DELIVERY_NOT_CONFIGURED"
+          ? (language === "hi" ? "Demo request delivery अभी configured नहीं है। Approved contact channel configure होने के बाद यहाँ दिखेगा।" : "Demo request delivery is not configured yet. An approved contact channel will be shown here once configured.")
+          : t("demo.error"));
         setStatus("error");
         return;
       }

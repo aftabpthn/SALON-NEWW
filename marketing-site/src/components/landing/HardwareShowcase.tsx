@@ -47,7 +47,7 @@ export function HardwareShowcase() {
                   <p className="text-xs text-white/60 mt-2 leading-5">{device.specs}</p>
                 </div>
                 <div className="mt-6 flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 border-t border-white/10 pt-3">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> 100% Plug & Play
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Setup requirements confirmed in proposal
                 </div>
               </div>
             );

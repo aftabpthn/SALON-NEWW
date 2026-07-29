@@ -316,13 +316,19 @@ type PendingBookingIntent = {
     }
     @media (min-width: 768px) {
       .booking-hero { grid-template-columns: 260px minmax(0, 1fr); }
+      .staff-choice em { text-align: left; }
+      .check-slots-button { justify-self: start; }
+      .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (min-width: 768px) {
+      .booking-hero { grid-template-columns: 260px minmax(0, 1fr); }
       .confirm-grid { grid-template-columns: minmax(0, 1fr) 260px; }
       .addon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   `]
 })
 export class BookingFlowPage implements OnInit {
-  readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || 1));
+  readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.route.snapshot.queryParamMap.get("serviceId") ? 2 : 1)));
   readonly selectedServiceId = signal(this.route.snapshot.queryParamMap.get("serviceId") ?? "");
   readonly selectedStaffId = signal<string | null>(this.route.snapshot.queryParamMap.get("staffId") || null);
   readonly selectedDate = signal(this.route.snapshot.queryParamMap.get("date") ?? "");
@@ -363,7 +369,11 @@ export class BookingFlowPage implements OnInit {
     await this.marketplace.loadBusiness(slug).catch(() => undefined);
     if (!this.isRescheduling()) this.restorePendingIntent();
     if (!this.selectedServiceId() && this.business()?.services[0]) this.selectedServiceId.set(this.business()?.services[0].id ?? "");
-    if (this.step() < 1 || this.step() > 4) this.step.set(1);
+    if (!this.route.snapshot.queryParamMap.has("step") && (this.selectedServiceId() || this.route.snapshot.queryParamMap.get("serviceId"))) {
+      this.step.set(2);
+    } else if (this.step() < 1 || this.step() > 4) {
+      this.step.set(1);
+    }
     await this.reloadAvailability();
   }
 

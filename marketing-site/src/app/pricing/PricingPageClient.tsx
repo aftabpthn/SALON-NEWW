@@ -114,7 +114,7 @@ export default function PricingPage() {
               >
                 {tier.highlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-neon-violet to-aura-rose text-white text-xs font-bold">
-                    {t("pricing.popular")}
+                     {language === "hi" ? "Growth प्लान" : "Growth plan"}
                   </div>
                 )}
                 <div className="text-center mb-6">

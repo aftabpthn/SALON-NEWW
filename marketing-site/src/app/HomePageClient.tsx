@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, ChevronDown, CircleCheck, Gauge, IndianRupee, Layers3, ShieldCheck, UsersRound } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, CircleCheck, Gauge, ShieldCheck, UsersRound } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { PRICING_PLANS } from "@/lib/constants";
 import { ECOSYSTEM_CONTENT } from "@/lib/ecosystem-content";
