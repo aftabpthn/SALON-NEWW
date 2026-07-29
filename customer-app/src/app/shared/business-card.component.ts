@@ -127,25 +127,24 @@ import { MarketplaceService } from "../core/marketplace.service";
       inset: 0;
       display: grid;
       place-items: center;
-      gap: 8px;
+      gap: 4px;
       text-align: center;
-      background:
-        radial-gradient(circle at 50% 22%, rgba(255,255,255,0.56), transparent 24%),
-        linear-gradient(145deg, #dff3fb, #bde6f7 42%, #7cd0e8 100%);
-      color: #0f4f65;
+      background: linear-gradient(135deg, #e8f5fa 0%, #c8e9f3 50%, #a8dbe9 100%);
+      color: #0b4678;
     }
 
     .cover-fallback span {
-      width: 88px;
-      height: 88px;
+      width: 40px;
+      height: 40px;
       display: grid;
       place-items: center;
-      border-radius: 28px;
-      background: rgba(255,255,255,0.82);
-      box-shadow: 0 18px 34px rgba(15, 79, 101, 0.12);
-      font-size: 1.9rem;
-      font-weight: 1000;
-      letter-spacing: -0.04em;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.14);
+      color: #0b4678;
+      font-size: 1rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
     }
 
     .cover-fallback small {

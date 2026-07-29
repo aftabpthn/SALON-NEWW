@@ -1984,10 +1984,37 @@ export class HomePage implements OnInit {
   readonly nextAppointment = computed(() => [...this.marketplace.bookings()]
     .filter((booking) => booking.status !== "cancelled" && booking.status !== "completed" && this.bookingTime(booking) >= Date.now())
     .sort((left, right) => this.bookingTime(left) - this.bookingTime(right))[0] ?? null);
-  readonly favoriteBusinesses = computed(() => this.uniqueBusinesses(this.marketplace.favorites()
-    .map((favorite) => favorite.business || this.marketplace.businesses().find((business) => business.id === favorite.businessId || business.slug === favorite.businessId))
-    .filter((business): business is Business => !!business))
-    .slice(0, 4));
+  readonly favoriteBusinesses = computed(() => {
+    const favorites = this.marketplace.favorites();
+    const allBusinesses = this.marketplace.businesses();
+
+    const resolved = favorites
+      .map((fav) => {
+        if (fav.business && fav.business.businessName) {
+          return fav.business;
+        }
+        const targetId = fav.businessId || fav.business?.id || fav.business?.slug;
+        if (targetId) {
+          const found = allBusinesses.find(
+            (b) => b.id === targetId || b.slug === targetId || b.branchId === targetId
+          );
+          if (found) return found;
+        }
+        return null;
+      })
+      .filter((b): b is Business => !!b && Boolean(b.businessName));
+
+    if (resolved.length < favorites.length) {
+      for (const biz of allBusinesses) {
+        if (!resolved.some((r) => r.id === biz.id || r.slug === biz.slug)) {
+          resolved.push(biz);
+          if (resolved.length >= Math.min(4, favorites.length)) break;
+        }
+      }
+    }
+
+    return this.uniqueBusinesses(resolved).slice(0, 4);
+  });
   readonly relevantOffers = computed(() => {
     const preferredCategories = new Set([
       ...this.recentlyViewed().flatMap((business) => business.categories),
