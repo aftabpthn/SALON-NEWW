@@ -3,7 +3,7 @@ import { Router, RouterLink } from "@angular/router";
 import { AlertController, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
-import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
+import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, chevronForwardOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Booking } from "../../core/api.types";
 
@@ -66,7 +66,10 @@ type WaitlistDialog = {
                     <h2>{{ booking.serviceName }}</h2>
                     <div class="booking-card-status">
                       <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
-                      <span class="view-details-label">View details</span>
+                      <span class="view-details-btn">
+                        <span>View details</span>
+                        <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                      </span>
                     </div>
                   </div>
                   <p>{{ booking.businessName }}</p>
@@ -272,8 +275,30 @@ type WaitlistDialog = {
     }
 
     .booking-title-row h2 { min-width: 0; }
-    .booking-card-status { flex: 0 0 auto; display: grid; justify-items: end; gap: 3px; }
-    .view-details-label { color: var(--primary); font-size: 0.72rem; font-weight: 900; white-space: nowrap; }
+    .booking-card-status { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .view-details-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 9px;
+      border: 1px solid rgba(11, 70, 120, 0.22);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft, rgba(11, 70, 120, 0.08));
+      font-size: 0.72rem;
+      font-weight: 850;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+      transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+    .view-details-btn ion-icon { font-size: 0.76rem; transition: transform 160ms ease; }
+    .booking-card:hover .view-details-btn {
+      color: #ffffff;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--primary), var(--brand-800, #0B4678));
+      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.25);
+    }
+    .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
 
     .booking-content p {
       margin: 0 0 10px;
@@ -641,6 +666,8 @@ type WaitlistDialog = {
       .booking-content { min-width: 0; align-self: center; overflow: hidden; }
       .booking-title-row { gap: 6px; margin: 0 0 2px; }
       .booking-content .status-pill { min-height: 20px; padding: 2px 6px; font-size: 0.58rem; }
+      .view-details-btn { padding: 2px 7px; font-size: 0.62rem; gap: 2px; }
+      .view-details-btn ion-icon { font-size: 0.64rem; }
 
       .booking-content h2 {
         margin: 0;
