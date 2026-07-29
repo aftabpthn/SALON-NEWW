@@ -19,7 +19,7 @@ use crate::{
         },
         ai_copilot_tools,
         ai_prediction_service::{self, PredictionKind, PredictionRun},
-        ai_scope_service::ScopeRequest,
+        ai_scope_service::{self, ScopeRequest},
         ai_action_service::{self, ActionDraft, ConfirmDraftRequest, CreateDraftRequest},
         ai_briefing_service::{
             self, BranchComparisonRow, Briefing, Cadence, Signal, SignalDecision,
@@ -245,7 +245,7 @@ async fn run_prediction(
             &tenant_id,
             &claims,
             kind,
-            &ScopeRequest::default(),
+            &ScopeRequest { branch_id: Some(branch_id), ..Default::default() },
         )
         .await?,
     )))
@@ -269,7 +269,7 @@ async fn get_latest_prediction(
             &tenant_id,
             &claims,
             kind,
-            &ScopeRequest::default(),
+            &ScopeRequest { branch_id: Some(branch_id), ..Default::default() },
         )
         .await?,
     )))
@@ -289,12 +289,8 @@ async fn run_what_if(
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_what_if_service::simulate(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &claims.role,
-            scenario,
+        ai_what_if_service::simulate_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, scenario,
         )
         .await?,
     )))
@@ -310,8 +306,8 @@ async fn create_action_draft(
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_action_service::create_draft(
-            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, payload,
+        ai_action_service::create_draft_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, payload,
         )
         .await?,
     )))
@@ -328,8 +324,8 @@ async fn confirm_action_draft(
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_action_service::confirm_draft(
-            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, &draft_id, payload,
+        ai_action_service::confirm_draft_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, &draft_id, payload,
         )
         .await?,
     )))
@@ -344,8 +340,8 @@ async fn cancel_action_draft(
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_action_service::cancel_draft(
-            &state.db, &tenant_id, &branch_id, &claims.role, &claims.sub, &draft_id,
+        ai_action_service::cancel_draft_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, &draft_id,
         )
         .await?,
     )))
@@ -366,14 +362,8 @@ async fn get_briefing(
     let cadence = Cadence::from_name(&cadence)
         .ok_or_else(|| AppError::not_found("that briefing cadence is not available"))?;
     Ok(Json(ApiResponse::ok(
-        ai_briefing_service::build_briefing(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &claims.role,
-            &claims.sub,
-            cadence,
-            false,
+        ai_briefing_service::build_briefing_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, cadence, false,
         )
         .await?,
     )))
@@ -393,22 +383,8 @@ async fn compare_branches(
     let (tenant_id, _) = tenant_branch(&headers)?;
     let signal = Signal::from_key(&signal)
         .ok_or_else(|| AppError::not_found("that comparison is not available"))?;
-    let user = crate::repositories::auth_repository::find_user_by_id(
-        &state.db, &tenant_id, &claims.sub,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to load branch access"))?
-    .ok_or_else(|| AppError::unauthenticated("user is not active"))?;
-    let branches = crate::repositories::auth_repository::list_branch_access(&state.db, &user)
-        .await
-        .map_err(|_| AppError::internal("failed to load branch access"))?
-        .into_iter()
-        .map(|access| (access.branch_id, access.branch_name))
-        .collect::<Vec<_>>();
     Ok(Json(ApiResponse::ok(
-        ai_briefing_service::compare_branches(
-            &state.db, &tenant_id, &claims.role, &claims.sub, &branches, signal,
-        )
+        ai_briefing_service::compare_branches_authorized(&state.db, &tenant_id, &claims, signal)
         .await?,
     )))
 }
@@ -472,32 +448,18 @@ fn verify_voice_provider(state: &AppState, headers: &HeaderMap) -> Result<(), Ap
 }
 
 fn require_ai_read(claims: &AuthClaims) -> Result<(), AppError> {
-    if matches!(
-        claims.role.to_ascii_lowercase().as_str(),
-        "owner"
-            | "admin"
-            | "manager"
-            | "staff"
-            | "frontdesk"
-            | "receptionist"
-            | "accountant"
-            | "analyst"
-            | "inventorymanager"
-    ) {
+    if ai_scope_service::any_domain_allowed(claims) {
         Ok(())
     } else {
-        Err(AppError::forbidden("AI concierge access is restricted"))
+        Err(AppError::forbidden("AI concierge access is not granted"))
     }
 }
 
 fn require_ai_manage(claims: &AuthClaims) -> Result<(), AppError> {
-    if matches!(
-        claims.role.to_ascii_lowercase().as_str(),
-        "owner" | "admin" | "manager"
-    ) {
+    if ai_scope_service::permission_allowed(claims, "management.write") {
         Ok(())
     } else {
-        Err(AppError::forbidden("AI governance access is restricted"))
+        Err(AppError::forbidden("AI governance access is not granted"))
     }
 }
 
@@ -517,14 +479,8 @@ async fn decide_signal(
     let signal = Signal::from_key(&signal)
         .ok_or_else(|| AppError::not_found("that briefing signal is not available"))?;
     Ok(Json(ApiResponse::ok(
-        ai_briefing_service::decide_signal(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &claims.role,
-            &claims.sub,
-            signal,
-            &payload,
+        ai_briefing_service::decide_signal_authorized(
+            &state.db, &tenant_id, &branch_id, &claims, signal, &payload,
         )
         .await?,
     )))

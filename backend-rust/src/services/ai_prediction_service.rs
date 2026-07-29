@@ -134,29 +134,6 @@ impl PredictionKind {
         }
     }
 
-    /// Roles allowed to ask. Money forecasts stay with finance-capable roles.
-    fn allowed_roles(self) -> &'static [&'static str] {
-        match self {
-            Self::RevenueForecast => &["owner", "admin", "manager", "accountant", "analyst"],
-            Self::StaffUtilization => &["owner", "admin", "manager", "analyst"],
-            Self::InventoryReorderRisk => {
-                &["owner", "admin", "manager", "analyst", "inventorymanager"]
-            }
-            _ => &[
-                "owner",
-                "admin",
-                "manager",
-                "staff",
-                "frontdesk",
-                "receptionist",
-                "analyst",
-            ],
-        }
-    }
-
-    pub fn permitted_for(self, role: &str) -> bool {
-        self.allowed_roles().contains(&role.to_ascii_lowercase().as_str())
-    }
 }
 
 /// One subject's deterministic features.
@@ -1229,24 +1206,6 @@ mod phase3_prediction_tests {
                 prediction.upper_value
             );
         }
-    }
-
-    /// Money and workforce forecasts are closed to roles that may not see them.
-    #[test]
-    fn forecasts_are_role_gated() {
-        for role in ["staff", "frontdesk", "receptionist", "inventorymanager"] {
-            assert!(
-                !PredictionKind::RevenueForecast.permitted_for(role),
-                "revenue forecast must be closed to {role}"
-            );
-        }
-        for role in ["owner", "admin", "manager", "accountant", "analyst"] {
-            assert!(PredictionKind::RevenueForecast.permitted_for(role));
-        }
-        assert!(!PredictionKind::StaffUtilization.permitted_for("staff"));
-        assert!(PredictionKind::InventoryReorderRisk.permitted_for("inventorymanager"));
-        // Client-level predictions stay available to the people who act on them.
-        assert!(PredictionKind::ClientReturnWindow.permitted_for("receptionist"));
     }
 
     async fn connect() -> Option<PgPool> {

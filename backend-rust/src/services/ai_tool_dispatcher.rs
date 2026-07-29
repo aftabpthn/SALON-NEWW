@@ -111,6 +111,10 @@ pub fn tool_scope(scope: &ResolvedScope, claims: &AuthClaims) -> ToolScope {
         primary_branch_id: scope.primary_branch_id().unwrap_or_default().to_string(),
         label: scope.label.clone(),
         financials_visible: ai_scope_service::domain_allowed(claims, AiDomain::Finance),
+        allowed_domains: AiDomain::ALL
+            .into_iter()
+            .filter(|domain| ai_scope_service::domain_allowed(claims, *domain))
+            .collect(),
         disclosure: scope.disclosure(),
     }
 }
