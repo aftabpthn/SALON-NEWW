@@ -67,6 +67,115 @@ type WaitlistDialog = {
                     <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
                   </div>
                   <p>{{ booking.businessName }}</p>
+                  <div class="booking-bottom-row">
+                    <div class="booking-meta">
+                      <span><ion-icon name="time-outline"></ion-icon>{{ bookingTimeLabel(booking) }}</span>
+                      <span><ion-icon name="location-outline"></ion-icon>{{ booking.address || "Venue to be confirmed" }}</span>
+                    </div>
+                    <span class="view-details-btn">
+                      <span>View details</span>
+                      <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                    </span>
+                  </div>
+                </div>
+              </article>
+            } @empty {
+              <section class="empty premium-card">
+                <h2>No bookings yet</h2>
+                <ion-button class="primary-gradient" routerLink="/tabs/search">Find a place</ion-button>
+              </section>
+            }
+          </div>
+        }
+      </main>
+
+      @if (waitlistDialog(); as dialog) {
+        <div class="reschedule-backdrop" role="presentation" (click)="closeWaitlist()">
+          <section class="waitlist-sheet" role="dialog" aria-modal="true" aria-label="Join appointment waitlist" (click)="$event.stopPropagation()">
+            <div class="sheet-head waitlist-head">
+              <div>
+                <h2>Join smart waitlist</h2>
+                <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
+              </div>
+              <button type="button" class="close-button" aria-label="Close waitlist" (click)="closeWaitlist()">x</button>
+            </div>
+
+            <div class="waitlist-body">
+              <div class="waitlist-summary">
+                <ion-icon name="hourglass-outline"></ion-icon>
+                <div>
+                  <strong>Auto-fill queue</strong>
+                  <span>We will look for earlier or backup slots and share the best match.</span>
+                </div>
+              </div>
+
+              <label class="waitlist-field">
+                <span>Preferred date</span>
+                <input type="date" [min]="todayKey()" [(ngModel)]="dialog.preferredDate" name="waitlistDate" (ngModelChange)="updateWaitlist({ preferredDate: $event })" />
+              </label>
+
+              <div class="waitlist-field">
+                <span>Preferred time</span>
+                <div class="waitlist-options" role="radiogroup" aria-label="Preferred waitlist time">
+                  @for (option of waitlistTimeOptions; track option.value) {
+                    <button type="button" [class.active]="dialog.preferredTime === option.value" (click)="updateWaitlist({ preferredTime: option.value })">{{ option.label }}</button>
+                  }
+                </div>
+              </div>
+
+              <div class="waitlist-field">
+                <span>Priority</span>
+                <div class="waitlist-options two" role="radiogroup" aria-label="Waitlist priority">
+                  <button type="button" [class.active]="dialog.priority === 'normal'" (click)="updateWaitlist({ priority: 'normal' })">Normal</button>
+                  <button type="button" [class.active]="dialog.priority === 'high'" (click)="updateWaitlist({ priority: 'high' })">Urgent</button>
+                </div>
+              </div>
+
+              <label class="waitlist-field">
+                <span>Note for the salon</span>
+                <textarea rows="3" maxlength="180" placeholder="Preferred staff, time window, or special request" [(ngModel)]="dialog.reason" name="waitlistReason" (ngModelChange)="updateWaitlist({ reason: $event })"></textarea>
+              </label>
+
+              @if (dialog.error) {
+                <p class="waitlist-error">{{ dialog.error }}</p>
+              }
+            </div>
+
+            <div class="sheet-actions">
+              <ion-button fill="clear" (click)="closeWaitlist()">Not now</ion-button>
+              <ion-button class="primary-gradient" [disabled]="!!actionLoading()" (click)="submitWaitlist()">
+                {{ actionLoading() === "waitlist:" + dialog.booking.id ? "Joining..." : "Join waitlist" }}
+              </ion-button>
+            </div>
+          </section>
+        </div>
+      }
+    </ion-content>
+  `,
+  styles: [`
+    .bookings-page {
+      max-width: 1180px;
+    }
+
+    .bookings-hero {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .bookings-hero .muted {
+      max-width: 680px;
+      margin: 0;
+    }
+
+    .booking-command-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .command-card {
       display: grid;
       gap: 6px;
       padding: 14px;
@@ -199,11 +308,6 @@ type WaitlistDialog = {
       box-shadow: 0 4px 12px rgba(11, 70, 120, 0.25);
     }
     .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
-
-    .booking-content p {
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-weight: 800;
     }
 
     .booking-meta {

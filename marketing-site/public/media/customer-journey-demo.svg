@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1500" viewBox="0 0 1200 1500" role="img" aria-labelledby="title desc">
+  <title id="title">Illustrative customer visit journey</title><desc id="desc">Editorial placeholder showing discovery, booking, arrival and rebooking.</desc>
+  <rect width="1200" height="1500" fill="#f5f0e7"/><circle cx="890" cy="300" r="360" fill="#d8e8ff"/>
+  <path d="M140 1160C390 880 690 1300 1060 900" fill="none" stroke="#1457d9" stroke-width="24" stroke-linecap="round"/>
+  <g fill="#071b3d" font-family="Arial, sans-serif"><text x="110" y="145" font-size="25" letter-spacing="5">CUSTOMER APP · ILLUSTRATIVE</text><text x="110" y="270" font-family="Georgia, serif" font-size="78">One salon visit</text><text x="110" y="352" font-family="Georgia, serif" font-size="78">from choice to return.</text></g>
+  <g fill="#1457d9"><circle cx="190" cy="1100" r="34"/><circle cx="575" cy="1070" r="34"/><circle cx="975" cy="930" r="34"/></g>
+  <g font-family="Arial, sans-serif" font-size="25" fill="#071b3d"><text x="135" y="1200">DISCOVER</text><text x="515" y="1175">PAY AT SALON</text><text x="900" y="1035">REBOOK</text></g>
+</svg>

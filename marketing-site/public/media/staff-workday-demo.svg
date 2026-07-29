@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1500" viewBox="0 0 1200 1500" role="img" aria-labelledby="title desc">
+  <title id="title">Illustrative staff workday journey</title><desc id="desc">Editorial placeholder showing shift, appointments, tasks and end-of-day review.</desc>
+  <rect width="1200" height="1500" fill="#071b3d"/><rect x="760" y="0" width="440" height="1500" fill="#0d3f91"/>
+  <g fill="none" stroke="#8bc9ff" stroke-width="4"><path d="M210 450v710"/><circle cx="210" cy="500" r="28" fill="#8bc9ff"/><circle cx="210" cy="800" r="28" fill="#8bc9ff"/><circle cx="210" cy="1110" r="28" fill="#8bc9ff"/></g>
+  <g font-family="Arial, sans-serif" fill="#fffdf8"><text x="105" y="145" font-size="25" letter-spacing="5" fill="#8bc9ff">STAFF APP · ILLUSTRATIVE</text><text x="105" y="270" font-family="Georgia, serif" font-size="82">A clear workday,</text><text x="105" y="355" font-family="Georgia, serif" font-size="82">within permission.</text><g font-size="28"><text x="285" y="512">START SHIFT</text><text x="285" y="812">SERVE THE DAY</text><text x="285" y="1122">CLOSE &amp; REVIEW</text></g></g>
+</svg>
