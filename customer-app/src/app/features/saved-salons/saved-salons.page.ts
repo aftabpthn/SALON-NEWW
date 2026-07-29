@@ -166,8 +166,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .state-icon {
       display: grid;
       place-items: center;
-      color: #b45309;
-      background: rgba(217, 119, 6, 0.12);
+      color: var(--primary);
+      background: var(--primary-soft);
     }
 
     .header-identity {
@@ -268,8 +268,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-content: center;
       justify-items: center;
       gap: 4px;
-      color: #78350f;
-      background: linear-gradient(145deg, #fef3c7, #fde68a 52%, #fcd34d);
+      color: #0f4f65;
+      background: linear-gradient(145deg, #e8f5fa, #c8e9f3 52%, #a8dbe9);
     }
 
     .image-fallback span {
@@ -280,7 +280,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(255, 255, 255, 0.76);
       border-radius: 11px;
       background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 4px 12px rgba(120, 53, 15, 0.08);
+      box-shadow: 0 4px 12px rgba(15, 79, 101, 0.08);
       font-size: 0.86rem;
       font-weight: 950;
       letter-spacing: -0.04em;
@@ -327,7 +327,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-items: center;
       border: 0;
       border-radius: 8px;
-      color: #d97706;
+      color: #c0264d;
       background: transparent;
       cursor: pointer;
       transition: color 180ms ease, background 180ms ease, transform 180ms ease, opacity 180ms ease;
@@ -377,8 +377,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       overflow: hidden;
       padding: 1.5px 5px;
       border-radius: 4px;
-      color: #b45309;
-      background: rgba(217, 119, 6, 0.12);
+      color: var(--primary);
+      background: var(--primary-soft);
       text-overflow: ellipsis;
     }
 
@@ -478,8 +478,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .state-icon.gold {
-      color: #b45309;
-      background: rgba(217, 119, 6, 0.12);
+      color: var(--primary);
+      background: var(--primary-soft);
     }
 
     .state-card.error p {
@@ -559,7 +559,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       .discover-action:hover,
       .card-action.secondary:hover,
       .remove-action:hover {
-        background: rgba(217, 119, 6, 0.08);
+        background: var(--primary-soft);
       }
 
       .card-action.primary:hover {
