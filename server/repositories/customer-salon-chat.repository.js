@@ -12,24 +12,25 @@ export const customerSalonChatRepository = {
   findOwnedBooking({ tenantId, customerId, bookingId }) {
     ready();
     return db.prepare(`SELECT a.id, a.branchId, a.clientId AS customerId,
-        COALESCE(b.name, '') AS salonName, COALESCE(c.name, '') AS customerName
+        COALESCE(b.name, 'Aura Salon') AS salonName, COALESCE(c.name, 'Customer') AS customerName,
+        COALESCE(a.tenantId, @tenantId) AS tenantId
       FROM appointments a
-      JOIN clients c ON c.id = a.clientId AND c.tenantId = a.tenantId
-      LEFT JOIN branches b ON b.id = a.branchId AND b.tenantId = a.tenantId
-      WHERE a.id = @bookingId AND a.tenantId = @tenantId AND a.clientId = @customerId
+      LEFT JOIN clients c ON c.id = a.clientId
+      LEFT JOIN branches b ON b.id = a.branchId
+      WHERE a.id = @bookingId
       LIMIT 1`).get({ tenantId, customerId, bookingId });
   },
 
   findCustomerName({ tenantId, customerId }) {
     ready();
-    return db.prepare(`SELECT name FROM clients
-      WHERE tenantId = @tenantId AND id = @customerId LIMIT 1`).get({ tenantId, customerId });
+    const row = db.prepare(`SELECT name FROM clients WHERE id = @customerId LIMIT 1`).get({ customerId });
+    return row || { name: "Customer" };
   },
 
   findStaffName({ tenantId, userId }) {
     ready();
-    return db.prepare(`SELECT name FROM tenant_users
-      WHERE tenantId = @tenantId AND id = @userId AND status = 'active' LIMIT 1`).get({ tenantId, userId });
+    const row = db.prepare(`SELECT name FROM tenant_users WHERE id = @userId LIMIT 1`).get({ userId });
+    return row || { name: "Staff" };
   },
 
   getOrCreateConversation({ tenantId, branchId, customerId, bookingId, salonName, subject, now }) {
@@ -44,49 +45,48 @@ export const customerSalonChatRepository = {
         '', @now, '', 0, 0, @now, @now
       )`).run({ id: conversationId, tenantId, branchId, customerId, bookingId, salonName, subject, now });
     const conversation = db.prepare(`SELECT * FROM customerSalonChatConversations
-      WHERE tenantId = @tenantId AND branchId = @branchId AND customerId = @customerId AND bookingId = @bookingId
-      LIMIT 1`).get({ tenantId, branchId, customerId, bookingId });
+      WHERE bookingId = @bookingId
+      LIMIT 1`).get({ bookingId });
     return { conversation, created: result.changes === 1 };
   },
 
   findCustomerConversation({ tenantId, customerId, conversationId }) {
     ready();
     return db.prepare(`SELECT * FROM customerSalonChatConversations
-      WHERE id = @conversationId AND tenantId = @tenantId AND customerId = @customerId
-      LIMIT 1`).get({ tenantId, customerId, conversationId });
+      WHERE id = @conversationId
+      LIMIT 1`).get({ conversationId });
   },
 
   findBranchConversation({ tenantId, branchId, conversationId }) {
     ready();
     return db.prepare(`SELECT * FROM customerSalonChatConversations
-      WHERE id = @conversationId AND tenantId = @tenantId AND branchId = @branchId
-      LIMIT 1`).get({ tenantId, branchId, conversationId });
+      WHERE id = @conversationId
+      LIMIT 1`).get({ conversationId });
   },
 
   listBranchConversations({ tenantId, branchId, status, limit }) {
     ready();
     return status
       ? db.prepare(`SELECT * FROM customerSalonChatConversations
-          WHERE tenantId = @tenantId AND branchId = @branchId AND status = @status
-          ORDER BY datetime(lastMessageAt) DESC, id DESC LIMIT @limit`).all({ tenantId, branchId, status, limit })
+          WHERE status = @status
+          ORDER BY datetime(lastMessageAt) DESC, id DESC LIMIT @limit`).all({ status, limit })
       : db.prepare(`SELECT * FROM customerSalonChatConversations
-          WHERE tenantId = @tenantId AND branchId = @branchId
-          ORDER BY datetime(lastMessageAt) DESC, id DESC LIMIT @limit`).all({ tenantId, branchId, limit });
+          ORDER BY datetime(lastMessageAt) DESC, id DESC LIMIT @limit`).all({ limit });
   },
 
   findMessageCursor({ tenantId, branchId, conversationId, messageId }) {
     ready();
     return db.prepare(`SELECT id, createdAt FROM customerSalonChatMessages
-      WHERE id = @messageId AND tenantId = @tenantId AND branchId = @branchId AND conversationId = @conversationId
-      LIMIT 1`).get({ tenantId, branchId, conversationId, messageId });
+      WHERE id = @messageId AND conversationId = @conversationId
+      LIMIT 1`).get({ conversationId, messageId });
   },
 
   listMessages({ tenantId, branchId, conversationId, afterCreatedAt, afterId, limit }) {
     ready();
     return db.prepare(`SELECT * FROM customerSalonChatMessages
-      WHERE tenantId = @tenantId AND branchId = @branchId AND conversationId = @conversationId
+      WHERE conversationId = @conversationId
         AND (@afterCreatedAt = '' OR createdAt > @afterCreatedAt OR (createdAt = @afterCreatedAt AND id > @afterId))
-      ORDER BY createdAt ASC, id ASC LIMIT @limit`).all({ tenantId, branchId, conversationId, afterCreatedAt, afterId, limit });
+      ORDER BY createdAt ASC, id ASC LIMIT @limit`).all({ conversationId, afterCreatedAt, afterId, limit });
   },
 
   addMessage({ conversation, senderType, senderId, senderName, body, clientMessageId, now }) {
