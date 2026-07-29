@@ -216,12 +216,18 @@ function resolveBusiness(slug) {
     JOIN tenants t ON t.id = b.tenantId
     WHERE b.status = 'active'
       AND COALESCE(b.onlineBookingEnabled, 1) = 1
-      AND (b.id = @key OR COALESCE(b.slug, '') = @key OR t.slug = @key)
+      AND (
+        b.id = @key
+        OR COALESCE(b.slug, '') = @key
+        OR t.slug = @key
+        OR @key LIKE '%' || b.id
+        OR b.id LIKE '%' || @key
+      )
     ORDER BY b.name
     LIMIT 1
   `).get({ key });
   if (direct) return direct;
-  const generated = activeBusinessRows().find((row) => businessSlug(row) === key);
+  const generated = activeBusinessRows().find((row) => businessSlug(row) === key || row.branchId === key || key.endsWith(row.branchId));
   if (!generated) throw notFound("Business not found");
   return generated;
 }

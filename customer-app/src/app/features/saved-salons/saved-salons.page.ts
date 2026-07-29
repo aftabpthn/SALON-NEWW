@@ -115,8 +115,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
                       }
 
                       <div class="saved-actions">
-                        <a class="card-action primary" [routerLink]="['/business', business.slug, 'book']">Book</a>
-                        <a class="card-action secondary" [routerLink]="['/business', business.slug]">View</a>
+                        <a class="card-action primary" [routerLink]="['/business', business.slug || business.id || business.branchId, 'book']">Book</a>
+                        <a class="card-action secondary" [routerLink]="['/business', business.slug || business.id || business.branchId]">View</a>
                       </div>
                     </div>
                   </article>

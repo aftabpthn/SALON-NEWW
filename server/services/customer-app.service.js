@@ -6,6 +6,7 @@ import { customerNotificationService } from "./customer-notification.service.js"
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
+const IST_TIME_ZONE = "Asia/Kolkata";
 
 function tableExists(table) {
   return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = @table").get({ table }));
@@ -134,12 +135,13 @@ function staffById(staffId) {
 function businessForBranch(branchId) {
   const branch = branchById(branchId);
   if (!branch.id) return null;
-  const slug = branch.slug || `${String(branch.name || branch.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${branch.id}`;
+  const slug = branch.slug || branch.id;
   try {
     return customerMarketplaceService.business(slug);
   } catch {
     return {
       id: branch.id,
+      slug: branch.slug || branch.id,
       branchId: branch.id,
       businessName: branch.name || "Aura Salon",
       address: branch.address || branch.city || "",
@@ -172,7 +174,7 @@ function mapBooking(row = {}) {
     staffName: staff.name || "Professional",
     startAt,
     startsAt: startAt,
-    displayStartAt: startAt ? new Date(startAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "",
+    displayStartAt: startAt ? new Date(startAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: IST_TIME_ZONE }) : "",
     endAt: row.endAt || "",
     endsAt: row.endAt || "",
     durationMinutes: Number(service.durationMinutes || 0),
@@ -258,11 +260,14 @@ function cancelBooking(access, bookingId, payload = {}) {
 function rescheduleBooking(access, bookingId, payload = {}) {
   const row = bookingById(access, bookingId);
   if (!payload.startAt) throw badRequest("startAt is required");
-  const serviceId = serviceIds(row)[0] || "";
-  const service = serviceId ? db.prepare("SELECT * FROM services WHERE id = @serviceId LIMIT 1").get({ serviceId }) || {} : {};
+  const serviceId = payload.serviceId || serviceIds(row)[0] || "";
+  const business = businessForBranch(row.branchId);
+  const service = serviceById(serviceId, business?.slug || business?.id || row.branchId);
+  if (!service) throw badRequest("Selected service is not available for this salon");
   const updated = updateRow("appointments", row.id, {
     startAt: payload.startAt,
     endAt: addMinutesIso(payload.startAt, service.durationMinutes || 60),
+    serviceIds: [service.id],
     staffId: payload.staffId || row.staffId,
     status: "booked"
   }, { tenantId: access.tenantId });
