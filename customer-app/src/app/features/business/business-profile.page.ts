@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
@@ -9,6 +10,7 @@ import {
   cardOutline,
   checkmarkCircleOutline,
   clipboardOutline,
+  closeCircleOutline,
   heart,
   heartOutline,
   locationOutline,
@@ -16,6 +18,7 @@ import {
   peopleOutline,
   pricetagOutline,
   ribbonOutline,
+  searchOutline,
   shareOutline,
   sparklesOutline,
   starOutline,
@@ -29,7 +32,7 @@ import { Subscription } from "rxjs";
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar],
+  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar],
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
@@ -119,19 +122,71 @@ import { Subscription } from "rxjs";
             <section class="services-section">
               <div class="section-heading">
                 <div>
-                  <h2 class="section-title">{{ business().services.length }} services available</h2>
+                  <h2 class="section-title">
+                    @if (serviceQuery() || selectedCategory()) {
+                      {{ filteredServices().length }} of {{ business().services.length }} services
+                    } @else {
+                      {{ business().services.length }} services available
+                    }
+                  </h2>
                 </div>
+                @if (serviceQuery() || selectedCategory()) {
+                  <button type="button" class="clear-filter-text-btn" (click)="clearServiceFilters()">Show all</button>
+                }
               </div>
+
+              <div class="service-search-box">
+                <ion-icon name="search-outline" class="search-icon" aria-hidden="true"></ion-icon>
+                <input
+                  type="text"
+                  class="service-search-input"
+                  [ngModel]="serviceQuery()"
+                  (ngModelChange)="serviceQuery.set($event)"
+                  placeholder="Search services in {{ business().businessName }}..."
+                  aria-label="Search salon services" />
+                @if (serviceQuery()) {
+                  <button type="button" class="clear-search-btn" (click)="serviceQuery.set('')" aria-label="Clear search">
+                    <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+                  </button>
+                }
+              </div>
+
+              @if (availableCategories().length > 1) {
+                <div class="category-pills-strip" role="tablist" aria-label="Service category filters">
+                  <button
+                    type="button"
+                    class="category-pill"
+                    [class.active]="!selectedCategory()"
+                    (click)="selectedCategory.set('')">
+                    All ({{ business().services.length }})
+                  </button>
+                  @for (cat of availableCategories(); track cat) {
+                    <button
+                      type="button"
+                      class="category-pill"
+                      [class.active]="selectedCategory() === cat"
+                      (click)="selectedCategory.set(cat)">
+                      {{ cat }}
+                    </button>
+                  }
+                </div>
+              }
+
               <div class="service-stack">
-                @for (service of business().services; track service.id) {
+                @for (service of filteredServices(); track service.id) {
                   <article
                     class="service-card premium-card"
                     [class.selected]="selectedServiceId() === service.id"
-                    (click)="selectService(service.id)">
+                    role="button"
+                    tabindex="0"
+                    (click)="selectService(service.id)"
+                    (keydown.enter)="selectService(service.id)">
                     <div class="service-details">
                       <div class="service-title-row">
                         <h3>{{ service.name }}</h3>
-                        @if (service.popular) { <span class="offer-pill">Popular</span> }
+                        @if (service.popular) {
+                          <span class="offer-pill">Popular</span>
+                        }
                       </div>
                       @if (service.description) {
                         <p class="muted">{{ service.description }}</p>
@@ -151,7 +206,12 @@ import { Subscription } from "rxjs";
                     </button>
                   </article>
                 } @empty {
-                  <section class="state-card premium-card"><h2>No services available</h2></section>
+                  <section class="state-card premium-card service-empty-card">
+                    <div class="empty-icon"><ion-icon name="search-outline" aria-hidden="true"></ion-icon></div>
+                    <h3>No services found</h3>
+                    <p>No services match "{{ serviceQuery() }}"{{ selectedCategory() ? ' in ' + selectedCategory() : '' }}.</p>
+                    <button type="button" class="primary-gradient reset-search-btn" (click)="clearServiceFilters()">Clear search</button>
+                  </section>
                 }
               </div>
             </section>
@@ -348,7 +408,7 @@ import { Subscription } from "rxjs";
             <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Hours</span><strong>{{ business().hoursLabel || "Published" }}</strong></div>
             <div class="rail-row"><span><ion-icon name="location-outline"></ion-icon> Area</span><strong>{{ business().area }}</strong></div>
             <div class="rail-row"><span><ion-icon name="card-outline"></ion-icon> Payment</span><strong>{{ paymentLabel() }}</strong></div>
-            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="selectedServiceId() ? { serviceId: selectedServiceId() } : null">Book now</ion-button>
+            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="selectedServiceId() ? { serviceId: selectedServiceId(), step: 2 } : { step: 2 }">Book now</ion-button>
           </aside>
         </section>
       </main>
@@ -364,7 +424,7 @@ import { Subscription } from "rxjs";
               <strong>{{ business().nextAvailableSlot || "Check availability" }}</strong>
             }
           </div>
-          <ion-button class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="selectedServiceId() ? { serviceId: selectedServiceId() } : null">Book now</ion-button>
+          <ion-button class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="selectedServiceId() ? { serviceId: selectedServiceId(), step: 2 } : { step: 2 }">Book now</ion-button>
         </div>
       </div>
       } @else {
@@ -515,9 +575,150 @@ import { Subscription } from "rxjs";
       display: none;
     }
 
-    .gallery-strip img {
+    .service-search-box {
+      position: relative;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+    }
+
+    .service-search-box .search-icon {
+      position: absolute;
+      left: 14px;
+      color: var(--primary);
+      font-size: 1.15rem;
+      pointer-events: none;
+    }
+
+    .service-search-input {
       width: 100%;
-      padding: 16px;
+      height: 46px;
+      padding: 0 40px 0 42px;
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      outline: none;
+      color: var(--text);
+      background: var(--surface);
+      font-size: 0.88rem;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(11, 70, 120, 0.04);
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .service-search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3.5px rgba(14, 165, 233, 0.15);
+    }
+
+    .clear-search-btn {
+      position: absolute;
+      right: 12px;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: var(--muted);
+      font-size: 1.25rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .clear-filter-text-btn {
+      background: transparent;
+      border: 0;
+      color: var(--primary);
+      font-size: 0.78rem;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .category-pills-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+      margin-bottom: 8px;
+      scrollbar-width: none;
+    }
+    .category-pills-strip::-webkit-scrollbar { display: none; }
+
+    .category-pill {
+      flex: 0 0 auto;
+      height: 32px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 750;
+      cursor: pointer;
+      transition: all 180ms ease;
+    }
+
+    .category-pill.active {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.18);
+    }
+
+    .service-empty-card {
+      text-align: center;
+      padding: 28px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .service-empty-card .empty-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: rgba(14, 165, 233, 0.1);
+      color: var(--primary);
+      display: grid;
+      place-items: center;
+      font-size: 1.2rem;
+    }
+
+    .reset-search-btn {
+      margin-top: 6px;
+      padding: 8px 16px;
+      border: 0;
+      border-radius: 999px;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+
+    .service-select-btn {
+      flex: 0 0 auto;
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 0 14px;
+      border: 1.5px solid var(--primary);
+      border-radius: 999px;
+      color: var(--primary);
+      background: transparent !important;
+      font-size: 0.76rem;
+      font-weight: 850;
+      cursor: pointer;
+      transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+
+    .service-select-btn.selected {
+      color: #fff !important;
+      border-color: transparent !important;
+      background: linear-gradient(135deg, var(--primary), var(--primary-2)) !important;
+      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.22);
     }
 
     .staff-card img {
@@ -1061,6 +1262,9 @@ import { Subscription } from "rxjs";
 export class BusinessProfilePage implements OnInit, OnDestroy {
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly selectedServiceId = signal<string>(this.route.snapshot.queryParamMap.get("serviceId") || "");
+  readonly serviceQuery = signal<string>("");
+  readonly selectedCategory = signal<string>("");
+
   readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
   readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
   readonly isPrimarySalon = computed(() => {
@@ -1075,6 +1279,32 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     if (!id) return null;
     return this.business()?.services.find((s) => s.id === id) || null;
   });
+
+  readonly availableCategories = computed(() => {
+    const biz = this.business();
+    if (!biz?.services) return [];
+    const cats = biz.services.map((s) => s.category).filter((c): c is string => Boolean(c));
+    return Array.from(new Set(cats));
+  });
+
+  readonly filteredServices = computed(() => {
+    const biz = this.business();
+    if (!biz?.services) return [];
+    const q = this.serviceQuery().trim().toLowerCase();
+    const cat = this.selectedCategory();
+
+    return biz.services.filter((service) => {
+      const matchCat = !cat || service.category === cat;
+      const matchQ = !q || service.name.toLowerCase().includes(q) || (service.description && service.description.toLowerCase().includes(q));
+      return matchCat && matchQ;
+    });
+  });
+
+  clearServiceFilters() {
+    this.serviceQuery.set("");
+    this.selectedCategory.set("");
+  }
+
   readonly otherBranches = computed(() => {
     const current = this.business();
     if (!current?.tenantId) return [];
@@ -1100,6 +1330,7 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
       cardOutline,
       checkmarkCircleOutline,
       clipboardOutline,
+      closeCircleOutline,
       heart,
       heartOutline,
       locationOutline,
@@ -1107,6 +1338,7 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
       peopleOutline,
       pricetagOutline,
       ribbonOutline,
+      searchOutline,
       shareOutline,
       sparklesOutline,
       starOutline,
