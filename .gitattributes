@@ -1,6 +1,4 @@
-# SQLx hashes migration bytes. Keep the repaired and future migration range
-# byte-stable across Windows and Linux checkouts.
-backend-rust/migrations/028*.sql text eol=lf
-backend-rust/migrations/029*.sql text eol=lf
-backend-rust/migrations/030*.sql text eol=lf
-backend-rust/migrations/031*.sql text eol=lf
+# SQLx hashes migration bytes, so Git must preserve their exact applied bytes.
+# Applied history includes CRLF and one intentional blank EOF; neither can be
+# rewritten without breaking the database checksum ledger.
+backend-rust/migrations/*.sql -text whitespace=cr-at-eol,-blank-at-eof
