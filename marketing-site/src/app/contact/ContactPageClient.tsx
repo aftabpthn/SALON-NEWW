@@ -246,8 +246,8 @@ export default function ContactPage() {
             >
               <div className="space-y-6">
                  {[
-                    { icon: MessageSquareText, label: "Contact channel", value: "Use this form until an approved public phone or messaging channel is configured." },
-                    { icon: FileCheck2, label: "Service details", value: "Support hours, languages, response targets and escalation paths are confirmed in the proposal." },
+                    { icon: MessageSquareText, label: language === "hi" ? "संपर्क चैनल" : "Contact channel", value: language === "hi" ? "Approved public phone या messaging channel configure होने तक इस form का उपयोग करें।" : "Use this form until an approved public phone or messaging channel is configured." },
+                    { icon: FileCheck2, label: language === "hi" ? "सेवा की जानकारी" : "Service details", value: language === "hi" ? "Support hours, भाषाएँ, response targets और escalation proposal में confirm होंगे।" : "Support hours, languages, response targets and escalation paths are confirmed in the proposal." },
                  ].map((item) => (
                   <div key={item.label} className="rounded-2xl border border-aura-border bg-aura-bg-warm p-6 hover:shadow-md hover:border-aura-border-strong transition-all duration-300">
                     <div className="flex items-start gap-3">
