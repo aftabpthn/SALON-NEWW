@@ -14,9 +14,9 @@ const TIME_SLOTS = [
 ];
 
 const BENEFITS = [
-  "15-minute personalized walkthrough",
+  "A focused walkthrough; timing confirmed by the team",
   "See features relevant to your salon size",
-  "Get your questions answered live",
+  "Review questions relevant to your workflow",
   "Clear guidance on setup and migration",
 ];
 

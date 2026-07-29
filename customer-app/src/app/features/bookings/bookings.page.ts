@@ -266,19 +266,29 @@ type WaitlistDialog = {
       letter-spacing: -0.04em;
     }
 
-    .booking-title-row {
+    .booking-content {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: space-between;
-      gap: 10px;
-      margin: 2px 0 5px;
+      min-width: 0;
+      height: 100%;
     }
 
-    .booking-title-row h2 { min-width: 0; }
+    .booking-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 0 4px;
+    }
+
+    .booking-title-row h2 { min-width: 0; margin-top: 0; }
     .booking-title-row .status-pill {
       flex: 0 0 auto !important;
+      align-self: flex-start !important;
+      margin-top: 0 !important;
       min-height: 18px !important;
-      padding: 2px 7px !important;
+      padding: 1px 7px !important;
       border: 1px solid rgba(16, 185, 129, 0.42) !important;
       border-radius: 999px !important;
       color: #047857 !important;
@@ -299,7 +309,7 @@ type WaitlistDialog = {
       align-items: flex-end;
       justify-content: space-between;
       gap: 10px;
-      margin-top: 4px;
+      margin-top: auto;
     }
     .booking-bottom-row .booking-meta { flex: 1 1 auto; min-width: 0; }
     .view-details-btn {
@@ -684,11 +694,11 @@ type WaitlistDialog = {
         font-size: 1.24rem;
       }
 
-      .booking-content { min-width: 0; align-self: center; overflow: hidden; }
-      .booking-title-row { gap: 6px; margin: 0 0 2px; }
-      .booking-content .status-pill { min-height: 16px !important; padding: 1px 5px !important; font-size: 0.52rem !important; }
-      .booking-bottom-row { display: flex !important; align-items: flex-end !important; justify-content: space-between !important; gap: 6px !important; margin-top: 2px !important; }
-      .view-details-btn { padding: 2px 6px !important; font-size: 0.58rem !important; gap: 2px !important; }
+      .booking-content { display: flex !important; flex-direction: column !important; justify-content: space-between !important; min-width: 0; align-self: stretch !important; height: 100% !important; overflow: hidden; }
+      .booking-title-row { display: flex !important; align-items: flex-start !important; gap: 6px; margin: 0 0 2px; }
+      .booking-content .status-pill { align-self: flex-start !important; margin-top: 0 !important; min-height: 16px !important; padding: 1px 5px !important; font-size: 0.52rem !important; }
+      .booking-bottom-row { display: flex !important; align-items: flex-end !important; justify-content: space-between !important; gap: 6px !important; margin-top: auto !important; }
+      .view-details-btn { align-self: flex-end !important; padding: 2px 6px !important; font-size: 0.58rem !important; gap: 2px !important; }
       .view-details-btn ion-icon { font-size: 0.60rem !important; }
 
       .booking-content h2 {
