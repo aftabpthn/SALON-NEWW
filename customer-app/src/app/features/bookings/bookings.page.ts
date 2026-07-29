@@ -308,7 +308,6 @@ type WaitlistDialog = {
       box-shadow: 0 4px 12px rgba(11, 70, 120, 0.25);
     }
     .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
-    }
 
     .booking-meta {
       display: grid;

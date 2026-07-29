@@ -1,49 +1,110 @@
 "use client";
 
-import { Hero } from "@/components/landing/Hero";
-import { Stats } from "@/components/landing/Stats";
-import { Testimonials } from "@/components/landing/Testimonials";
-import { PricingPreview } from "@/components/landing/PricingPreview";
-import { CTASection } from "@/components/landing/CTASection";
-import { ROICalculator } from "@/components/landing/ROICalculator";
-import { EcosystemSelector } from "@/components/landing/EcosystemSelector";
-import { WorkflowNarrative } from "@/components/landing/WorkflowNarrative";
-import { RoleChapters } from "@/components/landing/RoleChapters";
-import { ProductTour } from "@/components/landing/ProductTour";
-import { WhatsAppSimulator } from "@/components/landing/WhatsAppSimulator";
-import { POSSandbox } from "@/components/landing/POSSandbox";
-import { MultiBranchShowcase } from "@/components/landing/MultiBranchShowcase";
-import { LiveActivityTicker } from "@/components/landing/LiveActivityTicker";
-import { BeforeAfterSlider } from "@/components/landing/BeforeAfterSlider";
-import { CompetitorMatrix } from "@/components/landing/CompetitorMatrix";
-import { PersonalizedDemoModal } from "@/components/landing/PersonalizedDemoModal";
-import { InstantQuotationModal } from "@/components/landing/InstantQuotationModal";
-import { InteractiveFAQ } from "@/components/landing/InteractiveFAQ";
-import { HardwareShowcase } from "@/components/landing/HardwareShowcase";
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { ArrowRight, Check, ChevronDown, CircleCheck, Gauge, IndianRupee, Layers3, ShieldCheck, UsersRound } from "lucide-react";
+import { Container } from "@/components/ui/Container";
+import { PRICING_PLANS } from "@/lib/constants";
+import { ECOSYSTEM_CONTENT } from "@/lib/ecosystem-content";
+import { useLanguage } from "@/components/providers/LanguageProvider";
+
+const content = {
+  en: {
+    hero: { eyebrow: "Salon operations, in one continuous record", title: "Make the salon day easier to run—and easier to understand.", body: "Aura connects pay-at-salon booking, front desk, staff schedules, GST-ready checkout, stock context and owner review without flattening the needs of each role.", primary: "Request a demo", secondary: "Discuss trial access", note: "Demo and trial access are arranged with the team; this is not an instant account or login." },
+    trust: { eyebrow: "Honest foundations", title: "Built on operational clarity, not inflated proof.", body: "Aura’s current story is grounded in product architecture and demonstrable workflows. Customer outcomes will be published only with permission and evidence.", items: [
+      ["India-ready context", "GST-ready records, UPI/cash/card checkout options and IST business-day context."],
+      ["Scoped access", "Tenant, branch and role boundaries keep operational context with authorised users."],
+      ["Connected records", "Booking, billing, stock and attribution can be followed through one operational chain."],
+      ["Human implementation", "Assessment, data preparation, configuration and role training are planned with your team."],
+    ] },
+    benefits: { eyebrow: "Problems into measurable work", title: "Improve the system first. Then monitor the result.", body: "Results vary by salon baseline, adoption, data quality and operating policy.", items: [
+      ["Scattered booking and floor handoffs", "Connect booking status, duration, staff and branch context.", "Monitor: schedule changes, waitlist movement, slot utilisation"],
+      ["Client context lost between visits", "Keep authorised visit history, preferences, notes and consent together.", "Monitor: repeat visits, rebooking interval, profile completeness"],
+      ["Unclear checkout and closing", "Use GST-ready invoices, split payment records and daily closing review.", "Monitor: closing variance, refund rate, payment mix"],
+      ["Stock decisions made from memory", "Link batches, expiry, service recipes, usage and reorder context.", "Monitor: waste, stock variance, days of cover"],
+    ] },
+    ecosystem: { eyebrow: "Owner + customer + staff", title: "Three focused experiences. One salon day.", body: "Each role sees what it needs while the booking and branch context stays connected.", links: ["Explore Owner CRM", "Explore Customer App", "Explore Staff App"] },
+    workflow: { eyebrow: "Complete eight-step workflow", title: "From booking to owner insight, with every handoff visible." },
+    media: { eyebrow: "Illustrative product chapter", title: "See the operating logic before the approved product film arrives.", body: "This editorial poster explains the connected workflow. It is not a customer screenshot, live account or performance claim.", label: "Demo media — replace before launch", caption: "Illustrative product poster · 16:10 · approved screen recording required" },
+    setup: { eyebrow: "From setup to daily success", title: "Implementation is a working process, not a plug-and-play promise.", body: "Exact timing, support channels, languages, response targets and migration scope are confirmed in the proposal.", steps: [
+      ["Assessment", "Map branches, roles, current tools and priority workflows."], ["Data preparation & import", "Clean and validate agreed client, service, staff and inventory data."], ["Configuration", "Set branches, services, taxes, permissions, policies and templates."], ["Role training", "Train owners, front desk and staff around their actual day."], ["Go-live checks", "Verify booking, checkout, printing, access and closing with your team."], ["Ongoing support", "Review adoption and issues through the channels and cadence confirmed in the proposal."],
+    ] },
+    proof: { eyebrow: "Proof-safe by design", title: "Evidence before endorsement.", body: "No major brand is presented here as a live user. No named testimonial or quantified outcome is published without approval.", items: ["Approved customer identity", "Exact workflow and configuration", "Baseline, period and measurement method", "Permission to publish the outcome"] },
+    pricing: { eyebrow: "Pricing preview", title: "A clear starting point, with proposal-level detail.", body: "Prices below come directly from the existing plan data. Taxes, implementation, trial scope, support commitments and final inclusions should be confirmed in the proposal.", cta: "View full pricing" },
+    faq: { eyebrow: "FAQ", title: "Questions worth answering before a demo", items: [
+      ["Can customers pay while booking?", "The confirmed current booking flow is pay at salon. Online prepayment is not claimed."],
+      ["Is trial access instant?", "No instant signup or login is promised. Request a demo and discuss the suitable trial scope with the team."],
+      ["How long does onboarding take?", "Timing depends on branches, data readiness, configuration and training. The plan is confirmed in the proposal."],
+      ["What proof of results is available?", "Approved customer evidence is still required. Aura currently presents demonstrable workflows and the metrics a salon can monitor."],
+    ] },
+    final: { eyebrow: "Bring your real workflow", title: "See where Aura fits—and where configuration is required.", body: "Use the demo to walk through booking, checkout, staff access, stock and closing with your own operating questions.", primary: "Request a demo", secondary: "Contact the team" },
+  },
+  hi: {
+    hero: { eyebrow: "सैलून ऑपरेशंस, एक जुड़े रिकॉर्ड में", title: "सैलून का दिन चलाना भी आसान, समझना भी आसान।", body: "Aura pay-at-salon बुकिंग, फ्रंट डेस्क, स्टाफ शेड्यूल, GST-ready checkout, स्टॉक संदर्भ और owner review को जोड़ता है—हर भूमिका की सीमा बनाए रखते हुए।", primary: "डेमो का अनुरोध करें", secondary: "ट्रायल एक्सेस पर बात करें", note: "डेमो और ट्रायल एक्सेस टीम के साथ तय होते हैं; यह instant account या login नहीं है।" },
+    trust: { eyebrow: "ईमानदार नींव", title: "बढ़े-चढ़े प्रमाण नहीं, साफ़ ऑपरेशनल आधार।", body: "Aura की मौजूदा कहानी product architecture और दिखाए जा सकने वाले workflows पर आधारित है। ग्राहक नतीजे अनुमति और प्रमाण के बाद ही प्रकाशित होंगे।", items: [
+      ["भारत के लिए संदर्भ", "GST-ready रिकॉर्ड, UPI/cash/card checkout और IST business-day context।"], ["सीमित एक्सेस", "Tenant, branch और role boundaries authorised users तक context रखते हैं।"], ["जुड़े रिकॉर्ड", "Booking, billing, stock और attribution एक chain में देखे जा सकते हैं।"], ["इंसानी implementation", "Assessment, data preparation, configuration और role training टीम के साथ तय होते हैं।"],
+    ] },
+    benefits: { eyebrow: "समस्या से मापने योग्य काम तक", title: "पहले सिस्टम सुधारें। फिर नतीजा मापें।", body: "नतीजे salon baseline, adoption, data quality और policy के अनुसार बदलते हैं।", items: [
+      ["बिखरी booking और floor handoff", "Booking status, duration, staff और branch context जोड़ें।", "मापें: schedule changes, waitlist movement, slot utilisation"], ["विज़िट के बीच client context खोना", "Authorised history, preferences, notes और consent साथ रखें।", "मापें: repeat visits, rebooking interval, profile completeness"], ["Checkout और closing अस्पष्ट", "GST-ready invoice, split payment record और daily closing review।", "मापें: closing variance, refund rate, payment mix"], ["याददाश्त से stock decisions", "Batch, expiry, service recipe, usage और reorder context जोड़ें।", "मापें: waste, stock variance, days of cover"],
+    ] },
+    ecosystem: { eyebrow: "Owner + customer + staff", title: "तीन केंद्रित अनुभव। एक सैलून दिवस।", body: "हर भूमिका को जरूरी view मिलता है और booking व branch context जुड़ा रहता है।", links: ["Owner CRM देखें", "Customer App देखें", "Staff App देखें"] },
+    workflow: { eyebrow: "पूरा आठ-चरण workflow", title: "बुकिंग से owner insight तक हर handoff साफ़।" },
+    media: { eyebrow: "Illustrative product chapter", title: "Approved product film आने से पहले operating logic देखें।", body: "यह editorial poster जुड़ा workflow समझाता है। यह customer screenshot, live account या performance claim नहीं है।", label: "Demo media — replace before launch", caption: "Illustrative product poster · 16:10 · approved screen recording चाहिए" },
+    setup: { eyebrow: "Setup से daily success तक", title: "Implementation एक working process है, plug-and-play दावा नहीं।", body: "सही समय, support channels, भाषाएँ, response targets और migration scope proposal में पक्के होंगे।", steps: [
+      ["Assessment", "Branches, roles, current tools और priority workflows समझें।"], ["Data preparation और import", "तय client, service, staff और inventory data साफ़ व validate करें।"], ["Configuration", "Branches, services, taxes, permissions, policies और templates सेट करें।"], ["Role training", "Owners, front desk और staff को उनके असली दिन के अनुसार training दें।"], ["Go-live checks", "Booking, checkout, printing, access और closing टीम के साथ verify करें।"], ["Ongoing support", "Proposal में तय channels और cadence पर adoption और issues review करें।"],
+    ] },
+    proof: { eyebrow: "Proof-safe", title: "Endorsement से पहले evidence।", body: "यहाँ किसी बड़े brand को live user नहीं दिखाया गया है। बिना approval के कोई named testimonial या quantified result प्रकाशित नहीं है।", items: ["Approved customer identity", "सही workflow और configuration", "Baseline, period और measurement method", "Outcome publish करने की permission"] },
+    pricing: { eyebrow: "Pricing preview", title: "साफ़ शुरुआत, proposal में पूरी detail।", body: "नीचे कीमतें मौजूदा plan data से हैं। Tax, implementation, trial scope, support commitments और final inclusions proposal में confirm करें।", cta: "पूरी pricing देखें" },
+    faq: { eyebrow: "सवाल-जवाब", title: "डेमो से पहले पूछने लायक सवाल", items: [
+      ["क्या customer booking के समय pay करता है?", "मौजूदा confirmed flow pay at salon है। Online prepayment claim नहीं किया गया है।"], ["क्या trial access instant है?", "नहीं। डेमो का अनुरोध करें और टीम के साथ सही trial scope तय करें।"], ["Onboarding में कितना समय लगेगा?", "यह branches, data readiness, configuration और training पर निर्भर है। Plan proposal में confirm होगा।"], ["Results का क्या proof है?", "Approved customer evidence अभी चाहिए। फिलहाल Aura workflows और salon द्वारा monitor किए जाने वाले metrics दिखाता है।"],
+    ] },
+    final: { eyebrow: "अपना असली workflow लाएँ", title: "देखें Aura कहाँ fit होता है—और कहाँ configuration चाहिए।", body: "Demo में अपने सवालों के साथ booking, checkout, staff access, stock और closing walkthrough करें।", primary: "डेमो का अनुरोध करें", secondary: "टीम से संपर्क करें" },
+  },
+} as const;
+
+const roleLinks = ["/owner-crm", "/customer-app", "/staff-app"];
+const roleIcons = [Gauge, UsersRound, ShieldCheck];
+
+function FaqList({ items }: { items: readonly (readonly [string, string])[] }) {
+  const [open, setOpen] = useState(0);
+  return <div className="divide-y divide-aura-border border-y border-aura-border">{items.map(([question, answer], index) => {
+    const expanded = open === index;
+    const triggerId = `home-faq-trigger-${index}`;
+    const panelId = `home-faq-panel-${index}`;
+    return <div key={question}><h3><button id={triggerId} type="button" aria-expanded={expanded} aria-controls={panelId} onClick={() => setOpen(expanded ? -1 : index)} className="flex min-h-16 w-full items-center justify-between gap-5 py-4 text-left text-base font-semibold text-aura-text"><span>{question}</span><ChevronDown className={`h-5 w-5 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" /></button></h3>{expanded && <div id={panelId} role="region" aria-labelledby={triggerId} className="pb-5 pr-10 text-sm leading-7 text-aura-text-secondary">{answer}</div>}</div>;
+  })}</div>;
+}
 
 export default function HomePage() {
-  return (
-    <>
-      <LiveActivityTicker />
-      <Hero />
-      <EcosystemSelector />
-      <WorkflowNarrative compact />
-      <WhatsAppSimulator />
-      <POSSandbox />
-      <BeforeAfterSlider />
-      <RoleChapters />
-      <ProductTour />
-      <HardwareShowcase />
-      <MultiBranchShowcase />
-      <InstantQuotationModal />
-      <ROICalculator />
-      <CompetitorMatrix />
-      <PersonalizedDemoModal />
-      <InteractiveFAQ />
-      <Stats />
-      <Testimonials />
-      <PricingPreview />
-      <CTASection />
-    </>
-  );
+  const { language } = useLanguage();
+  const copy = content[language];
+  const ecosystem = ECOSYSTEM_CONTENT[language];
+
+  return <>
+    <section className="relative overflow-hidden bg-[var(--gradient-hero)] pb-20 text-white lg:pb-28">
+      <div className="absolute inset-0 opacity-40 [background-image:linear-gradient(rgba(255,255,255,.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.1)_1px,transparent_1px)] [background-size:72px_72px] [mask-image:linear-gradient(to_bottom,black,transparent)]" aria-hidden="true" />
+      <Container size="wide" className="relative"><div className="grid items-end gap-12 lg:grid-cols-[1.15fr_.85fr]"><div><p className="eyebrow-light">{copy.hero.eyebrow}</p><h1 className="mt-6 max-w-5xl font-display text-[clamp(3.5rem,7.5vw,7.8rem)] leading-[.93] tracking-[-.052em] text-aura-cta-cream">{copy.hero.title}</h1></div><div className="max-w-xl lg:pb-2"><p className="text-base leading-8 text-white/72 md:text-lg">{copy.hero.body}</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/demo" className="cta-light">{copy.hero.primary}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link><Link href="/demo?intent=trial" className="cta-outline-light">{copy.hero.secondary}</Link></div><p className="mt-5 text-xs leading-5 text-white/48">{copy.hero.note}</p></div></div></Container>
+    </section>
+
+    <section className="section-shell bg-aura-bg"><Container><header className="section-intro"><p className="eyebrow">{copy.trust.eyebrow}</p><h2>{copy.trust.title}</h2><p>{copy.trust.body}</p></header><div className="mt-12 grid border-l border-t border-aura-border sm:grid-cols-2 lg:grid-cols-4">{copy.trust.items.map(([title, body], index) => <article key={title} className="border-b border-r border-aura-border p-6 lg:p-7"><span className="text-xs font-bold text-aura-burgundy">0{index + 1}</span><h3 className="mt-8 text-base font-semibold">{title}</h3><p className="mt-3 text-sm leading-6 text-aura-text-secondary">{body}</p></article>)}</div></Container></section>
+
+    <section className="section-shell bg-aura-surface"><Container><header className="section-intro"><p className="eyebrow">{copy.benefits.eyebrow}</p><h2>{copy.benefits.title}</h2><p>{copy.benefits.body}</p></header><div className="mt-12 grid gap-4 lg:grid-cols-2">{copy.benefits.items.map(([problem, action, metric]) => <article key={problem} className="rounded-[1.5rem] border border-aura-border bg-white p-6 sm:p-8"><p className="text-[10px] font-bold uppercase tracking-[.16em] text-aura-danger">Problem</p><h3 className="mt-2 text-xl font-semibold">{problem}</h3><div className="my-5 h-px bg-aura-border"/><p className="text-[10px] font-bold uppercase tracking-[.16em] text-aura-burgundy">Aura action</p><p className="mt-2 text-sm leading-6 text-aura-text-secondary">{action}</p><p className="mt-5 rounded-xl bg-aura-surface-muted p-3 text-xs font-semibold text-aura-text-secondary">{metric}</p></article>)}</div></Container></section>
+
+    <section className="section-shell bg-aura-dark text-white"><Container><header className="section-intro section-intro-dark"><p className="eyebrow-light">{copy.ecosystem.eyebrow}</p><h2>{copy.ecosystem.title}</h2><p>{copy.ecosystem.body}</p></header><div className="mt-12 grid gap-px overflow-hidden rounded-[1.75rem] bg-white/12 lg:grid-cols-3">{([ecosystem.chapters.owner, ecosystem.chapters.customer, ecosystem.chapters.staff] as const).map((role, index) => { const Icon = roleIcons[index]; return <article key={role.label} className="flex flex-col bg-aura-dark-elevated p-7 sm:p-9"><Icon className="h-6 w-6 text-aura-copper" aria-hidden="true"/><p className="mt-8 text-xs font-bold uppercase tracking-[.16em] text-aura-copper">{role.label}</p><h3 className="mt-3 font-display text-3xl leading-tight">{role.title}</h3><p className="mt-4 text-sm leading-7 text-white/62">{role.body}</p><Link href={roleLinks[index]} className="mt-8 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-white">{copy.ecosystem.links[index]}<ArrowRight className="h-4 w-4" aria-hidden="true"/></Link></article>; })}</div></Container></section>
+
+    <section className="section-shell bg-aura-bg"><Container><header className="section-intro"><p className="eyebrow">{copy.workflow.eyebrow}</p><h2>{copy.workflow.title}</h2><p>{ecosystem.workflow.body}</p></header><ol className="mt-12 grid gap-3 md:grid-cols-2">{ecosystem.workflow.steps.map((step, index) => <li key={step.title} className="grid grid-cols-[3rem_1fr] gap-4 border-t border-aura-border py-6"><span className="font-display text-3xl text-aura-burgundy">{String(index + 1).padStart(2, "0")}</span><div><p className="text-[10px] font-bold uppercase tracking-[.14em] text-aura-text-muted">{step.tag}</p><h3 className="mt-1 text-lg font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-6 text-aura-text-secondary">{step.body}</p></div></li>)}</ol><p className="mt-8 rounded-xl border border-aura-border bg-aura-surface p-4 text-xs leading-6 text-aura-text-muted">{ecosystem.workflow.note}</p></Container></section>
+
+    <section className="section-shell bg-aura-surface"><Container size="wide"><div className="grid items-center gap-10 lg:grid-cols-[.72fr_1.28fr]"><header className="section-intro"><p className="eyebrow">{copy.media.eyebrow}</p><h2>{copy.media.title}</h2><p>{copy.media.body}</p><Link href="/demo" className="mt-7 inline-flex min-h-11 items-center gap-2 font-semibold text-aura-burgundy">{copy.hero.primary}<ArrowRight className="h-4 w-4" aria-hidden="true"/></Link></header><figure><div className="overflow-hidden rounded-[1.75rem] bg-aura-dark shadow-[var(--aura-shadow-xl)]"><div className="flex min-h-11 items-center justify-between gap-3 border-b border-white/10 px-4 text-[10px] font-bold uppercase tracking-[.12em] text-aura-copper"><span>{copy.media.label}</span><span>16:10</span></div><Image src="/media/home-product-demo.svg" alt="Illustrative diagram connecting pay-at-salon booking, staff schedule, checkout and owner review" width={1600} height={1000} className="h-auto w-full" sizes="(max-width: 1024px) 100vw, 62vw" /></div><figcaption className="mt-3 text-xs text-aura-text-muted">{copy.media.caption}</figcaption></figure></div></Container></section>
+
+    <section className="section-shell bg-aura-bg-warm"><Container><div className="grid gap-12 lg:grid-cols-[.8fr_1.2fr]"><div><header className="section-intro"><p className="eyebrow">{copy.setup.eyebrow}</p><h2>{copy.setup.title}</h2><p>{copy.setup.body}</p></header><figure className="mt-8"><div className="overflow-hidden rounded-2xl border border-aura-border bg-aura-surface"><div className="media-label">Demo media — replace before launch</div><Image src="/media/support-story-demo.svg" alt="Illustrative onboarding path from assessment through training to ongoing support" width={1600} height={900} className="h-auto w-full" sizes="(max-width: 1024px) 100vw, 40vw"/></div><figcaption className="mt-2 text-xs text-aura-text-muted">Editorial support-story placeholder · 16:9</figcaption></figure></div><ol className="grid gap-3 sm:grid-cols-2">{copy.setup.steps.map(([title, body], index) => <li key={title} className="rounded-2xl border border-aura-border bg-aura-surface p-5"><span className="text-xs font-bold text-aura-burgundy">0{index + 1}</span><h3 className="mt-5 text-base font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-aura-text-secondary">{body}</p></li>)}</ol></div></Container></section>
+
+    <section className="section-shell bg-aura-dark text-white"><Container><div className="grid gap-10 lg:grid-cols-[.9fr_1.1fr]"><header className="section-intro section-intro-dark"><p className="eyebrow-light">{copy.proof.eyebrow}</p><h2>{copy.proof.title}</h2><p>{copy.proof.body}</p></header><div className="grid gap-px overflow-hidden rounded-2xl bg-white/12 sm:grid-cols-2">{copy.proof.items.map((item, index) => <div key={item} className="bg-aura-dark-elevated p-6"><CircleCheck className="h-5 w-5 text-aura-copper" aria-hidden="true"/><span className="mt-7 block text-xs text-white/40">0{index + 1}</span><p className="mt-2 text-sm font-semibold">{item}</p></div>)}</div></div></Container></section>
+
+    <section className="section-shell bg-aura-surface"><Container><header className="section-intro"><p className="eyebrow">{copy.pricing.eyebrow}</p><h2>{copy.pricing.title}</h2><p>{copy.pricing.body}</p></header><div className="mt-12 grid gap-4 lg:grid-cols-3">{PRICING_PLANS.map((plan) => <article key={plan.name} className={`flex flex-col rounded-[1.5rem] border p-6 sm:p-8 ${plan.highlighted ? "border-aura-burgundy bg-aura-dark text-white" : "border-aura-border bg-white"}`}><p className={`text-xs font-bold uppercase tracking-[.14em] ${plan.highlighted ? "text-aura-copper" : "text-aura-burgundy"}`}>{plan.name}</p><p className="mt-5 font-display text-5xl">{plan.monthlyPrice ? `₹${plan.monthlyPrice.toLocaleString("en-IN")}` : language === "hi" ? "कस्टम" : "Custom"}</p>{plan.monthlyPrice > 0 && <span className={`text-xs ${plan.highlighted ? "text-white/50" : "text-aura-text-muted"}`}>/{language === "hi" ? "माह" : "month"}</span>}<p className={`mt-5 text-sm leading-6 ${plan.highlighted ? "text-white/62" : "text-aura-text-secondary"}`}>{plan.description}</p><ul className="mt-6 space-y-3">{plan.features.slice(0, 5).map(feature => <li key={feature} className={`flex gap-2 text-sm ${plan.highlighted ? "text-white/72" : "text-aura-text-secondary"}`}><Check className="mt-0.5 h-4 w-4 shrink-0 text-aura-success" aria-hidden="true"/>{feature}</li>)}</ul><Link href="/demo" className={`mt-8 inline-flex min-h-11 items-center justify-center rounded-full px-5 text-sm font-semibold ${plan.highlighted ? "bg-aura-cta-cream text-aura-burgundy" : "border border-aura-border text-aura-text"}`}>{plan.cta}</Link></article>)}</div><div className="mt-8 text-center"><Link href="/pricing" className="inline-flex min-h-11 items-center gap-2 font-semibold text-aura-burgundy">{copy.pricing.cta}<ArrowRight className="h-4 w-4" aria-hidden="true"/></Link></div></Container></section>
+
+    <section className="section-shell bg-aura-bg"><Container size="narrow"><header className="section-intro"><p className="eyebrow">{copy.faq.eyebrow}</p><h2>{copy.faq.title}</h2></header><div className="mt-10"><FaqList items={copy.faq.items}/></div></Container></section>
+
+    <section className="section-shell bg-[var(--gradient-cta)] text-white"><Container><div className="grid items-end gap-8 lg:grid-cols-[1fr_auto]"><div><p className="eyebrow-light">{copy.final.eyebrow}</p><h2 className="mt-5 max-w-4xl font-display text-[clamp(2.8rem,6vw,5.8rem)] leading-[1] tracking-[-.04em]">{copy.final.title}</h2><p className="mt-5 max-w-2xl text-base leading-7 text-white/62">{copy.final.body}</p></div><div className="flex flex-col gap-3 sm:flex-row lg:flex-col"><Link href="/demo" className="cta-light">{copy.final.primary}<ArrowRight className="h-4 w-4" aria-hidden="true"/></Link><Link href="/contact" className="cta-outline-light">{copy.final.secondary}</Link></div></div></Container></section>
+  </>;
 }

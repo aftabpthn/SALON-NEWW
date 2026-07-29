@@ -373,7 +373,7 @@ export interface Booking {
   endsAt?: string;
   durationMinutes?: number;
   serviceDurationMinutes?: number;
-  address: string;
+  address?: string;
   latitude?: number | null;
   longitude?: number | null;
   status: "pending" | "confirmed" | "completed" | "cancelled";
