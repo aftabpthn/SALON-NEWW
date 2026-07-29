@@ -276,23 +276,23 @@ type WaitlistDialog = {
 
     .booking-title-row h2 { min-width: 0; }
     .booking-title-row .status-pill {
-      flex: 0 0 auto;
-      min-height: 20px;
-      padding: 2px 7px;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      border-radius: 999px;
-      color: #047857;
-      background: rgba(16, 185, 129, 0.12);
-      font-size: 0.62rem;
-      font-weight: 850;
-      letter-spacing: 0.01em;
-      text-transform: lowercase;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      flex: 0 0 auto !important;
+      min-height: 18px !important;
+      padding: 2px 7px !important;
+      border: 1px solid rgba(16, 185, 129, 0.42) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      background: rgba(16, 185, 129, 0.14) !important;
+      font-size: 0.60rem !important;
+      font-weight: 850 !important;
+      letter-spacing: 0.01em !important;
+      text-transform: lowercase !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
     }
     .booking-title-row .status-pill.closed {
-      color: #dc2626;
-      border-color: rgba(239, 68, 68, 0.3);
-      background: rgba(239, 68, 68, 0.1);
+      color: #dc2626 !important;
+      border-color: rgba(239, 68, 68, 0.35) !important;
+      background: rgba(239, 68, 68, 0.12) !important;
     }
     .booking-bottom-row {
       display: flex;
@@ -686,10 +686,10 @@ type WaitlistDialog = {
 
       .booking-content { min-width: 0; align-self: center; overflow: hidden; }
       .booking-title-row { gap: 6px; margin: 0 0 2px; }
-      .booking-content .status-pill { min-height: 18px; padding: 1px 6px; font-size: 0.54rem; }
-      .booking-bottom-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; margin-top: 2px; }
-      .view-details-btn { padding: 2px 7px; font-size: 0.60rem; gap: 2px; }
-      .view-details-btn ion-icon { font-size: 0.62rem; }
+      .booking-content .status-pill { min-height: 16px !important; padding: 1px 5px !important; font-size: 0.52rem !important; }
+      .booking-bottom-row { display: flex !important; align-items: flex-end !important; justify-content: space-between !important; gap: 6px !important; margin-top: 2px !important; }
+      .view-details-btn { padding: 2px 6px !important; font-size: 0.58rem !important; gap: 2px !important; }
+      .view-details-btn ion-icon { font-size: 0.60rem !important; }
 
       .booking-content h2 {
         margin: 0;

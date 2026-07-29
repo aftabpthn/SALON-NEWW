@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { Check, X, ArrowRight } from "lucide-react";
 import * as Accordion from "@radix-ui/react-accordion";
 import { ChevronDown } from "lucide-react";
-import { PRICING_TIERS, PRICING_FAQ, CTA_LINKS } from "@/lib/constants";
+import { PRICING_PLANS, PRICING_FAQ, CTA_LINKS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Button } from "@/components/ui/Button";
@@ -102,7 +102,7 @@ export default function PricingPage() {
             animate={inView ? "visible" : "hidden"}
             className="grid md:grid-cols-3 gap-6 lg:gap-8 max-w-5xl mx-auto"
           >
-            {PRICING_TIERS.map((tier, tierIndex) => (
+            {PRICING_PLANS.map((tier, tierIndex) => (
               <motion.div
                 key={tier.name}
                 variants={staggerChild}
