@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
@@ -23,6 +23,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);
 
   readonly tabs: Array<{ key: WorkspaceTab; label: string; icon: string }> = [
@@ -73,6 +74,8 @@ export class StaffControlCenterPageComponent implements OnInit {
   penaltyRules: Row[] = [];
 
   async ngOnInit() {
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    if (this.tabs.some((item) => item.key === tab)) this.activeTab = tab as WorkspaceTab;
     await this.refresh();
   }
 
@@ -543,6 +546,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   async selectTab(tab: WorkspaceTab) {
     if (tab === this.activeTab || this.loading) return;
     this.activeTab = tab;
+    await this.router.navigate([], { relativeTo: this.route, queryParams: { tab }, queryParamsHandling: 'merge', replaceUrl: true });
     await this.refresh();
   }
   backToStaff() { void this.router.navigate(['/staff']); }

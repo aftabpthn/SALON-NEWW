@@ -7,7 +7,9 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 test('training page exposes connected assignment and coaching actions', () => {
   const models = read('../src/app/features/staff-os/domain/staff-os.models.ts');
   const workspace = read('../src/app/pages/staff/staff-os-workspace/staff-os-workspace-page.component.ts');
+  const template = read('../src/app/pages/staff/staff-os-workspace/staff-os-workspace-page.component.html');
   const routes = read('../../backend-rust/src/routes/staff_enterprise.rs');
+  const service = read('../../backend-rust/src/services/staff_enterprise_service.rs');
 
   assert.match(models, /training: \{[\s\S]+path: '\/staff-enterprise\/training'/);
   assert.match(models, /training: \{[\s\S]+path: '\/staff\/coach\/goals'/);
@@ -15,9 +17,23 @@ test('training page exposes connected assignment and coaching actions', () => {
   assert.match(models, /Add coaching goal[\s\S]+postPath: '\/staff\/coach\/goals'/);
   assert.match(models, /key: 'targetValue', label: 'Target value'/);
 
-  assert.match(workspace, /body\[field\.key\] = this\.actionValue\(field\.key, value\)/);
-  assert.match(workspace, /private actionValue\(key: string, value: string\)/);
-  assert.match(workspace, /Number\.isFinite\(number\) \? number : value/);
+  // Staff is picked from a dropdown, never a typed-in id, so both actions bind to a staff field.
+  assert.match(models, /Assign training[\s\S]+key: 'staffId', label: 'Staff', type: 'staff'/);
+  assert.match(models, /Add coaching goal[\s\S]+key: 'staffId', label: 'Staff', type: 'staff'/);
+
+  assert.match(workspace, /body\[field\.key\] = this\.fieldValue\(field, raw\)/);
+  assert.match(workspace, /private fieldValue\(field: StaffOsActionField, raw: string\): unknown/);
+  assert.match(workspace, /Number\.isFinite\(number\) \? number : raw/);
+  assert.match(workspace, /private async ensureStaffOptions\(\)/);
+  assert.doesNotMatch(workspace, /window\.prompt/);
+  assert.match(template, /actionDrawerOpen && activeAction/);
+  assert.match(template, /\(ngModelChange\)="actionValues\[field\.key\] = String\(\$event \?\? ''\)"/);
+  assert.match(template, /@for \(staff of staffOptions; track staff\.id\)[\s\S]+staffOptionLabel\(staff\)/);
+
+  assert.match(models, /options: \['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom'\]/);
+  assert.match(models, /options: \['count', 'percent', 'minutes', 'paise'\]/);
+  assert.match(service, /&\[\s*"revenue",\s*"appointments",\s*"rebooking",\s*"attendance",\s*"training",\s*"utilization",\s*"custom",?\s*\]/);
+  assert.match(service, /&\["count", "percent", "minutes", "paise"\]/);
 
   assert.match(routes, /route\("\/staff-enterprise\/training", get\(training_assignments\)\)/);
   assert.match(routes, /route\("\/staff-enterprise\/training\/assign", post\(assign_training\)\)/);

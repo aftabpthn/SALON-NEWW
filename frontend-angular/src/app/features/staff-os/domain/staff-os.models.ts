@@ -1,11 +1,25 @@
 export type StaffOsRow = Record<string, unknown>;
 
+export type StaffOsFieldType = 'text' | 'textarea' | 'number' | 'date' | 'staff' | 'select';
+
+export type StaffOsActionField = {
+  key: string;
+  label: string;
+  value?: string;
+  type?: StaffOsFieldType;
+  options?: string[];
+  optional?: boolean;
+};
+
 export type StaffOsAction = {
   label: string;
   icon: string;
   route?: string;
   postPath?: string;
-  fields?: Array<{ key: string; label: string; value?: string }>;
+  title?: string;
+  submitLabel?: string;
+  successMessage?: string;
+  fields?: StaffOsActionField[];
 };
 
 export type StaffOsEndpoint = {
@@ -41,8 +55,35 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Biometric exceptions', path: '/staff/biometric/exceptions' },
     ],
     actions: [
-      { label: 'Clock in', icon: 'bi-box-arrow-in-right', postPath: '/staff-attendance/clock-in', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'businessDate', label: 'Business date', value: '{today}' }, { key: 'source', label: 'Source', value: 'manual' }] },
-      { label: 'Clock out', icon: 'bi-box-arrow-right', postPath: '/staff-attendance/clock-out', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'businessDate', label: 'Business date', value: '{today}' }] },
+      {
+        label: 'Clock in',
+        icon: 'bi-box-arrow-in-right',
+        postPath: '/staff-attendance/clock-in',
+        title: 'Record clock in',
+        submitLabel: 'Clock in',
+        successMessage: 'Clock-in recorded',
+        fields: [
+          { key: 'staffId', label: 'Staff', type: 'staff' },
+          { key: 'businessDate', label: 'Business date', type: 'date', value: '{today}' },
+          { key: 'source', label: 'Source', type: 'select', options: ['manual', 'biometric', 'mobile', 'kiosk'], value: 'manual' },
+          { key: 'comments', label: 'Comments', type: 'textarea', optional: true },
+        ],
+      },
+      {
+        label: 'Clock out',
+        icon: 'bi-box-arrow-right',
+        postPath: '/staff-attendance/clock-out',
+        title: 'Record clock out',
+        submitLabel: 'Clock out',
+        successMessage: 'Clock-out recorded',
+        fields: [
+          { key: 'staffId', label: 'Staff', type: 'staff' },
+          { key: 'businessDate', label: 'Business date', type: 'date', value: '{today}' },
+          { key: 'comments', label: 'Comments', type: 'textarea', optional: true },
+        ],
+      },
+      { label: 'Biometric devices', icon: 'bi-hdd-network', route: '/staff/control-center?tab=systems' },
+      { label: 'Attendance summary', icon: 'bi-calendar-check', route: '/staff/attendance-summary' },
     ],
   },
   heatmaps: {
@@ -55,6 +96,10 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Roster coverage', path: '/staff/roster/coverage?{period}' },
       { title: 'Attendance report', path: '/staff/reports/attendance?{period}', columns: ['staffName', 'staffId', 'days', 'presentDays', 'workedMinutes', 'breakMinutes', 'lateMinutes', 'overtimeMinutes'] },
     ],
+    actions: [
+      { label: 'Edit availability', icon: 'bi-calendar-week', route: '/availability' },
+      { label: 'Roster & coverage', icon: 'bi-people', route: '/staff/control-center?tab=workforce' },
+    ],
   },
   'salary-structure': {
     key: 'salary-structure',
@@ -64,6 +109,10 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     endpoints: [
       { title: 'Payroll structure', path: '/staff/payroll-structure' },
       { title: 'Employees', path: '/staff/list?page=1&pageSize=100&active=true&sortBy=firstName&sortDirection=asc' },
+    ],
+    actions: [
+      { label: 'Edit salary structure', icon: 'bi-pencil-square', route: '/staff/payroll?tab=setup&section=structure' },
+      { label: 'Add salary revision', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=revisions' },
     ],
   },
   'salary-rules': {
@@ -89,7 +138,10 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Payroll runs', path: '/staff-payroll/runs' },
       { title: 'Salary revisions', path: '/staff/salary-revisions' },
     ],
-    actions: [{ label: 'Open Payroll', icon: 'bi-wallet2', route: '/staff/payroll' }],
+    actions: [
+      { label: 'Open Payroll', icon: 'bi-wallet2', route: '/staff/payroll' },
+      { label: 'Add salary revision', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=revisions' },
+    ],
   },
   'fines-deductions': {
     key: 'fines-deductions',
@@ -113,9 +165,12 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     icon: 'bi-bullseye',
     endpoints: [
       { title: 'Incentive rules', path: '/staff/incentive-rules' },
-      { title: 'Staff performance', path: '/staff/performance?date_from={periodStart}&date_to={periodEnd}' },
+      { title: 'Staff performance', path: '/staff/performance?dateFrom={periodStart}&dateTo={periodEnd}' },
     ],
-    actions: [{ label: 'Add incentive rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=incentives' }],
+    actions: [
+      { label: 'Add incentive rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=incentives' },
+      { label: 'Add service target', icon: 'bi-bullseye', route: '/staff-os/tasks?create=1' },
+    ],
   },
   leaderboard: {
     key: 'leaderboard',
@@ -124,7 +179,11 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
     icon: 'bi-trophy',
     endpoints: [
       { title: 'Command center ranking', path: '/staff-enterprise/command-center?{period}' },
-      { title: 'Staff performance', path: '/staff/performance?date_from={periodStart}&date_to={periodEnd}' },
+      { title: 'Staff performance', path: '/staff/performance?dateFrom={periodStart}&dateTo={periodEnd}' },
+    ],
+    actions: [
+      { label: 'Add incentive rule', icon: 'bi-plus-lg', route: '/staff/payroll?tab=setup&section=incentives' },
+      { label: 'Performance reviews', icon: 'bi-clipboard-check', route: '/staff/control-center?tab=development' },
     ],
   },
   training: {
@@ -137,8 +196,40 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Coaching goals', path: '/staff/coach/goals' },
     ],
     actions: [
-      { label: 'Assign training', icon: 'bi-plus-lg', postPath: '/staff-enterprise/training/assign', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'title', label: 'Training title' }, { key: 'priority', label: 'Priority', value: 'medium' }] },
-      { label: 'Add coaching goal', icon: 'bi-bullseye', postPath: '/staff/coach/goals', fields: [{ key: 'staffId', label: 'Staff ID' }, { key: 'goalType', label: 'Goal type' }, { key: 'metricUnit', label: 'Metric unit' }, { key: 'targetValue', label: 'Target value' }, { key: 'dueDate', label: 'Due date YYYY-MM-DD', value: '{today}' }, { key: 'actionTitle', label: 'Action title' }, { key: 'priority', label: 'Priority', value: 'medium' }] },
+      {
+        label: 'Assign training',
+        icon: 'bi-plus-lg',
+        postPath: '/staff-enterprise/training/assign',
+        title: 'Assign training',
+        submitLabel: 'Assign training',
+        successMessage: 'Training assigned',
+        fields: [
+          { key: 'staffId', label: 'Staff', type: 'staff' },
+          { key: 'title', label: 'Training title', type: 'text' },
+          { key: 'description', label: 'Description', type: 'textarea', optional: true },
+          { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'urgent'], value: 'medium' },
+          { key: 'dueAt', label: 'Due date', type: 'date', optional: true },
+        ],
+      },
+      {
+        label: 'Add coaching goal',
+        icon: 'bi-bullseye',
+        postPath: '/staff/coach/goals',
+        title: 'Add coaching goal',
+        submitLabel: 'Save goal',
+        successMessage: 'Coaching goal created',
+        fields: [
+          { key: 'staffId', label: 'Staff', type: 'staff' },
+          { key: 'goalType', label: 'Goal type', type: 'select', options: ['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom'] },
+          { key: 'metricUnit', label: 'Metric unit', type: 'select', options: ['count', 'percent', 'minutes', 'paise'] },
+          { key: 'targetValue', label: 'Target value', type: 'number' },
+          { key: 'dueDate', label: 'Due date', type: 'date', value: '{today}' },
+          { key: 'actionTitle', label: 'Action title', type: 'text' },
+          { key: 'actionDescription', label: 'Action description', type: 'textarea', optional: true },
+          { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'urgent'], value: 'medium' },
+        ],
+      },
+      { label: 'Skill matrix', icon: 'bi-diagram-3', route: '/staff/control-center?tab=development' },
     ],
   },
   tasks: {
@@ -170,6 +261,7 @@ export const STAFF_OS_VIEWS: Record<string, StaffOsViewConfig> = {
       { title: 'Mobile conflicts', path: '/staff/mobile/conflicts?status=open' },
     ],
     actions: [
+      { label: 'Resolve conflicts', icon: 'bi-exclamation-triangle', route: '/staff/control-center?tab=systems' },
       { label: 'Staff Kiosk', icon: 'bi-fingerprint', route: '/staff-os/face-punch' },
       { label: 'Customer Kiosk', icon: 'bi-person-badge', route: '/clients' },
       { label: 'Team Chat', icon: 'bi-chat-dots', route: '/notifications' },
