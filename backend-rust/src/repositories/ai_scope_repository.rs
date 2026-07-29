@@ -1072,6 +1072,101 @@ pub async fn finance_summary(
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LapsingClientRow {
+    pub branch_id: String,
+    pub branch_name: String,
+    pub client_id: String,
+    pub client_name: String,
+    pub last_visit_at: Option<DateTime<Utc>>,
+    pub days_since_visit: i64,
+    pub completed_visits: i64,
+    pub lifetime_value_paise: i64,
+    pub membership_id: String,
+    pub membership_name: String,
+    pub membership_expires_at: Option<DateTime<Utc>>,
+    pub membership_active: bool,
+}
+
+/// Clients drifting away, with the membership each one holds.
+///
+/// One statement rather than a per-client lookup, so a lapse list of any size
+/// costs a single round trip and the membership shown is always the client's
+/// current one.
+pub async fn lapsing_clients(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    lapse_after_days: i32,
+    limit: i64,
+) -> Result<Vec<LapsingClientRow>, sqlx::Error> {
+    sqlx::query_as(&format!(
+        r#"WITH scoped AS (
+             SELECT COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT) AS branch_id,
+                    branch.name AS branch_name
+               FROM branches branch
+               JOIN tenants tenant ON tenant.id=branch.tenant_id
+              WHERE COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=$1
+                AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=ANY($2::TEXT[])
+           ), visits AS (
+             SELECT appointment.branch_id,appointment.client_id,
+                    MAX(appointment.start_at) AS last_visit_at,
+                    COUNT(*)::BIGINT AS completed_visits
+               FROM appointments appointment
+               JOIN scoped ON scoped.branch_id=appointment.branch_id
+              WHERE appointment.tenant_id=$1
+                AND appointment.status IN {COMPLETED_APPOINTMENT_STATUSES}
+              GROUP BY appointment.branch_id,appointment.client_id
+           ), spend AS (
+             SELECT sale.branch_id,sale.client_id,
+                    COALESCE(SUM(sale.total_paise),0)::BIGINT AS lifetime_value_paise
+               FROM pos_sales sale
+               JOIN scoped ON scoped.branch_id=sale.branch_id
+              WHERE sale.tenant_id=$1
+                AND sale.status NOT IN {NON_REVENUE_SALE_STATUSES}
+              GROUP BY sale.branch_id,sale.client_id
+           )
+           SELECT visits.branch_id,scoped.branch_name,visits.client_id,
+                  BTRIM(CONCAT_WS(' ',client.first_name,NULLIF(client.last_name,''))) AS client_name,
+                  visits.last_visit_at,
+                  GREATEST(EXTRACT(DAY FROM (NOW()-visits.last_visit_at))::BIGINT,0) AS days_since_visit,
+                  visits.completed_visits,
+                  COALESCE(spend.lifetime_value_paise,0)::BIGINT AS lifetime_value_paise,
+                  COALESCE(membership.membership_id,'') AS membership_id,
+                  COALESCE(plan.name,'') AS membership_name,
+                  membership.expires_at AS membership_expires_at,
+                  COALESCE(membership.active,FALSE) AS membership_active
+             FROM visits
+             JOIN scoped ON scoped.branch_id=visits.branch_id
+             JOIN clients client ON client.id=visits.client_id
+              AND client.tenant_id=$1 AND client.branch_id=visits.branch_id
+              AND client.active=TRUE AND client.merged_into_client_id IS NULL
+             LEFT JOIN spend ON spend.branch_id=visits.branch_id
+              AND spend.client_id=visits.client_id
+             LEFT JOIN LATERAL (
+               SELECT assignment.membership_id,assignment.expires_at,assignment.active
+                 FROM client_memberships assignment
+                WHERE assignment.tenant_id=$1
+                  AND assignment.branch_id=visits.branch_id
+                  AND assignment.client_id=visits.client_id
+                ORDER BY assignment.active DESC,assignment.assigned_at DESC
+                LIMIT 1
+             ) membership ON TRUE
+             LEFT JOIN memberships plan ON plan.id=membership.membership_id
+              AND plan.tenant_id=$1
+            WHERE visits.last_visit_at < NOW()-MAKE_INTERVAL(days => $3::INT)
+            ORDER BY COALESCE(spend.lifetime_value_paise,0) DESC,visits.last_visit_at
+            LIMIT $4"#
+    ))
+    .bind(tenant_id)
+    .bind(branch_ids)
+    .bind(lapse_after_days)
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PackageUtilizationRow {
     pub branch_id: String,
     pub branch_name: String,

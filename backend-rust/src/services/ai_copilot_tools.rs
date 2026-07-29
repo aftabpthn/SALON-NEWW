@@ -20,6 +20,56 @@ use crate::{
     },
 };
 
+/// The branches a tool may read, resolved from the caller's login before the
+/// tool runs.
+///
+/// A tool never receives a raw branch id from a request header: it receives the
+/// set the grants actually allow, so a query cannot be pointed outside it.
+#[derive(Debug, Clone)]
+pub struct ToolScope {
+    /// Every branch the login is authorized to read.
+    pub branch_ids: Vec<String>,
+    /// The branch that single-branch CRM reports read. Always inside `branch_ids`.
+    pub primary_branch_id: String,
+    /// How the scope is described back to the user.
+    pub label: String,
+    /// Whether money lines may be shown. Decided from permissions by the
+    /// dispatcher, so a denied `finance.read` strips them even for an owner.
+    pub financials_visible: bool,
+    /// The scope statement stamped onto every answer.
+    pub disclosure: crate::services::ai_scope_service::ScopeDisclosure,
+}
+
+impl ToolScope {
+    /// The branch a single-branch CRM report should read.
+    pub fn primary(&self) -> &str {
+        self.primary_branch_id.as_str()
+    }
+
+    /// Whether this scope spans more than one branch.
+    pub fn is_multi_branch(&self) -> bool {
+        self.branch_ids.len() > 1
+    }
+
+    /// A one-branch scope, matching what the dispatcher builds for a login that
+    /// holds exactly one branch.
+    #[cfg(test)]
+    pub(crate) fn for_test(branch_id: &str, financials_visible: bool) -> Self {
+        Self {
+            branch_ids: vec![branch_id.to_string()],
+            primary_branch_id: branch_id.to_string(),
+            label: branch_id.to_string(),
+            financials_visible,
+            disclosure: crate::services::ai_scope_service::ScopeDisclosure {
+                label: branch_id.to_string(),
+                branch_count: 1,
+                branches_read: vec![branch_id.to_string()],
+                ..Default::default()
+            },
+        }
+    }
+}
+
 /// Comparison window for every trend tool, and the previous window it is measured against.
 const TREND_DAYS: i32 = 30;
 /// Days a visit needs before its rebooking outcome is considered settled.
@@ -48,6 +98,14 @@ pub enum CopilotTool {
     InventoryRisk,
     RegularClients,
     MembershipRenewals,
+    /// Cross-module: a declining service measured against branch revenue.
+    ServiceRevenueImpact,
+    /// Cross-module: clients drifting away, with the memberships they hold.
+    ClientLapseRisk,
+    /// Cross-module: whether a staff decline is demand-led or performance-led.
+    StaffDeclineCause,
+    /// Cross-module: branches billing well but converting little of it to margin.
+    BranchMarginOutlier,
 }
 
 impl CopilotTool {
@@ -69,6 +127,10 @@ impl CopilotTool {
             Self::InventoryRisk => "inventory_risk",
             Self::RegularClients => "regular_clients",
             Self::MembershipRenewals => "membership_renewals",
+            Self::ServiceRevenueImpact => "service_revenue_impact",
+            Self::ClientLapseRisk => "client_lapse_risk",
+            Self::StaffDeclineCause => "staff_decline_cause",
+            Self::BranchMarginOutlier => "branch_margin_outlier",
         }
     }
 
@@ -90,6 +152,10 @@ impl CopilotTool {
             Self::InventoryRisk => "inventory.reorder_risk",
             Self::RegularClients => "clients.best_clients",
             Self::MembershipRenewals => "membership.renewal_queue",
+            Self::ServiceRevenueImpact => "reports.service_trends",
+            Self::ClientLapseRisk => "clients.return_tracker",
+            Self::StaffDeclineCause => "staff.performance_trend",
+            Self::BranchMarginOutlier => "analytics.branch_contribution",
         }
     }
 
@@ -110,7 +176,21 @@ impl CopilotTool {
     fn allowed_roles(self) -> &'static [&'static str] {
         match self {
             // Staff comparisons are management information, not floor information.
-            Self::StaffPerformanceDecline => &["owner", "admin", "manager", "analyst"],
+            Self::StaffPerformanceDecline | Self::StaffDeclineCause => {
+                &["owner", "admin", "manager", "analyst"]
+            }
+            // Cross-module answers touch money, so they follow the finance roles.
+            Self::ServiceRevenueImpact | Self::BranchMarginOutlier => {
+                &["owner", "admin", "manager", "analyst", "accountant"]
+            }
+            Self::ClientLapseRisk => &[
+                "owner",
+                "admin",
+                "manager",
+                "analyst",
+                "frontdesk",
+                "receptionist",
+            ],
             Self::ServiceDecline | Self::ServiceOffer | Self::ClientOffer => {
                 &["owner", "admin", "manager", "analyst", "accountant"]
             }
@@ -218,6 +298,16 @@ pub struct CopilotMetric {
 }
 
 impl CopilotMetric {
+    /// A rupee metric, formatted the same way as every other money figure.
+    pub(crate) fn money(label: impl Into<String>, previous: i64, current: i64) -> Self {
+        Self::new(label, previous, current, rupees)
+    }
+
+    /// A plain count metric.
+    pub(crate) fn count(label: impl Into<String>, previous: i64, current: i64) -> Self {
+        Self::new(label, previous, current, |value| value.to_string())
+    }
+
     /// Builds a metric from two raw numbers using `format` for display.
     fn new(
         label: impl Into<String>,
@@ -262,7 +352,7 @@ impl ToolActor {
     }
 
     /// A floor staff member sees only their own numbers, never a colleague's.
-    fn restricted_to_self(&self) -> bool {
+    pub(crate) fn restricted_to_self(&self) -> bool {
         self.is("staff")
     }
 }
@@ -554,6 +644,32 @@ pub struct CopilotAnswer {
     pub confidence: String,
     /// Structured rows for the UI; never free text.
     pub data: Value,
+    /// Which branches this answer covers, and whether the request was narrowed.
+    pub scope: crate::services::ai_scope_service::ScopeDisclosure,
+    /// Every CRM module the figures came from. A cross-module answer names all
+    /// of them, so no number in it is untraceable.
+    pub sources: Vec<String>,
+    /// Whether the data behind the answer was enough to support it, and what
+    /// was missing when it was not.
+    pub data_sufficiency: DataSufficiency,
+}
+
+/// Whether an answer rests on enough data, stated rather than implied.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataSufficiency {
+    pub sufficient: bool,
+    /// Plain statements of what was thin or missing. Empty when nothing was.
+    pub gaps: Vec<String>,
+}
+
+impl Default for DataSufficiency {
+    fn default() -> Self {
+        Self {
+            sufficient: true,
+            gaps: Vec::new(),
+        }
+    }
 }
 
 impl CopilotAnswer {
@@ -576,6 +692,9 @@ impl CopilotAnswer {
             proposals: Vec::new(),
             confidence: "medium".into(),
             data: json!({}),
+            scope: crate::services::ai_scope_service::ScopeDisclosure::default(),
+            sources: vec![tool.source().into()],
+            data_sufficiency: DataSufficiency::default(),
         }
     }
 
@@ -629,7 +748,7 @@ impl CopilotAnswer {
         self
     }
 
-    fn action(mut self, action: impl Into<String>, deep_link: impl Into<String>) -> Self {
+    pub(crate) fn action(mut self, action: impl Into<String>, deep_link: impl Into<String>) -> Self {
         self.recommended_action = action.into();
         self.deep_link = deep_link.into();
         self
@@ -648,6 +767,59 @@ impl CopilotAnswer {
 
     fn data(mut self, data: Value) -> Self {
         self.data = data;
+        self
+    }
+
+    /// Names another CRM module this answer read from.
+    pub(crate) fn source_module(mut self, source: impl Into<String>) -> Self {
+        let source = source.into();
+        if !self.sources.contains(&source) {
+            self.sources.push(source);
+        }
+        self
+    }
+
+    /// Starts an answer for a tool. The crate-visible entry point used by
+    /// cross-module tools that live outside this file.
+    pub(crate) fn for_tool(tool: CopilotTool, headline: impl Into<String>) -> Self {
+        Self::new(tool, headline)
+    }
+
+    /// Marks the answer as covering the standard current-vs-previous windows.
+    pub(crate) fn trend_window(self) -> Self {
+        self.trend_period()
+    }
+
+    pub(crate) fn add_metric(self, metric: CopilotMetric) -> Self {
+        self.metric(metric)
+    }
+
+    pub(crate) fn why(self, reason: impl Into<String>) -> Self {
+        self.reason(reason)
+    }
+
+    pub(crate) fn link_entity(
+        self,
+        kind: impl Into<String>,
+        id: impl Into<String>,
+        name: impl Into<String>,
+        link: impl Into<String>,
+    ) -> Self {
+        self.entity(kind, id, name, link)
+    }
+
+    pub(crate) fn with_data(self, data: Value) -> Self {
+        self.data(data)
+    }
+
+    pub(crate) fn confidence_level(self, confidence: &'static str) -> Self {
+        self.confidence(confidence)
+    }
+
+    /// Records that something the answer would have used was missing or thin.
+    pub(crate) fn gap(mut self, gap: impl Into<String>) -> Self {
+        self.data_sufficiency.sufficient = false;
+        self.data_sufficiency.gaps.push(gap.into());
         self
     }
 
@@ -815,6 +987,51 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
             "gir rah", "घट", "कम",
         ],
     );
+
+    // Cross-module questions are matched before the single-module tools,
+    // because each of them contains the wording of a single-module question as
+    // well. "Which service is declining and is it hitting revenue" is a revenue
+    // question, and answering it with the service trend alone drops the half
+    // the user actually asked about.
+    let about_revenue = has_any(
+        text,
+        &["revenue", "sales", "income", "turnover", "kamai", "बिक्री", "राजस्व"],
+    );
+    let about_margin = has_any(
+        text,
+        &["margin", "contribution", "profit", "munafa", "मार्जिन", "मुनाफ"],
+    );
+    let about_branch = has_any(text, &["branch", "store", "outlet", "ब्रांच", "शाखा"]);
+    let about_staff = has_any(
+        text,
+        &["staff", "stylist", "therapist", "employee", "team member", "स्टाफ"],
+    );
+    let about_membership = has_any(text, &["membership", "member", "मेंबरशिप", "सदस्यता"]);
+    let about_lapse = has_any(
+        text,
+        &["lapse", "lapsing", "churn", "stopped coming", "not visited", "chhod", "छोड़"],
+    );
+    let about_bookings = has_any(
+        text,
+        &["booking", "appointment", "footfall", "demand", "बुकिंग", "अपॉइंटमेंट"],
+    );
+
+    if about_service && declining && about_revenue {
+        return Some(CopilotTool::ServiceRevenueImpact);
+    }
+    if (about_client || about_lapse) && about_lapse && about_membership {
+        return Some(CopilotTool::ClientLapseRisk);
+    }
+    if about_staff
+        && declining
+        && (about_bookings
+            || has_any(text, &["why", "cause", "reason", "kyon", "kyun", "क्यों", "वजह"]))
+    {
+        return Some(CopilotTool::StaffDeclineCause);
+    }
+    if about_branch && about_margin {
+        return Some(CopilotTool::BranchMarginOutlier);
+    }
 
     // The diagnostic composite is matched first and deliberately narrowly: only
     // a question about the business as a whole going wrong. Anything naming a
@@ -1395,54 +1612,71 @@ pub fn is_hindi(locale: &str) -> bool {
     locale.to_ascii_lowercase().starts_with("hi")
 }
 
-/// Runs a matched tool after checking the caller's role.
+/// Runs a matched tool against an already-authorized branch scope.
+///
+/// This function does not decide access. `ai_tool_dispatcher` resolves the
+/// login's scope and checks the domain permission before calling in, so by the
+/// time a tool runs the branch set is known-good. Keeping the decision in one
+/// place is what stops a second, weaker rule appearing next to this one.
 pub async fn run(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     actor: &ToolActor,
     matched: &ToolMatch,
 ) -> Result<CopilotAnswer, ToolRefusal> {
     let role = actor.role.as_str();
-    // Floor staff may see their own performance, so that one tool is allowed
-    // for them and then scoped to their own record below.
+    // Floor staff see only their own record, so the tool is narrowed to it below.
     let self_scoped_staff =
         matched.tool == CopilotTool::StaffPerformanceDecline && actor.restricted_to_self();
-    if !self_scoped_staff && !matched.tool.permitted_for(role) {
-        return Err(ToolRefusal::Forbidden(matched.tool));
-    }
     let subject = matched.subject_candidates.as_slice();
     let answer = match matched.tool {
         CopilotTool::StaffPerformanceDecline => {
-            staff_performance_decline(db, tenant_id, branch_id, self_scoped_staff.then_some(actor))
+            staff_performance_decline(db, tenant_id, scope, self_scoped_staff.then_some(actor))
                 .await
         }
         CopilotTool::BillingHowTo => Ok(billing_how_to()),
         // Financial visibility is passed in rather than checked inside, so the
         // role rule lives in one place for every tool.
         CopilotTool::BusinessOverview => {
-            business_overview(db, tenant_id, branch_id, can_view_financials(role)).await
+            business_overview(db, tenant_id, scope, scope.financials_visible).await
         }
         CopilotTool::BusinessDiagnostic => {
-            business_diagnostic(db, tenant_id, branch_id, actor).await
+            business_diagnostic(db, tenant_id, scope, actor).await
         }
         CopilotTool::RegularClients => {
-            regular_clients(db, tenant_id, branch_id, can_view_financials(role)).await
+            regular_clients(db, tenant_id, scope, scope.financials_visible).await
         }
-        CopilotTool::MembershipRenewals => membership_renewals(db, tenant_id, branch_id).await,
-        CopilotTool::ProfitIntelligence => profit_intelligence(db, tenant_id, branch_id).await,
-        CopilotTool::OfferPerformance => offer_performance(db, tenant_id, branch_id).await,
+        CopilotTool::MembershipRenewals => membership_renewals(db, tenant_id, scope).await,
+        // Cross-module tools live in their own module; they read the same
+        // repositories through the same already-authorized scope.
+        CopilotTool::ServiceRevenueImpact => {
+            crate::services::ai_cross_module_tools::service_revenue_impact(db, tenant_id, scope)
+                .await
+        }
+        CopilotTool::ClientLapseRisk => {
+            crate::services::ai_cross_module_tools::client_lapse_risk(db, tenant_id, scope).await
+        }
+        CopilotTool::StaffDeclineCause => {
+            crate::services::ai_cross_module_tools::staff_decline_cause(db, tenant_id, scope).await
+        }
+        CopilotTool::BranchMarginOutlier => {
+            crate::services::ai_cross_module_tools::branch_margin_outlier(db, tenant_id, scope)
+                .await
+        }
+        CopilotTool::ProfitIntelligence => profit_intelligence(db, tenant_id, scope).await,
+        CopilotTool::OfferPerformance => offer_performance(db, tenant_id, scope).await,
         CopilotTool::InventoryRisk => {
-            inventory_risk(db, tenant_id, branch_id, can_view_financials(role)).await
+            inventory_risk(db, tenant_id, scope, scope.financials_visible).await
         }
-        CopilotTool::ServiceDecline => service_decline(db, tenant_id, branch_id).await,
-        CopilotTool::ServiceOffer => service_offer(db, tenant_id, branch_id).await,
-        CopilotTool::LapsedClients => lapsed_clients(db, tenant_id, branch_id).await,
+        CopilotTool::ServiceDecline => service_decline(db, tenant_id, scope).await,
+        CopilotTool::ServiceOffer => service_offer(db, tenant_id, scope).await,
+        CopilotTool::LapsedClients => lapsed_clients(db, tenant_id, scope).await,
         CopilotTool::MembershipStatus => {
             client_scoped(
                 db,
                 tenant_id,
-                branch_id,
+                scope,
                 subject,
                 matched.tool,
                 membership_status,
@@ -1453,7 +1687,7 @@ pub async fn run(
             client_scoped(
                 db,
                 tenant_id,
-                branch_id,
+                scope,
                 subject,
                 matched.tool,
                 return_forecast,
@@ -1464,7 +1698,7 @@ pub async fn run(
             client_scoped(
                 db,
                 tenant_id,
-                branch_id,
+                scope,
                 subject,
                 matched.tool,
                 favourite_service,
@@ -1475,7 +1709,7 @@ pub async fn run(
             client_scoped(
                 db,
                 tenant_id,
-                branch_id,
+                scope,
                 subject,
                 matched.tool,
                 client_offer,
@@ -1494,15 +1728,20 @@ pub async fn run(
     })?;
     // Every answer names the branch it describes, so figures are never ambiguous
     // for a user who can switch branches.
-    answer.branch_name = copilot_repository::branch_name(db, tenant_id, branch_id)
-        .await
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| branch_id.to_string());
+    answer.branch_name = if scope.is_multi_branch() {
+        scope.label.clone()
+    } else {
+        copilot_repository::branch_name(db, tenant_id, scope.primary())
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| scope.primary().to_string())
+    };
     // Scope and read time are stamped here rather than in each tool, so a new
     // tool cannot ship without saying which tenant and branch it read, or when.
     answer.tenant_id = tenant_id.to_string();
-    answer.branch_id = branch_id.to_string();
+    answer.branch_id = scope.primary().to_string();
+    answer.scope = scope.disclosure.clone();
     answer.generated_at = Utc::now().to_rfc3339();
     // Never offer a next step the caller is not allowed to take. Gating here
     // means a tool cannot accidentally expose one by forgetting the check.
@@ -1537,14 +1776,14 @@ fn proposal_kind(id: &str) -> Option<ProposalKind> {
 async fn staff_performance_decline(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     // Some when the caller is floor staff: the answer is narrowed to them alone.
     self_only: Option<&ToolActor>,
 ) -> Result<CopilotAnswer, AppError> {
     let mut rows = copilot_repository::staff_performance_trend(
         db,
         tenant_id,
-        branch_id,
+        &scope.branch_ids,
         TREND_DAYS,
         ROW_LIMIT,
         REBOOK_WINDOW_DAYS,
@@ -1557,7 +1796,7 @@ async fn staff_performance_decline(
         // anything is read from them, so a colleague's numbers never reach the
         // answer, the evidence, the payload or the provider prompt.
         let own_staff_id =
-            copilot_repository::staff_id_for_user(db, tenant_id, branch_id, &actor.user_id)
+            copilot_repository::staff_id_for_user(db, tenant_id, &scope.branch_ids, &actor.user_id)
                 .await
                 .map_err(|_| AppError::internal("failed to resolve staff record"))?;
         let Some(own_staff_id) = own_staff_id else {
@@ -1768,10 +2007,10 @@ fn staff_decline_reason(row: &copilot_repository::StaffPerformanceTrendRow) -> S
 async fn service_decline(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let rows = copilot_repository::service_performance_trend(
-        db, tenant_id, branch_id, TREND_DAYS, ROW_LIMIT,
+        db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT,
     )
     .await
     .map_err(|_| AppError::internal("failed to load service performance trend"))?;
@@ -1803,7 +2042,7 @@ async fn service_decline(
     // Ask when in the week this service is weakest, so the answer explains where
     // the demand went instead of only reporting that it fell.
     let weekday_rows =
-        copilot_repository::weekday_demand(db, tenant_id, branch_id, TREND_DAYS, &worst.service_id)
+        copilot_repository::weekday_demand(db, tenant_id, &scope.branch_ids, TREND_DAYS, &worst.service_id)
             .await
             .map_err(|_| AppError::internal("failed to load weekday demand"))?;
     let weak_window = weakest_window(&weekday_rows);
@@ -1936,10 +2175,10 @@ fn service_decline_reason(row: &copilot_repository::ServicePerformanceTrendRow) 
 async fn service_offer(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let rows = copilot_repository::service_performance_trend(
-        db, tenant_id, branch_id, TREND_DAYS, ROW_LIMIT,
+        db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT,
     )
     .await
     .map_err(|_| AppError::internal("failed to load service performance trend"))?;
@@ -2006,7 +2245,7 @@ async fn service_offer(
     // Find when this service is weakest, so the offer can be aimed at idle
     // capacity instead of discounting slots that were already selling.
     let weekday_rows =
-        copilot_repository::weekday_demand(db, tenant_id, branch_id, TREND_DAYS, &best.service_id)
+        copilot_repository::weekday_demand(db, tenant_id, &scope.branch_ids, TREND_DAYS, &best.service_id)
             .await
             .map_err(|_| AppError::internal("failed to load weekday demand"))?;
     let weak_window = weakest_window(&weekday_rows);
@@ -2114,13 +2353,13 @@ async fn service_offer(
 async fn lapsed_clients(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     // Reuses the existing client report so the copilot and the report agree.
     let rows = clients_repository::client_report(
         db,
         tenant_id,
-        branch_id,
+        scope.primary(),
         "lapsed",
         clients_repository::ClientReportFilters {
             days: LAPSED_DAYS,
@@ -2337,10 +2576,10 @@ fn workflow_answer(tool: CopilotTool, entry: &WorkflowEntry) -> CopilotAnswer {
 async fn business_overview(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     financials_visible: bool,
 ) -> Result<CopilotAnswer, AppError> {
-    let context = concierge_repository::operational_context(db, tenant_id, branch_id)
+    let context = concierge_repository::operational_context(db, tenant_id, scope.primary())
         .await
         .map_err(|_| AppError::internal("failed to load branch overview"))?;
 
@@ -2412,13 +2651,13 @@ async fn business_overview(
 async fn profit_intelligence(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let today = Utc::now().date_naive();
     let window = i64::from(TREND_DAYS);
     let current_from = today - Duration::days(window);
     let previous_from = today - Duration::days(window * 2);
-    let branches = [branch_id.to_string()];
+    let branches = scope.branch_ids.clone();
     // Reuses the existing profit calculation so the copilot cannot invent a
     // second definition of margin. Both windows use the same function, so the
     // comparison is like for like.
@@ -2574,10 +2813,10 @@ async fn profit_intelligence(
 async fn offer_performance(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let rows =
-        copilot_repository::offer_performance(db, tenant_id, branch_id, TREND_DAYS, ROW_LIMIT)
+        copilot_repository::offer_performance(db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT)
             .await
             .map_err(|_| AppError::internal("failed to load offer performance"))?;
 
@@ -2659,11 +2898,11 @@ async fn offer_performance(
 async fn inventory_risk(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     financials_visible: bool,
 ) -> Result<CopilotAnswer, AppError> {
     let rows =
-        copilot_repository::inventory_risk(db, tenant_id, branch_id, TREND_DAYS, ROW_LIMIT)
+        copilot_repository::inventory_risk(db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT)
             .await
             .map_err(|_| AppError::internal("failed to load inventory risk"))?;
 
@@ -2745,13 +2984,13 @@ async fn inventory_risk(
 async fn regular_clients(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     financials_visible: bool,
 ) -> Result<CopilotAnswer, AppError> {
     let rows = clients_repository::client_report(
         db,
         tenant_id,
-        branch_id,
+        scope.primary(),
         "best-clients",
         clients_repository::ClientReportFilters {
             days: TREND_DAYS * 6,
@@ -2849,10 +3088,10 @@ async fn regular_clients(
 async fn membership_renewals(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     // Reuses the renewal queue the membership screens already run on.
-    let rows = membership_lifecycle_repository::renewal_queue(db, tenant_id, branch_id, 30)
+    let rows = membership_lifecycle_repository::renewal_queue(db, tenant_id, scope.primary(), 30)
         .await
         .map_err(|_| AppError::internal("failed to load membership renewals"))?;
 
@@ -2926,7 +3165,7 @@ async fn membership_renewals(
 async fn business_diagnostic(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     actor: &ToolActor,
 ) -> Result<CopilotAnswer, AppError> {
     const PARTS: &[CopilotTool] = &[
@@ -2937,7 +3176,7 @@ async fn business_diagnostic(
         CopilotTool::InventoryRisk,
     ];
 
-    let financials_visible = can_view_financials(&actor.role);
+    let financials_visible = scope.financials_visible;
     let mut findings = Vec::new();
     let mut answer = CopilotAnswer::new(CopilotTool::BusinessDiagnostic, String::new())
         .trend_period()
@@ -2955,14 +3194,14 @@ async fn business_diagnostic(
             continue;
         }
         let outcome = match part {
-            CopilotTool::ProfitIntelligence => profit_intelligence(db, tenant_id, branch_id).await,
+            CopilotTool::ProfitIntelligence => profit_intelligence(db, tenant_id, scope).await,
             CopilotTool::StaffPerformanceDecline => {
-                staff_performance_decline(db, tenant_id, branch_id, None).await
+                staff_performance_decline(db, tenant_id, scope, None).await
             }
-            CopilotTool::ServiceDecline => service_decline(db, tenant_id, branch_id).await,
-            CopilotTool::LapsedClients => lapsed_clients(db, tenant_id, branch_id).await,
+            CopilotTool::ServiceDecline => service_decline(db, tenant_id, scope).await,
+            CopilotTool::LapsedClients => lapsed_clients(db, tenant_id, scope).await,
             CopilotTool::InventoryRisk => {
-                inventory_risk(db, tenant_id, branch_id, financials_visible).await
+                inventory_risk(db, tenant_id, scope, financials_visible).await
             }
             _ => continue,
         };
@@ -3039,13 +3278,13 @@ async fn business_diagnostic(
 async fn client_scoped<'a, F, Fut>(
     db: &'a PgPool,
     tenant_id: &'a str,
-    branch_id: &'a str,
+    scope: &'a ToolScope,
     subject_candidates: &'a [String],
     tool: CopilotTool,
     body: F,
 ) -> Result<CopilotAnswer, AppError>
 where
-    F: FnOnce(&'a PgPool, &'a str, &'a str, copilot_repository::CopilotClientMatch) -> Fut,
+    F: FnOnce(&'a PgPool, &'a str, &'a ToolScope, copilot_repository::CopilotClientMatch) -> Fut,
     Fut: std::future::Future<Output = Result<CopilotAnswer, AppError>>,
 {
     if subject_candidates.is_empty() {
@@ -3064,7 +3303,7 @@ where
     let mut resolved = Vec::new();
     let mut used_term = String::new();
     for candidate in subject_candidates {
-        let matches = copilot_repository::find_clients(db, tenant_id, branch_id, candidate, 5)
+        let matches = copilot_repository::find_clients(db, tenant_id, &scope.branch_ids, candidate, 5)
             .await
             .map_err(|_| AppError::internal("failed to resolve client"))?;
         if !matches.is_empty() {
@@ -3088,7 +3327,7 @@ where
             body(
                 db,
                 tenant_id,
-                branch_id,
+                scope,
                 resolved.into_iter().next().expect("one match"),
             )
             .await
@@ -3120,19 +3359,19 @@ where
 async fn membership_status(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     client: copilot_repository::CopilotClientMatch,
 ) -> Result<CopilotAnswer, AppError> {
     let memberships = membership_lifecycle_repository::history_for_client(
         db,
         tenant_id,
-        branch_id,
+        scope.primary(),
         &client.client_id,
     )
     .await
     .map_err(|_| AppError::internal("failed to load membership history"))?;
     let credits =
-        membership_lifecycle_repository::client_wallet(db, tenant_id, branch_id, &client.client_id)
+        membership_lifecycle_repository::client_wallet(db, tenant_id, scope.primary(), &client.client_id)
             .await
             .map_err(|_| AppError::internal("failed to load membership credits"))?;
 
@@ -3303,10 +3542,10 @@ fn membership_json(record: &membership_lifecycle_repository::ActiveMembershipRec
 async fn return_forecast(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     client: copilot_repository::CopilotClientMatch,
 ) -> Result<CopilotAnswer, AppError> {
-    let summary = clients_repository::summary(db, tenant_id, branch_id, &client.client_id)
+    let summary = clients_repository::summary(db, tenant_id, scope.primary(), &client.client_id)
         .await
         .map_err(|_| AppError::internal("failed to load client summary"))?;
 
@@ -3429,13 +3668,13 @@ async fn return_forecast(
 async fn favourite_service(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     client: copilot_repository::CopilotClientMatch,
 ) -> Result<CopilotAnswer, AppError> {
-    let summary = clients_repository::summary(db, tenant_id, branch_id, &client.client_id)
+    let summary = clients_repository::summary(db, tenant_id, scope.primary(), &client.client_id)
         .await
         .map_err(|_| AppError::internal("failed to load client summary"))?;
-    let history = clients_repository::service_history(db, tenant_id, branch_id, &client.client_id)
+    let history = clients_repository::service_history(db, tenant_id, scope.primary(), &client.client_id)
         .await
         .map_err(|_| AppError::internal("failed to load client service history"))?;
 
@@ -3548,14 +3787,14 @@ async fn favourite_service(
 async fn client_offer(
     db: &PgPool,
     tenant_id: &str,
-    branch_id: &str,
+    scope: &ToolScope,
     client: copilot_repository::CopilotClientMatch,
 ) -> Result<CopilotAnswer, AppError> {
-    let summary = clients_repository::summary(db, tenant_id, branch_id, &client.client_id)
+    let summary = clients_repository::summary(db, tenant_id, scope.primary(), &client.client_id)
         .await
         .map_err(|_| AppError::internal("failed to load client summary"))?;
     let win_back =
-        clients_repository::win_back_summary(db, tenant_id, branch_id, &client.client_id)
+        clients_repository::win_back_summary(db, tenant_id, scope.primary(), &client.client_id)
             .await
             .map_err(|_| AppError::internal("failed to load win-back history"))?;
 
@@ -3833,6 +4072,7 @@ fn margin_bps(revenue_paise: i64, cost_paise: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
 
     #[test]
     fn detects_each_documented_question() {
@@ -4558,7 +4798,7 @@ mod reply_shape_tests {
         let answer = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "owner"),
             &matched,
         )
@@ -4609,20 +4849,12 @@ mod reply_shape_tests {
 
         // A receptionist must not receive the same revenue comparison.
         assert!(
-            matches!(
-                run(
-                    &db,
-                    &tenant,
-                    branch,
-                    &ToolActor::new("user1", "receptionist"),
-                    &matched
-                )
-                .await,
-                Err(ToolRefusal::Forbidden(_))
+            !crate::services::ai_scope_service::domain_allowed(
+                &crate::services::ai_tool_dispatcher::tests_support::claims("receptionist", &[], &[]),
+                crate::services::ai_tool_dispatcher::tool_domain(CopilotTool::ProfitIntelligence),
             ),
             "service revenue stays closed to non-finance roles"
         );
-
         for table in ["pos_sale_lines", "pos_sales", "services"] {
             let _ = sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
                 .bind(&tenant)
@@ -4654,7 +4886,7 @@ mod reply_shape_tests {
         let for_manager = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "manager"),
             &matched,
         )
@@ -4768,7 +5000,7 @@ mod reply_shape_tests {
         let mine = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new(format!("{tenant}user"), "staff"),
             &matched,
         )
@@ -4790,7 +5022,7 @@ mod reply_shape_tests {
         let branch_view = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("manager-user", "manager"),
             &matched,
         )
@@ -4807,7 +5039,7 @@ mod reply_shape_tests {
         let unlinked = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("no-such-user", "staff"),
             &matched,
         )
@@ -4823,7 +5055,7 @@ mod reply_shape_tests {
         let other_tenant = run(
             &db,
             &Uuid::new_v4().to_string(),
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("manager-user", "manager"),
             &matched,
         )
@@ -4881,7 +5113,7 @@ mod reply_shape_tests {
         let answer = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "receptionist"),
             &matched,
         )
@@ -5085,7 +5317,7 @@ mod phase1_tool_foundation_tests {
                 tool,
                 subject_candidates: Vec::new(),
             };
-            let answer = run(&db, &tenant, branch, &actor, &matched)
+            let answer = run(&db, &tenant, &ToolScope::for_test(branch, true), &actor, &matched)
                 .await
                 .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
 
@@ -5139,7 +5371,7 @@ mod phase1_tool_foundation_tests {
         let answer = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "owner"),
             &matched,
         )
@@ -5165,7 +5397,8 @@ mod phase1_tool_foundation_tests {
         let floor = run(
             &db,
             &tenant,
-            branch,
+            // What the dispatcher builds for a stock role: no finance.read.
+            &ToolScope::for_test(branch, false),
             &ToolActor::new("user2", "inventorymanager"),
             &matched,
         )
@@ -5184,7 +5417,7 @@ mod phase1_tool_foundation_tests {
         let owner = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "owner"),
             &matched,
         )
@@ -5216,20 +5449,20 @@ mod phase1_tool_foundation_tests {
                 tool,
                 subject_candidates: Vec::new(),
             };
-            let refusal = run(
-                &db,
-                &tenant,
-                "branch1",
-                &ToolActor::new("user3", "frontdesk"),
-                &matched,
-            )
-            .await
-            .expect_err("a finance tool must refuse a non-finance role");
+            // The refusal is now made by the dispatcher from the permission
+            // codes, before a branch scope is built or a query is issued.
+            let front_desk = crate::services::ai_tool_dispatcher::tests_support::claims(
+                "frontdesk",
+                &[],
+                &[],
+            );
+            let domain = crate::services::ai_tool_dispatcher::tool_domain(tool);
             assert!(
-                matches!(refusal, ToolRefusal::Forbidden(denied) if denied == tool),
+                !crate::services::ai_scope_service::domain_allowed(&front_desk, domain),
                 "{} must refuse explicitly rather than return an empty answer",
                 tool.name()
             );
+            let _ = &matched;
         }
     }
 
@@ -5266,7 +5499,7 @@ mod phase1_tool_foundation_tests {
         let answer = run(
             &db,
             &tenant,
-            branch,
+            &ToolScope::for_test(branch, true),
             &ToolActor::new("user1", "owner"),
             &ToolMatch {
                 tool: CopilotTool::OfferPerformance,
@@ -5425,7 +5658,7 @@ mod phase2_analytical_tests {
         let answer = run(
             &db,
             &tenant,
-            "branch1",
+            &ToolScope::for_test("branch1", true),
             &ToolActor::new("user1", "owner"),
             &diagnostic(),
         )
@@ -5477,7 +5710,7 @@ mod phase2_analytical_tests {
         let owner = run(
             &db,
             &tenant,
-            "branch1",
+            &ToolScope::for_test("branch1", true),
             &ToolActor::new("user1", "owner"),
             &diagnostic(),
         )
@@ -5486,7 +5719,7 @@ mod phase2_analytical_tests {
         let desk = run(
             &db,
             &tenant,
-            "branch1",
+            &ToolScope::for_test("branch1", true),
             &ToolActor::new("user2", "frontdesk"),
             &diagnostic(),
         )
@@ -5537,7 +5770,7 @@ mod phase2_analytical_tests {
         let answer = run(
             &db,
             &tenant,
-            "branch1",
+            &ToolScope::for_test("branch1", true),
             &ToolActor::new("user1", "owner"),
             &ToolMatch {
                 tool: CopilotTool::ProfitIntelligence,
@@ -5569,7 +5802,7 @@ mod phase2_analytical_tests {
         let answer = run(
             &db,
             &tenant,
-            "branch1",
+            &ToolScope::for_test("branch1", true),
             &ToolActor::new("user1", "owner"),
             &diagnostic(),
         )
@@ -5750,7 +5983,7 @@ mod phase8_evaluation_tests {
             CopilotTool::BusinessOverview,
         ] {
             let matched = ToolMatch { tool, subject_candidates: Vec::new() };
-            let answer = run(&db, &tenant, "branch1", &actor, &matched)
+            let answer = run(&db, &tenant, &ToolScope::for_test("branch1", true), &actor, &matched)
                 .await
                 .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
 
@@ -5797,7 +6030,7 @@ mod phase8_evaluation_tests {
         let actor = ToolActor::new("user1", "owner");
         for tool in [CopilotTool::LapsedClients, CopilotTool::RegularClients] {
             let matched = ToolMatch { tool, subject_candidates: Vec::new() };
-            let Ok(answer) = run(&db, &tenant, branch, &actor, &matched).await else {
+            let Ok(answer) = run(&db, &tenant, &ToolScope::for_test(branch, true), &actor, &matched).await else {
                 continue;
             };
             let rendered = serde_json::to_string(&answer).unwrap_or_default();

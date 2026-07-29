@@ -12,6 +12,12 @@ pub struct SignalStateRecord {
     pub fingerprint: String,
     pub confidence: String,
     pub raised_count: i32,
+    /// `open`, `acknowledged`, `snoozed` or `dismissed`.
+    pub status: String,
+    /// The finding the person's decision was taken against.
+    pub decided_fingerprint: String,
+    /// True while a snooze window is still running.
+    pub snooze_active: bool,
     /// Computed in SQL so the comparison uses the database clock, not the
     /// worker's, which may drift.
     pub hours_since_raised: f64,
@@ -34,6 +40,9 @@ pub async fn last_state(
         r#"SELECT fingerprint,
                   confidence,
                   raised_count,
+                  status,
+                  decided_fingerprint,
+                  (snoozed_until IS NOT NULL AND snoozed_until > NOW()) AS snooze_active,
                   (EXTRACT(EPOCH FROM (NOW() - last_raised_at)) / 3600.0)::DOUBLE PRECISION AS hours_since_raised
              FROM ai_signal_state
             WHERE tenant_id=$1 AND branch_id=$2 AND signal_key=$3"#,
@@ -81,6 +90,46 @@ pub async fn record_raised(
 ///
 /// Restricted to branches that have had recorded activity, so a dormant branch
 /// does not generate a daily notification nobody wants.
+/// Records a person's decision about a signal.
+///
+/// The fingerprint the decision was taken against is stored with it, so a
+/// dismissal silences the finding that was seen and not a different one that
+/// happens to share the signal's name.
+pub async fn set_signal_status(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    signal_key: &str,
+    status: &str,
+    snoozed_until: Option<chrono::DateTime<chrono::Utc>>,
+    decided_by: &str,
+) -> Result<Option<SignalStateRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE ai_signal_state
+              SET status=$4,
+                  snoozed_until=$5,
+                  decided_by=$6,
+                  decided_at=NOW(),
+                  decided_fingerprint=fingerprint
+            WHERE tenant_id=$1 AND branch_id=$2 AND signal_key=$3
+        RETURNING fingerprint,
+                  confidence,
+                  raised_count,
+                  status,
+                  decided_fingerprint,
+                  (snoozed_until IS NOT NULL AND snoozed_until > NOW()) AS snooze_active,
+                  (EXTRACT(EPOCH FROM (NOW() - last_raised_at)) / 3600.0)::DOUBLE PRECISION AS hours_since_raised"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(signal_key)
+    .bind(status)
+    .bind(snoozed_until)
+    .bind(decided_by)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn briefing_branches(db: &PgPool) -> Result<Vec<BriefingBranch>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT DISTINCT branch.tenant_id::TEXT AS tenant_id, branch.id::TEXT AS branch_id

@@ -19,8 +19,12 @@ use crate::{
         },
         ai_copilot_tools,
         ai_prediction_service::{self, PredictionKind, PredictionRun},
+        ai_scope_service::ScopeRequest,
         ai_action_service::{self, ActionDraft, ConfirmDraftRequest, CreateDraftRequest},
-        ai_briefing_service::{self, BranchComparisonRow, Briefing, Cadence, Signal},
+        ai_briefing_service::{
+            self, BranchComparisonRow, Briefing, Cadence, Signal, SignalDecision,
+            SignalDecisionRequest,
+        },
         ai_what_if_service::{self, WhatIf, WhatIfResult},
         auth_service::AuthClaims,
     },
@@ -41,6 +45,7 @@ pub fn router() -> Router<AppState> {
         .route("/ai/what-if", post(run_what_if))
         .route("/ai/briefing/:cadence", get(get_briefing))
         .route("/ai/briefing/compare/:signal", get(compare_branches))
+        .route("/ai/briefing/signals/:signal/decision", post(decide_signal))
         .route("/ai/actions/drafts", post(create_action_draft))
         .route("/ai/actions/drafts/:id/confirm", post(confirm_action_draft))
         .route("/ai/actions/drafts/:id/cancel", post(cancel_action_draft))
@@ -117,8 +122,7 @@ async fn send_message(
             &state.settings,
             &tenant_id,
             &branch_id,
-            &claims.sub,
-            &claims.role,
+            &claims,
             &session_id,
             payload,
         )
@@ -237,12 +241,11 @@ async fn run_prediction(
     Ok(Json(ApiResponse::ok(
         ai_prediction_service::predict(
             &state.db,
-            &state.settings,
+            ai_prediction_service::ProviderConfig::from_settings(&state.settings),
             &tenant_id,
-            &branch_id,
-            &claims.role,
-            &claims.sub,
+            &claims,
             kind,
+            &ScopeRequest::default(),
         )
         .await?,
     )))
@@ -264,9 +267,9 @@ async fn get_latest_prediction(
         ai_prediction_service::latest_run(
             &state.db,
             &tenant_id,
-            &branch_id,
-            &claims.role,
+            &claims,
             kind,
+            &ScopeRequest::default(),
         )
         .await?,
     )))
@@ -496,4 +499,33 @@ fn require_ai_manage(claims: &AuthClaims) -> Result<(), AppError> {
     } else {
         Err(AppError::forbidden("AI governance access is restricted"))
     }
+}
+
+/// Records acknowledge, snooze or dismiss for a briefing signal.
+///
+/// Nothing about the business changes here: this only decides whether the
+/// briefing raises the same finding again.
+async fn decide_signal(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(signal): Path<String>,
+    Json(payload): Json<SignalDecisionRequest>,
+) -> ApiResult<SignalDecision> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let signal = Signal::from_key(&signal)
+        .ok_or_else(|| AppError::not_found("that briefing signal is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_briefing_service::decide_signal(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            signal,
+            &payload,
+        )
+        .await?,
+    )))
 }

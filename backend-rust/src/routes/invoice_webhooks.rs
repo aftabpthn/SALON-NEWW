@@ -434,6 +434,8 @@ async fn respond_to_inbound_whatsapp(
         Some(&context.client_id),
         "whatsapp",
         &message.sender,
+        // The sender's number identifies them; unknown numbers stay anonymous.
+        &message.sender,
         "en-IN",
         &message.body,
         Some(&message.message_id),

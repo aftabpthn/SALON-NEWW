@@ -22,7 +22,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use crate::{models::common::AppError, repositories::ai_action_repository as action_repository};
+use crate::{
+    models::common::AppError, repositories::ai_action_repository as action_repository,
+    services::staff_advanced_service,
+};
 
 /// The actions the copilot may draft. Every one either creates a *draft* record
 /// or opens a screen; none of them completes a business transaction.
@@ -39,7 +42,30 @@ pub enum ActionKind {
     OpenServiceReport,
     OpenMembership,
     ContinueBilling,
+    /// A coaching task for a staff member, written to the CRM's own task list.
+    CreateCoachingTask,
+    /// A reorder proposal, prepared for the purchasing screen to complete.
+    CreateReorderProposal,
+    /// A membership follow-up task, written to the CRM's own task list.
+    CreateMembershipFollowUp,
 }
+
+/// Operations that always stop at a person, whatever the draft says.
+///
+/// These move money, reach a client, or change a payslip. The copilot may
+/// prepare and route to them, but the authoritative screen performs them — so
+/// this list is about what the AI will never execute, not merely what needs a
+/// click.
+pub const ALWAYS_EXPLICIT_APPROVAL: &[&str] = &[
+    "payment",
+    "refund",
+    "payroll_change",
+    "booking_confirmation",
+    "offer_publishing",
+    "marketing_send",
+    "membership_cancellation",
+    "financial_adjustment",
+];
 
 impl ActionKind {
     pub fn name(self) -> &'static str {
@@ -50,6 +76,9 @@ impl ActionKind {
             Self::CreateFollowUpTask => "create_follow_up_task",
             Self::PrepareBookingDraft => "prepare_booking_draft",
             Self::PrepareMembershipRenewal => "prepare_membership_renewal",
+            Self::CreateCoachingTask => "create_coaching_task",
+            Self::CreateReorderProposal => "create_reorder_proposal",
+            Self::CreateMembershipFollowUp => "create_membership_follow_up",
             Self::OpenStaffReport => "open_staff_report",
             Self::OpenClientProfile => "open_client_profile",
             Self::OpenServiceReport => "open_service_report",
@@ -67,7 +96,7 @@ impl ActionKind {
         }
     }
 
-    pub fn all() -> [Self; 11] {
+    pub fn all() -> [Self; 14] {
         [
             Self::CreateOfferDraft,
             Self::CreateCampaignDraft,
@@ -79,6 +108,9 @@ impl ActionKind {
             Self::OpenClientProfile,
             Self::OpenServiceReport,
             Self::OpenMembership,
+            Self::CreateCoachingTask,
+            Self::CreateReorderProposal,
+            Self::CreateMembershipFollowUp,
             Self::ContinueBilling,
         ]
     }
@@ -130,6 +162,18 @@ impl ActionKind {
 
     /// The CRM screen that owns this change. Executing a draft never bypasses
     /// it: the user still lands there, where its own validation and audit apply.
+    /// Whether approving this kind may complete the write, or only hand off.
+    ///
+    /// Only task-shaped work qualifies: creating a to-do changes no money and
+    /// reaches no client. Publishing, sending, confirming and billing stay with
+    /// the screens that own them, so approving one here routes rather than acts.
+    pub fn executes_on_approval(self) -> bool {
+        matches!(
+            self,
+            Self::CreateFollowUpTask | Self::CreateCoachingTask | Self::CreateMembershipFollowUp
+        )
+    }
+
     fn route(self) -> &'static str {
         match self {
             Self::CreateOfferDraft => "/marketing/offers",
@@ -142,6 +186,8 @@ impl ActionKind {
             Self::OpenClientProfile => "/clients",
             Self::OpenServiceReport => "/reports/services",
             Self::ContinueBilling => "/pos",
+            Self::CreateCoachingTask | Self::CreateMembershipFollowUp => "/staff/control-center",
+            Self::CreateReorderProposal => "/purchase-orders",
         }
     }
 
@@ -154,6 +200,8 @@ impl ActionKind {
             Self::CreateFollowUpTask => &["tasks"],
             Self::PrepareBookingDraft => &["appointments"],
             Self::PrepareMembershipRenewal => &["memberships"],
+            Self::CreateCoachingTask | Self::CreateMembershipFollowUp => &["tasks"],
+            Self::CreateReorderProposal => &["purchases.orders"],
             _ => &[],
         }
     }
@@ -212,7 +260,7 @@ pub struct CreateDraftRequest {
     pub summary: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfirmDraftRequest {
     /// Identifies this confirmation. Replaying it returns the first result.
@@ -353,14 +401,39 @@ pub async fn confirm_draft(
         return Err(AppError::conflict("that action draft was already decided"));
     }
 
-    // Approval records the decision and hands the user to the screen that owns
-    // the change. Nothing is published, sent, charged or confirmed here.
-    let result = json!({
+    // Task-shaped work is completed here through the CRM's own service. Anything
+    // that moves money or reaches a client is handed to the screen that owns it.
+    //
+    // `executed` is only ever true once that authoritative write has returned
+    // successfully — a failed write is reported as a failure, never as an
+    // approval that quietly did nothing.
+    let mut result = json!({
         "approved": true,
         "executed": false,
         "route": kind.route(),
         "note": kind.confirmation_note(),
     });
+    if kind.executes_on_approval() {
+        match execute_through_crm(db, tenant_id, branch_id, user_id, kind, &record.payload).await {
+            Ok(execution) => {
+                result = json!({
+                    "approved": true,
+                    "executed": true,
+                    "route": kind.route(),
+                    "note": kind.confirmation_note(),
+                    "execution": execution,
+                });
+            }
+            Err(error) => {
+                audit(
+                    db, tenant_id, branch_id, Some(&record.id), kind, "failed", user_id, role,
+                    error.message(),
+                )
+                .await;
+                return Err(error);
+            }
+        }
+    }
     let approved = action_repository::mark_approved(
         db,
         tenant_id,
@@ -380,6 +453,83 @@ pub async fn confirm_draft(
 
     audit(db, tenant_id, branch_id, Some(&approved.id), kind, "approved", user_id, role, "").await;
     Ok(to_draft(approved))
+}
+
+/// Performs the approved change through the CRM service that owns it.
+///
+/// This function deliberately contains no SQL of its own: every write goes
+/// through the same service the corresponding CRM screen calls, so the copilot
+/// cannot end up with a second, divergent definition of what creating a task
+/// means. Adding a kind here means finding its existing service, not writing a
+/// new insert.
+async fn execute_through_crm(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    kind: ActionKind,
+    payload: &Value,
+) -> Result<Value, AppError> {
+    match kind {
+        ActionKind::CreateFollowUpTask
+        | ActionKind::CreateCoachingTask
+        | ActionKind::CreateMembershipFollowUp => {
+            let title = payload
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| AppError::validation("the draft has no task title"))?;
+            let record = staff_advanced_service::create_task(
+                db,
+                tenant_id,
+                branch_id,
+                user_id,
+                staff_advanced_service::StaffTaskRequest {
+                    staff_id: payload
+                        .get("staffId")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .filter(|value| !value.is_empty()),
+                    title: title.to_string(),
+                    description: payload
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    // The CRM's task list owns this vocabulary; the copilot maps
+                    // onto it rather than inventing task types of its own.
+                    task_type: Some(match kind {
+                        ActionKind::CreateCoachingTask => "training".to_string(),
+                        _ => "follow_up".to_string(),
+                    }),
+                    priority: payload
+                        .get("priority")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    due_at: payload
+                        .get("dueAt")
+                        .and_then(Value::as_str)
+                        .and_then(|value| value.parse().ok()),
+                    status: None,
+                    version: None,
+                },
+            )
+            .await?;
+            Ok(json!({
+                "service": "staff_advanced_service.create_task",
+                "recordKind": "staff_task",
+                "recordId": record.id,
+                "title": record.title,
+            }))
+        }
+        // Nothing else is completed here by design; the caller routes instead.
+        // Naming the policy in the message keeps the refusal and the rule that
+        // produced it in one place.
+        _ => Err(AppError::validation(format!(
+            "this action is completed on its own CRM screen, not by the copilot; {} always stay with a person",
+            ALWAYS_EXPLICIT_APPROVAL.join(", ").replace('_', " ")
+        ))),
+    }
 }
 
 /// Cancels a draft. Nothing runs.
@@ -755,5 +905,365 @@ mod phase5_action_tests {
 
         cleanup(&db, &tenant).await;
         cleanup(&db, &other).await;
+    }
+}
+
+#[cfg(test)]
+mod controlled_action_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    /// Every draft kind the phase asks the copilot to prepare.
+    const REQUIRED_DRAFT_KINDS: &[ActionKind] = &[
+        ActionKind::CreateCoachingTask,
+        ActionKind::CreateFollowUpTask,
+        ActionKind::CreateOfferDraft,
+        ActionKind::CreateCampaignDraft,
+        ActionKind::PrepareBookingDraft,
+        ActionKind::CreateReorderProposal,
+        ActionKind::CreateMembershipFollowUp,
+    ];
+
+    async fn seed(db: &PgPool) -> (String, String, String) {
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id",
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let branch_id: String = sqlx::query_scalar(
+            r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+               VALUES((SELECT id FROM tenants WHERE scope_id=$1),'Banjara Hills','','South','Hyderabad','Central',TRUE)
+               RETURNING scope_id"#,
+        )
+        .bind(&tenant_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        let staff_id: String = sqlx::query_scalar(
+            r#"INSERT INTO staff(tenant_id,branch_id,first_name,last_name,email,job_title,active)
+               VALUES($1,$2,'Asha','Rao','asha.rao@aurasalon.in','Stylist',TRUE) RETURNING id"#,
+        )
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        (tenant_id, branch_id, staff_id)
+    }
+
+    #[test]
+    fn every_required_draft_kind_exists() {
+        for kind in REQUIRED_DRAFT_KINDS {
+            assert!(
+                ActionKind::from_name(kind.name()).is_some(),
+                "missing draft kind {}",
+                kind.name()
+            );
+        }
+    }
+
+    /// The AI must never complete an operation that moves money, reaches a
+    /// client, or changes a payslip — approval routes to the owning screen.
+    #[test]
+    fn dangerous_operations_are_never_executed_by_the_copilot() {
+        for kind in [
+            ActionKind::ContinueBilling,
+            ActionKind::CreateOfferDraft,
+            ActionKind::CreateCampaignDraft,
+            ActionKind::CreateWhatsAppDraft,
+            ActionKind::PrepareBookingDraft,
+            ActionKind::PrepareMembershipRenewal,
+        ] {
+            assert!(
+                !kind.executes_on_approval(),
+                "{} must hand off, never execute",
+                kind.name()
+            );
+        }
+        // The named always-explicit list is stated and complete.
+        for operation in [
+            "payment",
+            "refund",
+            "payroll_change",
+            "booking_confirmation",
+            "offer_publishing",
+            "marketing_send",
+            "membership_cancellation",
+            "financial_adjustment",
+        ] {
+            assert!(
+                ALWAYS_EXPLICIT_APPROVAL.contains(&operation),
+                "{operation} must be on the always-explicit list"
+            );
+        }
+    }
+
+    #[test]
+    fn only_task_shaped_work_is_executed() {
+        for kind in [
+            ActionKind::CreateFollowUpTask,
+            ActionKind::CreateCoachingTask,
+            ActionKind::CreateMembershipFollowUp,
+        ] {
+            assert!(kind.executes_on_approval(), "{} should complete", kind.name());
+        }
+    }
+
+    /// Approval must produce the real CRM record, and only then say `executed`.
+    #[sqlx::test]
+    async fn approving_a_coaching_task_writes_it_through_the_crm_service(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({
+                    "staffId": staff_id,
+                    "title": "Coach on add-on selling",
+                    "description": "Utilization is high but average bill is falling.",
+                }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+        assert_eq!(draft.status, "draft");
+
+        // Nothing exists yet: a draft is not a task.
+        let before: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
+                .bind(&tenant_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(before, 0, "drafting must not write the task");
+
+        let approved = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "confirm-key-1".into(),
+            },
+        )
+        .await
+        .expect("the approval completes");
+
+        assert_eq!(approved.status, "approved");
+        assert_eq!(
+            approved.result["executed"], true,
+            "an executed action must say so"
+        );
+        assert_eq!(
+            approved.result["execution"]["service"],
+            "staff_advanced_service.create_task",
+            "the write must go through the CRM's own service"
+        );
+
+        // The authoritative record actually exists.
+        let after: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1 AND task_type='training'",
+        )
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(after, 1, "approval must create the real CRM task");
+    }
+
+    /// A failing authoritative write must surface as a failure, never as an
+    /// approval that silently did nothing.
+    #[sqlx::test]
+    async fn a_failed_write_is_not_reported_as_executed(pool: PgPool) {
+        let (tenant_id, branch_id, _) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                // No title, so the CRM service will reject it.
+                action_type: "create_follow_up_task".into(),
+                payload: json!({ "description": "no title supplied" }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        let error = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "confirm-key-2".into(),
+            },
+        )
+        .await
+        .expect_err("a rejected write must fail the approval");
+        assert!(format!("{error:?}").to_lowercase().contains("title"));
+
+        // The draft must not be left looking approved.
+        let status: String =
+            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+                .bind(&draft.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            status, "draft",
+            "a failed write must leave the draft undecided, not approved"
+        );
+
+        // And the failure is on the audit trail.
+        let failures: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM ai_action_audit WHERE tenant_id=$1 AND event='failed'",
+        )
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(failures, 1, "a failed execution must be audited");
+    }
+
+    /// Replaying the same key returns the first approval instead of writing
+    /// the task a second time.
+    #[sqlx::test]
+    async fn a_replayed_key_does_not_execute_twice(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_coaching_task".into(),
+                payload: json!({ "staffId": staff_id, "title": "Coach on rebooking" }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("the draft is created");
+
+        let key = ConfirmDraftRequest {
+            idempotency_key: "confirm-key-3".into(),
+        };
+        confirm_draft(&pool, &tenant_id, &branch_id, "manager", "approver-1", &draft.id, key.clone())
+            .await
+            .expect("first approval");
+        confirm_draft(&pool, &tenant_id, &branch_id, "manager", "approver-1", &draft.id, key)
+            .await
+            .expect("the replay returns the first approval");
+
+        let tasks: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
+                .bind(&tenant_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(tasks, 1, "a replayed approval must not write twice");
+    }
+
+    /// The idempotency key is scoped to a branch, so the same key in another
+    /// branch is a different approval rather than a collision.
+    #[sqlx::test]
+    async fn idempotency_keys_are_scoped_to_a_branch(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let other_branch: String = sqlx::query_scalar(
+            r#"INSERT INTO branches(tenant_id,name,scope_id,region_name,zone_name,cluster_name,active)
+               VALUES((SELECT id FROM tenants WHERE scope_id=$1),'Andheri West','','West','Mumbai','North',TRUE)
+               RETURNING scope_id"#,
+        )
+        .bind(&tenant_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let make = |branch: String, staff: Option<String>| {
+            let tenant = tenant_id.clone();
+            let pool = pool.clone();
+            async move {
+                create_draft(
+                    &pool,
+                    &tenant,
+                    &branch,
+                    "manager",
+                    "user-1",
+                    CreateDraftRequest {
+                        action_type: "create_coaching_task".into(),
+                        payload: json!({ "staffId": staff, "title": "Coach on add-ons" }),
+                        summary: String::new(),
+                    },
+                )
+                .await
+                .expect("draft")
+            }
+        };
+
+        let first = make(branch_id.clone(), Some(staff_id)).await;
+        let second = make(other_branch.clone(), None).await;
+
+        let key = "shared-key";
+        confirm_draft(
+            &pool, &tenant_id, &branch_id, "manager", "approver-1", &first.id,
+            ConfirmDraftRequest { idempotency_key: key.into() },
+        )
+        .await
+        .expect("first branch approves");
+        confirm_draft(
+            &pool, &tenant_id, &other_branch, "manager", "approver-1", &second.id,
+            ConfirmDraftRequest { idempotency_key: key.into() },
+        )
+        .await
+        .expect("the same key in another branch is a separate approval");
+    }
+
+    /// A permission revoked between drafting and approval must stop the write.
+    #[sqlx::test]
+    async fn permission_is_rechecked_at_approval_not_at_draft_time(pool: PgPool) {
+        let (tenant_id, branch_id, staff_id) = seed(&pool).await;
+        let draft = create_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "user-1",
+            CreateDraftRequest {
+                action_type: "create_offer_draft".into(),
+                payload: json!({ "staffId": staff_id, "discountPercent": 10 }),
+                summary: String::new(),
+            },
+        )
+        .await
+        .expect("a manager may draft an offer");
+
+        // The same draft, approved by a role that may not confirm it.
+        let error = confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "receptionist",
+            "approver-2",
+            &draft.id,
+            ConfirmDraftRequest {
+                idempotency_key: "confirm-key-4".into(),
+            },
+        )
+        .await
+        .expect_err("a role without the right must not confirm");
+        assert!(format!("{error:?}").to_lowercase().contains("not available"));
     }
 }

@@ -322,6 +322,92 @@ impl ResolvedScope {
                 .unwrap_or_default()
         }
     }
+
+    /// The branch a single-branch tool reads.
+    ///
+    /// Only ever a branch inside the resolved set, so a tool that cannot span
+    /// branches still cannot be pointed at one the login does not hold.
+    pub fn primary_branch_id(&self) -> Option<&str> {
+        self.branches
+            .first()
+            .map(|branch| branch.branch_id.as_str())
+    }
+
+    /// Whether a branch id is inside this login's authorized set.
+    pub fn authorizes(&self, branch_id: &str) -> bool {
+        self.branches
+            .iter()
+            .any(|branch| branch.branch_id == branch_id)
+    }
+
+    /// Reject a branch the login may not read.
+    ///
+    /// The guard exists so a branch id taken from a request header can never
+    /// reach a query without being checked against the grants first.
+    pub fn require_branch(&self, branch_id: &str) -> Result<(), AppError> {
+        if self.authorizes(branch_id) {
+            return Ok(());
+        }
+        Err(AppError::forbidden(
+            "this branch is outside your authorized scope",
+        ))
+    }
+
+    /// The scope statement carried on every answer.
+    pub fn disclosure(&self) -> ScopeDisclosure {
+        ScopeDisclosure {
+            level: self.level,
+            label: self.label.clone(),
+            branch_count: self.branches.len(),
+            branches_read: self
+                .branches
+                .iter()
+                .map(|branch| branch.branch_name.clone())
+                .collect(),
+            regions: self.regions.clone(),
+            zones: self.zones.clone(),
+            clusters: self.clusters.clone(),
+            narrowed: self.narrowed,
+            notice: self.narrow_notice.clone().unwrap_or_default(),
+            role: self.role.clone(),
+        }
+    }
+}
+
+/// What an answer covers, returned with every reply so a partial answer is
+/// never mistaken for a complete one.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeDisclosure {
+    pub level: ScopeLevel,
+    pub label: String,
+    pub branch_count: usize,
+    pub branches_read: Vec<String>,
+    pub regions: Vec<String>,
+    pub zones: Vec<String>,
+    pub clusters: Vec<String>,
+    /// True when the login could not cover what was asked for.
+    pub narrowed: bool,
+    /// Human-readable narrowing statement, empty when nothing was narrowed.
+    pub notice: String,
+    pub role: String,
+}
+
+impl Default for ScopeDisclosure {
+    fn default() -> Self {
+        Self {
+            level: ScopeLevel::Branch,
+            label: String::new(),
+            branch_count: 0,
+            branches_read: Vec::new(),
+            regions: Vec::new(),
+            zones: Vec::new(),
+            clusters: Vec::new(),
+            narrowed: false,
+            notice: String::new(),
+            role: String::new(),
+        }
+    }
 }
 
 /// Roles that always see the whole tenant.
