@@ -392,7 +392,7 @@ export class NotificationsPage implements OnInit {
   }
 
   private isSafeDeepLink(value: string): boolean {
-    return /^(?:\/bookings\/[A-Za-z0-9_-]+|\/tabs\/(?:bookings|wallet|offers|rewards|memberships|profile)|\/notifications)$/.test(value);
+    return /^(?:\/bookings\/[A-Za-z0-9_-]+(?:\/chat)?|\/tabs\/(?:bookings|wallet|offers|rewards|memberships|profile)|\/notifications)$/.test(value);
   }
 
   private persist(ids: Set<string>) {

@@ -161,7 +161,7 @@ export function CustomCursor() {
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
           className="w-3 h-3 rounded-full"
           style={{
-            background: "radial-gradient(circle, rgba(124,58,237,0.6), rgba(232,121,168,0.3), transparent 70%)",
+            background: "radial-gradient(circle, rgba(75,166,190,0.58), rgba(18,63,92,0.28), transparent 70%)",
           }}
         />
       </motion.div>

@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
-import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar } from "@ionic/angular/standalone";
+import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
@@ -20,24 +20,29 @@ type PendingBookingIntent = {
 
 @Component({
   standalone: true,
-  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar],
+  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar],
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
         <ion-buttons slot="start"><ion-back-button defaultHref="/tabs/home"></ion-back-button></ion-buttons>
+        @if (isRescheduling()) {
+          <ion-title class="edit-toolbar-title">Edit appointment</ion-title>
+        }
       </ion-toolbar>
     </ion-header>
 
     <ion-content>
       @if (business(); as business) {
-        <main class="page booking-page">
-          <section class="booking-hero premium-card">
-            <img [src]="business.coverImage || 'assets/icons/icon.svg'" [alt]="business.businessName" />
-            <div>
-              <h1 class="page-title">Book your visit</h1>
-              <p class="muted">{{ business.businessName }} · {{ business.area }} · {{ business.ratingAverage }} rating</p>
-            </div>
-          </section>
+        <main class="page booking-page" [class.editing]="isRescheduling()">
+          @if (!isRescheduling()) {
+            <section class="booking-hero premium-card">
+              <img [src]="business.coverImage || 'assets/icons/icon.svg'" [alt]="business.businessName" />
+              <div>
+                <h1 class="page-title">Book your visit</h1>
+                <p class="muted">{{ business.businessName }} · {{ business.area }} · {{ business.ratingAverage }} rating</p>
+              </div>
+            </section>
+          }
 
           @if (marketplace.error()) {
             <section class="state-card premium-card error"><h2>Booking data unavailable</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
@@ -139,7 +144,7 @@ type PendingBookingIntent = {
           @if (step() === 4) {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
-                <h2>Confirm your booking</h2>
+                <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
                 <dl>
                   <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
                   <div><dt>Service</dt><dd>{{ selectedService()?.name || "Not selected" }}</dd></div>
@@ -170,7 +175,7 @@ type PendingBookingIntent = {
               <ion-button class="primary-gradient" [disabled]="!canContinue()" (click)="next()">Continue</ion-button>
             } @else {
               <ion-button class="primary-gradient" [disabled]="!canConfirm() || marketplace.loading()" (click)="confirmBooking()">
-                {{ marketplace.isAuthenticated() ? "Confirm booking" : "Sign in to book" }}
+                  {{ isRescheduling() ? "Save changes" : (marketplace.isAuthenticated() ? "Confirm booking" : "Sign in to book") }}
               </ion-button>
             }
           </div>
@@ -188,6 +193,16 @@ type PendingBookingIntent = {
   `,
   styles: [`
     .booking-page { max-width: 980px; padding-bottom: 14px; }
+    .edit-toolbar-title {
+      padding-inline: 0 16px;
+      color: var(--text);
+      text-align: left;
+      font-size: 1.08rem;
+      font-weight: 900;
+      letter-spacing: -0.025em;
+    }
+    .booking-page.editing { padding-top: 8px !important; }
+    .booking-page.editing .stepper { margin-top: 2px; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
     .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)) !important; }
     .booking-hero { display: grid; gap: 18px; align-items: center; padding: 14px; }
@@ -310,8 +325,9 @@ export class BookingFlowPage implements OnInit {
   readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || 1));
   readonly selectedServiceId = signal(this.route.snapshot.queryParamMap.get("serviceId") ?? "");
   readonly selectedStaffId = signal<string | null>(this.route.snapshot.queryParamMap.get("staffId") || null);
-  readonly selectedDate = signal("");
+  readonly selectedDate = signal(this.route.snapshot.queryParamMap.get("date") ?? "");
   readonly selectedSlotStartAt = signal("");
+  readonly rescheduleBookingId = this.route.snapshot.queryParamMap.get("rescheduleBookingId") ?? "";
   readonly steps = [
     { id: 1, label: "Service", icon: "sparkles-outline" },
     { id: 2, label: "Pro", icon: "person-outline" },
@@ -329,6 +345,10 @@ export class BookingFlowPage implements OnInit {
   readonly slotGroups = computed(() => this.selectedAvailabilityDay()?.periods ?? []);
   readonly selectedSlotLabel = computed(() => this.slotGroups().flatMap((group) => group.slots).find((slot) => slot.startAt === this.selectedSlotStartAt())?.displayTime ?? "");
 
+  isRescheduling(): boolean {
+    return !!this.rescheduleBookingId;
+  }
+
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline });
   }
@@ -341,7 +361,7 @@ export class BookingFlowPage implements OnInit {
     const slug = this.slug();
     if (!slug) return;
     await this.marketplace.loadBusiness(slug).catch(() => undefined);
-    this.restorePendingIntent();
+    if (!this.isRescheduling()) this.restorePendingIntent();
     if (!this.selectedServiceId() && this.business()?.services[0]) this.selectedServiceId.set(this.business()?.services[0].id ?? "");
     if (this.step() < 1 || this.step() > 4) this.step.set(1);
     await this.reloadAvailability();
@@ -419,7 +439,7 @@ export class BookingFlowPage implements OnInit {
     const business = this.business();
     const service = this.selectedService();
     if (!business || !service || !this.selectedSlotStartAt()) return;
-    this.savePendingIntent();
+    if (!this.isRescheduling()) this.savePendingIntent();
     if (!this.marketplace.isAuthenticated()) {
       this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
       return;
@@ -431,6 +451,15 @@ export class BookingFlowPage implements OnInit {
     }
     const slotStillAvailable = await this.revalidateSelectedSlot();
     if (!slotStillAvailable) return;
+    if (this.rescheduleBookingId) {
+      await this.marketplace.rescheduleBooking(this.rescheduleBookingId, {
+        startAt: this.selectedSlotStartAt(),
+        staffId: this.selectedStaffId() || undefined,
+        serviceId: this.selectedServiceId()
+      });
+      await this.router.navigate(["/bookings", this.rescheduleBookingId], { replaceUrl: true });
+      return;
+    }
     await this.marketplace.createBooking({
       businessSlug: business.slug,
       businessId: business.id,

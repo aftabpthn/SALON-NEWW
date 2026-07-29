@@ -196,6 +196,11 @@ export const routes: Routes = [
     loadComponent: () => import("./features/booking/booking-success.page").then((m) => m.BookingSuccessPage)
   },
   {
+    path: "bookings/:id/chat",
+    canActivate: [customerAuthGuard],
+    loadComponent: () => import("./features/bookings/booking-chat.page").then((m) => m.BookingChatPage)
+  },
+  {
     path: "bookings/:id",
     canActivate: [customerAuthGuard],
     loadComponent: () => import("./features/bookings/booking-detail.page").then((m) => m.BookingDetailPage)

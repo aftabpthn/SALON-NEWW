@@ -5,20 +5,9 @@ import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
 import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { AvailabilitySlot, Booking } from "../../core/api.types";
+import { Booking } from "../../core/api.types";
 
 type BookingTab = "upcoming" | "past";
-type RescheduleDateOption = { date: string; day: string; label: string; short: string };
-type RescheduleDialog = {
-  booking: Booking;
-  businessSlug: string;
-  dates: RescheduleDateOption[];
-  selectedDate: string;
-  slots: AvailabilitySlot[];
-  selectedStartAt: string;
-  loading: boolean;
-  error: string;
-};
 type WaitlistDialog = {
   booking: Booking;
   preferredDate: string;
@@ -61,12 +50,10 @@ type WaitlistDialog = {
             @for (booking of filtered(); track booking.id) {
               <article
                 class="booking-card premium-card"
-                [class.expanded]="expandedBookingId() === booking.id"
                 [attr.data-booking-id]="booking.id"
                 role="button"
                 tabindex="0"
-                aria-label="Booking actions"
-                [attr.aria-expanded]="expandedBookingId() === booking.id"
+                aria-label="View booking details"
                 (click)="openBooking(booking)"
                 (keydown)="handleBookingKeydown($event, booking)"
               >
@@ -75,38 +62,17 @@ type WaitlistDialog = {
                   <strong>{{ dateParts(booking).day }}</strong>
                 </div>
                 <div class="booking-content">
-                  <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
-                  <h2>{{ booking.serviceName }}</h2>
+                  <div class="booking-title-row">
+                    <h2>{{ booking.serviceName }}</h2>
+                    <div class="booking-card-status">
+                      <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
+                      <span class="view-details-label">View details</span>
+                    </div>
+                  </div>
                   <p>{{ booking.businessName }}</p>
                   <div class="booking-meta">
-                    <span><ion-icon name="time-outline"></ion-icon>{{ booking.displayStartAt || booking.startsAt || booking.startAt }}</span>
-                    <span><ion-icon name="location-outline"></ion-icon>{{ booking.address }}</span>
-                  </div>
-                  <div class="actions">
-                    @if (canRebook(booking)) {
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="rebook($event, booking)">
-                        <ion-icon name="repeat-outline" slot="start"></ion-icon>
-                        Rebook
-                      </ion-button>
-                    }
-                    @if (canManageUpcoming(booking)) {
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="reschedule($event, booking.id)">Reschedule</ion-button>
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="joinWaitlist($event)">
-                        <ion-icon name="hourglass-outline" slot="start"></ion-icon>
-                        Waitlist
-                      </ion-button>
-                    }
-                    <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="directions($event, booking)">
-                      <ion-icon name="navigate-outline" slot="start"></ion-icon>
-                      Directions
-                    </ion-button>
-                    <ion-button size="small" fill="outline" class="secondary-button" (click)="$event.stopPropagation(); openBookingDetails(booking)">
-                      <ion-icon name="receipt-outline" slot="start"></ion-icon>
-                      View invoice
-                    </ion-button>
-                    @if (canManageUpcoming(booking)) {
-                      <ion-button size="small" fill="clear" color="danger" (click)="cancel($event, booking.id)">Cancel</ion-button>
-                    }
+                    <span><ion-icon name="time-outline"></ion-icon>{{ bookingTimeLabel(booking) }}</span>
+                    <span><ion-icon name="location-outline"></ion-icon>{{ booking.address || "Venue to be confirmed" }}</span>
                   </div>
                 </div>
               </article>
@@ -119,53 +85,6 @@ type WaitlistDialog = {
           </div>
         }
       </main>
-
-      @if (rescheduleDialog(); as dialog) {
-        <div class="reschedule-backdrop" role="presentation" (click)="closeReschedule()">
-          <section class="reschedule-sheet" role="dialog" aria-modal="true" aria-label="Choose new appointment date and time" (click)="$event.stopPropagation()">
-            <div class="sheet-head">
-              <div>
-                <h2>Choose new date & time</h2>
-                <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
-              </div>
-              <button type="button" class="close-button" aria-label="Close reschedule picker" (click)="closeReschedule()">x</button>
-            </div>
-
-            <div class="calendar-strip" aria-label="Available dates" (wheel)="scrollDateStrip($event)" (pointerdown)="startDateSwipe($event)" (pointerup)="finishDateSwipe($event)" (pointercancel)="cancelDateSwipe()">
-              @for (date of dialog.dates; track date.date) {
-                <button type="button" class="date-pill" [class.active]="dialog.selectedDate === date.date" (click)="selectRescheduleDate(date.date)">
-                  <span>{{ date.day }}</span>
-                  <strong>{{ date.label }}</strong>
-                  <small>{{ date.short }}</small>
-                </button>
-              }
-            </div>
-
-            @if (dialog.loading) {
-              <div class="slot-state">Loading live slots...</div>
-            } @else if (dialog.error) {
-              <div class="slot-state error">{{ dialog.error }}</div>
-            } @else {
-              <div class="slot-grid-picker" aria-label="Available times">
-                @for (slot of dialog.slots; track slot.startAt) {
-                  <button type="button" class="time-pill" [class.active]="dialog.selectedStartAt === slot.startAt" (click)="selectRescheduleSlot(slot.startAt)">
-                    {{ slot.displayTime }}
-                  </button>
-                } @empty {
-                  <div class="slot-state">No slots on this date. Choose another date or join waitlist.</div>
-                }
-              </div>
-            }
-
-            <div class="sheet-actions">
-              <ion-button fill="clear" (click)="closeReschedule()">Cancel</ion-button>
-              <ion-button class="primary-gradient" [disabled]="!dialog.selectedStartAt || dialog.loading || !!actionLoading()" (click)="confirmReschedule()">
-                Reschedule
-              </ion-button>
-            </div>
-          </section>
-        </div>
-      }
 
       @if (waitlistDialog(); as dialog) {
         <div class="reschedule-backdrop" role="presentation" (click)="closeWaitlist()">
@@ -340,9 +259,21 @@ type WaitlistDialog = {
     }
 
     .booking-content h2 {
-      margin: 10px 0 5px;
+      margin: 0;
       letter-spacing: -0.04em;
     }
+
+    .booking-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 2px 0 5px;
+    }
+
+    .booking-title-row h2 { min-width: 0; }
+    .booking-card-status { flex: 0 0 auto; display: grid; justify-items: end; gap: 3px; }
+    .view-details-label { color: var(--primary); font-size: 0.72rem; font-weight: 900; white-space: nowrap; }
 
     .booking-content p {
       margin: 0 0 10px;
@@ -393,18 +324,6 @@ type WaitlistDialog = {
       padding: 18px;
       background: rgba(17, 24, 39, 0.42);
       backdrop-filter: blur(5px);
-    }
-
-    .reschedule-sheet {
-      width: min(100%, 520px);
-      max-height: min(760px, calc(100vh - 36px));
-      display: grid;
-      grid-template-rows: auto auto minmax(120px, 1fr) auto;
-      overflow: hidden;
-      border: 1px solid rgba(17, 24, 39, 0.12);
-      border-radius: 28px;
-      background: #ffffff;
-      box-shadow: 0 28px 70px rgba(17, 24, 39, 0.24);
     }
 
     .waitlist-sheet {
@@ -575,87 +494,6 @@ type WaitlistDialog = {
       line-height: 1;
     }
 
-    .calendar-strip {
-      display: flex;
-      gap: 10px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 10px 22px 16px;
-      border-bottom: 1px solid var(--border);
-      scrollbar-width: none;
-      touch-action: pan-x;
-      -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x mandatory;
-    }
-
-    .calendar-strip::-webkit-scrollbar {
-      display: none;
-    }
-
-    .date-pill {
-      flex: 0 0 86px;
-      min-height: 92px;
-      display: grid;
-      align-content: center;
-      justify-items: center;
-      gap: 5px;
-      padding: 10px 8px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      color: var(--text);
-      background: var(--surface);
-      font-weight: 900;
-      scroll-snap-align: start;
-    }
-
-    .date-pill span,
-    .date-pill small {
-      color: var(--muted);
-      font-size: 0.74rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .date-pill strong {
-      font-size: 1.45rem;
-      line-height: 1;
-    }
-
-    .date-pill.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      box-shadow: 0 14px 28px rgba(11, 70, 120, 0.22);
-    }
-
-    .date-pill.active span,
-    .date-pill.active small {
-      color: rgba(255, 255, 255, 0.84);
-    }
-
-    .slot-grid-picker {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      overflow-y: auto;
-      padding: 18px 22px;
-    }
-
-    .time-pill {
-      min-height: 48px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--text);
-      background: #ffffff;
-      font-weight: 900;
-    }
-
-    .time-pill.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-    }
-
     .slot-state {
       align-self: center;
       padding: 26px 22px;
@@ -697,8 +535,10 @@ type WaitlistDialog = {
         padding: 0 18px;
       }
 
-      .slot-grid-picker {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .sheet-actions {
+        gap: 6px;
+        padding: 10px 12px;
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
       }
 
       .waitlist-options {
@@ -723,96 +563,142 @@ type WaitlistDialog = {
       }
 
       .booking-command-grid {
-        gap: 8px;
-        margin-top: 4px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        margin-top: 2px;
       }
 
       .command-card {
         min-height: 0;
-        gap: 3px;
-        padding: 10px;
-        border-radius: 16px !important;
+        justify-items: center;
+        align-content: center;
+        gap: 4px;
+        padding: 7px 3px 6px;
+        border-radius: 14px !important;
+        text-align: center;
       }
 
       .command-card ion-icon {
-        width: 34px;
-        height: 34px;
-        padding: 8px;
-        border-radius: 12px;
+        width: 28px;
+        height: 28px;
+        padding: 7px;
+        border-radius: 11px;
       }
 
       .command-card strong {
-        font-size: 0.86rem;
-        line-height: 1.05;
+        max-width: 100%;
+        font-size: 0.64rem;
+        line-height: 1.08;
+        overflow-wrap: anywhere;
       }
 
       .command-card span {
-        font-size: 0.72rem;
-        line-height: 1.2;
+        display: none;
       }
 
       ion-segment {
-        margin-bottom: 10px;
+        margin-bottom: 8px;
       }
 
       ion-segment-button {
-        min-height: 38px;
-        font-size: 0.78rem;
+        min-height: 36px;
+        font-size: 0.74rem;
       }
 
       .booking-stack {
-        gap: 10px;
+        gap: 8px;
       }
 
       .booking-card {
-        grid-template-columns: 1fr;
+        grid-template-columns: 48px minmax(0, 1fr);
+        align-items: stretch;
         gap: 8px;
-        padding: 10px;
-        border-radius: 16px !important;
+        min-height: 84px;
+        padding: 6px;
+        border-radius: 14px !important;
       }
 
       .date-block {
-        min-height: 54px;
-        grid-template-columns: auto auto;
-        justify-content: start;
-        gap: 8px;
-        padding: 0 14px;
-        border-radius: 16px;
+        width: 48px;
+        min-height: 72px;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto;
+        justify-content: center;
+        gap: 2px;
+        padding: 7px 3px;
+        border-radius: 11px;
       }
 
       .date-block span {
-        font-size: 0.7rem;
+        font-size: 0.56rem;
+        letter-spacing: 0.06em;
       }
 
       .date-block strong {
-        font-size: 1.55rem;
+        font-size: 1.24rem;
       }
 
+      .booking-content { min-width: 0; align-self: center; overflow: hidden; }
+      .booking-title-row { gap: 6px; margin: 0 0 2px; }
+      .booking-content .status-pill { min-height: 20px; padding: 2px 6px; font-size: 0.58rem; }
+
       .booking-content h2 {
-        margin: 5px 0 2px;
-        font-size: 1.2rem;
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.88rem;
         line-height: 1.05;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .booking-content p {
-        margin: 0 0 5px;
-        font-size: 0.86rem;
+        margin: 0 0 3px;
+        overflow: hidden;
+        font-size: 0.68rem;
+        line-height: 1.08;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .booking-meta {
-        gap: 3px;
-        font-size: 0.76rem;
-        line-height: 1.15;
+        gap: 1px;
+        min-width: 0;
+        font-size: 0.61rem;
+        line-height: 1.08;
+      }
+
+      .booking-meta span {
+        min-width: 0;
+        gap: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .booking-meta ion-icon {
+        flex: 0 0 auto;
+        font-size: 0.66rem;
       }
 
       .actions {
         display: none;
-        gap: 5px;
-        margin-top: 8px;
+        flex-wrap: nowrap;
+        gap: 4px;
+        margin-top: 6px;
+        padding: 1px 0 2px;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: none;
       }
+
+      .actions::-webkit-scrollbar { display: none; }
 
       .booking-card.expanded .actions {
         display: flex;
+      }
+
+      .booking-card.expanded {
+        min-height: 0;
       }
 
       .booking-card {
@@ -825,11 +711,12 @@ type WaitlistDialog = {
       }
 
       .actions ion-button {
-        min-height: 32px;
+        flex: 0 0 auto;
+        min-height: 34px;
         margin: 0;
-        font-size: 0.7rem;
-        --padding-start: 10px;
-        --padding-end: 10px;
+        font-size: 0.64rem;
+        --padding-start: 9px;
+        --padding-end: 9px;
       }
     }
     @media (min-width: 1024px) {
@@ -846,9 +733,7 @@ type WaitlistDialog = {
 })
 export class BookingsPage implements OnDestroy, OnInit {
   readonly tab = signal<BookingTab>("upcoming");
-  readonly expandedBookingId = signal<string | null>(null);
   readonly actionLoading = signal("");
-  readonly rescheduleDialog = signal<RescheduleDialog | null>(null);
   readonly waitlistDialog = signal<WaitlistDialog | null>(null);
   readonly filtered = computed(() => this.marketplace.bookings());
   readonly waitlistTimeOptions: Array<{ value: WaitlistDialog["preferredTime"]; label: string }> = [
@@ -864,8 +749,6 @@ export class BookingsPage implements OnDestroy, OnInit {
     { label: "Support", copy: "Chat and ticket handoff", icon: "chatbubbles-outline" }
   ];
   private midnightRefreshId: ReturnType<typeof setTimeout> | null = null;
-  private dateSwipeStartX = 0;
-  private dateSwipeStartY = 0;
 
   constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly router: Router, private readonly toasts: ToastController) {
     addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
@@ -882,15 +765,10 @@ export class BookingsPage implements OnDestroy, OnInit {
 
   setTab(tab: BookingTab) {
     this.tab.set(tab);
-    this.expandedBookingId.set(null);
     this.reload();
   }
 
   openBooking(booking: Booking) {
-    if (window.matchMedia("(max-width: 599px)").matches) {
-      this.expandedBookingId.update((id) => id === booking.id ? null : booking.id);
-      return;
-    }
     void this.router.navigate(["/bookings", booking.id]);
   }
 
@@ -917,6 +795,20 @@ export class BookingsPage implements OnDestroy, OnInit {
     if (label.toLowerCase().includes("today")) return { month: "Today", day: "Now" };
     const match = label.match(/(\d{1,2})\s+([A-Za-z]{3})/);
     return { month: match?.[2] ?? "Soon", day: match?.[1] ?? "Next" };
+  }
+
+  bookingTimeLabel(booking: Booking): string {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = raw ? new Date(raw) : null;
+    if (date && Number.isFinite(date.getTime())) {
+      return new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "Asia/Kolkata"
+      }).format(date).toUpperCase();
+    }
+    return booking.displayStartAt?.match(/\d{1,2}:\d{2}\s*[AP]M/i)?.[0].toUpperCase() || "Time to be confirmed";
   }
 
   async cancel(event: Event, id: string) {
@@ -1011,7 +903,27 @@ export class BookingsPage implements OnDestroy, OnInit {
     event.stopPropagation();
     const booking = this.marketplace.bookings().find((item) => item.id === id);
     if (!booking) return;
-    await this.openRescheduleSlots(booking);
+    if (!booking.businessId || !booking.serviceId) {
+      await this.presentToast("This booking cannot be rescheduled because service details are missing.", "danger");
+      return;
+    }
+    this.actionLoading.set(`reschedule:${booking.id}`);
+    try {
+      const business = await this.marketplace.loadBusiness(booking.businessId);
+      await this.router.navigate(["/business", business.slug, "book"], {
+        queryParams: {
+          serviceId: booking.serviceId,
+          staffId: booking.staffId || undefined,
+          date: this.dateValue(booking),
+          step: 1,
+          rescheduleBookingId: booking.id
+        }
+      });
+    } catch {
+      await this.presentToast(this.marketplace.error() || "Could not open rescheduling.", "danger");
+    } finally {
+      this.actionLoading.set("");
+    }
   }
 
   directions(event: Event, booking: Booking) {
@@ -1022,122 +934,6 @@ export class BookingsPage implements OnDestroy, OnInit {
       ? `${booking.latitude},${booking.longitude}`
       : encodeURIComponent([booking.businessName, booking.address].filter(Boolean).join(", "));
     window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, "_blank", "noopener,noreferrer");
-  }
-
-  private async openRescheduleSlots(booking: Booking) {
-    if (!booking.businessId || !booking.serviceId) {
-      await this.presentToast("This booking cannot be rescheduled because service details are missing.", "danger");
-      return;
-    }
-    this.actionLoading.set(`reschedule:${booking.id}`);
-    try {
-      const business = await this.marketplace.loadBusiness(booking.businessId);
-      const dates = this.rescheduleDates(booking);
-      const selectedDate = dates.find((item) => item.date === this.dateValue(booking))?.date || dates[0]?.date || this.localDateKey(new Date());
-      this.rescheduleDialog.set({
-        booking,
-        businessSlug: business.slug,
-        dates,
-        selectedDate,
-        slots: [],
-        selectedStartAt: "",
-        loading: true,
-        error: ""
-      });
-      await this.loadRescheduleSlots(selectedDate);
-    } catch {
-      await this.presentToast(this.marketplace.error() || "Could not load reschedule slots.", "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
-  }
-
-  closeReschedule() {
-    this.rescheduleDialog.set(null);
-  }
-
-  selectRescheduleSlot(startAt: string) {
-    this.rescheduleDialog.update((current) => current ? { ...current, selectedStartAt: startAt } : current);
-  }
-
-  scrollDateStrip(event: WheelEvent) {
-    const strip = event.currentTarget as HTMLElement | null;
-    if (!strip) return;
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (!delta) return;
-    strip.scrollLeft += delta;
-    event.preventDefault();
-  }
-
-  startDateSwipe(event: PointerEvent) {
-    this.dateSwipeStartX = event.clientX;
-    this.dateSwipeStartY = event.clientY;
-  }
-
-  finishDateSwipe(event: PointerEvent) {
-    const deltaX = event.clientX - this.dateSwipeStartX;
-    const deltaY = event.clientY - this.dateSwipeStartY;
-    this.cancelDateSwipe();
-    if (Math.abs(deltaX) < 50 || Math.abs(deltaX) < Math.abs(deltaY)) return;
-    void this.moveRescheduleDate(deltaX < 0 ? 1 : -1);
-  }
-
-  cancelDateSwipe() {
-    this.dateSwipeStartX = 0;
-    this.dateSwipeStartY = 0;
-  }
-
-  async selectRescheduleDate(date: string) {
-    await this.loadRescheduleSlots(date);
-  }
-
-  async moveRescheduleDate(offset: -1 | 1) {
-    const dialog = this.rescheduleDialog();
-    if (!dialog) return;
-    const currentIndex = Math.max(0, dialog.dates.findIndex((item) => item.date === dialog.selectedDate));
-    const nextIndex = Math.min(dialog.dates.length - 1, Math.max(0, currentIndex + offset));
-    const nextDate = dialog.dates[nextIndex]?.date;
-    if (!nextDate || nextDate === dialog.selectedDate) return;
-    await this.loadRescheduleSlots(nextDate);
-  }
-
-  async confirmReschedule() {
-    const dialog = this.rescheduleDialog();
-    if (!dialog?.selectedStartAt) return;
-    const slot = dialog.slots.find((item) => item.startAt === dialog.selectedStartAt);
-    await this.rescheduleToSlot(dialog.booking, dialog.selectedStartAt, slot);
-  }
-
-  private async loadRescheduleSlots(date: string) {
-    const dialog = this.rescheduleDialog();
-    if (!dialog?.booking.serviceId) return;
-    this.rescheduleDialog.update((current) => current ? { ...current, selectedDate: date, slots: [], selectedStartAt: "", loading: true, error: "" } : current);
-    try {
-      const days = await this.marketplace.loadAvailability(dialog.businessSlug, {
-        serviceId: dialog.booking.serviceId,
-        staffId: dialog.booking.staffId || undefined,
-        date,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      });
-      const slots = days.flatMap((day) => day.periods.flatMap((period) => period.slots)).filter((slot) => slot.available).slice(0, 18);
-      this.rescheduleDialog.update((current) => current ? { ...current, slots, selectedStartAt: slots[0]?.startAt || "", loading: false, error: "" } : current);
-    } catch {
-      this.rescheduleDialog.update((current) => current ? { ...current, loading: false, error: this.marketplace.error() || "Could not load slots for this date." } : current);
-    }
-  }
-
-  private async rescheduleToSlot(booking: Booking, startAt: string, slot?: AvailabilitySlot) {
-    this.actionLoading.set(`reschedule:${booking.id}`);
-    try {
-      await this.marketplace.rescheduleBooking(booking.id, { startAt, staffId: slot?.staffId || booking.staffId || undefined });
-      await this.presentToast("Booking rescheduled successfully.", "success");
-      this.closeReschedule();
-      await this.reload();
-    } catch {
-      await this.presentToast(this.marketplace.error() || "Unable to reschedule booking.", "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
   }
 
   private async joinWaitlistForBooking(booking: Booking, value: { preferredDate?: string; preferredTime?: WaitlistDialog["preferredTime"]; priority?: "normal" | "high"; reason?: string }) {
@@ -1179,32 +975,6 @@ export class BookingsPage implements OnDestroy, OnInit {
     return Number.isNaN(date.getTime()) ? this.localDateKey(new Date()) : this.localDateKey(date);
   }
 
-  private rescheduleDates(booking: Booking): RescheduleDateOption[] {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const bookingDate = this.localDateFromKey(this.dateValue(booking));
-    bookingDate.setHours(0, 0, 0, 0);
-    const selected = bookingDate.getTime() >= today.getTime() ? bookingDate : today;
-    const dates: Date[] = [];
-    const endDate = new Date(today);
-    endDate.setMonth(endDate.getMonth() + 1);
-    const dayCount = Math.max(1, Math.round((endDate.getTime() - today.getTime()) / 86400000) + 1);
-    for (let index = 0; index < dayCount; index += 1) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + index);
-      dates.push(date);
-    }
-    if (!dates.some((date) => this.localDateKey(date) === this.localDateKey(selected))) {
-      dates.unshift(selected);
-    }
-    return dates.map((date) => ({
-      date: this.localDateKey(date),
-      day: new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(date),
-      label: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
-      short: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date)
-    }));
-  }
-
   private localDateKey(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1216,25 +986,12 @@ export class BookingsPage implements OnDestroy, OnInit {
     return this.localDateKey(new Date());
   }
 
-  private localDateFromKey(value: string): Date {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return new Date();
-    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  }
-
   private scheduleMidnightRefresh() {
     if (this.midnightRefreshId) clearTimeout(this.midnightRefreshId);
     const now = new Date();
     const nextMidnight = new Date(now);
     nextMidnight.setHours(24, 0, 5, 0);
     this.midnightRefreshId = setTimeout(() => {
-      const dialog = this.rescheduleDialog();
-      if (dialog) {
-        const dates = this.rescheduleDates(dialog.booking);
-        const selectedDate = dates.some((date) => date.date === dialog.selectedDate) ? dialog.selectedDate : dates[0]?.date || "";
-        this.rescheduleDialog.set({ ...dialog, dates, selectedDate });
-        if (selectedDate) void this.loadRescheduleSlots(selectedDate);
-      }
       this.reload();
       this.scheduleMidnightRefresh();
     }, Math.max(1000, nextMidnight.getTime() - now.getTime()));

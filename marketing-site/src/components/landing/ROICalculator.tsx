@@ -35,7 +35,7 @@ export function ROICalculator() {
       <Container>
         <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr] lg:gap-16">
           <div><SectionHeading badge={t("roi.badge")} title={t("roi.title")} subtitle={t("roi.body")} align="left" /><div className="mt-8 rounded-2xl border border-aura-border bg-aura-bg p-5"><Calculator className="h-5 w-5 text-aura-burgundy" /><p className="mt-4 text-xs leading-5 text-aura-text-muted">{t("roi.disclaimer")}</p></div></div>
-          <div className="overflow-hidden rounded-[1.5rem] border border-aura-border bg-white shadow-[0_24px_70px_rgba(49,28,33,.09)]">
+          <div className="overflow-hidden rounded-[1.5rem] border border-aura-border bg-white shadow-[0_24px_70px_rgba(6,23,36,.09)]">
             <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-7">
               {fields.map((field) => <label key={field.key} className="grid gap-2 text-xs font-semibold text-aura-text-secondary"><span>{field.label}</span><input type="number" min={limits[field.key][0]} max={limits[field.key][1]} step={field.step ?? 1} inputMode="decimal" value={values[field.key]} onChange={(event) => update(field.key, event.target.value)} onBlur={(event) => update(field.key, event.target.value)} className="w-full rounded-xl border border-aura-border bg-aura-surface-muted px-3 py-3 text-base font-semibold text-aura-text outline-none focus:border-aura-burgundy focus:ring-2 focus:ring-aura-rose-soft" /></label>)}
             </div>

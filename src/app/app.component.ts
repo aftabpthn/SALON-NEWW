@@ -962,6 +962,7 @@ export class AppComponent implements OnDestroy {
             { path: '/appointment-deposits', label: 'Deposit Report', icon: 'DP', keywords: 'appointment advance payment deposit report no show cancellation' }
           ]
         },
+        { path: '/booking-inbox', label: 'Booking Inbox', icon: 'BI', keywords: 'customer chat booking inbox salon conversation unread reply' },
         {
           path: '/salon-3d',
           label: 'Online Booking',

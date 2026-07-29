@@ -7,10 +7,10 @@ import * as THREE from "three";
 import type { EcosystemRole } from "@/lib/ecosystem-content";
 
 const satellites: Array<{ role: EcosystemRole; position: [number, number, number]; shape: "desktop" | "phone" | "node"; color: string }> = [
-  { role: "owner", position: [-2.7, .85, 0], shape: "desktop", color: "#681f37" },
-  { role: "customer", position: [2.45, 1.15, -.2], shape: "phone", color: "#b87343" },
-  { role: "staff", position: [2.6, -1.2, .15], shape: "phone", color: "#567565" },
-  { role: "flow", position: [-2.35, -1.45, -.25], shape: "node", color: "#c58a99" },
+  { role: "owner", position: [-2.7, .85, 0], shape: "desktop", color: "#123f5c" },
+  { role: "customer", position: [2.45, 1.15, -.2], shape: "phone", color: "#397f99" },
+  { role: "staff", position: [2.6, -1.2, .15], shape: "phone", color: "#427f8c" },
+  { role: "flow", position: [-2.35, -1.45, -.25], shape: "node", color: "#5ba9bd" },
 ];
 
 function Core({ reducedMotion }: { reducedMotion: boolean }) {
@@ -25,15 +25,15 @@ function Core({ reducedMotion }: { reducedMotion: boolean }) {
     <group ref={group}>
       <mesh>
         <icosahedronGeometry args={[1.05, 2]} />
-        <meshPhysicalMaterial color="#681f37" roughness={.22} metalness={.18} transmission={.08} clearcoat={1} clearcoatRoughness={.16} />
+        <meshPhysicalMaterial color="#123f5c" roughness={.22} metalness={.18} transmission={.08} clearcoat={1} clearcoatRoughness={.16} />
       </mesh>
       <mesh rotation={[Math.PI / 2.15, 0, .35]}>
         <torusGeometry args={[1.48, .022, 8, 96]} />
-        <meshStandardMaterial color="#d39a67" emissive="#7b3d20" emissiveIntensity={.35} />
+        <meshStandardMaterial color="#79bdca" emissive="#123f5c" emissiveIntensity={.28} />
       </mesh>
       <mesh rotation={[Math.PI / 1.7, .7, 0]}>
         <torusGeometry args={[1.72, .012, 8, 96]} />
-        <meshStandardMaterial color="#c7b8aa" transparent opacity={.65} />
+        <meshStandardMaterial color="#c7d5d5" transparent opacity={.65} />
       </mesh>
     </group>
   );
@@ -55,11 +55,11 @@ function Scene({ selected, reducedMotion, onSelect }: { selected: EcosystemRole;
   return (
     <>
       <ambientLight intensity={1.4} />
-      <directionalLight position={[4, 6, 7]} intensity={2.4} color="#fff5e8" />
-      <pointLight position={[-4, -2, 3]} intensity={8} distance={8} color="#b87343" />
+      <directionalLight position={[4, 6, 7]} intensity={2.4} color="#fff9ef" />
+      <pointLight position={[-4, -2, 3]} intensity={8} distance={8} color="#397f99" />
       <Core reducedMotion={reducedMotion} />
       {satellites.map((item) => <Satellite key={`${item.role}-${item.position.join("-")}`} item={item} active={selected === item.role} onSelect={onSelect} />)}
-      {satellites.map((item) => <Line key={`line-${item.position.join("-")}`} points={[[0, 0, 0], item.position]} color={selected === item.role ? "#d39a67" : "#8f7f73"} lineWidth={selected === item.role ? 1.6 : .65} transparent opacity={selected === item.role ? .9 : .38} />)}
+      {satellites.map((item) => <Line key={`line-${item.position.join("-")}`} points={[[0, 0, 0], item.position]} color={selected === item.role ? "#79bdca" : "#81939a"} lineWidth={selected === item.role ? 1.6 : .65} transparent opacity={selected === item.role ? .9 : .38} />)}
     </>
   );
 }

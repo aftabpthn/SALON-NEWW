@@ -1,7 +1,9 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { AlertController, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
+import { firstValueFrom } from "rxjs";
 import {
   briefcaseOutline,
   calendarOutline,
@@ -19,10 +21,16 @@ import {
 } from "ionicons/icons";
 import {
   CustomerAccountModule,
+  Booking,
+  CustomerBookingSupportCategory,
+  CustomerBookingSupportPreferredContact,
+  CustomerBookingSupportPriority,
+  CustomerBookingSupportTicket,
   CustomerMembershipPlan,
   CustomerRewardSummary,
   CustomerWallet
 } from "../../core/api.types";
+import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 interface HubConfig {
@@ -133,10 +141,113 @@ const hubConfigs: Record<string, HubConfig> = {
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon],
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
       <main class="page hub-page">
+        @if (bookingSupportMode()) {
+          <section class="booking-support" aria-labelledby="booking-support-title">
+            <header class="support-heading">
+              <div class="hero-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
+              <div>
+                <p class="support-eyebrow">Booking support</p>
+                <h1 id="booking-support-title">How can we help?</h1>
+                <span>Send a request linked securely to your booking.</span>
+              </div>
+            </header>
+
+            <div class="support-status">
+              @if (supportLoading()) {
+                <section class="support-panel" role="status"><h2>Loading booking</h2><p>Confirming your booking details securely.</p></section>
+              } @else if (supportLoadError()) {
+                <section class="support-panel support-error" role="alert">
+                  <h2>Booking support is unavailable</h2>
+                  <p>{{ supportLoadError() }}</p>
+                  <div class="support-inline-actions">
+                    <ion-button class="primary-gradient" (click)="loadBookingSupportContext()">Retry</ion-button>
+                    <ion-button fill="outline" class="secondary-button" routerLink="/help">General help</ion-button>
+                  </div>
+                </section>
+              } @else if (supportTicket(); as ticket) {
+                <section class="support-panel support-success" role="status">
+                  <span class="status-pill">{{ ticket.status }}</span>
+                  <h2>Support request sent</h2>
+                  <dl>
+                    <div><dt>Ticket ID</dt><dd>{{ ticket.id }}</dd></div>
+                    <div><dt>Status</dt><dd>{{ ticket.status }}</dd></div>
+                  </dl>
+                  <ion-button class="primary-gradient" [routerLink]="['/bookings', ticket.bookingId]">Back to booking</ion-button>
+                </section>
+              } @else if (supportBooking(); as booking) {
+                <section class="support-booking-card" aria-label="Verified booking details">
+                  <div>
+                    <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
+                    <h2>{{ booking.serviceName }}</h2>
+                    <p>{{ booking.businessName }}</p>
+                  </div>
+                  <dl>
+                    <div><dt>Appointment</dt><dd>{{ supportAppointmentDisplay() }}</dd></div>
+                    <div><dt>Reference</dt><dd>{{ booking.reference || booking.id }}</dd></div>
+                  </dl>
+                </section>
+
+                <form class="support-form" (submit)="submitBookingSupport($event)" novalidate>
+                  <div class="field-group">
+                    <label for="support-category">What do you need help with?</label>
+                    <select id="support-category" name="supportCategory" [(ngModel)]="supportCategory" required>
+                      @for (category of supportCategories; track category.value) {
+                        <option [value]="category.value">{{ category.label }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="field-group">
+                    <div class="field-label-row">
+                      <label for="support-message">Message</label>
+                      <span>{{ supportMessage.length }}/1200</span>
+                    </div>
+                    <textarea
+                      id="support-message"
+                      name="supportMessage"
+                      [(ngModel)]="supportMessage"
+                      maxlength="1200"
+                      rows="6"
+                      required
+                      placeholder="Tell us what happened and how we can help."
+                    ></textarea>
+                  </div>
+
+                  <div class="support-field-grid">
+                    <div class="field-group">
+                      <label for="preferred-contact">Preferred contact</label>
+                      <select id="preferred-contact" name="preferredContact" [(ngModel)]="preferredContact">
+                        <option value="in_app">In-app</option>
+                        <option value="phone">Phone</option>
+                        <option value="email">Email</option>
+                      </select>
+                    </div>
+                    <div class="field-group">
+                      <label for="support-priority">Priority</label>
+                      <select id="support-priority" name="supportPriority" [(ngModel)]="supportPriority">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  @if (supportSubmitError()) {
+                    <p class="form-error" role="alert">{{ supportSubmitError() }}</p>
+                  }
+                  <span class="support-live" aria-live="polite">{{ supportSubmitting() ? "Sending support request" : "" }}</span>
+                  <ion-button type="submit" expand="block" class="primary-gradient" [disabled]="!supportFormValid() || supportSubmitting()">
+                    {{ supportSubmitting() ? "Sending request" : "Send support request" }}
+                  </ion-button>
+                </form>
+              }
+            </div>
+          </section>
+        } @else {
         <section class="hub-hero">
           <div class="hero-icon"><ion-icon [name]="config().icon"></ion-icon></div>
           <p>{{ config().eyebrow }}</p>
@@ -231,6 +342,17 @@ const hubConfigs: Record<string, HubConfig> = {
             </section>
           }
 
+          @if (slug() === "support" && supportHistoryLoading()) {
+            <section class="premium-card state-card" role="status"><h2>Loading support requests</h2></section>
+          }
+          @if (slug() === "support" && supportHistoryError()) {
+            <section class="premium-card state-card error" role="alert">
+              <h2>Could not load support requests</h2>
+              <p>{{ supportHistoryError() }}</p>
+              <ion-button class="primary-gradient" (click)="loadSupportHistory()">Retry</ion-button>
+            </section>
+          }
+
           @if (slug() === "memberships") {
             <section class="premium-card action-card">
               <div>
@@ -275,6 +397,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <p class="muted">{{ stateCopy() }}</p>
             </div>
           </section>
+        }
         }
       </main>
     </ion-content>
@@ -526,6 +649,90 @@ const hubConfigs: Record<string, HubConfig> = {
       color: var(--danger);
     }
 
+    .booking-support {
+      width: min(100%, 680px);
+      display: grid;
+      gap: 14px;
+      margin-inline: auto;
+    }
+
+    .support-heading {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 14px;
+      padding: 18px;
+      border-radius: var(--radius-lg);
+      color: #FFFFFF;
+      background: linear-gradient(145deg, var(--brand-900), var(--brand-800));
+      box-shadow: 0 14px 34px rgba(6, 23, 43, 0.15);
+    }
+
+    .support-heading .hero-icon { width: 52px; height: 52px; border-radius: 18px; font-size: 1.4rem; }
+    .support-heading h1, .support-heading p, .support-heading span { margin: 0; color: #FFFFFF; }
+    .support-heading h1 { font-size: clamp(1.45rem, 6vw, 2rem); letter-spacing: -0.04em; line-height: 1.08; }
+    .support-heading span { display: block; margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 0.86rem; line-height: 1.4; }
+    .support-heading .support-eyebrow { margin-bottom: 4px; color: rgba(255, 255, 255, 0.82); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
+    .support-status { display: grid; gap: 12px; }
+    .support-panel, .support-form {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .support-panel h2, .support-panel p { margin: 0; }
+    .support-panel h2 { font-size: 1.2rem; letter-spacing: -0.025em; }
+    .support-panel p { margin-top: 7px; color: var(--muted); line-height: 1.5; }
+    .support-error { border-color: rgba(180, 35, 24, 0.28); }
+    .support-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .support-inline-actions ion-button { min-height: 44px; margin: 0; text-transform: none; }
+    .support-success { display: grid; gap: 12px; }
+    .support-success dl { display: grid; gap: 8px; margin: 0; }
+    .support-success dl div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
+    .support-success dt { color: var(--muted); font-size: 0.8rem; font-weight: 800; }
+    .support-success dd { margin: 0; overflow-wrap: anywhere; }
+    .support-booking-card {
+      overflow: hidden;
+      border: 1px solid rgba(11, 47, 85, 0.24);
+      border-radius: var(--radius-md);
+      color: #FFFFFF;
+      background: var(--brand-900);
+      box-shadow: 0 14px 34px rgba(6, 23, 43, 0.14);
+    }
+    .support-booking-card > div { padding: 15px 16px 12px; }
+    .support-booking-card h2 { margin: 9px 0 3px; color: #FFFFFF; font-size: 1.25rem; letter-spacing: -0.035em; overflow-wrap: anywhere; }
+    .support-booking-card p { margin: 0; color: rgba(255, 255, 255, 0.78); overflow-wrap: anywhere; }
+    .support-booking-card dl { display: grid; margin: 0; background: rgba(11, 70, 120, 0.36); }
+    .support-booking-card dl div { min-width: 0; padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+    .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 800; }
+    .support-booking-card dd { margin: 3px 0 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 750; overflow-wrap: anywhere; }
+    .support-booking-card .status-pill { color: var(--brand-900); background: #FFFFFF; text-transform: capitalize; }
+    .support-booking-card .status-pill.closed { color: var(--muted); background: var(--surface-soft); }
+    .support-form { display: grid; gap: 15px; }
+    .field-group { min-width: 0; display: grid; gap: 7px; }
+    .field-group label { color: var(--text); font-size: 0.84rem; font-weight: 850; }
+    .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .field-label-row span { color: var(--muted); font-size: 0.75rem; font-weight: 750; }
+    .field-group select, .field-group textarea {
+      width: 100%;
+      min-width: 0;
+      min-height: 44px;
+      padding: 11px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      background: var(--surface);
+      font: inherit;
+      line-height: 1.4;
+    }
+    .field-group textarea { min-height: 132px; resize: vertical; }
+    .field-group select:focus-visible, .field-group textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
+    .support-field-grid { display: grid; gap: 12px; }
+    .support-form ion-button { min-height: 46px; margin: 0; text-transform: none; }
+    .form-error { margin: -3px 0 0; color: #B42318; font-size: 0.84rem; font-weight: 750; line-height: 1.4; }
+    .support-live { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
     @media (max-width: 599px) {
       .hub-hero {
         min-height: 310px;
@@ -557,6 +764,9 @@ const hubConfigs: Record<string, HubConfig> = {
       .records-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .support-booking-card dl, .support-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .support-booking-card dl div + div { border-left: 1px solid rgba(255, 255, 255, 0.1); }
     }
 
     @media (max-width: 1023px) {
@@ -568,15 +778,32 @@ const hubConfigs: Record<string, HubConfig> = {
         min-height: 96px;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .booking-support, .support-panel, .support-form, .support-booking-card { animation: none; transition: none; }
+    }
   `]
 })
 export class CustomerHubPage implements OnInit {
   readonly slug = computed(() => this.route.snapshot.data["hub"] as string || "rewards");
+  readonly bookingSupportMode = computed(() => this.slug() === "support" && this.route.snapshot.queryParamMap.get("mode") === "booking" && !!this.route.snapshot.queryParamMap.get("bookingId"));
   readonly config = computed(() => hubConfigs[this.slug()] ?? hubConfigs["rewards"]);
   readonly customerName = computed(() => this.marketplace.customer()?.name || "Customer");
   readonly liveRecords = computed(() => this.recordsFor(this.marketplace.accountModule()));
-  readonly demoMode = computed(() => this.marketplace.isAuthenticated() && !this.marketplace.loading() && this.liveRecords().length === 0);
+  readonly supportTickets = signal<CustomerBookingSupportTicket[]>([]);
+  readonly supportHistoryLoading = signal(false);
+  readonly supportHistoryError = signal("");
+  readonly supportRecords = computed<HubRecord[]>(() => this.supportTickets().map((ticket) => ({
+    key: ticket.id,
+    status: ticket.status,
+    title: this.supportCategoryLabel(ticket.category),
+    description: ticket.message,
+    date: this.supportTicketDate(ticket.updatedAt || ticket.createdAt),
+    route: ticket.bookingId ? `/bookings/${ticket.bookingId}` : undefined
+  })));
+  readonly demoMode = computed(() => this.slug() !== "support" && this.marketplace.isAuthenticated() && !this.marketplace.loading() && this.liveRecords().length === 0);
   readonly records = computed(() => {
+    if (this.slug() === "support") return this.supportRecords();
     const live = this.liveRecords();
     if (live.length) return live;
     if (!this.marketplace.isAuthenticated() || this.marketplace.loading()) return [];
@@ -584,6 +811,23 @@ export class CustomerHubPage implements OnInit {
   });
   readonly recordCount = computed(() => this.records().length);
   readonly actionMessage = signal("");
+  readonly supportBooking = signal<Booking | null>(null);
+  readonly supportTicket = signal<CustomerBookingSupportTicket | null>(null);
+  readonly supportLoading = signal(false);
+  readonly supportSubmitting = signal(false);
+  readonly supportLoadError = signal("");
+  readonly supportSubmitError = signal("");
+  supportCategory: CustomerBookingSupportCategory = "other";
+  supportMessage = "";
+  preferredContact: CustomerBookingSupportPreferredContact = "in_app";
+  supportPriority: CustomerBookingSupportPriority = "medium";
+  readonly supportCategories: { value: CustomerBookingSupportCategory; label: string }[] = [
+    { value: "reschedule", label: "Edit appointment" },
+    { value: "cancellation", label: "Cancellation" },
+    { value: "payment", label: "Payment" },
+    { value: "salon_unavailable", label: "Salon unavailable" },
+    { value: "other", label: "Other" }
+  ];
   readonly hubModules = [
     { slug: "rewards", label: "Rewards", copy: "Points, tier and booking rewards.", icon: "ribbon-outline", route: "/tabs/rewards" },
     { slug: "wallet", label: "Wallet", copy: "Credits, refunds and invoice payments.", icon: "wallet-outline", route: "/tabs/wallet" },
@@ -601,7 +845,7 @@ export class CustomerHubPage implements OnInit {
     { slug: "notifications", label: "Notifications", copy: "Booking and account updates.", icon: "chatbubbles-outline", route: "/notifications" }
   ];
 
-  constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService, private readonly alerts: AlertController) {
+  constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly api: CustomerApiService) {
     addIcons({
       briefcaseOutline,
       calendarOutline,
@@ -624,13 +868,102 @@ export class CustomerHubPage implements OnInit {
   }
 
   reload() {
+    if (this.bookingSupportMode()) {
+      void this.loadBookingSupportContext();
+      return;
+    }
     if (!this.marketplace.isAuthenticated()) return;
     this.actionMessage.set("");
     void Promise.all([
       this.marketplace.loadCustomer(),
       this.marketplace.loadBookings(),
-      this.marketplace.loadAccountModule(this.slug())
+      this.marketplace.loadAccountModule(this.slug()),
+      this.slug() === "support" ? this.loadSupportHistory() : Promise.resolve()
     ]).catch(() => undefined);
+  }
+
+  async loadSupportHistory() {
+    if (!this.marketplace.isAuthenticated()) return;
+    this.supportHistoryLoading.set(true);
+    this.supportHistoryError.set("");
+    try {
+      this.supportTickets.set(await firstValueFrom(this.api.listCustomerSupportTickets({ limit: 20 })));
+    } catch {
+      this.supportHistoryError.set("Your support history could not be loaded. Please try again.");
+    } finally {
+      this.supportHistoryLoading.set(false);
+    }
+  }
+
+  async loadBookingSupportContext() {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    this.supportBooking.set(null);
+    this.supportTicket.set(null);
+    this.supportLoadError.set("");
+    this.supportSubmitError.set("");
+    if (!bookingId) {
+      this.supportLoadError.set("We couldn't verify a booking for this support request. Please use general help instead.");
+      return;
+    }
+    this.supportLoading.set(true);
+    try {
+      this.supportBooking.set(await this.marketplace.loadBooking(bookingId));
+    } catch {
+      this.supportLoadError.set("We couldn't verify this booking. Please retry or use general help.");
+    } finally {
+      this.supportLoading.set(false);
+    }
+  }
+
+  supportFormValid(): boolean {
+    const length = this.supportMessage.trim().length;
+    return !!this.supportBooking() && length > 0 && length <= 1200;
+  }
+
+  async submitBookingSupport(event: Event) {
+    event.preventDefault();
+    const booking = this.supportBooking();
+    if (!booking || !this.supportFormValid() || this.supportSubmitting()) return;
+    this.supportSubmitting.set(true);
+    this.supportSubmitError.set("");
+    try {
+      const ticket = await firstValueFrom(this.api.createBookingSupportTicket(booking.id, {
+        category: this.supportCategory,
+        message: this.supportMessage.trim(),
+        preferredContact: this.preferredContact,
+        priority: this.supportPriority
+      }));
+      this.supportTicket.set(ticket);
+      this.supportTickets.update((items) => [ticket, ...items.filter((item) => item.id !== ticket.id)]);
+    } catch {
+      this.supportSubmitError.set("Your support request could not be sent. Review the details and try again.");
+    } finally {
+      this.supportSubmitting.set(false);
+    }
+  }
+
+  private supportCategoryLabel(category: CustomerBookingSupportCategory): string {
+    return this.supportCategories.find((item) => item.value === category)?.label || "Booking support";
+  }
+
+  private supportTicketDate(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
+  }
+
+  supportAppointmentDisplay(): string {
+    const booking = this.supportBooking();
+    const raw = String(booking?.displayStartAt || booking?.startsAt || booking?.startAt || "");
+    const date = raw ? new Date(raw) : null;
+    if (!date || !Number.isFinite(date.getTime())) return raw;
+    try {
+      const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short" }).format(date);
+      const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(date).toUpperCase();
+      return `${day} · ${time}`;
+    } catch {
+      return raw;
+    }
   }
 
   stateTitle(): string {

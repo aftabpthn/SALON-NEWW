@@ -381,6 +381,72 @@ export interface Booking {
   cancellationPolicy?: string;
 }
 
+export type CustomerBookingChatStatus = "open" | "waiting_for_salon" | "waiting_for_customer" | "resolved" | "closed";
+
+export interface CustomerBookingChatThread {
+  id: string;
+  bookingId: string;
+  salonName: string;
+  subject: string;
+  status: CustomerBookingChatStatus;
+  lastMessageAt: string | null;
+  lastMessagePreview: string;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerBookingChatMessage {
+  id: string;
+  conversationId: string;
+  senderType: "customer" | "staff" | "system";
+  senderName: string;
+  body: string;
+  clientMessageId: string | null;
+  customerReadAt: string | null;
+  staffReadAt: string | null;
+  createdAt: string;
+}
+
+export interface CustomerBookingChatMessagesResponse {
+  thread: CustomerBookingChatThread;
+  messages: CustomerBookingChatMessage[];
+}
+
+export interface SendCustomerBookingChatMessagePayload {
+  body: string;
+  clientMessageId: string;
+}
+
+export type CustomerBookingSupportCategory = "reschedule" | "cancellation" | "payment" | "salon_unavailable" | "other";
+export type CustomerBookingSupportPreferredContact = "phone" | "email" | "in_app";
+export type CustomerBookingSupportPriority = "low" | "medium" | "high";
+
+export interface CreateCustomerBookingSupportTicketPayload {
+  category: CustomerBookingSupportCategory;
+  message: string;
+  preferredContact?: CustomerBookingSupportPreferredContact;
+  priority?: CustomerBookingSupportPriority;
+}
+
+export interface CustomerBookingSupportTicket {
+  id: string;
+  bookingId: string;
+  branchId: string;
+  category: CustomerBookingSupportCategory;
+  message: string;
+  preferredContact: CustomerBookingSupportPreferredContact;
+  priority: CustomerBookingSupportPriority;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerSupportTicketQuery {
+  status?: string;
+  limit?: number;
+}
+
 export interface CancelBookingPayload {
   reason?: string;
 }
@@ -388,6 +454,7 @@ export interface CancelBookingPayload {
 export interface RescheduleBookingPayload {
   startAt: string;
   staffId?: string;
+  serviceId?: string;
 }
 
 export interface JoinWaitlistPayload {

@@ -4,7 +4,7 @@ const ACCESS_PERMISSION_RULES: Array<{ pattern: RegExp; permission: string | str
   { pattern: /^\/(enterprise-security-shield|security-alerts|permissions|compliance|audit-compliance|two-factor|mfa-security|passkeys|audit-logs|site-logs)/, permission: ['read:security', 'write:security', 'admin:security'] },
   { pattern: /^\/(business-details|settings|setting|branches|white-label|localization|locations|super-admin|saas)/, permission: ['read:settings', 'write:settings', 'read:branches', 'write:branches'] },
   { pattern: /^\/dashboard\//, permission: 'read:dashboard' },
-  { pattern: /^\/(appointments|appointment-activity|appointment-reports|scheduler|staff\/my-work|queue-system)/, permission: 'read:appointments' },
+  { pattern: /^\/(appointments|appointment-activity|appointment-reports|booking-inbox|scheduler|staff\/my-work|queue-system)/, permission: 'read:appointments' },
   { pattern: /^\/appointment-deposits/, permission: 'read:appointment_deposits' },
   { pattern: /^\/(clients|client-masters|customer-360)/, permission: ['read:clients', 'read:customer-360'] },
   { pattern: /^\/(pos|checkout)/, permission: 'use:pos' },

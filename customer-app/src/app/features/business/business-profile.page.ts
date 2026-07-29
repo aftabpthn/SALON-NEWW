@@ -101,7 +101,6 @@ import { Subscription } from "rxjs";
               </div>
             </section>
             }
-
             <section class="gallery-section">
               <div class="section-heading">
                 <div>
@@ -125,16 +124,31 @@ import { Subscription } from "rxjs";
               </div>
               <div class="service-stack">
                 @for (service of business().services; track service.id) {
-                  <article class="service-card premium-card">
-                    <div>
+                  <article
+                    class="service-card premium-card"
+                    [class.selected]="selectedServiceId() === service.id"
+                    (click)="selectService(service.id)">
+                    <div class="service-details">
                       <div class="service-title-row">
                         <h3>{{ service.name }}</h3>
                         @if (service.popular) { <span class="offer-pill">Popular</span> }
                       </div>
-                      <p class="muted">{{ service.description }}</p>
+                      @if (service.description) {
+                        <p class="muted">{{ service.description }}</p>
+                      }
                       <strong>{{ money(service.pricePaise) }} · {{ service.durationMinutes }} min</strong>
                     </div>
-                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business().slug, 'book']" [queryParams]="{ serviceId: service.id }">Select</ion-button>
+                    <button
+                      type="button"
+                      class="service-select-btn"
+                      [class.selected]="selectedServiceId() === service.id"
+                      (click)="$event.stopPropagation(); selectService(service.id)">
+                      @if (selectedServiceId() === service.id) {
+                        <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon> Selected
+                      } @else {
+                        + Select
+                      }
+                    </button>
                   </article>
                 } @empty {
                   <section class="state-card premium-card"><h2>No services available</h2></section>
@@ -178,9 +192,6 @@ import { Subscription } from "rxjs";
             }
 
             <section class="staff-section">
-              <div class="section-heading">
-                <div>
-                  <h2 class="section-title">Choose your professional</h2>
                 </div>
               </div>
               <div class="staff-grid">
@@ -255,141 +266,6 @@ import { Subscription } from "rxjs";
                 </a>
                 <a class="loyalty-card" routerLink="/tabs/rewards">
                   <ion-icon name="ribbon-outline"></ion-icon>
-                  <div>
-                    <strong>Rewards</strong>
-                    <span>Loyalty points, referrals, and redemption options</span>
-                  </div>
-                </a>
-                <a class="loyalty-card" routerLink="/tabs/memberships">
-                  <ion-icon name="card-outline"></ion-icon>
-                  <div>
-                    <strong>Memberships</strong>
-                    <span>Exclusive plans and benefits for regular customers</span>
-                  </div>
-                </a>
-              </div>
-            </section>
-            }
-
-            <section class="info-grid">
-              <article class="premium-card info-card">
-                <h2>Location</h2>
-                <p><ion-icon name="location-outline"></ion-icon>{{ business().address }}</p>
-                <div class="info-actions">
-                  <ion-button size="small" fill="outline" class="secondary-button" [href]="business().mapsUrl || undefined" target="_blank">
-                    <ion-icon name="navigate-outline" slot="start"></ion-icon>
-                    Directions
-                  </ion-button>
-                  <ion-button size="small" fill="outline" class="secondary-button" [href]="phoneHref()">
-                    <ion-icon name="call-outline" slot="start"></ion-icon>
-                    Call
-                  </ion-button>
-                </div>
-                <span class="muted">{{ business().area }}, {{ business().city }} {{ business().postalCode || "" }}</span>
-              </article>
-              <article class="premium-card info-card">
-                <h2>Hours</h2>
-                @for (day of business().businessHours; track day.day) {
-                  <p class="hours-row"><strong>{{ day.label }}</strong><span>{{ day.display }}{{ day.note ? " · " + day.note : "" }}</span></p>
-                } @empty {
-                  <p class="muted">{{ business().hoursLabel || "Business hours have not been published yet." }}</p>
-                }
-              </article>
-              <article class="premium-card info-card">
-                <h2>Contact</h2>
-                @if (business().phone || business().appointmentNumber || business().mobileNumber) {
-                  <p><ion-icon name="call-outline"></ion-icon>{{ business().appointmentNumber || business().mobileNumber || business().phone }}</p>
-                } @else {
-                }
-                @if (business().websiteUrl) {
-                  <p><ion-icon name="navigate-outline"></ion-icon>{{ business().websiteUrl }}</p>
-                }
-                @if (business().instagramUrl) {
-                  <p><ion-icon name="sparkles-outline"></ion-icon>{{ business().instagramUrl }}</p>
-                }
-              </article>
-              <article class="premium-card info-card">
-                <h2>Policies</h2>
-                @for (policy of business().policies; track policy) {
-                  <p>{{ policy }}</p>
-                } @empty {
-                  <p class="muted">No public policies have been published yet.</p>
-                }
-              </article>
-            </section>
-          </div>
-
-          <aside class="booking-rail premium-card">
-            <span class="rating-pill">Star {{ business().ratingAverage }}</span>
-            <h2>Book {{ business().popularService || business().category }}</h2>
-            <p class="muted">Starts from {{ money(business().startingPricePaise) }}. Next available {{ business().nextAvailableSlot || "after selecting a service" }}.</p>
-            @if (business().hasOffer) {
-              <div class="rail-offer">{{ business().offerText }}</div>
-            }
-            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Next slot</span><strong>{{ business().nextAvailableSlot || "Check availability" }}</strong></div>
-            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Hours</span><strong>{{ business().hoursLabel || "Published" }}</strong></div>
-            <div class="rail-row"><span><ion-icon name="location-outline"></ion-icon> Area</span><strong>{{ business().area }}</strong></div>
-            <div class="rail-row"><span><ion-icon name="card-outline"></ion-icon> Payment</span><strong>{{ paymentLabel() }}</strong></div>
-            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', business().slug, 'book']">Book now</ion-button>
-          </aside>
-        </section>
-      </main>
-
-      <div class="sticky-cta mobile-only">
-        <div class="bottom-action-card">
-          <div>
-            <small>From {{ money(business().startingPricePaise) }}</small>
-            <strong>{{ business().nextAvailableSlot || "Check availability" }}</strong>
-          </div>
-          <ion-button class="primary-gradient" [routerLink]="['/business', business().slug, 'book']">Book now</ion-button>
-        </div>
-      </div>
-      } @else {
-        <main class="page-narrow">
-          @if (marketplace.loading()) {
-            <section class="premium-card state-card"><h1>Loading business</h1></section>
-          } @else {
-            <section class="premium-card state-card error"><h1>Business unavailable</h1><p>{{ marketplace.error() || "The business profile could not be loaded." }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
-          }
-        </main>
-      }
-    </ion-content>
-  `,
-  styles: [`
-    .profile-page {
-      padding-bottom: calc(100px + env(safe-area-inset-bottom));
-    }
-
-    .cover {
-      position: relative;
-      min-height: clamp(340px, 52vh, 520px);
-      display: grid;
-      align-items: end;
-      overflow: hidden;
-      border-radius: 0 0 40px 40px;
-      background: var(--surface-soft);
-    }
-
-    .cover img,
-    .cover-overlay {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    .cover img {
-      object-fit: cover;
-    }
-
-    .cover-overlay {
-      background: linear-gradient(180deg, rgba(24, 17, 31, 0.08), rgba(24, 17, 31, 0.72));
-    }
-
-    .cover-actions {
-      position: absolute;
-      top: 16px;
-      right: 16px;
       z-index: 2;
       display: flex;
       gap: 8px;
@@ -509,57 +385,6 @@ import { Subscription } from "rxjs";
 
     .gallery-strip img {
       width: 100%;
-      aspect-ratio: 16 / 10;
-      height: auto;
-      border-radius: 26px;
-      object-fit: cover;
-      box-shadow: var(--shadow-soft);
-    }
-
-    .service-stack {
-      display: grid;
-      gap: 12px;
-    }
-
-    .service-card {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 18px;
-      align-items: center;
-      padding: 18px;
-    }
-
-    .service-title-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .service-card h3 {
-      margin: 0;
-      font-size: 1.12rem;
-      letter-spacing: -0.035em;
-    }
-
-    .service-card p {
-      margin: 7px 0 10px;
-    }
-
-    .service-card strong {
-      color: var(--primary-2);
-    }
-
-    .staff-grid,
-    .review-grid,
-    .info-grid {
-      display: grid;
-      gap: 14px;
-    }
-
-    .staff-card {
-      display: grid;
-      gap: 6px;
       padding: 16px;
     }
 
@@ -1095,7 +920,6 @@ import { Subscription } from "rxjs";
       .booking-rail {
         display: block;
       }
-
       .mobile-only {
         display: none;
       }
@@ -1104,6 +928,7 @@ import { Subscription } from "rxjs";
 })
 export class BusinessProfilePage implements OnInit, OnDestroy {
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
+  readonly selectedServiceId = signal<string>(this.route.snapshot.queryParamMap.get("serviceId") || "");
   readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
   readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
   readonly isPrimarySalon = computed(() => {
@@ -1113,6 +938,11 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     return primary.branchId === biz.branchId || primary.businessId === biz.id;
   });
   readonly activeOffers = computed(() => this.marketplace.salonOffers()?.offers ?? []);
+  readonly selectedService = computed(() => {
+    const id = this.selectedServiceId();
+    if (!id) return null;
+    return this.business()?.services.find((s) => s.id === id) || null;
+  });
   readonly otherBranches = computed(() => {
     const current = this.business();
     if (!current?.tenantId) return [];
@@ -1158,8 +988,20 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
       this.slug.set(params.get("slug"));
       this.reload();
     });
+    const paramServiceId = this.route.snapshot.queryParamMap.get("serviceId");
+    if (paramServiceId) {
+      this.selectedServiceId.set(paramServiceId);
+    }
     void this.marketplace.ensureFavorites().catch(() => undefined);
     void this.marketplace.ensureSavedSalons().catch(() => undefined);
+  }
+
+  selectService(serviceId: string) {
+    if (this.selectedServiceId() === serviceId) {
+      this.selectedServiceId.set("");
+    } else {
+      this.selectedServiceId.set(serviceId);
+    }
   }
 
   ngOnDestroy() {

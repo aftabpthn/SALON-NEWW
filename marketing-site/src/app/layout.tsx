@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Cormorant_Garamond, Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -14,6 +14,13 @@ import { softwareAppJsonLd, organizationJsonLd, websiteJsonLd } from "@/lib/seo"
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["500", "600"],
   display: "swap",
 });
 
@@ -93,7 +100,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-IN" className={`${inter.variable} h-full`} suppressHydrationWarning>
+    <html lang="en-IN" className={`${inter.variable} ${cormorant.variable} h-full`} suppressHydrationWarning>
       <head>
         {jsonLdScripts.map((ld, i) => (
           <script

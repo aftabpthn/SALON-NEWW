@@ -118,6 +118,8 @@ import { clientMasterRouter } from "./routes/client-master.routes.js";
 import { customer360Router } from "./routes/customer-360.routes.js";
 import { customerAppRouter } from "./routes/customer-app.routes.js";
 import { customerAuthRouter } from "./routes/customer-auth.routes.js";
+import { customerBookingSupportRouter } from "./routes/customer-booking-support.routes.js";
+import { customerSalonChatRouter } from "./routes/customer-salon-chat.routes.js";
 import { customerCareAiRouter } from "./routes/customer-care-ai.routes.js";
 import { customerMarketplaceRouter } from "./routes/customer-marketplace.routes.js";
 import { customerSalonRouter } from "./routes/customer-salon.routes.js";
@@ -440,6 +442,8 @@ export function createApp() {
   app.use("/api/v1", publicBookingProfileRouter);
   app.use("/api/v1", customerAuthRouter);
   app.use("/api/v1", customerAppRouter);
+  app.use("/api/v1", customerBookingSupportRouter);
+  app.use("/api/v1", customerSalonChatRouter);
   app.use("/api/v1", customerMarketplaceRouter);
   app.use("/api/v1", customerSalonRouter);
   app.use("/api/v1", customerIdentityRouter);

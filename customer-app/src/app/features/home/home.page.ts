@@ -88,6 +88,46 @@ interface ConsultationChatMessage {
       </ion-header>
 
       <main class="page home-page">
+
+interface ConsultationChatMessage {
+  role: "customer" | "assistant";
+  text: string;
+}
+
+@Component({
+  standalone: true,
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent, MySalonCardComponent],
+  template: `
+    <ion-content>
+      <ion-header class="ion-no-border">
+        <ion-toolbar>
+          <div class="home-toolbar app-container">
+            <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
+            <div class="location-copy">
+              <span>Near you</span>
+              <div class="location-row">
+                <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
+                @if (!mobileHome()) {
+                <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
+                  <ion-icon name="navigate-outline"></ion-icon>
+                  {{ locating() ? "Detecting" : "Use current location" }}
+                </button>
+                }
+              </div>
+            </div>
+            <div class="toolbar-actions">
+              <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
+                <ion-icon name="notifications-outline"></ion-icon>
+              </ion-button>
+              <ion-button fill="clear" shape="round" routerLink="/tabs/profile" aria-label="Open profile">
+                <ion-icon name="person-circle-outline"></ion-icon>
+              </ion-button>
+            </div>
+          </div>
+        </ion-toolbar>
+      </ion-header>
+
+      <main class="page home-page">
         <section class="hero dashboard-hero">
           <div class="hero-copy">
             <span class="eyebrow">Your day, beautifully planned</span>
@@ -97,6 +137,8 @@ interface ConsultationChatMessage {
                 <ion-searchbar
                   placeholder="Search services or salons"
                   [value]="query()"
+                  (ionFocus)="openExploreFromSearch()"
+                  (click)="openExploreFromSearch()"
                   (ionInput)="setQuery($any($event.target).value || '')"
                   (ionSearch)="search()">
                 </ion-searchbar>
@@ -1468,8 +1510,8 @@ interface ConsultationChatMessage {
         display: block !important;
         margin-inline: 0;
         padding: 0 !important;
-        border-radius: 18px !important;
-        box-shadow: 0 12px 30px rgba(6, 23, 43, 0.12) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 7px 18px rgba(6, 23, 43, 0.08) !important;
       }
       .home-page .home-search-wrap {
         position: relative;
@@ -1479,11 +1521,17 @@ interface ConsultationChatMessage {
       }
       .home-page .home-search-wrap ion-searchbar {
         width: 100% !important;
-        min-height: 38px !important;
+        height: 42px !important;
+        min-height: 42px !important;
+        padding: 0 !important;
         padding-right: 0 !important;
         --padding-end: 112px !important;
         --background: #ffffff !important;
-        --border-radius: 14px !important;
+        --border-radius: 13px !important;
+        --box-shadow: none !important;
+        --icon-color: #6B7C8E;
+        --placeholder-color: #8493A3;
+        font-size: 0.82rem;
       }
       .home-page .home-control-row {
         position: absolute !important;
@@ -1499,10 +1547,10 @@ interface ConsultationChatMessage {
         transform: translateY(-50%);
       }
       .home-page .home-control-button {
-        width: 36px !important;
-        min-width: 36px !important;
-        height: 36px !important;
-        min-height: 36px !important;
+        width: 34px !important;
+        min-width: 34px !important;
+        height: 34px !important;
+        min-height: 34px !important;
         padding: 0 !important;
         border-radius: 50% !important;
         background: transparent !important;
@@ -1754,20 +1802,20 @@ interface ConsultationChatMessage {
       .dashboard-hero .search-panel { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 6px !important; }
       .dashboard-hero .search-panel ion-button { width: 44px; min-width: 44px; height: 44px; font-size: 0; --padding-start: 0; --padding-end: 0; }
       .next-appointment {
-        grid-template-columns: 56px minmax(0, 1fr) auto;
-        gap: 12px;
+        grid-template-columns: 54px minmax(0, 1fr) auto;
+        gap: 10px;
         width: 100%;
-        padding: 14px;
-        border-radius: 22px;
+        padding: 12px;
+        border-radius: 20px;
         background: linear-gradient(145deg, var(--brand-900), var(--brand-700));
         box-shadow: 0 14px 32px rgba(6, 23, 43, 0.18);
       }
-      .next-appointment > a { grid-column: auto; justify-self: end; min-width: 64px; margin: 0; }
-      .appointment-date { width: 56px; min-width: 56px; height: 60px; border-radius: 16px; background: rgba(255, 255, 255, 0.14); }
+      .next-appointment > a { grid-column: auto; justify-self: end; min-width: 60px; margin: 0; padding-inline: 10px; }
+      .appointment-date { width: 54px; min-width: 54px; height: 58px; border-radius: 15px; background: rgba(255, 255, 255, 0.14); }
       .appointment-date span { color: #fff; }
       .appointment-date strong { color: #fff; font-size: 1.55rem; }
-      .appointment-copy h2 { color: #fff; font-size: 1.08rem; }
-      .appointment-copy p { color: rgba(255, 255, 255, 0.88); }
+      .appointment-copy h2 { margin-block: 2px; color: #fff; font-size: 1rem; }
+      .appointment-copy p { color: rgba(255, 255, 255, 0.88); font-size: 0.74rem; line-height: 1.25; }
       .account-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 0; }
       .account-shortcuts a {
         grid-template-columns: minmax(0, 1fr);
@@ -2161,6 +2209,10 @@ export class HomePage implements OnInit {
 
   openBusiness(business: Business) {
     void this.router.navigate(["/business", business.slug]);
+  }
+
+  openExploreFromSearch() {
+    void this.router.navigate(["/search"]);
   }
 
   bookAgain(item: HomeVisitedBusiness) {
