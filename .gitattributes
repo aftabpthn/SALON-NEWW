@@ -1,0 +1,4 @@
+# SQLx hashes migration bytes, so Git must preserve their exact applied bytes.
+# Applied history includes CRLF and one intentional blank EOF; neither can be
+# rewritten without breaking the database checksum ledger.
+backend-rust/migrations/*.sql -text whitespace=cr-at-eol,-blank-at-eof

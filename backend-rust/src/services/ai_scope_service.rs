@@ -97,6 +97,12 @@ pub enum AiDomain {
 }
 
 impl AiDomain {
+    pub const ALL: [Self; 13] = [
+        Self::Appointments, Self::Pos, Self::Staff, Self::Clients, Self::Services,
+        Self::Inventory, Self::Memberships, Self::Packages, Self::Marketing,
+        Self::Finance, Self::Reviews, Self::GeoComparison, Self::Forecasting,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Appointments => "appointments",
@@ -468,6 +474,17 @@ pub fn require_domain(claims: &AuthClaims, domain: AiDomain) -> Result<(), AppEr
         "your role does not have {} access, so this answer cannot be produced",
         domain.as_str().replace('_', " ")
     )))
+}
+
+/// Whether an exact permission is granted, with explicit denials winning.
+pub fn permission_allowed(claims: &AuthClaims, permission: &str) -> bool {
+    !claims.denied_permissions.iter().any(|item| item == permission)
+        && claims.permissions.iter().any(|item| item == permission)
+}
+
+/// Whether this login can use at least one CRM-backed AI capability.
+pub fn any_domain_allowed(claims: &AuthClaims) -> bool {
+    AiDomain::ALL.into_iter().any(|domain| domain_allowed(claims, domain))
 }
 
 /// Resolve the branches this login may read, then narrow them to the request.
@@ -1354,6 +1371,16 @@ mod tests {
     fn explicit_grant_extends_a_role_default() {
         let claims = claims_with("receptionist", &["finance.read"], &[]);
         assert!(domain_allowed(&claims, AiDomain::Finance));
+    }
+
+    #[test]
+    fn exact_manage_grant_honours_denial_and_custom_roles() {
+        let granted = claims_with("custom operator", &["management.write"], &[]);
+        assert!(permission_allowed(&granted, "management.write"));
+        assert!(any_domain_allowed(&claims_with("custom operator", &["clients.read"], &[])));
+
+        let denied = claims_with("owner", &["management.write"], &["management.write"]);
+        assert!(!permission_allowed(&denied, "management.write"));
     }
 
     #[test]

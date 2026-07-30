@@ -27,8 +27,10 @@ use sqlx::PgPool;
 use crate::{
     models::common::AppError,
     repositories::ai_signal_repository as signal_repository,
-    services::ai_copilot_tools::{
-        self, CopilotAnswer, CopilotTool, ToolActor, ToolMatch, ToolScope,
+    services::{
+        ai_copilot_tools::{self, CopilotAnswer, CopilotTool, ToolActor, ToolMatch, ToolScope},
+        ai_scope_service::{self, AiDomain, ScopeRequest}, ai_tool_dispatcher,
+        auth_service::AuthClaims,
     },
 };
 
@@ -250,20 +252,23 @@ const MAX_SNOOZE_HOURS: i64 = 24 * 30;
 /// This never changes any business data — it only decides whether the briefing
 /// says this again. Acting on the finding stays with the CRM screen the alert
 /// deep-links to.
-pub async fn decide_signal(
+pub async fn decide_signal_authorized(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    role: &str,
-    user_id: &str,
+    claims: &AuthClaims,
     signal: Signal,
     request: &SignalDecisionRequest,
 ) -> Result<SignalDecision, AppError> {
     // Same gate the briefing itself uses, so a signal cannot be decided by
     // someone who could not have been shown it.
-    if !signal.tool().permitted_for(role) {
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest {
+        branch_id: Some(branch_id.to_string()), ..Default::default()
+    }).await?;
+    scope.require_branch(branch_id)?;
+    if !ai_scope_service::domain_allowed(claims, ai_tool_dispatcher::tool_domain(signal.tool())) {
         return Err(AppError::forbidden(
-            "this briefing signal is not available for your role",
+            "this briefing signal is not available for your permissions",
         ));
     }
     let (status, snoozed_until) = match request.decision.trim().to_ascii_lowercase().as_str() {
@@ -296,7 +301,7 @@ pub async fn decide_signal(
         signal.key(),
         status,
         snoozed_until,
-        user_id,
+        &claims.sub,
     )
     .await
     .map_err(|_| AppError::internal("failed to record the signal decision"))?
@@ -319,12 +324,13 @@ pub async fn decide_signal(
 ///
 /// The briefing already runs per branch against branches the caller was shown,
 /// so it builds its scope explicitly rather than re-resolving grants per tool.
-fn briefing_scope(branch_id: &str, branch_name: &str, financials_visible: bool) -> ToolScope {
+fn briefing_scope(branch_id: &str, branch_name: &str, financials_visible: bool, allowed_domains: Vec<AiDomain>) -> ToolScope {
     ToolScope {
         branch_ids: vec![branch_id.to_string()],
         primary_branch_id: branch_id.to_string(),
         label: branch_name.to_string(),
         financials_visible,
+        allowed_domains,
         disclosure: crate::services::ai_scope_service::ScopeDisclosure {
             label: branch_name.to_string(),
             branch_count: 1,
@@ -334,16 +340,21 @@ fn briefing_scope(branch_id: &str, branch_name: &str, financials_visible: bool) 
     }
 }
 
-pub async fn build_briefing(
+pub async fn build_briefing_authorized(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    role: &str,
-    user_id: &str,
+    claims: &AuthClaims,
     cadence: Cadence,
     persist: bool,
 ) -> Result<Briefing, AppError> {
-    let actor = ToolActor::new(user_id, role);
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest {
+        branch_id: Some(branch_id.to_string()), ..Default::default()
+    }).await?;
+    scope.require_branch(branch_id)?;
+    let branch_name = scope.branches.iter().find(|branch| branch.branch_id == branch_id)
+        .map(|branch| branch.branch_name.as_str()).unwrap_or(branch_id);
+    let actor = ToolActor::new(&claims.sub, &claims.role);
     let mut sections = Vec::new();
     let mut suppressed = Vec::new();
 
@@ -351,7 +362,7 @@ pub async fn build_briefing(
         let tool = signal.tool();
         // Role gating is the tool's own, so a briefing can never show a reader
         // something they could not have asked for.
-        if !tool.permitted_for(role) {
+        if !ai_scope_service::domain_allowed(claims, ai_tool_dispatcher::tool_domain(tool)) {
             continue;
         }
         let matched = ToolMatch {
@@ -361,7 +372,9 @@ pub async fn build_briefing(
         let Ok(answer) = ai_copilot_tools::run(
             db,
             tenant_id,
-            &briefing_scope(branch_id, branch_id, ai_copilot_tools::can_view_financials(role)),
+            &briefing_scope(branch_id, branch_name,
+                ai_scope_service::domain_allowed(claims, AiDomain::Finance),
+                AiDomain::ALL.into_iter().filter(|domain| ai_scope_service::domain_allowed(claims, *domain)).collect()),
             &actor,
             &matched,
         )
@@ -456,23 +469,24 @@ pub async fn build_briefing(
 /// Compares one signal across the branches a user may actually see.
 ///
 /// The caller supplies the authorized branches; this never widens that list.
-pub async fn compare_branches(
+pub async fn compare_branches_authorized(
     db: &PgPool,
     tenant_id: &str,
-    role: &str,
-    user_id: &str,
-    branches: &[(String, String)],
+    claims: &AuthClaims,
     signal: Signal,
 ) -> Result<Vec<BranchComparisonRow>, AppError> {
     let tool = signal.tool();
-    if !tool.permitted_for(role) {
+    if !ai_scope_service::domain_allowed(claims, ai_tool_dispatcher::tool_domain(tool)) {
         return Err(AppError::forbidden(
-            "this comparison is not available for your role",
+            "this comparison is not available for your permissions",
         ));
     }
-    let actor = ToolActor::new(user_id, role);
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest::default()).await?;
+    let actor = ToolActor::new(&claims.sub, &claims.role);
     let mut rows = Vec::new();
-    for (branch_id, branch_name) in branches {
+    for branch in &scope.branches {
+        let branch_id = &branch.branch_id;
+        let branch_name = &branch.branch_name;
         let matched = ToolMatch {
             tool,
             subject_candidates: Vec::new(),
@@ -480,7 +494,9 @@ pub async fn compare_branches(
         let row = match ai_copilot_tools::run(
             db,
             tenant_id,
-            &briefing_scope(branch_id, branch_name, ai_copilot_tools::can_view_financials(role)),
+            &briefing_scope(branch_id, branch_name,
+                ai_scope_service::domain_allowed(claims, AiDomain::Finance),
+                AiDomain::ALL.into_iter().filter(|domain| ai_scope_service::domain_allowed(claims, *domain)).collect()),
             &actor,
             &matched,
         )
@@ -508,6 +524,35 @@ pub async fn compare_branches(
     Ok(rows)
 }
 
+#[cfg(test)]
+fn legacy_claims(tenant_id: &str, branch_id: Option<&str>, role: &str, user_id: &str) -> AuthClaims {
+    let permissions: &[&str] = match role.to_ascii_lowercase().as_str() {
+        "owner" | "admin" | "manager" => &["tenant.read", "finance.read"],
+        "frontdesk" | "receptionist" => &["appointments.read", "clients.read", "services.read", "memberships.read"],
+        "inventorymanager" => &["inventory.read"], "staff" => &["staff.read"], _ => &[],
+    };
+    let mut claims = crate::services::ai_tool_dispatcher::tests_support::claims(role, permissions, &[]);
+    claims.tenant_id = tenant_id.to_string();
+    claims.branch_id = branch_id.map(str::to_string);
+    claims.sub = user_id.to_string();
+    claims
+}
+
+#[cfg(test)]
+async fn build_briefing(db: &PgPool, tenant_id: &str, branch_id: &str, role: &str, user_id: &str, cadence: Cadence, persist: bool) -> Result<Briefing, AppError> {
+    build_briefing_authorized(db, tenant_id, branch_id, &legacy_claims(tenant_id, Some(branch_id), role, user_id), cadence, persist).await
+}
+
+#[cfg(test)]
+async fn compare_branches(db: &PgPool, tenant_id: &str, role: &str, user_id: &str, branches: &[(String, String)], signal: Signal) -> Result<Vec<BranchComparisonRow>, AppError> {
+    compare_branches_authorized(db, tenant_id, &legacy_claims(tenant_id, branches.first().map(|branch| branch.0.as_str()), role, user_id), signal).await
+}
+
+#[cfg(test)]
+async fn decide_signal(db: &PgPool, tenant_id: &str, branch_id: &str, role: &str, user_id: &str, signal: Signal, request: &SignalDecisionRequest) -> Result<SignalDecision, AppError> {
+    decide_signal_authorized(db, tenant_id, branch_id, &legacy_claims(tenant_id, Some(branch_id), role, user_id), signal, request).await
+}
+
 /// Worker cycle: builds the daily briefing for every active branch and delivers
 /// it through the existing notification table.
 ///
@@ -519,15 +564,22 @@ pub async fn run_daily_briefing_worker(db: &PgPool) -> Result<usize, AppError> {
 
     let mut delivered = 0_usize;
     for branch in branches {
-        // The worker has no signed-in user, so it briefs at owner scope — the
-        // notification is addressed to the branch, and every reader of it is an
-        // owner or admin by the query above.
-        let briefing = match build_briefing(
+        // The worker has no signed-in user. Explicit read-only grants keep it
+        // on the same domain checks as interactive users.
+        let system_claims = AuthClaims {
+            sub: "system".into(), tenant_id: branch.tenant_id.clone(), branch_id: Some(branch.branch_id.clone()),
+            role: "system".into(), role_id: None,
+            permissions: AiDomain::ALL.into_iter().map(|domain| domain.required_permission().to_string()).collect(),
+            denied_permissions: Vec::new(), masked_fields: Vec::new(), max_discount_paise: None,
+            max_refund_paise: None, max_cash_movement_paise: None, permission_version: 0,
+            session_id: "ai-briefing-worker".into(), mfa_enrollment_required: false,
+            token_type: "system".into(), jti: "ai-briefing-worker".into(), iat: 0, exp: usize::MAX,
+        };
+        let briefing = match build_briefing_authorized(
             db,
             &branch.tenant_id,
             &branch.branch_id,
-            "owner",
-            "system",
+            &system_claims,
             Cadence::Daily,
             true,
         )
