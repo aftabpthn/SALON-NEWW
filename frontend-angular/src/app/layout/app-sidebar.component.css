@@ -168,6 +168,13 @@
   transform: translateX(0);
 }
 
+@media (min-width: 761px) {
+  .nav-group:nth-last-child(-n + 6) > .flyout {
+    top: auto;
+    bottom: -10px;
+  }
+}
+
 .flyout header {
   min-height: 42px;
   display: flex;

@@ -1,13 +1,19 @@
 use crate::{
     models::migration::{
-        ClaimedImportJob, ImportJob, MigrationEntity, MigrationJobStatus, MigrationMapping,
-        MigrationMode, MigrationRecoveryReport,
+        ClaimedImportJob, ImportJob, MigrationAlias, MigrationEntity, MigrationJobStatus,
+        MigrationMapping, MigrationMappingApproval, MigrationMode, MigrationProvider,
+        MigrationRecoveryReport,
     },
     repositories::{clients_repository, staff_hr_repository},
-    services::accounting_service::{self, ManualJournalLine},
+    services::{
+        accounting_service::{self, ManualJournalLine, RefundSettlement},
+        membership_service,
+    },
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use std::{collections::BTreeMap, io};
 
@@ -62,6 +68,35 @@ struct MigrationMappingRow {
     source_columns_json: Value,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, FromRow)]
+struct MigrationAliasRow {
+    id: String,
+    entity: String,
+    source_provider: String,
+    alias: String,
+    target_field: String,
+    created_by: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, FromRow)]
+struct MigrationMappingApprovalRow {
+    id: String,
+    entity: String,
+    source_provider: String,
+    rule_version: String,
+    fingerprint: String,
+    source_file_id: Option<String>,
+    source_sheet: String,
+    source_column: String,
+    target_field: String,
+    confidence_percentage: i16,
+    decision_json: Value,
+    approved_by: String,
+    approved_at: DateTime<Utc>,
 }
 
 #[derive(Debug, FromRow)]
@@ -170,6 +205,10 @@ pub async fn create_job(
         .await?;
     }
 
+    if mode == MigrationMode::Commit {
+        sync_job_dependencies(&mut tx, tenant, branch, &row.id, entity, source_hash).await?;
+    }
+
     insert_audit(
         &mut tx,
         tenant,
@@ -256,6 +295,158 @@ pub async fn get_mapping(
     .fetch_optional(db)
     .await?;
     row.map(into_mapping).transpose()
+}
+
+pub async fn save_alias(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: MigrationEntity,
+    source_provider: MigrationProvider,
+    alias: &str,
+    target_field: &str,
+    actor: &str,
+) -> Result<MigrationAlias, sqlx::Error> {
+    let row = sqlx::query_as::<_, MigrationAliasRow>(
+        r#"INSERT INTO integration_import_aliases(
+             tenant_id,branch_id,entity,source_provider,alias,target_field,created_by
+           ) VALUES($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT(tenant_id,branch_id,entity,source_provider,(LOWER(alias))) DO UPDATE SET
+             target_field=EXCLUDED.target_field,created_by=EXCLUDED.created_by,updated_at=NOW()
+           RETURNING id,entity,source_provider,alias,target_field,created_by,created_at,updated_at"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(entity.as_str())
+    .bind(source_provider.as_str())
+    .bind(alias)
+    .bind(target_field)
+    .bind(actor)
+    .fetch_one(db)
+    .await?;
+    into_alias(row)
+}
+
+pub async fn list_aliases(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: Option<MigrationEntity>,
+) -> Result<Vec<MigrationAlias>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, MigrationAliasRow>(
+        "SELECT id,entity,source_provider,alias,target_field,created_by,created_at,updated_at FROM integration_import_aliases WHERE tenant_id=$1 AND branch_id=$2 AND ($3::TEXT IS NULL OR entity=$3) ORDER BY entity,LOWER(alias),source_provider",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(entity.map(MigrationEntity::as_str))
+    .fetch_all(db)
+    .await?;
+    rows.into_iter().map(into_alias).collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn approve_mapping(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: MigrationEntity,
+    source_provider: MigrationProvider,
+    rule_version: &str,
+    fingerprint: &str,
+    source_file_id: Option<&str>,
+    source_sheet: &str,
+    source_column: &str,
+    target_field: &str,
+    confidence_percentage: u8,
+    decision: &Value,
+    actor: &str,
+) -> Result<MigrationMappingApproval, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let inserted = sqlx::query_as::<_, MigrationMappingApprovalRow>(
+        r#"INSERT INTO integration_import_mapping_approvals(
+             tenant_id,branch_id,entity,source_provider,rule_version,fingerprint,
+             source_file_id,source_sheet,source_column,target_field,
+             confidence_percentage,decision_json,approved_by
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           ON CONFLICT(tenant_id,branch_id,fingerprint,source_column,target_field) DO NOTHING
+           RETURNING id,entity,source_provider,rule_version,fingerprint,source_file_id,
+             source_sheet,source_column,target_field,confidence_percentage,decision_json,
+             approved_by,approved_at"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(entity.as_str())
+    .bind(source_provider.as_str())
+    .bind(rule_version)
+    .bind(fingerprint)
+    .bind(source_file_id)
+    .bind(source_sheet)
+    .bind(source_column)
+    .bind(target_field)
+    .bind(i16::from(confidence_percentage))
+    .bind(decision)
+    .bind(actor)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let created = inserted.is_some();
+    let row = if let Some(row) = inserted {
+        row
+    } else {
+        sqlx::query_as::<_, MigrationMappingApprovalRow>(
+            "SELECT id,entity,source_provider,rule_version,fingerprint,source_file_id,source_sheet,source_column,target_field,confidence_percentage,decision_json,approved_by,approved_at FROM integration_import_mapping_approvals WHERE tenant_id=$1 AND branch_id=$2 AND fingerprint=$3 AND source_column=$4 AND target_field=$5",
+        )
+        .bind(tenant)
+        .bind(branch)
+        .bind(fingerprint)
+        .bind(source_column)
+        .bind(target_field)
+        .fetch_one(&mut *tx)
+        .await?
+    };
+    if created {
+        insert_audit(
+            &mut tx,
+            tenant,
+            branch,
+            None,
+            None,
+            "migration.mapping.yellow_approved",
+            "success",
+            actor,
+            json!({
+                "approvalId":row.id,
+                "entity":entity.as_str(),
+                "sourceProvider":source_provider.as_str(),
+                "ruleVersion":rule_version,
+                "fingerprint":fingerprint,
+                "sourceFileId":source_file_id,
+                "sourceSheet":source_sheet,
+                "sourceColumn":source_column,
+                "targetField":target_field,
+                "confidencePercentage":confidence_percentage
+            }),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    into_mapping_approval(row)
+}
+
+pub async fn list_mapping_approvals(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    fingerprint: &str,
+) -> Result<Vec<MigrationMappingApproval>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, MigrationMappingApprovalRow>(
+        "SELECT id,entity,source_provider,rule_version,fingerprint,source_file_id,source_sheet,source_column,target_field,confidence_percentage,decision_json,approved_by,approved_at FROM integration_import_mapping_approvals WHERE tenant_id=$1 AND branch_id=$2 AND fingerprint=$3 ORDER BY source_column,target_field,approved_at",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(fingerprint)
+    .fetch_all(db)
+    .await?;
+    rows.into_iter().map(into_mapping_approval).collect()
 }
 
 pub async fn find_client_duplicate(
@@ -402,15 +593,167 @@ pub async fn resolve_migration_reference(
             "SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR LOWER(BTRIM(code))=LOWER(BTRIM($3)) OR normalized_phone=$3) AND merged_into_client_id IS NULL ORDER BY created_at LIMIT 1",
         ).bind(tenant).bind(branch).bind(reference).fetch_optional(db).await,
         MigrationEntity::Staff => sqlx::query_scalar(
-            "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR LOWER(BTRIM(employee_code))=LOWER(BTRIM($3))) ORDER BY created_at LIMIT 1",
+            "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR LOWER(BTRIM(employee_code))=LOWER(BTRIM($3)) OR LOWER(BTRIM(CONCAT_WS(' ',first_name,last_name)))=LOWER(BTRIM($3))) ORDER BY created_at LIMIT 1",
         ).bind(tenant).bind(branch).bind(reference).fetch_optional(db).await,
         MigrationEntity::Services => Ok(resolve_service(db, tenant, branch, reference).await?.map(|row| row.0)),
         MigrationEntity::Products => Ok(resolve_inventory_item(db, tenant, branch, reference).await?.map(|row| row.0)),
         MigrationEntity::Sales | MigrationEntity::Invoices => sqlx::query_scalar(
             "SELECT id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR invoice_number=$3 OR (source='migration' AND reference_id=$3)) ORDER BY created_at LIMIT 1",
         ).bind(tenant).bind(branch).bind(reference).fetch_optional(db).await,
+        MigrationEntity::Appointments => sqlx::query_scalar(
+            "SELECT id FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR (source='migration' AND booking_group_id=$3)) ORDER BY created_at LIMIT 1",
+        ).bind(tenant).bind(branch).bind(reference).fetch_optional(db).await,
         _ => Ok(None),
     }
+}
+
+pub async fn resolve_sale_line(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    sale_id: &str,
+    reference: &str,
+) -> Result<Option<(String, String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT id,line_type,item_id FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND (id=$4 OR item_id=$4 OR LOWER(BTRIM(item_name))=LOWER(BTRIM($4))) ORDER BY created_at,id LIMIT 1",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(sale_id)
+    .bind(reference)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn refundable_payment_balance(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    sale_id: &str,
+    method: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT SUM(payment.amount_paise-COALESCE((
+               SELECT SUM(allocation.amount_paise)
+               FROM pos_refund_payment_allocations allocation
+               WHERE allocation.tenant_id=$1 AND allocation.branch_id=$2
+                 AND allocation.pos_payment_id=payment.id
+             ),0))::BIGINT
+           FROM pos_payments payment
+           WHERE payment.tenant_id=$1 AND payment.branch_id=$2
+             AND payment.sale_id=$3 AND LOWER(payment.method)=LOWER($4)"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(sale_id)
+    .bind(method)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn commission_split_total(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    sale_line_id: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COALESCE(SUM(split_bps),0)::BIGINT FROM pos_staff_commission_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND sale_line_id=$3",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(sale_line_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn inventory_stock_quantity(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    inventory_item_id: &str,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT stock_quantity::BIGINT FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(inventory_item_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn find_extended_duplicate(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    entity: MigrationEntity,
+    key: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let mapped: Option<String> = sqlx::query_scalar(
+        "SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND entity=$3 AND source_external_id=$4 AND target_id IS NOT NULL AND status IN ('created','merged','linked','kept') ORDER BY updated_at DESC LIMIT 1",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(entity.as_str())
+    .bind(key)
+    .fetch_optional(db)
+    .await?;
+    if mapped.is_some() {
+        return Ok(mapped);
+    }
+    match entity {
+        MigrationEntity::Refunds => sqlx::query_scalar(
+            "SELECT id FROM pos_invoice_refunds WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3 LIMIT 1",
+        ).bind(tenant).bind(branch).bind(format!("migration:{key}")).fetch_optional(db).await,
+        MigrationEntity::GiftCards => sqlx::query_scalar(
+            "SELECT id FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND LOWER(code)=LOWER($3) LIMIT 1",
+        ).bind(tenant).bind(branch).bind(key).fetch_optional(db).await,
+        MigrationEntity::Loyalty => sqlx::query_scalar(
+            "SELECT id FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3 LIMIT 1",
+        ).bind(tenant).bind(branch).bind(format!("migration:{key}")).fetch_optional(db).await,
+        MigrationEntity::Payroll => {
+            let (period, staff) = key.split_once(':').unwrap_or(("", ""));
+            sqlx::query_scalar("SELECT item.id FROM staff_payroll_items item JOIN staff_payroll_runs run ON run.id=item.payroll_run_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND run.period_start=$3::DATE AND item.staff_id=$4 LIMIT 1")
+                .bind(tenant).bind(branch).bind(period).bind(staff).fetch_optional(db).await
+        }
+        MigrationEntity::StockMovements => sqlx::query_scalar(
+            "SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND adjustment_idempotency_key=$3 LIMIT 1",
+        ).bind(tenant).bind(branch).bind(format!("migration:{key}")).fetch_optional(db).await,
+        _ => Ok(None),
+    }
+}
+
+pub async fn find_client_membership_duplicate(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    external_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND migration_source_id=$3 ORDER BY assigned_at LIMIT 1",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(external_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn resolve_membership(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    reference: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR LOWER(BTRIM(code))=LOWER(BTRIM($3)) OR LOWER(BTRIM(name))=LOWER(BTRIM($3))) ORDER BY created_at,id LIMIT 1",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(reference)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn find_transaction_duplicate(
@@ -463,6 +806,74 @@ pub async fn list_jobs(
     .fetch_all(db)
     .await?;
     rows.into_iter().map(into_import_job).collect()
+}
+
+fn dependency_phase(entity: MigrationEntity) -> i32 {
+    match entity {
+        MigrationEntity::Clients
+        | MigrationEntity::Staff
+        | MigrationEntity::Services
+        | MigrationEntity::Products
+        | MigrationEntity::Suppliers
+        | MigrationEntity::Memberships
+        | MigrationEntity::Packages => 0,
+        MigrationEntity::Inventory
+        | MigrationEntity::ClientMemberships
+        | MigrationEntity::GiftCards
+        | MigrationEntity::Loyalty
+        | MigrationEntity::Payroll
+        | MigrationEntity::ClientNotes
+        | MigrationEntity::Files
+        | MigrationEntity::StockMovements => 1,
+        MigrationEntity::Appointments | MigrationEntity::PurchaseBills => 2,
+        MigrationEntity::Sales | MigrationEntity::Invoices | MigrationEntity::Expenses => 3,
+        MigrationEntity::Payments | MigrationEntity::Commissions => 4,
+        MigrationEntity::Refunds => 5,
+    }
+}
+
+pub(crate) async fn sync_job_dependencies(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+    job_id: &str,
+    entity: MigrationEntity,
+    source_hash: &str,
+) -> Result<(), sqlx::Error> {
+    if source_hash.is_empty() {
+        return Ok(());
+    }
+    let related: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id,entity FROM integration_import_jobs WHERE tenant_id=$1 AND branch_id=$2 AND source_hash=$3 AND mode='commit' AND id<>$4 AND status NOT IN ('cancelled','rolled_back')",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(source_hash)
+    .bind(job_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    let phase = dependency_phase(entity);
+    for (related_id, related_entity) in related {
+        let related_entity = decode_enum::<MigrationEntity>(&related_entity, "entity")?;
+        let related_phase = dependency_phase(related_entity);
+        let (dependent, prerequisite) = if phase > related_phase {
+            (job_id, related_id.as_str())
+        } else if related_phase > phase {
+            (related_id.as_str(), job_id)
+        } else {
+            continue;
+        };
+        sqlx::query(
+            "INSERT INTO integration_import_job_dependencies(tenant_id,branch_id,job_id,depends_on_job_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
+        )
+        .bind(tenant)
+        .bind(branch)
+        .bind(dependent)
+        .bind(prerequisite)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 pub async fn monitoring_counts(
@@ -677,6 +1088,26 @@ pub async fn governance_report(
     let impact = rollback_impact(db, tenant, branch, id)
         .await?
         .unwrap_or_else(|| json!({}));
+    let financial: Value =
+        sqlx::query_scalar("SELECT migration_import_financial_reconciliation($1,$2,$3)")
+            .bind(tenant)
+            .bind(branch)
+            .bind(id)
+            .fetch_one(db)
+            .await?;
+    let dependencies: Value = sqlx::query_scalar(
+        r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+             'jobId',required.id,'entity',required.entity,'status',required.status,
+             'completed',required.status='completed') ORDER BY required.created_at),'[]'::JSONB)
+           FROM integration_import_job_dependencies dependency
+           JOIN integration_import_jobs required ON required.id=dependency.depends_on_job_id
+           WHERE dependency.tenant_id=$1 AND dependency.branch_id=$2 AND dependency.job_id=$3"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .fetch_one(db)
+    .await?;
     let expected_valid = job
         .pointer("/expected/validRows")
         .and_then(Value::as_i64)
@@ -694,11 +1125,33 @@ pub async fn governance_report(
         "rolled_back"
     } else if status != "completed" {
         "pending"
-    } else if processed == expected_valid && failed == 0 {
+    } else if processed == expected_valid
+        && failed == 0
+        && financial.get("status").and_then(Value::as_str) != Some("mismatch")
+    {
         "matched"
     } else {
         "mismatch"
     };
+    let dependencies_completed = dependencies.as_array().map_or(true, |items| {
+        items
+            .iter()
+            .all(|item| item.get("completed").and_then(Value::as_bool) == Some(true))
+    });
+    let approval_complete = matches!(
+        job.get("approvalStatus").and_then(Value::as_str),
+        Some("approved" | "not_required")
+    );
+    let financial_status = financial
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let financial_matched = matches!(financial_status, "matched" | "not_applicable");
+    let cutover_ready = status == "completed"
+        && reconciliation == "matched"
+        && financial_matched
+        && dependencies_completed
+        && approval_complete;
     let mut recommendations = Vec::new();
     if job.get("approvalStatus").and_then(Value::as_str) == Some("pending") {
         recommendations.push("Owner approval is required before commit");
@@ -708,6 +1161,12 @@ pub async fn governance_report(
     }
     if reconciliation == "mismatch" {
         recommendations.push("Review the proof pack before rollback");
+    }
+    if financial.get("status").and_then(Value::as_str) == Some("mismatch") {
+        recommendations.push("Financial totals differ from the imported source; do not cut over");
+    }
+    if !dependencies_completed {
+        recommendations.push("Waiting for prerequisite migration jobs to complete");
     }
     if impact
         .pointer("/dependencies/blockingRecords")
@@ -724,6 +1183,9 @@ pub async fn governance_report(
         "job": job,
         "actual": actual,
         "reconciliation": {"status":reconciliation,"expectedValidRows":expected_valid,"actualProcessedRows":processed},
+        "financialReconciliation": financial,
+        "dependencies": dependencies,
+        "cutover": {"ready":cutover_ready,"checks":{"jobCompleted":status == "completed","rowsMatched":reconciliation == "matched","financialsMatched":financial_matched,"dependenciesCompleted":dependencies_completed,"approvalComplete":approval_complete}},
         "branchEntityTotals": branch_totals,
         "preRollbackImpact": impact,
         "recoveryRecommendations": recommendations
@@ -748,9 +1210,15 @@ pub async fn proof_pack(
     let chunks: Value = sqlx::query_scalar(
         "SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('chunkNumber',chunk_number,'status',status,'sourceSheet',source_sheet,'sourceRowStart',source_row_start,'sourceRowEnd',source_row_end,'totalRows',total_rows,'readyRows',ready_rows,'errorRows',error_rows,'checksum',checksum,'processedRows',processed_rows,'attempts',attempts,'lastError',last_error) ORDER BY chunk_number),'[]'::JSONB) FROM integration_import_chunks WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3",
     ).bind(tenant).bind(branch).bind(id).fetch_one(db).await?;
-    Ok(Some(
-        json!({"schemaVersion":"1.0","generatedAt":Utc::now(),"governance":governance,"auditEvents":audit,"batches":batches,"chunks":chunks}),
-    ))
+    let mut pack = json!({"schemaVersion":"1.1","generatedAt":Utc::now(),"governance":governance,"auditEvents":audit,"batches":batches,"chunks":chunks});
+    let payload_sha256 = format!("{:x}", Sha256::digest(pack.to_string().as_bytes()));
+    pack.as_object_mut()
+        .expect("proof pack is an object")
+        .insert(
+            "integrity".into(),
+            json!({"algorithm":"SHA-256","payloadSha256":payload_sha256}),
+        );
+    Ok(Some(pack))
 }
 
 pub async fn failed_rows_csv(
@@ -825,7 +1293,7 @@ pub fn is_active_source_duplicate_error(error: &sqlx::Error) -> bool {
 pub async fn claim_job(db: &PgPool) -> Result<Option<ClaimedImportJob>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, ClaimedImportJobRow>(
-        "WITH due AS(SELECT id FROM integration_import_jobs WHERE status='queued' AND source_file_id IS NULL ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE integration_import_jobs job SET status='processing',updated_at=NOW() FROM due WHERE job.id=due.id RETURNING job.id,job.tenant_id,job.branch_id,job.entity,job.rows_json,job.total_rows,job.next_row,job.created_by",
+        "WITH due AS(SELECT job.id FROM integration_import_jobs job WHERE job.status='queued' AND job.source_file_id IS NULL AND NOT EXISTS(SELECT 1 FROM integration_import_job_dependencies dependency JOIN integration_import_jobs required ON required.id=dependency.depends_on_job_id WHERE dependency.job_id=job.id AND required.status<>'completed') ORDER BY job.created_at FOR UPDATE OF job SKIP LOCKED LIMIT 1) UPDATE integration_import_jobs job SET status='processing',updated_at=NOW() FROM due WHERE job.id=due.id RETURNING job.id,job.tenant_id,job.branch_id,job.entity,job.rows_json,job.total_rows,job.next_row,job.created_by",
     )
     .fetch_optional(&mut *tx)
     .await?;
@@ -841,7 +1309,7 @@ pub async fn apply_batch(
     end: usize,
 ) -> Result<(), sqlx::Error> {
     let batch_number = (start / 100 + 1) as i32;
-    apply_batch_numbered(db, job, batch, batch_number, start, end).await
+    apply_batch_numbered(db, job, batch, batch_number, start, end, None).await
 }
 
 pub async fn apply_batch_numbered(
@@ -851,6 +1319,7 @@ pub async fn apply_batch_numbered(
     batch_number: i32,
     start: usize,
     end: usize,
+    chunk_id: Option<&str>,
 ) -> Result<(), sqlx::Error> {
     let mut tx = db.begin().await?;
     let active: bool = sqlx::query_scalar(
@@ -1020,12 +1489,21 @@ pub async fn apply_batch_numbered(
                         write_rows.push(row.clone());
                     }
                     MigrationEntity::Inventory => return Err(sqlx::Error::RowNotFound),
+                    MigrationEntity::ClientMemberships => return Err(sqlx::Error::RowNotFound),
                     MigrationEntity::Appointments
                     | MigrationEntity::Sales
                     | MigrationEntity::Invoices
                     | MigrationEntity::Payments
                     | MigrationEntity::Expenses
                     | MigrationEntity::PurchaseBills => return Err(sqlx::Error::RowNotFound),
+                    MigrationEntity::Refunds
+                    | MigrationEntity::GiftCards
+                    | MigrationEntity::Loyalty
+                    | MigrationEntity::Payroll
+                    | MigrationEntity::Commissions
+                    | MigrationEntity::ClientNotes
+                    | MigrationEntity::Files
+                    | MigrationEntity::StockMovements => return Err(sqlx::Error::RowNotFound),
                 }
                 merged_rows += 1;
             }
@@ -1127,6 +1605,11 @@ pub async fn apply_batch_numbered(
                 apply_master_row(&mut tx, job, &batch_id, row).await?;
             }
         }
+        MigrationEntity::ClientMemberships if !write_rows.is_empty() => {
+            for row in &write_rows {
+                apply_client_membership_row(&mut tx, job, &batch_id, row).await?;
+            }
+        }
         MigrationEntity::Appointments
         | MigrationEntity::Sales
         | MigrationEntity::Invoices
@@ -1138,8 +1621,33 @@ pub async fn apply_batch_numbered(
             for row in &write_rows {
                 apply_transaction_row(&mut tx, job, &batch_id, row).await?;
             }
-            if job.entity == MigrationEntity::PurchaseBills && end >= job.total_rows as usize {
+            let completes_job = if let Some(chunk_id) = chunk_id {
+                !sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM integration_import_chunks WHERE job_id=$1 AND id<>$2 AND status<>'completed')",
+                )
+                .bind(&job.id)
+                .bind(chunk_id)
+                .fetch_one(&mut *tx)
+                .await?
+            } else {
+                end >= job.total_rows as usize
+            };
+            if job.entity == MigrationEntity::PurchaseBills && completes_job {
                 post_purchase_bill_journals(&mut tx, job).await?;
+            }
+        }
+        MigrationEntity::Refunds
+        | MigrationEntity::GiftCards
+        | MigrationEntity::Loyalty
+        | MigrationEntity::Payroll
+        | MigrationEntity::Commissions
+        | MigrationEntity::ClientNotes
+        | MigrationEntity::Files
+        | MigrationEntity::StockMovements
+            if !write_rows.is_empty() =>
+        {
+            for row in &write_rows {
+                apply_extended_row(&mut tx, job, &batch_id, row).await?;
             }
         }
         _ => {}
@@ -1149,9 +1657,27 @@ pub async fn apply_batch_numbered(
     let processed_rows = (end - start) as i32;
     sqlx::query("UPDATE integration_import_batches SET status='completed',processed_rows=$2,imported_rows=$3,error_rows=0,last_error='',completed_at=NOW(),updated_at=NOW() WHERE tenant_id=$4 AND branch_id=$5 AND id=$1")
         .bind(&batch_id).bind(processed_rows).bind(imported_rows).bind(&job.tenant_id).bind(&job.branch_id).execute(&mut *tx).await?;
-    let completed = end >= job.total_rows as usize;
-    sqlx::query("UPDATE integration_import_jobs SET status=CASE WHEN $2 THEN 'completed' ELSE 'queued' END,processed_rows=$3,next_row=$3,last_error='',completed_at=CASE WHEN $2 THEN NOW() ELSE NULL END,updated_at=NOW() WHERE tenant_id=$4 AND branch_id=$5 AND id=$1")
-        .bind(&job.id).bind(completed).bind(end as i32).bind(&job.tenant_id).bind(&job.branch_id).execute(&mut *tx).await?;
+    if let Some(chunk_id) = chunk_id {
+        let completed_chunk = sqlx::query("UPDATE integration_import_chunks SET status='completed',processed_rows=$2,worker_id='',heartbeat_at=NOW(),lease_expires_at=NULL,completed_at=NOW(),updated_at=NOW() WHERE tenant_id=$3 AND branch_id=$4 AND job_id=$5 AND id=$1 AND status='processing'")
+            .bind(chunk_id).bind(processed_rows).bind(&job.tenant_id).bind(&job.branch_id).bind(&job.id)
+            .execute(&mut *tx).await?.rows_affected();
+        if completed_chunk != 1 {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        let (aggregate_processed, completed_chunks, failed_chunks, remaining_chunks): (i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT COALESCE(SUM(processed_rows),0),COUNT(*) FILTER(WHERE status='completed'),COUNT(*) FILTER(WHERE status='failed'),COUNT(*) FILTER(WHERE status<>'completed') FROM integration_import_chunks WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3",
+        )
+        .bind(&job.tenant_id).bind(&job.branch_id).bind(&job.id).fetch_one(&mut *tx).await?;
+        let completed = remaining_chunks == 0 && failed_chunks == 0;
+        sqlx::query("UPDATE integration_import_jobs SET status=CASE WHEN $4 THEN 'completed' ELSE 'processing' END,processed_rows=$5,next_row=$5,completed_chunks=$6,failed_chunks=$7,worker_id='',heartbeat_at=NOW(),lease_expires_at=NULL,last_error='',completed_at=CASE WHEN $4 THEN NOW() ELSE NULL END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(&job.tenant_id).bind(&job.branch_id).bind(&job.id).bind(completed)
+            .bind(aggregate_processed as i32).bind(completed_chunks as i32).bind(failed_chunks as i32)
+            .execute(&mut *tx).await?;
+    } else {
+        let completed = end >= job.total_rows as usize;
+        sqlx::query("UPDATE integration_import_jobs SET status=CASE WHEN $2 THEN 'completed' ELSE 'queued' END,processed_rows=$3,next_row=$3,last_error='',completed_at=CASE WHEN $2 THEN NOW() ELSE NULL END,updated_at=NOW() WHERE tenant_id=$4 AND branch_id=$5 AND id=$1")
+            .bind(&job.id).bind(completed).bind(end as i32).bind(&job.tenant_id).bind(&job.branch_id).execute(&mut *tx).await?;
+    }
     insert_audit(
         &mut tx,
         &job.tenant_id,
@@ -1328,6 +1854,78 @@ async fn apply_opening_stock(
     .await
 }
 
+async fn apply_client_membership_row(
+    tx: &mut Transaction<'_, Postgres>,
+    job: &ClaimedImportJob,
+    batch_id: &str,
+    row: &Value,
+) -> Result<(), sqlx::Error> {
+    let line = value_i64(row, "source_row_number")? as i32;
+    let (membership_id, created_membership_plan) = match row
+        .get("membership_id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        Some(id) => (id.to_string(), false),
+        None => {
+            let created = sqlx::query_scalar::<_, String>(
+                r#"INSERT INTO memberships(tenant_id,branch_id,name,code,plan_type,price_paise,validity_days,notes,active)
+                   VALUES($1,$2,$3->>'membership_name',$3->>'membership_code','discount',($3->>'price_paid_paise')::BIGINT,
+                          CASE WHEN NULLIF($3->>'expires_at','') IS NULL THEN 0 ELSE GREATEST(0,(($3->>'expires_at')::DATE-($3->>'assigned_at')::DATE)) END,
+                          'Created from data migration',TRUE)
+                   ON CONFLICT (tenant_id,branch_id,code) DO NOTHING RETURNING id"#,
+            )
+            .bind(&job.tenant_id)
+            .bind(&job.branch_id)
+            .bind(row)
+            .fetch_optional(&mut **tx)
+            .await?;
+            match created {
+                Some(id) => (id, true),
+                None => {
+                    let id = sqlx::query_scalar(
+                        "SELECT id FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND code=$3",
+                    )
+                    .bind(&job.tenant_id)
+                    .bind(&job.branch_id)
+                    .bind(value_str(row, "membership_code")?)
+                    .fetch_one(&mut **tx)
+                    .await?;
+                    (id, false)
+                }
+            }
+        }
+    };
+    let target_id: String = sqlx::query_scalar(
+        r#"INSERT INTO client_memberships(
+             tenant_id,branch_id,client_id,membership_id,assigned_at,expires_at,active,source_sale_id,
+             migration_price_paid_paise,migration_balance_paise,migration_staff_id,migration_source_id,import_job_id,created_at,updated_at)
+           VALUES($1,$2,$3,$4,($5->>'assigned_at')::DATE,CASE WHEN $5->>'expires_at'='' THEN NULL ELSE ($5->>'expires_at')::DATE END,
+             ($5->>'active')::BOOLEAN,$6,($5->>'price_paid_paise')::BIGINT,($5->>'balance_paise')::BIGINT,
+             NULLIF($5->>'staff_id',''),$6,$7,NOW(),NOW())
+           ON CONFLICT (tenant_id,branch_id,migration_source_id) WHERE migration_source_id<>'' DO NOTHING RETURNING id"#,
+    )
+    .bind(&job.tenant_id)
+    .bind(&job.branch_id)
+    .bind(value_str(row, "client_id")?)
+    .bind(&membership_id)
+    .bind(row)
+    .bind(value_str(row, "source_external_id")?)
+    .bind(&job.id)
+    .fetch_one(&mut **tx)
+    .await?;
+    mark_row_action(
+        tx,
+        job,
+        batch_id,
+        line,
+        "created",
+        &target_id,
+        &json!({"membershipId":membership_id,"createdMembershipPlan":created_membership_plan}),
+    )
+    .await
+}
+
 async fn apply_transaction_row(
     tx: &mut Transaction<'_, Postgres>,
     job: &ClaimedImportJob,
@@ -1452,6 +2050,295 @@ async fn apply_transaction_row(
         }
         MigrationEntity::PurchaseBills => {
             apply_purchase_bill_row(tx, job, batch_id, row, line).await
+        }
+        _ => Err(sqlx::Error::RowNotFound),
+    }
+}
+
+async fn apply_extended_row(
+    tx: &mut Transaction<'_, Postgres>,
+    job: &ClaimedImportJob,
+    batch_id: &str,
+    row: &Value,
+) -> Result<(), sqlx::Error> {
+    let line = value_i64(row, "source_row_number")? as i32;
+    let external_id = value_str(row, "source_external_id")?;
+    let occurred_at = row
+        .get("occurred_at")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty());
+    match job.entity {
+        MigrationEntity::Refunds => {
+            let sale_id = value_str(row, "sale_id")?;
+            let amount = value_i64(row, "amount_paise")?;
+            let method = value_str(row, "payment_method")?;
+            let (paid, total, status, client_id, staff_id): (i64, i64, String, String, String) = sqlx::query_as(
+                "SELECT paid_paise,total_paise,status,client_id,staff_id FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).fetch_one(&mut **tx).await?;
+            let refunded: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(SUM(amount_paise),0)::BIGINT FROM pos_invoice_refunds WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).fetch_one(&mut **tx).await?;
+            if refunded
+                .checked_add(amount)
+                .is_none_or(|next_refund| next_refund > paid)
+            {
+                return Err(sqlx::Error::Protocol(
+                    "REFUND_EXCEEDS_REFUNDABLE_BALANCE".into(),
+                ));
+            }
+            let refundable_payments: Vec<(String, i64)> = sqlx::query_as(
+                r#"SELECT payment.id,
+                          payment.amount_paise-COALESCE((SELECT SUM(allocation.amount_paise) FROM pos_refund_payment_allocations allocation WHERE allocation.tenant_id=$1 AND allocation.branch_id=$2 AND allocation.pos_payment_id=payment.id),0)::BIGINT AS available
+                   FROM pos_payments payment
+                   WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND payment.sale_id=$3
+                     AND LOWER(payment.method)=LOWER($4)
+                     AND payment.amount_paise-COALESCE((SELECT SUM(allocation.amount_paise) FROM pos_refund_payment_allocations allocation WHERE allocation.tenant_id=$1 AND allocation.branch_id=$2 AND allocation.pos_payment_id=payment.id),0)>0
+                   ORDER BY payment.created_at,payment.id FOR UPDATE OF payment"#,
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).bind(method).fetch_all(&mut **tx).await?;
+            if refundable_payments.is_empty() {
+                return Err(sqlx::Error::Protocol("REFUND_PAYMENT_NOT_FOUND".into()));
+            }
+            if refundable_payments
+                .iter()
+                .try_fold(0_i64, |total, (_, available)| total.checked_add(*available))
+                .is_none_or(|available| amount > available)
+            {
+                return Err(sqlx::Error::Protocol(
+                    "REFUND_EXCEEDS_REFUNDABLE_BALANCE".into(),
+                ));
+            }
+            let refund_id: String = sqlx::query_scalar(
+                "INSERT INTO pos_invoice_refunds(tenant_id,branch_id,sale_id,actor_user_id,amount_paise,reason,notes,idempotency_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,COALESCE($9::TIMESTAMPTZ,NOW())) RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).bind(&job.created_by).bind(amount)
+             .bind(value_str(row,"reason")?).bind(value_str(row,"notes")?).bind(format!("migration:{external_id}")).bind(occurred_at)
+             .fetch_one(&mut **tx).await?;
+            let credit_note_number = format!("MIG-CN-{}-{line}", &job.id[..job.id.len().min(8)]);
+            let credit_note_id: String = sqlx::query_scalar(
+                "INSERT INTO pos_credit_notes(tenant_id,branch_id,sale_id,credit_note_number,amount_paise,reason,notes,idempotency_key,actor_user_id,refund_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE($11::TIMESTAMPTZ,NOW())) RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).bind(&credit_note_number).bind(amount)
+             .bind(value_str(row,"reason")?).bind(value_str(row,"notes")?).bind(format!("migration:{external_id}"))
+             .bind(&job.created_by).bind(&refund_id).bind(occurred_at).fetch_one(&mut **tx).await?;
+            sqlx::query("UPDATE pos_invoice_refunds SET credit_note_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(&refund_id).bind(&credit_note_id).execute(&mut **tx).await?;
+            let mut remaining = amount;
+            for (payment_id, available) in refundable_payments {
+                let allocated = remaining.min(available);
+                sqlx::query("INSERT INTO pos_refund_payment_allocations(tenant_id,branch_id,refund_id,pos_payment_id,method,amount_paise) VALUES($1,$2,$3,$4,$5,$6)")
+                    .bind(&job.tenant_id).bind(&job.branch_id).bind(&refund_id).bind(payment_id).bind(method).bind(allocated).execute(&mut **tx).await?;
+                remaining -= allocated;
+                if remaining == 0 {
+                    break;
+                }
+            }
+            let next_refunded = refunded + amount;
+            sqlx::query("UPDATE pos_sales SET status=CASE WHEN $4>=paid_paise THEN 'refunded' ELSE 'partial_refund' END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).bind(next_refunded).execute(&mut **tx).await?;
+            membership_service::reverse_rewards_for_refund(
+                tx,
+                &job.tenant_id,
+                &job.branch_id,
+                &client_id,
+                &staff_id,
+                sale_id,
+                &refund_id,
+                next_refunded,
+                total,
+            )
+            .await
+            .map_err(accounting_error)?;
+            accounting_service::post_refund(
+                tx,
+                &job.tenant_id,
+                &job.branch_id,
+                &refund_id,
+                &[RefundSettlement {
+                    method: method.into(),
+                    amount_paise: amount,
+                }],
+            )
+            .await
+            .map_err(accounting_error)?;
+            let journal_ids: Vec<String> = sqlx::query_scalar("SELECT id FROM accounting_journal_entries WHERE tenant_id=$1 AND branch_id=$2 AND source_type='refund' AND source_id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(&refund_id).fetch_all(&mut **tx).await?;
+            mark_row_action(tx, job, batch_id, line, "created", &refund_id, &json!({"saleId":sale_id,"saleStatus":status,"creditNoteId":credit_note_id,"journalIds":journal_ids})).await
+        }
+        MigrationEntity::GiftCards => {
+            let initial = value_i64(row, "initial_amount_paise")?;
+            let balance = value_i64(row, "balance_paise")?;
+            if balance > initial {
+                return Err(sqlx::Error::Protocol(
+                    "GIFT_CARD_BALANCE_EXCEEDS_INITIAL".into(),
+                ));
+            }
+            let card_id: String = sqlx::query_scalar(
+                "INSERT INTO gift_cards(tenant_id,branch_id,code,client_id,initial_amount_paise,balance_paise,status,expires_at,idempotency_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::DATE,$9,COALESCE($10::TIMESTAMPTZ,NOW())) RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"code")?).bind(value_str(row,"client_id")?)
+             .bind(initial).bind(balance).bind(value_str(row,"status")?).bind(row.get("expires_at").and_then(Value::as_str))
+             .bind(format!("migration:{external_id}")).bind(occurred_at).fetch_one(&mut **tx).await?;
+            sqlx::query("INSERT INTO gift_card_transactions(tenant_id,branch_id,gift_card_id,transaction_type,delta_paise,balance_after_paise,idempotency_key,notes,created_at) VALUES($1,$2,$3,'issue',$4,$4,$5,'Migrated gift-card issue',COALESCE($6::TIMESTAMPTZ,NOW()))")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(&card_id).bind(initial).bind(format!("migration:{external_id}:issue")).bind(occurred_at).execute(&mut **tx).await?;
+            if balance != initial {
+                sqlx::query("INSERT INTO gift_card_transactions(tenant_id,branch_id,gift_card_id,transaction_type,delta_paise,balance_after_paise,idempotency_key,notes,created_at) VALUES($1,$2,$3,'adjustment_debit',$4,$5,$6,'Migrated current balance',COALESCE($7::TIMESTAMPTZ,NOW()))")
+                    .bind(&job.tenant_id).bind(&job.branch_id).bind(&card_id).bind(balance-initial).bind(balance)
+                    .bind(format!("migration:{external_id}:balance")).bind(occurred_at).execute(&mut **tx).await?;
+            }
+            mark_row_action(tx, job, batch_id, line, "created", &card_id, &json!({})).await
+        }
+        MigrationEntity::Loyalty => {
+            let id: String = sqlx::query_scalar(
+                "INSERT INTO membership_reward_ledger(tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,expires_at,staff_id,note,idempotency_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::DATE,$9,$10,$11,COALESCE($12::TIMESTAMPTZ,NOW())) RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"client_id")?).bind(value_str(row,"sale_id")?)
+             .bind(value_str(row,"transaction_type")?).bind(value_i64(row,"points")? as i32).bind(value_i64(row,"balance_after")? as i32)
+             .bind(row.get("expires_at").and_then(Value::as_str)).bind(value_str(row,"staff_id")?).bind(value_str(row,"note")?)
+             .bind(format!("migration:{external_id}")).bind(occurred_at).fetch_one(&mut **tx).await?;
+            mark_row_action(tx, job, batch_id, line, "created", &id, &json!({})).await
+        }
+        MigrationEntity::Payroll => {
+            let staff_id = value_str(row, "staff_id")?;
+            if value_i64(row, "gross_paise")?.checked_sub(value_i64(row, "deductions_paise")?)
+                != Some(value_i64(row, "net_paise")?)
+            {
+                return Err(sqlx::Error::Protocol("PAYROLL_TOTAL_MISMATCH".into()));
+            }
+            let (staff_name, employee_code): (String, Option<String>) = sqlx::query_as(
+                "SELECT CONCAT_WS(' ',first_name,last_name),NULLIF(employee_code,'') FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(staff_id).fetch_one(&mut **tx).await?;
+            let run_id: String = sqlx::query_scalar(
+                "INSERT INTO staff_payroll_runs(tenant_id,branch_id,period_start,period_end,status,created_by) VALUES($1,$2,$3::DATE,$4::DATE,$5,$6) ON CONFLICT(tenant_id,branch_id,cycle,period_start,period_end) DO UPDATE SET updated_at=NOW() RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"period_start")?).bind(value_str(row,"period_end")?)
+             .bind(value_str(row,"status")?).bind(&job.created_by).fetch_one(&mut **tx).await?;
+            let item_status = if value_str(row, "status")? == "partially_paid" {
+                "finalized"
+            } else {
+                value_str(row, "status")?
+            };
+            let item_id: String = sqlx::query_scalar(
+                r#"INSERT INTO staff_payroll_items(tenant_id,branch_id,payroll_run_id,staff_id,staff_name,employee_code,earned_salary_paise,overtime_paise,commission_paise,adjustment_paise,penalty_paise,gross_paise,deductions_paise,net_paise,notes,status,calculation_json)
+                   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,JSONB_BUILD_OBJECT('source','migration','externalId',$17)) RETURNING id"#,
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(&run_id).bind(staff_id).bind(staff_name).bind(employee_code)
+             .bind(value_i64(row,"earned_salary_paise")?).bind(value_i64(row,"overtime_paise")?).bind(value_i64(row,"commission_paise")?)
+             .bind(value_i64(row,"adjustment_paise")?).bind(value_i64(row,"penalty_paise")?).bind(value_i64(row,"gross_paise")?)
+             .bind(value_i64(row,"deductions_paise")?).bind(value_i64(row,"net_paise")?).bind(value_str(row,"notes")?).bind(item_status).bind(external_id)
+             .fetch_one(&mut **tx).await?;
+            sqlx::query("UPDATE staff_payroll_runs run SET gross_paise=summary.gross,deductions_paise=summary.deductions,net_paise=summary.net,staff_count=summary.staff_count,updated_at=NOW() FROM (SELECT COALESCE(SUM(gross_paise),0)::BIGINT gross,COALESCE(SUM(deductions_paise),0)::BIGINT deductions,COALESCE(SUM(net_paise),0)::BIGINT net,COUNT(*)::INTEGER staff_count FROM staff_payroll_items WHERE payroll_run_id=$3) summary WHERE run.tenant_id=$1 AND run.branch_id=$2 AND run.id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(&run_id).execute(&mut **tx).await?;
+            mark_row_action(
+                tx,
+                job,
+                batch_id,
+                line,
+                "created",
+                &item_id,
+                &json!({"payrollRunId":run_id}),
+            )
+            .await
+        }
+        MigrationEntity::Commissions => {
+            let sale_id = value_str(row, "sale_id")?;
+            let sale_line_id = value_str(row, "sale_line_id")?;
+            let split_bps = value_i64(row, "split_bps")?;
+            let rate_percent = value_i64(row, "rate_percent")?;
+            if !(1..=10_000).contains(&split_bps) {
+                return Err(sqlx::Error::Protocol(
+                    "COMMISSION_SPLIT_EXCEEDS_10000_BPS".into(),
+                ));
+            }
+            if !(0..=100).contains(&rate_percent) {
+                return Err(sqlx::Error::Protocol("COMMISSION_RATE_OUT_OF_RANGE".into()));
+            }
+            sqlx::query_scalar::<_, i32>(
+                "SELECT 1 FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND id=$4 FOR UPDATE",
+            )
+            .bind(&job.tenant_id)
+            .bind(&job.branch_id)
+            .bind(sale_id)
+            .bind(sale_line_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| sqlx::Error::Protocol("COMMISSION_SALE_LINE_NOT_FOUND".into()))?;
+            let existing_split: i64 = sqlx::query_scalar(
+                "SELECT COALESCE(SUM(split_bps),0)::BIGINT FROM pos_staff_commission_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND sale_line_id=$3",
+            )
+            .bind(&job.tenant_id)
+            .bind(&job.branch_id)
+            .bind(sale_line_id)
+            .fetch_one(&mut **tx)
+            .await?;
+            if existing_split
+                .checked_add(split_bps)
+                .is_none_or(|total| total > 10_000)
+            {
+                return Err(sqlx::Error::Protocol(
+                    "COMMISSION_SPLIT_EXCEEDS_10000_BPS".into(),
+                ));
+            }
+            let (business_date, sale_created_at): (NaiveDate, DateTime<Utc>) = sqlx::query_as("SELECT business_date,created_at FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).fetch_one(&mut **tx).await?;
+            let id: String = sqlx::query_scalar(
+                "INSERT INTO pos_staff_commission_snapshots(tenant_id,branch_id,sale_id,sale_line_id,staff_id,line_type,item_id,split_bps,base_paise,rate_percent,commission_paise,rule_source,rule_name,business_date,sale_created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'migration',$12,$13,$14) RETURNING id",
+            ).bind(&job.tenant_id).bind(&job.branch_id).bind(sale_id).bind(sale_line_id).bind(value_str(row,"staff_id")?)
+             .bind(value_str(row,"line_type")?).bind(value_str(row,"item_id")?).bind(split_bps as i32)
+             .bind(value_i64(row,"base_paise")?).bind(rate_percent as i32).bind(value_i64(row,"commission_paise")?)
+             .bind(format!("Migrated {external_id}")).bind(business_date).bind(sale_created_at).fetch_one(&mut **tx).await?;
+            mark_row_action(tx, job, batch_id, line, "created", &id, &json!({})).await
+        }
+        MigrationEntity::ClientNotes => {
+            let id: String = sqlx::query_scalar("INSERT INTO client_notes(tenant_id,branch_id,client_id,note_type,note,created_by,created_at) VALUES($1,$2,$3,$4,$5,$6,COALESCE($7::TIMESTAMPTZ,NOW())) RETURNING id")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"client_id")?).bind(value_str(row,"note_type")?)
+                .bind(value_str(row,"note")?).bind(&job.created_by).bind(occurred_at).fetch_one(&mut **tx).await?;
+            mark_row_action(
+                tx,
+                job,
+                batch_id,
+                line,
+                "created",
+                &id,
+                &json!({"fileTable":"client_notes"}),
+            )
+            .await
+        }
+        MigrationEntity::Files => {
+            let content = STANDARD
+                .decode(value_str(row, "content_base64")?)
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+            let owner_type = value_str(row, "owner_type")?;
+            let id: String = if owner_type == "client" {
+                sqlx::query_scalar("INSERT INTO client_treatment_photos(tenant_id,branch_id,client_id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,content,uploaded_by) VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id")
+                    .bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"owner_id")?)
+                    .bind(row.get("appointment_id").and_then(Value::as_str).unwrap_or(""))
+                    .bind(value_str(row,"caption")?).bind(value_str(row,"file_name")?).bind(value_str(row,"content_type")?).bind(content.len() as i32)
+                    .bind(value_str(row,"sha256")?).bind(value_str(row,"photo_type")?).bind(content).bind(&job.created_by).fetch_one(&mut **tx).await?
+            } else {
+                sqlx::query_scalar("INSERT INTO staff_files(tenant_id,branch_id,staff_id,file_kind,file_name,content_type,byte_size,content,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id")
+                    .bind(&job.tenant_id).bind(&job.branch_id).bind(value_str(row,"owner_id")?).bind(value_str(row,"file_kind")?)
+                    .bind(value_str(row,"file_name")?).bind(value_str(row,"content_type")?).bind(content.len() as i32).bind(content).bind(&job.created_by)
+                    .fetch_one(&mut **tx).await?
+            };
+            mark_row_action(tx, job, batch_id, line, "created", &id, &json!({"fileTable":if owner_type=="client"{"client_treatment_photos"}else{"staff_files"}})).await
+        }
+        MigrationEntity::StockMovements => {
+            let item_id = value_str(row, "inventory_item_id")?;
+            let (before, before_cost): (i32, i64) = sqlx::query_as("SELECT stock_quantity,unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(item_id).fetch_one(&mut **tx).await?;
+            let delta = value_i64(row, "quantity_delta")? as i32;
+            let after = before
+                .checked_add(delta)
+                .ok_or_else(|| sqlx::Error::Protocol("stock movement overflow".into()))?;
+            if after < 0 {
+                return Err(sqlx::Error::Protocol("NEGATIVE_STOCK_NOT_ALLOWED".into()));
+            }
+            let supplied_cost = value_i64(row, "unit_cost_paise")?;
+            let cost = if supplied_cost == 0 {
+                before_cost
+            } else {
+                supplied_cost
+            };
+            sqlx::query("UPDATE inventory_items SET stock_quantity=$4,unit_cost_paise=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(item_id).bind(after).bind(cost).execute(&mut **tx).await?;
+            let ledger_id: String = sqlx::query_scalar("INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,adjustment_reason,adjustment_idempotency_key,created_at) VALUES($1,$2,$3,'adjustment',$4,$5,$6,$7,$8,COALESCE($9::TIMESTAMPTZ,NOW())) RETURNING id")
+                .bind(&job.tenant_id).bind(&job.branch_id).bind(item_id).bind(delta).bind(cost).bind(after).bind(value_str(row,"reason")?)
+                .bind(format!("migration:{external_id}")).bind(occurred_at).fetch_one(&mut **tx).await?;
+            mark_row_action(tx, job, batch_id, line, "created", &ledger_id, &json!({"ledgerId":ledger_id,"inventoryItemId":item_id,"stockQuantity":before,"unitCostPaise":before_cost})).await
         }
         _ => Err(sqlx::Error::RowNotFound),
     }
@@ -1789,7 +2676,20 @@ pub async fn rollback_job(
     };
     if matches!(
         entity.as_str(),
-        "appointments" | "sales" | "invoices" | "payments" | "expenses" | "purchase-bills"
+        "appointments"
+            | "sales"
+            | "invoices"
+            | "payments"
+            | "expenses"
+            | "purchase-bills"
+            | "refunds"
+            | "gift-cards"
+            | "loyalty"
+            | "payroll"
+            | "commissions"
+            | "client-notes"
+            | "files"
+            | "stock-movements"
     ) {
         return rollback_transaction_job(tx, tenant, branch, id, actor, &entity).await;
     }
@@ -1800,19 +2700,28 @@ pub async fn rollback_job(
         "products" => Some("DELETE FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='created' AND target_id IS NOT NULL)"),
         "suppliers" => Some("DELETE FROM suppliers WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='created' AND target_id IS NOT NULL)"),
         "memberships" => Some("DELETE FROM memberships WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='created' AND target_id IS NOT NULL)"),
+        "client-memberships" => None,
         "packages" => Some("DELETE FROM packages WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='created' AND target_id IS NOT NULL)"),
         "inventory" => None,
         _ => return Err(sqlx::Error::RowNotFound),
     };
-    let deleted = match delete_sql {
-        Some(sql) => sqlx::query(sql)
-            .bind(tenant)
-            .bind(branch)
-            .bind(id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected(),
-        None => 0,
+    let deleted = if entity == "client-memberships" {
+        let deleted = sqlx::query("DELETE FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT target_id FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='created' AND target_id IS NOT NULL)")
+            .bind(tenant).bind(branch).bind(id).execute(&mut *tx).await?.rows_affected();
+        sqlx::query("DELETE FROM memberships plan WHERE plan.tenant_id=$1 AND plan.branch_id=$2 AND plan.id IN (SELECT DISTINCT result.before_snapshot->>'membershipId' FROM integration_import_row_results result WHERE result.tenant_id=$1 AND result.branch_id=$2 AND result.job_id=$3 AND result.action='created' AND COALESCE((result.before_snapshot->>'createdMembershipPlan')::BOOLEAN,FALSE)) AND NOT EXISTS (SELECT 1 FROM client_memberships assigned WHERE assigned.tenant_id=$1 AND assigned.branch_id=$2 AND assigned.membership_id=plan.id)")
+            .bind(tenant).bind(branch).bind(id).execute(&mut *tx).await?;
+        deleted
+    } else {
+        match delete_sql {
+            Some(sql) => sqlx::query(sql)
+                .bind(tenant)
+                .bind(branch)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected(),
+            None => 0,
+        }
     };
     let merged_rows = sqlx::query_as::<_, (String, Value)>(
         "SELECT target_id,before_snapshot FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND action='merged' AND target_id IS NOT NULL ORDER BY source_row_number",
@@ -1919,6 +2828,7 @@ async fn rollback_transaction_job(
             "payments" => Some("payment"),
             "expenses" => Some("migration_expense"),
             "purchase-bills" => Some("purchase_grn"),
+            "refunds" => Some("refund"),
             _ => None,
         };
         if matches!(entity, "sales" | "invoices") {
@@ -1968,6 +2878,108 @@ async fn rollback_transaction_job(
                 .execute(&mut *tx)
                 .await?
                 .rows_affected() as i64;
+            }
+            "refunds" => {
+                let sale_id = snapshot.get("saleId").and_then(Value::as_str).unwrap_or("");
+                sqlx::query("DELETE FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND source_refund_id=$3")
+                    .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?;
+                sqlx::query("DELETE FROM pos_credit_notes WHERE tenant_id=$1 AND branch_id=$2 AND refund_id=$3")
+                    .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?;
+                sqlx::query("DELETE FROM pos_refund_payment_allocations WHERE tenant_id=$1 AND branch_id=$2 AND refund_id=$3")
+                    .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?;
+                deleted += sqlx::query(
+                    "DELETE FROM pos_invoice_refunds WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                )
+                .bind(tenant)
+                .bind(branch)
+                .bind(target_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+                if !sale_id.is_empty() {
+                    sqlx::query("UPDATE pos_sales SET status=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                        .bind(tenant).bind(branch).bind(sale_id).bind(snapshot.get("saleStatus").and_then(Value::as_str).unwrap_or("paid"))
+                        .execute(&mut *tx).await?;
+                }
+            }
+            "gift-cards" => {
+                deleted += sqlx::query(
+                    "DELETE FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                )
+                .bind(tenant)
+                .bind(branch)
+                .bind(target_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+            }
+            "loyalty" => {
+                deleted += sqlx::query("DELETE FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                    .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?.rows_affected() as i64;
+            }
+            "payroll" => {
+                let run_id = snapshot
+                    .get("payrollRunId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                deleted += sqlx::query(
+                    "DELETE FROM staff_payroll_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                )
+                .bind(tenant)
+                .bind(branch)
+                .bind(target_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+                if !run_id.is_empty() {
+                    sqlx::query("DELETE FROM staff_payroll_runs run WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND NOT EXISTS(SELECT 1 FROM staff_payroll_items item WHERE item.payroll_run_id=run.id)")
+                        .bind(tenant).bind(branch).bind(run_id).execute(&mut *tx).await?;
+                }
+            }
+            "commissions" => {
+                deleted += sqlx::query("DELETE FROM pos_staff_commission_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                    .bind(tenant).bind(branch).bind(target_id).execute(&mut *tx).await?.rows_affected() as i64;
+            }
+            "client-notes" => {
+                deleted += sqlx::query(
+                    "DELETE FROM client_notes WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                )
+                .bind(tenant)
+                .bind(branch)
+                .bind(target_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+            }
+            "files" => {
+                let table = snapshot
+                    .get("fileTable")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let sql = match table {
+                    "client_treatment_photos" => "DELETE FROM client_treatment_photos WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                    "staff_files" => "DELETE FROM staff_files WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+                    _ => return Err(sqlx::Error::RowNotFound),
+                };
+                deleted += sqlx::query(sql)
+                    .bind(tenant)
+                    .bind(branch)
+                    .bind(target_id)
+                    .execute(&mut *tx)
+                    .await?
+                    .rows_affected() as i64;
+            }
+            "stock-movements" => {
+                reverse_inventory_ledger(
+                    &mut tx,
+                    tenant,
+                    branch,
+                    target_id,
+                    actor,
+                    "Migration stock movement rollback",
+                )
+                .await?;
+                restored += 1;
             }
             "sales" | "invoices" => {
                 if action == "merged" {
@@ -2384,6 +3396,40 @@ fn into_mapping(row: MigrationMappingRow) -> Result<MigrationMapping, sqlx::Erro
     })
 }
 
+fn into_alias(row: MigrationAliasRow) -> Result<MigrationAlias, sqlx::Error> {
+    Ok(MigrationAlias {
+        id: row.id,
+        entity: decode_enum("alias entity", &row.entity)?,
+        source_provider: decode_enum("alias provider", &row.source_provider)?,
+        alias: row.alias,
+        target_field: row.target_field,
+        created_by: row.created_by,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    })
+}
+
+fn into_mapping_approval(
+    row: MigrationMappingApprovalRow,
+) -> Result<MigrationMappingApproval, sqlx::Error> {
+    Ok(MigrationMappingApproval {
+        id: row.id,
+        entity: decode_enum("mapping approval entity", &row.entity)?,
+        source_provider: decode_enum("mapping approval provider", &row.source_provider)?,
+        rule_version: row.rule_version,
+        fingerprint: row.fingerprint,
+        source_file_id: row.source_file_id,
+        source_sheet: row.source_sheet,
+        source_column: row.source_column,
+        target_field: row.target_field,
+        confidence_percentage: u8::try_from(row.confidence_percentage)
+            .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+        decision: row.decision_json,
+        approved_by: row.approved_by,
+        approved_at: row.approved_at,
+    })
+}
+
 fn into_claimed_job(row: ClaimedImportJobRow) -> Result<ClaimedImportJob, sqlx::Error> {
     Ok(ClaimedImportJob {
         id: row.id,
@@ -2466,6 +3512,18 @@ mod tests {
         .await
         .unwrap();
         sqlx::raw_sql(include_str!(
+            "../../migrations/0170_data_migration_file_intake.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0174_data_migration_large_worker.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
             "../../migrations/0187_data_migration_governance.sql"
         ))
         .execute(pool)
@@ -2477,6 +3535,44 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0294_data_migration_financial_reconciliation.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0295_data_migration_dependencies.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0302_data_migration_schema_alias_registry.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[test]
+    fn dependency_phases_order_master_data_before_payments() {
+        assert!(
+            dependency_phase(MigrationEntity::Clients)
+                < dependency_phase(MigrationEntity::Appointments)
+        );
+        assert!(
+            dependency_phase(MigrationEntity::Appointments)
+                < dependency_phase(MigrationEntity::Invoices)
+        );
+        assert!(
+            dependency_phase(MigrationEntity::Invoices)
+                < dependency_phase(MigrationEntity::Payments)
+        );
+        assert_eq!(
+            dependency_phase(MigrationEntity::Clients),
+            dependency_phase(MigrationEntity::Staff)
+        );
     }
 
     #[sqlx::test(migrations = false)]
@@ -2748,5 +3844,35 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+
+        let alias = save_alias(
+            &pool,
+            "tenant-1",
+            "branch-1",
+            MigrationEntity::Clients,
+            MigrationProvider::Dingg,
+            "Customer Contact",
+            "phone",
+            "owner-1",
+        )
+        .await
+        .unwrap();
+        assert_eq!(alias.target_field, "phone");
+        assert_eq!(
+            list_aliases(
+                &pool,
+                "tenant-1",
+                "branch-1",
+                Some(MigrationEntity::Clients)
+            )
+            .await
+            .unwrap()
+            .len(),
+            1
+        );
+        assert!(list_aliases(&pool, "tenant-1", "branch-2", None)
+            .await
+            .unwrap()
+            .is_empty());
     }
 }

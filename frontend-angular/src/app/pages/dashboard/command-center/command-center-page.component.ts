@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch';
+type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch' | 'growth';
 
 type DashboardSnapshot = {
   totalAppointments: number;
@@ -327,6 +327,67 @@ type MultiBranchCommandCenter = {
   audit: BranchAudit[];
 };
 
+type GrowthIntelligence = {
+  owner: {
+    revenue30dPaise: number;
+    todayAppointments: number;
+    openAppointments: number;
+    openDueCount: number;
+    outstandingPaise: number;
+    lowStockCount: number;
+    activeStaffCount: number;
+    activeClientCount: number;
+    attentionCount: number;
+  };
+  revenueLeaks: Array<{
+    kind: string;
+    title: string;
+    message: string;
+    impactPaise: number;
+    severity: string;
+    nextAction: string;
+  }>;
+  clientMemory: Array<{
+    clientId: string;
+    clientName: string;
+    visitCount: number;
+    revenuePaise: number;
+    lastVisitAt?: string | null;
+    noShowCount: number;
+    cancellationCount: number;
+    riskScore: number;
+    nextAction: string;
+  }>;
+  campaignPlanner: Array<{
+    key: string;
+    title: string;
+    segmentKey: string;
+    audienceCount: number;
+    draftCount: number;
+    approvedCount: number;
+    actionLabel: string;
+  }>;
+  staffCoach: Array<{
+    staffId: string;
+    staffName: string;
+    revenuePaise: number;
+    serviceCount: number;
+    activeGoalCount: number;
+    noShowCount: number;
+    priority: string;
+    coachingFocus: string;
+  }>;
+  digitalTwin: Array<{
+    key: string;
+    title: string;
+    metricLabel: string;
+    metricValue: number;
+    impactPaise: number;
+    recommendation: string;
+  }>;
+  generatedAt: string;
+};
+
 const EMPTY_SNAPSHOT: DashboardSnapshot = {
   totalAppointments: 0,
   todayAppointments: 0,
@@ -363,6 +424,7 @@ export class CommandCenterPageComponent implements OnInit {
   franchise: FranchiseControls | null = null;
   membershipSettings: MembershipSettings | null = null;
   multiBranch: MultiBranchCommandCenter | null = null;
+  growth: GrowthIntelligence | null = null;
   locationStartDate = this.dateOffset(-29);
   locationEndDate = this.dateOffset(0);
   locationRegion = '';
@@ -372,6 +434,9 @@ export class CommandCenterPageComponent implements OnInit {
   locationActionBusy = false;
   locationActionStatus = '';
   locationActionError = '';
+  growthActionBusy = false;
+  growthActionStatus = '';
+  growthActionError = '';
   locationDrilldownKind = '';
   locationDrilldownRows: Array<Record<string, any>> = [];
   locationDrilldownLoading = false;
@@ -381,6 +446,7 @@ export class CommandCenterPageComponent implements OnInit {
   controlsLoading = true;
   paymentLoading = true;
   locationLoading = true;
+  growthLoading = true;
   updatedAt: Date | null = null;
   readonly errors = new Set<Source>();
 
@@ -395,6 +461,7 @@ export class CommandCenterPageComponent implements OnInit {
     this.loadControls();
     this.loadPayments();
     this.loadLocations();
+    this.loadGrowth();
   }
 
   get branchLabel(): string {
@@ -430,7 +497,7 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get loading(): boolean {
-    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.paymentLoading || this.locationLoading;
+    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.paymentLoading || this.locationLoading || this.growthLoading;
   }
 
   get liveState(): 'loading' | 'live' | 'partial' | 'unavailable' {
@@ -595,6 +662,26 @@ export class CommandCenterPageComponent implements OnInit {
   get syncGapCount(): number {
     return this.multiBranch?.summary.syncGapCount
       ?? this.branchComparisons.reduce((total, branch) => total + branch.serviceSyncGap + branch.productSyncGap, 0);
+  }
+
+  get clientMemoryHighlights(): GrowthIntelligence['clientMemory'] {
+    return (this.growth?.clientMemory ?? []).slice(0, 4);
+  }
+
+  get revenueLeakHighlights(): GrowthIntelligence['revenueLeaks'] {
+    return (this.growth?.revenueLeaks ?? []).slice(0, 4);
+  }
+
+  get campaignPlannerHighlights(): GrowthIntelligence['campaignPlanner'] {
+    return (this.growth?.campaignPlanner ?? []).slice(0, 4);
+  }
+
+  get staffCoachHighlights(): GrowthIntelligence['staffCoach'] {
+    return (this.growth?.staffCoach ?? []).slice(0, 4);
+  }
+
+  get digitalTwinScenarios(): GrowthIntelligence['digitalTwin'] {
+    return (this.growth?.digitalTwin ?? []).slice(0, 4);
   }
 
   get locationRegions(): string[] {
@@ -786,6 +873,12 @@ export class CommandCenterPageComponent implements OnInit {
     return `${(Number(bps || 0) / 100).toFixed(1)}%`;
   }
 
+  twinMetric(row: GrowthIntelligence['digitalTwin'][number]): string {
+    return row.metricLabel.toLowerCase().includes('revenue')
+      ? this.money(row.metricValue)
+      : String(row.metricValue || 0);
+  }
+
   label(value: string): string {
     return String(value || 'Unknown').replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
@@ -884,6 +977,50 @@ export class CommandCenterPageComponent implements OnInit {
     });
   }
 
+  private loadGrowth(): void {
+    this.growthLoading = true;
+    this.optional('growth', this.api.get<ApiEnvelope<GrowthIntelligence> | GrowthIntelligence>('/api/v1/reports/growth-intelligence'))
+      .pipe(finalize(() => (this.growthLoading = false)))
+      .subscribe((growth) => {
+        this.growth = this.unwrap(growth) ?? null;
+        if (growth) this.touch();
+      });
+  }
+
+
+  createCampaignDraft(plan: GrowthIntelligence['campaignPlanner'][number]): void {
+    if (this.growthActionBusy) return;
+    if (!window.confirm(`Create a campaign draft for ${plan.title}?`)) return;
+    this.growthActionBusy = true;
+    this.growthActionStatus = '';
+    this.growthActionError = '';
+    this.api.post(`/api/v1/reports/growth-intelligence/campaign-plans/${encodeURIComponent(plan.key)}/draft`, {})
+      .pipe(finalize(() => (this.growthActionBusy = false)))
+      .subscribe({
+        next: () => {
+          this.growthActionStatus = `Campaign draft created for ${plan.title}`;
+          this.loadGrowth();
+        },
+        error: (error) => { this.growthActionError = this.apiError(error, 'Unable to create campaign draft'); },
+      });
+  }
+
+  createStaffGoal(staff: GrowthIntelligence['staffCoach'][number]): void {
+    if (this.growthActionBusy) return;
+    if (!window.confirm(`Create a coaching goal for ${staff.staffName || staff.staffId}?`)) return;
+    this.growthActionBusy = true;
+    this.growthActionStatus = '';
+    this.growthActionError = '';
+    this.api.post(`/api/v1/reports/growth-intelligence/staff/${encodeURIComponent(staff.staffId)}/coaching-goal`, {})
+      .pipe(finalize(() => (this.growthActionBusy = false)))
+      .subscribe({
+        next: () => {
+          this.growthActionStatus = `Coaching goal created for ${staff.staffName || staff.staffId}`;
+          this.loadGrowth();
+        },
+        error: (error) => { this.growthActionError = this.apiError(error, 'Unable to create coaching goal'); },
+      });
+  }
   private apiError(error: any, fallback: string): string {
     return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback;
   }

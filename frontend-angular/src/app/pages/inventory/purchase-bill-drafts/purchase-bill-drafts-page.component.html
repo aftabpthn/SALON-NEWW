@@ -57,14 +57,44 @@
       <button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="close()"><i class="bi bi-x-lg"></i></button>
     </header>
     <div class="drawer-body">
-      @if (detail.draft.warnings.length) {
-        <section class="warning-panel">
-          <strong>{{ 'inventory.ui.cbe42e3c92' | translate }}</strong>@for (warning of detail.draft.warnings; track warning) {
-          <span>{{ warning }}</span>
+      <section class="review-gates" aria-label="Review readiness">
+        @for (gate of reviewGates(); track gate.label) {
+          <div [class.ready]="gate.ready"><i class="bi" [class.bi-check-circle-fill]="gate.ready" [class.bi-circle]="!gate.ready"></i><span>{{ gate.label }}</span></div>
         }
       </section>
-    }
-    <form class="header-form" (ngSubmit)="saveHeader()" id="bill-header-form">
+
+      <div class="review-top">
+        <section class="source-panel">
+          <header><h3>Bill preview</h3><button type="button" (click)="downloadSource()" [disabled]="!previewUrl">Download</button></header>
+          @if (previewLoading) { <div class="preview-state">Loading preview…</div> }
+          @if (previewError) { <div class="preview-state error">{{ previewError }}</div> }
+          @if (previewSafeUrl && previewMime === 'application/pdf') {
+            <iframe [src]="previewSafeUrl" title="Purchase bill PDF preview"></iframe>
+          }
+          @if (previewUrl && previewMime !== 'application/pdf') {
+            <img [src]="previewUrl" [alt]="detail.draft.sourceFileName" />
+          }
+          @if (!previewLoading && !previewUrl && !previewError) { <div class="preview-state">No preview available</div> }
+        </section>
+
+        <div class="review-details">
+          @if (latestExtraction(); as extraction) {
+            <section class="extraction-panel">
+              <header><h3>Extraction evidence</h3><span class="status" [class.good]="extraction.status === 'succeeded'">{{ extraction.status }}</span></header>
+              <div><span>Provider</span><strong>{{ extraction.provider || 'manual review' }}</strong></div>
+              <div><span>Model</span><strong>{{ extraction.modelVersion || '—' }}</strong></div>
+              <div><span>Created</span><strong>{{ date(extraction.createdAt) }}</strong></div>
+              @if (extraction.errorMessage) { <p class="error-text">{{ extraction.errorMessage }}</p> }
+            </section>
+          }
+          @if (detail.draft.warnings.length) {
+            <section class="warning-panel">
+              <strong>{{ 'inventory.ui.cbe42e3c92' | translate }}</strong>@for (warning of detail.draft.warnings; track warning) {
+              <span>{{ warning }}</span>
+            }
+          </section>
+        }
+        <form class="header-form" (ngSubmit)="saveHeader()" id="bill-header-form">
       <h3>{{ 'inventory.ui.ba03aa8b94' | translate }}</h3>
       <label>{{ 'inventory.ui.55edd46287' | translate }}<select [(ngModel)]="detail.draft.supplierId" (ngModelChange)="supplierChanged()" name="supplier" [disabled]="!canEdit()"><option value="">{{ 'inventory.ui.cfce526861' | translate }}</option>@for (row of suppliers; track row) {
       <option [value]="row.id" [disabled]="!row.active">{{ row.name }} · {{ row.gstin || 'No GSTIN' }}</option>
@@ -82,10 +112,20 @@
     <label>{{ 'inventory.ui.0efd5d1325' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.sgstPaise)" (ngModelChange)="detail.draft.sgstPaise = paise($event)" name="sgst" [disabled]="!canEdit()" /></label>
     <label>{{ 'inventory.ui.e766e67178' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.igstPaise)" (ngModelChange)="detail.draft.igstPaise = paise($event)" name="igst" [disabled]="!canEdit()" /></label>
     <label>{{ 'inventory.ui.c7fa0883b8' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(detail.draft.totalPaise)" (ngModelChange)="detail.draft.totalPaise = paise($event)" name="total" [disabled]="!canEdit()" /><small>{{ fieldConfidence('total_paise') }}% confidence</small></label>
-    <button type="submit" [disabled]="saving || !canEdit()">{{ 'inventory.ui.2820069788' | translate }}</button>
-  </form>
+    <div class="header-actions">
+      @if (!detail.draft.supplierId && detail.draft.supplierName.trim()) {
+        <button type="button" (click)="createSupplier()" [disabled]="saving || !canEdit()">Create & link supplier</button>
+      }
+      <button class="primary" type="submit" [disabled]="saving || !canEdit()">{{ 'inventory.ui.2820069788' | translate }}</button>
+    </div>
+    @if (headerMismatch(); as mismatch) {
+      <div class="mismatch" [class.blocking]="mismatch > 100 || mismatch < -100">Header total mismatch: {{ money(mismatch) }}</div>
+    }
+        </form>
+      </div>
+    </div>
   <section class="line-section">
-    <header><h3>{{ 'inventory.ui.94cb66d8a9' | translate }}</h3><button type="button" (click)="addLine()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.a147e4e01e' | translate }}</button></header>
+    <header><h3>{{ 'inventory.ui.94cb66d8a9' | translate }}</h3><div class="line-actions"><input type="search" placeholder="Search product name, SKU or barcode" [(ngModel)]="itemSearch" (ngModelChange)="searchItems($event)" /><button type="button" (click)="addLine()" [disabled]="saving || !canEdit()">{{ 'inventory.ui.a147e4e01e' | translate }}</button></div></header>
     @for (line of detail.lines; track line) {
       <article class="line-card">
         <header><strong>Line {{ line.lineNumber }} · {{ line.rawName || itemLabel(line.inventoryItemId) }}</strong><span>{{ confidence(line.confidenceBps) }}</span></header>
@@ -96,18 +136,34 @@
         <label>{{ 'inventory.ui.d36392a051' | translate }}<input maxlength="240" [(ngModel)]="line.rawName" [name]="'name' + line.id" [disabled]="!canEdit()" /></label>
         <label>{{ 'inventory.ui.13c2c0a597' | translate }}<input maxlength="120" [(ngModel)]="line.supplierSku" [name]="'sku' + line.id" [disabled]="!canEdit()" /></label>
         <label>{{ 'inventory.ui.e8aa70fbf4' | translate }}<input maxlength="40" [(ngModel)]="line.hsnSac" [name]="'hsn' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.3d405900cd' | translate }}<input type="number" min="1" [(ngModel)]="line.purchaseQuantity" [name]="'purchaseQty' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.3d405900cd' | translate }}<input type="number" min="1" [(ngModel)]="line.purchaseQuantity" (ngModelChange)="recalculateQuantity(line)" [name]="'purchaseQty' + line.id" [disabled]="!canEdit()" /></label>
         <label>{{ 'inventory.ui.87dd2c9768' | translate }}<input type="number" min="1" [(ngModel)]="line.packSize" [name]="'pack' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.9151f8433f' | translate }}<input type="number" min="1" [(ngModel)]="line.conversionFactor" [name]="'conversion' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.915f65fbb6' | translate }}<input type="number" min="1" [(ngModel)]="line.quantity" [name]="'quantity' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.6e51fd9150' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(line.unitCostPaise)" (ngModelChange)="line.unitCostPaise = paise($event)" [name]="'cost' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.0cd95d4129' | translate }}<input type="number" min="0" max="100" step="0.01" [ngModel]="line.discountBps / 100" (ngModelChange)="line.discountBps = $event * 100" [name]="'discount' + line.id" [disabled]="!canEdit()" /></label>
-        <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="'gst' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.9151f8433f' | translate }}<input type="number" min="1" [(ngModel)]="line.conversionFactor" (ngModelChange)="recalculateQuantity(line)" [name]="'conversion' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.915f65fbb6' | translate }}<input type="number" min="1" [(ngModel)]="line.quantity" (ngModelChange)="recalculateLine(line)" [name]="'quantity' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.6e51fd9150' | translate }}<input type="number" min="0" step="0.01" [ngModel]="rupees(line.unitCostPaise)" (ngModelChange)="line.unitCostPaise = paise($event); recalculateLine(line)" [name]="'cost' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.0cd95d4129' | translate }}<input type="number" min="0" max="100" step="0.01" [ngModel]="line.discountBps / 100" (ngModelChange)="line.discountBps = $event * 100; recalculateLine(line)" [name]="'discount' + line.id" [disabled]="!canEdit()" /></label>
+        <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input type="number" min="0" max="100" [(ngModel)]="line.gstPercent" (ngModelChange)="recalculateLine(line)" [name]="'gst' + line.id" [disabled]="!canEdit()" /></label>
         <label>{{ 'inventory.ui.8bf1ef5668' | translate }}<input maxlength="120" [(ngModel)]="line.batchNumber" [name]="'batch' + line.id" [disabled]="!canEdit()" /></label>
         <label>{{ 'inventory.ui.ba8f571e0f' | translate }}<as-date-picker [value]="line.expiryDate ?? ''" (valueChange)="line.expiryDate = $event" [ariaLabel]="'Expiry line ' + line.lineNumber" [disabled]="!canEdit()"></as-date-picker></label>
       </div>
-      @if (line.warnings.length) {
-        <div class="line-warnings">@for (warning of line.warnings; track warning) {
+      <div class="line-totals">
+        <span>Discount <strong>{{ money(lineExpected(line).discount) }}</strong></span><span>Taxable <strong>{{ money(lineExpected(line).taxable) }}</strong></span>
+        <span>GST <strong>{{ money(lineExpected(line).gst) }}</strong></span><span>Total <strong>{{ money(lineExpected(line).total) }}</strong></span>
+        @if (lineExpected(line).mismatch; as mismatch) { <span class="mismatch" [class.blocking]="mismatch > 100 || mismatch < -100">Mismatch <strong>{{ money(mismatch) }}</strong></span> }
+      </div>
+      @if (!line.inventoryItemId && canEdit()) {
+        <div class="create-item-panel">
+          <strong>Create and link inventory item</strong>
+          <label>SKU<input maxlength="80" [(ngModel)]="productDraft(line).sku" [name]="'newSku' + line.id" /></label>
+          <label>Category<input maxlength="120" [(ngModel)]="productDraft(line).category" [name]="'newCategory' + line.id" /></label>
+          <label>Stock unit<select [(ngModel)]="productDraft(line).unit" [name]="'newUnit' + line.id"><option value="">Select</option><option value="pcs">Pcs</option><option value="bottle">Bottle</option><option value="kit">Kit</option><option value="ml">Ml</option><option value="g">G</option></select></label>
+          <label>Package unit<select [(ngModel)]="productDraft(line).packageUnit" [name]="'newPackageUnit' + line.id"><option value="">Select</option><option value="pcs">Pcs</option><option value="box">Box</option><option value="bottle">Bottle</option><option value="jar">Jar</option><option value="tube">Tube</option><option value="pouch">Pouch</option><option value="pack">Pack</option></select></label>
+          <label class="check"><input type="checkbox" [(ngModel)]="productDraft(line).batchTracked" [name]="'newBatchTracked' + line.id" /> Batch tracked</label>
+          <button type="button" (click)="createAndLinkItem(line)" [disabled]="saving">Create & link</button>
+        </div>
+      }
+      @if (lineWarnings(line).length) {
+        <div class="line-warnings">@for (warning of lineWarnings(line); track warning) {
           <span>{{ warning }}</span>
         }</div>
       }

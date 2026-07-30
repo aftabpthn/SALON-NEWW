@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -45,6 +46,20 @@ pub struct PaymentRefund {
     pub payload: Value,
 }
 
+#[derive(Debug, Clone)]
+pub struct SubscriptionPlan {
+    pub provider_plan_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubscriptionCheckout {
+    pub provider_subscription_id: String,
+    pub status: String,
+    pub short_url: String,
+    pub current_start: i64,
+    pub current_end: i64,
+}
+
 #[derive(Debug, Deserialize)]
 struct RazorpayLinkResponse {
     id: String,
@@ -57,6 +72,219 @@ struct RazorpayLinkResponse {
 struct RazorpayRefundResponse {
     id: String,
     status: Option<String>,
+}
+
+pub async fn create_subscription_plan(
+    settings: &Settings,
+    name: &str,
+    billing_interval: &str,
+    amount_paise: i64,
+    local_plan_id: &str,
+) -> Result<SubscriptionPlan, AppError> {
+    if amount_paise <= 0 || !matches!(billing_interval, "monthly" | "yearly") {
+        return Err(AppError::validation("invalid Razorpay subscription plan"));
+    }
+    let payload = request_json(
+        settings,
+        Method::POST,
+        "/plans",
+        Some(json!({
+            "period": billing_interval,
+            "interval": 1,
+            "item": {"name": name, "amount": amount_paise, "currency": "INR"},
+            "notes": {"saasPlanId": local_plan_id}
+        })),
+    )
+    .await?;
+    let id = required_provider_id(&payload, "plan_")?;
+    Ok(SubscriptionPlan {
+        provider_plan_id: id,
+    })
+}
+
+pub async fn create_subscription_checkout(
+    settings: &Settings,
+    provider_plan_id: &str,
+    total_count: i32,
+    tenant_id: &str,
+) -> Result<SubscriptionCheckout, AppError> {
+    if !provider_plan_id.starts_with("plan_") || !(1..=120).contains(&total_count) {
+        return Err(AppError::validation(
+            "invalid Razorpay subscription checkout",
+        ));
+    }
+    let payload = request_json(
+        settings,
+        Method::POST,
+        "/subscriptions",
+        Some(json!({
+            "plan_id": provider_plan_id,
+            "total_count": total_count,
+            "quantity": 1,
+            "customer_notify": 1,
+            "notes": {"saasTenantId": tenant_id}
+        })),
+    )
+    .await?;
+    subscription_checkout(payload)
+}
+
+pub async fn update_subscription_plan(
+    settings: &Settings,
+    subscription_id: &str,
+    provider_plan_id: &str,
+    effective: &str,
+) -> Result<SubscriptionCheckout, AppError> {
+    if !provider_plan_id.starts_with("plan_") || !matches!(effective, "now" | "cycle_end") {
+        return Err(AppError::validation("invalid Razorpay plan change"));
+    }
+    subscription_action(
+        settings,
+        Method::PATCH,
+        subscription_id,
+        "",
+        json!({"plan_id":provider_plan_id,"schedule_change_at":effective,"customer_notify":1}),
+    )
+    .await
+}
+
+pub async fn pause_subscription(
+    settings: &Settings,
+    subscription_id: &str,
+) -> Result<SubscriptionCheckout, AppError> {
+    subscription_action(
+        settings,
+        Method::POST,
+        subscription_id,
+        "/pause",
+        json!({"pause_at":"now"}),
+    )
+    .await
+}
+
+pub async fn resume_subscription(
+    settings: &Settings,
+    subscription_id: &str,
+) -> Result<SubscriptionCheckout, AppError> {
+    subscription_action(
+        settings,
+        Method::POST,
+        subscription_id,
+        "/resume",
+        json!({"resume_at":"now"}),
+    )
+    .await
+}
+
+pub async fn cancel_subscription(
+    settings: &Settings,
+    subscription_id: &str,
+    at_cycle_end: bool,
+) -> Result<SubscriptionCheckout, AppError> {
+    subscription_action(
+        settings,
+        Method::POST,
+        subscription_id,
+        "/cancel",
+        json!({"cancel_at_cycle_end":at_cycle_end}),
+    )
+    .await
+}
+
+async fn subscription_action(
+    settings: &Settings,
+    method: Method,
+    subscription_id: &str,
+    suffix: &str,
+    body: Value,
+) -> Result<SubscriptionCheckout, AppError> {
+    if !subscription_id.starts_with("sub_") {
+        return Err(AppError::validation(
+            "invalid Razorpay subscription reference",
+        ));
+    }
+    let payload = request_json(
+        settings,
+        method,
+        &format!("/subscriptions/{subscription_id}{suffix}"),
+        Some(body),
+    )
+    .await?;
+    subscription_checkout(payload)
+}
+
+async fn request_json(
+    settings: &Settings,
+    method: Method,
+    path: &str,
+    body: Option<Value>,
+) -> Result<Value, AppError> {
+    let (key_id, key_secret) = credentials(settings)?;
+    let mut request = reqwest::Client::new()
+        .request(method, format!("{RAZORPAY_API_BASE}{path}"))
+        .basic_auth(key_id, Some(key_secret));
+    if let Some(body) = body {
+        request = request.json(&body);
+    }
+    let response = request.send().await.map_err(|_| {
+        AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay subscription request failed",
+        )
+    })?;
+    let status = response.status();
+    let payload = response.json::<Value>().await.map_err(|_| {
+        AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay returned an invalid subscription response",
+        )
+    })?;
+    if !status.is_success() {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            payload
+                .pointer("/error/description")
+                .and_then(Value::as_str)
+                .unwrap_or("Razorpay subscription request was rejected"),
+        ));
+    }
+    Ok(payload)
+}
+
+fn subscription_checkout(payload: Value) -> Result<SubscriptionCheckout, AppError> {
+    let id = required_provider_id(&payload, "sub_")?;
+    Ok(SubscriptionCheckout {
+        provider_subscription_id: id,
+        status: payload
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        short_url: payload
+            .get("short_url")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        current_start: payload
+            .get("current_start")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+        current_end: payload
+            .get("current_end")
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+    })
+}
+
+fn required_provider_id(payload: &Value, prefix: &str) -> Result<String, AppError> {
+    let id = payload.get("id").and_then(Value::as_str).unwrap_or("");
+    if !id.starts_with(prefix) {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_UNAVAILABLE",
+            "Razorpay subscription response is incomplete",
+        ));
+    }
+    Ok(id.to_string())
 }
 
 pub async fn create_payment_refund(
@@ -282,13 +510,24 @@ fn valid_refund_idempotency_key(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_refund_idempotency_key;
+    use super::{subscription_checkout, valid_refund_idempotency_key};
+    use serde_json::json;
 
     #[test]
     fn razorpay_refund_idempotency_key_is_provider_safe() {
         assert!(valid_refund_idempotency_key("refund-1234567890"));
         assert!(!valid_refund_idempotency_key("short"));
         assert!(!valid_refund_idempotency_key("invalid key!"));
+    }
+
+    #[test]
+    fn subscription_response_requires_provider_identity() {
+        let parsed = subscription_checkout(
+            json!({"id":"sub_123","status":"created","short_url":"https://rzp.io/i/x"}),
+        )
+        .unwrap();
+        assert_eq!(parsed.provider_subscription_id, "sub_123");
+        assert!(subscription_checkout(json!({"id":"pay_123"})).is_err());
     }
 }
 

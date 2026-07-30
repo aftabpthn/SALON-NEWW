@@ -154,10 +154,14 @@ export class PackagesPageComponent implements OnInit {
     } catch (error) { this.error = error instanceof Error ? error.message : 'Package save failed'; }
     finally { this.saving = false; }
   }
-  async remove(item: Package) {
-    if (!confirm(`Delete ${item.name}?`)) return;
-    try { await firstValueFrom(this.api.delete<ApiEnvelope<unknown>>(`/packages/${item.id}`)); await this.loadPackages(); this.message = 'Package deleted'; }
-    catch { this.error = 'Package delete failed'; }
+  async setArchived(item: Package) {
+    const action = item.active ? 'Archive' : 'Restore';
+    if (!confirm(`${action} ${item.name}?`)) return;
+    try {
+      await firstValueFrom(this.api.patch<ApiEnvelope<Package>>(`/packages/${item.id}`, { active: !item.active }));
+      await this.loadPackages();
+      this.message = `Package ${item.active ? 'archived' : 'restored'}`;
+    } catch { this.error = `Package ${action.toLowerCase()} failed`; }
   }
   async saveSettings() {
     this.saving = true; this.error = '';

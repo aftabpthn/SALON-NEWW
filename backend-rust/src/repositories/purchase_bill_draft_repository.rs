@@ -99,6 +99,12 @@ pub struct DraftEventRecord {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, FromRow)]
+pub struct DraftSourceRecord {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+}
+
 pub struct ExtractedDraftData<'a> {
     pub supplier_name: &'a str,
     pub supplier_gstin: &'a str,
@@ -159,6 +165,16 @@ pub async fn get(
     id: &str,
 ) -> Result<Option<DraftRecord>, sqlx::Error> {
     sqlx::query_as(&format!("SELECT {DRAFT_COLUMNS} FROM purchase_bill_drafts WHERE tenant_id=$1 AND branch_id=$2 AND id=$3"))
+        .bind(tenant).bind(branch).bind(id).fetch_optional(db).await
+}
+
+pub async fn source(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<Option<DraftSourceRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT source_content_type AS content_type, source_bytes AS bytes FROM purchase_bill_drafts WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(tenant).bind(branch).bind(id).fetch_optional(db).await
 }
 

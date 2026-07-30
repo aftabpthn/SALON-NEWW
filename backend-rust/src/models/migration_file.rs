@@ -2,14 +2,24 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::migration::{MigrationEntity, MigrationProvider};
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMigrationUploadRequest {
     pub file_name: String,
+    #[serde(default)]
+    pub provider: MigrationProvider,
     pub content_type: Option<String>,
     pub size_bytes: i64,
     pub total_parts: i32,
     pub expected_sha256: Option<String>,
+    #[serde(default = "default_retention_days")]
+    pub retention_days: i32,
+}
+
+fn default_retention_days() -> i32 {
+    90
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -22,6 +32,10 @@ pub struct CompleteMigrationUploadRequest {
 #[serde(rename_all = "camelCase")]
 pub struct MigrationUploadSession {
     pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub provider: MigrationProvider,
+    pub uploaded_by: String,
     pub file_name: String,
     pub extension: String,
     pub declared_content_type: String,
@@ -39,6 +53,7 @@ pub struct MigrationUploadSession {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub retention_days: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,6 +71,10 @@ pub struct MigrationSourceArtifact {
 #[serde(rename_all = "camelCase")]
 pub struct MigrationSourceFile {
     pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub provider: MigrationProvider,
+    pub uploaded_by: String,
     pub upload_session_id: String,
     pub original_file_name: String,
     pub extension: String,
@@ -66,9 +85,53 @@ pub struct MigrationSourceFile {
     pub sha256: String,
     pub evidence_status: String,
     pub read_only: bool,
+    pub encrypted: bool,
+    pub encryption_scheme: String,
+    pub retention_until: DateTime<Utc>,
+    pub purged_at: Option<DateTime<Utc>>,
     pub manifest: Value,
     pub artifacts: Vec<MigrationSourceArtifact>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationSourceColumnProfile {
+    pub original_header: String,
+    pub normalized_header: String,
+    pub sample_values: Vec<String>,
+    pub detected_data_type: String,
+    pub empty_percentage: f64,
+    pub unique_percentage: f64,
+    pub duplicate_count: i64,
+    pub minimum: Option<String>,
+    pub maximum: Option<String>,
+    pub patterns: Vec<String>,
+    pub possible_crm_entity: Option<MigrationEntity>,
+    pub possible_crm_field: Option<String>,
+    pub invalid_value_count: i64,
+    pub statistics_exact: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationSourceSheet {
+    pub id: String,
+    pub name: String,
+    pub file_name: String,
+    pub row_count: i64,
+    pub column_count: i32,
+    pub columns: Vec<String>,
+    pub column_profiles: Vec<MigrationSourceColumnProfile>,
+    pub targets: Vec<MigrationEntity>,
+    pub importable: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationSourceProfile {
+    pub provider: MigrationProvider,
+    pub sheets: Vec<MigrationSourceSheet>,
 }
 
 #[derive(Debug, Clone, Serialize)]

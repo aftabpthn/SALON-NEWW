@@ -16,6 +16,7 @@ pub struct SecuritySettingsRecord {
 pub struct SecurityAuditRecord {
     pub id: String,
     pub user_id: Option<String>,
+    pub actor_name: String,
     pub session_id: Option<String>,
     pub branch_id: Option<String>,
     pub identity: Option<String>,
@@ -642,14 +643,17 @@ pub async fn list_audit(
 ) -> Result<Vec<SecurityAuditRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
-        SELECT id, user_id, session_id, branch_id, identity, event_type, outcome,
-               ip_address, details_json, created_at
-        FROM auth_audit_logs
-        WHERE tenant_id=$1 AND (branch_id=$2 OR branch_id IS NULL)
-          AND ($3='' OR event_type ILIKE '%' || $3 || '%' OR outcome ILIKE '%' || $3 || '%'
-               OR COALESCE(identity, '') ILIKE '%' || $3 || '%')
-          AND created_at >= NOW() - ($4 * INTERVAL '1 day')
-        ORDER BY created_at DESC
+        SELECT audit.id, audit.user_id, COALESCE(NULLIF(actor.full_name,''),audit.identity,audit.user_id,'System') AS actor_name,
+               audit.session_id, audit.branch_id, audit.identity, audit.event_type, audit.outcome,
+               audit.ip_address, audit.details_json, audit.created_at
+        FROM auth_audit_logs audit
+        LEFT JOIN users actor ON actor.tenant_id=audit.tenant_id AND actor.id=audit.user_id
+        WHERE audit.tenant_id=$1 AND (audit.branch_id=$2 OR audit.branch_id IS NULL)
+          AND ($3='' OR audit.event_type ILIKE '%' || $3 || '%' OR audit.outcome ILIKE '%' || $3 || '%'
+               OR COALESCE(audit.identity, '') ILIKE '%' || $3 || '%' OR COALESCE(actor.full_name,'') ILIKE '%' || $3 || '%'
+               OR audit.details_json::TEXT ILIKE '%' || $3 || '%')
+          AND audit.created_at >= NOW() - ($4 * INTERVAL '1 day')
+        ORDER BY audit.created_at DESC
         LIMIT $5
         "#,
     )

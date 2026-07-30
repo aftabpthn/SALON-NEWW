@@ -137,7 +137,10 @@ pub struct InventoryWriteRequest {
     pub sku: Option<String>,
     pub name: Option<String>,
     pub category: Option<String>,
+    pub brand: Option<String>,
     pub unit: Option<String>,
+    pub package_unit: Option<String>,
+    pub units_per_package: Option<i32>,
     pub stock_quantity: Option<i32>,
     pub reorder_point: Option<i32>,
     pub unit_cost_paise: Option<i64>,
@@ -180,7 +183,10 @@ pub struct InventoryResponse {
     pub sku: String,
     pub name: String,
     pub category: String,
+    pub brand: String,
     pub unit: String,
+    pub package_unit: String,
+    pub units_per_package: i32,
     pub stock_quantity: i32,
     pub reorder_point: i32,
     pub unit_cost_paise: i64,
@@ -870,6 +876,9 @@ async fn create_inventory(
 ) -> ApiResult<InventoryResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let name = required_text(payload.name, "name is required")?;
+    let unit = inventory_unit(payload.unit.as_deref().unwrap_or("pcs"))?;
+    let package_unit = inventory_package_unit(payload.package_unit.as_deref().unwrap_or("pcs"))?;
+    let units_per_package = positive_i32(payload.units_per_package, "unitsPerPackage")?;
     let hsn_code = tax_code(payload.hsn_code.as_deref(), "hsnCode")?;
     let barcode = barcode(payload.barcode.as_deref())?;
     let stock_quantity = non_negative_i32(payload.stock_quantity, "stockQuantity")?;
@@ -886,7 +895,10 @@ async fn create_inventory(
             sku: payload.sku.as_deref().unwrap_or_default(),
             name: &name,
             category: payload.category.as_deref().unwrap_or_default(),
-            unit: payload.unit.as_deref().unwrap_or("pcs"),
+            brand: payload.brand.as_deref().unwrap_or_default(),
+            unit: &unit,
+            package_unit: &package_unit,
+            units_per_package,
             stock_quantity,
             reorder_point: non_negative_i32(payload.reorder_point, "reorderPoint")?,
             unit_cost_paise: non_negative_i64(payload.unit_cost_paise, "unitCostPaise")?,
@@ -911,6 +923,16 @@ async fn update_inventory(
     Json(payload): Json<InventoryWriteRequest>,
 ) -> ApiResult<InventoryResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let unit = payload.unit.as_deref().map(inventory_unit).transpose()?;
+    let package_unit = payload
+        .package_unit
+        .as_deref()
+        .map(inventory_package_unit)
+        .transpose()?;
+    let units_per_package = payload
+        .units_per_package
+        .map(|value| positive_i32(Some(value), "unitsPerPackage"))
+        .transpose()?;
     let hsn_code = payload
         .hsn_code
         .as_deref()
@@ -930,7 +952,10 @@ async fn update_inventory(
             sku: payload.sku.as_deref(),
             name: payload.name.as_deref(),
             category: payload.category.as_deref(),
-            unit: payload.unit.as_deref(),
+            brand: payload.brand.as_deref(),
+            unit: unit.as_deref(),
+            package_unit: package_unit.as_deref(),
+            units_per_package,
             stock_quantity: payload.stock_quantity,
             reorder_point: payload.reorder_point,
             unit_cost_paise: payload.unit_cost_paise,
@@ -974,6 +999,45 @@ fn required_text(value: Option<String>, message: &'static str) -> Result<String,
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::validation(message))
+}
+
+fn inventory_unit(value: &str) -> Result<String, AppError> {
+    let unit = value.trim().to_ascii_lowercase();
+    matches!(unit.as_str(), "pcs" | "bottle" | "kit" | "ml" | "g")
+        .then_some(unit)
+        .ok_or_else(|| AppError::validation("unit must be pcs, bottle, kit, ml, or g"))
+}
+
+fn inventory_package_unit(value: &str) -> Result<String, AppError> {
+    let unit = value.trim().to_ascii_lowercase();
+    matches!(
+        unit.as_str(),
+        "pcs" | "box" | "bottle" | "jar" | "tube" | "pouch" | "pack"
+    )
+    .then_some(unit)
+    .ok_or_else(|| {
+        AppError::validation("packageUnit must be pcs, box, bottle, jar, tube, pouch, or pack")
+    })
+}
+
+fn positive_i32(value: Option<i32>, field: &'static str) -> Result<i32, AppError> {
+    value
+        .unwrap_or(1)
+        .gt(&0)
+        .then_some(value.unwrap_or(1))
+        .ok_or_else(|| AppError::validation(format!("{field} must be greater than 0")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inventory_unit;
+
+    #[test]
+    fn inventory_unit_accepts_options_and_rejects_numbers() {
+        assert_eq!(inventory_unit(" Bottle ").unwrap(), "bottle");
+        assert_eq!(inventory_unit("KIT").unwrap(), "kit");
+        assert!(inventory_unit("4000").is_err());
+    }
 }
 
 fn non_negative_i32(value: Option<i32>, field: &'static str) -> Result<i32, AppError> {
@@ -1027,7 +1091,10 @@ impl From<InventoryRecord> for InventoryResponse {
             sku: record.sku,
             name: record.name,
             category: record.category,
+            brand: record.brand,
             unit: record.unit,
+            package_unit: record.package_unit,
+            units_per_package: record.units_per_package,
             stock_quantity: record.stock_quantity,
             reorder_point: record.reorder_point,
             unit_cost_paise: record.unit_cost_paise,

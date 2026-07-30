@@ -50,7 +50,12 @@ export class LoginPageComponent implements OnInit {
   changingPassword = false;
   errorMessage = '';
   successMessage = '';
+  subscriptionStatus = '';
   ssoProviders: SsoProviders = { google: false, microsoft: false, saml: false };
+
+  get subscriptionTitle(): string {
+    return this.subscriptionStatus === 'paused' ? 'Subscription paused' : 'Subscription expired';
+  }
 
   ngOnInit(): void {
     if (this.auth.hasValidAccessToken() && this.auth.mustChangePassword) {
@@ -98,6 +103,7 @@ export class LoginPageComponent implements OnInit {
 
     this.errorMessage = '';
     this.successMessage = '';
+    this.subscriptionStatus = '';
     this.tenantContext = tenantContext;
     const { loginId, password, mfaCode } = this.loginForm.getRawValue();
     if (this.mfaRequired && !mfaCode.trim()) {
@@ -110,8 +116,7 @@ export class LoginPageComponent implements OnInit {
       .subscribe({
         next: (response) => this.handleLoginResponse(response),
         error: (error) => {
-          if (error?.error?.error?.details?.mfaRequired) this.mfaRequired = true;
-          this.errorMessage = this.readError(error);
+          this.handleAuthError(error);
         },
       });
   }
@@ -130,11 +135,12 @@ export class LoginPageComponent implements OnInit {
     }
     this.signingIn = true;
     this.errorMessage = '';
+    this.subscriptionStatus = '';
     this.tenantContext = tenantContext;
     try {
       this.handleLoginResponse(await this.webauthn.login(tenantContext, loginId));
     } catch (error) {
-      this.errorMessage = this.readError(error);
+      this.handleAuthError(error);
     } finally {
       this.signingIn = false;
     }
@@ -144,12 +150,13 @@ export class LoginPageComponent implements OnInit {
     if (!this.selectionToken || this.selectingBranchId) return;
 
     this.errorMessage = '';
+    this.subscriptionStatus = '';
     this.selectingBranchId = branch.branchId;
     this.auth.selectBranch(this.tenantContext, this.selectionToken, branch.branchId)
       .pipe(finalize(() => { this.selectingBranchId = ''; }))
       .subscribe({
         next: (tokens) => this.finishAuthentication(tokens, branch),
-        error: (error) => { this.errorMessage = this.readError(error); },
+        error: (error) => { this.handleAuthError(error); },
       });
   }
 
@@ -162,6 +169,7 @@ export class LoginPageComponent implements OnInit {
     this.loginForm.controls.mfaCode.setValue('');
     this.mfaRequired = false;
     this.errorMessage = '';
+    this.subscriptionStatus = '';
   }
 
   submitPasswordChange(): void {
@@ -224,7 +232,7 @@ export class LoginPageComponent implements OnInit {
     this.tenantContext = this.route.snapshot.queryParamMap.get('tenant') || this.auth.resolveTenantContext() || '';
     this.auth.exchangeSso(code).pipe(finalize(() => { this.signingIn = false; })).subscribe({
       next: (response) => this.handleLoginResponse(response),
-      error: (error) => { this.errorMessage = this.readError(error); },
+      error: (error) => { this.handleAuthError(error); },
     });
   }
 
@@ -250,6 +258,15 @@ export class LoginPageComponent implements OnInit {
 
   private isBranchSelection(response: LoginResponse): response is BranchSelectionResponse {
     return 'requiresBranchSelection' in response && response.requiresBranchSelection === true;
+  }
+
+  private handleAuthError(error: any): void {
+    if (error?.error?.error?.details?.mfaRequired) this.mfaRequired = true;
+    const status = error?.status === 403
+      ? String(error?.error?.error?.details?.subscriptionStatus || '')
+      : '';
+    this.subscriptionStatus = status;
+    this.errorMessage = status ? '' : this.readError(error);
   }
 
   private safeReturnUrl(): string {

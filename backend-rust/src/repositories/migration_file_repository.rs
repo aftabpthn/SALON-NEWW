@@ -5,6 +5,10 @@ use sqlx::{FromRow, PgPool};
 #[derive(Debug, Clone, FromRow)]
 pub struct UploadSessionRow {
     pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub source_provider: String,
+    pub created_by: String,
     pub original_file_name: String,
     pub file_extension: String,
     pub declared_content_type: String,
@@ -20,6 +24,7 @@ pub struct UploadSessionRow {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub retention_days: i32,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -33,6 +38,10 @@ pub struct UploadPartRow {
 #[derive(Debug, Clone, FromRow)]
 pub struct SourceFileRow {
     pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub source_provider: String,
+    pub created_by: String,
     pub upload_session_id: String,
     pub original_file_name: String,
     pub file_extension: String,
@@ -44,6 +53,9 @@ pub struct SourceFileRow {
     pub storage_key: String,
     pub evidence_status: String,
     pub read_only: bool,
+    pub encryption_scheme: String,
+    pub retention_until: DateTime<Utc>,
+    pub purged_at: Option<DateTime<Utc>>,
     pub manifest_json: Value,
     pub created_at: DateTime<Utc>,
 }
@@ -70,6 +82,7 @@ pub struct NewSourceFile<'a> {
     pub size_bytes: i64,
     pub sha256: &'a str,
     pub storage_key: &'a str,
+    pub encryption_scheme: &'a str,
     pub manifest_json: &'a Value,
 }
 
@@ -83,8 +96,8 @@ pub struct NewSourceArtifact<'a> {
     pub storage_key: &'a str,
 }
 
-const SESSION_COLUMNS: &str = "id,original_file_name,file_extension,declared_content_type,expected_size_bytes,expected_sha256,total_parts,received_parts,received_bytes,status,source_file_id,last_error,expires_at,created_at,updated_at,completed_at";
-const SOURCE_COLUMNS: &str = "id,upload_session_id,original_file_name,file_extension,declared_content_type,detected_content_type,file_format,size_bytes,sha256,storage_key,evidence_status,read_only,manifest_json,created_at";
+const SESSION_COLUMNS: &str = "id,tenant_id,branch_id,source_provider,created_by,original_file_name,file_extension,declared_content_type,expected_size_bytes,expected_sha256,total_parts,received_parts,received_bytes,status,source_file_id,last_error,expires_at,created_at,updated_at,completed_at,retention_days";
+const SOURCE_COLUMNS: &str = "id,tenant_id,branch_id,source_provider,created_by,upload_session_id,original_file_name,file_extension,declared_content_type,detected_content_type,file_format,size_bytes,sha256,storage_key,evidence_status,read_only,encryption_scheme,retention_until,purged_at,manifest_json,created_at";
 
 pub async fn create_session(
     db: &PgPool,
@@ -97,9 +110,11 @@ pub async fn create_session(
     size_bytes: i64,
     total_parts: i32,
     expected_sha256: &str,
+    source_provider: &str,
+    retention_days: i32,
 ) -> Result<UploadSessionRow, sqlx::Error> {
     let sql = format!(
-        "INSERT INTO integration_import_upload_sessions(tenant_id,branch_id,original_file_name,file_extension,declared_content_type,expected_size_bytes,expected_sha256,total_parts,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING {SESSION_COLUMNS}"
+        "INSERT INTO integration_import_upload_sessions(tenant_id,branch_id,original_file_name,file_extension,declared_content_type,expected_size_bytes,expected_sha256,total_parts,created_by,source_provider,retention_days) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING {SESSION_COLUMNS}"
     );
     let mut tx = db.begin().await?;
     let row = sqlx::query_as::<_, UploadSessionRow>(&sql)
@@ -112,6 +127,8 @@ pub async fn create_session(
         .bind(expected_sha256)
         .bind(total_parts)
         .bind(actor)
+        .bind(source_provider)
+        .bind(retention_days)
         .fetch_one(&mut *tx)
         .await?;
     sqlx::query("INSERT INTO integration_import_audit_events(tenant_id,branch_id,event_type,outcome,actor_user_id,details_json) VALUES($1,$2,'migration.upload.initiated','success',$3,$4)")
@@ -216,7 +233,7 @@ pub async fn complete_session(
     artifacts: &[NewSourceArtifact<'_>],
 ) -> Result<SourceFileRow, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let sql = format!("INSERT INTO integration_import_source_files(id,tenant_id,branch_id,upload_session_id,original_file_name,file_extension,declared_content_type,detected_content_type,file_format,size_bytes,sha256,storage_key,manifest_json,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING {SOURCE_COLUMNS}");
+    let sql = format!("INSERT INTO integration_import_source_files(id,tenant_id,branch_id,upload_session_id,original_file_name,file_extension,declared_content_type,detected_content_type,file_format,size_bytes,sha256,storage_key,manifest_json,created_by,source_provider,encryption_scheme,retention_until) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,s.source_provider,$15,NOW()+make_interval(days=>s.retention_days) FROM integration_import_upload_sessions s WHERE s.tenant_id=$2 AND s.branch_id=$3 AND s.id=$4 RETURNING {SOURCE_COLUMNS}");
     let row: SourceFileRow = sqlx::query_as(&sql)
         .bind(source.id)
         .bind(tenant_id)
@@ -232,6 +249,7 @@ pub async fn complete_session(
         .bind(source.storage_key)
         .bind(source.manifest_json)
         .bind(actor)
+        .bind(source.encryption_scheme)
         .fetch_one(&mut *tx)
         .await?;
     for artifact in artifacts {
@@ -311,6 +329,28 @@ pub async fn audit_evidence_read(
         serde_json::json!({"sourceFileId":source_id}),
     )
     .await
+}
+
+pub async fn mark_evidence_expired(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("UPDATE integration_import_source_files SET evidence_status='expired',purged_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND retention_until<=NOW() AND evidence_status<>'expired'")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(source_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO integration_import_audit_events(tenant_id,branch_id,event_type,outcome,actor_user_id,details_json) VALUES($1,$2,'migration.source_file.retention_purged','success','system',$3)")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(serde_json::json!({"sourceFileId":source_id}))
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
 }
 
 async fn audit(

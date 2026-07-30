@@ -69,3 +69,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .pricing-skill-row { display:grid; grid-template-columns:minmax(220px,1fr) 120px 130px; gap:12px; }
 .pricing-skill-row>label:first-child { min-width:0; }
 @media(max-width:720px){.service-assignment-toolbar,.service-category-group>header{align-items:stretch;flex-direction:column}.service-assignment-toolbar>label{min-width:0}.service-category-group header div:last-child{width:100%}.service-category-group header button{flex:1;min-height:44px}}
+
+.staff-shortcuts { display:flex; gap:8px; margin:0 0 12px; padding:8px 0; overflow-x:auto; scrollbar-width:thin; }
+.staff-shortcuts a { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:0 12px; border:1px solid #c9d5e5; border-radius:8px; background:#fff; color:#173f69; font-size:13px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.staff-shortcuts a:hover,.staff-shortcuts a:focus-visible,.staff-shortcuts a.active { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
+.header-actions { flex-wrap:wrap; justify-content:flex-end; }
+@media (max-width:720px) { .staff-shortcuts { width:100%; } .staff-shortcuts a { min-width:max-content; } }

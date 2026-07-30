@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,7 @@ use crate::{
         self, CreateMembership, MembershipRecord, UpdateMembership,
     },
     routes::context::tenant_branch,
+    services::{auth_service::AuthClaims, security_service},
     state::AppState,
 };
 
@@ -23,10 +24,14 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(list_memberships).post(create_membership),
         )
         .route(
+            "/memberships/:id/restore",
+            axum::routing::post(restore_membership),
+        )
+        .route(
             "/memberships/:id",
             axum::routing::get(get_membership)
                 .patch(update_membership)
-                .delete(delete_membership),
+                .delete(archive_membership),
         )
 }
 
@@ -117,6 +122,7 @@ async fn get_membership(
 
 async fn create_membership(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<MembershipWriteRequest>,
 ) -> ApiResult<MembershipResponse> {
@@ -154,16 +160,31 @@ async fn create_membership(
     .await
     .map_err(|_| AppError::internal("failed to create membership"))?;
 
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "membership.added",
+        serde_json::json!({"membershipId":row.id,"recordName":row.name}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(MembershipResponse::from(row))))
 }
 
 async fn update_membership(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<MembershipWriteRequest>,
 ) -> ApiResult<MembershipResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let previous = membership_repository::get(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load membership"))?
+        .ok_or_else(|| AppError::not_found("membership was not found"))?;
+    let requested_active = payload.active;
     let notes = payload.notes.as_deref();
     let service_ids_json = payload
         .service_ids
@@ -197,25 +218,80 @@ async fn update_membership(
     .map_err(|_| AppError::internal("failed to update membership"))?
     .ok_or_else(|| AppError::not_found("membership was not found"))?;
 
+    let (action, restorable) = match (previous.active, requested_active) {
+        (true, Some(false)) => ("membership.archived", true),
+        (false, Some(true)) => ("membership.restored", false),
+        _ => ("membership.edited", false),
+    };
+
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        action,
+        serde_json::json!({"membershipId":row.id,"recordName":row.name,"restorable":restorable}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(MembershipResponse::from(row))))
 }
 
-async fn delete_membership(
+async fn archive_membership(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let deleted = membership_repository::delete(&state.db, &tenant_id, &branch_id, &id)
+    let record = membership_repository::get(&state.db, &tenant_id, &branch_id, &id)
         .await
-        .map_err(|_| AppError::internal("failed to delete membership"))?;
+        .map_err(|_| AppError::internal("failed to load membership"))?
+        .ok_or_else(|| AppError::not_found("membership was not found"))?;
+    let archived = membership_repository::archive(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to archive membership"))?;
 
-    if !deleted {
-        return Err(AppError::not_found("membership was not found"));
+    if !archived {
+        return Err(AppError::conflict("membership is already archived"));
     }
 
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "membership.archived",
+        serde_json::json!({"membershipId":id,"recordName":record.name,"restorable":true}),
+    )
+    .await?;
+
     Ok(Json(ApiResponse::ok(
-        serde_json::json!({ "deleted": true, "id": id }),
+        serde_json::json!({ "deleted": false, "archived": true, "id": id }),
+    )))
+}
+
+async fn restore_membership(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let name = membership_repository::restore(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to restore membership"))?
+        .ok_or_else(|| AppError::conflict("membership is not archived"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "membership.restored",
+        serde_json::json!({"membershipId":id,"recordName":name,"restored":true}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"restored":true,"id":id}),
     )))
 }
 

@@ -115,6 +115,11 @@ export class AuthService {
     return token ? this.tokenClaims(token)?.sub ?? null : null;
   }
 
+  get currentRole(): string | null {
+    const token = this.accessToken;
+    return token ? this.tokenClaims(token)?.role ?? null : null;
+  }
+
   get mustChangePassword(): boolean {
     return localStorage.getItem(MUST_CHANGE_PASSWORD_KEY) === 'true';
   }
@@ -125,8 +130,8 @@ export class AuthService {
   }
 
   hasRole(...roles: string[]): boolean {
-    const role = this.accessToken ? this.tokenClaims(this.accessToken)?.role : null;
-    return Boolean(role && roles.some((allowed) => allowed.toLowerCase() === role.toLowerCase()));
+    const role = this.currentRole;
+    return Boolean(role && roles.some((allowed) => this.normalizedRole(allowed) === this.normalizedRole(role)));
   }
 
   hasPermission(...permissions: string[]): boolean {
@@ -134,11 +139,19 @@ export class AuthService {
     return permissions.some((required) => granted.includes(required));
   }
 
+  hasAccess(roles: readonly string[] = [], permissions: readonly string[] = []): boolean {
+    if (!roles.length && !permissions.length) return true;
+    return this.hasRole(...roles) || this.hasPermission(...permissions);
+  }
+
   resolveTenantContext(): string | null {
     const metaContext = document
       .querySelector<HTMLMetaElement>('meta[name="aurashine-tenant-context"]')
       ?.content.trim();
     if (metaContext) return metaContext;
+
+    const queryContext = new URLSearchParams(location.search).get('tenant')?.trim();
+    if (queryContext) return queryContext;
 
     if (environment.tenantContext.trim()) return environment.tenantContext.trim();
 
@@ -390,5 +403,15 @@ export class AuthService {
     } catch {
       return null;
     }
+  }
+
+  private normalizedRole(role: string): string {
+    const normalized = role.trim().toLowerCase().replace(/_/g, '-');
+    if (normalized === 'superadmin') return 'super-admin';
+    if (normalized === 'platformadmin') return 'platform-admin';
+    if (normalized === 'frontdesk') return 'front-desk';
+    if (normalized === 'inventorymanager') return 'inventory-manager';
+    if (normalized === 'marketinglead') return 'marketing-lead';
+    return normalized;
   }
 }

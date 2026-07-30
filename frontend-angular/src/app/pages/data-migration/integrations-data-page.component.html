@@ -27,6 +27,8 @@
           <small>{{ connector.lastError }}</small>
         }</span>@if (connector.provider === 'netsuite' && connector.status !== 'connected') {
         <label>Account ID<input [(ngModel)]="netsuiteAccountId" /></label>
+        }@if ((connector.provider === 'zenoti' || connector.provider === 'dingg') && connector.status !== 'connected') {
+        <div class="migration-connector-fields"><label>Credential<input type="password" autocomplete="new-password" [(ngModel)]="migrationConnectorDraft.credential" /></label><label>Auth<select [(ngModel)]="migrationConnectorDraft.authScheme"><option value="api_key">API key</option><option value="bearer">Bearer</option></select></label>@if (connector.provider === 'zenoti') {<label>Center IDs<input [(ngModel)]="migrationConnectorDraft.centerIds" /></label><label>From DD/MM/YYYY<input inputmode="numeric" [(ngModel)]="migrationConnectorDraft.startDate" /></label><label>To DD/MM/YYYY<input inputmode="numeric" [(ngModel)]="migrationConnectorDraft.endDate" /></label>}@if (connector.provider === 'dingg') {<label>Export URL<input type="url" [(ngModel)]="migrationConnectorDraft.exportUrl" /></label><label>File name<input [(ngModel)]="migrationConnectorDraft.sourceFileName" /></label>}<label>Mode<select [(ngModel)]="migrationConnectorDraft.mode"><option value="dry-run">Dry run</option><option value="commit">Commit</option></select></label></div>
         }<span class="row-actions">@if (connector.status !== 'connected') {
         <button type="button" [disabled]="busy" (click)="connectConnector(connector)">{{ connector.provider === 'zapier' ? 'API setup' : 'Connect' }}</button>
         }@if (connector.status === 'connected' && connector.provider !== 'zapier') {
@@ -133,10 +135,15 @@
   @if (drawer === 'import') {
     <div class="drawer-body">
       <span class="drawer-section-label">Source / upload</span>
-      <label>Entity<select [(ngModel)]="entity" (ngModelChange)="entityChanged()"><option value="">Select entity</option><option value="clients">Clients</option><option value="staff">Staff</option><option value="services">Services</option><option value="products">Products</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory / opening stock</option><option value="memberships">Memberships</option><option value="packages">Packages</option><option value="appointments">Appointments</option><option value="sales">Sales</option><option value="invoices">Invoices</option><option value="payments">Payments</option><option value="expenses">Expenses</option><option value="purchase-bills">Historical purchase bills</option></select></label>
+      <label>Source provider<select [(ngModel)]="sourceProvider"><option *ngFor="let provider of migrationProviders" [value]="provider">{{ providerLabel(provider) }}</option></select></label>
+      <label>Evidence retention days<input type="number" min="1" max="3650" step="1" [(ngModel)]="evidenceRetentionDays" /></label>
+      <label>Entity<select [(ngModel)]="entity" (ngModelChange)="entityChanged()"><option value="">Select entity</option><option value="clients">Clients</option><option value="staff">Staff</option><option value="services">Services</option><option value="products">Products</option><option value="suppliers">Suppliers</option><option value="inventory">Inventory / opening stock</option><option value="memberships">Membership plans</option><option value="client-memberships">Client memberships</option><option value="packages">Packages</option><option value="appointments">Appointments</option><option value="sales">Sales</option><option value="invoices">Invoices</option><option value="payments">Payments</option><option value="refunds">Refunds</option><option value="gift-cards">Gift cards</option><option value="loyalty">Loyalty history</option><option value="payroll">Payroll history</option><option value="commissions">Commissions</option><option value="client-notes">Client notes</option><option value="files">Attachments / images</option><option value="stock-movements">Stock movements</option><option value="expenses">Expenses</option><option value="purchase-bills">Historical purchase bills</option></select></label>
       <label class="file">Source file<input type="file" accept=".csv,.xlsx,.zip,text/csv,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" (change)="chooseFile($event)" /><span>{{ fileName || selectedSourceFile?.name || 'Choose file' }}</span></label>
+      @if (sourceSheets.length) {
+        <label>Workbook sheet<select [(ngModel)]="selectedSourceSheet" (ngModelChange)="suggestedMapping = {}; mappingOverrides = {}; mappingDecisions = []; approvalRequiredIssues = []; hardBlockingIssues = []; blockingMappingIssues = []; approvedAliasTargets = {}; mappingRuleVersion = ''; mappingFingerprint = ''; mappingSemanticSource = ''; semanticAdvisory = {}; importAnalysis = null"><option value="">Select sheet</option>@for (sheet of sourceSheets; track sheet.id) {<option [value]="sheet.id">{{ sheet.name }} · {{ sheet.rowCount }} rows</option>}</select></label>
+      }
       <span class="drawer-section-label">Mapping</span>
-      <label>Saved mapping<select [(ngModel)]="selectedMappingId" (ngModelChange)="mappingSource = ''; suggestedMapping = {}; importAnalysis = null"><option value="">Automatic mapping</option>@for (mapping of availableMappings; track mapping) {
+      <label>Saved mapping<select [(ngModel)]="selectedMappingId" (ngModelChange)="mappingSource = ''; mappingRuleVersion = ''; mappingFingerprint = ''; mappingSemanticSource = ''; semanticAdvisory = {}; suggestedMapping = {}; mappingOverrides = {}; mappingDecisions = []; approvalRequiredIssues = []; hardBlockingIssues = []; blockingMappingIssues = []; approvedAliasTargets = {}; importAnalysis = null"><option value="">Automatic mapping</option>@for (mapping of availableMappings; track mapping) {
       <option [value]="mapping.id">{{ mapping.name }}</option>
     }</select></label>
     <span class="drawer-section-label">Validation</span>
@@ -155,9 +162,42 @@
     @if (uploadSessionId && uploadStatus === 'Upload paused') {
       <button type="button" [disabled]="busy" (click)="resumeSourceUpload()">Resume upload</button>
     }
-    <div class="row-actions"><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="suggestMapping()">{{ csvText ? 'AI mapping + analyze' : 'AI mapping' }}</button><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="analyzeImport()">Analyze without writes</button></div>
+    <div class="row-actions"><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="suggestMapping()">{{ csvText && !selectedSourceFileId ? 'Smart mapping + analyze' : 'Smart mapping' }}</button><button type="button" [disabled]="busy || (!csvText && !selectedSourceFileId)" (click)="analyzeImport()">Analyze without writes</button></div>
     @if (mappingSource) {
-      <p class="validation">Mapping source: {{ mappingSource }}</p>
+      <p class="validation">{{ mappingSource }} · {{ mappingRuleVersion }} · {{ mappingFingerprint | slice:0:12 }} · {{ greenMappingCount }} Green automatic · {{ yellowMappingCount }} Yellow approval · {{ redMappingCount }} Red blocked@if (mappingSemanticSource && mappingSemanticSource !== 'unavailable') { · AI advisory: {{ mappingSemanticSource }} (non-executable)}</p>
+    }
+    @if (approvalRequiredIssues.length) {
+      <div class="mapping-issues yellow" role="status"><strong><span aria-hidden="true">!</span> Yellow — approval required</strong>@for (issue of approvalRequiredIssues; track issue) {<small>{{ issue }}</small>}</div>
+    }
+    @if (hardBlockingIssues.length) {
+      <div class="mapping-issues red" role="alert"><strong><span aria-hidden="true">×</span> Red — import blocked</strong>@for (issue of hardBlockingIssues; track issue) {<small>{{ issue }}</small>}</div>
+    }
+    @if (mappingReviewDecisions.length) {
+      <section class="analysis">
+        @for (decision of mappingReviewDecisions; track decision.sourceColumn) {
+          <div class="analysis-row">
+            <span>
+              <strong>{{ decision.sourceColumn }} → {{ decision.targetField || 'Ignored' }}</strong>
+              <span class="mapping-confidence" [class.green]="decision.confidence === 'green'" [class.yellow]="decision.confidence === 'yellow'" [class.red]="decision.confidence === 'red'"><span aria-hidden="true">{{ decision.confidence === 'green' ? '✓' : decision.confidence === 'yellow' ? '!' : '×' }}</span> {{ decision.confidence === 'green' ? 'Green — automatic' : decision.approved ? 'Yellow — approved' : decision.confidence === 'yellow' ? 'Yellow — approval required' : 'Red — blocked' }} · {{ decision.confidencePercentage }}%</span>
+              <small>{{ decision.detectedDataType }}@if (decision.requiredTransformation) { · {{ decision.requiredTransformation }}}</small>
+              @if (decision.approved) {<small>Approved by {{ decision.approvedBy }} · {{ formatDate(decision.approvedAt) }}</small>}
+              @if (decision.suggestionReasons.length) {<small>{{ decision.suggestionReasons.join(' · ') }}</small>}
+              @if (decision.rejectionReasons.length) {<small>{{ decision.rejectionReasons.join(' · ') }}</small>}
+              @if (decision.sampleEvidence.length) {<small>Evidence: {{ decision.sampleEvidence.join(', ') }}</small>}
+              @if (decision.alternativeTargets.length) {<small>Alternatives: @for (alternative of decision.alternativeTargets; track alternative.targetField) { {{ alternative.targetField }} {{ alternative.confidencePercentage }}% }</small>}
+              @if (semanticAdvisory[decision.sourceColumn]) {<small>AI advisory only: {{ semanticAdvisory[decision.sourceColumn] }} (not used for score or import)</small>}
+            </span>
+            @if (decision.confidence === 'yellow' && !decision.approved) {
+              @if (canManageMigrations) {
+                <div class="mapping-save"><select [(ngModel)]="approvedAliasTargets[decision.sourceColumn]"><option value="">Select CRM field</option>@for (target of aliasTargets(decision); track target) {<option [value]="target">{{ target }}</option>}</select><button type="button" [disabled]="busy || !approvedAliasTargets[decision.sourceColumn]" (click)="approveYellowMapping(decision)">Approve Yellow</button><button type="button" [disabled]="busy" (click)="ignoreMappingColumn(decision)">Ignore</button></div>
+              } @else {<span class="mapping-authority">Authorized approval required</span>}
+            }
+            @if (decision.confidence === 'red') {
+              <span class="mapping-authority">Red cannot be approved or overridden</span>
+            }
+          </div>
+        }
+      </section>
     }
     @if (importAnalysis) {
       <section class="analysis">
@@ -167,7 +207,7 @@
         }
         @for (row of analysisRows; track row) {
           <div class="analysis-row"><span><strong>Row {{ row.sourceRowNumber }}</strong>@if (row.errors.length) {
-          <small>{{ row.errors[0].message }}</small>
+          <small>{{ row.errors[0].code }} · {{ row.errors[0].message }}@if (row.errors[0].valuePattern) { · Pattern: {{ row.errors[0].valuePattern }}}@if (row.errors[0].suggestedTarget) { · Suggested: {{ row.errors[0].suggestedTarget }}}</small>
           }@if (!row.errors.length && row.warnings.length) {
           <small>{{ row.warnings[0].message }}</small>
         }</span>@if (row.duplicateTargetId) {
@@ -192,6 +232,13 @@
     @if (governance; as report) {
       <section class="review-section"><span class="drawer-section-label">Job</span><dl class="review-grid"><div><dt>Entity</dt><dd>{{ report.job.entity }}</dd></div><div><dt>Status</dt><dd>{{ report.job.status }}</dd></div><div><dt>Owner</dt><dd>{{ report.job.ownerUserId }}</dd></div><div><dt>Approval</dt><dd>{{ report.job.approvalStatus }}</dd></div></dl></section>
       <section class="review-section"><span class="drawer-section-label">Reconciliation</span><div class="reconciliation-status" [class.good]="report.reconciliation.status === 'matched'">{{ report.reconciliation.status }}</div><dl class="review-grid"><div><dt>Expected valid</dt><dd>{{ report.reconciliation.expectedValidRows }}</dd></div><div><dt>Processed</dt><dd>{{ report.reconciliation.actualProcessedRows }}</dd></div><div><dt>Created</dt><dd>{{ report.actual.created }}</dd></div><div><dt>Merged / linked</dt><dd>{{ report.actual.merged + report.actual.linked }}</dd></div><div><dt>Failed</dt><dd>{{ report.actual.failed }}</dd></div><div><dt>Branch entity jobs</dt><dd>{{ report.branchEntityTotals.jobs }}</dd></div></dl></section>
+      @if (report.financialReconciliation.supported) {
+        <section class="review-section"><span class="drawer-section-label">Financial reconciliation</span><div class="reconciliation-status" [class.good]="report.financialReconciliation.status === 'matched'">{{ report.financialReconciliation.status }}</div><dl class="review-grid">@for (metric of report.financialReconciliation.metrics | keyvalue; track metric.key) {<div><dt>{{ metric.key }}</dt><dd>{{ metric.value.sourcePaise }} → {{ metric.value.targetPaise }} ({{ metric.value.differencePaise }})</dd></div>}</dl></section>
+      }
+      @if (report.dependencies.length) {
+        <section class="review-section"><span class="drawer-section-label">Automatic dependency order</span><dl class="review-grid">@for (dependency of report.dependencies; track dependency.jobId) {<div><dt>{{ dependency.entity }}</dt><dd>{{ dependency.status }}</dd></div>}</dl></section>
+      }
+      <section class="review-section"><span class="drawer-section-label">Cutover readiness</span><div class="reconciliation-status" [class.good]="report.cutover.ready">{{ report.cutover.ready ? 'ready' : 'not ready' }}</div><dl class="review-grid"><div><dt>Job complete</dt><dd>{{ report.cutover.checks.jobCompleted ? 'yes' : 'no' }}</dd></div><div><dt>Rows matched</dt><dd>{{ report.cutover.checks.rowsMatched ? 'yes' : 'no' }}</dd></div><div><dt>Financials matched</dt><dd>{{ report.cutover.checks.financialsMatched ? 'yes' : 'no' }}</dd></div><div><dt>Dependencies complete</dt><dd>{{ report.cutover.checks.dependenciesCompleted ? 'yes' : 'no' }}</dd></div><div><dt>Approval complete</dt><dd>{{ report.cutover.checks.approvalComplete ? 'yes' : 'no' }}</dd></div></dl></section>
       <section class="review-section"><span class="drawer-section-label">Rollback impact</span><dl class="review-grid"><div><dt>Delete</dt><dd>{{ report.preRollbackImpact.actions.wouldDelete }}</dd></div><div><dt>Restore</dt><dd>{{ report.preRollbackImpact.actions.wouldRestore }}</dd></div><div><dt>Unlink</dt><dd>{{ report.preRollbackImpact.actions.wouldUnlink }}</dd></div><div><dt>Blocked dependencies</dt><dd>{{ report.preRollbackImpact.dependencies.blockingRecords }}</dd></div></dl></section>
       @if (report.recoveryRecommendations.length) {
         <section class="review-section"><span class="drawer-section-label">Recovery recommendations</span><ul>@for (recommendation of report.recoveryRecommendations; track recommendation) {
@@ -217,7 +264,7 @@
 }</label></div>
 }
 @if (drawer !== 'governance') {
-  <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'import' && (!entity || (!csvText && !selectedSourceFileId)))" (click)="drawer === 'import' ? applyImport() : drawer === 'api-key' ? saveApiKey() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
+  <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'import' && (!canManageMigrations || !entity || (!csvText && !selectedSourceFileId) || blockingMappingIssues.length > 0))" (click)="drawer === 'import' ? applyImport() : drawer === 'api-key' ? saveApiKey() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
 }
 @if (drawer === 'governance') {
   <footer><button type="button" [disabled]="busy" (click)="closeDrawer()">Close</button>@if (selectedJob; as job) {

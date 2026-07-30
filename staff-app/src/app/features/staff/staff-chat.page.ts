@@ -1,5 +1,5 @@
 import { DatePipe } from "@angular/common";
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { StaffAppService, StaffChatConversation, StaffConversationMessage } from "../../core/staff-app.service";
 
@@ -25,11 +25,11 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
           <div class="chat-main"><div class="chat-skeleton heading"></div><div class="chat-skeleton bubble"></div><div class="chat-skeleton bubble mine"></div></div>
         </section>
       } @else if (loadError()) {
-        <section class="notice chat-access-state" role="alert"><div><strong>Conversations could not be loaded</strong><p>{{ loadError() }}</p></div><button class="link-button" type="button" (click)="loadConversations()">Try again</button></section>
+        <section class="notice chat-access-state" role="alert"><div><strong>Conversations could not be loaded</strong><p>{{ loadError() }}</p></div><button class="link-button" type="button" [disabled]="initialLoading()" [attr.aria-busy]="initialLoading()" (click)="loadConversations()">Try again</button></section>
       } @else {
         <section class="chat-shell">
           <aside class="chat-sidebar" aria-label="Conversations">
-            <div class="chat-sidebar-head"><div><p class="eyebrow">Conversations</p><h2>Inbox</h2></div><span>{{ conversations().length }}</span></div>
+            <div class="chat-sidebar-head"><div><p class="eyebrow">Conversations</p><h2>Inbox</h2></div><span>{{ conversationsRefreshing() ? 'Sync' : conversations().length }}</span></div>
             <nav class="chat-conversation-list" aria-label="Choose a conversation">
               @for (conversation of conversations(); track conversation.id) {
                 <button type="button" class="chat-conversation" [class.active]="conversation.id === activeConversationId()" [class.private]="conversation.type === 'private-owner'" [attr.aria-current]="conversation.id === activeConversationId() ? 'page' : null" (click)="openConversation(conversation.id)">
@@ -44,7 +44,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
             @if (canStartPrivateChat()) {
               <div class="start-private-card">
                 <span aria-hidden="true">↗</span><div><strong>Need a private word?</strong><p>Only you and the owner can see this conversation.</p></div>
-                <button class="button" type="button" [disabled]="startingPrivate() || !online()" (click)="startPrivateChat()">{{ startingPrivate() ? 'Starting…' : 'Start private owner chat' }}</button>
+                <button class="button" type="button" [disabled]="startingPrivate() || !online()" [attr.aria-busy]="startingPrivate()" (click)="startPrivateChat()">{{ startingPrivate() ? 'Starting...' : 'Start private owner chat' }}</button>
               </div>
             }
           </aside>
@@ -64,7 +64,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
                 @if (messagesLoading()) {
                   <div class="chat-message-loading"><div class="chat-skeleton bubble"></div><div class="chat-skeleton bubble mine"></div></div>
                 } @else if (messagesError()) {
-                  <div class="chat-thread-state" role="alert"><strong>Messages could not be loaded</strong><p>{{ messagesError() }}</p><button class="link-button" type="button" (click)="refreshMessages(true)">Retry</button></div>
+                  <div class="chat-thread-state" role="alert"><strong>Messages could not be loaded</strong><p>{{ messagesError() }}</p><button class="link-button" type="button" [disabled]="messagesLoading() || !online()" [attr.aria-busy]="messagesLoading()" (click)="refreshMessages(true)">Retry</button></div>
                 } @else {
                   <div class="chat-message-list">
                     @for (item of messages(); track item.id) {
@@ -84,7 +84,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
               <form class="chat-composer" (submit)="send($event)">
                 <label class="sr-only" for="chat-draft">Message {{ active.title }}</label>
                 <textarea id="chat-draft" name="chatDraft" [(ngModel)]="draft" maxlength="4000" rows="1" [disabled]="!canSendChat() || !online() || sending()" [attr.aria-describedby]="'chat-compose-help chat-character-count'" [placeholder]="canSendChat() ? (online() ? 'Write a message…' : 'Reconnect to send a message') : 'Read-only conversation'" (keydown)="onComposerKeydown($event)"></textarea>
-                <div class="composer-footer"><span id="chat-compose-help">Enter to send · Shift+Enter for a new line</span><span id="chat-character-count" [class.near-limit]="draft.length > 3600">{{ draft.length }}/4000</span><button class="button primary chat-send" type="submit" [disabled]="!canSubmit()">{{ sending() ? 'Sending…' : 'Send' }} <span aria-hidden="true">↗</span></button></div>
+                <div class="composer-footer"><span id="chat-compose-help">Enter to send · Shift+Enter for a new line</span><span id="chat-character-count" [class.near-limit]="draft.length > 3600">{{ draft.length }}/4000</span><button class="button primary chat-send" type="submit" [disabled]="!canSubmit()" [attr.aria-busy]="sending()">{{ sending() ? 'Sending...' : 'Send' }} <span aria-hidden="true">↗</span></button></div>
               </form>
             } @else {
               <div class="chat-thread-state"><strong>No conversation selected</strong><p>Choose an available conversation to begin.</p></div>
@@ -102,6 +102,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
   readonly messages = signal<StaffConversationMessage[]>([]);
   readonly activeConversationId = signal("");
   readonly initialLoading = signal(false);
+  readonly conversationsRefreshing = signal(false);
   readonly messagesLoading = signal(false);
   readonly startingPrivate = signal(false);
   readonly sending = signal(false);
@@ -157,6 +158,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
     if (!this.canReadChat()) return;
     const generation = ++this.conversationGeneration;
     if (!silent) this.initialLoading.set(true);
+    else this.conversationsRefreshing.set(true);
     this.loadError.set("");
     try {
       const conversations = await this.staff.staffChatConversations();
@@ -168,7 +170,10 @@ export class StaffChatPage implements OnInit, OnDestroy {
     } catch {
       if (generation === this.conversationGeneration && !silent) this.loadError.set(this.staff.error() || "Check your connection and try again.");
     } finally {
-      if (generation === this.conversationGeneration) this.initialLoading.set(false);
+      if (generation === this.conversationGeneration) {
+        this.initialLoading.set(false);
+        this.conversationsRefreshing.set(false);
+      }
     }
   }
 
@@ -257,6 +262,11 @@ export class StaffChatPage implements OnInit, OnDestroy {
     void this.poll();
     void this.connectRealtime();
   };
+
+  @HostListener("document:visibilitychange")
+  onVisibilityChange(): void {
+    if (document.visibilityState === "visible" && this.canReadChat() && this.online()) void this.poll();
+  }
 
   private readonly handleOffline = (): void => {
     this.online.set(false);

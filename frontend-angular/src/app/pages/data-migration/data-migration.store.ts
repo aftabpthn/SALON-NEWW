@@ -2,18 +2,23 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 
-export type ImportIssue = { code: string; message: string };
+export type ImportIssue = { code: string; message: string; rowNumber?: number; sourceField?: string; valuePattern?: string; suggestedTarget?: string };
 export type ImportAnalysisRow = { sourceRowNumber: number; sourceExternalId: string; status: string; errors: ImportIssue[]; warnings: ImportIssue[]; duplicateTargetId?: string; duplicateDecision?: 'merge' | 'keep' | 'link' };
-export type ImportEntity = 'clients' | 'staff' | 'services' | 'products' | 'suppliers' | 'inventory' | 'memberships' | 'packages' | 'appointments' | 'sales' | 'invoices' | 'payments' | 'expenses' | 'purchase-bills';
+export type ImportEntity = 'clients' | 'staff' | 'services' | 'products' | 'suppliers' | 'inventory' | 'memberships' | 'client-memberships' | 'packages' | 'appointments' | 'sales' | 'invoices' | 'payments' | 'expenses' | 'purchase-bills' | 'refunds' | 'gift-cards' | 'loyalty' | 'payroll' | 'commissions' | 'client-notes' | 'files' | 'stock-movements';
 export type ImportAnalysis = { entity: ImportEntity; mapping: Record<string, string>; unmatchedColumns: string[]; rows: ImportAnalysisRow[]; summary: { sourceRows: number; validRows: number; errorRows: number; warningRows: number; duplicateRows: number; readyRows: number } };
 export type ImportMapping = { id: string; name: string; entity: ImportEntity; mapping: Record<string, string>; sourceColumns: string[] };
-export type ImportTemplate = { entity: ImportEntity; columns: { field: string; required: boolean; aliases: string[] }[] };
+export type ImportTemplate = { contractVersion: string; entity: ImportEntity; columns: { field: string; required: boolean; aliases: string[]; globalAliases: string[]; providerAliases: Record<string, string[]>; dataType: string; transformationRule: string }[] };
 export type ImportJob = { id: string; entity: string; fileName: string; mode: string; status: string; errorsJson: { row: number; message: string }[]; totalRows: number; processedRows: number; errorRowCount: number; warningRowCount: number; duplicateRowCount: number; lastError: string; sourceFileId?: string; chunkSize: number; allowPartialImport: boolean; workerPhase: string; heartbeatAt?: string; totalChunks: number; completedChunks: number; failedChunks: number; ownerUserId: string; approvalStatus: 'not_required' | 'pending' | 'approved' | 'rejected'; analysisJson?: ImportAnalysis; createdAt: string; completedAt?: string; rolledBackAt?: string };
-export type SourceFile = { id: string; originalFileName: string; format: string; sizeBytes: number; sha256: string; evidenceStatus: string; readOnly: boolean; artifacts: { id: string; entryName: string }[]; createdAt: string };
+export type SourceFile = { id: string; tenantId: string; branchId: string; provider: string; uploadedBy: string; originalFileName: string; format: string; sizeBytes: number; sha256: string; evidenceStatus: string; readOnly: boolean; encrypted: boolean; encryptionScheme: string; retentionUntil: string; purgedAt?: string; artifacts: { id: string; entryName: string }[]; createdAt: string };
+export type MigrationSourceColumnProfile = { originalHeader: string; normalizedHeader: string; sampleValues: string[]; detectedDataType: string; emptyPercentage: number; uniquePercentage: number; duplicateCount: number; minimum?: string; maximum?: string; patterns: string[]; possibleCrmEntity?: ImportEntity; possibleCrmField?: string; invalidValueCount: number; statisticsExact: boolean };
+export type MigrationSourceProfile = { provider: string; sheets: { id: string; name: string; fileName: string; rowCount: number; columnCount: number; columns: string[]; columnProfiles: MigrationSourceColumnProfile[]; targets: ImportEntity[]; importable: boolean }[] };
 export type MigrationGovernance = {
   job: { jobId: string; branchId: string; entity: string; fileName: string; mode: string; status: string; ownerUserId: string; approvalStatus: string; sourceHash?: string; expected: { sourceRows: number; validRows: number; errorRows: number; warningRows: number; duplicateRows: number }; processedRows: number; createdAt: string; completedAt?: string; rolledBackAt?: string };
   actual: { created: number; merged: number; linked: number; kept: number; failed: number; rolledBack: number };
   reconciliation: { status: string; expectedValidRows: number; actualProcessedRows: number };
+  financialReconciliation: { supported: boolean; status: string; matched?: boolean; metrics: Record<string, { sourcePaise: number; targetPaise: number; differencePaise: number }> };
+  dependencies: { jobId: string; entity: string; status: string; completed: boolean }[];
+  cutover: { ready: boolean; checks: { jobCompleted: boolean; rowsMatched: boolean; financialsMatched: boolean; dependenciesCompleted: boolean; approvalComplete: boolean } };
   branchEntityTotals: { branchId: string; entity: string; jobs: number; completedJobs: number; sourceRows: number; processedRows: number; errorRows: number };
   preRollbackImpact: { safeToRollback: boolean; actions: { wouldDelete: number; wouldRestore: number; wouldUnlink: number; noChange: number }; dependencies: { blockingRecords: number; cascadeRecords: number; setNullRecords: number; managedRecords?: number } };
   recoveryRecommendations: string[];

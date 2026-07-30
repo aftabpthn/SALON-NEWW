@@ -7,6 +7,11 @@ import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnsw
 import { LANGUAGE_OPTIONS, LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
+import { firstValueFrom } from 'rxjs';
+import { ApiEnvelope, ApiService } from '../shared/services/api.service';
+
+type HeaderNotification = { id: string; title: string; body: string; isRead: boolean; createdAt: string; metadata?: { deepLink?: string } };
+type HeaderNotificationSummary = { unread: number; data: HeaderNotification[] };
 
 @Component({
     selector: 'app-header',
@@ -14,7 +19,7 @@ import { TranslatePipe } from '../shared/pipes/translate.pipe';
     templateUrl: './app-header.component.html',
     styleUrls: ['./app-header.component.css']
 })
-export class AppHeaderComponent implements OnInit {
+export class AppHeaderComponent implements OnInit, OnDestroy {
   @Input() mobileNavOpen = false;
   @Output() readonly mobileNavToggle = new EventEmitter<void>();
 
@@ -22,6 +27,7 @@ export class AppHeaderComponent implements OnInit {
   private readonly element = inject(ElementRef<HTMLElement>);
   private readonly router = inject(Router);
   private readonly concierge = inject(AiConciergeService);
+  private readonly api = inject(ApiService);
   readonly loadingTicker = inject(LoadingTickerService);
   readonly language = inject(LanguageService);
 
@@ -88,11 +94,35 @@ export class AppHeaderComponent implements OnInit {
     return this.branches.find((branch) => branch.branchId === this.auth.branchId);
   }
 
+  get currentRoleLabel(): string {
+    const role = this.auth.currentRole ?? this.currentBranch?.roleName ?? 'User';
+    const normalized = role.trim().toLowerCase().replace(/_/g, '-');
+    const labels: Record<string, string> = {
+      superadmin: 'Platform Super Admin', 'super-admin': 'Platform Super Admin',
+      platformadmin: 'Platform Admin', 'platform-admin': 'Platform Admin',
+      owner: 'Salon Owner', admin: 'Tenant Admin', manager: 'Branch Manager',
+      receptionist: 'Front Desk', frontdesk: 'Front Desk', 'front-desk': 'Front Desk',
+      cashier: 'Cashier', accountant: 'Accountant',
+      inventorymanager: 'Inventory Manager', 'inventory-manager': 'Inventory Manager',
+      marketinglead: 'Marketing Lead', 'marketing-lead': 'Marketing Lead',
+      analyst: 'Analyst', staff: 'Staff',
+    };
+    return labels[normalized] ?? role;
+  }
+
+  get currentRoleInitials(): string {
+    return this.currentRoleLabel.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  }
+
   get languageLabel(): string {
     const preferences = this.language.preferences();
     const primary = this.languageName(preferences.primary);
     if (preferences.mode !== 'bilingual' || !preferences.secondary) return primary;
     return `${primary} + ${this.languageName(preferences.secondary)}`;
+  }
+
+  languageName(code: string): string {
+    return this.languageOptions.find((option) => option.code === code)?.label ?? code;
   }
 
   get filteredBranches(): AuthBranchAccess[] {
@@ -104,9 +134,13 @@ export class AppHeaderComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.auth.accessToken) return;
-    void this.language.loadSettings().catch((error) => {
-      this.languageError = this.message(error, 'error.unableToLoad');
-    });
+    void this.refreshNotifications();
+    this.notificationTimer = window.setInterval(() => void this.refreshNotifications(), 30_000);
+    if (!this.auth.hasRole('superadmin', 'super-admin', 'platformadmin', 'platform-admin')) {
+      void this.language.loadSettings().catch((error) => {
+        this.languageError = this.message(error, 'error.unableToLoad');
+      });
+    }
     this.auth.loadProfile().subscribe({
       next: (profile) => {
         this.branches = profile.branches;
@@ -115,6 +149,45 @@ export class AppHeaderComponent implements OnInit {
         this.branchError = this.language.text('error.unableToLoad');
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.notificationTimer !== undefined) window.clearInterval(this.notificationTimer);
+  }
+
+  async toggleNotifications(): Promise<void> {
+    this.notificationOpen = !this.notificationOpen;
+    this.branchMenuOpen = false;
+    this.languageMenuOpen = false;
+    if (this.notificationOpen) await this.refreshNotifications();
+  }
+
+  async openNotification(notification: HeaderNotification): Promise<void> {
+    try {
+      if (!notification.isRead) {
+        await firstValueFrom(this.api.patch<ApiEnvelope<HeaderNotification>>(`/notifications/${encodeURIComponent(notification.id)}`, { isRead: true }));
+        notification.isRead = true;
+        this.notificationUnread = Math.max(0, this.notificationUnread - 1);
+      }
+    } catch { /* Navigation remains available if marking read fails. */ }
+    this.notificationOpen = false;
+    const deepLink = notification.metadata?.deepLink;
+    if (deepLink) await this.router.navigateByUrl(deepLink);
+  }
+
+  private async refreshNotifications(): Promise<void> {
+    if (!this.auth.accessToken || this.notificationLoading) return;
+    this.notificationLoading = true;
+    this.notificationError = '';
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<HeaderNotificationSummary>>('/notifications?page=1&pageSize=20'));
+      this.notificationUnread = Number(response.data?.unread || 0);
+      this.notificationItems = response.data?.data || [];
+    } catch (error) {
+      this.notificationError = this.message(error, 'error.unableToLoad');
+    } finally {
+      this.notificationLoading = false;
+    }
   }
 
   toggleLanguageMenu(): void {
@@ -134,10 +207,6 @@ export class AppHeaderComponent implements OnInit {
     } finally {
       this.languageSaving = false;
     }
-  }
-
-  languageName(code: string): string {
-    return this.languageOptions.find((option) => option.code === code)?.label ?? code;
   }
 
   toggleBranchMenu(): void {
@@ -441,12 +510,14 @@ export class AppHeaderComponent implements OnInit {
       this.branchSearch = '';
     }
     if (this.languageMenuOpen && !this.element.nativeElement.contains(event.target as Node)) this.languageMenuOpen = false;
+    if (this.notificationOpen && !this.element.nativeElement.contains(event.target as Node)) this.notificationOpen = false;
   }
 
   @HostListener('document:keydown.escape')
   closeBranchMenuWithKeyboard(): void {
     this.branchMenuOpen = false;
     this.languageMenuOpen = false;
+    this.notificationOpen = false;
     this.branchSearch = '';
     this.assistantOpen = false;
   }

@@ -17,3 +17,10 @@ test('attendance summary actions stay wired', () => {
   for (const handler of new Set(handlers)) assert.match(source, new RegExp(`\\b${handler}\\(`), `missing ${handler}`);
   for (const path of ['/staff-attendance/summary', '/details', '/correction']) assert.match(source, new RegExp(path));
 });
+
+test('attendance details show saved shifts, metrics and calculation source', () => {
+  for (const field of ['scheduledShift1Start', 'scheduledShift1End', 'scheduledShift2Start', 'scheduledShift2End']) assert.match(source, new RegExp(field));
+  for (const label of ['Clock in', 'Clock out', 'Worked', 'Break', 'Scheduled', 'Late', 'Early leave', 'Overtime']) assert.match(template, new RegExp(label));
+  assert.match(template, /sourceLabel\(detail\)/);
+  assert.match(repository, /s\.shift1_start AS scheduled_shift1_start/);
+});

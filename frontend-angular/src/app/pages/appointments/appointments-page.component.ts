@@ -65,6 +65,22 @@ type ClientOption = {
   email: string;
 };
 
+type StaffRecommendation = {
+  staffId: string;
+  staffName: string;
+  workloadCount: number;
+  workloadMinutes: number;
+  department: string;
+  departmentMatch: boolean;
+  preferredClient: boolean;
+  utilizationPercent: number | null;
+  rating: number | null;
+  completionPercent: number | null;
+  repeatClientPercent: number | null;
+  confidence: string;
+  recommendationReason: string;
+};
+
 type AppointmentRecord = {
   id: string;
   clientId: string;
@@ -147,6 +163,11 @@ type BookingLine = {
   staffPreference: 'any' | 'preferred' | 'required';
   staffChangeApproval: '' | 'client-approved' | 'manager-override';
   staffChangeReason: string;
+  recommendedStaffId: string;
+  recommendationOverrideReason: string;
+  recommendations: StaffRecommendation[];
+  recommendationLoading: boolean;
+  recommendationError: string;
   serviceOpen: boolean;
   staffOpen: boolean;
   variantId: string;
@@ -245,30 +266,13 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     'Capacity View',
     'Conflict View',
   ];
-  readonly settingsKey = 'aurashine.appointment.settings';
-  readonly scheduledStaffKey = 'aurashine.appointment.scheduled-staff';
-  // ponytail: build auth headers from local auth context instead of fixed dev IDs.
   private readonly settingsUpdatedEvent = () => {
-    const existingSelectedId = this.selectedAppointment?.id;
-    this.appointmentSettings = this.loadAppointmentSettings();
-    this.times = this.buildTimes();
-    this.mapAppointmentCards();
-    this.updateCurrentTimeLine(true);
-    if (existingSelectedId) {
-      this.selectedAppointment = this.appointments.find((item) => item.id === existingSelectedId) || null;
-      if (!this.selectedAppointment) this.appointmentNoteDraft = '';
-    }
-  };
-
-  private readonly storageUpdatedHandler = (event: StorageEvent) => {
-    if (event.key === this.settingsKey) {
-      this.settingsUpdatedEvent();
-    }
+    void this.refreshAppointmentSettings();
   };
 
   activeView: CalendarView = 'Day';
   activeStaffGridMode: StaffGridMode = 'Staff Grid';
-  appointmentSettings = this.loadAppointmentSettings();
+  appointmentSettings = this.defaultAppointmentSettings();
   times = this.buildTimes();
   scheduledStaffOpen = false;
   scheduledStaffSelection: Record<string, boolean> = {};
@@ -593,11 +597,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     void this.loadDataSourceStatus();
     window.addEventListener('aurashine:appointment-settings-updated', this.settingsUpdatedEvent);
-    window.addEventListener('storage', this.storageUpdatedHandler);
     this.updateCurrentTimeLine();
     this.currentTimeTimer = setInterval(() => this.updateCurrentTimeLine(), 30000);
     void this.loadRescheduleRequests();
-    await Promise.all([this.loadClients(), this.loadStaff(), this.loadServices(), this.loadChairRooms(), this.loadOverlapSetting(), this.loadWaitlist(), this.loadBlackouts(), this.loadAdvancePaymentMethods(), this.loadCashTills()]);
+    await Promise.all([this.loadClients(), this.loadStaff(), this.loadServices(), this.loadChairRooms(), this.refreshAppointmentSettings(), this.loadWaitlist(), this.loadBlackouts(), this.loadAdvancePaymentMethods(), this.loadCashTills()]);
     await this.loadAppointments();
     this.updateCurrentTimeLine(true);
     this.connectLiveAppointments();
@@ -605,7 +608,6 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     window.removeEventListener('aurashine:appointment-settings-updated', this.settingsUpdatedEvent);
-    window.removeEventListener('storage', this.storageUpdatedHandler);
     this.stopActivityRefresh();
     if (this.currentTimeTimer) clearInterval(this.currentTimeTimer);
     if (this.liveReconnectTimer) clearTimeout(this.liveReconnectTimer);
@@ -639,27 +641,83 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     const request = ++this.bookingIntelligenceRequest;
     this.bookingIntelligenceLoading = true;
     this.bookingIntelligenceError = '';
+    this.bookingLines = this.bookingLines.map((line) => lines.some((item) => item.id === line.id)
+      ? { ...line, recommendationLoading: true, recommendationError: '' }
+      : line);
     try {
-      const result: any = await this.postJson('/api/v1/booking-intelligence/preview', {
-        clientId: this.selectedClientId,
-        lines: lines.map((line, index) => ({
-          id: line.id,
-          serviceId: line.serviceId,
-          staffId: line.staffId,
-          startAt: this.localDateTimeToIso(this.appointmentDate, line.startTime),
-          parallel: index > 0 && line.startTime === lines[0].startTime,
+      const [result, recommendations] = await Promise.all([
+        this.postJson<any>('/api/v1/booking-intelligence/preview', {
+          clientId: this.selectedClientId,
+          lines: lines.map((line, index) => ({
+            id: line.id,
+            serviceId: line.serviceId,
+            staffId: line.staffId,
+            startAt: this.localDateTimeToIso(this.appointmentDate, line.startTime),
+            parallel: index > 0 && line.startTime === lines[0].startTime,
+          })),
+        }),
+        Promise.all(lines.map(async (line) => {
+          try {
+            const response = await this.postJson<ApiList<StaffRecommendation>>('/api/v1/staff/intelligence/best-staff', {
+              date: this.appointmentDate,
+              startTime: line.startTime,
+              endTime: this.addMinutesToTime(line.startTime, line.durationMinutes || 30),
+              serviceIds: [line.serviceId],
+              clientId: line.clientId || this.selectedClientId,
+              appointmentId: line.appointmentId,
+            });
+            return { lineId: line.id, rows: this.asArray(response), error: '' };
+          } catch (error) {
+            return { lineId: line.id, rows: [] as StaffRecommendation[], error: this.errorMessage(error, 'Unable to load staff recommendations') };
+          }
         })),
-      });
-      if (request === this.bookingIntelligenceRequest) this.bookingIntelligence = (result?.data ?? result) as BookingIntelligence;
+      ]);
+      if (request === this.bookingIntelligenceRequest) {
+        this.bookingIntelligence = (result?.data ?? result) as BookingIntelligence;
+        const byLine = new Map(recommendations.map((item) => [item.lineId, item]));
+        this.bookingLines = this.bookingLines.map((line) => {
+          const recommendation = byLine.get(line.id);
+          if (!recommendation) return line;
+          const recommendedStaffId = recommendation.rows[0]?.staffId || '';
+          return {
+            ...line,
+            recommendations: recommendation.rows,
+            recommendedStaffId,
+            recommendationLoading: false,
+            recommendationError: recommendation.error,
+            recommendationOverrideReason: line.staffId !== recommendedStaffId ? line.recommendationOverrideReason : '',
+          };
+        });
+      }
     } catch (error) {
       if (request === this.bookingIntelligenceRequest) this.bookingIntelligenceError = this.errorMessage(error, 'Unable to load booking plan');
     } finally {
-      if (request === this.bookingIntelligenceRequest) this.bookingIntelligenceLoading = false;
+      if (request === this.bookingIntelligenceRequest) {
+        this.bookingIntelligenceLoading = false;
+        this.bookingLines = this.bookingLines.map((line) => ({ ...line, recommendationLoading: false }));
+      }
     }
   }
 
-  private refreshBookingIntelligenceIfReady() {
-    if (this.selectedClientId && this.bookingLines.some((line) => line.serviceId && line.startTime)) {
+  applyStaffRecommendation(line: BookingLine, recommendation: StaffRecommendation) {
+    const person = this.staff.find((item) => item.id === recommendation.staffId);
+    if (!person) return;
+    this.selectStaff(line, person);
+    line.recommendationOverrideReason = '';
+  }
+
+  recommendationMeta(item: StaffRecommendation) {
+    return [
+      item.rating == null ? '' : `Rating ${item.rating.toFixed(1)}`,
+      item.completionPercent == null ? '' : `${item.completionPercent}% completion`,
+      item.repeatClientPercent == null ? '' : `${item.repeatClientPercent}% repeat`,
+      item.utilizationPercent == null ? '' : `${item.utilizationPercent}% utilization`,
+    ].filter(Boolean).join(' · ');
+  }
+
+  refreshBookingIntelligenceIfReady() {
+    if ((this.selectedClientId || this.bookingLines.some((line) => line.clientId))
+      && this.bookingLines.some((line) => line.serviceId && line.startTime)) {
       void this.refreshBookingIntelligence();
     }
   }
@@ -753,14 +811,6 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   saveScheduledStaff() {
-    try {
-      localStorage.setItem(this.scheduledStaffKey, JSON.stringify({
-        selectedIds: this.scheduledStaff.map((person) => person.id),
-        orderedIds: this.staff.map((person) => person.id),
-      }));
-    } catch {
-      // Local display preference does not block calendar work when storage is unavailable.
-    }
     this.closeScheduledStaff();
   }
 
@@ -1045,6 +1095,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     line.clientId = client.id;
     line.clientSearch = this.clientLabel(client);
     line.clientOpen = false;
+    this.refreshBookingIntelligenceIfReady();
   }
 
   removeServiceLine(lineId: string) {
@@ -1155,6 +1206,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.bookingError = 'Service, staff, and time required';
       return;
     }
+    if (validLines.some((line) => line.recommendedStaffId && line.staffId !== line.recommendedStaffId && line.recommendationOverrideReason.trim().length < 3)) {
+      this.bookingError = 'Manager override reason is required when recommended staff is changed';
+      return;
+    }
     if (!this.editingAppointmentId && this.recurrenceFrequency !== 'none'
       && (!Number.isInteger(Number(this.recurrenceCount)) || Number(this.recurrenceCount) < 2 || Number(this.recurrenceCount) > 52)) {
       this.bookingError = 'Recurring booking occurrences must be between 2 and 52';
@@ -1234,6 +1289,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           staff_preference: line.staffPreference,
           staff_change_approval: line.staffChangeApproval,
           staff_change_reason: line.staffChangeReason.trim(),
+          recommended_staff_id: line.recommendedStaffId,
+          recommendation_override_reason: line.recommendationOverrideReason.trim(),
           service_id: line.serviceId,
           start_at: this.localDateTimeToIso(this.appointmentDate, line.startTime),
           end_at: this.localDateTimeToIso(
@@ -1315,9 +1372,6 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       && line.requestedStaffId !== line.staffId);
   }
 
-  trackByIndex(index: number) {
-    return index;
-  }
 
   trackLine(_: number, line: BookingLine) {
     return line.id;
@@ -1727,30 +1781,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   private restoreScheduledStaffPreference() {
-    let saved: { selectedIds?: unknown; orderedIds?: unknown } = {};
-    try {
-      const raw = localStorage.getItem(this.scheduledStaffKey);
-      if (raw) saved = JSON.parse(raw);
-    } catch {
-      saved = {};
-    }
-    const orderedIds = Array.isArray(saved.orderedIds)
-      ? saved.orderedIds.filter((id): id is string => typeof id === 'string')
-      : [];
-    const selectedIds = Array.isArray(saved.selectedIds)
-      ? saved.selectedIds.filter((id): id is string => typeof id === 'string')
-      : this.staff.map((person) => person.id);
-    const byId = new Map(this.staff.map((person) => [person.id, person]));
-    const orderedStaff = orderedIds
-      .map((id) => byId.get(id))
-      .filter((person): person is StaffOption => !!person);
-    const restoredIds = new Set(orderedStaff.map((person) => person.id));
-    this.staff = [...orderedStaff, ...this.staff.filter((person) => !restoredIds.has(person.id))];
-    const selected = new Set(selectedIds);
-    const knownIds = new Set(orderedIds);
-    this.scheduledStaffSelection = Object.fromEntries(
-      this.staff.map((person) => [person.id, !knownIds.has(person.id) || selected.has(person.id)]),
-    );
+    this.scheduledStaffSelection = Object.fromEntries(this.staff.map((person) => [person.id, true]));
   }
 
   private async loadStaff() {
@@ -1961,19 +1992,24 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     return Math.max(this.calendarSlotHeight, (this.minutesBetween(entry.blockedFrom, entry.blockedUntil) / this.appointmentSettings.slotMinutes) * this.calendarSlotHeight - 4);
   }
 
-  private async loadOverlapSetting() {
+  private async refreshAppointmentSettings() {
+    const existingSelectedId = this.selectedAppointment?.id;
     try {
       const result = await this.getJson<any>('/api/v1/appointment-settings');
       const body = result?.data ?? result;
-      this.appointmentSettings = {
-        ...this.defaultAppointmentSettings(),
+      this.appointmentSettings = this.mergeAppointmentSettings({
         ...(body?.settings && typeof body.settings === 'object' ? body.settings : {}),
         overlapTimeSlot: Boolean(body?.allowOverlap ?? body?.allow_overlap),
-      };
-      localStorage.setItem(this.settingsKey, JSON.stringify(this.appointmentSettings));
-      this.times = this.buildTimes();
+      });
     } catch {
-      // Existing local preference remains available while offline.
+      this.appointmentSettings = this.mergeAppointmentSettings(this.appointmentSettings);
+    }
+    this.times = this.buildTimes();
+    this.mapAppointmentCards();
+    this.updateCurrentTimeLine(true);
+    if (existingSelectedId) {
+      this.selectedAppointment = this.appointments.find((item) => item.id === existingSelectedId) || null;
+      if (!this.selectedAppointment) this.appointmentNoteDraft = '';
     }
   }
 
@@ -2082,6 +2118,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       staffPreference: person?.id ? 'preferred' : 'any',
       staffChangeApproval: '',
       staffChangeReason: '',
+      recommendedStaffId: '',
+      recommendationOverrideReason: '',
+      recommendations: [],
+      recommendationLoading: false,
+      recommendationError: '',
       serviceOpen: false,
       staffOpen: false,
       variantId: '',
@@ -2494,12 +2535,19 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
   }
 
-  private loadAppointmentSettings(): AppointmentSettings {
-    try {
-      return { ...this.defaultAppointmentSettings(), ...JSON.parse(localStorage.getItem(this.settingsKey) || '{}') };
-    } catch {
-      return this.defaultAppointmentSettings();
-    }
+  private mergeAppointmentSettings(source: Partial<AppointmentSettings>): AppointmentSettings {
+    const defaults = this.defaultAppointmentSettings();
+    const colors = Array.isArray(source.colors) ? source.colors : defaults.colors;
+    return {
+      ...defaults,
+      ...source,
+      startTime: /^\\d{2}:\\d{2}$/.test(String(source.startTime || '')) ? String(source.startTime) : defaults.startTime,
+      endTime: /^\\d{2}:\\d{2}$/.test(String(source.endTime || '')) ? String(source.endTime) : defaults.endTime,
+      slotMinutes: [10, 15, 30, 60].includes(Number(source.slotMinutes)) ? Number(source.slotMinutes) : defaults.slotMinutes,
+      timeFormat: source.timeFormat === '24 Hours' ? '24 Hours' : defaults.timeFormat,
+      weekStartFrom: source.weekStartFrom === 'Monday' ? 'Monday' : defaults.weekStartFrom,
+      colors: defaults.colors.map((item) => ({ ...item, ...(colors.find((entry) => entry?.status === item.status) || {}) })),
+    };
   }
 
   private buildTimes() {

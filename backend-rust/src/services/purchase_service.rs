@@ -112,6 +112,10 @@ pub struct ReceiptDetails {
 
 struct CalculatedLine {
     item_id: String,
+    package_unit: String,
+    stock_unit: String,
+    units_per_package: i32,
+    stock_quantity: i32,
     quantity: i32,
     delivered_quantity: i32,
     ordered_quantity: Option<i32>,
@@ -125,6 +129,7 @@ struct CalculatedLine {
     unit_cost_paise: i64,
     landed_cost_paise: i64,
     landed_unit_cost_paise: i64,
+    stock_unit_cost_paise: i64,
     discount_bps: i32,
     discount_paise: i64,
     gst_percent: i32,
@@ -295,27 +300,48 @@ pub async fn receive(
         .ok_or_else(|| AppError::not_found("GRN inventory item was not found"))?;
         let gst_percent = line.gst_percent.unwrap_or(item.gst_percent).clamp(0, 100);
         let expiry_date = parse_optional_date(line.expiry_date.as_deref(), "expiryDate")?;
-        let ordered_quantity = if let Some(order_id) = purchase_order_id {
-            let (ordered, received) = purchase_repository::lock_order_line_for_receipt(
-                &mut tx,
-                tenant_id,
-                branch_id,
-                order_id,
-                line.inventory_item_id.trim(),
-            )
-            .await
-            .map_err(|_| AppError::internal("failed to lock purchase order line"))?
-            .ok_or_else(|| AppError::conflict("GRN item is not on the purchase order"))?;
-            Some(ordered.saturating_sub(received))
-        } else {
-            None
-        };
+        let (ordered_quantity, package_unit, stock_unit, units_per_package) =
+            if let Some(order_id) = purchase_order_id {
+                let order_line = purchase_repository::lock_order_line_for_receipt(
+                    &mut tx,
+                    tenant_id,
+                    branch_id,
+                    order_id,
+                    line.inventory_item_id.trim(),
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to lock purchase order line"))?
+                .ok_or_else(|| AppError::conflict("GRN item is not on the purchase order"))?;
+                if order_line.stock_unit != item.stock_unit {
+                    return Err(AppError::conflict(
+                        "product stock unit changed after the purchase order was created",
+                    ));
+                }
+                (
+                    Some(
+                        order_line
+                            .quantity
+                            .saturating_sub(order_line.received_quantity),
+                    ),
+                    order_line.package_unit,
+                    order_line.stock_unit,
+                    order_line.units_per_package,
+                )
+            } else {
+                (
+                    None,
+                    item.package_unit.clone(),
+                    item.stock_unit.clone(),
+                    item.units_per_package,
+                )
+            };
         let (accepted, short, excess, applied) = receiving_variance(
             ordered_quantity,
             line.quantity,
             line.damaged_quantity,
             line.rejected_quantity,
         );
+        let stock_quantity = base_quantity(accepted, units_per_package)?;
         let variance_reason = line.variance_reason.trim().to_string();
         if (excess > 0 || line.damaged_quantity > 0 || line.rejected_quantity > 0)
             && variance_reason.is_empty()
@@ -345,7 +371,8 @@ pub async fn receive(
         } else {
             (0, 0, tax)
         };
-        let next_stock_i64 = i64::from(item.stock_quantity).saturating_add(i64::from(accepted));
+        let next_stock_i64 =
+            i64::from(item.stock_quantity).saturating_add(i64::from(stock_quantity));
         if next_stock_i64 > i64::from(i32::MAX) {
             return Err(AppError::validation(
                 "GRN stock quantity exceeds supported range",
@@ -353,6 +380,10 @@ pub async fn receive(
         }
         calculated.push(CalculatedLine {
             item_id: line.inventory_item_id.trim().to_string(),
+            package_unit,
+            stock_unit,
+            units_per_package,
+            stock_quantity,
             quantity: accepted,
             delivered_quantity: line.quantity,
             ordered_quantity,
@@ -366,6 +397,7 @@ pub async fn receive(
             unit_cost_paise: net_unit_cost,
             landed_cost_paise: 0,
             landed_unit_cost_paise: net_unit_cost,
+            stock_unit_cost_paise: 0,
             discount_bps: line.discount_bps,
             discount_paise,
             gst_percent,
@@ -405,11 +437,15 @@ pub async fn receive(
             .unit_cost_paise
             .checked_add(div_round(allocation, i64::from(line.quantity)))
             .ok_or_else(|| AppError::validation("landed unit cost is too large"))?;
+        line.stock_unit_cost_paise = div_round(
+            line.taxable_paise.saturating_add(allocation),
+            i64::from(line.stock_quantity),
+        );
         line.next_cost = weighted_cost(
             line.current_stock,
             line.current_cost,
-            line.quantity,
-            line.landed_unit_cost_paise,
+            line.stock_quantity,
+            line.stock_unit_cost_paise,
         );
     }
     let receipt = purchase_repository::create_receipt(
@@ -463,6 +499,11 @@ pub async fn receive(
             branch_id,
             &receipt.id,
             &line.item_id,
+            &line.package_unit,
+            &line.stock_unit,
+            line.units_per_package,
+            line.stock_quantity,
+            line.stock_unit_cost_paise,
             line.quantity,
             line.delivered_quantity,
             line.ordered_quantity,
@@ -507,7 +548,7 @@ pub async fn receive(
             .map_err(|_| AppError::internal("failed to quarantine damaged GRN stock"))?;
             saved.quarantine_status = "quarantined".to_string();
         }
-        if line.quantity > 0 {
+        if line.stock_quantity > 0 {
             purchase_repository::apply_stock(
                 &mut tx,
                 tenant_id,
@@ -525,8 +566,8 @@ pub async fn receive(
                 &line.item_id,
                 &receipt.id,
                 &saved.id,
-                line.quantity,
-                line.landed_unit_cost_paise,
+                line.stock_quantity,
+                line.stock_unit_cost_paise,
                 line.next_stock,
             )
             .await
@@ -541,8 +582,8 @@ pub async fn receive(
                 &line.batch_barcode,
                 line.expiry_date,
                 received_date,
-                line.quantity,
-                line.landed_unit_cost_paise,
+                line.stock_quantity,
+                line.stock_unit_cost_paise,
                 &ledger_id,
             )
             .await?;
@@ -918,7 +959,8 @@ pub async fn create_return(
         .await
         .map_err(|_| AppError::internal("failed to lock purchase return inventory"))?
         .ok_or_else(|| AppError::not_found("purchase return inventory item was not found"))?;
-        if item.stock_quantity < input_line.quantity {
+        let stock_quantity = base_quantity(input_line.quantity, line.units_per_package)?;
+        if item.stock_quantity < stock_quantity {
             return Err(AppError::conflict(
                 "purchase return would make stock negative",
             ));
@@ -939,16 +981,17 @@ pub async fn create_return(
         total_cgst = total_cgst.saturating_add(cgst);
         total_sgst = total_sgst.saturating_add(sgst);
         total_igst = total_igst.saturating_add(igst);
-        let next_stock = item.stock_quantity - input_line.quantity;
+        let next_stock = item.stock_quantity - stock_quantity;
         let next_cost = remaining_weighted_cost(
             item.stock_quantity,
             item.unit_cost_paise,
-            input_line.quantity,
-            line.landed_unit_cost_paise,
+            stock_quantity,
+            line.stock_unit_cost_paise,
         );
         rows.push((
             line,
             input_line.quantity,
+            stock_quantity,
             next_stock,
             next_cost,
             taxable,
@@ -971,7 +1014,7 @@ pub async fn create_return(
     )
     .await
     .map_err(|_| AppError::conflict("purchase return retry conflicts with an existing request"))?;
-    for (line, quantity, next_stock, next_cost, taxable, tax) in rows {
+    for (line, quantity, stock_quantity, next_stock, next_cost, taxable, tax) in rows {
         let return_line_id = purchase_repository::create_return_line(
             &mut tx,
             tenant_id,
@@ -1002,8 +1045,8 @@ pub async fn create_return(
             &line.inventory_item_id,
             &return_id,
             &return_line_id,
-            quantity,
-            line.landed_unit_cost_paise,
+            stock_quantity,
+            line.stock_unit_cost_paise,
             next_stock,
         )
         .await
@@ -1016,7 +1059,7 @@ pub async fn create_return(
                 &line.inventory_item_id,
                 &line.batch_number,
                 &ledger_id,
-                quantity,
+                stock_quantity,
             )
             .await?;
         }
@@ -1278,6 +1321,13 @@ fn return_tax_breakdown(
     (cgst, sgst, tax.saturating_sub(cgst).saturating_sub(sgst))
 }
 
+fn base_quantity(packages: i32, units_per_package: i32) -> Result<i32, AppError> {
+    packages
+        .checked_mul(units_per_package)
+        .filter(|quantity| *quantity >= 0)
+        .ok_or_else(|| AppError::validation("package stock quantity exceeds supported range"))
+}
+
 fn required(value: String, message: &'static str) -> Result<String, AppError> {
     let value = value.trim().to_string();
     if value.is_empty() {
@@ -1333,12 +1383,18 @@ fn parse_optional_date(
 #[cfg(test)]
 mod tests {
     use super::{
-        discounted_cost, div_round, proportional_allocations, receiving_variance,
+        base_quantity, discounted_cost, div_round, proportional_allocations, receiving_variance,
         remaining_weighted_cost, return_tax_breakdown, transition_target, weighted_cost,
     };
     #[test]
     fn weighted_cost_uses_received_quantity() {
         assert_eq!(weighted_cost(10, 100, 10, 200), 150);
+    }
+
+    #[test]
+    fn one_box_of_ten_kits_adds_ten_stock_units() {
+        assert_eq!(base_quantity(1, 10).unwrap(), 10);
+        assert!(base_quantity(i32::MAX, 10).is_err());
     }
 
     #[test]

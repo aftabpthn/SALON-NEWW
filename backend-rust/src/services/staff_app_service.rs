@@ -3,7 +3,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use crate::{models::common::AppError, services::staff_enterprise_service};
+use crate::{
+    models::common::AppError,
+    services::{staff_advanced_service, staff_enterprise_service},
+};
 
 #[derive(Clone, Copy)]
 pub struct StaffBusinessVisibility {
@@ -277,6 +280,167 @@ fn clean_pref(value: Option<String>, max_len: usize) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn performance_points(row: &staff_advanced_service::StaffPerformanceRow) -> i64 {
+    row.completed_appointments.saturating_mul(100)
+        + row.present_days.saturating_mul(20)
+        + row.repeat_clients.saturating_mul(50)
+        + row.operation_task_completed.saturating_mul(25)
+}
+
+pub struct AppointmentHistoryQuery<'a> {
+    pub staff_id: &'a str,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub page: i64,
+    pub page_size: i64,
+    pub query: &'a str,
+    pub status: &'a str,
+    pub service_id: &'a str,
+    pub service: &'a str,
+    pub department: &'a str,
+    pub sort: &'a str,
+    pub include_client_names: bool,
+}
+
+pub async fn appointment_history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    input: AppointmentHistoryQuery<'_>,
+) -> Result<Value, AppError> {
+    if let (Some(from), Some(to)) = (input.from, input.to) {
+        if to < from {
+            return Err(AppError::validation(
+                "history from date must be on or before to date",
+            ));
+        }
+    }
+    let page = input.page.max(1);
+    let page_size = input.page_size.clamp(1, 100);
+    let status = match input.status.trim().to_ascii_lowercase().as_str() {
+        "" | "all" => String::new(),
+        value
+            if [
+                "booked",
+                "scheduled",
+                "pending",
+                "queued",
+                "confirmed",
+                "arrived",
+                "checked-in",
+                "checked_in",
+                "in-service",
+                "in service",
+                "inprogress",
+                "in progress",
+                "started",
+                "active",
+                "running",
+                "completed",
+                "billed",
+                "paid",
+                "checked-out",
+                "checked_out",
+                "checkout",
+                "done",
+                "cancelled",
+                "canceled",
+                "voided",
+                "no-show",
+                "no show",
+                "noshow",
+            ]
+            .contains(&value) =>
+        {
+            value.to_string()
+        }
+        _ => {
+            return Err(AppError::validation(
+                "unsupported appointment history status",
+            ))
+        }
+    };
+    let query = input.query.trim().to_ascii_lowercase();
+    let service_id = input.service_id.trim();
+    let service = input.service.trim().to_ascii_lowercase();
+    let department = input.department.trim().to_ascii_lowercase();
+    if query.chars().count() > 100
+        || service.chars().count() > 100
+        || department.chars().count() > 100
+    {
+        return Err(AppError::validation(
+            "history filters must be 100 characters or less",
+        ));
+    }
+    let descending = match input.sort.trim().to_ascii_lowercase().as_str() {
+        "" | "desc" => true,
+        "asc" => false,
+        _ => return Err(AppError::validation("history sort must be asc or desc")),
+    };
+    let total_items = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*) FROM appointments appointment
+            WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND ($3='' OR appointment.staff_id=$3)
+              AND ($4::DATE IS NULL OR (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE >= $4)
+              AND ($5::DATE IS NULL OR (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE <= $5)
+              AND ($6='' OR LOWER(appointment.status)=$6)
+              AND ($7='' OR LOWER(CONCAT_WS(' ',appointment.id,appointment.notes)) LIKE '%'||$7||'%'
+                OR ($11 AND EXISTS(SELECT 1 FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id AND LOWER(CONCAT_WS(' ',client.first_name,client.last_name)) LIKE '%'||$7||'%'))
+                OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id
+                  AND LOWER(CONCAT_WS(' ',service.name,service.category)) LIKE '%'||$7||'%'
+                  AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
+              AND ($8='' OR $8 IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb)))
+              AND ($9='' OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND LOWER(service.name) LIKE '%'||$9||'%' AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
+              AND ($10='' OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND LOWER(service.category)=$10 AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(input.staff_id).bind(input.from).bind(input.to)
+    .bind(&status).bind(&query).bind(service_id).bind(&service).bind(&department).bind(input.include_client_names)
+    .fetch_one(db).await.map_err(|_| AppError::internal("failed to count appointment history"))?;
+    let rows = sqlx::query_scalar::<_, Value>(
+        r#"SELECT jsonb_build_object(
+              'id',appointment.id,'staffId',appointment.staff_id,'branchId',appointment.branch_id,
+              'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),appointment.staff_id),
+              'serviceIds',COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb,
+              'serviceNames',COALESCE((SELECT jsonb_agg(service.name ORDER BY service.name) FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),'[]'::jsonb),
+              'serviceDepartments',COALESCE((SELECT jsonb_agg(DISTINCT service.category) FILTER(WHERE service.category<>'') FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),'[]'::jsonb),
+              'durationMinutes',GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),
+              'value',COALESCE((SELECT SUM(service.price_paise) FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),0),
+              'startAt',appointment.start_at,'endAt',appointment.end_at,'status',appointment.status,
+              'chair',COALESCE((SELECT resource.name FROM appointment_resources resource WHERE resource.tenant_id=appointment.tenant_id AND resource.branch_id=appointment.branch_id AND resource.id=appointment.chair_room_id),''),
+              'source',appointment.source,'businessDate',(appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,'state',appointment.status,
+              'clientName',CASE WHEN $14 THEN COALESCE((SELECT TRIM(CONCAT_WS(' ',client.first_name,client.last_name)) FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),'') ELSE '' END,
+              'preferredClient',CASE WHEN $14 THEN COALESCE((SELECT client.preferred_staff_id=appointment.staff_id FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),FALSE) ELSE FALSE END,
+              'rescheduleTimeline',COALESCE((SELECT jsonb_agg(jsonb_build_object('action',activity.action,'changedAt',activity.created_at,'reason',activity.reason,'changedBy',activity.changed_by,'fromStartAt',activity.old_data->>'startAt','toStartAt',activity.new_data->>'startAt') ORDER BY activity.created_at) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND (activity.branch_id=appointment.branch_id OR activity.branch_id='') AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED','CALENDAR_MOVED')),'[]'::jsonb),
+              'rescheduleCount',(SELECT COUNT(*) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND (activity.branch_id=appointment.branch_id OR activity.branch_id='') AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED','CALENDAR_MOVED')),
+              'lastServiceAt',(SELECT previous.start_at FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),
+              'lastServiceNames',COALESCE((SELECT jsonb_agg(service.name ORDER BY service.name) FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF((SELECT previous.service_ids_json FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),''),'[]')::jsonb))),'[]'::jsonb),
+              'lastServiceDepartments',COALESCE((SELECT jsonb_agg(DISTINCT service.category) FILTER(WHERE service.category<>'') FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF((SELECT previous.service_ids_json FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),''),'[]')::jsonb))),'[]'::jsonb),
+              'workedMinutes',CASE WHEN LOWER(appointment.status) IN ('completed','billed','paid','checked-out') THEN GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60) ELSE 0 END,
+              'timer',jsonb_build_object('appointmentId',appointment.id,'status',appointment.status,'live',FALSE,'startedAt',NULL,'completedAt',NULL,'timeSource','estimated','elapsedMinutes',0,'totalMinutes',GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),'remainingMinutes',0,'overrunMinutes',0,'progress',0),
+              'billing',NULL,'attribution',NULL)
+            FROM appointments appointment LEFT JOIN staff ON staff.tenant_id=appointment.tenant_id AND staff.branch_id=appointment.branch_id AND staff.id=appointment.staff_id
+            WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND ($3='' OR appointment.staff_id=$3)
+              AND ($4::DATE IS NULL OR (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE >= $4)
+              AND ($5::DATE IS NULL OR (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE <= $5)
+              AND ($6='' OR LOWER(appointment.status)=$6)
+              AND ($7='' OR LOWER(CONCAT_WS(' ',appointment.id,appointment.notes)) LIKE '%'||$7||'%'
+                OR ($14 AND EXISTS(SELECT 1 FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id AND LOWER(CONCAT_WS(' ',client.first_name,client.last_name)) LIKE '%'||$7||'%'))
+                OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND LOWER(CONCAT_WS(' ',service.name,service.category)) LIKE '%'||$7||'%' AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
+              AND ($8='' OR $8 IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb)))
+              AND ($9='' OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND LOWER(service.name) LIKE '%'||$9||'%' AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
+              AND ($10='' OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND LOWER(service.category)=$10 AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
+            ORDER BY CASE WHEN $11 THEN appointment.start_at END DESC,CASE WHEN NOT $11 THEN appointment.start_at END ASC
+            OFFSET $12 LIMIT $13"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(input.staff_id).bind(input.from).bind(input.to)
+    .bind(&status).bind(&query).bind(service_id).bind(&service).bind(&department).bind(descending)
+    .bind((page - 1) * page_size).bind(page_size).bind(input.include_client_names)
+    .fetch_all(db).await.map_err(|_| AppError::internal("failed to load appointment history"))?;
+    let total_pages = (total_items + page_size - 1) / page_size;
+    Ok(
+        json!({"rows":rows,"page":page,"pageSize":page_size,"totalItems":total_items,"totalPages":total_pages,"hasMore":page<total_pages}),
+    )
+}
+
 pub async fn enterprise_os(
     db: &PgPool,
     tenant_id: &str,
@@ -314,12 +478,21 @@ pub async fn enterprise_os(
               'serviceNames',COALESCE((SELECT jsonb_agg(service.name ORDER BY service.name)
                 FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id
                   AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),'[]'::jsonb),
+              'serviceDepartments',COALESCE((SELECT jsonb_agg(DISTINCT service.category) FILTER(WHERE service.category<>'') FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),'[]'::jsonb),
               'durationMinutes',GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),
               'value',COALESCE((SELECT SUM(service.price_paise) FROM services service
                 WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id
                   AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),0),
               'startAt',appointment.start_at,'endAt',appointment.end_at,'status',appointment.status,
-              'chair','','source',appointment.source)
+              'chair',COALESCE((SELECT resource.name FROM appointment_resources resource WHERE resource.id=appointment.chair_room_id),''),
+              'source',appointment.source,
+              'clientName',COALESCE((SELECT TRIM(CONCAT_WS(' ',client.first_name,client.last_name)) FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),''),
+              'preferredClient',COALESCE((SELECT client.preferred_staff_id=appointment.staff_id FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),FALSE),
+              'rescheduleTimeline',COALESCE((SELECT jsonb_agg(jsonb_build_object('action',activity.action,'changedAt',activity.created_at,'reason',activity.reason,'changedBy',activity.changed_by,'fromStartAt',activity.old_data->>'startAt','toStartAt',activity.new_data->>'startAt') ORDER BY activity.created_at) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND (activity.branch_id=appointment.branch_id OR activity.branch_id='') AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED','CALENDAR_MOVED')),'[]'::jsonb),
+              'rescheduleCount',(SELECT COUNT(*) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND activity.branch_id=appointment.branch_id AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED')),
+              'lastServiceAt',(SELECT previous.start_at FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),
+              'lastServiceNames',COALESCE((SELECT jsonb_agg(service.name ORDER BY service.name) FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF((SELECT previous.service_ids_json FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),''),'[]')::jsonb))),'[]'::jsonb),
+              'lastServiceDepartments',COALESCE((SELECT jsonb_agg(DISTINCT service.category) FILTER (WHERE service.category<>'') FROM services service WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF((SELECT previous.service_ids_json FROM appointments previous WHERE previous.tenant_id=appointment.tenant_id AND previous.branch_id=appointment.branch_id AND previous.client_id=appointment.client_id AND previous.start_at<appointment.start_at AND LOWER(previous.status) IN ('completed','checked-out','billed','paid') ORDER BY previous.start_at DESC LIMIT 1),''),'[]')::jsonb))),'[]'::jsonb))
             FROM appointments appointment
             WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.staff_id=$3
               AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5
@@ -372,38 +545,49 @@ pub async fn enterprise_os(
     .fetch_all(db)
     .await
     .map_err(|_| AppError::internal("failed to load staff notifications"))?;
-    let (revenue, completed_services, worked_minutes, scheduled_minutes, rating) =
-        sqlx::query_as::<_, (i64, i64, i64, i64, Option<f64>)>(
-        r#"SELECT
-              COALESCE((SELECT SUM(snapshot.base_paise) FROM pos_staff_commission_snapshots snapshot
-                WHERE snapshot.tenant_id=$1 AND snapshot.branch_id=$2 AND snapshot.staff_id=$3
-                  AND snapshot.business_date BETWEEN $4 AND $5),0)::BIGINT,
-              COUNT(*) FILTER(WHERE LOWER(appointment.status) IN ('completed','billed','paid'))::BIGINT,
-              COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60)
-                FILTER(WHERE LOWER(appointment.status) IN ('completed','billed','paid')),0)::BIGINT,
-              COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),0)::BIGINT,
-              (SELECT ROUND(AVG(review.score)::NUMERIC/20,1)::DOUBLE PRECISION
-                 FROM staff_performance_reviews review
-                WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.staff_id=$3
-                  AND review.status IN ('shared','acknowledged','closed')
-                  AND review.period_start<=$5 AND review.period_end>=$4)
-            FROM appointments appointment WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2
-              AND appointment.staff_id=$3 AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5"#,
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(&staff_id)
-    .bind(from)
-    .bind(to)
-    .fetch_one(db)
-    .await
-    .map_err(|_| AppError::internal("failed to load staff enterprise performance"))?;
-    let utilization = if scheduled_minutes > 0 {
-        Some(((worked_minutes * 100) / scheduled_minutes).clamp(0, 100))
-    } else {
-        None
-    };
-    let productivity_score = utilization;
+    let performance_rows =
+        staff_advanced_service::performance(db, tenant_id, branch_id, from, to, "")
+            .await?
+            .rows;
+    let performance = performance_rows
+        .iter()
+        .find(|row| row.staff_id == staff_id)
+        .cloned()
+        .ok_or_else(|| AppError::not_found("linked employee profile not found"))?;
+    let mut ranked = performance_rows
+        .iter()
+        .filter(|row| row.score.is_some())
+        .collect::<Vec<_>>();
+    ranked.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then_with(|| performance_points(right).cmp(&performance_points(left)))
+            .then_with(|| right.revenue_paise.cmp(&left.revenue_paise))
+            .then_with(|| left.staff_name.cmp(&right.staff_name))
+            .then_with(|| left.staff_id.cmp(&right.staff_id))
+    });
+    let leaderboard = ranked
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            json!({
+                "rank":index + 1,"staffId":row.staff_id,"staffName":row.staff_name,
+                "revenue":row.revenue_paise,"score":row.score,"rating":row.rating,
+                "points":performance_points(row),"days":row.present_days + row.absent_days,
+                "isMe":row.staff_id == staff_id
+            })
+        })
+        .collect::<Vec<_>>();
+    let points = performance_points(&performance);
+    let badges = vec![
+        json!({"label":"First Service","description":"Complete the first appointment","earned":performance.completed_appointments > 0}),
+        json!({"label":"Service Pro","description":"Complete 10 appointments","earned":performance.completed_appointments >= 10}),
+        json!({"label":"Attendance Star","description":"Attend 5 days without an attendance exception","earned":performance.present_days >= 5 && performance.absent_days == 0 && performance.late_minutes == 0 && performance.early_leave_minutes == 0}),
+        json!({"label":"Client Favorite","description":"Reach a 40% repeat-client rate","earned":performance.repeat_client_percent.is_some_and(|value| value >= 40)}),
+        json!({"label":"Target Champion","description":"Reach the assigned revenue target","earned":performance.revenue_target_percent.is_some_and(|value| value >= 100)}),
+        json!({"label":"Operations Pro","description":"Complete 5 operation tasks without a miss","earned":performance.operation_task_completed >= 5 && performance.operation_task_missed == 0}),
+    ];
     let target_progress = sqlx::query_scalar::<_, Value>(
         r#"WITH target AS (
              SELECT id,service_id,service_name,target_count,starts_on,ends_on,
@@ -458,7 +642,11 @@ pub async fn enterprise_os(
             json!({
                 "id":appointment["id"],"serviceNames":appointment["serviceNames"],
                 "startAt":start,"endAt":end,"status":appointment["status"],"state":appointment["status"],
-                "minutesToStart":0,"durationMinutes":appointment["durationMinutes"]
+                "minutesToStart":0,"durationMinutes":appointment["durationMinutes"],"chair":appointment["chair"],
+                "clientName":appointment["clientName"],"preferredClient":appointment["preferredClient"],
+                "rescheduleCount":appointment["rescheduleCount"],"lastServiceAt":appointment["lastServiceAt"],
+                "rescheduleTimeline":appointment["rescheduleTimeline"],"serviceDepartments":appointment["serviceDepartments"],
+                "lastServiceNames":appointment["lastServiceNames"],"lastServiceDepartments":appointment["lastServiceDepartments"]
             })
         })
         .collect::<Vec<_>>();
@@ -471,12 +659,17 @@ pub async fn enterprise_os(
             "targetProgress":target_progress
         },
         "timeline":timeline,"serviceTimers":[],
-        "performance":{"revenue":revenue,"completedServices":completed_services,"avgUtilization":utilization,"avgRating":rating,"productivityScore":productivity_score,"strengths":[],"opportunities":[]},
-        "leaderboard":[],
-        "gamification":{"points":0,"level":0,"stars":0,"dailyStreak":0,"monthlyStreak":0,"badges":[]},
+        "performance":{"revenue":performance.revenue_paise,"completedServices":performance.completed_appointments,
+          "avgUtilization":performance.utilization_percent,"avgRating":performance.rating,"productivityScore":performance.score,
+          "strengths":performance.strengths,"opportunities":performance.opportunities},
+        "leaderboard":leaderboard,
+        "gamification":{"points":points,"level":if points > 0 { points / 500 + 1 } else { 0 },
+          "stars":performance.score.map(|value| ((value + 19) / 20).clamp(1,5)).unwrap_or(0),
+          "activeDays":performance.present_days,"dailyStreak":0,"monthlyStreak":0,"badges":badges},
         "notifications":notifications,"tasks":tasks,"calendar":calendar,
-        "reports":{"selected":{"days":days,"revenue":revenue,"services":completed_services,"productivityScore":productivity_score,"rating":rating}},
-        "generatedAt":now,"workedMinutes":worked_minutes
+        "reports":{"selected":{"days":days,"revenue":performance.revenue_paise,"services":performance.completed_appointments,
+          "productivityScore":performance.score,"rating":performance.rating}},
+        "generatedAt":now,"workedMinutes":performance.worked_minutes
     }))
 }
 
@@ -486,79 +679,63 @@ pub async fn business(
     tenant_id: &str,
     branch_id: &str,
     user_id: &str,
-    from: NaiveDate,
-    to: NaiveDate,
+    mut from: NaiveDate,
+    mut to: NaiveDate,
     page: i64,
     page_size: i64,
     query: &str,
     status: &str,
     sort: &str,
+    all_history: bool,
+    service_id: &str,
+    service: &str,
+    department: &str,
     visible: StaffBusinessVisibility,
     earnings_visible: bool,
 ) -> Result<Value, AppError> {
-    if to < from || (to - from).num_days() > 92 {
+    let staff_id =
+        staff_enterprise_service::self_staff_id(db, tenant_id, branch_id, user_id).await?;
+    if all_history {
+        let bounds = sqlx::query_as::<_, (Option<NaiveDate>, Option<NaiveDate>)>(
+            "SELECT MIN((start_at AT TIME ZONE 'Asia/Kolkata')::DATE),MAX((start_at AT TIME ZONE 'Asia/Kolkata')::DATE) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3",
+        )
+        .bind(tenant_id).bind(branch_id).bind(&staff_id).fetch_one(db).await
+        .map_err(|_| AppError::internal("failed to load appointment history range"))?;
+        if let (Some(first), Some(last)) = bounds {
+            from = first;
+            to = last;
+        }
+    } else if to < from || (to - from).num_days() > 92 {
         return Err(AppError::validation(
             "staff business range must be 93 days or less",
         ));
     }
-    let staff_id =
-        staff_enterprise_service::self_staff_id(db, tenant_id, branch_id, user_id).await?;
     let page = page.max(1);
     let page_size = page_size.clamp(1, 100);
-    let status = match status.trim().to_ascii_lowercase().as_str() {
-        "all" => String::new(),
-        value => value.to_string(),
-    };
     let query = query.trim().to_ascii_lowercase();
     let descending = sort != "asc";
-    let appointment_total = sqlx::query_scalar::<_, i64>(
-        r#"SELECT COUNT(*) FROM appointments appointment
-            WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.staff_id=$3
-              AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5
-              AND ($6='' OR LOWER(appointment.status)=$6)
-              AND ($7='' OR LOWER(appointment.id||' '||appointment.notes) LIKE '%'||$7||'%'
-                OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id
-                  AND service.branch_id=appointment.branch_id AND LOWER(service.name) LIKE '%'||$7||'%'
-                  AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))"#,
+    let history = appointment_history(
+        db,
+        tenant_id,
+        branch_id,
+        AppointmentHistoryQuery {
+            staff_id: &staff_id,
+            from: Some(from),
+            to: Some(to),
+            page,
+            page_size,
+            query: &query,
+            status,
+            service_id,
+            service,
+            department,
+            sort,
+            include_client_names: visible.client_name,
+        },
     )
-    .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to).bind(&status).bind(&query)
-    .fetch_one(db).await.map_err(|_| AppError::internal("failed to count staff business appointments"))?;
-    let appointments = sqlx::query_scalar::<_, Value>(
-        r#"SELECT jsonb_build_object(
-              'id',appointment.id,'staffId',appointment.staff_id,'branchId',appointment.branch_id,
-              'serviceIds',COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb,
-              'serviceNames',COALESCE((SELECT jsonb_agg(service.name ORDER BY service.name) FROM services service
-                WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id
-                  AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),'[]'::jsonb),
-              'durationMinutes',GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),
-              'value',COALESCE((SELECT SUM(service.price_paise) FROM services service
-                WHERE service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id
-                  AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))),0),
-              'startAt',appointment.start_at,'endAt',appointment.end_at,'status',appointment.status,'chair','',
-              'source',appointment.source,'businessDate',(appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,
-              'state',appointment.status,
-              'workedMinutes',CASE WHEN LOWER(appointment.status) IN ('completed','billed','paid')
-                THEN GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60) ELSE 0 END,
-              'timer',jsonb_build_object('appointmentId',appointment.id,'status',appointment.status,'live',FALSE,
-                'startedAt',NULL,'completedAt',NULL,'timeSource','estimated','elapsedMinutes',0,
-                'totalMinutes',GREATEST(0,EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60),
-                'remainingMinutes',0,'overrunMinutes',0,'progress',0),
-              'billing',NULL,
-              'attribution',NULL)
-            FROM appointments appointment
-            WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.staff_id=$3
-              AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5
-              AND ($6='' OR LOWER(appointment.status)=$6)
-              AND ($7='' OR LOWER(appointment.id||' '||appointment.notes) LIKE '%'||$7||'%'
-                OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id=appointment.tenant_id
-                  AND service.branch_id=appointment.branch_id AND LOWER(service.name) LIKE '%'||$7||'%'
-                  AND service.id IN (SELECT jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb))))
-            ORDER BY CASE WHEN $8 THEN appointment.start_at END DESC,CASE WHEN NOT $8 THEN appointment.start_at END ASC
-            OFFSET $9 LIMIT $10"#,
-    )
-    .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to).bind(&status).bind(&query)
-    .bind(descending).bind((page - 1) * page_size).bind(page_size)
-    .fetch_all(db).await.map_err(|_| AppError::internal("failed to load staff business appointments"))?;
+    .await?;
+    let appointment_total = history["totalItems"].as_i64().unwrap_or_default();
+    let appointments = history["rows"].clone();
     let service_data = self_service_lines(
         db,
         tenant_id,
@@ -596,6 +773,16 @@ pub async fn business(
     )
     .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to)
     .fetch_one(db).await.map_err(|_| AppError::internal("failed to load staff business summary"))?;
+    summary["appointmentValuePaise"] = json!(sqlx::query_scalar::<_, i64>(
+        r#"SELECT COALESCE(SUM(service.price_paise),0)::BIGINT
+            FROM appointments appointment
+            JOIN LATERAL jsonb_array_elements_text(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::jsonb) selected(id) ON TRUE
+            JOIN services service ON service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id=selected.id
+            WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.staff_id=$3
+              AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to)
+    .fetch_one(db).await.map_err(|_| AppError::internal("failed to load staff appointment value"))?);
     let service_totals = &service_data["totals"];
     summary["bills"] = service_totals["bills"].clone();
     summary["subtotalPaise"] = service_totals["grossPaise"].clone();
@@ -607,7 +794,7 @@ pub async fn business(
     summary["paidPaise"] = Value::Null;
     summary["duePaise"] = Value::Null;
     let services = sqlx::query_scalar::<_, Value>(
-        "SELECT jsonb_build_object('id',id,'name',name) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY name,id",
+        "SELECT jsonb_build_object('id',id,'name',name,'category',category) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY name,id",
     )
     .bind(tenant_id).bind(branch_id).fetch_all(db).await
     .map_err(|_| AppError::internal("failed to load staff business services"))?;
@@ -701,6 +888,7 @@ pub async fn business(
     };
     let total_items = appointment_total.max(service_total);
     let total_pages = (total_items + page_size - 1) / page_size;
+    let appointment_pages = (appointment_total + page_size - 1) / page_size;
     Ok(json!({
         "date":to,"range":{"from":from,"to":to,"timeZone":"Asia/Kolkata"},"staff":staff,
         "billingVisible":visible.financial(),"permissions":{"billing":visible.financial(),"earnings":earnings_visible,"targets":true,
@@ -709,7 +897,8 @@ pub async fn business(
         "summary":summary,
         "performance":performance,
         "earnings":earnings,"targets":[],"services":services,"dailyBreakdown":daily_breakdown,
-        "pagination":{"page":page,"pageSize":page_size,"totalItems":total_items,"totalPages":total_pages,"hasMore":page<total_pages},
+        "pagination":{"page":page,"pageSize":page_size,"totalItems":total_items,"totalPages":total_pages,"hasMore":page<total_pages,
+          "appointmentTotal":appointment_total,"appointmentPages":appointment_pages,"appointmentHasMore":page<appointment_pages,"serviceTotal":service_total},
         "appointments":appointments,"serviceInvoices":service_data["rows"]
     }))
 }

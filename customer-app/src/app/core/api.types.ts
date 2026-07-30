@@ -54,6 +54,7 @@ export interface CustomerMarketingOffer {
   endsAt?: string;
   minimumBillPaise: number;
   perClientLimit: number;
+  personal: boolean;
   hasCreative: boolean;
 }
 
@@ -400,6 +401,7 @@ export interface CreateBookingPayload {
   notes?: string;
   rebookFromBookingId?: string;
   source?: string;
+  offerCode?: string;
   paymentMode: "pay_at_venue" | "online";
   cardGuaranteeAccepted?: boolean;
 }

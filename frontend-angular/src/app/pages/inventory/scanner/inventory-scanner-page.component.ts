@@ -2,6 +2,7 @@ import { LanguageService } from '../../../core/i18n/language.service';
 import { CommonModule } from '@angular/common';
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
@@ -26,6 +27,7 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
   @ViewChild('camera') camera?: ElementRef<HTMLVideoElement>;
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
   private stream?: MediaStream;
   private detector?: { detect(source: HTMLVideoElement): Promise<Array<{ rawValue?: string }>> };
   private detectionFrame = 0;
@@ -34,7 +36,11 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
   workflow: Workflow = 'lookup'; code = ''; matched: InventoryItem | null = null; history: ScanEvent[] = []; audits: AuditSession[] = []; branches: AuthBranchAccess[] = [];
   historyOpen = false; loading = false; saving = false; cameraActive = false; error = ''; notice = ''; quantity: number | null = null; notes = ''; destinationBranchId = ''; destinationInventoryItemId = ''; auditSessionId = '';
 
-  ngOnInit() { window.addEventListener('online', this.onlineHandler); void this.loadScannerState(); void firstValueFrom(this.auth.loadProfile()).then((profile) => { this.branches = profile.branches; }).catch(() => undefined); }
+  ngOnInit() {
+    const auditSessionId = this.route.snapshot.queryParamMap.get('auditSessionId');
+    if (auditSessionId) { this.auditSessionId = auditSessionId; this.workflow = 'count'; }
+    window.addEventListener('online', this.onlineHandler); void this.loadScannerState(); void firstValueFrom(this.auth.loadProfile()).then((profile) => { this.branches = profile.branches; }).catch(() => undefined);
+  }
   ngOnDestroy() { window.removeEventListener('online', this.onlineHandler); this.stopCamera(); }
 
   async loadScannerState() {
@@ -42,6 +48,7 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
       const [events, audits] = await Promise.all([this.get<PersistedEvent[]>('/inventory/scanner-events'), this.get<AuditSession[]>('/inventory/stock-audits')]);
       this.history = events.map((row) => ({ code: row.code, workflow: row.workflow, itemName: row.result === 'matched' ? 'Matched product' : '', status: this.scanStatus(row.result), at: new Date(row.receivedAt) }));
       this.audits = audits.filter((row) => row.status === 'counting' || row.status === 'recount_required');
+      if (this.auditSessionId && !this.audits.some((row) => row.id === this.auditSessionId)) this.auditSessionId = '';
       if (!this.auditSessionId && this.audits.length === 1) this.auditSessionId = this.audits[0].id;
       await this.replayOfflineQueue();
     } catch { /* scanner remains usable; the next online scan will retry */ }

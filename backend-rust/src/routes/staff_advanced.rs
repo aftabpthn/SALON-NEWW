@@ -1354,18 +1354,20 @@ fn ensure_payroll_permission(
     roles: &[&str],
     permissions: &[&str],
 ) -> Result<(), AppError> {
-    let denied = claims
-        .denied_permissions
-        .iter()
-        .any(|denied| permissions.iter().any(|permission| denied.as_str() == *permission));
+    let denied = claims.denied_permissions.iter().any(|denied| {
+        permissions
+            .iter()
+            .any(|permission| denied.as_str() == *permission)
+    });
     if !denied
         && (roles
             .iter()
             .any(|role| role.eq_ignore_ascii_case(&claims.role))
-            || claims
-                .permissions
-                .iter()
-                .any(|allowed| permissions.iter().any(|permission| allowed.as_str() == *permission)))
+            || claims.permissions.iter().any(|allowed| {
+                permissions
+                    .iter()
+                    .any(|permission| allowed.as_str() == *permission)
+            }))
     {
         Ok(())
     } else {

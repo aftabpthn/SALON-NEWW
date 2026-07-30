@@ -20,7 +20,7 @@ use crate::{
     },
     services::{
         auth_service::{self, TokenScope},
-        entitlement_service, security_service, sso_service, webauthn_service,
+        entitlement_service, security_service, sso_service, staff_service, webauthn_service,
     },
     state::AppState,
 };
@@ -126,6 +126,21 @@ pub struct ChangePasswordResponse {
     pub reauthentication_required: bool,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AcceptStaffInviteRequest {
+    pub login_id: String,
+    pub password: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcceptStaffInviteResponse {
+    pub accepted: bool,
+    pub login_id: String,
+    pub tenant_context: String,
+}
+
 #[derive(Serialize)]
 pub struct LogoutResponse {
     pub revoked: bool,
@@ -184,6 +199,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/csrf", get(csrf))
         .route("/auth/login", post(login))
+        .route(
+            "/auth/staff-invitations/:token",
+            get(preview_staff_invite).post(accept_staff_invite),
+        )
         .route("/auth/sso/providers", get(sso_providers))
         .route("/auth/sso/:provider/start", get(start_sso))
         .route("/auth/sso/:provider/callback", get(finish_sso))
@@ -196,6 +215,45 @@ pub fn router() -> Router<AppState> {
         .route("/auth/refresh", post(refresh))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
+}
+
+pub async fn preview_staff_invite(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> ApiResult<staff_service::StaffLoginInvitePreview> {
+    Ok(Json(ApiResponse::ok(
+        staff_service::preview_login_invite(&state.db, &token).await?,
+    )))
+}
+
+pub async fn accept_staff_invite(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    headers: HeaderMap,
+    Json(payload): Json<AcceptStaffInviteRequest>,
+) -> ApiResult<AcceptStaffInviteResponse> {
+    let accepted =
+        staff_service::accept_login_invite(&state.db, &token, &payload.login_id, &payload.password)
+            .await?;
+    let client = ClientContext::from_headers(&headers);
+    audit(
+        &state,
+        &accepted.tenant_id,
+        Some(&accepted.user_id),
+        None,
+        Some(&accepted.branch_id),
+        Some(&accepted.login_id),
+        "staff.login_invite.accepted",
+        "success",
+        &client,
+        json!({"staffId":accepted.staff_id}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(AcceptStaffInviteResponse {
+        accepted: true,
+        login_id: accepted.login_id,
+        tenant_context: accepted.tenant_id,
+    })))
 }
 
 pub async fn csrf() -> ApiResult<CsrfResponse> {

@@ -28,6 +28,11 @@ resource "random_password" "security_encryption" {
   special = false
 }
 
+resource "random_password" "support_email_webhook" {
+  length  = 64
+  special = false
+}
+
 resource "random_password" "origin_header" {
   length  = 48
   special = false
@@ -172,6 +177,7 @@ locals {
     JWT_REFRESH_SECRET      = random_password.jwt_refresh.result
     AI_SERVICE_TOKEN       = random_password.ai_service.result
     SECURITY_ENCRYPTION_KEY = random_password.security_encryption.result
+    SUPPORT_EMAIL_WEBHOOK_SECRET = random_password.support_email_webhook.result
     OPENAI_API_KEY         = var.openai_api_key
     AWS_REGION             = var.aws_region
     AWS_S3_BUCKET          = aws_cloudformation_stack.data_protection.outputs["FileBucketName"]

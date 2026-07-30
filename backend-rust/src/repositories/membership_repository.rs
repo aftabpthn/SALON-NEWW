@@ -132,14 +132,14 @@ pub async fn update(
     .fetch_optional(db).await
 }
 
-pub async fn delete(
+pub async fn archive(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
     id: &str,
 ) -> Result<bool, sqlx::Error> {
     Ok(
-        sqlx::query("DELETE FROM memberships WHERE tenant_id = $1 AND branch_id = $2 AND id = $3")
+        sqlx::query("UPDATE memberships SET active = FALSE, updated_at = NOW() WHERE tenant_id = $1 AND branch_id = $2 AND id = $3 AND active = TRUE")
             .bind(tenant_id)
             .bind(branch_id)
             .bind(id)
@@ -148,6 +148,16 @@ pub async fn delete(
             .rows_affected()
             > 0,
     )
+}
+
+pub async fn restore(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("UPDATE memberships SET active=TRUE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE RETURNING name")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
 }
 
 fn select_sql(where_clause: &str) -> String {

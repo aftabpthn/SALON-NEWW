@@ -31,6 +31,8 @@ pub fn router() -> Router<AppState> {
         .route("/staff-leave/balances", get(list_balances))
         .route("/staff-leave/requests/:id/approve", post(approve))
         .route("/staff-leave/requests/:id/reject", post(reject))
+        .route("/staff-leave/requests/:id/withdraw", post(withdraw))
+        .route("/staff-leave/requests/:id/restore", post(restore))
 }
 
 #[derive(Debug, Deserialize)]
@@ -200,6 +202,46 @@ async fn reject(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn withdraw(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<LeaveRequestRecord> {
+    ensure_leave_request_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_leave_service::withdraw(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &staff_id,
+        &claims.sub,
+        payload.version,
+    )
+    .await?;
+    audit_leave_record(&state, &claims, &branch_id, "staff.leave.withdrawn", &row).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn restore(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<LeaveRequestRecord> {
+    let (tenant_id, branch_id) = leave_context(&claims, &headers)?;
+    let row = staff_leave_service::restore(&state.db, &tenant_id, &branch_id, &id, payload.version)
+        .await?;
+    audit_leave_record(&state, &claims, &branch_id, "staff.leave.restored", &row).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 fn leave_context(claims: &AuthClaims, headers: &HeaderMap) -> Result<(String, String), AppError> {
     ensure_leave_manage_access(claims)?;
     tenant_branch(headers)
@@ -230,7 +272,11 @@ fn ensure_leave_request_access(claims: &AuthClaims) -> Result<(), AppError> {
         claims,
         "staff.app.leaves.manage",
         &["owner", "admin", "manager", "staff"],
-        &["staff.self_manage", "staff_self.write"],
+        &[
+            "staff.leave.manage",
+            "staff.self_manage",
+            "staff_self.write",
+        ],
     ) {
         Ok(())
     } else {
@@ -296,6 +342,31 @@ async fn audit_leave(
             ip_address: None,
             user_agent: None,
             details: json!({ "leaveRequestId": request_id }),
+        },
+    )
+    .await;
+}
+
+async fn audit_leave_record(
+    state: &AppState,
+    claims: &AuthClaims,
+    branch_id: &str,
+    event_type: &str,
+    row: &LeaveRequestRecord,
+) {
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &claims.tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(branch_id),
+            identity: None,
+            event_type,
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"leaveRequestId":row.id,"recordName":row.staff_name,"version":row.version,"restorable":event_type.ends_with("withdrawn")}),
         },
     )
     .await;

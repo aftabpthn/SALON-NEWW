@@ -3,6 +3,8 @@ import { LanguageService } from '../../../core/i18n/language.service';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../../../core/services/auth.service';
+import { BackbarControlService } from '../../../features/inventory/backbar-control.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
@@ -38,6 +40,8 @@ type RecipeTab = 'recipes' | 'demand' | 'approvals' | 'variance';
 })
 export class ServiceRecipesPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
+  private readonly auth = inject(AuthService);
+  private readonly backbar = inject(BackbarControlService);
   private readonly api = inject(ApiService);
   services: Service[] = [];
   items: Item[] = [];
@@ -66,6 +70,7 @@ export class ServiceRecipesPageComponent implements OnInit {
   get selectedService() { return this.services.find((service) => service.id === this.selectedServiceId); }
   get varianceRows() { return this.usage.filter((row) => row.varianceQuantity !== 0); }
   get approvalRows() { return this.usage.filter((row) => row.status === 'pending_approval'); }
+  get canReview() { return this.auth.hasRole('owner') || this.auth.hasPermission('inventory.approve'); }
   get demandRows(): DemandRow[] {
     const now = Date.now();
     const horizon = now + 15 * 24 * 60 * 60 * 1000;
@@ -159,6 +164,18 @@ export class ServiceRecipesPageComponent implements OnInit {
   quantity(value: number, unit = '') { return `${Number(value || 0).toLocaleString('en-IN')} ${unit}`.trim(); }
   variancePercent(row: Usage) { return row.expectedQuantity > 0 ? Math.max(0, row.varianceQuantity / row.expectedQuantity * 100) : (row.varianceQuantity > 0 ? 100 : 0); }
   approvalThreshold(row: Usage) { return Number(row.approvalThresholdPercent || 0); }
+
+  async review(row: Usage, decision: 'approve' | 'reject') {
+    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    if (decision === 'reject' && !reviewNote) return;
+    this.saving = true; this.clearFeedback();
+    try {
+      await this.backbar.reviewUsage(row.id, { decision, reviewNote: reviewNote || '' });
+      this.usage = await this.get<Usage[]>('/inventory/backbar-usage?limit=500');
+      this.notice = decision === 'approve' ? 'Usage approved and stock updated' : 'Usage rejected';
+    } catch (error) { this.error = this.message(error, this.language.text('inventory.message.b646c3516a')); }
+    finally { this.saving = false; }
+  }
 
   async saveRecipe() {
     const service = this.selectedService;

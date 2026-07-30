@@ -87,6 +87,7 @@ pub struct WhatsAppCampaignPlan {
     pub scheduled_for: Option<DateTime<Utc>>,
     pub created_by: String,
     pub approved_by: String,
+    pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -370,7 +371,7 @@ pub async fn campaign_plans(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<WhatsAppCampaignPlan>, sqlx::Error> {
-    sqlx::query_as("SELECT id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,scheduled_for,created_by,approved_by,created_at,updated_at FROM whatsapp_campaign_plans WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC LIMIT 500")
+    sqlx::query_as("SELECT id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,scheduled_for,created_by,approved_by,version,created_at,updated_at FROM whatsapp_campaign_plans WHERE tenant_id=$1 AND branch_id=$2 ORDER BY status='archived',created_at DESC LIMIT 500")
         .bind(tenant_id).bind(branch_id).fetch_all(db).await
 }
 
@@ -386,7 +387,7 @@ pub async fn create_campaign_plan(
     criteria: &Value,
     created_by: &str,
 ) -> Result<WhatsAppCampaignPlan, sqlx::Error> {
-    sqlx::query_as("INSERT INTO whatsapp_campaign_plans (id,tenant_id,branch_id,campaign_type,title,objective,message_text,segment_key,criteria_json,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,scheduled_for,created_by,approved_by,created_at,updated_at")
+    sqlx::query_as("INSERT INTO whatsapp_campaign_plans (id,tenant_id,branch_id,campaign_type,title,objective,message_text,segment_key,criteria_json,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,scheduled_for,created_by,approved_by,version,created_at,updated_at")
         .bind(new_id("wacp")).bind(tenant_id).bind(branch_id).bind(campaign_type).bind(title).bind(objective).bind(message_text).bind(segment_key).bind(criteria).bind(created_by).fetch_one(db).await
 }
 
@@ -398,9 +399,68 @@ pub async fn update_campaign_status(
     status: &str,
     actor: &str,
     scheduled_for: Option<DateTime<Utc>>,
+    expected_version: i32,
 ) -> Result<Option<WhatsAppCampaignPlan>, sqlx::Error> {
-    sqlx::query_as("UPDATE whatsapp_campaign_plans SET status=$4,approved_by=CASE WHEN $4='approved' THEN $5 ELSE approved_by END,scheduled_for=COALESCE($6,scheduled_for),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,scheduled_for,created_by,approved_by,created_at,updated_at")
-        .bind(tenant_id).bind(branch_id).bind(id).bind(status).bind(actor).bind(scheduled_for).fetch_optional(db).await
+    sqlx::query_as(
+        r#"UPDATE whatsapp_campaign_plans SET status=$4,
+             approved_by=CASE WHEN $4='approved' THEN $5 ELSE approved_by END,
+             scheduled_for=CASE WHEN $4 IN ('stopped','archived','draft') THEN NULL ELSE COALESCE($6,scheduled_for) END,
+             version=version+1,updated_at=NOW()
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$7 AND (
+             ($4='pending' AND status IN ('draft','rejected','stopped')) OR
+             ($4 IN ('approved','rejected') AND status='pending') OR
+             ($4='scheduled' AND status='approved') OR
+             ($4='stopped' AND status IN ('approved','scheduled')) OR
+             ($4='archived' AND status NOT IN ('sent','archived')) OR
+             ($4='draft' AND status='archived'))
+           RETURNING id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,
+             scheduled_for,created_by,approved_by,version,created_at,updated_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(status)
+    .bind(actor)
+    .bind(scheduled_for)
+    .bind(expected_version)
+    .fetch_optional(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn edit_campaign_plan(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    expected_version: i32,
+    campaign_type: &str,
+    title: &str,
+    objective: &str,
+    message_text: &str,
+    segment_key: &str,
+    criteria: &Value,
+) -> Result<Option<WhatsAppCampaignPlan>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE whatsapp_campaign_plans SET campaign_type=$5,title=$6,objective=$7,
+             message_text=$8,segment_key=$9,criteria_json=$10,version=version+1,updated_at=NOW()
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4
+             AND status IN ('draft','rejected','stopped')
+           RETURNING id,campaign_type,title,objective,message_text,segment_key,criteria_json,status,
+             scheduled_for,created_by,approved_by,version,created_at,updated_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(expected_version)
+    .bind(campaign_type)
+    .bind(title)
+    .bind(objective)
+    .bind(message_text)
+    .bind(segment_key)
+    .bind(criteria)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn campaign_outcomes(

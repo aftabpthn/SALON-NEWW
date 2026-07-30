@@ -62,6 +62,10 @@ pub fn router() -> Router<AppState> {
         .route("/staff-self/enterprise-os", get(staff_app_enterprise_os))
         .route("/staff-self/business", get(staff_app_business))
         .route(
+            "/staff-self/appointments/:id/recommendations",
+            get(self_appointment_recommendations),
+        )
+        .route(
             "/staff-self/business/invoices/:id",
             get(staff_app_business_invoice),
         )
@@ -224,6 +228,10 @@ struct StaffAppBusinessQuery {
     q: Option<String>,
     status: Option<String>,
     sort: Option<String>,
+    all_history: Option<bool>,
+    service_id: Option<String>,
+    service: Option<String>,
+    department: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -475,6 +483,7 @@ async fn list_self_offers(
           'startsAt',starts_at,'endsAt',ends_at,
           'minimumBillPaise',min_subtotal_paise,'usageLimit',usage_limit,'usedCount',used_count,
           'perClientLimit',per_client_limit,'active',active,'approvalStatus',approval_status,
+          'personalOffer',target_client_id IS NOT NULL,
           'hasCreative',EXISTS(SELECT 1 FROM marketing_offer_creatives creative WHERE creative.tenant_id=pos_coupons.tenant_id AND creative.branch_id=pos_coupons.branch_id AND creative.offer_id=pos_coupons.id)
         ) ORDER BY COALESCE(ends_at,starts_at,created_at) ASC),'[]'::JSONB)
         FROM pos_coupons
@@ -652,6 +661,11 @@ async fn staff_app_enterprise_os(
     headers: HeaderMap,
     Query(query): Query<StaffAppRangeQuery>,
 ) -> ApiResult<serde_json::Value> {
+    require_app(
+        &claims,
+        "staff.app.appointments.read",
+        &["appointments.read", "staff.self_manage"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let today = Utc::now()
         .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
@@ -671,6 +685,11 @@ async fn staff_app_business(
     headers: HeaderMap,
     Query(query): Query<StaffAppBusinessQuery>,
 ) -> ApiResult<serde_json::Value> {
+    require_app(
+        &claims,
+        "staff.app.business.read",
+        &["appointments.read", "staff.self_manage"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let today = Utc::now()
         .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
@@ -707,6 +726,10 @@ async fn staff_app_business(
             query.q.as_deref().unwrap_or(""),
             query.status.as_deref().unwrap_or(""),
             query.sort.as_deref().unwrap_or("desc"),
+            query.all_history.unwrap_or(false),
+            query.service_id.as_deref().unwrap_or(""),
+            query.service.as_deref().unwrap_or(""),
+            query.department.as_deref().unwrap_or(""),
             visible,
             earnings_visible,
         )
@@ -835,7 +858,8 @@ fn filter_staff_app_os(os: &mut serde_json::Value, c: &AuthClaims) {
         &["staff.analytics.read", "staff.self_manage"],
     ) {
         os["performance"] = json!({});
-    } else if !app_allowed(
+    }
+    if !app_allowed(
         c,
         "staff.app.business.service_amount.read",
         &[
@@ -845,10 +869,17 @@ fn filter_staff_app_os(os: &mut serde_json::Value, c: &AuthClaims) {
             "read:invoices",
         ],
     ) {
-        os["performance"]["revenue"] = json!(null);
+        if os["performance"].is_object() {
+            os["performance"]["revenue"] = json!(null);
+        }
         if let Some(reports) = os["reports"].as_object_mut() {
             for report in reports.values_mut() {
                 report["revenue"] = json!(null);
+            }
+        }
+        if let Some(leaderboard) = os["leaderboard"].as_array_mut() {
+            for row in leaderboard {
+                row["revenue"] = json!(null);
             }
         }
     }
@@ -936,6 +967,7 @@ fn filter_self_dashboard(dashboard: &mut SelfDashboardRecord, c: &AuthClaims) {
         STAFF_APP_PAYROLL_ROLES,
         &["staff.payroll.read", "staff.payroll.manage", "finance.read"],
     ) {
+        dashboard.payroll_profile = json!({});
         dashboard.payroll = json!([]);
     }
     dashboard.payroll_rules = json!([]);
@@ -1357,10 +1389,37 @@ async fn best_staff(
     h: HeaderMap,
     Json(p): Json<BestStaffRequest>,
 ) -> ApiResult<Vec<RankedStaffCandidate>> {
-    manager(&c)?;
+    if !auth_service::staff_app_permission_allowed(
+        &c,
+        "appointments.read",
+        &["owner", "admin", "manager", "receptionist"],
+        &["read:appointments"],
+    ) {
+        return Err(AppError::forbidden(
+            "appointment read permission is required",
+        ));
+    }
     let (t, b) = tenant_branch(&h)?;
     Ok(Json(ApiResponse::ok(
         staff_enterprise_service::best_staff(&s.db, &t, &b, p).await?,
+    )))
+}
+
+async fn self_appointment_recommendations(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<RankedStaffCandidate>> {
+    require_app(
+        &c,
+        "staff.app.appointments.read",
+        &["appointments.read", "staff.self_manage"],
+    )?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::best_staff_for_self_appointment(&s.db, &t, &b, &c.sub, &id)
+            .await?,
     )))
 }
 
@@ -1760,17 +1819,20 @@ fn payroll_read(c: &AuthClaims) -> Result<(), AppError> {
     payroll_permission(c, &["staff.payroll.read", "staff.payroll.manage"])
 }
 fn payroll_permission(c: &AuthClaims, permissions: &[&str]) -> Result<(), AppError> {
-    let denied = c
-        .denied_permissions
-        .iter()
-        .any(|denied| permissions.iter().any(|permission| denied.as_str() == *permission));
+    let denied = c.denied_permissions.iter().any(|denied| {
+        permissions
+            .iter()
+            .any(|permission| denied.as_str() == *permission)
+    });
     if !denied
         && (["owner", "admin", "accountant"]
             .iter()
             .any(|r| r.eq_ignore_ascii_case(&c.role))
-            || c.permissions
-                .iter()
-                .any(|allowed| permissions.iter().any(|permission| allowed.as_str() == *permission)))
+            || c.permissions.iter().any(|allowed| {
+                permissions
+                    .iter()
+                    .any(|permission| allowed.as_str() == *permission)
+            }))
     {
         Ok(())
     } else {

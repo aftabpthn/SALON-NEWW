@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
+use serde_json::json;
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::{
+    config::Settings,
     models::common::AppError,
     repositories::{
         staff_configuration_repository::{
@@ -16,10 +19,14 @@ use crate::{
         staff_hr_repository::{self, BulkImportResult, BulkStaffInput},
         staff_repository::{
             self, AuthRoleOptionRecord, AuthRoleRecord, BranchRoleAssignmentInput,
-            ProvisionStaffLoginInput, StaffBranchAccessRecord, StaffRecord,
+            CreateStaffLoginInviteInput, ProvisionStaffLoginInput, StaffBranchAccessRecord,
+            StaffLoginInviteRecord, StaffRecord,
         },
     },
-    services::auth_service::{self, TENANT_PERMISSION_CATALOG},
+    services::{
+        auth_service::{self, TENANT_PERMISSION_CATALOG},
+        invoice_delivery,
+    },
 };
 
 pub(crate) fn is_supported_photo_url(url: &str) -> bool {
@@ -142,6 +149,52 @@ pub struct StaffLoginProvision {
     pub email: String,
     pub initial_password: String,
     pub role_id: String,
+}
+
+const STAFF_LOGIN_INVITE_TTL_HOURS: i64 = 72;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffLoginInvite {
+    pub id: String,
+    pub email: String,
+    pub role_id: String,
+    pub role_name: String,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub delivery_status: String,
+    pub delivery_provider: String,
+    pub provider_message_id: String,
+    pub delivery_attempts: i32,
+    pub last_delivery_error: String,
+    pub last_sent_at: Option<DateTime<Utc>>,
+    pub delivered_at: Option<DateTime<Utc>>,
+    pub bounced_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept_path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffLoginInvitePreview {
+    pub tenant_name: String,
+    pub branch_name: String,
+    pub staff_name: String,
+    pub email: String,
+    pub role_name: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug)]
+pub struct StaffLoginInviteAcceptance {
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub staff_id: String,
+    pub user_id: String,
+    pub login_id: String,
 }
 
 pub async fn load_auth_roles(
@@ -702,7 +755,301 @@ pub async fn provision_login(
     load_branch_access(db, tenant_id, branch_id, staff_id).await
 }
 
-fn normalize_login_id(value: &str) -> Result<String, AppError> {
+pub async fn issue_login_invite(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    email: &str,
+    role_id: &str,
+) -> Result<StaffLoginInvite, AppError> {
+    let email = normalize_login_email(email)?;
+    let role_id = role_id.trim();
+    if role_id.is_empty() {
+        return Err(AppError::validation("roleId is required"));
+    }
+    let token = Uuid::new_v4().simple().to_string();
+    let id = staff_repository::create_staff_login_invite(
+        db,
+        &CreateStaffLoginInviteInput {
+            tenant_id,
+            branch_id,
+            staff_id,
+            role_id,
+            email: &email,
+            token_hash: &auth_service::token_hash(&token),
+            expires_at: Utc::now() + chrono::Duration::hours(STAFF_LOGIN_INVITE_TTL_HOURS),
+            actor_user_id,
+        },
+    )
+    .await
+    .map_err(|error| {
+        if matches!(error, sqlx::Error::RowNotFound) {
+            AppError::conflict("employee branch or role is no longer available")
+        } else {
+            AppError::internal("failed to create employee invitation")
+        }
+    })?;
+    deliver_login_invite(db, settings, tenant_id, &id, &token).await?;
+    let invite = staff_repository::staff_login_invite_by_id(db, tenant_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load employee invitation"))?
+        .ok_or_else(|| AppError::internal("created employee invitation was not found"))?;
+    Ok(login_invite(invite, Some(format!("/staff-invite/{token}"))))
+}
+
+pub async fn resend_login_invite(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+) -> Result<StaffLoginInvite, AppError> {
+    let previous = staff_repository::latest_staff_login_invite(db, tenant_id, branch_id, staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load employee invitation"))?
+        .ok_or_else(|| AppError::not_found("employee invitation was not found"))?;
+    issue_login_invite(
+        db,
+        settings,
+        tenant_id,
+        branch_id,
+        staff_id,
+        actor_user_id,
+        &previous.email,
+        &previous.role_id,
+    )
+    .await
+}
+
+pub async fn load_login_invite(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<Option<StaffLoginInvite>, AppError> {
+    Ok(
+        staff_repository::latest_staff_login_invite(db, tenant_id, branch_id, staff_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load employee invitation"))?
+            .map(|invite| login_invite(invite, None)),
+    )
+}
+
+pub async fn revoke_login_invite(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+) -> Result<StaffLoginInvite, AppError> {
+    if !staff_repository::revoke_staff_login_invite(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to revoke employee invitation"))?
+    {
+        return Err(AppError::conflict(
+            "no pending employee invitation was found",
+        ));
+    }
+    load_login_invite(db, tenant_id, branch_id, staff_id)
+        .await?
+        .ok_or_else(|| AppError::internal("revoked employee invitation was not found"))
+}
+
+pub async fn preview_login_invite(
+    db: &PgPool,
+    token: &str,
+) -> Result<StaffLoginInvitePreview, AppError> {
+    let token = valid_invite_token(token)?;
+    let preview =
+        staff_repository::preview_staff_login_invite(db, &auth_service::token_hash(token))
+            .await
+            .map_err(|_| AppError::internal("failed to load employee invitation"))?
+            .ok_or_else(|| AppError::not_found("invitation is invalid or expired"))?;
+    Ok(StaffLoginInvitePreview {
+        tenant_name: preview.tenant_name,
+        branch_name: preview.branch_name,
+        staff_name: preview.staff_name,
+        email: preview.email,
+        role_name: preview.role_name,
+        expires_at: preview.expires_at,
+    })
+}
+
+pub async fn accept_login_invite(
+    db: &PgPool,
+    token: &str,
+    login_id: &str,
+    password: &str,
+) -> Result<StaffLoginInviteAcceptance, AppError> {
+    let token = valid_invite_token(token)?;
+    let login_id = normalize_login_id(login_id)?;
+    if !auth_service::password_meets_policy(password) {
+        return Err(AppError::validation(
+            "password must contain 12 to 128 characters",
+        ));
+    }
+    let password_hash = auth_service::hash_password(password)
+        .map_err(|_| AppError::internal("failed to secure password"))?;
+    let accepted = staff_repository::accept_staff_login_invite(
+        db,
+        &auth_service::token_hash(token),
+        &login_id,
+        &password_hash,
+    )
+    .await
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|database_error| database_error.is_unique_violation())
+        {
+            AppError::conflict("login ID or email is already in use")
+        } else if matches!(error, sqlx::Error::RowNotFound) {
+            AppError::not_found("invitation is invalid or expired")
+        } else {
+            AppError::internal("failed to accept employee invitation")
+        }
+    })?;
+    Ok(StaffLoginInviteAcceptance {
+        tenant_id: accepted.tenant_id,
+        branch_id: accepted.branch_id,
+        staff_id: accepted.staff_id,
+        user_id: accepted.user_id,
+        login_id,
+    })
+}
+
+fn valid_invite_token(token: &str) -> Result<&str, AppError> {
+    let token = token.trim();
+    if token.len() != 32 || !token.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(AppError::not_found("invitation is invalid or expired"));
+    }
+    Ok(token)
+}
+
+fn login_invite(record: StaffLoginInviteRecord, accept_path: Option<String>) -> StaffLoginInvite {
+    StaffLoginInvite {
+        id: record.id,
+        email: record.email,
+        role_id: record.role_id,
+        role_name: record.role_name,
+        status: record.status,
+        expires_at: record.expires_at,
+        created_at: record.created_at,
+        accepted_at: record.accepted_at,
+        revoked_at: record.revoked_at,
+        delivery_status: record.delivery_status,
+        delivery_provider: record.delivery_provider,
+        provider_message_id: record.provider_message_id,
+        delivery_attempts: record.delivery_attempts,
+        last_delivery_error: record.last_delivery_error,
+        last_sent_at: record.last_sent_at,
+        delivered_at: record.delivered_at,
+        bounced_at: record.bounced_at,
+        accept_path,
+    }
+}
+
+async fn deliver_login_invite(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    invitation_id: &str,
+    token: &str,
+) -> Result<(), AppError> {
+    if !settings.smtp_email_enabled()
+        && (settings.invoice_delivery_webhook_url.is_none()
+            || settings.invoice_delivery_webhook_token.is_none())
+    {
+        return Ok(());
+    }
+    let preview = preview_login_invite(db, token).await?;
+    let accept_url = format!("{}/staff-invite/{token}", settings.crm_app_base_url);
+    let subject = format!("{} staff login invitation", preview.tenant_name);
+    let message = format!(
+        "Hello {},\n\n{} invited you to {} as {}. Create your login within 72 hours:\n{}\n",
+        preview.staff_name, preview.tenant_name, preview.branch_name, preview.role_name, accept_url
+    );
+    let payload = json!({
+        "channel": "email",
+        "templateKind": "staff_login_invite",
+        "recipient": preview.email,
+        "subject": subject,
+        "message": message,
+        "html": staff_invite_email_html(&preview, &accept_url),
+        "invitationId": invitation_id,
+        "tenantId": tenant_id,
+        "acceptUrl": accept_url
+    });
+    let delivery = invoice_delivery::deliver(settings, &payload).await;
+    let (status, message_id, error) = match delivery {
+        Ok(message_id) if !message_id.trim().is_empty() => ("sent", message_id, ""),
+        Ok(_) => (
+            "failed",
+            String::new(),
+            "email provider did not return a message id",
+        ),
+        Err(_) => (
+            "failed",
+            String::new(),
+            "email provider did not accept the invitation",
+        ),
+    };
+    staff_repository::record_staff_login_invite_delivery_attempt(
+        db,
+        tenant_id,
+        invitation_id,
+        status,
+        &message_id,
+        error,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record invitation delivery"))
+}
+
+fn staff_invite_email_html(preview: &StaffLoginInvitePreview, accept_url: &str) -> String {
+    let tenant = html_escape(&preview.tenant_name);
+    let branch = html_escape(&preview.branch_name);
+    let staff = html_escape(&preview.staff_name);
+    let role = html_escape(&preview.role_name);
+    let url = html_escape(accept_url);
+    format!(
+        r#"<!doctype html><html><body style="margin:0;background:#f5f3ff;font-family:Arial,sans-serif;color:#201a36"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" style="max-width:560px;background:#fff;border-radius:16px;border:1px solid #e5e1f4"><tr><td style="padding:32px"><div style="font-size:22px;font-weight:700;color:#6d28d9">AuraShine CRM</div><h1 style="font-size:24px;margin:24px 0 12px">Create your staff login</h1><p>Hello {staff},</p><p><strong>{tenant}</strong> invited you to <strong>{branch}</strong> as <strong>{role}</strong>.</p><p style="margin:28px 0"><a href="{url}" style="display:inline-block;background:#6d28d9;color:#fff;text-decoration:none;padding:14px 22px;border-radius:9px;font-weight:700">Create secure login</a></p><p style="font-size:13px;color:#665f78">This single-use link expires in 72 hours. If you did not expect this invitation, ignore this email.</p></td></tr></table></td></tr></table></body></html>"#
+    )
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+#[cfg(test)]
+mod invite_email_tests {
+    use super::html_escape;
+
+    #[test]
+    fn escapes_html_attributes_and_text() {
+        assert_eq!(
+            html_escape("<A & B> \"team\"'"),
+            "&lt;A &amp; B&gt; &quot;team&quot;&#39;"
+        );
+    }
+}
+
+pub(crate) fn normalize_login_id(value: &str) -> Result<String, AppError> {
     let login_id = value.trim().to_ascii_lowercase();
     if !(3..=80).contains(&login_id.len())
         || !login_id
@@ -862,7 +1209,7 @@ fn validate_branch_access(
             _ => {
                 return Err(AppError::validation(
                     "accessType must be permanent or deputation",
-                ))
+                ));
             }
         };
         normalized.push(BranchRoleAssignmentInput {
@@ -1178,7 +1525,6 @@ pub async fn terminate(
     .await
     .map_err(|_| AppError::internal("failed to load staff"))?
     .ok_or_else(|| AppError::not_found("staff was not found"))?;
-
     sqlx::query(
         "UPDATE staff SET active=false, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
     )
@@ -1262,9 +1608,9 @@ mod tests {
     use chrono::{NaiveDate, NaiveTime};
 
     use super::{
-        normalize_login_email, normalize_login_id, validate_auth_role, validate_branch_access,
-        validate_bulk_row, validate_configuration, validate_masters, AuthRoleSecurityInput,
-        BranchAccessAssignment, LINKED_ACTIVE_USER_SQL,
+        normalize_login_email, normalize_login_id, valid_invite_token, validate_auth_role,
+        validate_branch_access, validate_bulk_row, validate_configuration, validate_masters,
+        AuthRoleSecurityInput, BranchAccessAssignment, LINKED_ACTIVE_USER_SQL,
     };
     use crate::repositories::staff_configuration_repository::{
         AttendanceRuleInput, PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput,
@@ -1485,5 +1831,12 @@ mod tests {
             shift_template_id: None,
         };
         assert!(validate_bulk_row(&row).is_err());
+    }
+
+    #[test]
+    fn staff_login_invite_token_requires_full_uuid_entropy() {
+        assert!(valid_invite_token("0123456789abcdef0123456789abcdef").is_ok());
+        assert!(valid_invite_token("0123456789abcdef").is_err());
+        assert!(valid_invite_token("0123456789abcdef0123456789abcdeg").is_err());
     }
 }

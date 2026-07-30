@@ -13,7 +13,7 @@
   <section class="workspace">
     <aside class="sessions-card">
       <h2>{{ 'inventory.ui.96b7e8194e' | translate }}</h2>
-      <form (ngSubmit)="create()" class="create-form">
+      @if (canManage()) { <form (ngSubmit)="create()" class="create-form">
         <label>{{ 'inventory.ui.709a23220f' | translate }}<input name="name" [(ngModel)]="createForm.name" required maxlength="160" /></label>
         <label>{{ 'inventory.ui.f5f8a0edf3' | translate }}<select name="counters" [(ngModel)]="createForm.requiredCounters">@for (count of [1,2,3,4,5]; track count) {
           <option [ngValue]="count">{{ count }}</option>
@@ -21,7 +21,7 @@
         <label>{{ 'inventory.ui.2e0b4927fe' | translate }}<input type="number" min="0" step="1" name="threshold" [(ngModel)]="createForm.recountThreshold" /></label>
         <label class="checkbox"><input type="checkbox" name="blind" [(ngModel)]="createForm.blindCounting" />{{ 'inventory.ui.388c2604a0' | translate }}</label>
         <button class="primary" type="submit" [disabled]="saving">{{ 'inventory.ui.d1df08890b' | translate }}</button>
-      </form>
+      </form> }
       <h2>{{ 'inventory.ui.e11e37a925' | translate }}</h2>
       @for (row of sessions; track row) {
         <button class="session" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.createdAt | date:'dd/MM/yyyy' }}</span></button>
@@ -33,31 +33,71 @@
 
     @if (selected; as detail) {
       <main class="audit-card">
-        <header class="detail-head"><div><h2>{{ detail.session.name }}</h2><span>{{ detail.session.status.replace('_', ' ') }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span></div><div class="actions">@if (canCount()) {
-        <button type="button" (click)="action('close-counting')" [disabled]="saving">{{ 'inventory.ui.ef2e693a28' | translate }}</button>
+        <header class="detail-head">
+          <div class="session-title">
+            <h2>{{ detail.session.name }}</h2>
+            <span class="status-chip">{{ detail.session.status.replace('_', ' ') }}</span>
+            <span>{{ detail.session.blindCounting ? 'Blind count' : 'Visible count' }} · {{ detail.session.requiredCounters }} {{ detail.session.requiredCounters === 1 ? 'counter' : 'counters' }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span>
+          </div>
+          <div class="actions">@if (canCount()) {
+        <button type="button" (click)="saveProgress()" [disabled]="saving || !hasDraftCounts">Save progress</button>
+        <button class="primary" type="button" (click)="action('close-counting')" [disabled]="saving || hasDraftCounts" [title]="hasDraftCounts ? 'Save progress before submitting' : ''">Submit count</button>
         }@if (canReview()) {
         <button type="button" (click)="action('submit')" [disabled]="saving">{{ 'inventory.ui.46a9603925' | translate }}</button>
         }@if (canApprove()) {
         <button class="primary" type="button" (click)="action('approve')" [disabled]="saving">{{ 'inventory.ui.f9a63b82cb' | translate }}</button>
       }</div></header>
-      @if (canCount()) {
-        <form class="count-form" (ngSubmit)="submitCount()"><label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select name="countItem" [(ngModel)]="countForm.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (item of detail.items; track item) {
-        <option [value]="item.inventoryItemId">{{ item.itemName }} · {{ item.sku }}</option>
-        }</select></label><label>{{ 'inventory.ui.17ee7c23a9' | translate }}<input type="number" name="quantity" [(ngModel)]="countForm.quantity" min="0" step="1" required /></label><button class="primary" type="submit" [disabled]="saving">{{ 'inventory.ui.b64c0a4d76' | translate }}</button></form>
+      @if (detail.valueSummary; as valueSummary) {
+        <p class="value-summary">
+          @if (valueSummary.expectedValuePaise !== null) { <span>Expected value <strong>{{ money(valueSummary.expectedValuePaise) }}</strong></span> }
+          @if (valueSummary.countedValuePaise !== null) { <span>Counted value <strong>{{ money(valueSummary.countedValuePaise) }}</strong></span> }
+          @if (valueSummary.netVarianceValuePaise !== null) { <span>Net deviation <strong [class.variance]="valueSummary.netVarianceValuePaise !== 0">{{ money(valueSummary.netVarianceValuePaise) }}</strong></span> }
+          @if (valueSummary.absoluteVarianceValuePaise !== null) { <span>Absolute exposure <strong [class.variance]="valueSummary.absoluteVarianceValuePaise !== 0">{{ money(valueSummary.absoluteVarianceValuePaise) }}</strong></span> }
+          <span>Owner threshold <strong>{{ money(valueSummary.approvalThresholdPaise) }}</strong></span>
+          @if (valueSummary.ownerApprovalRequired !== null) { <span>Approval <strong [class.variance]="valueSummary.ownerApprovalRequired">{{ valueSummary.ownerApprovalRequired ? 'Owner required' : 'Standard' }}</strong></span> }
+        </p>
       }
-      <div class="table-wrap"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th>@if (!detail.session.blindCounting || !canCount()) {
-      <th>{{ 'inventory.ui.6ac87f3446' | translate }}</th>
-      }<th>{{ 'inventory.ui.ac3222574b' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.87176429ca' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th></tr></thead><tbody>@for (item of detail.items; track item) {
-      <tr><td><strong>{{ item.itemName }}</strong><small>{{ item.sku }} · {{ item.unit }}</small></td>@if (!detail.session.blindCounting || !canCount()) {
-      <td>{{ item.expectedQuantity ?? 'Hidden' }}</td>
-      }<td>{{ item.approvedQuantity ?? '—' }}</td><td [class.variance]="item.varianceQuantity">{{ item.varianceQuantity ?? '—' }}</td><td>{{ countFor(item) }}</td><td>@if (canReview() && item.varianceQuantity) {
-      <div><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" [attr.placeholder]="'inventory.ui.ec4bfc89d1' | translate" /><button type="button" (click)="saveReason(item)" [disabled]="saving">{{ 'inventory.ui.efc007a393' | translate }}</button></div>
-      }@if (!canReview() || !item.varianceQuantity) {
-      <span>{{ item.varianceReason || '—' }}</span>
-    }</td></tr>
-    }@if (!detail.items.length) {
-    <tr><td colspan="6">{{ 'inventory.ui.b7a856107b' | translate }}</td></tr>
-  }</tbody></table></div>
+      <div class="product-toolbar">
+        <label class="search-field"><span class="sr-only">Search products</span><input type="search" [(ngModel)]="searchQuery" placeholder="Search product or SKU" /></label>
+        <button type="button" (click)="openScanner()">Scan barcode</button>
+        <span>Products: <strong>{{ detail.items.length }}</strong></span>
+      </div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>Product</th><th>SKU</th><th>Unit</th><th class="numeric">Expected stock</th><th class="numeric">Counted quantity</th><th class="numeric">Variance</th>
+        @if (!detail.session.blindCounting || !canCount()) { <th class="numeric">Unit cost</th><th class="numeric">Expected value</th><th class="numeric">Counted value</th><th class="numeric">Value variance</th> }
+      </tr></thead><tbody>@for (item of visibleItems; track item.id) {
+      <tr>
+        <td><strong>{{ item.itemName }}</strong></td><td>{{ item.sku }}</td><td>{{ item.unit }}</td>
+        <td class="numeric expected-evidence">@if (detail.session.blindCounting && canCount()) {
+          Hidden
+        } @else {
+          <strong>{{ item.expectedQuantity ?? '—' }}</strong>
+          @if (provenanceLabel(item)) { <small class="provenance" [class.warning]="item.expectedProvenanceStatus === 'legacy_snapshot'">{{ provenanceLabel(item) }}</small> }
+          @if (item.expectedMovementSummary) {
+            <details><summary>Expected breakdown</summary>@for (row of movementBreakdown(item); track row[0]) {
+              <span><span>{{ row[0] }}</span><strong>{{ row[1] > 0 ? '+' : '' }}{{ row[1] }}</strong></span>
+            }<span class="equation-total"><span>Expected stock</span><strong>{{ item.expectedQuantity }}</strong></span></details>
+          }
+        }</td>
+        <td class="numeric">@if (canCount()) {
+          <input class="count-input" type="number" min="0" step="1" [name]="'count-' + item.id" [(ngModel)]="countDrafts[item.id]" [attr.aria-label]="'Counted quantity for ' + item.itemName" placeholder="" />
+        } @else { {{ item.approvedQuantity ?? '—' }} }</td>
+        <td class="numeric" [class.variance]="!canCount() && item.varianceQuantity">{{ detail.session.blindCounting && canCount() ? 'Hidden' : (item.varianceQuantity ?? '—') }}
+          @if (!canCount() && item.varianceCauseSuggestion) { <small class="cause-chip">{{ causeLabel(item.varianceCauseSuggestion) }}</small> }
+        </td>
+        @if (!detail.session.blindCounting || !canCount()) {
+          <td class="numeric">{{ money(item.expectedUnitCostPaise) }}</td><td class="numeric">{{ money(item.expectedValuePaise) }}</td><td class="numeric">{{ money(item.countedValuePaise) }}</td><td class="numeric" [class.variance]="item.varianceValuePaise">{{ money(item.varianceValuePaise) }}</td>
+        }
+      </tr>
+      }@if (!visibleItems.length) {
+      <tr><td [attr.colspan]="(!detail.session.blindCounting || !canCount()) ? 10 : 6">{{ detail.items.length ? 'No matching products' : ('inventory.ui.b7a856107b' | translate) }}</td></tr>
+      }</tbody></table></div>
+      <footer class="count-progress"><span>{{ countedProductCount }} of {{ detail.items.length }} products counted</span><progress [value]="countedProductCount" [max]="detail.items.length || 1"></progress></footer>
+      @if (canReview()) {
+        <section class="variance-reasons"><h3>Variance reasons</h3>@for (item of detail.items; track item.id) {@if (item.varianceQuantity) {
+      <div><strong>{{ item.itemName }}<small class="cause-chip">{{ causeLabel(item.varianceCauseSuggestion) }}</small></strong><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" [attr.placeholder]="'inventory.ui.ec4bfc89d1' | translate" /><button type="button" (click)="saveReason(item)" [disabled]="saving">{{ 'inventory.ui.efc007a393' | translate }}</button></div>
+      }}</section>
+      }
   <section class="review-grid">@if (canReview()) {
     <form (ngSubmit)="addFinding()"><h3>{{ 'inventory.ui.ee355bb8e5' | translate }}</h3><label>{{ 'inventory.ui.ecdda59aea' | translate }}<select name="findingItem" [(ngModel)]="findingForm.itemId"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of detail.items; track item) {
     <option [value]="item.inventoryItemId">{{ item.itemName }}</option>
@@ -71,6 +111,13 @@
   }</section>
 }
 </main>
+} @else if (loading) {
+  <main class="audit-card loading-card" aria-live="polite">
+    <div class="skeleton skeleton-title"></div>
+    <div class="skeleton skeleton-toolbar"></div>
+    <div class="table-wrap skeleton-table"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    <span>Loading products from inventory…</span>
+  </main>
 } @else {
   <main class="empty-panel"><strong>{{ 'inventory.ui.2f0b7413c9' | translate }}</strong><span>{{ 'inventory.ui.b0fd09c7f0' | translate }}</span></main>
 }

@@ -11,14 +11,20 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Tasks</p><h1>Tasks</h1></div></header>
       @if (!canReadTasks()) { <section staffPageState class="notice">You do not have permission to read staff tasks.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading tasks...</section> }
-      @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
+      @if (loading() && !today()) {
+        <section class="tasks-skeleton" aria-label="Loading tasks">
+          <div class="skeleton-grid"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
+          <div class="tasks-skeleton-board"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton"></span></div>
+        </section>
+      }
+      @if (loadError()) { <section staffPageState class="notice tasks-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" (click)="load()">Retry</button></section> }
+      @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (staff.error() && !localError() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (canReadTasks() && today(); as data) {
         @if (serviceTargets().length) {
           <section class="panel target-panel">
-            <div class="panel-title"><h2>Service targets</h2><span>{{ serviceTargets().length }}</span></div>
+            <div class="panel-title"><h2>Service targets</h2><span>{{ loading() ? 'Refreshing...' : serviceTargets().length }}</span></div>
             <div class="target-grid">
               @for (target of serviceTargets(); track target.id) {
                 <article class="target-card">
@@ -38,11 +44,11 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         <section class="kanban-board">
           @for (column of columns; track column.status) {
             <article class="panel kanban-column" (dragover)="$event.preventDefault()" (drop)="dropTask(column.status)">
-              <div class="panel-title"><h2>{{ column.label }}</h2><span>{{ taskCount(column.status) }}</span></div>
+              <div class="panel-title"><h2>{{ column.label }}</h2><span>{{ loading() ? 'Refreshing...' : taskCount(column.status) }}</span></div>
               <div class="list">
                 @for (task of tasksByStatus(column.status); track task.id) {
-                   <div class="kanban-card" draggable="true" (dragstart)="dragTask(task.id, task.version)"><strong>{{ task.title }}</strong><small>{{ task.priority || 'medium' }} · {{ task.dueAt ? (task.dueAt | date:'short') : 'no due date' }}</small><div class="row-actions"><span class="badge">{{ task.status || 'open' }}</span>@if (canUpdateTasks() && (!task.status || task.status === 'open')) { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" (click)="moveTask(task.id, task.version, 'in_progress')">Start</button> } @if (canUpdateTasks() && task.status === 'in_progress') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" (click)="completeTask(task.id, task.version)">Done</button> } @if (canUpdateTasks() && task.status === 'completed') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" (click)="moveTask(task.id, task.version, 'open')">Reopen</button> }</div></div>
-                } @empty { <p class="empty">No {{ column.label.toLowerCase() }} tasks.</p> }
+                   <div class="kanban-card task-card" draggable="true" (dragstart)="dragTask(task.id, task.version)" [class.pending]="pendingTaskId() === task.id"><div class="task-heading"><strong>{{ task.title }}</strong>@if (task.taskType === 'training' || task.taskType === 'compliance') { <span class="pill">{{ task.taskType === 'training' ? 'SOP' : 'Rule' }}</span> }</div>@if (task.description) { <p>{{ task.description }}</p> }<small>{{ task.priority || 'medium' }} · {{ task.dueAt ? (task.dueAt | date:'short') : 'no due date' }}</small><div class="row-actions task-actions"><span class="badge">{{ task.status || 'open' }}</span>@if (canUpdateTasks() && (!task.status || task.status === 'open')) { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'in_progress')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Start' }}</button> } @if (canUpdateTasks() && task.status === 'in_progress') { <button type="button" class="button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="completeTask(task.id, task.version)">{{ pendingTaskId() === task.id ? 'Saving...' : 'Done' }}</button> } @if (canUpdateTasks() && task.status === 'completed') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'open')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Reopen' }}</button> }</div></div>
+                } @empty { <div class="tasks-empty"><p>No {{ column.label.toLowerCase() }} tasks.</p><small>{{ column.status === 'open' ? 'Assigned CRM tasks will appear here.' : 'Move tasks here when status changes.' }}</small></div> }
               </div>
             </article>
           }
@@ -50,7 +56,26 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       }
     </section>
   `,
-  styleUrls: ["./staff-app.styles.css"]
+  styleUrls: ["./staff-app.styles.css"],
+  styles: [`
+    .tasks-skeleton { display: grid; gap: 12px; }
+    .tasks-skeleton-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .tasks-skeleton-board .skeleton { min-height: 280px; }
+    .tasks-error { justify-content: space-between; }
+    .task-card.pending { opacity: .72; }
+    .task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .task-card p { margin: 7px 0; color: var(--staff-text-secondary); font-size: .78rem; line-height: 1.45; white-space: pre-wrap; }
+    .tasks-empty { display: grid; justify-items: center; gap: 4px; min-height: 96px; padding: 22px 8px; color: var(--staff-text-secondary); font-weight: 600; text-align: center; }
+    .tasks-empty p { margin: 0; }
+    .tasks-empty small { font-weight: 600; }
+    .task-actions .button, .task-actions .link-button { min-width: 88px; }
+    @media (max-width: 700px) {
+      .tasks-skeleton-board { grid-template-columns: 1fr; }
+      .tasks-error, .task-actions { align-items: stretch; flex-direction: column; }
+      .tasks-error button, .task-actions .button, .task-actions .link-button { width: 100%; }
+      .task-actions .badge { width: fit-content; }
+    }
+  `]
 })
 export class StaffTasksPage implements OnInit {
   readonly today = signal<StaffToday | null>(null);
@@ -58,12 +83,13 @@ export class StaffTasksPage implements OnInit {
   readonly loading = signal(false);
   readonly message = signal("");
   readonly localError = signal("");
+  readonly loadError = signal("");
   readonly pendingTaskId = signal("");
   readonly draggedTask = signal<{ id: string; version: number } | null>(null);
   readonly columns = [{ label: "Open", status: "open" }, { label: "In Progress", status: "in_progress" }, { label: "Done", status: "completed" }];
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadTasks()) void this.load(); }
-  async load() { this.loading.set(true); try { const [today, targets] = await Promise.all([this.staff.today(), this.staff.serviceTargets()]); this.today.set(today); this.serviceTargets.set(targets); } finally { this.loading.set(false); } }
+  async load() { this.loading.set(true); this.loadError.set(""); try { const [today, targets] = await Promise.all([this.staff.today(), this.staff.serviceTargets()]); this.today.set(today); this.serviceTargets.set(targets); } catch { this.loadError.set(this.staff.error() || "Unable to load tasks."); } finally { this.loading.set(false); } }
   canReadTasks(): boolean { return this.staff.hasPermission("staff.app.tasks.read"); }
   canUpdateTasks(): boolean { return this.staff.hasPermission("staff.app.tasks.manage"); }
   taskCount(status: string): number { return this.tasksByStatus(status).length; }

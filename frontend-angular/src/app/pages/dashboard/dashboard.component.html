@@ -5,9 +5,9 @@
       <h1>Dashboard</h1>
     </div>
     <div class="title-actions">
-      <span class="data-state" [class.online]="status === 'ok' || status === 'healthy'">
+      <span class="data-state" [class.online]="status === 'ok' || status === 'healthy'" [class.degraded]="status === 'degraded'">
         <i class="bi bi-database-check" aria-hidden="true"></i>
-        {{ status === 'ok' || status === 'healthy' ? 'Live data' : 'API unavailable' }}
+        {{ status === 'degraded' ? 'Degraded data' : (status === 'ok' || status === 'healthy' ? 'Live data' : 'API unavailable') }}
       </span>
       <button type="button" (click)="load()" [disabled]="loading || insightsLoading || activityLoading">
         <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
@@ -114,7 +114,7 @@
           </div>
           @if (salesTrend.length) {
             <div class="trend-list">
-              @for (point of salesTrend; track point) {
+              @for (point of salesTrend; track point.date) {
                 <label>
                   <span>{{ formatDate(point.date) }}</span>
                   <progress class="money-progress" [value]="point.value" [max]="maxSalesTrend"></progress>
@@ -145,7 +145,7 @@
           </div>
           @if (forecast.forecastTotalPaise > 0) {
             <div class="trend-list">
-              @for (point of forecast.forecast; track point) {
+              @for (point of forecast.forecast; track point.date) {
                 <label>
                   <span>{{ formatDate(point.date) }}</span>
                   <progress class="money-progress" [value]="point.valuePaise" [max]="maxForecastRevenue"></progress>
@@ -173,7 +173,7 @@
           @if (appointmentTrend.length || appointmentStatuses.length) {
             <div class="appointment-insight-body">
               <div class="trend-list compact-trend">
-                @for (point of appointmentTrend; track point) {
+                @for (point of appointmentTrend; track point.date) {
                   <label>
                     <span>{{ formatDate(point.date) }}</span>
                     <progress [value]="point.value" [max]="maxAppointmentTrend"></progress>
@@ -182,7 +182,7 @@
                 }
               </div>
               <div class="status-list">
-                @for (point of appointmentStatuses; track point) {
+                @for (point of appointmentStatuses; track point.status) {
                   <div>
                     <span>{{ label(point.status) }}</span>
                     <b>{{ point.count | number }}</b>
@@ -209,7 +209,7 @@
         }
         @if (!activityLoading && !sectionUnavailable('activity') && recentActivity.length) {
           <div class="activity-list">
-            @for (row of recentActivity; track row) {
+            @for (row of recentActivity; track row.appointmentId + (row.lastUpdatedAt || row.appointmentStartAt || '')) {
               <a routerLink="/appointments/activities">
                 <i class="bi bi-calendar-check" aria-hidden="true"></i>
                 <span>
@@ -245,7 +245,7 @@
             }
             @if (!sectionUnavailable('payments') && paymentModes.length) {
               <div class="payment-list">
-                @for (mode of paymentModes | slice:0:5; track mode) {
+                @for (mode of paymentModes | slice:0:5; track mode.method) {
                   <div>
                     <i class="bi bi-wallet2" aria-hidden="true"></i>
                     <span>{{ label(mode.method) }}<small>{{ mode.paymentCount | number }} payments · {{ mode.invoiceCount | number }} invoices</small></span>
@@ -268,7 +268,7 @@
             }
             @if (!sectionUnavailable('dues') && dues.length) {
               <div class="due-list">
-                @for (due of dues | slice:0:5; track due) {
+                @for (due of dues | slice:0:5; track due.invoiceId) {
                   <div>
                     <span><strong>{{ due.invoiceNumber || due.invoiceId }}</strong><small>@if (due.clientName) {
                     {{ due.clientName }} ·

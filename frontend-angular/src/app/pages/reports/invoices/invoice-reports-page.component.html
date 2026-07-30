@@ -122,16 +122,6 @@
 </section>
 }
 
-@if (!loading && activeTab === 'invoice-360') {
-  <section class="report-table">
-    <div class="table-scroll"><table><thead><tr><th>Invoice</th><th>Activity</th><th>Channel</th><th>Recipient</th><th>Status</th><th>Created</th></tr></thead><tbody>@for (row of activityRows; track row) {
-    <tr><td><a [routerLink]="['/billing/invoices', row.invoiceId]">{{ row.invoiceNumber }}</a></td><td>{{ row.activityType }}</td><td>{{ row.channel || '—' }}</td><td>{{ row.recipient || '—' }}</td><td>{{ row.status }}</td><td>{{ formatDate(row.createdAt) }}</td></tr>
-  }</tbody></table></div>@if (!activityRows.length) {
-  <p>No records yet</p>
-}
-</section>
-}
-
 @if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'due-recovery')) {
   <section class="summary-strip unpaid-summary">
     <div><span>Outstanding invoices</span><strong>{{ currentUnpaidSummary.invoiceCount }}</strong></div><div><span>Original due</span><strong>{{ currentUnpaidSummary.originalDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Received due</span><strong>{{ currentUnpaidSummary.receivedDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>Remaining due</span><strong>{{ currentUnpaidSummary.remainingDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div><div><span>31+ days</span><strong>{{ currentUnpaidSummary.overdue31Count }}</strong></div>
@@ -160,7 +150,7 @@
 @if (!loading && (activeTab === 'receivable-recovery' || activeTab === 'recovery-history')) {
   <section class="report-table recovery-report">
     <div class="table-toolbar"><strong>Recovery History</strong><span>{{ recoveryRows.length }} invoices</span></div>
-    <div class="table-scroll"><table><thead><tr><th>Invoice / date</th><th>Client / phone</th><th>Services</th><th>Staff</th><th>Status</th><th>Original due</th><th>Recovered</th><th>Unpaid at</th><th>Paid at</th><th>Recovery days</th><th>Payment mode / ref</th><th>Received by</th><th>Partial-payment history</th><th>FIFO allocation</th></tr></thead><tbody>@for (row of recoveryRows; track row) {
+    <div class="table-scroll"><table><thead><tr><th>Invoice / date</th><th>Client / phone</th><th>Services</th><th>Staff</th><th>Status</th><th>Original due</th><th>Recovered</th><th>Unpaid at</th><th>Full-paid date</th><th>Recovery days</th><th>Payment mode / ref</th><th>Received by</th><th>Partial-payment history</th><th>FIFO allocation</th></tr></thead><tbody>@for (row of recoveryRows; track row) {
     <tr><td><a routerLink="/pos/invoices" [queryParams]="{ invoiceId: row.invoiceId, view: 'full' }">{{ row.invoiceNumber }}</a><small>{{ formatDate(row.businessDate) }}</small></td><td><strong>{{ row.clientName || 'Walk-in client' }}</strong><small>{{ row.clientPhone || '—' }}</small></td><td class="wrap">{{ row.serviceNames }}</td><td class="wrap">{{ row.staffNames }}</td><td><span class="status-badge paid">Unpaid → Paid</span></td><td>{{ row.originalDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</td><td><strong>{{ row.receivedDuePaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></td><td>{{ formatDateTime(row.unpaidAt) }}</td><td>{{ row.fullPaidAt ? formatDateTime(row.fullPaidAt) : '—' }}</td><td>{{ row.recoveryDays ?? '—' }}</td><td class="wrap"><strong>{{ row.paymentModes || '—' }}</strong><small>{{ row.paymentReferences || '—' }}</small></td><td>{{ row.receivedBy || '—' }}</td><td class="wrap">@for (payment of row.recoveryPaymentHistory; track payment) {
     <div>{{ formatDateTime(payment.paidAt) }} · {{ payment.paymentMode }} · {{ payment.amountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}<small>{{ payment.reference || '—' }}</small></div>
   }</td><td class="wrap">@for (allocation of row.fifoAllocations; track allocation) {

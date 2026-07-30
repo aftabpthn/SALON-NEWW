@@ -15,6 +15,8 @@ pub struct PolicyWrite {
     pub valuation_method: String,
     pub expiry_window_days: i32,
     pub count_variance_threshold_bps: i32,
+    #[serde(default = "default_count_value_variance_threshold_paise")]
+    pub count_value_variance_threshold_paise: i64,
     #[serde(default = "default_reorder_history_days")]
     pub reorder_history_days: i32,
     #[serde(default = "default_reorder_coverage_days")]
@@ -28,6 +30,9 @@ pub struct PolicyWrite {
 }
 fn default_reorder_history_days() -> i32 {
     60
+}
+fn default_count_value_variance_threshold_paise() -> i64 {
+    10_000
 }
 fn default_reorder_coverage_days() -> i32 {
     30
@@ -112,7 +117,7 @@ fn text(value: &str, name: &str, max: usize) -> Result<String, AppError> {
 }
 
 pub async fn policy(db: &PgPool, t: &str, b: &str) -> Result<Value, AppError> {
-    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"reorderHistoryDays":60,"reorderCoverageDays":30,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
+    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"countValueVarianceThresholdPaise":10000,"reorderHistoryDays":60,"reorderCoverageDays":30,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
 }
 pub async fn save_policy(
     db: &PgPool,
@@ -139,6 +144,7 @@ pub async fn save_policy(
     ];
     if !(1..=3650).contains(&p.expiry_window_days)
         || !(0..=10000).contains(&p.count_variance_threshold_bps)
+        || !(0..=1_000_000_000_000).contains(&p.count_value_variance_threshold_paise)
         || !(14..=365).contains(&p.reorder_history_days)
         || !(7..=180).contains(&p.reorder_coverage_days)
         || !p.approval_matrix.is_object()
@@ -166,6 +172,7 @@ pub async fn save_policy(
         &p.valuation_method,
         p.expiry_window_days,
         p.count_variance_threshold_bps,
+        p.count_value_variance_threshold_paise,
         p.reorder_history_days,
         p.reorder_coverage_days,
         p.transfer_base_transport_cost_paise,

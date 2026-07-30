@@ -189,7 +189,7 @@ pub async fn get(
 ) -> Result<Option<PackageRecord>, sqlx::Error> {
     sqlx::query_as::<_, PackageRecord>(&select_sql(
         r#"
-        WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
+        WHERE tenant_id = $1 AND branch_id = $2 AND id = $3 AND active = TRUE
         LIMIT 1
         "#,
     ))
@@ -289,7 +289,7 @@ pub async fn update(
     .await
 }
 
-pub async fn delete(
+pub async fn archive(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
@@ -297,7 +297,8 @@ pub async fn delete(
 ) -> Result<bool, sqlx::Error> {
     let result = sqlx::query(
         r#"
-        DELETE FROM packages
+        UPDATE packages
+        SET active = FALSE, updated_at = NOW()
         WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
         "#,
     )
@@ -308,6 +309,22 @@ pub async fn delete(
     .await?;
 
     Ok(result.rows_affected() > 0)
+}
+
+pub async fn restore(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "UPDATE packages SET active=TRUE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE RETURNING name",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .fetch_optional(db)
+    .await
 }
 
 fn select_sql(where_clause: &str) -> String {

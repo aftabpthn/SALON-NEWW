@@ -1280,6 +1280,21 @@ async fn create_booking_payment_link(
             "this booking does not require a deposit",
         ));
     }
+    let provider_enabled = payment_gateway_service::provider_enabled_for_branch(
+        &state.db,
+        &state.settings,
+        tenant_id,
+        branch_id,
+        "razorpay",
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to load payment provider control"))?;
+    if !provider_enabled {
+        return Err(ApiError::with_status(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Razorpay is disabled for this branch",
+        ));
+    }
     let payment_id = Uuid::new_v4().to_string();
     sqlx::query("INSERT INTO appointment_payment_links (id,tenant_id,branch_id,appointment_id,amount_paise,idempotency_key) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,branch_id,appointment_id) DO UPDATE SET amount_paise=EXCLUDED.amount_paise,updated_at=NOW() WHERE appointment_payment_links.status IN ('pending','failed') AND appointment_payment_links.link_url=''")
         .bind(&payment_id)
@@ -1934,6 +1949,8 @@ async fn appointment_deposits_multi_service_bookings(
             staff_preference: "any".to_string(),
             staff_change_approval: String::new(),
             staff_change_reason: String::new(),
+            recommended_staff_id: String::new(),
+            recommendation_override_reason: String::new(),
             service_id: line.service_id.trim().to_string(),
             start_at: start_at.to_string(),
             end_at,

@@ -325,10 +325,80 @@ pub async fn add_action(
     message_id: &str,
     action_type: &str,
     payload: &Value,
-) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO ai_concierge_actions(tenant_id,branch_id,session_id,message_id,action_type,payload_json) VALUES ($1,$2,$3,$4,$5,$6)")
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO ai_concierge_actions(tenant_id,branch_id,session_id,message_id,action_type,payload_json) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id")
         .bind(tenant_id).bind(branch_id).bind(session_id).bind(message_id).bind(action_type).bind(payload)
-        .execute(db).await.map(|_| ())
+        .fetch_one(db).await
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AiActionDecisionRecord {
+    pub id: String,
+    pub action_type: String,
+    pub status: String,
+    pub payload_json: Value,
+}
+
+pub async fn pending_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    action_id: &str,
+    user_id: &str,
+) -> Result<Option<AiActionDecisionRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT action.id, action.action_type, action.status, action.payload_json
+             FROM ai_concierge_actions action
+             JOIN ai_concierge_sessions session
+               ON session.tenant_id=action.tenant_id
+              AND session.branch_id=action.branch_id
+              AND session.id=action.session_id
+            WHERE action.tenant_id=$1 AND action.branch_id=$2
+              AND action.session_id=$3 AND action.id=$4
+              AND action.status='pending' AND session.user_id=$5"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(session_id)
+    .bind(action_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn decide_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    session_id: &str,
+    action_id: &str,
+    user_id: &str,
+    status: &str,
+) -> Result<Option<AiActionDecisionRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE ai_concierge_actions action
+              SET status=$7, decided_by=$6, decided_at=NOW()
+            WHERE action.tenant_id=$1 AND action.branch_id=$2
+              AND action.session_id=$3 AND action.id=$4 AND action.status='pending'
+              AND EXISTS (
+                SELECT 1 FROM ai_concierge_sessions session
+                 WHERE session.tenant_id=$1 AND session.branch_id=$2
+                   AND session.id=$3 AND session.user_id=$5
+              )
+        RETURNING action.id, action.action_type, action.status, action.payload_json"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(session_id)
+    .bind(action_id)
+    .bind(user_id)
+    .bind(user_id)
+    .bind(status)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn set_session_status(

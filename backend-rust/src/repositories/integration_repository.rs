@@ -127,6 +127,7 @@ pub struct ClaimedConnectorSyncJob {
     pub connection_id: String,
     pub provider: String,
     pub attempts: i32,
+    pub created_by: String,
 }
 
 const API_KEY_COLUMNS: &str =
@@ -494,7 +495,7 @@ pub async fn claim_connector_sync_jobs(
     limit: i64,
 ) -> Result<Vec<ClaimedConnectorSyncJob>, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let rows=sqlx::query_as("WITH due AS (SELECT id FROM integration_connector_sync_jobs WHERE status IN ('queued','failed') AND next_attempt_at<=NOW() AND attempts<max_attempts ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE integration_connector_sync_jobs j SET status='processing',attempts=j.attempts+1,started_at=COALESCE(j.started_at,NOW()),updated_at=NOW() FROM due WHERE j.id=due.id RETURNING j.id,j.tenant_id,j.branch_id,j.connection_id,j.provider,j.attempts")
+    let rows=sqlx::query_as("WITH due AS (SELECT id FROM integration_connector_sync_jobs WHERE status IN ('queued','failed') AND next_attempt_at<=NOW() AND attempts<max_attempts ORDER BY next_attempt_at,created_at FOR UPDATE SKIP LOCKED LIMIT $1) UPDATE integration_connector_sync_jobs j SET status='processing',attempts=j.attempts+1,started_at=COALESCE(j.started_at,NOW()),updated_at=NOW() FROM due WHERE j.id=due.id RETURNING j.id,j.tenant_id,j.branch_id,j.connection_id,j.provider,j.attempts,j.created_by")
         .bind(limit).fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(rows)

@@ -172,6 +172,20 @@ export class CustomerApiService {
     }).pipe(map((response) => this.unwrapList<CustomerMarketingOffer>(response)));
   }
 
+  listMarketingOffers(branchId?: string): Observable<CustomerMarketingOffer[]> {
+    return this.http.get<ApiResponse<CustomerMarketingOffer[] | ApiList<CustomerMarketingOffer>>>(`${this.baseUrl}/customer/marketing-offers`, {
+      params: this.toParams({ branchId })
+    }).pipe(map((response) => this.unwrapList<CustomerMarketingOffer>(response)));
+  }
+
+  marketingOfferCreative(offerId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/customer/marketing-offers/${encodeURIComponent(offerId)}/creative`, { responseType: "blob" });
+  }
+
+  trackMarketingOfferClick(offerId: string, channel: string): Observable<void> {
+    return this.http.post<ApiResponse<unknown>>(`${this.baseUrl}/customer/marketing-offers/events`, { offerId, channel }).pipe(map(() => undefined));
+  }
+
   publicOfferCreativeUrl(offerId: string): string {
     return `${this.baseUrl}/marketplace/offers/${encodeURIComponent(offerId)}/creative`;
   }

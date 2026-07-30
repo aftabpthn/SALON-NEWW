@@ -15,6 +15,7 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
         <h1 id="today-heading">Today’s Shift</h1>
         <p>{{ viewModel.hero.title }}</p>
         @if (viewModel.hero.detail) { <small class="shift-detail">{{ viewModel.hero.detail }}</small> }
+        @if (viewModel.hero.hint) { <small class="shift-detail">{{ viewModel.hero.hint }}</small> }
         @if (viewModel.hero.shiftAssigned) { <span class="shift-line"><b>Shift</b> {{ viewModel.hero.shift }}</span> }
       </div>
       <div class="hero-action-stack" aria-label="Recommended next actions">
@@ -30,8 +31,8 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
         <div class="section-heading"><h2 id="quick-actions-heading">Quick Actions</h2></div>
         <div class="quick-action-grid">
           @for (action of viewModel.quickActions; track action.id) {
-            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b></span></a> }
-            @else { <button type="button" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ pendingLabel(action) }}</b></span></button> }
+            @if (action.route) { <a [routerLink]="action.route"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ action.label }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></a> }
+            @else { <button type="button" [disabled]="!!pendingAction" [attr.aria-busy]="isPending(action)" [attr.aria-pressed]="isPending(action)" (click)="actionSelected.emit(action)"><span class="quick-action-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor(action.id)"></path></svg></span><span class="quick-action-copy"><b>{{ pendingLabel(action) }}</b>@if (action.status) { <small>{{ action.status }}</small> }</span></button> }
           }
         </div>
       </section>
@@ -41,8 +42,8 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
       <div class="section-heading"><h2 id="overview-heading">Today’s Overview</h2></div>
        <div class="overview-grid" [class.three-metrics]="viewModel.overview.length === 3" [class.single-metric]="viewModel.overview.length === 1">
         @for (metric of viewModel.overview; track metric.label) {
-          @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></a> }
-          @else { <article class="overview-card"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></article> }
+          @if (metric.route) { <a class="overview-card" [routerLink]="metric.route"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></a> }
+          @else { <article class="overview-card"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong><small>{{ metric.hint }}</small></article> }
         }
       </div>
     </section>
@@ -60,7 +61,7 @@ import { DashboardAction, StaffDashboardViewModel } from "./staff-dashboard.mode
         <div class="work-actions">
           @for (action of viewModel.work.actions; track action.id) {
             @if (action.route) { <a class="button" [class.primary]="action.primary" [routerLink]="action.route">{{ action.label }}</a> }
-            @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
+            @else { <button type="button" class="link-button" [class.primary-action]="action.primary" [disabled]="!!pendingAction" [attr.aria-busy]="isPending(action)" [attr.aria-pressed]="isPending(action)" (click)="actionSelected.emit(action)">{{ pendingLabel(action) }}</button> }
           }
           @if (viewModel.work.mode === 'empty' && viewModel.work.scheduleRoute; as scheduleRoute) { <a class="text-control" [routerLink]="scheduleRoute">{{ viewModel.work.scheduleActionLabel }}</a> }
         </div>

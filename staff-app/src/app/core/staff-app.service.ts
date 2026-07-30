@@ -80,7 +80,7 @@ const STAFF_APP_PERMISSION_FALLBACKS: Record<string, string[]> = {
   "staff.app.chat.manage": ["staff.self_manage", "staff_self.write", "write:staff"],
   "staff.app.payroll.read": ["staff.payroll.read", "finance.read", "read:payroll", "read:finance"],
   "staff.app.leaves.read": ["staff.leave.read", "staff.self_manage", "read:staff"],
-  "staff.app.leaves.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.leaves.manage": ["staff.leave.manage", "staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
   "staff.app.feedback.read": ["staff.self_manage", "staff_self.write", "read:staff"],
   "staff.app.feedback.manage": ["staff.self_manage", "staff_self.write", "write:staff"],
   "staff.app.profile.read": ["staff.self_manage", "staff_self.write", "read:staff"],
@@ -116,6 +116,14 @@ export type StaffAppointment = {
   status: string;
   chair: string;
   source: string;
+  clientName: string;
+  preferredClient: boolean;
+  rescheduleCount: number;
+  rescheduleTimeline: Array<{ action: string; changedAt: string; reason: string; changedBy: string; fromStartAt: string; toStartAt: string }>;
+  serviceDepartments: string[];
+  lastServiceAt: string;
+  lastServiceNames: string[];
+  lastServiceDepartments: string[];
 };
 
 export type StaffDashboard = {
@@ -159,11 +167,11 @@ export type StaffEnterpriseOs = {
     recentNotifications: number;
     targetProgress: { label: string; targetValue: number; achievedValue: number; percentage: number; remaining: number } | null;
   };
-  timeline: Array<{ id: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number }>;
+  timeline: Array<{ id: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number; chair: string; clientName: string; preferredClient: boolean; rescheduleCount: number; rescheduleTimeline: StaffAppointment["rescheduleTimeline"]; serviceDepartments: string[]; lastServiceAt: string; lastServiceNames: string[]; lastServiceDepartments: string[] }>;
   serviceTimers: Array<{ appointmentId: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
   performance: { revenue: number | null; completedServices: number; avgUtilization: number | null; avgRating: number | null; productivityScore: number | null; strengths: string[]; opportunities: string[] };
-  leaderboard: Array<{ rank: number; staffId: string; staffName: string; revenue: number; score: number; rating: number; days: number; isMe: boolean }>;
-  gamification: { points: number; level: number; stars: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }> };
+  leaderboard: Array<{ rank: number; staffId: string; staffName: string; revenue: number | null; score: number; rating: number | null; points: number; days: number; isMe: boolean }>;
+  gamification: { points: number; level: number; stars: number; activeDays?: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }> };
   notifications: Array<{ id: string; title: string; body: string; status: string; createdAt: string }>;
   tasks: Array<{ id: string; title: string; priority: string; status: string; dueAt: string; assignedBy: string; checklist: unknown[] }>;
   calendar: Array<{ id: string; date: string; startTime: string; endTime: string; type: string; status: string; version?: number }>;
@@ -274,11 +282,32 @@ export type StaffBusinessQuery = {
   q?: string;
   status?: string;
   sort?: "asc" | "desc";
+  allHistory?: boolean;
+  serviceId?: string;
+  service?: string;
+  department?: string;
+};
+
+export type StaffRecommendation = {
+  staffId: string;
+  staffName: string;
+  workloadCount: number;
+  workloadMinutes: number;
+  department: string;
+  departmentMatch: boolean;
+  preferredClient: boolean;
+  utilizationPercent: number | null;
+  rating: number | null;
+  completionPercent: number | null;
+  repeatClientPercent: number | null;
+  confidence: string;
+  recommendationReason: string;
 };
 
 export type StaffBusinessSummary = {
   appointments: number;
   completedServices: number;
+  appointmentValuePaise?: number;
   scheduledMinutes: number;
   completedMinutes: number;
   workedMinutes: number;
@@ -354,9 +383,9 @@ export type StaffBusiness = {
   performance: StaffBusinessPerformance;
   earnings: StaffBusinessEarnings | null;
   targets: StaffBusinessTarget[];
-  services: Array<{ id: string; name: string }>;
+  services: Array<{ id: string; name: string; category: string }>;
   dailyBreakdown: Array<{ date: string; performance: StaffBusinessPerformance } & StaffBusinessSummary>;
-  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean };
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean; appointmentTotal: number; appointmentPages: number; appointmentHasMore: boolean; serviceTotal: number };
   appointments: StaffBusinessAppointment[];
   serviceInvoices: StaffBusinessServiceInvoice[];
 };
@@ -424,7 +453,7 @@ export type StaffToday = {
   schedules: Array<{ id: string; scheduleDate: string; startTime: string; endTime: string; shiftType: string; status: string }>;
   attendance: StaffAttendance[];
   activeBreak: { id: string; status: string; startedAt?: string } | null;
-  tasks: Array<{ id: string; title: string; description: string; status: string; priority: string; dueAt: string; version: number }>;
+  tasks: Array<{ id: string; title: string; description: string; taskType: string; status: string; priority: string; dueAt: string; version: number }>;
 };
 
 export type StaffPayrollItem = {
@@ -434,9 +463,69 @@ export type StaffPayrollItem = {
   grossPay: number;
   deductionsPay: number;
   netPay: number;
+  salaryPay: number;
+  overtimePay: number;
+  commissionPay: number;
+  adjustmentPay: number;
+  presentDaysX2: number;
+  absentDaysX2: number;
+  halfDayCount: number;
+  paidLeaveDaysX2: number;
+  workedMinutes: number;
+  scheduledMinutes: number;
+  lateMinutes: number;
+  earlyLeaveMinutes: number;
+  approvedOvertimeMinutes: number;
+  overtimeRatePayPerHour: number;
+  serviceCommissionPay: number;
+  productCommissionPay: number;
+  membershipCommissionPay: number;
+  packageCommissionPay: number;
+  serviceSalesPay: number;
+  productSalesPay: number;
+  membershipSalesPay: number;
+  packageSalesPay: number;
+  attendancePenaltyPay: number;
+  ruleFinePay: number;
+  ruleDeductionPay: number;
+  statutoryDeductionPay: number;
+  advanceRecoveryPay: number;
+  lateDeductionPay: number;
+  absenceDeductionPay: number;
+  fineDeductionPay: number;
   status: string;
   createdAt: string;
+  paidAt: string;
+  paymentMethod: string;
+  reference: string;
   payslipPath: string;
+};
+
+export type StaffEarlyDepartureRequest = {
+  id: string;
+  status: string;
+  version: number;
+  createdAt: string;
+  payloadJson: {
+    businessDate?: string;
+    scheduledStartTime?: string;
+    scheduledEndTime?: string;
+    requestedDepartureTime?: string;
+    earlyMinutes?: number;
+    reason?: string;
+    staffName?: string;
+  };
+};
+
+export type StaffPayrollProfile = {
+  rateType: string;
+  amountPaise: number;
+  effectiveFrom: string;
+};
+
+export type StaffPayrollOverview = {
+  profile: StaffPayrollProfile | null;
+  items: StaffPayrollItem[];
 };
 
 export type StaffPayrollRule = {
@@ -471,6 +560,7 @@ export type StaffOffer = {
   perClientLimit: number;
   active: boolean;
   approvalStatus: string;
+  personalOffer: boolean;
   hasCreative: boolean;
 };
 
@@ -504,6 +594,7 @@ export type StaffLeave = {
   reason: string;
   status: string;
   days: number;
+  version: number;
   createdAt: string;
 };
 
@@ -601,6 +692,7 @@ type RustStaffSelfDashboard = {
   appointments?: unknown[];
   sales?: unknown[];
   leaveRequests?: unknown[];
+  payrollProfile?: Record<string, unknown>;
   payroll?: unknown[];
   payrollRules?: unknown[];
 };
@@ -637,6 +729,7 @@ export class StaffAppService {
   private flushPromise: Promise<number> | null = null;
   private readonly getCache = new Map<string, ReadCacheEntry<unknown>>();
   private readonly tabId = crypto.randomUUID();
+  private readonly faceDeviceStorageKey = "auraStaffFaceDeviceId";
   readonly loading = signal(false);
   readonly error = signal("");
   readonly user = signal<StaffUser | null>(null);
@@ -790,7 +883,10 @@ export class StaffAppService {
   }
 
   async saveWorkspacePreferences(input: StaffWorkspacePreferenceUpdate): Promise<StaffWorkspacePreferences> {
-    return this.put<StaffWorkspacePreferences>("/staff-self/workspace-preferences", { ...input });
+    const saved = await this.put<StaffWorkspacePreferences>("/staff-self/workspace-preferences", { ...input });
+    this.clearGetCache("workspace-preferences");
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:preferences-updated", { detail: saved }));
+    return saved;
   }
 
   async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
@@ -803,7 +899,9 @@ export class StaffAppService {
   }
 
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
-    return this.queueableMutation("PATCH", `/staff-self/notifications/${encodeURIComponent(id)}`, { status });
+    const result = await this.queueableMutation("PATCH", `/staff-self/notifications/${encodeURIComponent(id)}`, { status });
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:notifications-updated"));
+    return result;
   }
 
   async mobilePushConfig(): Promise<StaffPushConfig> {
@@ -873,7 +971,7 @@ export class StaffAppService {
         const row = objectValue(value);
         return {
           id: stringValue(row, "id"), title: stringValue(row, "title"), description: stringValue(row, "description"),
-          status: stringValue(row, "status"), priority: stringValue(row, "priority"),
+          taskType: stringValue(row, "taskType", "task_type"), status: stringValue(row, "status"), priority: stringValue(row, "priority"),
           dueAt: stringValue(row, "dueAt", "due_at"), version: numberValue(row, "version")
         };
       })
@@ -952,17 +1050,52 @@ export class StaffAppService {
   }
 
   async payroll(): Promise<StaffPayrollItem[]> {
+    return (await this.payrollOverview()).items;
+  }
+
+  async earlyDepartureRequests(): Promise<StaffEarlyDepartureRequest[]> {
+    return this.get<StaffEarlyDepartureRequest[]>("/staff-attendance/early-departure-requests");
+  }
+
+  async requestEarlyDeparture(payload: { businessDate: string; requestedDepartureTime: string; reason: string }): Promise<StaffEarlyDepartureRequest> {
+    return this.post<StaffEarlyDepartureRequest>("/staff-attendance/early-departure-requests", payload);
+  }
+
+  async payrollOverview(): Promise<StaffPayrollOverview> {
     const dashboard = await this.get<RustStaffSelfDashboard>("/staff/self/dashboard", { date: staffBusinessDate() });
-    return arrayValue(dashboard.payroll).map((value) => {
+    const profile = objectValue(dashboard.payrollProfile);
+    return {
+      profile: Object.keys(profile).length ? {
+        rateType: stringValue(profile, "rateType", "rate_type"),
+        amountPaise: numberValue(profile, "amountPaise", "amount_paise"),
+        effectiveFrom: stringValue(profile, "effectiveFrom", "effective_from")
+      } : null,
+      items: arrayValue(dashboard.payroll).map((value) => {
       const row = objectValue(value);
       return {
         id: stringValue(row, "id", "runId", "run_id"), periodStart: stringValue(row, "periodStart", "period_start"),
         periodEnd: stringValue(row, "periodEnd", "period_end"), grossPay: numberValue(row, "grossPaise", "gross_paise"),
         deductionsPay: numberValue(row, "deductionsPaise", "deductions_paise"),
-        netPay: numberValue(row, "netPaise", "net_paise"), status: stringValue(row, "status"),
-        createdAt: stringValue(row, "paidAt", "paid_at"), payslipPath: stringValue(row, "payslipPath", "payslip_path")
+        netPay: numberValue(row, "netPaise", "net_paise"), salaryPay: numberValue(row, "earnedSalaryPaise", "earned_salary_paise"),
+        overtimePay: numberValue(row, "overtimePaise", "overtime_paise"), commissionPay: numberValue(row, "commissionPaise", "commission_paise"),
+        adjustmentPay: numberValue(row, "adjustmentPaise", "adjustment_paise"),
+        presentDaysX2: numberValue(row, "presentDaysX2"), absentDaysX2: numberValue(row, "absentDaysX2"), halfDayCount: numberValue(row, "halfDayCount"), paidLeaveDaysX2: numberValue(row, "paidLeaveDaysX2"),
+        workedMinutes: numberValue(row, "workedMinutes"), scheduledMinutes: numberValue(row, "scheduledMinutes"), lateMinutes: numberValue(row, "lateMinutes"), earlyLeaveMinutes: numberValue(row, "earlyLeaveMinutes"),
+        approvedOvertimeMinutes: numberValue(row, "approvedOvertimeMinutes"), overtimeRatePayPerHour: numberValue(row, "overtimeRatePaisePerHour"),
+        serviceCommissionPay: numberValue(row, "serviceCommissionPaise"), productCommissionPay: numberValue(row, "productCommissionPaise"),
+        membershipCommissionPay: numberValue(row, "membershipCommissionPaise"), packageCommissionPay: numberValue(row, "packageCommissionPaise"),
+        serviceSalesPay: numberValue(row, "serviceSalesPaise"), productSalesPay: numberValue(row, "productSalesPaise"),
+        membershipSalesPay: numberValue(row, "membershipSalesPaise"), packageSalesPay: numberValue(row, "packageSalesPaise"),
+        attendancePenaltyPay: numberValue(row, "attendancePenaltyPaise"), ruleFinePay: numberValue(row, "ruleFinePaise"),
+        ruleDeductionPay: numberValue(row, "ruleDeductionPaise"), statutoryDeductionPay: numberValue(row, "statutoryEmployeePaise"),
+        advanceRecoveryPay: numberValue(row, "advanceRecoveryPaise"), lateDeductionPay: numberValue(row, "lateDeductionPaise"),
+        absenceDeductionPay: numberValue(row, "absenceDeductionPaise"), fineDeductionPay: numberValue(row, "fineDeductionPaise"), status: stringValue(row, "status"),
+        createdAt: stringValue(row, "finalizedAt", "finalized_at"), paidAt: stringValue(row, "paidAt", "paid_at"),
+        paymentMethod: stringValue(row, "paymentMethod", "payment_method"), reference: stringValue(row, "reference"),
+        payslipPath: stringValue(row, "payslipPath", "payslip_path")
       };
-    });
+      })
+    };
   }
 
   async downloadPayslip(path: string): Promise<void> {
@@ -991,18 +1124,36 @@ export class StaffAppService {
   }
 
   async submitFeedback(payload: { category: string; title: string; body: string }): Promise<StaffFeedback> {
-    return this.post<StaffFeedback>("/staff-self/feedback", payload);
+    const result = await this.post<StaffFeedback>("/staff-self/feedback", payload);
+    this.notifyFeedbackUpdated();
+    return result;
   }
 
   async cancelAppointment(id: string, reason: string): Promise<unknown> {
-    return this.post(`/staff-self/appointments/${encodeURIComponent(id)}/cancel`, { reason });
+    const result = await this.post(`/staff-self/appointments/${encodeURIComponent(id)}/cancel`, { reason });
+    this.notifyAppointmentsUpdated();
+    return result;
+  }
+
+  async appointmentRecommendations(id: string): Promise<StaffRecommendation[]> {
+    return this.get<StaffRecommendation[]>(`/staff-self/appointments/${encodeURIComponent(id)}/recommendations`);
   }
 
   async rescheduleAppointment(id: string, payload: { startAt: string; reason: string }): Promise<unknown> {
-    return this.post(`/staff-self/appointments/${encodeURIComponent(id)}/reschedule`, {
+    const result = await this.post(`/staff-self/appointments/${encodeURIComponent(id)}/reschedule`, {
       start_at: payload.startAt,
       reason: payload.reason
     });
+    this.notifyAppointmentsUpdated();
+    return result;
+  }
+
+  private notifyAppointmentsUpdated(): void {
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:appointments-updated"));
+  }
+
+  private notifyFeedbackUpdated(): void {
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:feedback-updated"));
   }
 
   async payrollRules(): Promise<StaffPayrollRule[]> {
@@ -1039,10 +1190,21 @@ export class StaffAppService {
     }));
   }
 
-  async clockIn(): Promise<MutationResult<StaffAttendance>> {
+  async clockIn(source = "staff-app"): Promise<MutationResult<StaffAttendance>> {
     return this.queueableMutation<StaffAttendance>("POST", "/staff-attendance/clock-in", {
-      staffId: this.staffId(), businessDate: staffBusinessDate(), source: "staff-app"
+      staffId: this.staffId(), businessDate: staffBusinessDate(), source
     });
+  }
+
+  async faceClockIn(livenessResponse: string): Promise<MutationResult<StaffAttendance>> {
+    const position = await this.currentPosition();
+    return this.onlineMutation(() => this.post<StaffAttendance>("/staff-attendance/clock-in", {
+      staffId: this.staffId(), businessDate: staffBusinessDate(), source: "staff-app-face",
+      faceScan: {
+        deviceUid: this.faceDeviceId(), latitude: position.coords.latitude, longitude: position.coords.longitude,
+        accuracyMeters: position.coords.accuracy, livenessPrompt: "camera-opened", livenessResponse
+      }
+    }));
   }
 
   async clockOut(attendanceId?: string): Promise<MutationResult<StaffAttendance>> {
@@ -1065,6 +1227,10 @@ export class StaffAppService {
 
   async requestLeave(payload: { leaveType: string; startDate: string; endDate: string; reason: string }): Promise<unknown> {
     return this.post("/staff-leave/requests", { ...payload, staffId: this.staffId() });
+  }
+
+  async withdrawLeave(requestId: string, version: number): Promise<StaffLeave> {
+    return this.post<StaffLeave>(`/staff-leave/requests/${encodeURIComponent(requestId)}/withdraw`, { version });
   }
 
   async completeTask(taskId: string, version: number): Promise<MutationResult<unknown>> {
@@ -1258,7 +1424,16 @@ export class StaffAppService {
       branchId: stringValue(row, "branchId", "branch_id") || this.user()?.branchId || "",
       serviceIds: arrayValue(row["serviceIds"] ?? row["service_ids"]).map(String), serviceNames,
       durationMinutes: duration, value: numberValue(row, "value", "amountPaise", "amount_paise", "totalPaise", "total_paise"),
-      startAt, endAt, status: stringValue(row, "status"), chair: stringValue(row, "chair"), source: stringValue(row, "source")
+      startAt, endAt, status: stringValue(row, "status"), chair: stringValue(row, "chair"), source: stringValue(row, "source"),
+      clientName: stringValue(row, "clientName", "client_name"), preferredClient: Boolean(row["preferredClient"] ?? row["preferred_client"]),
+      rescheduleCount: numberValue(row, "rescheduleCount", "reschedule_count"),
+      rescheduleTimeline: arrayValue(row["rescheduleTimeline"] ?? row["reschedule_timeline"]).map((entry) => {
+        const event = objectValue(entry);
+        return { action: stringValue(event, "action"), changedAt: stringValue(event, "changedAt", "changed_at"), reason: stringValue(event, "reason"), changedBy: stringValue(event, "changedBy", "changed_by"), fromStartAt: stringValue(event, "fromStartAt", "from_start_at"), toStartAt: stringValue(event, "toStartAt", "to_start_at") };
+      }),
+      serviceDepartments: arrayValue(row["serviceDepartments"] ?? row["service_departments"]).map(String), lastServiceAt: stringValue(row, "lastServiceAt", "last_service_at"),
+      lastServiceNames: arrayValue(row["lastServiceNames"] ?? row["last_service_names"]).map(String),
+      lastServiceDepartments: arrayValue(row["lastServiceDepartments"] ?? row["last_service_departments"]).map(String)
     };
   }
 
@@ -1624,6 +1799,19 @@ export class StaffAppService {
     return false;
   }
 
+  private faceDeviceId(): string {
+    if (typeof localStorage === "undefined") return this.tabId;
+    const existing = localStorage.getItem(this.faceDeviceStorageKey);
+    if (existing) return existing;
+    const created = `staff_face_${crypto.randomUUID()}`;
+    localStorage.setItem(this.faceDeviceStorageKey, created);
+    return created;
+  }
+
+  private currentPosition(): Promise<GeolocationPosition> {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.reject(new Error("GPS location is required for face attendance."));
+    return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }));
+  }
   private async onlineMutation<T>(mutation: () => Promise<T>): Promise<MutationResult<T>> {
     if (!this.isOnline()) throw new Error("This action requires an internet connection and cannot be stored offline.");
     return { state: "completed", data: await mutation() };

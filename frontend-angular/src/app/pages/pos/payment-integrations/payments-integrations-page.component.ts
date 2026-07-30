@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { LanguageService } from '../../../core/i18n/language.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 
 type PaymentProviderRow = {
@@ -15,6 +16,7 @@ type PaymentProviderRow = {
   documentationUrl: string;
   integrationStatus: 'available' | 'planned';
   recommended: boolean;
+  configured: boolean;
   enabled: boolean;
   webhookConfigured: boolean;
   environment: string | null;
@@ -42,7 +44,7 @@ type PaymentPlatformOverview = {
     payoutsPending?: number;
   };
   openDisputes?: number;
-  providers?: Record<string, { configured?: boolean; webhookConfigured?: boolean }>;
+  providers?: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }>;
 };
 
 @Component({
@@ -56,6 +58,7 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   providers: PaymentProviderRow[] = [];
   loading = true;
   error = '';
+  notice = '';
   search = '';
   country = 'IN';
   accounts: MerchantAccount[] = [];
@@ -67,12 +70,13 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   actionError = '';
   operations = { pending: 0, failed: 0, payoutsPending: 0 };
   openDisputes = 0;
-  providerSetup: Record<string, { configured?: boolean; webhookConfigured?: boolean }> = {};
+  providerSetup: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }> = {};
   private readonly countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
   constructor(
     private readonly api: ApiService,
     private readonly language: LanguageService,
+    private readonly auth: AuthService,
   ) {}
 
   ngOnInit(): void {
@@ -132,7 +136,8 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
         documentationUrl: provider.documentationUrl || '',
         integrationStatus: provider.integrationStatus === 'planned' ? 'planned' : 'available',
         recommended: !!provider.recommended,
-        enabled: this.providerSetup[provider.provider]?.configured ?? !!provider.enabled,
+        configured: provider.configured ?? this.providerSetup[provider.provider]?.configured ?? !!provider.enabled,
+        enabled: this.providerSetup[provider.provider]?.enabled ?? !!provider.enabled,
         webhookConfigured: this.providerSetup[provider.provider]?.webhookConfigured ?? !!provider.webhookConfigured,
         environment: provider.environment || null,
       }));
@@ -144,6 +149,7 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   }
 
   isConnected(provider: PaymentProviderRow): boolean {
+    if (!provider.enabled) return false;
     if (this.isPlatformProvider(provider)) {
       const account = this.accountFor(provider);
       return !!account?.chargesEnabled && provider.webhookConfigured;
@@ -159,6 +165,14 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
     return provider.recommended;
   }
 
+  isDisabled(provider: PaymentProviderRow): boolean {
+    return this.isAvailable(provider) && provider.configured && !provider.enabled;
+  }
+
+  get canManageProviders(): boolean {
+    return this.auth.hasRole('owner', 'admin') || this.auth.hasPermission('pos.manage');
+  }
+
   providerLabel(provider: PaymentProviderRow): string {
     return provider.displayName || this.titleCase(provider.provider);
   }
@@ -171,12 +185,14 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   statusLabel(provider: PaymentProviderRow): string {
     if (this.isRecommended(provider)) return 'Recommended';
     if (!this.isAvailable(provider)) return 'Planned';
+    if (this.isDisabled(provider)) return 'Disabled';
     return this.isConnected(provider) ? 'Connected' : 'Setup required';
   }
 
   statusClass(provider: PaymentProviderRow): string {
     if (this.isRecommended(provider)) return 'recommended';
     if (!this.isAvailable(provider)) return 'planned';
+    if (this.isDisabled(provider)) return 'disabled';
     return this.isConnected(provider) ? 'connected' : 'pending';
   }
 
@@ -185,6 +201,7 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   }
 
   actionLabel(provider: PaymentProviderRow): string {
+    if (this.isDisabled(provider)) return 'Enable';
     return this.isConnected(provider) ? 'Manage setup' : 'Connect';
   }
 
@@ -255,13 +272,29 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
     }
   }
 
+  async setProviderEnabled(provider: PaymentProviderRow, enabled: boolean): Promise<void> {
+    if (!enabled && !confirm(`Disable ${this.providerLabel(provider)}? New payment requests will stop, but payment history will remain.`)) return;
+    this.actionLoading = true;
+    this.actionError = '';
+    try {
+      await firstValueFrom(this.api.post(`/pos/payment-platform/providers/${provider.provider}/status`, { enabled }));
+      await this.load();
+      this.selectedProvider = this.providers.find((row) => row.provider === provider.provider) ?? null;
+      this.notice = `${this.providerLabel(provider)} ${enabled ? 'enabled' : 'disabled'}`;
+    } catch (error) {
+      this.actionError = this.messageFor(error, `Unable to ${enabled ? 'enable' : 'disable'} payment provider`);
+    } finally {
+      this.actionLoading = false;
+    }
+  }
+
   canStartHostedOnboarding(provider: PaymentProviderRow): boolean {
-    return this.isPlatformProvider(provider) && !this.accountFor(provider)?.chargesEnabled;
+    return this.canManageProviders && provider.enabled && this.isPlatformProvider(provider) && !this.accountFor(provider)?.chargesEnabled;
   }
 
   setupRows(provider: PaymentProviderRow): Array<{ label: string; ready: boolean }> {
     const rows = [
-      { label: 'API credentials', ready: !!provider.enabled },
+      { label: 'API credentials', ready: provider.configured },
       { label: 'Webhook secret', ready: !!provider.webhookConfigured },
     ];
     if (this.isPlatformProvider(provider)) rows.push({ label: 'Merchant account', ready: !!this.accountFor(provider)?.chargesEnabled });
@@ -269,7 +302,8 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   }
 
   setupHint(provider: PaymentProviderRow): string {
-    if (!provider.enabled) return `${provider.provider.toUpperCase()} credentials missing in backend environment`;
+    if (this.isDisabled(provider)) return 'Disabled for this branch';
+    if (!provider.configured) return `${provider.provider.toUpperCase()} credentials missing in backend environment`;
     if (!provider.webhookConfigured) return `${provider.provider.toUpperCase()} webhook is not configured`;
     return this.isConnected(provider) ? 'Ready for live payments' : 'Setup in progress';
   }

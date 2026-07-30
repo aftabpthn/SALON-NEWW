@@ -70,6 +70,14 @@ pub struct ApprovalDetail {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EarlyDepartureRequest {
+    pub business_date: NaiveDate,
+    pub requested_departure_time: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TipPayoutRequest {
     pub staff_id: String,
     pub period_start: NaiveDate,
@@ -195,6 +203,10 @@ pub struct BestStaffRequest {
     pub start_time: NaiveTime,
     pub end_time: NaiveTime,
     pub service_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub appointment_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -204,7 +216,16 @@ pub struct RankedStaffCandidate {
     pub staff_name: String,
     pub performance_score: Option<i32>,
     pub workload_count: i64,
+    pub workload_minutes: i64,
+    pub department: String,
+    pub department_match: bool,
+    pub preferred_client: bool,
+    pub utilization_percent: Option<i32>,
+    pub rating: Option<f64>,
+    pub completion_percent: Option<i32>,
+    pub repeat_client_percent: Option<i32>,
     pub confidence: String,
+    pub recommendation_reason: String,
     pub evidence: Vec<String>,
 }
 
@@ -289,6 +310,7 @@ pub struct StaffEnterpriseCommandCenter {
     pub kpis: Value,
     pub top_staff: Vec<StaffPerformanceRow>,
     pub attention_queue: Value,
+    pub recommendations: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -414,6 +436,81 @@ pub async fn create_approval(
     .map_err(internal("create approval"))
 }
 
+pub async fn list_self_early_departures(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+) -> Result<Vec<ApprovalRequestRecord>, AppError> {
+    repository::list_self_early_departure_requests(db, tenant, branch, actor)
+        .await
+        .map_err(internal("load early departure requests"))
+}
+
+pub async fn request_early_departure(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    role: &str,
+    request: EarlyDepartureRequest,
+) -> Result<ApprovalRequestRecord, AppError> {
+    let reason = required(&request.reason, 500, "reason")?;
+    let requested_departure_time =
+        NaiveTime::parse_from_str(request.requested_departure_time.trim(), "%H:%M")
+            .map_err(|_| AppError::validation("departure time must use HH:MM format"))?;
+    let schedule =
+        repository::early_departure_schedule(db, tenant, branch, actor, request.business_date)
+            .await
+            .map_err(internal("load scheduled shift"))?
+            .ok_or_else(|| {
+                AppError::validation("a working shift is required for the selected date")
+            })?;
+    let early_minutes = early_departure_minutes(
+        schedule.shift_start,
+        schedule.shift_end,
+        requested_departure_time,
+    )?;
+    if repository::has_open_early_departure_request(
+        db,
+        tenant,
+        branch,
+        actor,
+        request.business_date,
+    )
+    .await
+    .map_err(internal("check early departure request"))?
+    {
+        return Err(AppError::conflict(
+            "an active early departure request already exists for this date",
+        ));
+    }
+    create_approval(
+        db,
+        tenant,
+        branch,
+        actor,
+        role,
+        ApprovalRequestInput {
+            request_type: "early_departure".to_string(),
+            entity_type: "staff".to_string(),
+            entity_id: schedule.staff_id,
+            amount_paise: Some(0),
+            payload: Some(json!({
+                "businessDate": request.business_date,
+                "scheduledStartTime": schedule.shift_start.format("%H:%M").to_string(),
+                "scheduledEndTime": schedule.shift_end.format("%H:%M").to_string(),
+                "requestedDepartureTime": requested_departure_time.format("%H:%M").to_string(),
+                "earlyMinutes": early_minutes,
+                "reason": reason,
+                "staffName": schedule.staff_name,
+            })),
+            expires_at: None,
+        },
+    )
+    .await
+}
+
 pub async fn approval_detail(
     db: &PgPool,
     t: &str,
@@ -469,6 +566,11 @@ pub async fn decide_approval(
     }
     if decision == "cancelled" && current.requested_by != actor {
         return Err(AppError::forbidden("only requester can cancel approval"));
+    }
+    if decision != "cancelled" && current.requested_by == actor {
+        return Err(AppError::forbidden(
+            "you cannot decide your own approval request",
+        ));
     }
     let next = if decision == "approved"
         && current.steps.as_array().is_some_and(|s| {
@@ -1044,6 +1146,7 @@ pub async fn recommend_replacement(
         context.start_time,
         context.end_time,
         &services,
+        &context.client_id,
     )
     .await?;
     let best = ranked
@@ -1083,11 +1186,42 @@ pub async fn best_staff(
         t,
         b,
         "",
-        "",
+        &request.appointment_id,
         request.date,
         request.start_time,
         request.end_time,
         &request.service_ids.unwrap_or_default(),
+        &request.client_id,
+    )
+    .await
+}
+
+pub async fn best_staff_for_self_appointment(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    user_id: &str,
+    appointment_id: &str,
+) -> Result<Vec<RankedStaffCandidate>, AppError> {
+    let staff_id = self_staff_id(db, t, b, user_id).await?;
+    let context = repository::replacement_context(db, t, b, appointment_id)
+        .await
+        .map_err(internal("load appointment recommendation context"))?
+        .ok_or_else(|| AppError::not_found("appointment not found"))?;
+    if context.absent_staff_id != staff_id {
+        return Err(AppError::not_found("appointment not found"));
+    }
+    rank_candidates(
+        db,
+        t,
+        b,
+        "",
+        &context.appointment_id,
+        context.business_date,
+        context.start_time,
+        context.end_time,
+        &parse_service_ids(&context.service_ids_json)?,
+        &context.client_id,
     )
     .await
 }
@@ -1548,7 +1682,7 @@ pub async fn enterprise_command_center(
     to: NaiveDate,
 ) -> Result<StaffEnterpriseCommandCenter, AppError> {
     validate_period(from, to, 367, "enterprise command center")?;
-    let (performance, approvals, tasks, sales) = tokio::try_join!(
+    let (performance, approvals, tasks, sales, recommendations) = tokio::try_join!(
         staff_advanced_service::performance(db, t, b, from, to, ""),
         async {
             repository::list_approval_requests(db, t, b, "")
@@ -1560,6 +1694,11 @@ pub async fn enterprise_command_center(
             repository::staff_sales_summary(db, t, b, from, to)
                 .await
                 .map_err(internal("load command center sales"))
+        },
+        async {
+            repository::management_recommendations(db, t, b, from, to)
+                .await
+                .map_err(internal("load management recommendations"))
         },
     )?;
     let pending_approvals = approvals
@@ -1599,6 +1738,7 @@ pub async fn enterprise_command_center(
         kpis: json!({"staffCount":performance.summary.staff_count,"totalRevenuePaise":performance.summary.total_revenue_paise,"highRiskSignals":risks.len(),"pendingApprovals":pending_approvals,"trainingDue":training_due}),
         top_staff,
         attention_queue,
+        recommendations,
     })
 }
 
@@ -1961,6 +2101,7 @@ async fn rank_candidates(
     start: NaiveTime,
     end: NaiveTime,
     services: &[String],
+    client_id: &str,
 ) -> Result<Vec<RankedStaffCandidate>, AppError> {
     let candidates = repository::replacement_candidates(
         db,
@@ -1972,21 +2113,29 @@ async fn rank_candidates(
         start,
         end,
         services,
+        client_id,
     )
     .await
     .map_err(internal("load replacement candidates"))?;
     let performance =
         staff_advanced_service::performance(db, t, b, date - Duration::days(30), date, "").await?;
-    let scores = performance
+    let performance = performance
         .rows
         .into_iter()
-        .map(|row| (row.staff_id, row.score))
+        .map(|row| (row.staff_id.clone(), row))
         .collect::<HashMap<_, _>>();
     let mut ranked = candidates
         .into_iter()
-        .filter(|row| row.schedule_match && row.leave_free && row.slot_free && row.service_match)
+        .filter(|row| {
+            row.schedule_match
+                && row.leave_free
+                && row.slot_free
+                && row.service_match
+                && row.blackout_free
+        })
         .map(|row| {
-            let performance_score = scores.get(&row.staff_id).copied().flatten();
+            let metrics = performance.get(&row.staff_id);
+            let performance_score = metrics.and_then(|value| value.score);
             let confidence = if performance_score.is_some() && !services.is_empty() {
                 "high"
             } else if performance_score.is_some() || !services.is_empty() {
@@ -1997,6 +2146,7 @@ async fn rank_candidates(
             let mut evidence = vec![
                 "scheduled_for_requested_slot".to_string(),
                 "no_leave_or_booking_conflict".to_string(),
+                "no_blackout".to_string(),
             ];
             if !services.is_empty() {
                 evidence.push("all_requested_services_assigned".to_string());
@@ -2004,23 +2154,89 @@ async fn rank_candidates(
             if let Some(score) = performance_score {
                 evidence.push(format!("performance_score_{score}"));
             }
+            if row.department_match && !row.department.is_empty() {
+                evidence.push("department_match".to_string());
+            }
+            if row.preferred_client {
+                evidence.push("preferred_client_relationship".to_string());
+            }
+            let mut reasons = Vec::new();
+            if row.preferred_client {
+                reasons.push("Client preferred staff".to_string());
+            }
+            if row.department_match && !row.department.is_empty() {
+                reasons.push(format!("{} department match", row.department));
+            }
+            if !services.is_empty() {
+                reasons.push("Assigned to requested service".to_string());
+            }
+            reasons.push("Roster available; no leave, blackout or booking conflict".to_string());
+            if let Some(value) = metrics.and_then(|item| item.rating) {
+                reasons.push(format!("{value:.1} rating"));
+            }
+            if let Some(value) = metrics.and_then(|item| item.completion_percent) {
+                reasons.push(format!("{value}% completion"));
+            }
+            reasons.push(format!(
+                "{} appointment{} / {} min booked today",
+                row.workload_count,
+                if row.workload_count == 1 { "" } else { "s" },
+                row.workload_minutes
+            ));
             RankedStaffCandidate {
                 staff_id: row.staff_id,
                 staff_name: row.staff_name,
                 performance_score,
                 workload_count: row.workload_count,
+                workload_minutes: row.workload_minutes,
+                department: row.department,
+                department_match: row.department_match,
+                preferred_client: row.preferred_client,
+                utilization_percent: metrics.and_then(|item| item.utilization_percent),
+                rating: metrics.and_then(|item| item.rating),
+                completion_percent: metrics.and_then(|item| item.completion_percent),
+                repeat_client_percent: metrics.and_then(|item| item.repeat_client_percent),
                 confidence: confidence.to_string(),
+                recommendation_reason: reasons.join(" · "),
                 evidence,
             }
         })
         .collect::<Vec<_>>();
+    sort_ranked_candidates(&mut ranked);
+    Ok(ranked)
+}
+
+fn sort_ranked_candidates(ranked: &mut [RankedStaffCandidate]) {
     ranked.sort_by(|a, b| {
-        b.performance_score
-            .cmp(&a.performance_score)
+        b.preferred_client
+            .cmp(&a.preferred_client)
+            .then(b.department_match.cmp(&a.department_match))
+            .then(b.performance_score.cmp(&a.performance_score))
+            .then(
+                b.rating
+                    .unwrap_or(-1.0)
+                    .total_cmp(&a.rating.unwrap_or(-1.0)),
+            )
+            .then(b.completion_percent.cmp(&a.completion_percent))
+            .then(b.repeat_client_percent.cmp(&a.repeat_client_percent))
+            .then(b.utilization_percent.cmp(&a.utilization_percent))
+            .then(a.workload_minutes.cmp(&b.workload_minutes))
             .then(a.workload_count.cmp(&b.workload_count))
             .then(a.staff_name.cmp(&b.staff_name))
     });
-    Ok(ranked)
+}
+
+fn early_departure_minutes(
+    start: NaiveTime,
+    end: NaiveTime,
+    requested: NaiveTime,
+) -> Result<i64, AppError> {
+    if requested <= start || requested >= end {
+        return Err(AppError::validation(
+            "departure time must be inside the scheduled shift and before shift end",
+        ));
+    }
+    Ok(i64::from(end.num_seconds_from_midnight() - requested.num_seconds_from_midnight()) / 60)
 }
 
 fn approval_steps(value: Value) -> Result<Value, AppError> {
@@ -2194,8 +2410,8 @@ fn db_write(duplicate: &'static str, a: &'static str) -> impl FnOnce(sqlx::Error
 mod tests {
     use super::{calculate_rule, calculate_rule_with_rounding};
     use super::{
-        ceil_div, forecast_confidence, is_due_training, quiet_delay, render_template,
-        ManpowerSourceRecord,
+        ceil_div, early_departure_minutes, forecast_confidence, is_due_training, quiet_delay,
+        render_template, sort_ranked_candidates, ManpowerSourceRecord, RankedStaffCandidate,
     };
     use chrono::NaiveTime;
     use serde_json::json;
@@ -2281,5 +2497,53 @@ mod tests {
             now
         ));
         assert!(!is_due_training("general", "open", Some(now), now));
+    }
+
+    #[test]
+    fn early_departure_must_be_inside_shift() {
+        let start = NaiveTime::from_hms_opt(11, 0, 0).unwrap();
+        let end = NaiveTime::from_hms_opt(20, 0, 0).unwrap();
+        assert_eq!(
+            early_departure_minutes(start, end, NaiveTime::from_hms_opt(18, 0, 0).unwrap())
+                .unwrap(),
+            120
+        );
+        assert!(early_departure_minutes(start, end, end).is_err());
+    }
+
+    #[test]
+    fn best_staff_prefers_client_relationship_then_department_and_performance() {
+        let candidate = |id: &str, preferred_client: bool, department_match: bool, score: i32| {
+            RankedStaffCandidate {
+                staff_id: id.to_string(),
+                staff_name: id.to_string(),
+                performance_score: Some(score),
+                workload_count: 0,
+                workload_minutes: 0,
+                department: "Hair".to_string(),
+                department_match,
+                preferred_client,
+                utilization_percent: Some(80),
+                rating: Some(4.5),
+                completion_percent: Some(90),
+                repeat_client_percent: Some(60),
+                confidence: "high".to_string(),
+                recommendation_reason: String::new(),
+                evidence: Vec::new(),
+            }
+        };
+        let mut ranked = vec![
+            candidate("highest-score", false, true, 99),
+            candidate("preferred", true, false, 60),
+            candidate("department", false, true, 80),
+        ];
+        sort_ranked_candidates(&mut ranked);
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|row| row.staff_id.as_str())
+                .collect::<Vec<_>>(),
+            ["preferred", "highest-score", "department"]
+        );
     }
 }

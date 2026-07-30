@@ -297,10 +297,14 @@ export class MembershipsPageComponent implements OnInit {
     finally { this.saving = false; }
   }
 
-  async remove(item: Membership) {
-    if (!confirm(`Delete ${item.name}?`)) return;
-    try { await firstValueFrom(this.api.delete<ApiEnvelope<unknown>>(`/memberships/${item.id}`)); await this.loadMemberships(); }
-    catch { this.error = 'Membership delete failed'; }
+  async setArchived(item: Membership) {
+    const action = item.active ? 'Archive' : 'Restore';
+    if (!confirm(`${action} ${item.name}?`)) return;
+    try {
+      await firstValueFrom(this.api.patch<ApiEnvelope<Membership>>(`/memberships/${item.id}`, { active: !item.active }));
+      await this.loadMemberships();
+      this.message = `Membership ${item.active ? 'archived' : 'restored'}`;
+    } catch { this.error = `Membership ${action.toLowerCase()} failed`; }
   }
 
   async submitPlanChange() {

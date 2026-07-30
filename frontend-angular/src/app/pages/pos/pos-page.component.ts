@@ -205,6 +205,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   syncingOffline = false;
   private lineSeed = 1;
   private clientSearchRequest = 0;
+  private clientSearchTimer = 0;
   private appointmentIdFromRoute = '';
   private membershipPrefillApplied = false;
   private membershipSettingsLoaded = false;
@@ -259,6 +260,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.persistWorkingDraft();
     this.liveUpdates?.unsubscribe();
     window.clearInterval(this.heartbeatTimer);
+    window.clearTimeout(this.clientSearchTimer);
   }
 
   @HostListener('window:beforeunload')
@@ -331,7 +333,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
 
   loadClients(): void { this.loadList('/api/v1/clients', (rows) => { this.clients = rows; const routeClientId = this.route.snapshot.queryParamMap.get('clientId'); if (routeClientId && !this.selectedClientId) this.onClientChange(routeClientId); const client = rows.find((item) => String(item.id) === String(this.selectedClientId)); if (client) this.clientSearchText = this.recordName(client); this.applyMembershipFromRoute(); this.applyAppointmentFromRoute(); }); }
   loadServices(): void { this.loadList('/api/v1/services', (rows) => { this.services = rows; this.applyAppointmentFromRoute(); }); }
-  loadProducts(): void { this.loadList('/api/v1/products', (rows) => (this.products = rows)); }
+  loadProducts(): void { this.loadList('/api/v1/inventory?pageSize=200', (rows) => (this.products = rows.filter((item) => item.active !== false))); }
   loadMemberships(): void { this.loadList('/api/v1/memberships', (rows) => { this.memberships = rows.filter((item) => item.active !== false); this.applyMembershipFromRoute(); }); }
   loadMembershipSettings(): void {
     this.api.get<any>('/membership-enterprise/settings').subscribe({
@@ -436,6 +438,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.clientSearchText = value;
     this.clientSearchActive = true;
     this.quickClientOpen = false;
+    window.clearTimeout(this.clientSearchTimer);
+    const request = ++this.clientSearchRequest;
     const query = value.trim();
     if (!query) {
       this.onClientChange(null);
@@ -443,13 +447,30 @@ export class PosPageComponent implements OnInit, OnDestroy {
     }
     if (query.length < 3) return;
 
-    const request = ++this.clientSearchRequest;
-    this.api.get<any>(`/api/v1/clients?q=${encodeURIComponent(query)}&pageSize=25`).subscribe({
-      next: (res: any) => {
-        if (request === this.clientSearchRequest) this.clients = this.list(res).filter((item) => item?.id != null);
-      },
-      error: () => undefined,
-    });
+    this.clientSearchTimer = window.setTimeout(() => {
+      this.api.get<any>(`/api/v1/clients?q=${encodeURIComponent(query)}&pageSize=25`).subscribe({
+        next: (res: any) => {
+          if (request === this.clientSearchRequest) this.clients = this.list(res).filter((item) => item?.id != null);
+        },
+        error: () => undefined,
+      });
+    }, 180);
+  }
+
+  handleClientSearchKey(event: KeyboardEvent): void {
+    if (event.key === 'Enter') this.selectFirstClientResult(event);
+    if (event.key === 'Escape') this.clientSearchActive = false;
+  }
+
+  selectFirstClientResult(event: Event): void {
+    const first = this.filteredClients()[0];
+    if (first) {
+      event.preventDefault();
+      this.selectClient(first);
+    } else if (this.showAddClient()) {
+      event.preventDefault();
+      this.openQuickClient();
+    }
   }
 
   selectClient(client: any): void {
@@ -727,12 +748,15 @@ export class PosPageComponent implements OnInit, OnDestroy {
   filteredClients(): any[] {
     const phone = this.phoneDigits(this.clientSearchText);
     if (phone) {
+      const q = this.normalizeSearch(this.clientSearchText);
       return this.clients
-        .filter((client) => this.clientPhone(client).includes(phone))
-        .sort((a, b) => Number(!this.clientPhone(a).startsWith(phone)) - Number(!this.clientPhone(b).startsWith(phone)))
-        .slice(0, 8);
+        .map((client, index) => ({ client, index, score: Math.max(this.clientPhoneSearchScore(client, phone), this.searchScore(this.clientSearchFields(client), q)) }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .slice(0, 8)
+        .map((item) => item.client);
     }
-    return this.ranked(this.clients, this.clientSearchText, (c) => [this.recordName(c), c.phone, c.mobile, c.whatsapp, c.email, c.code, c.customerCode, c.clientCode, c.id]);
+    return this.ranked(this.clients, this.clientSearchText, (client) => this.clientSearchFields(client));
   }
 
   filteredHeaderStaff(): any[] { return this.filteredStaff(this.staffSearchText); }
@@ -747,7 +771,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   }
 
   showClientResults(): boolean { return this.clientSearchActive && this.filteredClients().length > 0; }
-  showAddClient(): boolean { return this.clientSearchActive && this.phoneDigits(this.clientSearchText).length >= 3 && !this.filteredClients().length; }
+  showAddClient(): boolean { return this.clientSearchActive && this.normalizeSearch(this.clientSearchText).length >= 3 && !this.filteredClients().length; }
   showHeaderStaffResults(): boolean { return this.staffSearchActive && this.filteredHeaderStaff().length > 0; }
   showQuickServiceResults(): boolean { return this.quickServiceActive && this.quickServiceSearch.trim().length > 0 && this.filteredQuickServices().length > 0; }
   showQuickProductResults(): boolean { return this.quickProductActive && this.quickProductSearch.trim().length > 0 && this.filteredQuickProducts().length > 0; }
@@ -854,7 +878,9 @@ export class PosPageComponent implements OnInit, OnDestroy {
   walkInClient(): void { this.clientSearchText = 'Walk-in client'; this.clientSearchActive = false; this.onClientChange(null); }
 
   openQuickClient(): void {
-    this.quickClient = { ...this.emptyQuickClient(), phone: this.phoneDigits(this.clientSearchText) };
+    const search = this.clientSearchText.trim();
+    const phone = this.phoneDigits(search);
+    this.quickClient = { ...this.emptyQuickClient(), name: phone ? '' : this.titleCase(search), phone };
     this.quickClientError = '';
     this.quickClientOpen = true;
     this.clientSearchActive = false;
@@ -1199,8 +1225,18 @@ export class PosPageComponent implements OnInit, OnDestroy {
     const joinedName = [record?.firstName ?? record?.first_name, record?.lastName ?? record?.last_name].filter(Boolean).join(' ');
     return String(record?.name ?? record?.fullName ?? record?.displayName ?? record?.staffName ?? record?.serviceName ?? record?.productName ?? joinedName ?? `#${record?.id ?? ''}`).trim();
   }
-  resultMeta(record: any): string { return [record?.phone ?? record?.mobile, record?.category, record?.sku, record?.barcode, record?.role ?? record?.designation].filter(Boolean).join(' · '); }
+  resultMeta(record: any): string { return [record?.phone ?? record?.mobile, record?.category, record?.sku, record?.barcode, record?.stockQuantity !== undefined ? `Stock ${record.stockQuantity}` : '', record?.role ?? record?.designation].filter(Boolean).join(' · '); }
   clientWalletPaise(client: any): number { return this.firstNumber(client, ['walletBalancePaise', 'wallet_balance_paise']); }
+  clientUnpaidPaise(client: any): number { return this.firstMoney(client, ['unpaidPaise', 'unpaid_paise', 'unpaidAmountPaise', 'unpaid_amount_paise']); }
+  clientMembershipLabel(client: any): string {
+    if (Boolean(client?.hasActiveMembership ?? client?.has_active_membership)) return 'Active member';
+    const expiry = client?.membershipExpireDate ?? client?.membership_expire_date ?? client?.membershipExpiresAt ?? client?.membership_expires_at;
+    return expiry ? `Membership till ${this.formatDate(expiry)}` : '';
+  }
+  clientLastVisitLabel(client: any): string {
+    const visit = client?.lastVisitAt ?? client?.last_visit_at ?? client?.lastAppointmentAt ?? client?.last_appointment_at ?? client?.lastSaleAt ?? client?.last_sale_at ?? client?.lastInvoiceAt ?? client?.last_invoice_at;
+    return visit ? `Last ${this.formatDate(visit)}` : '';
+  }
   clientHasDuplicates(client: any): boolean { return this.firstNumber(client, ['duplicateCount', 'duplicate_count']) > 0; }
   whatsappUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `https://wa.me/${phone.length === 10 ? `91${phone}` : phone}` : ''; }
   callUrl(client: any): string { const phone = this.phoneDigits(this.clientPhone(client)); return phone ? `tel:${phone}` : ''; }
@@ -1217,7 +1253,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   trackByLine(_: number, line: PosLine): string { return line.id; }
   trackById(_: number, item: any): string | number { return item.id; }
   trackByPayment(_: number, item: PaymentMode): string { return item.code; }
-  trackBySplit(index: number): number { return index; }
+  trackBySplit(index: number, _split?: unknown): number { return index; }
   appointmentOptionLabel(item: any): string {
     const clientId = item?.clientId ?? item?.client_id ?? item?.customerId ?? item?.customer_id ?? '';
     const client = item?.clientName ?? item?.client_name ?? item?.customerName ?? item?.customer_name ?? this.clients.find((row) => String(row.id) === String(clientId));
@@ -1274,6 +1310,34 @@ export class PosPageComponent implements OnInit, OnDestroy {
     const taxPercent = this.membershipTaxPercent(plan);
     this.addAddonLine('membership', plan, this.priceBeforeMembershipTax(displayPrice, taxPercent), taxPercent);
     this.membershipPrefillApplied = true;
+  }
+
+  private clientSearchFields(client: any): unknown[] {
+    return [this.recordName(client), client?.phone, client?.mobile, client?.whatsapp, client?.email, client?.code, client?.customerCode, client?.customer_code, client?.clientCode, client?.client_code, client?.id, ...this.clientPhoneVariants(client)];
+  }
+
+  private clientPhoneSearchScore(client: any, queryDigits: string): number {
+    let best = 0;
+    for (const query of this.phoneSearchTerms(queryDigits)) {
+      for (const phone of this.clientPhoneVariants(client)) {
+        if (phone === query) best = Math.max(best, 130);
+        else if (phone.startsWith(query)) best = Math.max(best, 105);
+        else if (phone.includes(query)) best = Math.max(best, 85);
+      }
+    }
+    return best;
+  }
+
+  private clientPhoneVariants(client: any): string[] {
+    const values = [client?.phone, client?.mobile, client?.whatsapp, client?.alternatePhone, client?.alternate_phone]
+      .map((value) => this.phoneDigits(value))
+      .filter(Boolean);
+    return [...new Set(values.flatMap((value) => this.phoneSearchTerms(value)))];
+  }
+
+  private phoneSearchTerms(value: string): string[] {
+    const digits = this.phoneDigits(value);
+    return [...new Set([digits, digits.length > 10 ? digits.slice(-10) : '', digits.startsWith('91') && digits.length > 10 ? digits.slice(2) : ''].filter(Boolean))];
   }
 
   private ranked(rows: any[], query: string, fieldsFor: (row: any) => unknown[]): any[] {
@@ -1976,7 +2040,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       };
     }).filter((row) => row.id && row.packageId && row.serviceId && row.pendingQty > 0);
   }
-  private pricePaise(item: any): number { return this.firstMoney(item, ['pricePaise', 'unitPricePaise', 'defaultPricePaise', 'price_paise', 'unit_price_paise']) || this.toPaise(this.firstNumber(item, ['price', 'unitPrice', 'sellingPrice', 'mrp', 'rate'])); }
+  private pricePaise(item: any): number { return this.firstMoney(item, ['pricePaise', 'unitPricePaise', 'defaultPricePaise', 'sellingPricePaise', 'retailPricePaise', 'mrpPaise', 'price_paise', 'unit_price_paise', 'selling_price_paise', 'retail_price_paise', 'mrp_paise']) || this.toPaise(this.firstNumber(item, ['price', 'unitPrice', 'sellingPrice', 'mrp', 'rate'])); }
   private firstMoney(obj: any, keys: string[]): number { for (const k of keys) if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return Math.round(Number(obj[k]) || 0); return 0; }
   private firstNumber(obj: any, keys: string[]): number { for (const k of keys) if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return Number(obj[k]) || 0; return 0; }
   private clientPhone(client: any): string { return this.phoneDigits(client?.phone ?? client?.mobile ?? client?.whatsapp); }

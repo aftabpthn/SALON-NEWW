@@ -5,7 +5,7 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 ## Inventory policy
 
 - `GET /inventory/policy` returns the effective branch policy. A branch without a persisted row receives safe defaults and null transfer-cost inputs.
-- `PUT /inventory/policy` is owner/admin only. Body: `negativeStockRule`, `valuationMethod`, `expiryWindowDays`, `countVarianceThresholdBps`, optional backward-compatible `reorderHistoryDays` (default 60), `reorderCoverageDays` (default 30), and object `approvalMatrix`. Transfer landed-cost configuration is all-or-none: base transport paise, per-km paise, handling per unit paise, delay per unit/day paise, and expected transfer days.
+- `PUT /inventory/policy` is owner/admin only. Body: `negativeStockRule`, `valuationMethod`, `expiryWindowDays`, `countVarianceThresholdBps`, `countValueVarianceThresholdPaise` (default ₹100), optional backward-compatible `reorderHistoryDays` (default 60), `reorderCoverageDays` (default 30), and object `approvalMatrix`. Stock-audit sessions snapshot both quantity and monetary approval thresholds plus item unit cost at cut-off, so later policy/cost changes cannot rewrite approval evidence. Transfer landed-cost configuration is all-or-none: base transport paise, per-km paise, handling per unit paise, delay per unit/day paise, and expected transfer days.
 - Negative stock remains blocked at direct transactional endpoints. With `approval_required`, `POST /inventory/negative-stock-requests` creates a reasoned request and `POST /inventory/negative-stock-requests/{id}/review` performs owner/admin maker-checker review. Approval updates stock and the immutable adjustment ledger in one transaction.
 - `weighted_average` values from immutable ledger movement costs. `fifo` values remaining batch layers and their immutable batch movements.
 
@@ -34,6 +34,7 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 ## Purchase bill intelligence
 
 - `/purchase-bill-drafts` keeps the uploaded PDF/image bytes, SHA-256 duplicate guard, extraction evidence, human-reviewed lines, matches, events and final GRN link in PostgreSQL.
+- `GET /purchases/bill-drafts/{id}/source` streams the tenant/branch-scoped stored PDF or image to authenticated purchase readers with private, no-store caching.
 - The AI service supports configured local OCR, OpenAI Responses, Anthropic Messages, and optional OpenAI-to-Anthropic fallback. Provider output never posts stock directly.
 - Confirmed human item mappings update tenant/branch/supplier-scoped aliases. Later bills consult learned supplier aliases before exact SKU/barcode/name matching; the mapped inventory item remains the source of category truth.
 
@@ -54,7 +55,9 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 
 ## Stock audit and scanner
 
-- `/inventory/stock-audits` owns blind/multi-counter counts, recount, review, approval, immutable adjustment and evidence workflows.
+- `/inventory/stock-audits` owns blind/multi-counter counts, recount, quantity/value variance review, threshold-based owner approval, immutable adjustment and evidence workflows. Monetary exposure sums absolute line variances so gains cannot hide losses.
+- Audit creation locks the active branch inventory snapshot and rejects a ledger/current-stock mismatch before counting starts. Each item freezes its latest source-ledger ID, movement count, opening/carry-forward quantity and signed purchase, return, transfer, sale, consumption, kit and adjustment totals at cut-off. Items without ledger movements remain backward-compatible as an explicit `opening_baseline`; existing unverifiable snapshots are labelled `legacy_snapshot` rather than presented as verified.
+- Audit detail responses expose the expected-stock equation only after blind counting is closed. Non-zero variances receive neutral, evidence-aware suggestions such as possible missing inbound, unrecorded consumption, missing sale/checkout, or unaccounted; a human variance reason remains mandatory before submission. Approve and reject actions require `inventory.approve`, while owner/admin approval remains mandatory above the saved quantity or value threshold.
 - `/inventory/scanner-events` persists scanner results and idempotency. The GRN drawer reuses its `receive` workflow to resolve product, alias, SKU, and batch barcodes into received quantities.
 - `/inventory/barcode-aliases` owns product, batch, package and location aliases.
 

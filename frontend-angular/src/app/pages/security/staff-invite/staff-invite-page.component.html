@@ -1,0 +1,57 @@
+<main class="login-page">
+  <section class="login-card" aria-labelledby="invite-title">
+    <header class="brand-header">
+      <span class="brand-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>
+      <span class="brand-name">AuraShine CRM</span>
+    </header>
+
+    @if (loading) {
+      <p role="status">Loading invitation…</p>
+    } @else if (accepted) {
+      <div class="title-block">
+        <h1 id="invite-title">Account ready</h1>
+        <p>Your login ID is <strong>{{ accepted.loginId }}</strong>.</p>
+      </div>
+      <a class="primary-button" routerLink="/login" [queryParams]="{ tenant: accepted.tenantContext }">Sign in</a>
+    } @else if (preview) {
+      <form class="auth-form" [formGroup]="form" (ngSubmit)="accept()">
+        <div class="title-block">
+          <h1 id="invite-title">Join {{ preview.tenantName }}</h1>
+          <p>{{ preview.staffName }} · {{ preview.roleName }} · {{ preview.branchName }}</p>
+          <p>{{ preview.email }}</p>
+        </div>
+
+        <label class="field-label" for="invite-login-id">Choose login ID</label>
+        <div class="input-shell" [class.invalid]="form.controls.loginId.touched && form.controls.loginId.invalid">
+          <i class="bi bi-person" aria-hidden="true"></i>
+          <input id="invite-login-id" type="text" formControlName="loginId" autocomplete="username" placeholder="3–80 letters, numbers, dots, _ or -" />
+        </div>
+
+        <label class="field-label" for="invite-password">Choose password</label>
+        <div class="input-shell" [class.invalid]="form.controls.password.touched && form.controls.password.invalid">
+          <i class="bi bi-lock" aria-hidden="true"></i>
+          <input id="invite-password" type="password" formControlName="password" autocomplete="new-password" placeholder="12–128 characters" />
+        </div>
+
+        <label class="field-label" for="invite-password-confirm">Confirm password</label>
+        <div class="input-shell">
+          <i class="bi bi-lock-fill" aria-hidden="true"></i>
+          <input id="invite-password-confirm" type="password" formControlName="confirmPassword" autocomplete="new-password" />
+        </div>
+
+        @if (errorMessage) {
+          <p class="form-error" role="alert">{{ errorMessage }}</p>
+        }
+        <button class="primary-button" type="submit" [disabled]="accepting">
+          {{ accepting ? 'Creating account…' : 'Accept invitation' }}
+        </button>
+      </form>
+    } @else {
+      <div class="title-block">
+        <h1 id="invite-title">Invitation unavailable</h1>
+        <p class="form-error" role="alert">{{ errorMessage }}</p>
+      </div>
+      <a class="primary-button" routerLink="/login">Return to sign in</a>
+    }
+  </section>
+</main>

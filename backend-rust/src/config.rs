@@ -161,6 +161,7 @@ pub struct Settings {
     pub jwt_access_ttl_minutes: u64,
     pub jwt_refresh_ttl_days: u64,
     pub security_encryption_key: Option<String>,
+    pub migration_proof_signing_key: Option<String>,
     pub webauthn_rp_id: Option<String>,
     pub webauthn_rp_origin: Option<String>,
     pub oauth_google_client_id: Option<String>,
@@ -192,6 +193,7 @@ pub struct Settings {
     pub aws_region: Option<String>,
     pub aws_s3_bucket: Option<String>,
     pub cors_allowed_origins: Vec<String>,
+    pub crm_app_base_url: String,
     pub customer_app_base_url: String,
     pub enable_dev_session: bool,
     pub dev_session_secret: Option<String>,
@@ -201,6 +203,12 @@ pub struct Settings {
     pub voice_provider_token: Option<String>,
     pub invoice_delivery_webhook_url: Option<String>,
     pub invoice_delivery_webhook_token: Option<String>,
+    pub support_email_webhook_secret: Option<String>,
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: Option<String>,
     pub turnstile_site_key: Option<String>,
     pub turnstile_secret_key: Option<String>,
     pub compliance_provider_url: Option<String>,
@@ -253,13 +261,52 @@ impl Settings {
         let jwt_access_secret = secure_secret("JWT_ACCESS_SECRET")?;
         let jwt_refresh_secret = secure_secret("JWT_REFRESH_SECRET")?;
         let cors_allowed_origins = csv_var("CORS_ALLOWED_ORIGINS");
+        let crm_app_base_url = var_or("CRM_APP_BASE_URL", "http://127.0.0.1:4200")
+            .trim_end_matches('/')
+            .to_string();
         let customer_app_base_url = var_or("CUSTOMER_APP_BASE_URL", "http://127.0.0.1:4310")
             .trim_end_matches('/')
             .to_string();
-        if !customer_app_base_url.starts_with("http://")
-            && !customer_app_base_url.starts_with("https://")
+        for (name, value) in [
+            ("CRM_APP_BASE_URL", &crm_app_base_url),
+            ("CUSTOMER_APP_BASE_URL", &customer_app_base_url),
+        ] {
+            if !value.starts_with("http://") && !value.starts_with("https://") {
+                return Err(anyhow!("{name} must be an HTTP(S) URL"));
+            }
+        }
+        let invoice_delivery_webhook_url = optional_value("INVOICE_DELIVERY_WEBHOOK_URL");
+        if invoice_delivery_webhook_url
+            .as_deref()
+            .is_some_and(|value| {
+                !value.starts_with("https://")
+                    && !(is_local_env(&app_env) && value.starts_with("http://"))
+            })
         {
-            return Err(anyhow!("CUSTOMER_APP_BASE_URL must be an HTTP(S) URL"));
+            return Err(anyhow!(
+                "INVOICE_DELIVERY_WEBHOOK_URL must use HTTPS outside local environments"
+            ));
+        }
+        let smtp_host = optional_value("SMTP_HOST");
+        let smtp_username = optional_value("SMTP_USERNAME");
+        let smtp_password = optional_secure_secret("SMTP_PASSWORD")?;
+        let smtp_from = optional_value("SMTP_FROM");
+        let smtp_values = [
+            smtp_host.is_some(),
+            smtp_username.is_some(),
+            smtp_password.is_some(),
+            smtp_from.is_some(),
+        ];
+        if smtp_values.iter().any(|configured| *configured)
+            && !smtp_values.iter().all(|configured| *configured)
+        {
+            return Err(anyhow!(
+                "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, and SMTP_FROM must be configured together"
+            ));
+        }
+        let smtp_port = var_or_parse("SMTP_PORT", 587)?;
+        if !matches!(smtp_port, 587 | 2587) {
+            return Err(anyhow!("SMTP_PORT must be 587 or 2587 for STARTTLS"));
         }
         let enable_dev_session = var_or_parse("ENABLE_DEV_SESSION", false)?;
         if !is_local_env(&app_env) && cors_allowed_origins.is_empty() {
@@ -304,6 +351,7 @@ impl Settings {
             jwt_access_ttl_minutes: var_or_parse("JWT_ACCESS_TTL_MINUTES", 15)?,
             jwt_refresh_ttl_days: var_or_parse("JWT_REFRESH_TTL_DAYS", 30)?,
             security_encryption_key: optional_secure_secret("SECURITY_ENCRYPTION_KEY")?,
+            migration_proof_signing_key: optional_secure_secret("MIGRATION_PROOF_SIGNING_KEY")?,
             webauthn_rp_id,
             webauthn_rp_origin,
             oauth_google_client_id: std::env::var("OAUTH_GOOGLE_CLIENT_ID")
@@ -355,6 +403,7 @@ impl Settings {
                 .ok()
                 .filter(|v| !v.is_empty()),
             cors_allowed_origins,
+            crm_app_base_url,
             customer_app_base_url,
             enable_dev_session,
             dev_session_secret,
@@ -365,12 +414,16 @@ impl Settings {
             ai_service_token: optional_secure_secret("AI_SERVICE_TOKEN")?,
             customer_firebase_api_key: optional_value("CUSTOMER_FIREBASE_API_KEY"),
             voice_provider_token: optional_secure_secret("VOICE_PROVIDER_TOKEN")?,
-            invoice_delivery_webhook_url: std::env::var("INVOICE_DELIVERY_WEBHOOK_URL")
-                .ok()
-                .filter(|value| value.starts_with("https://")),
+            invoice_delivery_webhook_url,
             invoice_delivery_webhook_token: std::env::var("INVOICE_DELIVERY_WEBHOOK_TOKEN")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
+            support_email_webhook_secret: optional_secure_secret("SUPPORT_EMAIL_WEBHOOK_SECRET")?,
+            smtp_host,
+            smtp_port,
+            smtp_username,
+            smtp_password,
+            smtp_from,
             turnstile_site_key,
             turnstile_secret_key,
             compliance_provider_url: std::env::var("COMPLIANCE_PROVIDER_URL")
@@ -457,7 +510,9 @@ impl Settings {
     }
 
     pub fn benefit_delivery_configured(&self) -> bool {
-        self.invoice_delivery_webhook_url.is_some() || self.whatsapp_benefit_enabled()
+        self.invoice_delivery_webhook_url.is_some()
+            || self.smtp_email_enabled()
+            || self.whatsapp_benefit_enabled()
     }
 
     pub fn whatsapp_cloud_webhook_configured(&self) -> bool {
@@ -465,7 +520,16 @@ impl Settings {
     }
 
     pub fn invoice_delivery_configured(&self) -> bool {
-        self.invoice_delivery_webhook_url.is_some() || self.whatsapp_cloud_enabled()
+        self.invoice_delivery_webhook_url.is_some()
+            || self.smtp_email_enabled()
+            || self.whatsapp_cloud_enabled()
+    }
+
+    pub fn smtp_email_enabled(&self) -> bool {
+        self.smtp_host.is_some()
+            && self.smtp_username.is_some()
+            && self.smtp_password.is_some()
+            && self.smtp_from.is_some()
     }
 
     pub fn turnstile_enabled(&self) -> bool {

@@ -11,7 +11,7 @@
       <as-date-picker ariaLabel="Appointment date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
 
       <div class="view-switch" aria-label="Calendar view">
-        @for (mode of viewModes; track trackByIndex($index, mode)) {
+        @for (mode of viewModes; track mode) {
           <button
             type="button"
             [class.active]="activeView === mode"
@@ -29,7 +29,7 @@
         name="staffGridMode"
         (ngModelChange)="setStaffGridMode($event)"
         >
-        @for (mode of staffGridModes; track trackByIndex($index, mode)) {
+        @for (mode of staffGridModes; track mode) {
           <option [ngValue]="mode">{{ mode }}</option>
         }
       </select>
@@ -57,7 +57,7 @@
   }
 
   <section class="metrics" aria-label="Appointment summary">
-    @for (item of summary; track trackByIndex($index, item)) {
+    @for (item of summary; track item.label) {
       <button
         type="button"
         class="metric-card"
@@ -129,7 +129,7 @@
     <section class="calendar-panel" aria-label="Staff appointment calendar">
       @if (activeStaffGridMode === 'List') {
         <section class="appointment-list-mode">
-          @for (item of todaysAppointments; track trackByIndex($index, item)) {
+          @for (item of todaysAppointments; track item.id) {
             <article
               class="list-appointment"
               (click)="openAppointment(item)"
@@ -154,10 +154,10 @@
       } @else {
         @if (activeStaffGridMode === 'Chair / Room Grid') {
           <section class="operational-view resource-grid-mode">
-            @for (resource of chairRoomGridRows; track trackByIndex($index, resource)) {
+            @for (resource of chairRoomGridRows; track resource.id) {
               <article class="resource-grid-card">
                 <header><span>{{ resource.kind }}</span><b>{{ resource.name }}</b></header>
-                @for (appointment of resource.appointments; track trackByIndex($index, appointment)) {
+                @for (appointment of resource.appointments; track appointment.id) {
                   <div class="resource-grid-booking">
                     <strong>{{ appointment.time }}</strong>
                     <b>{{ appointment.client }}</b>
@@ -177,10 +177,10 @@
         } @else {
           @if (activeStaffGridMode === 'Status Board') {
             <section class="operational-view status-board-mode">
-              @for (column of statusBoardColumns; track trackByIndex($index, column)) {
+              @for (column of statusBoardColumns; track column.key) {
                 <article class="status-column">
                   <header><b>{{ column.label }}</b><span>{{ column.appointments.length }}</span></header>
-                  @for (appointment of column.appointments; track trackByIndex($index, appointment)) {
+                  @for (appointment of column.appointments; track appointment.id) {
                     <button type="button" class="status-card" (click)="openAppointment(appointment)">
                       <strong>{{ appointment.time }}</strong>
                       <b>{{ appointment.client }}</b>
@@ -196,7 +196,7 @@
           } @else {
             @if (activeStaffGridMode === 'Capacity View') {
               <section class="operational-view capacity-view-mode">
-                @for (staff of capacityRows; track trackByIndex($index, staff)) {
+                @for (staff of capacityRows; track staff.id) {
                   <article class="capacity-card">
                     <header>
                       <span class="avatar">
@@ -223,7 +223,7 @@
                   @if (conflictRows.length) {
                     <table>
                       <thead><tr><th scope="col">Type</th><th scope="col">Resource</th><th scope="col">Booking one</th><th scope="col">Booking two</th></tr></thead>
-                      <tbody>@for (conflict of conflictRows; track trackByIndex($index, conflict)) {
+                      <tbody>@for (conflict of conflictRows; track conflict.id) {
                         <tr><td>{{ conflict.type }}</td><td>{{ conflict.target }}</td><td>{{ conflict.first }}</td><td>{{ conflict.second }}</td></tr>
                       }</tbody>
                     </table>
@@ -239,7 +239,7 @@
                     [style.grid-template-columns]="calendarColumns"
                     >
                     <div class="time-head">Time</div>
-                    @for (column of calendarColumnsData; track trackByIndex($index, column)) {
+                    @for (column of calendarColumnsData; track column.id) {
                       <div class="staff-head">
                         <span class="avatar">
                           @if (column.photoUrl) {
@@ -255,7 +255,7 @@
                       </div>
                     }
                     <div class="time-col">
-                      @for (time of times; track trackByIndex($index, time)) {
+                      @for (time of times; track time) {
                         <div class="time-row">{{ time }}</div>
                       }
                       @if (currentTimeTop !== null && activeView === 'Day') {
@@ -266,9 +266,9 @@
                         >{{ currentTimeLabel }}</div>
                       }
                     </div>
-                    @for (column of calendarColumnsData; track trackByIndex(columnIndex, column); let columnIndex = $index) {
+                    @for (column of calendarColumnsData; track column.id; let columnIndex = $index) {
                       <div class="lane">
-                        @for (time of times; track trackByIndex($index, time)) {
+                        @for (time of times; track time) {
                           <button
                             class="slot"
                             type="button"
@@ -290,7 +290,7 @@
                             aria-hidden="true"
                           ></div>
                         }
-                        @for (entry of blackouts; track trackByIndex($index, entry)) {
+                        @for (entry of blackouts; track entry.id) {
                           @if (isBlackoutForColumn(entry, column)) {
                             <div
                               class="blocked-time-card"
@@ -303,7 +303,7 @@
                             </div>
                           }
                         }
-                        @for (item of appointments; track trackByIndex($index, item)) {
+                        @for (item of appointments; track item.id) {
                           @if (item.staff === columnIndex) {
                             <button
                               class="booking"
@@ -348,12 +348,12 @@
                     <div class="time-head">Time</div>
                     <div class="staff-head muted-head">Staff lanes</div>
                     <div class="time-col">
-                      @for (time of times; track trackByIndex($index, time)) {
+                      @for (time of times; track time) {
                         <div class="time-row">{{ time }}</div>
                       }
                     </div>
                     <div class="empty-lane">
-                      @for (time of times; track trackByIndex($index, time)) {
+                      @for (time of times; track time) {
                         <div class="slot"></div>
                       }
                       <div class="empty-state">
@@ -407,7 +407,7 @@
         </div>
       </header>
       <div class="scheduled-staff-list">
-        @for (person of staff; track trackByIndex($index, person)) {
+        @for (person of staff; track person.id) {
           <article
             [class.is-dragging]="draggedScheduledStaffId === person.id"
             [class.drop-before]="scheduledStaffDropId === person.id && !scheduledStaffDropAfter"
@@ -486,7 +486,7 @@
             <small>{{ appointment.time }}</small>
           </div>
           <div class="status-actions" aria-label="Appointment status actions">
-            @for (action of statusActions; track trackByIndex($index, action)) {
+            @for (action of statusActions; track action.status) {
               <button
                 type="button"
                 [class.active]="appointment.status === action.status"
@@ -518,7 +518,7 @@
         @if (appointmentDetailTab === 'booking') {
           <section class="detail-body">
             <div class="detail-grid">
-              @for (row of appointment.detailRows; track trackByIndex($index, row)) {
+              @for (row of appointment.detailRows; track row.label) {
                 <article>
                   <span>{{ row.label }}</span>
                   <b>{{ row.value }}</b>
@@ -547,7 +547,7 @@
                   <span>Discount</span>
                   <span>Total</span>
                 </div>
-                @for (line of selectedAppointmentRows; track trackByIndex($index, line)) {
+                @for (line of selectedAppointmentRows; track line.serviceName + line.startTime + line.staffName) {
                   <div class="bill-row">
                     <span>{{ line.serviceName }}</span>
                     <span>{{ line.startTime }}</span>
@@ -563,7 +563,7 @@
             @if (selectedRescheduleRequests.length) {
               <section class="pending-reschedule-requests">
                 <strong>Client reschedule request</strong>
-                @for (request of selectedRescheduleRequests; track trackByIndex($index, request)) {
+                @for (request of selectedRescheduleRequests; track request.id) {
                   <article>
                     <span>{{ formatActivityTime(request.requestedStartAt) }}{{ request.reason ? ' · ' + request.reason : '' }}</span>
                     <button type="button" (click)="decideRescheduleRequest(request.id, true)">Approve</button><button type="button" (click)="decideRescheduleRequest(request.id, false)">Reject</button>
@@ -585,7 +585,7 @@
             }
             @if (appointment.activityLines.length > 0) {
               <div class="activity-log">
-                @for (event of appointment.activityLines; track trackByIndex($index, event)) {
+                @for (event of appointment.activityLines; track event.id) {
                   <article>
                     <strong>{{ event.title }}</strong>
                     <span>{{ formatActivityTime(event.time) }}</span>
@@ -612,7 +612,7 @@
           <strong>{{ hover.card.client }}</strong>
           <small>{{ hover.card.time }}</small>
         </div>
-        @for (row of hover.card.detailRows; track trackByIndex($index, row)) {
+        @for (row of hover.card.detailRows; track row.label) {
           <div class="hover-row">
             <em>{{ row.label }}</em>
             <b>{{ row.value }}</b>
@@ -683,7 +683,7 @@
               Appointment
               <select [(ngModel)]="commandAppointmentId" name="commandAppointmentId">
                 <option value="">Select appointment</option>
-                @for (appointment of appointmentRows; track trackByIndex($index, appointment)) {
+                @for (appointment of appointmentRows; track appointment.id) {
                   <option [value]="appointment.id">
                     {{ timeText(appointment.startAt) }} · {{ clientName(appointment.clientId) }}
                   </option>
@@ -696,7 +696,7 @@
               Client
               <select [(ngModel)]="commandClientId" name="commandClientId">
                 <option value="">Select client</option>
-                @for (client of clients; track trackByIndex($index, client)) {
+                @for (client of clients; track client.id) {
                   <option [value]="client.id">{{ client.name || client.phone }}</option>
                 }
               </select>
@@ -707,7 +707,7 @@
               Service
               <select [(ngModel)]="commandServiceId" name="commandServiceId">
                 <option value="">Select service</option>
-                @for (service of services; track trackByIndex($index, service)) {
+                @for (service of services; track service.id) {
                   <option [value]="service.id">{{ service.name }}</option>
                 }
               </select>
@@ -721,7 +721,7 @@
                 <button type="button" (click)="setBlockStaffIds([])">Clear</button>
               </div>
               <div class="block-staff-options">
-                @for (person of scheduledStaff; track trackByIndex($index, person)) {
+                @for (person of scheduledStaff; track person.id) {
                   <label>
                     <input type="checkbox" [checked]="commandStaffIds.includes(person.id)" (change)="toggleBlockStaff(person.id, $any($event.target).checked)" />
                     <span>{{ person.name }}</span>
@@ -735,7 +735,7 @@
               Staff
               <select [(ngModel)]="commandStaffId" name="commandStaffId">
                 <option value="">Select staff</option>
-                @for (person of staff; track trackByIndex($index, person)) {
+                @for (person of staff; track person.id) {
                   <option [value]="person.id">{{ person.name }}</option>
                 }
               </select>
@@ -749,7 +749,7 @@
             <div class="command-time-picker">
               <span>Start</span>
               <div class="time-slot-grid command-time-slots" role="listbox" aria-label="Choose command start time">
-                @for (slot of commandSlots(); track trackByIndex($index, slot)) {
+                @for (slot of commandSlots(); track slot.value) {
                   <button
                     type="button"
                     class="time-slot"
@@ -780,7 +780,7 @@
           @if (activeCommand === 'waitlist' || activeCommand === 'block') {
             <section class="command-records">
               <h3>{{ activeCommand === 'waitlist' ? 'Pending waitlist' : 'Blocked times' }}</h3>
-              @for (entry of commandRecords; track trackByIndex($index, entry)) {
+              @for (entry of commandRecords; track entry.id) {
                 <article>
                   <div>
                     <strong>{{ activeCommand === 'waitlist' ? waitlistLabel($any(entry)) : blackoutLabel($any(entry)) }}</strong>
@@ -829,7 +829,7 @@
                 />
                 @if (bookingClientSearch && !selectedClientId) {
                   <div class="picker-results">
-                    @for (client of filteredClients(); track trackByIndex($index, client)) {
+                    @for (client of filteredClients(); track client.id) {
                       <button
                         type="button"
                         (mousedown)="$event.preventDefault(); selectClient(client)"
@@ -891,7 +891,7 @@
                   @if (intelligence.plan.length > 1) {
                     <button class="mini" type="button" (click)="applySequencePlan()">Apply sequence</button>
                   }
-                  @for (plan of intelligence.plan; track trackByIndex($index, plan)) {
+                  @for (plan of intelligence.plan; track plan.lineId) {
                     <article class="booking-plan-line">
                       <div>
                         <b>{{ plan.serviceName }}</b>
@@ -909,10 +909,10 @@
                       @if ((plan.consultation.required || plan.consultation.patchTestRequired) && plan.consultation.current) {
                         <small>Consultation clearance is current.</small>
                       }
-                      @for (alternative of intelligence.alternatives; track trackByIndex($index, alternative)) {
+                      @for (alternative of intelligence.alternatives; track alternative.lineId) {
                         <div class="booking-alternatives">
                           @if (alternative.lineId === plan.lineId) {
-                            @for (slot of alternative.slots; track trackByIndex($index, slot)) {
+                            @for (slot of alternative.slots; track slot.staffId + slot.startAt) {
                               <button class="mini" type="button" (click)="applyAlternative(plan.lineId, slot)">
                                 {{ staffName(slot.staffId) }} · {{ timeText(slot.startAt) }}
                               </button>
@@ -937,7 +937,7 @@
                 </div>
                 @if (previousServices().length > 0) {
                   <div class="previous-service-list">
-                    @for (item of previousServices(); track trackByIndex($index, item)) {
+                    @for (item of previousServices(); track item.id) {
                       <article>
                         <span>
                           <b>{{ item.serviceName }}</b>
@@ -979,7 +979,7 @@
                     />
                     @if (line.clientOpen) {
                       <div class="picker-results">
-                        @for (client of filteredLineClients(line); track trackByIndex($index, client)) {
+                        @for (client of filteredLineClients(line); track client.id) {
                           <button
                             type="button"
                             (mousedown)="$event.preventDefault(); selectLineClient(line, client)"
@@ -1006,7 +1006,7 @@
                       />
                       @if (line.serviceOpen) {
                         <div class="picker-results">
-                          @for (service of filteredServices(line); track trackByIndex($index, service)) {
+                          @for (service of filteredServices(line); track service.id) {
                             <button
                               type="button"
                               (mousedown)="$event.preventDefault(); selectService(line, service)"
@@ -1026,7 +1026,7 @@
                         Variant
                         <select [ngModel]="line.variantId" [name]="'variant' + line.id" (ngModelChange)="selectVariant(line, $event)">
                           <option value="">Standard</option>
-                          @for (variant of serviceVariants(line); track trackByIndex($index, variant)) {
+                          @for (variant of serviceVariants(line); track variant.id) {
                             <option [value]="variant.id">{{ variant.name }}</option>
                           }
                         </select>
@@ -1035,7 +1035,7 @@
                     @if (serviceAddons(line).length) {
                       <div class="service-addons">
                         <span>Add-ons</span>
-                        @for (addon of serviceAddons(line); track trackByIndex($index, addon)) {
+                        @for (addon of serviceAddons(line); track addon.id) {
                           <label>
                             <input type="checkbox" [checked]="line.addonIds.includes(addon.id)" (change)="toggleAddon(line, addon.id)" />
                             {{ addon.name }}
@@ -1067,7 +1067,7 @@
                         </div>
                         @if (line.staffOpen) {
                           <div class="picker-results">
-                            @for (person of filteredStaff(line); track trackByIndex($index, person)) {
+                            @for (person of filteredStaff(line); track person.id) {
                               <button
                                 type="button"
                                 (mousedown)="$event.preventDefault(); selectStaff(line, person)"
@@ -1082,6 +1082,30 @@
                           </div>
                         }
                       </label>
+                      @if (line.recommendationLoading) {
+                        <div class="staff-recommendations"><strong>Recommended staff</strong><small>Checking live availability...</small></div>
+                      } @else if (line.recommendations.length) {
+                        <div class="staff-recommendations" aria-label="Recommended staff">
+                          <strong>Recommended staff</strong>
+                          @for (recommendation of line.recommendations.slice(0, 3); track recommendation.staffId; let rank = $index) {
+                            <button type="button" [class.selected]="line.staffId === recommendation.staffId" (click)="applyStaffRecommendation(line, recommendation)">
+                              <span><b>{{ rank + 1 }}. {{ recommendation.staffName }}</b>@if (recommendation.preferredClient) { <em>Preferred client</em> }</span>
+                              <small>{{ recommendation.recommendationReason }}</small>
+                              @if (recommendationMeta(recommendation)) { <small>{{ recommendationMeta(recommendation) }}</small> }
+                            </button>
+                          }
+                        </div>
+                      } @else if (line.recommendationError) {
+                        <small class="inline-error">{{ line.recommendationError }}</small>
+                      } @else if (line.serviceId) {
+                        <small class="inline-error">No suitable staff available for this slot</small>
+                      }
+                      @if (line.recommendedStaffId && line.staffId && line.staffId !== line.recommendedStaffId) {
+                        <label class="recommendation-override-field">
+                          Manager override reason
+                          <textarea rows="2" maxlength="500" [(ngModel)]="line.recommendationOverrideReason" [name]="'recommendationOverrideReason' + line.id" placeholder="Why another staff member is being selected"></textarea>
+                        </label>
+                      }
                       <label class="staff-preference-field">
                         Staff preference
                         <select [ngModel]="line.staffPreference" [name]="'staffPreference' + line.id" (ngModelChange)="setStaffPreference(line, $any($event))">
@@ -1095,8 +1119,8 @@
                       </label>
                       <div class="booking-time-picker">
                         <span>Start</span>
-                        <select [(ngModel)]="line.startTime" [name]="'startTime' + line.id" aria-label="Choose start time">
-                          @for (slot of bookingSlots(line); track trackByIndex($index, slot)) {
+                        <select [ngModel]="line.startTime" (ngModelChange)="line.startTime = $event; refreshBookingIntelligenceIfReady()" [name]="'startTime' + line.id" aria-label="Choose start time">
+                          @for (slot of bookingSlots(line); track slot.value) {
                             <option
                               [value]="slot.value"
                               [disabled]="slot.blocked && line.startTime !== slot.value"
@@ -1106,13 +1130,13 @@
                       </div>
                       <label>
                         Duration
-                        <input type="number" min="15" step="15" [(ngModel)]="line.durationMinutes" [name]="'duration' + line.id" />
+                        <input type="number" min="15" step="15" [ngModel]="line.durationMinutes" (ngModelChange)="line.durationMinutes = $event; refreshBookingIntelligenceIfReady()" [name]="'duration' + line.id" />
                       </label>
                       <label>
                         Chair / room
                         <select [(ngModel)]="line.chairRoomId" [name]="'chairRoom' + line.id">
                           <option value="">No chair / room</option>
-                          @for (resource of chairRooms; track trackByIndex($index, resource)) {
+                          @for (resource of chairRooms; track resource.id) {
                             <option
                               [value]="resource.id"
                               [disabled]="isChairRoomUnavailable(line, resource.id)"

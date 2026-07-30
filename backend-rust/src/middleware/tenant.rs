@@ -51,6 +51,7 @@ const MANAGEMENT_ROLES: &[&str] = &[
     "regionalHead",
     "regionalhead",
 ];
+const TENANT_ADMIN_ROLES: &[&str] = &["owner", "admin"];
 const OWNER_ROLES: &[&str] = &["owner"];
 const AUTH_ADMIN_ROLES: &[&str] = &["owner", "admin", "superadmin", "superAdmin", "super-admin"];
 const FRONT_DESK_WRITE_ROLES: &[&str] = &[
@@ -201,7 +202,12 @@ pub async fn require_tenant_id(
 
     let mut branch_id = claims_branch_id.clone();
     if let Some(claims) = claims.as_ref() {
-        if is_platform_role(&claims.role) && tenant_id.eq_ignore_ascii_case("platform") {
+        if !role_matches_tenant_context(&claims.role, &tenant_id) {
+            return Err(AppError::forbidden(
+                "role does not match platform or tenant context",
+            ));
+        }
+        if is_platform_role(&claims.role) {
             branch_id = None;
         } else if branch_id.is_none() {
             return Err(AppError::forbidden("branch-scoped session is required"));
@@ -257,7 +263,9 @@ pub async fn require_route_role(
     } else if path_starts_with(path, "/auth") {
         require_authenticated_user(req, next).await
     } else if let Some(access) = route_access(path, method) {
-        if auth_service::route_permissions_registered(access.permissions) {
+        if access.permissions.is_empty()
+            || auth_service::route_permissions_registered(access.permissions)
+        {
             let feature_result = match (route_feature_key(path, access.permissions), &audit_claims)
             {
                 (Some(feature_key), Some(claims)) => {
@@ -730,7 +738,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     }
     if matches_route_prefix(path, STAFF_PREFIXES) {
         return Some(if is_read_method(method) {
-            access(TENANT_ROLES, &["staff.read", "staff.manage", "tenant.read"])
+            access(MANAGEMENT_ROLES, &["staff.read", "staff.manage"])
         } else {
             access(MANAGEMENT_ROLES, &["staff.manage", "management.write"])
         });
@@ -770,12 +778,14 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
                 ],
             ));
         }
-        if (path_starts_with(path, "/inventory/backbar-usage")
+        if (((path_starts_with(path, "/inventory/backbar-usage")
             || path_starts_with(path, "/inventory/backbar-overrides")
             || path_starts_with(path, "/inventory/negative-stock-requests")
             || path_starts_with(path, "/inventory/exception-recommendations")
             || path_starts_with(path, "/inventory/autonomous-operations/actions"))
-            && path.ends_with("/review")
+            && path.ends_with("/review"))
+            || (path_starts_with(path, "/inventory/stock-audits")
+                && (path.ends_with("/approve") || path.ends_with("/reject"))))
             && !is_read_method(method)
         {
             return Some(access(OWNER_ROLES, &["inventory.approve"]));
@@ -874,15 +884,12 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         ));
     }
     if path_starts_with(path, "/saas") {
-        return Some(domain_access(
-            method,
-            MANAGEMENT_ROLES,
-            MANAGEMENT_ROLES,
-            &["settings.read", "settings.manage", "tenant.read"],
-            &["settings.manage", "management.write"],
-        ));
+        return Some(access(TENANT_ADMIN_ROLES, &[]));
     }
-    if path_starts_with(path, "/notifications") || path_starts_with(path, "/whatsapp") {
+    if path_starts_with(path, "/notifications")
+        || path_starts_with(path, "/whatsapp")
+        || path_starts_with(path, "/whatsapp-campaign-planner")
+    {
         return Some(domain_access(
             method,
             TENANT_ROLES,
@@ -1172,6 +1179,10 @@ fn is_platform_role(role: &str) -> bool {
         .any(|allowed| allowed.eq_ignore_ascii_case(role))
 }
 
+fn role_matches_tenant_context(role: &str, tenant_id: &str) -> bool {
+    is_platform_role(role) == tenant_id.eq_ignore_ascii_case("platform")
+}
+
 async fn require_role_or_permission(
     req: Request<Body>,
     next: Next,
@@ -1256,8 +1267,8 @@ pub async fn require_platform_admin(req: Request<Body>, next: Next) -> Result<Re
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_route_path, requires_platform_access, role_or_permissions_allowed, route_access,
-        MANAGEMENT_ROLES, TENANT_ROLES,
+        normalize_route_path, requires_platform_access, role_matches_tenant_context,
+        role_or_permissions_allowed, route_access, MANAGEMENT_ROLES, TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
@@ -1272,6 +1283,14 @@ mod tests {
             normalize_route_path("/api/saas/context"),
             &Method::GET,
         ));
+    }
+
+    #[test]
+    fn platform_and_tenant_roles_cannot_cross_contexts() {
+        assert!(role_matches_tenant_context("superadmin", "platform"));
+        assert!(role_matches_tenant_context("owner", "tenant_aura"));
+        assert!(!role_matches_tenant_context("superadmin", "tenant_aura"));
+        assert!(!role_matches_tenant_context("owner", "platform"));
     }
 
     #[test]
@@ -1312,6 +1331,16 @@ mod tests {
             ),
             (
                 "/api/v1/inventory/negative-stock-requests/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/stock-audits/1/approve",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/stock-audits/1/reject",
                 Method::POST,
                 "inventory.approve",
             ),
@@ -1377,8 +1406,6 @@ mod tests {
                 Method::GET,
                 "reports.export",
             ),
-            ("/api/v1/saas/context", Method::GET, "settings.read"),
-            ("/api/v1/saas/tickets", Method::POST, "settings.manage"),
             (
                 "/api/v1/birthday-anniversary/overview",
                 Method::GET,
@@ -1422,6 +1449,26 @@ mod tests {
                 "{path} must require {permission}"
             );
         }
+    }
+
+    #[test]
+    fn tenant_saas_is_owner_or_admin_only() {
+        let access = route_access(normalize_route_path("/api/v1/saas/context"), &Method::GET)
+            .expect("tenant SaaS route is mapped");
+        assert!(access.roles.contains(&"owner"));
+        assert!(access.roles.contains(&"admin"));
+        assert!(!access.roles.contains(&"manager"));
+        assert!(access.permissions.is_empty());
+    }
+
+    #[test]
+    fn staff_directory_requires_management_or_staff_read() {
+        let access = route_access(normalize_route_path("/api/v1/staff"), &Method::GET)
+            .expect("staff directory route is mapped");
+        assert!(access.roles.contains(&"manager"));
+        assert!(!access.roles.contains(&"staff"));
+        assert!(access.permissions.contains(&"staff.read"));
+        assert!(!access.permissions.contains(&"tenant.read"));
     }
 
     #[test]

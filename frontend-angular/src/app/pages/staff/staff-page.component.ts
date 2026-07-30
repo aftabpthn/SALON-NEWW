@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { Component, inject, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { AuthService } from '../../core/services/auth.service';
@@ -191,6 +191,12 @@ type StaffBranchAccess = {
   branches: StaffBranchAccessRow[]; roles: BranchAccessRole[];
 };
 type LoginProvisionForm = { loginId: string; email: string; initialPassword: string; roleId: string };
+type StaffLoginInvite = {
+  id: string; email: string; roleId: string; roleName: string; status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: string; createdAt: string; deliveryStatus: 'manual' | 'sent' | 'delivered' | 'bounced' | 'failed';
+  deliveryProvider: string; providerMessageId: string; deliveryAttempts: number; lastDeliveryError: string;
+  lastSentAt: string | null; deliveredAt: string | null; bouncedAt: string | null; acceptPath?: string;
+};
 type StaffCategory = { id: string; code: string; name: string; designation: string; active: boolean };
 type StaffPricingLevel = { id: string; code: string; name: string; rank: number | null; active: boolean };
 type ShiftTemplate = {
@@ -244,7 +250,7 @@ const emptyMasters = (): StaffMasters => ({ categories: [], pricingLevels: [], s
 
 @Component({
     selector: 'page-staff',
-    imports: [CommonModule, FormsModule, DatePickerComponent, TranslatePipe, BranchNamePipe],
+    imports: [CommonModule, FormsModule, RouterLink, RouterLinkActive, DatePickerComponent, TranslatePipe, BranchNamePipe],
     templateUrl: './staff-page.component.html',
     styleUrls: ['./staff-page.component.css']
 })
@@ -263,7 +269,26 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   readonly visibleColumns: Record<StaffColumn, boolean> = {
     employeeCode: true, firstName: true, lastName: true, mobilePhone: true, jobTitle: true, active: true, branchId: true,
   };
-  readonly staffTabs: StaffTab[] = [
+
+  readonly staffQuickLinks = [
+    { label: 'Staff', icon: 'bi-person-badge', route: '/staff' },
+    { label: 'Control Center', icon: 'bi-speedometer2', route: '/staff/control-center' },
+    { label: 'Availability', icon: 'bi-calendar-week', route: '/staff/availability' },
+    { label: 'Attendance Summary', icon: 'bi-calendar-check', route: '/staff/attendance-summary' },
+    { label: 'Face Punch', icon: 'bi-fingerprint', route: '/staff/face-punch' },
+    { label: 'Heatmaps', icon: 'bi-grid-3x3-gap', route: '/staff/heatmaps' },
+    { label: 'Leave', icon: 'bi-calendar2-check', route: '/staff/leave-management' },
+    { label: 'Payroll', icon: 'bi-wallet2', route: '/staff/payroll' },
+    { label: 'Salary Structure', icon: 'bi-cash-coin', route: '/staff/salary-structure' },
+    { label: 'Salary Rules', icon: 'bi-sliders', route: '/staff/salary-rules' },
+    { label: 'Salary History', icon: 'bi-clock-history', route: '/staff/salary-history' },
+    { label: 'Fines & Deductions', icon: 'bi-receipt-cutoff', route: '/staff/fines-deductions' },
+    { label: 'Target Incentive', icon: 'bi-bullseye', route: '/staff/target-incentive' },
+    { label: 'Leaderboard', icon: 'bi-trophy', route: '/staff/leaderboard' },
+    { label: 'Training', icon: 'bi-mortarboard', route: '/staff/training' },
+    { label: 'Tasks', icon: 'bi-list-check', route: '/staff/tasks' },
+    { label: 'Mobile Preview', icon: 'bi-phone', route: '/staff/mobile-preview' },
+  ];  readonly staffTabs: StaffTab[] = [
     'General', 'HR Profile', 'Documents', 'History', 'Operations', 'Employee Roles',
     ...(this.auth.hasRole('owner', 'admin') ? ['Branch Access' as StaffTab] : []),
     'Pricing & Skills', 'Services', 'Products', 'Memberships', 'Packages', 'Commissions', 'Payrates', 'Catalog', 'Leave Policies',
@@ -318,6 +343,8 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   branchAccessError = '';
   serviceCategoryFilter = 'all';
   loginProvision = emptyLoginProvision();
+  loginInvite: StaffLoginInvite | null = null;
+  loginInviteLink = '';
   passwordModalOpen = false;
   passwordAction: 'update' | 'reset' = 'update';
   newPassword = '';
@@ -395,7 +422,10 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.route.paramMap.subscribe((params) => {
       const staffId = params.get('id');
       this.detailPage = Boolean(staffId);
-      if (staffId) void this.openEditById(staffId);
+      if (staffId) {
+        const tab = this.route.snapshot.queryParamMap.get('tab');
+        void this.openEditById(staffId, tab === 'Services' || tab === 'Products' ? tab : 'General');
+      }
       else void this.loadEmployees();
     });
   }
@@ -406,6 +436,11 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   get pageEnd() { return Math.min(this.page * this.pageSize, this.total); }
 
   trackById(_: number, employee: StaffRecord) { return employee.id; }
+  get canManageStaff() { return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission('staff.manage', 'management.write'); }
+  get canManageAuthAccess() { return this.auth.hasRole('owner', 'admin'); }
+  get canManagePayroll() { return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission('staff.payroll.read', 'staff.payroll.manage'); }
+  get canReadStaffOperations() { return this.auth.hasRole('owner', 'admin', 'manager', 'analyst') || this.auth.hasPermission('staff.analytics.read', 'staff.read'); }
+
   isColumnVisible(column: StaffColumn) { return this.visibleColumns[column]; }
 
   toggleColumn(column: StaffColumn) {
@@ -451,6 +486,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   openCreate() {
+    if (!this.canManageStaff) return;
     this.editingId = '';
     this.selectedBranchId = this.auth.branchId || '';
     this.cloneMode = false;
@@ -489,6 +525,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async openMasters() {
+    if (!this.canManageStaff) return;
     this.masterTab = 'Categories';
     this.mastersDrawerOpen = true;
     this.mastersSuccess = '';
@@ -500,14 +537,17 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   addCategory() {
+    if (!this.canManageStaff) return;
     this.masters.categories.push({ id: '', code: '', name: '', designation: '', active: true });
   }
 
   addPricingLevel() {
+    if (!this.canManageStaff) return;
     this.masters.pricingLevels.push({ id: '', code: '', name: '', rank: null, active: true });
   }
 
   addShiftTemplate() {
+    if (!this.canManageStaff) return;
     this.masters.shiftTemplates.push({
       id: '', code: '', name: '', shift1Start: '', shift1End: '', shift2Start: null,
       shift2End: null, breakMinutes: null, weeklyOffDays: [], active: true,
@@ -521,6 +561,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async saveMasters() {
+    if (!this.canManageStaff) return;
     const rule = this.masters.attendanceRule || emptyAttendanceRule();
     if (this.masters.categories.some((item) => !item.code.trim() || !item.name.trim())) {
       this.mastersError = 'Complete every staff category';
@@ -574,7 +615,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     void this.router.navigate(['/staff', staffId]);
   }
 
-  private async openEditById(staffId: string) {
+  private async openEditById(staffId: string, initialTab: StaffTab = 'General') {
     this.editingId = staffId;
     this.cloneMode = false;
     this.form = emptyStaff();
@@ -582,7 +623,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.configuration = emptyConfiguration();
     this.resetBranchAccess();
     this.resetOperations();
-    this.activeTab = 'General';
+    this.activeTab = initialTab;
     this.configurationError = '';
     this.saveError = '';
     this.profileError = '';
@@ -631,6 +672,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   cloneEmployee() {
+    if (!this.canManageStaff) return;
     this.cloneMode = true;
     this.editingId = '';
     this.form = { ...this.form, employeeCode: '', email: '', appointmentDisplayName: '', active: true };
@@ -648,6 +690,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async save() {
+    if (!this.canManageStaff) return;
     const firstName = this.form.firstName.trim();
     const savedTab = this.activeTab;
     this.saveError = '';
@@ -679,6 +722,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   openPassword(action: 'update' | 'reset') {
+    if (!this.canManageAuthAccess) return;
     this.actionError = '';
     this.newPassword = '';
     this.passwordAction = action;
@@ -686,6 +730,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async savePassword() {
+    if (!this.canManageAuthAccess) return;
     this.actionError = '';
     if (this.newPassword.length < 12) { this.actionError = 'Password must be at least 12 characters'; return; }
     this.actionSaving = true;
@@ -706,6 +751,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async terminateEmployee() {
+    if (!this.canManageStaff) return;
     if (!window.confirm(this.language.text('staff.message.739e12df2f'))) return;
     this.actionError = '';
     this.actionSaving = true;
@@ -746,8 +792,10 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   isProfileTab() { return this.activeTab === 'General' || this.activeTab === 'HR Profile'; }
   isConfigurationTab() { return !['General', 'HR Profile', 'Documents', 'History', 'Operations', 'Branch Access'].includes(this.activeTab); }
   async saveCurrentTab() {
+    if (!this.canManageStaff) return;
     if (this.isProfileTab()) await this.save();
     else if (this.activeTab === 'Branch Access') {
+      if (!this.canManageAuthAccess) return;
       if (this.branchAccess.linkedLogin) await this.saveBranchAccess();
       else await this.provisionLogin();
     }
@@ -756,6 +804,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   toggleBranchAccess(branch: StaffBranchAccessRow) {
+    if (!this.canManageStaff) return;
     if (!branch.active) branch.isDefault = false;
     else if (branch.accessType === 'permanent' && !this.branchAccess.branches.some((item) => item.active && item.isDefault)) {
       branch.isDefault = true;
@@ -823,7 +872,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async loadBranchAccess() {
-    if (!this.editingId) return;
+    if (!this.canManageAuthAccess || !this.editingId) return;
     this.branchAccessLoading = true;
     this.branchAccessError = '';
     try {
@@ -832,6 +881,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
       this.branchAccess = result.data;
       if (!result.data.linkedLogin) {
         this.loginProvision.email = this.form.email.trim().toLowerCase();
+        await this.loadLoginInvite();
       }
       this.branchAccessLoaded = true;
     } catch (error) {
@@ -842,6 +892,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async saveBranchAccess() {
+    if (!this.canManageAuthAccess) return;
     if (!this.editingId || !this.branchAccess.linkedLogin) return;
     const active = this.branchAccess.branches.filter((branch) => branch.active);
     if (active.some((branch) => !branch.roleId)) {
@@ -887,6 +938,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async provisionLogin() {
+    if (!this.canManageAuthAccess) return;
     if (!this.editingId || this.branchAccess.linkedLogin) return;
     const loginId = this.loginProvision.loginId.trim().toLowerCase();
     const email = this.loginProvision.email.trim().toLowerCase();
@@ -927,6 +979,78 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  async createLoginInvite() {
+    if (!this.canManageAuthAccess || !this.editingId || this.branchAccess.linkedLogin) return;
+    const email = this.loginProvision.email.trim().toLowerCase();
+    const roleId = this.loginProvision.roleId;
+    this.branchAccessError = '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.branchAccessError = 'Enter a valid real email';
+      return;
+    }
+    if (!roleId) {
+      this.branchAccessError = 'Select a role';
+      return;
+    }
+    this.branchAccessSaving = true;
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffLoginInvite>>(`/staff/${this.editingId}/invite`, { email, roleId }));
+      if (!result.success || !result.data) throw new Error(result.error?.message || 'Unable to create invitation');
+      this.setLoginInvite(result.data);
+      await this.loadHistory();
+    } catch (error) {
+      this.branchAccessError = error instanceof Error ? error.message : 'Unable to create invitation';
+    } finally {
+      this.branchAccessSaving = false;
+    }
+  }
+
+  async resendLoginInvite() {
+    if (!this.canManageAuthAccess || !this.editingId || this.branchAccess.linkedLogin) return;
+    await this.changeLoginInvite(`/staff/${this.editingId}/invite/resend`, 'Unable to resend invitation');
+  }
+
+  async revokeLoginInvite() {
+    if (!this.canManageAuthAccess || !this.editingId || this.branchAccess.linkedLogin) return;
+    await this.changeLoginInvite(`/staff/${this.editingId}/invite/revoke`, 'Unable to revoke invitation');
+  }
+
+  async copyLoginInviteLink() {
+    if (!this.loginInviteLink) return;
+    try {
+      await navigator.clipboard.writeText(this.loginInviteLink);
+    } catch {
+      this.branchAccessError = 'Unable to copy invitation link';
+    }
+  }
+
+  private async loadLoginInvite() {
+    if (!this.editingId) return;
+    const result = await firstValueFrom(this.api.get<ApiEnvelope<StaffLoginInvite | null>>(`/staff/${this.editingId}/invite`));
+    this.loginInvite = result.data ?? null;
+    this.loginInviteLink = '';
+  }
+
+  private async changeLoginInvite(path: string, fallback: string) {
+    this.branchAccessSaving = true;
+    this.branchAccessError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<StaffLoginInvite>>(path, {}));
+      if (!result.success || !result.data) throw new Error(result.error?.message || fallback);
+      this.setLoginInvite(result.data);
+      await this.loadHistory();
+    } catch (error) {
+      this.branchAccessError = error instanceof Error ? error.message : fallback;
+    } finally {
+      this.branchAccessSaving = false;
+    }
+  }
+
+  private setLoginInvite(invite: StaffLoginInvite) {
+    this.loginInvite = invite;
+    this.loginInviteLink = invite.acceptPath ? `${location.origin}${invite.acceptPath}` : '';
+  }
+
   private resetBranchAccess() {
     this.branchAccess = emptyBranchAccess();
     this.branchAccessSearch = '';
@@ -942,6 +1066,8 @@ export class StaffPageComponent implements OnInit, OnDestroy {
     this.branchAccessSaving = false;
     this.branchAccessError = '';
     this.loginProvision = emptyLoginProvision();
+    this.loginInvite = null;
+    this.loginInviteLink = '';
   }
 
   private uniqueBranchValues(
@@ -978,19 +1104,23 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   addCommissionRule() {
+    if (!this.canManageStaff) return;
     this.configuration.commissionRules.push({ name: '', appliesTo: 'all', ratePercent: null, effectiveFrom: '', active: true });
   }
   addPayRate() {
+    if (!this.canManageStaff) return;
     this.configuration.payRates.push({ rateType: 'hourly', amount: null, effectiveFrom: '', active: true });
   }
   addLeavePolicy() {
+    if (!this.canManageStaff) return;
     this.configuration.leavePolicies.push({ name: '', leaveType: 'annual', annualDays: null, active: true });
   }
-  removeCommissionRule(index: number) { this.configuration.commissionRules.splice(index, 1); }
-  removePayRate(index: number) { this.configuration.payRates.splice(index, 1); }
-  removeLeavePolicy(index: number) { this.configuration.leavePolicies.splice(index, 1); }
+  removeCommissionRule(index: number) { if (!this.canManageStaff) return; this.configuration.commissionRules.splice(index, 1); }
+  removePayRate(index: number) { if (!this.canManageStaff) return; this.configuration.payRates.splice(index, 1); }
+  removeLeavePolicy(index: number) { if (!this.canManageStaff) return; this.configuration.leavePolicies.splice(index, 1); }
 
   async saveConfiguration() {
+    if (!this.canManageStaff) return;
     if (!this.editingId) return;
     this.configurationError = '';
     this.configurationSaving = true;
@@ -1118,6 +1248,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   resetDocument() { this.documentForm = emptyDocument(); this.documentError = ''; }
 
   async saveDocument() {
+    if (!this.canManageStaff) return;
     if (!this.editingId) return;
     if (!this.documentForm.documentType.trim() || !this.documentForm.documentName.trim() || !this.documentForm.documentUrl.trim()) {
       this.documentError = 'Document type, name and URL are required';
@@ -1166,6 +1297,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async uploadDocumentFile(event: Event) {
+    if (!this.canManageStaff) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
@@ -1252,6 +1384,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async selectBulkFile(event: Event) {
+    if (!this.canManageStaff) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
@@ -1315,7 +1448,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async applyBulkImport() {
-    if (!this.bulkRows.length || !this.bulkBatchId) return;
+    if (!this.canManageStaff || !this.bulkRows.length || !this.bulkBatchId) return;
     this.bulkSaving = true;
     this.bulkError = '';
     try {
@@ -1412,6 +1545,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async assignOperationTask(operationId: string) {
+    if (!this.canManageStaff) return;
     if (!this.editingId) return;
     const taskTitle = this.operationTaskTitle.trim();
     if (!taskTitle) { this.operationsError = 'Task title is required'; return; }
@@ -1431,6 +1565,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async completeOperationTask(task: StaffOperationTask) {
+    if (!this.canManageStaff) return;
     await this.updateOperationTask(task.id, { status: 'completed', proofUrl: task.proofUrl || undefined, notes: task.notes || undefined });
   }
 
@@ -1439,6 +1574,7 @@ export class StaffPageComponent implements OnInit, OnDestroy {
   }
 
   async markOperationAttendance(operationId: string, status: 'present' | 'absent') {
+    if (!this.canManageStaff) return;
     if (!this.editingId) return;
     this.operationsSaving = true;
     this.operationsError = '';

@@ -32,6 +32,7 @@ futures-util = "0.3"
 hmac = "0.12"
 qrcodegen = "1.8"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+lettre = { version = "0.11.22", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls"] }
 passkey-auth = "0.1.3"
 percent-encoding = "2.3"
 

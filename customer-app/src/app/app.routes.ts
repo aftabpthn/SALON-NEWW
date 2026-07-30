@@ -44,6 +44,7 @@ export const routes: Routes = [
       },
       {
         path: "offers",
+        canActivate: [customerAuthGuard],
         loadComponent: () => import("./features/offers/offers.page").then((m) => m.OffersPage)
       },
       {
@@ -103,12 +104,6 @@ export const routes: Routes = [
         path: "referrals",
         canActivate: [customerAuthGuard],
         data: { hub: "referrals" },
-        loadComponent: () => import("./features/customer-hub/customer-hub.page").then((m) => m.CustomerHubPage)
-      },
-      {
-        path: "offers",
-        canActivate: [customerAuthGuard],
-        data: { hub: "offers" },
         loadComponent: () => import("./features/customer-hub/customer-hub.page").then((m) => m.CustomerHubPage)
       },
       {

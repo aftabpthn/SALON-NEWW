@@ -10,7 +10,7 @@ use crate::{
 };
 
 const LEAVE_TYPES: &[&str] = &["annual", "sick", "casual", "special", "unpaid"];
-const STATUSES: &[&str] = &["pending", "approved", "rejected"];
+const STATUSES: &[&str] = &["pending", "approved", "rejected", "withdrawn"];
 
 pub async fn list_requests(
     db: &PgPool,
@@ -155,6 +155,83 @@ pub async fn reject(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub async fn withdraw(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    version: i32,
+) -> Result<LeaveRequestRecord, AppError> {
+    if request_id.trim().is_empty() || staff_id.trim().is_empty() || version < 1 {
+        return Err(AppError::validation("leave request version is invalid"));
+    }
+    match repository::withdraw_request(
+        db,
+        tenant_id,
+        branch_id,
+        request_id.trim(),
+        staff_id.trim(),
+        actor_user_id,
+        version,
+    )
+    .await
+    .map_err(|error| AppError::internal(format!("failed to withdraw leave request: {error}")))?
+    {
+        DecisionOutcome::Updated => {}
+        DecisionOutcome::NotFound => return Err(AppError::not_found("leave request not found")),
+        DecisionOutcome::Conflict => {
+            return Err(AppError::conflict(
+                "only a pending leave request can be withdrawn; refresh and try again",
+            ))
+        }
+        DecisionOutcome::PolicyMissing | DecisionOutcome::InsufficientBalance => {
+            return Err(AppError::internal("invalid leave withdrawal outcome"))
+        }
+    }
+    repository::get_request(db, tenant_id, branch_id, request_id.trim())
+        .await
+        .map_err(|error| {
+            AppError::internal(format!("failed to load withdrawn leave request: {error}"))
+        })?
+        .ok_or_else(|| AppError::not_found("leave request not found"))
+}
+
+pub async fn restore(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    version: i32,
+) -> Result<LeaveRequestRecord, AppError> {
+    if request_id.trim().is_empty() || version < 1 {
+        return Err(AppError::validation("leave request version is invalid"));
+    }
+    match repository::restore_request(db, tenant_id, branch_id, request_id.trim(), version)
+        .await
+        .map_err(|error| AppError::internal(format!("failed to restore leave request: {error}")))?
+    {
+        DecisionOutcome::Updated => {}
+        DecisionOutcome::NotFound => return Err(AppError::not_found("leave request not found")),
+        DecisionOutcome::Conflict => {
+            return Err(AppError::conflict(
+                "only an unchanged withdrawn leave request can be restored",
+            ))
+        }
+        DecisionOutcome::PolicyMissing | DecisionOutcome::InsufficientBalance => {
+            return Err(AppError::internal("invalid leave restoration outcome"))
+        }
+    }
+    repository::get_request(db, tenant_id, branch_id, request_id.trim())
+        .await
+        .map_err(|error| {
+            AppError::internal(format!("failed to load restored leave request: {error}"))
+        })?
+        .ok_or_else(|| AppError::not_found("leave request not found"))
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn decide(
     db: &PgPool,
     tenant_id: &str,
@@ -173,6 +250,15 @@ async fn decide(
     if review_note.chars().count() > 500 {
         return Err(AppError::validation(
             "review note cannot exceed 500 characters",
+        ));
+    }
+    let current = repository::get_request(db, tenant_id, branch_id, request_id)
+        .await
+        .map_err(|error| AppError::internal(format!("failed to load leave request: {error}")))?
+        .ok_or_else(|| AppError::not_found("leave request not found"))?;
+    if current.requested_by == actor_user_id {
+        return Err(AppError::forbidden(
+            "you cannot decide your own leave request",
         ));
     }
     let outcome = repository::decide_request(

@@ -385,6 +385,10 @@ struct AdjustmentBreakdown {
     allowance_paise: i64,
     deduction_paise: i64,
     fine_paise: i64,
+    late_fine_paise: i64,
+    late_deduction_paise: i64,
+    absence_fine_paise: i64,
+    absence_deduction_paise: i64,
     rows: Vec<Value>,
     skipped_statutory_names: Vec<String>,
 }
@@ -665,14 +669,18 @@ pub async fn preview(
                 .map(Vec::as_slice)
                 .unwrap_or(&[]);
 
-            let attendance_days_x2 = attendance_rows
+            let present_days_x2 = attendance_rows
                 .iter()
                 .map(|row| match row.status.as_str() {
                     "clocked_out" | "present" => 2,
-                    "half_day" => 1,
                     _ => 0,
                 })
                 .sum::<i32>();
+            let attendance_days_x2 = present_days_x2
+                + attendance_rows
+                    .iter()
+                    .filter(|row| row.status == "half_day")
+                    .count() as i32;
             let absent_days_x2 = attendance_rows
                 .iter()
                 .filter(|row| row.status == "absent")
@@ -711,6 +719,22 @@ pub async fn preview(
                 .iter()
                 .map(|row| row.penalty_paise)
                 .sum::<i64>();
+            // ponytail: attendance stores one penalty total per day; use a per-cause ledger
+            // when one exists so a day containing multiple causes can be split further.
+            let absence_attendance_penalty_paise = attendance_rows
+                .iter()
+                .filter(|row| row.status == "absent")
+                .map(|row| row.penalty_paise)
+                .sum::<i64>();
+            let late_attendance_penalty_paise = attendance_rows
+                .iter()
+                .filter(|row| row.status != "absent" && row.late_minutes > 0)
+                .map(|row| row.penalty_paise)
+                .sum::<i64>();
+            let other_attendance_penalty_paise = (penalty_paise
+                - absence_attendance_penalty_paise
+                - late_attendance_penalty_paise)
+                .max(0);
             let late_minutes = attendance_rows
                 .iter()
                 .map(|row| row.late_minutes)
@@ -818,6 +842,16 @@ pub async fn preview(
                 Some("hourly") => multiply_divide(rate, i64::from(approved_overtime_minutes), 60),
                 _ => 0,
             };
+            let overtime_rate_paise_per_hour = match staff_row.pay_rate_type.as_deref() {
+                Some("monthly") => multiply_divide(
+                    rate,
+                    60,
+                    scheduled_minutes.max(days_in_month * 480),
+                ),
+                Some("daily") => multiply_divide(rate, 60, 480),
+                Some("hourly") => rate,
+                _ => 0,
+            };
             let commission_paise = commission_by_staff.get(&staff_id).copied().unwrap_or(0);
             let commission_breakdown = commission_breakdown_by_staff
                 .get(&staff_id)
@@ -846,6 +880,21 @@ pub async fn preview(
                 &weekend_sandwich,
             );
             let auto_deduction_paise = rule_adjustments.deduction_paise + rule_adjustments.fine_paise;
+            let late_deduction_paise = late_attendance_penalty_paise
+                + rule_adjustments.late_fine_paise
+                + rule_adjustments.late_deduction_paise;
+            let absence_deduction_paise = absence_attendance_penalty_paise
+                + rule_adjustments.absence_fine_paise
+                + rule_adjustments.absence_deduction_paise;
+            let fine_deduction_paise = (rule_adjustments.fine_paise
+                - rule_adjustments.late_fine_paise
+                - rule_adjustments.absence_fine_paise)
+                .max(0);
+            let other_deduction_paise = other_attendance_penalty_paise
+                + (rule_adjustments.deduction_paise
+                    - rule_adjustments.late_deduction_paise
+                    - rule_adjustments.absence_deduction_paise)
+                    .max(0);
             let generated_positive_paise = tip_paise + rule_adjustments.allowance_paise;
             let gross_paise =
                 earned_salary_paise + overtime_paise + commission_paise + generated_positive_paise;
@@ -885,7 +934,7 @@ pub async fn preview(
                 "payRateType": staff_row.pay_rate_type,
                 "payRatePaise": staff_row.pay_rate_paise,
                 "attendanceDaysX2": attendance_days_x2,
-                "presentDaysX2": attendance_days_x2,
+                "presentDaysX2": present_days_x2,
                 "absentDaysX2": absent_days_x2,
                 "halfDayCount": half_day_count,
                 "paidLeaveDaysX2": paid_leave_days_x2,
@@ -907,6 +956,7 @@ pub async fn preview(
                 "baseSalaryPaise": rate,
                 "earnedSalaryPaise": earned_salary_paise,
                 "overtimePaise": overtime_paise,
+                "overtimeRatePaisePerHour": overtime_rate_paise_per_hour,
                 "invoiceSalesPaise": commission_breakdown.invoice_sales_paise,
                 "serviceSalesPaise": commission_breakdown.service_sales_paise,
                 "productSalesPaise": commission_breakdown.product_sales_paise,
@@ -923,6 +973,10 @@ pub async fn preview(
                 "attendancePenaltyPaise": penalty_paise,
                 "ruleFinePaise": rule_adjustments.fine_paise,
                 "ruleDeductionPaise": rule_adjustments.deduction_paise,
+                "lateDeductionPaise": late_deduction_paise,
+                "absenceDeductionPaise": absence_deduction_paise,
+                "fineDeductionPaise": fine_deduction_paise,
+                "otherDeductionPaise": other_deduction_paise,
                 "advanceRecoveryPaise": advance_recovery_paise,
                 "advanceSource": if advance_recovery.items.is_empty() { "none" } else { "salary_advance_ledger" },
                 "grossPaise": gross_paise,
@@ -1415,6 +1469,36 @@ fn salary_row_i64(salary_row: &Value, key: &str) -> i64 {
     salary_row.get(key).and_then(Value::as_i64).unwrap_or(0)
 }
 
+#[derive(Debug, PartialEq)]
+struct PayslipDeductionBreakdown {
+    late_paise: i64,
+    absence_paise: i64,
+    advance_paise: i64,
+    fine_paise: i64,
+    statutory_paise: i64,
+    other_paise: i64,
+}
+
+fn payslip_deduction_breakdown(total_paise: i64, salary_row: &Value) -> PayslipDeductionBreakdown {
+    let late_paise = salary_row_i64(salary_row, "lateDeductionPaise");
+    let absence_paise = salary_row_i64(salary_row, "absenceDeductionPaise");
+    let advance_paise = salary_row_i64(salary_row, "advanceRecoveryPaise");
+    let fine_paise = salary_row
+        .get("fineDeductionPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or_else(|| salary_row_i64(salary_row, "ruleFinePaise"));
+    let statutory_paise = salary_row_i64(salary_row, "statutoryEmployeePaise");
+    let classified = late_paise + absence_paise + advance_paise + fine_paise + statutory_paise;
+    PayslipDeductionBreakdown {
+        late_paise,
+        absence_paise,
+        advance_paise,
+        fine_paise,
+        statutory_paise,
+        other_paise: (total_paise - classified).max(0),
+    }
+}
+
 /// Employee-side amount for one statutory rule type (`providentFund`/`esic`/`professionalTax`/
 /// `tds`), read from a payroll item's `calculation_json`. Exposed for the payroll history/item
 /// CSV export, which mirrors the same breakdown shown on the payslip.
@@ -1488,6 +1572,7 @@ pub async fn payslip_pdf(
         .get("salaryRow")
         .cloned()
         .unwrap_or(Value::Null);
+    let deduction_breakdown = payslip_deduction_breakdown(item.deductions_paise, &salary_row);
 
     let mut lines = vec![
         format!("Branch: {}", branch.as_deref().unwrap_or("-")),
@@ -1504,8 +1589,16 @@ pub async fn payslip_pdf(
         String::new(),
         "Attendance summary:".to_string(),
         format!(
-            "  Attendance days: {:.1}",
-            f64::from(item.attendance_days_x2) / 2.0
+            "  Present days: {:.1}",
+            salary_row_i64(&salary_row, "presentDaysX2") as f64 / 2.0
+        ),
+        format!(
+            "  Absent days: {:.1}",
+            salary_row_i64(&salary_row, "absentDaysX2") as f64 / 2.0
+        ),
+        format!(
+            "  Half days: {}",
+            salary_row_i64(&salary_row, "halfDayCount")
         ),
         format!(
             "  Paid leave days: {:.1}",
@@ -1524,12 +1617,34 @@ pub async fn payslip_pdf(
             "  Overtime minutes (approved): {}",
             salary_row_i64(&salary_row, "approvedOvertimeMinutes")
         ),
+        format!(
+            "  Overtime rate/hour: INR {}",
+            paise_text(salary_row_i64(&salary_row, "overtimeRatePaisePerHour"))
+        ),
         String::new(),
         format!(
             "Earned salary: INR {}",
             paise_text(item.earned_salary_paise)
         ),
         format!("Overtime pay: INR {}", paise_text(item.overtime_paise)),
+        String::new(),
+        "Business sales breakup:".to_string(),
+        format!(
+            "  Service: INR {}",
+            paise_text(salary_row_i64(&salary_row, "serviceSalesPaise"))
+        ),
+        format!(
+            "  Product: INR {}",
+            paise_text(salary_row_i64(&salary_row, "productSalesPaise"))
+        ),
+        format!(
+            "  Package: INR {}",
+            paise_text(salary_row_i64(&salary_row, "packageSalesPaise"))
+        ),
+        format!(
+            "  Membership: INR {}",
+            paise_text(salary_row_i64(&salary_row, "membershipSalesPaise"))
+        ),
         String::new(),
         "Commission breakup:".to_string(),
         format!(
@@ -1563,17 +1678,23 @@ pub async fn payslip_pdf(
         ),
         String::new(),
         "Fines and deductions:".to_string(),
+        format!("  Late: INR {}", paise_text(deduction_breakdown.late_paise)),
         format!(
-            "  Attendance penalty: INR {}",
-            paise_text(salary_row_i64(&salary_row, "attendancePenaltyPaise"))
+            "  Absence: INR {}",
+            paise_text(deduction_breakdown.absence_paise)
         ),
         format!(
-            "  Rule fines: INR {}",
-            paise_text(salary_row_i64(&salary_row, "ruleFinePaise"))
+            "  Salary advance: INR {}",
+            paise_text(deduction_breakdown.advance_paise)
+        ),
+        format!("  Fine: INR {}", paise_text(deduction_breakdown.fine_paise)),
+        format!(
+            "  Statutory: INR {}",
+            paise_text(deduction_breakdown.statutory_paise)
         ),
         format!(
-            "  Rule deductions: INR {}",
-            paise_text(salary_row_i64(&salary_row, "ruleDeductionPaise"))
+            "  Other: INR {}",
+            paise_text(deduction_breakdown.other_paise)
         ),
     ];
     lines.extend(statutory_payslip_lines(&item.calculation_json));
@@ -2889,8 +3010,22 @@ fn auto_adjustments(
         }
         match rule.kind.as_str() {
             "allowance" => result.allowance_paise += amount_paise,
-            "fine" => result.fine_paise += amount_paise,
-            "deduction" => result.deduction_paise += amount_paise,
+            "fine" => {
+                result.fine_paise += amount_paise;
+                match rule.trigger_type.as_str() {
+                    "late_count" => result.late_fine_paise += amount_paise,
+                    "absent_day" => result.absence_fine_paise += amount_paise,
+                    _ => {}
+                }
+            }
+            "deduction" => {
+                result.deduction_paise += amount_paise;
+                match rule.trigger_type.as_str() {
+                    "late_count" => result.late_deduction_paise += amount_paise,
+                    "absent_day" => result.absence_deduction_paise += amount_paise,
+                    _ => {}
+                }
+            }
             _ => continue,
         }
         result.rows.push(json!({
@@ -3649,16 +3784,18 @@ async fn queue_posted_correction_notification(
 #[cfg(test)]
 mod tests {
     use super::{
-        best_statutory_rules, compute_advance_recovery, compute_statutory,
+        auto_adjustments, best_statutory_rules, compute_advance_recovery, compute_statutory,
         compute_weekend_sandwich, encrypt_identifier, history_payment_method,
         is_payroll_amount_variable, is_statutory_named, line_attributions, mask_sensitive_id,
-        multiply_divide, normalized_staff_ids, paid_holiday_days_x2, payout_staff_key, period,
-        resolve_statutory_rule, settled_provider_reference, statutory_encryption_key,
-        unpaid_week_off_occurrences, validate_payout, validate_statutory_identifiers,
-        PayrollPayoutInput, StatutoryProfileSource, StatutoryRuleRecord,
+        multiply_divide, normalized_staff_ids, paid_holiday_days_x2, payout_staff_key,
+        payslip_deduction_breakdown, period, resolve_statutory_rule, settled_provider_reference,
+        statutory_encryption_key, unpaid_week_off_occurrences, validate_payout,
+        validate_statutory_identifiers, PayrollPayoutInput, StatutoryProfileSource,
+        StatutoryRuleRecord,
     };
     use crate::repositories::staff_payroll_repository::{
-        ActiveAdvanceSource, AttendanceSourceRecord, ScheduleSourceRecord,
+        ActiveAdvanceSource, AttendanceSourceRecord, PayrollAdjustmentRuleSource,
+        ScheduleSourceRecord,
     };
     use chrono::Datelike;
     use serde_json::{json, Value};
@@ -4028,5 +4165,46 @@ mod tests {
         assert_eq!(unpaid_week_off_occurrences(Some("monthly"), 8), 4);
         assert_eq!(unpaid_week_off_occurrences(Some("daily"), 8), 0);
         assert_eq!(unpaid_week_off_occurrences(Some("hourly"), 8), 0);
+    }
+
+    #[test]
+    fn payslip_deductions_classify_late_absence_and_residual_other() {
+        let rules = vec![
+            PayrollAdjustmentRuleSource {
+                id: "late".into(),
+                kind: "fine".into(),
+                name: "Late fine".into(),
+                amount_paise: 100,
+                trigger_type: "late_count".into(),
+                trigger_count: 1,
+                application_mode: "per_occurrence".into(),
+            },
+            PayrollAdjustmentRuleSource {
+                id: "absence".into(),
+                kind: "deduction".into(),
+                name: "Absence deduction".into(),
+                amount_paise: 200,
+                trigger_type: "absent_day".into(),
+                trigger_count: 1,
+                application_mode: "per_occurrence".into(),
+            },
+        ];
+        let adjustments = auto_adjustments(&rules, 2, 1, 0, 0, 0, 0, &Default::default());
+        assert_eq!(adjustments.late_fine_paise, 200);
+        assert_eq!(adjustments.absence_deduction_paise, 200);
+
+        let breakdown = payslip_deduction_breakdown(
+            1_000,
+            &json!({
+                "lateDeductionPaise": 250,
+                "absenceDeductionPaise": 300,
+                "advanceRecoveryPaise": 100,
+                "fineDeductionPaise": 50,
+                "statutoryEmployeePaise": 200
+            }),
+        );
+        assert_eq!(breakdown.late_paise, 250);
+        assert_eq!(breakdown.absence_paise, 300);
+        assert_eq!(breakdown.other_paise, 100);
     }
 }

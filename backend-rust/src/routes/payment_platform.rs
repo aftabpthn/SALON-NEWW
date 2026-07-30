@@ -17,8 +17,8 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     routes::{context::tenant_branch, pos::settle_deferred_customer_commerce_benefits},
     services::{
-        accounting_service, auth_service::AuthClaims, payment_platform_service as platform,
-        security_service,
+        accounting_service, auth_service::AuthClaims, payment_gateway_service,
+        payment_platform_service as platform, security_service,
     },
     state::AppState,
 };
@@ -32,6 +32,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/pos/payment-platform/accounts/:provider/refresh",
             post(refresh_account),
+        )
+        .route(
+            "/pos/payment-platform/providers/:provider/status",
+            post(set_provider_status),
         )
         .route("/pos/payment-platform/payments", post(create_payment))
         .route("/pos/payment-platform/setup-sessions", post(create_setup))
@@ -69,8 +73,29 @@ struct OperationPayload<T> {
     request: T,
 }
 
+#[derive(Deserialize)]
+struct ProviderStatusPayload {
+    enabled: bool,
+}
+
 async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
     let (tenant, branch) = tenant_branch(&headers)?;
+    let stripe_enabled = payment_gateway_service::provider_enabled_for_branch(
+        &state.db,
+        &state.settings,
+        &tenant,
+        &branch,
+        "stripe",
+    )
+    .await?;
+    let adyen_enabled = payment_gateway_service::provider_enabled_for_branch(
+        &state.db,
+        &state.settings,
+        &tenant,
+        &branch,
+        "adyen",
+    )
+    .await?;
     let accounts = sqlx::query_scalar::<_, Value>(
         r#"SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'id',id,'provider',provider,'providerAccountId',provider_account_id,
@@ -113,8 +138,8 @@ async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResul
         "operations":operations,
         "openDisputes":disputes,
         "providers":{
-            "stripe":{"configured":state.settings.payment_provider_enabled("stripe"),"webhookConfigured":state.settings.payment_provider_webhook_configured("stripe")},
-            "adyen":{"configured":state.settings.payment_provider_enabled("adyen"),"webhookConfigured":state.settings.payment_provider_webhook_configured("adyen")}
+            "stripe":{"configured":state.settings.payment_provider_enabled("stripe"),"enabled":stripe_enabled,"webhookConfigured":state.settings.payment_provider_webhook_configured("stripe")},
+            "adyen":{"configured":state.settings.payment_provider_enabled("adyen"),"enabled":adyen_enabled,"webhookConfigured":state.settings.payment_provider_webhook_configured("adyen")}
         }
     }))))
 }
@@ -126,7 +151,9 @@ async fn start_onboarding(
     Json(payload): Json<OnboardingPayload>,
 ) -> ApiResult<Value> {
     let (tenant, branch) = tenant_branch(&headers)?;
+    require_payment_manage(&claims)?;
     ensure_provider_ready(&state, &payload.request.provider)?;
+    ensure_branch_provider_enabled(&state, &tenant, &branch, &payload.request.provider).await?;
     let existing = sqlx::query_as::<_, (String, String)>(
         "SELECT id,provider_account_id FROM payment_merchant_accounts WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3",
     )
@@ -192,6 +219,8 @@ async fn refresh_account(
     Path(provider): Path<String>,
 ) -> ApiResult<Value> {
     let (tenant, branch) = tenant_branch(&headers)?;
+    require_payment_manage(&claims)?;
+    ensure_branch_provider_enabled(&state, &tenant, &branch, &provider).await?;
     let (id, account_id) = merchant_account(&state, &tenant, &branch, &provider).await?;
     let payload = platform::retrieve_account(&state.settings, &provider, &account_id).await?;
     let (status, kyc, charges, payouts, submitted, capabilities, requirements) =
@@ -212,6 +241,78 @@ async fn refresh_account(
     Ok(Json(ApiResponse::ok(
         json!({"id":id,"provider":provider,"status":status,"kycStatus":kyc,"chargesEnabled":charges,"payoutsEnabled":payouts,"detailsSubmitted":submitted,"capabilities":capabilities,"requirements":requirements}),
     )))
+}
+
+async fn set_provider_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(provider): Path<String>,
+    Json(payload): Json<ProviderStatusPayload>,
+) -> ApiResult<Value> {
+    require_payment_manage(&claims)?;
+    let provider = provider.trim().to_ascii_lowercase();
+    let supported = crate::config::PAYMENT_PROVIDER_CATALOG
+        .iter()
+        .any(|entry| entry.provider == provider && entry.implemented);
+    if !supported {
+        return Err(AppError::validation("payment provider is not available"));
+    }
+    if payload.enabled && !state.settings.payment_provider_enabled(&provider) {
+        return Err(AppError::conflict(
+            "payment provider credentials are not configured",
+        ));
+    }
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to update payment provider status"))?;
+    sqlx::query(
+        r#"INSERT INTO payment_provider_branch_controls
+           (tenant_id,branch_id,provider,enabled,updated_by_user_id)
+           VALUES($1,$2,$3,$4,$5)
+           ON CONFLICT (tenant_id,branch_id,provider) DO UPDATE SET
+             enabled=EXCLUDED.enabled,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=NOW()"#,
+    )
+    .bind(&tenant)
+    .bind(&branch)
+    .bind(&provider)
+    .bind(payload.enabled)
+    .bind(&claims.sub)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to update payment provider status"))?;
+    sqlx::query(
+        "UPDATE payment_merchant_accounts SET status=CASE WHEN $4 THEN CASE WHEN status='disabled' THEN 'pending' ELSE status END ELSE 'disabled' END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3",
+    )
+    .bind(&tenant)
+    .bind(&branch)
+    .bind(&provider)
+    .bind(payload.enabled)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to update payment merchant account status"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to update payment provider status"))?;
+    audit(
+        &state,
+        &tenant,
+        &branch,
+        &claims.sub,
+        if payload.enabled {
+            "payments.provider.enabled"
+        } else {
+            "payments.provider.disabled"
+        },
+        json!({"provider":provider,"enabled":payload.enabled}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(json!({
+        "provider":provider,"enabled":payload.enabled
+    }))))
 }
 
 async fn create_payment(
@@ -458,6 +559,7 @@ async fn active_merchant_account(
     charges: bool,
 ) -> Result<(String, String, String), AppError> {
     ensure_provider_ready(state, provider)?;
+    ensure_branch_provider_enabled(state, tenant, branch, provider).await?;
     let row=sqlx::query_as::<_,(String,String,String,bool,bool)>("SELECT id,provider_account_id,provider,charges_enabled,payouts_enabled FROM payment_merchant_accounts WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3").bind(tenant).bind(branch).bind(provider).fetch_optional(&state.db).await.map_err(|_|AppError::internal("failed to load active merchant account"))?.ok_or_else(||AppError::not_found("payment merchant account was not found"))?;
     if (charges && !row.3) || (!charges && !row.4) {
         return Err(AppError::conflict(if charges {
@@ -467,6 +569,49 @@ async fn active_merchant_account(
         }));
     }
     Ok((row.0, row.1, row.2))
+}
+
+async fn ensure_branch_provider_enabled(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    provider: &str,
+) -> Result<(), AppError> {
+    if !payment_gateway_service::provider_enabled_for_branch(
+        &state.db,
+        &state.settings,
+        tenant,
+        branch,
+        provider,
+    )
+    .await?
+    {
+        return Err(AppError::conflict(
+            "payment provider is disabled for this branch",
+        ));
+    }
+    Ok(())
+}
+
+fn require_payment_manage(claims: &AuthClaims) -> Result<(), AppError> {
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|permission| permission == "pos.manage");
+    if !denied
+        && (claims.role.eq_ignore_ascii_case("owner")
+            || claims.role.eq_ignore_ascii_case("admin")
+            || claims
+                .permissions
+                .iter()
+                .any(|permission| permission == "pos.manage"))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "payment integration management permission is required",
+        ))
+    }
 }
 
 fn ensure_provider_ready(state: &AppState, provider: &str) -> Result<(), AppError> {

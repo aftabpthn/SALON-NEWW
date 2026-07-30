@@ -22,6 +22,7 @@ button:disabled { cursor:not-allowed; opacity:.55; } button.primary { border-col
 .table-scroll { overflow:auto; } table { width:100%; border-collapse:collapse; } th,td { padding:11px 12px; border-bottom:1px solid #e8edf4; text-align:left; white-space:nowrap; }
 th { background:#f8fafc; color:var(--muted); font-size:11px; letter-spacing:.04em; text-transform:uppercase; } td small { display:block; margin-top:3px; color:var(--muted); font-size:11px; }
 .status { display:inline-flex; padding:4px 8px; border-radius:999px; background:#e8f3ff; color:#0b4f8a; font-size:12px; font-weight:700; }.status.muted { background:#eef2f7; color:var(--muted); }
+.row-actions { display:flex; gap:6px; }.row-actions .danger { border-color:#fecaca; color:#b42318; }
 .editor-body { min-height:0; overflow:auto; display:grid; align-content:start; gap:12px; padding:12px; } label { display:grid; gap:5px; color:#31425d; font-size:12px; font-weight:600; }
 .line-list { display:grid; gap:9px; }.recipe-line { display:grid; gap:9px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; }
 .line-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.line-actions { display:flex; align-items:end; justify-content:space-between; gap:8px; }.line-actions label { max-width:130px; }

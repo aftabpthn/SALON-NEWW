@@ -1,6 +1,6 @@
 <aside class="sidebar" id="primary-navigation">
   <nav class="nav-groups" [attr.aria-label]="'shell.primaryNavigation' | translate">
-    @for (group of visibleGroups; track group) {
+    @for (group of visibleGroups; track group.label) {
       <div
         class="nav-group"
         routerLinkActive="is-active"
@@ -35,7 +35,7 @@
             [attr.aria-hidden]="openGroup !== group.label"
             >
             <header><h2>{{ 'nav.' + group.label | translate }}</h2></header>
-            @for (link of group.links; track link) {
+            @for (link of group.links; track link.route) {
               <a
                 class="flyout-link"
                 [routerLink]="link.route"

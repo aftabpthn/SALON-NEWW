@@ -80,6 +80,8 @@ pub enum ConnectorProvider {
     NetSuite,
     Google,
     Zapier,
+    Zenoti,
+    Dingg,
 }
 
 impl ConnectorProvider {
@@ -90,6 +92,8 @@ impl ConnectorProvider {
             "netsuite" => Ok(Self::NetSuite),
             "google" => Ok(Self::Google),
             "zapier" => Ok(Self::Zapier),
+            "zenoti" => Ok(Self::Zenoti),
+            "dingg" => Ok(Self::Dingg),
             _ => Err(AppError::validation("unsupported connector provider")),
         }
     }
@@ -101,16 +105,20 @@ impl ConnectorProvider {
             Self::NetSuite => "netsuite",
             Self::Google => "google",
             Self::Zapier => "zapier",
+            Self::Zenoti => "zenoti",
+            Self::Dingg => "dingg",
         }
     }
 
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::QuickBooks => "QuickBooks Online",
             Self::Xero => "Xero Accounting",
             Self::NetSuite => "Oracle NetSuite",
             Self::Google => "Google Calendar",
             Self::Zapier => "Zapier",
+            Self::Zenoti => "Zenoti Migration",
+            Self::Dingg => "DINGG Migration",
         }
     }
 }
@@ -134,6 +142,21 @@ pub struct ConnectorView {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectorAuthorize {
     pub authorization_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MigrationConnectorWrite {
+    pub credential: String,
+    pub auth_scheme: Option<String>,
+    #[serde(default)]
+    pub center_ids: Vec<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub export_url: Option<String>,
+    pub source_file_name: Option<String>,
+    pub mode: Option<String>,
+    pub auto_queue: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -594,12 +617,18 @@ pub async fn list_connectors(
         ConnectorProvider::NetSuite,
         ConnectorProvider::Google,
         ConnectorProvider::Zapier,
+        ConnectorProvider::Zenoti,
+        ConnectorProvider::Dingg,
     ]
     .into_iter()
     .map(|provider| {
         let record = saved.iter().find(|row| row.provider == provider.code());
         let (configured, auth_mode) = if provider == ConnectorProvider::Zapier {
             (true, "api_key_webhook")
+        } else if provider == ConnectorProvider::Zenoti {
+            (settings.security_encryption_key.is_some(), "api_key")
+        } else if provider == ConnectorProvider::Dingg {
+            (settings.security_encryption_key.is_some(), "partner_export")
         } else {
             (
                 connector_provider_configured(settings, provider),
@@ -610,6 +639,11 @@ pub async fn list_connectors(
             provider: provider.code().into(),
             label: provider.label().into(),
             category: if matches!(
+                provider,
+                ConnectorProvider::Zenoti | ConnectorProvider::Dingg
+            ) {
+                "migration".into()
+            } else if matches!(
                 provider,
                 ConnectorProvider::Google | ConnectorProvider::Zapier
             ) {
@@ -655,7 +689,10 @@ pub async fn begin_connector_oauth(
     return_uri: &str,
     account_id: Option<&str>,
 ) -> Result<ConnectorAuthorize, AppError> {
-    if provider == ConnectorProvider::Zapier {
+    if matches!(
+        provider,
+        ConnectorProvider::Zapier | ConnectorProvider::Zenoti | ConnectorProvider::Dingg
+    ) {
         return Err(AppError::validation(
             "Zapier uses the existing scoped API keys and signed webhooks",
         ));
@@ -712,6 +749,78 @@ pub async fn begin_connector_oauth(
     Ok(ConnectorAuthorize {
         authorization_url: url.to_string(),
     })
+}
+
+pub async fn connect_migration_provider(
+    db: &PgPool,
+    settings: &Settings,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    provider: ConnectorProvider,
+    request: MigrationConnectorWrite,
+) -> Result<ConnectorSyncJob, AppError> {
+    if !matches!(
+        provider,
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg
+    ) {
+        return Err(AppError::validation(
+            "provider does not use migration credentials",
+        ));
+    }
+    let secret = request.credential.trim();
+    if !(8..=4096).contains(&secret.len()) {
+        return Err(AppError::validation("provider credential is invalid"));
+    }
+    let encryption_key = settings.security_encryption_key.as_deref().ok_or_else(|| {
+        AppError::service_unavailable(
+            "SECURITY_ENCRYPTION_NOT_CONFIGURED",
+            "connector credential encryption is not configured",
+        )
+    })?;
+    let config = crate::services::migration_provider_service::validated_config(provider, &request)?;
+    let ciphertext = security_service::encrypt_secret(encryption_key, secret)?;
+    integration_repository::upsert_connector(
+        db,
+        tenant,
+        branch,
+        provider.code(),
+        provider.label(),
+        config
+            .get("accountId")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+        "",
+        &ciphertext,
+        "",
+        None,
+        &json!(["migration.read"]),
+        &config,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save migration connector"))?;
+    let job = integration_repository::enqueue_connector_sync(
+        db,
+        tenant,
+        branch,
+        provider.code(),
+        "manual",
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to queue migration connector"))?
+    .ok_or_else(|| AppError::internal("failed to activate migration connector"))?;
+    let _ = security_service::record_audit(
+        db,
+        tenant,
+        branch,
+        actor,
+        "integration.migration_connector.connected",
+        json!({"provider":provider.code()}),
+    )
+    .await;
+    Ok(job)
 }
 
 pub async fn finish_connector_oauth(
@@ -877,8 +986,11 @@ pub async fn process_connector_sync_jobs(
         .map_err(|_| AppError::internal("failed to claim connector sync jobs"))?;
     let mut completed = 0;
     for job in jobs {
-        let result =
-            run_connector_check(db, settings, &job.tenant_id, &job.branch_id, &job.provider).await;
+        let result = if matches!(job.provider.as_str(), "zenoti" | "dingg") {
+            crate::services::migration_provider_service::run(db, settings, &job).await
+        } else {
+            run_connector_check(db, settings, &job.tenant_id, &job.branch_id, &job.provider).await
+        };
         match result {
             Ok((summary, account_id, account_name)) => {
                 integration_repository::complete_connector_sync(
@@ -959,6 +1071,11 @@ async fn run_connector_check(
                 "Zapier does not use connector sync jobs",
             ))
         }
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg => {
+            return Err(AppError::validation(
+                "migration connectors use the migration worker",
+            ))
+        }
     };
     let response = client
         .get(url)
@@ -1032,6 +1149,7 @@ async fn run_connector_check(
             credential.external_account_id.clone(),
         ),
         ConnectorProvider::Zapier => (String::new(), String::new()),
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg => (String::new(), String::new()),
     };
     Ok((
         json!({"verified":true,"provider":provider.code()}),
@@ -1238,6 +1356,9 @@ fn connector_oauth_config<'a>(
             Ok(ConnectorOauthConfig{client_id:settings.connector_netsuite_client_id.as_deref().ok_or_else(missing)?,client_secret:settings.connector_netsuite_client_secret.as_deref().ok_or_else(missing)?,redirect_uri:settings.connector_netsuite_redirect_uri.as_deref().ok_or_else(missing)?,authorization_endpoint:format!("https://{domain}.app.netsuite.com/app/login/oauth2/authorize.nl"),token_endpoint:format!("https://{domain}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token"),scope:"rest_webservices",credentials_in_body:false})
         }
         ConnectorProvider::Zapier => Err(AppError::validation("Zapier uses API keys and webhooks")),
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg => Err(AppError::validation(
+            "migration connectors do not use OAuth",
+        )),
     }
 }
 
@@ -1264,6 +1385,9 @@ fn connector_provider_configured(settings: &Settings, provider: ConnectorProvide
                 && settings.connector_google_redirect_uri.is_some()
         }
         ConnectorProvider::Zapier => true,
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg => {
+            settings.security_encryption_key.is_some()
+        }
     }
 }
 

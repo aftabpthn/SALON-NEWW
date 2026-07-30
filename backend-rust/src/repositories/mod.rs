@@ -18,6 +18,7 @@ pub mod cash_drawer_repository;
 pub mod clients_repository;
 pub mod compliance_repository;
 pub mod customer_portal_repository;
+pub mod growth_intelligence_repository;
 pub mod happy_hours_repository;
 pub mod integration_repository;
 pub mod inventory_governance_repository;

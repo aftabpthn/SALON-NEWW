@@ -252,12 +252,133 @@ type StaffRecentItem = { label: string; path: string };
         .staff-identity { gap:4px; }
         .staff-identity small { max-width:100%; }
       }
-      @media (max-width: 900px) and (any-pointer: coarse) {
+     @media (max-width: 900px) and (any-pointer: coarse) {
         @supports selector(.staff-app-shell:has(input:focus)) {
           .staff-app-shell:has(input:focus,textarea:focus,select:focus) .mobile-bottom-nav { opacity:0;pointer-events:none;transform:translate(-50%,calc(100% + var(--staff-mobile-nav-offset) + env(safe-area-inset-bottom))); }
         }
       }
      @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
+     .staff-app-shell { grid-template-columns: 232px minmax(0, 1fr); font-size: 14px; }
+     .staff-sidebar { padding: 8px; }
+     .user-card { grid-template-columns: 34px 1fr; gap: 9px; padding: 7px; }
+     .user-card b { width:34px; height:34px; }
+     .staff-sidebar nav a { grid-template-columns: 30px 1fr; gap: 8px; min-height: 40px; padding: 3px 8px; font-size: .8rem; }
+     .staff-sidebar nav a span { width:30px; height:30px; }
+     .nav-group { margin: 10px 8px 3px; font-size: .6rem; letter-spacing: .08em; }
+     .nav-logout { min-height: 40px; font-size: .86rem; }
+     .staff-topbar { min-height: 52px; padding: 4px 14px; }
+     .profile-avatar { width: 38px; height: 38px; border-radius: 12px; }
+     .staff-identity span,.staff-identity small { font-size: .66rem; }
+     .staff-identity strong { font-size: .86rem; }
+     .search-button { height: 40px; border-radius: 13px; }
+     .chat-button,.bell-button { width:40px; height:40px; min-width:40px; border-radius:13px; }
+     .net-status,.queue-status { padding: 6px 9px; font-size: .78rem; }
+     .staff-content { padding: 18px; }
+     @media (max-width: 900px) {
+       .staff-app-shell { font-size: 13px; }
+       .staff-topbar { min-height: var(--staff-header-height); padding: calc(4px + env(safe-area-inset-top)) 4px 4px 10px; }
+       .staff-content { padding: 10px 0 var(--staff-bottom-clearance); }
+       .staff-sidebar { width: min(78vw, 300px); }
+       .mobile-bottom-nav { width: min(calc(100vw - 16px), 420px); min-height: 56px; padding: 5px; border-radius: 18px; }
+       .mobile-bottom-nav :is(a,button) { min-height: 42px; border-radius: 13px; font-size: .58rem; }
+       .mobile-bottom-nav :is(a,button) svg { width: 18px; height: 18px; }
+       .search-button,.topbar-actions :is(.chat-button,.bell-button) { width: 34px; height: 42px; min-width: 34px; }
+     }
+     @media (max-width: 380px) {
+       .staff-identity strong { max-width: 138px; font-size: .8rem; }
+       .staff-identity span,.staff-identity small { font-size: .62rem; }
+       .mobile-bottom-nav :is(a,button) { font-size: .54rem; }
+     }
+     .staff-sidebar {
+       gap: 8px;
+       padding: 10px;
+       background: #0c477d;
+     }
+     .user-card {
+       flex: 0 0 auto;
+       margin: 0;
+       padding: 9px;
+       border-color: rgba(255,255,255,.16);
+       border-radius: 8px;
+       background: rgba(255,255,255,.09);
+     }
+     .user-card b {
+       border-radius: 8px;
+       font-size: .82rem;
+     }
+     .user-card strong {
+       font-size: .92rem;
+       line-height: 1.15;
+     }
+     .user-card small {
+       margin-top: 2px;
+       font-size: .7rem;
+       line-height: 1.2;
+     }
+     .staff-sidebar nav {
+       gap: 2px;
+       padding: 2px 2px 8px;
+       scrollbar-color: rgba(255,255,255,.48) transparent;
+     }
+     .staff-sidebar nav::-webkit-scrollbar {
+       width: 5px;
+     }
+     .staff-sidebar nav::-webkit-scrollbar-thumb {
+       border-radius: 999px;
+       background: rgba(255,255,255,.45);
+     }
+     .nav-group {
+       margin: 12px 6px 5px;
+       color: rgba(255,255,255,.7);
+       font-size: .62rem;
+       letter-spacing: .07em;
+     }
+     .staff-sidebar nav a {
+       grid-template-columns: 34px minmax(0,1fr);
+       min-height: 42px;
+       padding: 4px 8px;
+       border-radius: 8px;
+       color: rgba(255,255,255,.86);
+       font-size: .84rem;
+       line-height: 1.1;
+     }
+     .staff-sidebar nav a span {
+       width: 34px;
+       height: 34px;
+       border-radius: 8px;
+     }
+     .staff-sidebar nav a.active {
+       border-color: rgba(255,255,255,.86);
+       background: #e8f1ff;
+       color: #0c477d;
+       font-weight: 750;
+     }
+     .staff-sidebar nav a:hover:not(.active) {
+       border-color: rgba(255,255,255,.16);
+       background: rgba(255,255,255,.1);
+       color: #fff;
+     }
+     .nav-logout {
+       flex: 0 0 auto;
+       margin: 0;
+       min-height: 44px;
+       border-radius: 8px;
+       background: rgba(255,255,255,.06);
+       font-size: .92rem;
+     }
+     @media (max-width: 900px) {
+       .staff-sidebar {
+         width: min(84vw, 320px);
+         padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
+       }
+       .user-card {
+         padding-right: 50px;
+       }
+       .staff-sidebar nav a {
+         min-height: 44px;
+         font-size: .86rem;
+       }
+     }
   `]
 })
 export class StaffLayoutPage implements OnInit, OnDestroy {

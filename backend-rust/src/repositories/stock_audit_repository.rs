@@ -11,6 +11,8 @@ pub struct SessionRecord {
     pub blind_counting: bool,
     pub required_counters: i32,
     pub recount_threshold: i32,
+    pub count_variance_threshold_bps: i32,
+    pub count_value_variance_threshold_paise: i64,
     pub cutoff_at: DateTime<Utc>,
     pub cutoff_ledger_at: Option<DateTime<Utc>>,
     pub created_by: String,
@@ -32,6 +34,11 @@ pub struct SessionItemRecord {
     pub sku: String,
     pub unit: String,
     pub expected_quantity: i32,
+    pub expected_unit_cost_paise: i64,
+    pub expected_source_ledger_id: Option<String>,
+    pub expected_ledger_movement_count: i64,
+    pub expected_provenance_status: String,
+    pub expected_movement_summary: Value,
     pub approved_quantity: Option<i32>,
     pub variance_quantity: Option<i32>,
     pub variance_reason: String,
@@ -105,7 +112,7 @@ pub async fn list_sessions(
     tenant: &str,
     branch: &str,
 ) -> Result<Vec<SessionRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,status,name,blind_counting,required_counters,recount_threshold,cutoff_at,cutoff_ledger_at,created_by,submitted_by,submitted_at,approved_by,approved_at,rejection_reason,created_at,updated_at FROM stock_count_sessions WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC LIMIT 100").bind(tenant).bind(branch).fetch_all(db).await
+    sqlx::query_as("SELECT id,status,name,blind_counting,required_counters,recount_threshold,count_variance_threshold_bps,count_value_variance_threshold_paise,cutoff_at,cutoff_ledger_at,created_by,submitted_by,submitted_at,approved_by,approved_at,rejection_reason,created_at,updated_at FROM stock_count_sessions WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC LIMIT 100").bind(tenant).bind(branch).fetch_all(db).await
 }
 pub async fn get_session(
     db: &PgPool,
@@ -113,7 +120,7 @@ pub async fn get_session(
     branch: &str,
     id: &str,
 ) -> Result<Option<SessionRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,status,name,blind_counting,required_counters,recount_threshold,cutoff_at,cutoff_ledger_at,created_by,submitted_by,submitted_at,approved_by,approved_at,rejection_reason,created_at,updated_at FROM stock_count_sessions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3").bind(tenant).bind(branch).bind(id).fetch_optional(db).await
+    sqlx::query_as("SELECT id,status,name,blind_counting,required_counters,recount_threshold,count_variance_threshold_bps,count_value_variance_threshold_paise,cutoff_at,cutoff_ledger_at,created_by,submitted_by,submitted_at,approved_by,approved_at,rejection_reason,created_at,updated_at FROM stock_count_sessions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3").bind(tenant).bind(branch).bind(id).fetch_optional(db).await
 }
 pub async fn create_session(
     tx: &mut Transaction<'_, Postgres>,
@@ -123,9 +130,48 @@ pub async fn create_session(
     blind: bool,
     counters: i32,
     threshold: i32,
+    variance_threshold_bps: i32,
+    value_variance_threshold_paise: i64,
     actor: &str,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO stock_count_sessions(tenant_id,branch_id,name,blind_counting,required_counters,recount_threshold,cutoff_ledger_at,created_by) VALUES($1,$2,$3,$4,$5,$6,(SELECT MAX(created_at) FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2),$7) RETURNING id").bind(tenant).bind(branch).bind(name).bind(blind).bind(counters).bind(threshold).bind(actor).fetch_one(&mut **tx).await
+    sqlx::query_scalar("INSERT INTO stock_count_sessions(tenant_id,branch_id,name,blind_counting,required_counters,recount_threshold,count_variance_threshold_bps,count_value_variance_threshold_paise,cutoff_ledger_at,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,(SELECT MAX(created_at) FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2),$9) RETURNING id").bind(tenant).bind(branch).bind(name).bind(blind).bind(counters).bind(threshold).bind(variance_threshold_bps).bind(value_variance_threshold_paise).bind(actor).fetch_one(&mut **tx).await
+}
+pub async fn lock_snapshot_inventory(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+) -> Result<usize, sqlx::Error> {
+    Ok(sqlx::query_scalar::<_, String>("SELECT id FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY id FOR SHARE")
+        .bind(tenant)
+        .bind(branch)
+        .fetch_all(&mut **tx)
+        .await?
+        .len())
+}
+pub async fn ledger_stock_mismatch_count(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT COUNT(*)::BIGINT
+           FROM inventory_items item
+           JOIN LATERAL (
+             SELECT ledger.stock_after_quantity
+             FROM inventory_stock_ledger ledger
+             WHERE ledger.tenant_id=item.tenant_id
+               AND ledger.branch_id=item.branch_id
+               AND ledger.inventory_item_id=item.id
+             ORDER BY ledger.created_at DESC,ledger.id DESC
+             LIMIT 1
+           ) latest ON TRUE
+           WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.active=TRUE
+             AND (latest.stock_after_quantity IS NULL OR latest.stock_after_quantity<>item.stock_quantity)"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .fetch_one(&mut **tx)
+    .await
 }
 pub async fn snapshot_items(
     tx: &mut Transaction<'_, Postgres>,
@@ -133,7 +179,77 @@ pub async fn snapshot_items(
     branch: &str,
     session: &str,
 ) -> Result<u64, sqlx::Error> {
-    Ok(sqlx::query("INSERT INTO stock_count_session_items(tenant_id,branch_id,session_id,inventory_item_id,expected_quantity) SELECT $1,$2,$3,id,stock_quantity FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE").bind(tenant).bind(branch).bind(session).execute(&mut **tx).await?.rows_affected())
+    Ok(sqlx::query(
+        r#"WITH snapshot AS (
+             SELECT item.*,
+                    latest.id AS source_ledger_id,
+                    latest.stock_after_quantity AS source_stock_quantity,
+                    COALESCE(movement.movement_count,0) AS movement_count,
+                    COALESCE(movement.total_quantity,0) AS total_quantity,
+                    COALESCE(movement.purchase_quantity,0) AS purchase_quantity,
+                    COALESCE(movement.purchase_return_quantity,0) AS purchase_return_quantity,
+                    COALESCE(movement.transfer_in_quantity,0) AS transfer_in_quantity,
+                    COALESCE(movement.transfer_out_quantity,0) AS transfer_out_quantity,
+                    COALESCE(movement.transfer_reversal_quantity,0) AS transfer_reversal_quantity,
+                    COALESCE(movement.sale_quantity,0) AS sale_quantity,
+                    COALESCE(movement.return_quantity,0) AS return_quantity,
+                    COALESCE(movement.consumption_quantity,0) AS consumption_quantity,
+                    COALESCE(movement.kit_component_out_quantity,0) AS kit_component_out_quantity,
+                    COALESCE(movement.kit_assembly_in_quantity,0) AS kit_assembly_in_quantity,
+                    COALESCE(movement.adjustment_quantity,0) AS adjustment_quantity
+             FROM inventory_items item
+             JOIN stock_count_sessions audit
+               ON audit.id=$3 AND audit.tenant_id=item.tenant_id AND audit.branch_id=item.branch_id
+             LEFT JOIN LATERAL (
+               SELECT ledger.id,ledger.stock_after_quantity
+               FROM inventory_stock_ledger ledger
+               WHERE ledger.tenant_id=item.tenant_id AND ledger.branch_id=item.branch_id
+                 AND ledger.inventory_item_id=item.id AND ledger.created_at<=audit.cutoff_at
+               ORDER BY ledger.created_at DESC,ledger.id DESC LIMIT 1
+             ) latest ON TRUE
+             LEFT JOIN LATERAL (
+               SELECT COUNT(*)::BIGINT AS movement_count,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT),0) AS total_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='purchase'),0) AS purchase_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='purchase_return'),0) AS purchase_return_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='transfer_in'),0) AS transfer_in_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='transfer_out'),0) AS transfer_out_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='transfer_reversal'),0) AS transfer_reversal_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='sale'),0) AS sale_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='return'),0) AS return_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='consumption'),0) AS consumption_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='kit_component_out'),0) AS kit_component_out_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='kit_assembly_in'),0) AS kit_assembly_in_quantity,
+                      COALESCE(SUM(ledger.quantity_delta::BIGINT) FILTER(WHERE ledger.movement_type='adjustment'),0) AS adjustment_quantity
+               FROM inventory_stock_ledger ledger
+               WHERE ledger.tenant_id=item.tenant_id AND ledger.branch_id=item.branch_id
+                 AND ledger.inventory_item_id=item.id AND ledger.created_at<=audit.cutoff_at
+             ) movement ON TRUE
+             WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.active=TRUE
+           )
+           INSERT INTO stock_count_session_items(
+             tenant_id,branch_id,session_id,inventory_item_id,expected_quantity,expected_unit_cost_paise,
+             expected_source_ledger_id,expected_ledger_movement_count,expected_provenance_status,expected_movement_summary
+           )
+           SELECT $1,$2,$3,id,stock_quantity,GREATEST(unit_cost_paise,0),source_ledger_id,movement_count,
+                  CASE WHEN source_ledger_id IS NULL THEN 'opening_baseline'
+                       WHEN source_stock_quantity=stock_quantity THEN 'verified_ledger'
+                       ELSE 'legacy_snapshot' END,
+                  jsonb_build_object(
+                    'openingQuantity',stock_quantity::BIGINT-total_quantity,
+                    'purchaseQuantity',purchase_quantity,
+                    'purchaseReturnQuantity',purchase_return_quantity,
+                    'transferInQuantity',transfer_in_quantity,
+                    'transferOutQuantity',transfer_out_quantity,
+                    'transferReversalQuantity',transfer_reversal_quantity,
+                    'saleQuantity',sale_quantity,
+                    'returnQuantity',return_quantity,
+                    'consumptionQuantity',consumption_quantity,
+                    'kitComponentOutQuantity',kit_component_out_quantity,
+                    'kitAssemblyInQuantity',kit_assembly_in_quantity,
+                    'adjustmentQuantity',adjustment_quantity)
+           FROM snapshot"#,
+    ).bind(tenant).bind(branch).bind(session).execute(&mut **tx).await?.rows_affected())
 }
 pub async fn session_items(
     db: &PgPool,
@@ -141,7 +257,7 @@ pub async fn session_items(
     branch: &str,
     session: &str,
 ) -> Result<Vec<SessionItemRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,item.sku,item.unit,line.expected_quantity,line.approved_quantity,line.variance_quantity,line.variance_reason,line.adjustment_ledger_id,line.posted_at FROM stock_count_session_items line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.session_id=$3 ORDER BY item.name").bind(tenant).bind(branch).bind(session).fetch_all(db).await
+    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,item.sku,item.unit,line.expected_quantity,line.expected_unit_cost_paise,line.expected_source_ledger_id,line.expected_ledger_movement_count,line.expected_provenance_status,line.expected_movement_summary,line.approved_quantity,line.variance_quantity,line.variance_reason,line.adjustment_ledger_id,line.posted_at FROM stock_count_session_items line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.session_id=$3 ORDER BY item.name").bind(tenant).bind(branch).bind(session).fetch_all(db).await
 }
 pub async fn count_lines(
     db: &PgPool,
@@ -166,7 +282,7 @@ pub async fn session_item(
     session: &str,
     item: &str,
 ) -> Result<Option<SessionItemRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,item.sku,item.unit,line.expected_quantity,line.approved_quantity,line.variance_quantity,line.variance_reason,line.adjustment_ledger_id,line.posted_at FROM stock_count_session_items line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.session_id=$3 AND line.inventory_item_id=$4").bind(tenant).bind(branch).bind(session).bind(item).fetch_optional(db).await
+    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,item.sku,item.unit,line.expected_quantity,line.expected_unit_cost_paise,line.expected_source_ledger_id,line.expected_ledger_movement_count,line.expected_provenance_status,line.expected_movement_summary,line.approved_quantity,line.variance_quantity,line.variance_reason,line.adjustment_ledger_id,line.posted_at FROM stock_count_session_items line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.session_id=$3 AND line.inventory_item_id=$4").bind(tenant).bind(branch).bind(session).bind(item).fetch_optional(db).await
 }
 pub async fn count_by_key(
     tx: &mut Transaction<'_, Postgres>,

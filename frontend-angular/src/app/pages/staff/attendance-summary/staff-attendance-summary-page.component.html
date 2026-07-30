@@ -84,8 +84,12 @@
           <th scope="col">Earned Salary</th>
           }@if (isVisible('overtimePay')) {
           <th scope="col">OT Pay</th>
+          }@if (isVisible('serviceCommission')) {
+          <th scope="col">Service Commission</th>
+          }@if (isVisible('productCommission')) {
+          <th scope="col">Product Commission</th>
           }@if (isVisible('commission')) {
-          <th scope="col">Commission</th>
+          <th scope="col">Total Commission</th>
           }@if (isVisible('grossPay')) {
           <th scope="col">Gross Pay</th>
           }@if (isVisible('deductions')) {
@@ -151,6 +155,10 @@
               <td>{{ payrollMoney(row, 'earnedSalaryPaise') }}</td>
               }@if (isVisible('overtimePay')) {
               <td>{{ payrollMoney(row, 'overtimePaise') }}</td>
+              }@if (isVisible('serviceCommission')) {
+              <td><span class="commission-cell">{{ payrollMoney(row, 'serviceCommissionPaise') }}<button type="button" (click)="openCommissionSettings(row, 'Services')">Set</button></span></td>
+              }@if (isVisible('productCommission')) {
+              <td><span class="commission-cell">{{ payrollMoney(row, 'productCommissionPaise') }}<button type="button" (click)="openCommissionSettings(row, 'Products')">Set</button></span></td>
               }@if (isVisible('commission')) {
               <td>{{ payrollMoney(row, 'commissionPaise') }}</td>
               }@if (isVisible('grossPay')) {
@@ -210,18 +218,25 @@
           <button class="primary save-correction" type="button" [disabled]="correctionSaving" (click)="saveCorrection()">{{ correctionSaving ? 'Saving…' : 'Save correction' }}</button>
         </section>
       }
-      <div class="detail-head"><span>{{ 'staff.ui.987b9ced08' | translate }}</span><span>{{ 'staff.ui.aef36502d6' | translate }}</span><span>{{ 'staff.ui.220e06ba2f' | translate }}</span><span>{{ 'staff.ui.55bd39660c' | translate }}</span><span>{{ 'staff.ui.7c9d6bf311' | translate }}</span><span>{{ 'staff.ui.4310ed540c' | translate }}</span><span>{{ 'staff.ui.fe4a84952c' | translate }}</span><span>{{ 'staff.ui.b5441c8918' | translate }}</span><span>{{ 'staff.ui.bae7d5be70' | translate }}</span><span></span></div>
       @for (detail of details; track detail) {
-        <div class="detail-row"><span>{{ displayDate(detail.businessDate) }}</span><span>{{ displayTime(detail.clockInAt) }}</span><span>{{ displayTime(detail.clockOutAt) }}</span><span>{{ hours(detail.workedMinutes) }}</span><span>{{ hours(detail.breakMinutes) }}</span><span>{{ hours(detail.lateMinutes) }}</span><span>{{ hours(detail.earlyLeaveMinutes) }}</span><span>{{ hours(detail.overtimeMinutes) }}</span><span class="detail-status">{{ statusLabel(detail) }}</span><button type="button" (click)="editAttendance(detail)">{{ 'staff.ui.5301648dcf' | translate }}</button>@if (detail.comments || detail.correctionReason || detail.operations.length) {
-        <small>@if (detail.comments) {
-          {{ detail.comments }}
-          }@if (detail.correctionReason) {
-          <b>Correction: {{ detail.correctionReason }}</b>
-          }@for (operation of detail.operations; track operation) {
-          <b>Operation: {{ operationLabel(operation) }}</b>
-        }</small>
-      }</div>
-    }
+        <article class="attendance-day-card">
+          <div class="day-card-heading"><div><span>{{ displayDate(detail.businessDate) }}</span><small>{{ sourceLabel(detail) }}</small></div><span class="detail-status">{{ statusLabel(detail) }}</span></div>
+          <div class="day-metrics">
+            <div><small>Clock in</small><strong>{{ displayTime(detail.clockInAt) }}</strong></div>
+            <div><small>Clock out</small><strong>{{ displayTime(detail.clockOutAt) }}</strong></div>
+            <div><small>Worked</small><strong>{{ hours(detail.workedMinutes) }}</strong></div>
+            <div><small>Break</small><strong>{{ hours(detail.breakMinutes) }}</strong></div>
+            <div class="schedule-metric"><small>Scheduled</small><strong>{{ scheduleLabel(detail) }}</strong></div>
+            <div><small>Late</small><strong>{{ hours(detail.lateMinutes) }}</strong></div>
+            <div><small>Early leave</small><strong>{{ hours(detail.earlyLeaveMinutes) }}</strong></div>
+            <div><small>Overtime</small><strong>{{ hours(detail.overtimeMinutes) }}</strong></div>
+          </div>
+          @if (detail.comments || detail.correctionReason || detail.operations.length) {
+            <div class="day-notes">@if (detail.comments) {<span>{{ detail.comments }}</span>}@if (detail.correctionReason) {<b>Correction: {{ detail.correctionReason }}</b>}@for (operation of detail.operations; track operation) {<b>Operation: {{ operationLabel(operation) }}</b>}</div>
+          }
+          <button class="correct-day" type="button" (click)="editAttendance(detail)">{{ 'staff.ui.5301648dcf' | translate }}</button>
+        </article>
+      }
     @if (detailLoading) {
       <div class="loading-state compact">{{ 'staff.ui.d6b61171cd' | translate }}</div>
     }

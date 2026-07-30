@@ -10,7 +10,7 @@ import { AuthService } from '../../../core/services/auth.service';
 
 type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'operations';
 type NegativeStockRequest = { id:string; productName:string; requestedStockQuantity:number; reason:string; status:string; requestedBy:string; requestedAt:string };
-type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required'; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; reorderHistoryDays: number; reorderCoverageDays: number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string> };
+type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required'; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; countValueVarianceThresholdPaise?: number; reorderHistoryDays: number; reorderCoverageDays: number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string> };
 type OperationsHealth = {
   queue: { queued:number; processing:number; retryScheduled:number; terminalFailed:number; oldestPendingAt?:string; lastSentAt?:string; lastFailure?:string };
   invariants: { ledgerStockMismatch:number; negativeStock:number; ledgerSnapshotMissing:number; ledgerSnapshotMismatch:number; provenanceIncomplete:number; batchEvidenceMissing:number; trustedLedgerRows:number; reconstructedLedgerRows:number };
@@ -63,7 +63,9 @@ export class AdvancedControlsPageComponent implements OnInit {
   loading = true;
   error = '';
   controls: AdvancedControls = this.emptyControls();
-  policy: InventoryPolicy = { negativeStockRule: 'block', valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, reorderHistoryDays: 60, reorderCoverageDays: 30, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' } };
+  policy: InventoryPolicy = { negativeStockRule: 'block', valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, countValueVarianceThresholdPaise: 10_000, reorderHistoryDays: 60, reorderCoverageDays: 30, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' } };
+  countValueVarianceThresholdRupees: number | null = 100;
+  supportsCountValueVarianceThreshold = false;
   transferBaseTransportRupees: number | null = null;
   transferCostPerKmRupees: number | null = null;
   transferHandlingPerUnitRupees: number | null = null;
@@ -133,7 +135,7 @@ export class AdvancedControlsPageComponent implements OnInit {
       firstValueFrom(this.api.get<ApiEnvelope<OperationsHealth>>('/inventory/operations-health')),
       firstValueFrom(this.api.get<ApiEnvelope<AutonomousOperations>>('/inventory/autonomous-operations')),
     ]);
-    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = policy.value.data; this.syncTransferCostInputs(); }
+    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = policy.value.data; this.supportsCountValueVarianceThreshold = Number.isSafeInteger(this.policy.countValueVarianceThresholdPaise); this.syncTransferCostInputs(); }
     if (negativeRequests.status === 'fulfilled' && negativeRequests.value.data) this.negativeStockRequests = negativeRequests.value.data;
     if (operations.status === 'fulfilled' && operations.value.data) this.operations = operations.value.data;
     if (autonomous.status === 'fulfilled' && autonomous.value.data) {
@@ -153,6 +155,7 @@ export class AdvancedControlsPageComponent implements OnInit {
     try {
       const response = await firstValueFrom(this.api.put<ApiEnvelope<InventoryPolicy>>('/inventory/policy', {
         ...this.policy,
+        ...(this.supportsCountValueVarianceThreshold ? { countValueVarianceThresholdPaise: this.toPaise(this.countValueVarianceThresholdRupees) ?? 0 } : {}),
         transferBaseTransportCostPaise: this.toPaise(this.transferBaseTransportRupees),
         transferCostPerKmPaise: this.toPaise(this.transferCostPerKmRupees),
         transferHandlingCostPerUnitPaise: this.toPaise(this.transferHandlingPerUnitRupees),
@@ -202,6 +205,7 @@ export class AdvancedControlsPageComponent implements OnInit {
 
   private toPaise(value: number | null) { return value === null ? null : Math.round(value * 100); }
   private syncTransferCostInputs() {
+    this.countValueVarianceThresholdRupees = (this.policy.countValueVarianceThresholdPaise ?? 10_000) / 100;
     this.transferBaseTransportRupees = this.policy.transferBaseTransportCostPaise === null ? null : this.policy.transferBaseTransportCostPaise / 100;
     this.transferCostPerKmRupees = this.policy.transferCostPerKmPaise === null ? null : this.policy.transferCostPerKmPaise / 100;
     this.transferHandlingPerUnitRupees = this.policy.transferHandlingCostPerUnitPaise === null ? null : this.policy.transferHandlingCostPerUnitPaise / 100;

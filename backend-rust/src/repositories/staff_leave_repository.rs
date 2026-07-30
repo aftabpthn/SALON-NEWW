@@ -1,6 +1,7 @@
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::Serialize;
-use sqlx::{FromRow, PgPool};
+use serde_json::json;
+use sqlx::{FromRow, PgConnection, PgPool};
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -72,6 +73,7 @@ struct LeaveRequestState {
     days: i32,
     status: String,
     version: i32,
+    requested_by: String,
 }
 
 pub async fn list_requests(
@@ -140,18 +142,18 @@ pub async fn create_request(
     input: NewLeaveRequest,
 ) -> Result<CreateOutcome, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let staff_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT active FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+    let staff_name = sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(NULLIF(appointment_display_name,''),TRIM(CONCAT_WS(' ',first_name,last_name))) FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(&input.staff_id)
     .fetch_optional(&mut *tx)
     .await?
-    .unwrap_or(false);
-    if !staff_exists {
+    ;
+    let Some(staff_name) = staff_name else {
         return Ok(CreateOutcome::StaffNotFound);
-    }
+    };
 
     if input.leave_type != "unpaid" {
         let policy = sqlx::query_scalar::<_, i64>(
@@ -192,6 +194,21 @@ pub async fn create_request(
     .bind(&input.requested_by)
     .fetch_one(&mut *tx)
     .await?;
+    notify_leave_managers(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &input.requested_by,
+        &id,
+        "Leave request",
+        &format!(
+            "{staff_name} requested {} leave from {} to {}.",
+            input.leave_type,
+            input.start_date.format("%d/%m/%Y"),
+            input.end_date.format("%d/%m/%Y")
+        ),
+    )
+    .await?;
     tx.commit().await?;
     Ok(CreateOutcome::Created(id))
 }
@@ -208,7 +225,7 @@ pub async fn decide_request(
 ) -> Result<DecisionOutcome, sqlx::Error> {
     let mut tx = db.begin().await?;
     let request = sqlx::query_as::<_, LeaveRequestState>(
-        "SELECT staff_id,leave_type,start_date,end_date,days,status,version FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+        "SELECT staff_id,leave_type,start_date,end_date,days,status,version,requested_by FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
     )
     .bind(tenant_id).bind(branch_id).bind(request_id).fetch_optional(&mut *tx).await?;
     let Some(request) = request else {
@@ -252,6 +269,14 @@ pub async fn decide_request(
     .bind(tenant_id).bind(branch_id).bind(request_id).bind(decision).bind(reviewer_id).bind(review_note)
     .execute(&mut *tx).await?;
 
+    sqlx::query("UPDATE notifications SET is_read=TRUE,metadata_json=jsonb_set(metadata_json,'{status}',to_jsonb($4::TEXT),TRUE),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND resource_type='staff_leave_request' AND resource_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(request_id).bind(decision).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json) VALUES($1,$2,$3,$4,'staff_leave_decision',$5,$6,'staff_leave_request',$7,$8)")
+        .bind(tenant_id).bind(branch_id).bind(&request.requested_by).bind(reviewer_id)
+        .bind(format!("Leave request {decision}"))
+        .bind(format!("Your {} leave request from {} to {} was {decision}.", request.leave_type, request.start_date.format("%d/%m/%Y"), request.end_date.format("%d/%m/%Y")))
+        .bind(request_id).bind(json!({"deepLink":"/staff/leaves","status":decision})).execute(&mut *tx).await?;
+
     if decision == "approved" {
         let schedule_status = match request.leave_type.as_str() {
             "annual" => "annual_leave",
@@ -281,6 +306,111 @@ pub async fn decide_request(
     }
     tx.commit().await?;
     Ok(DecisionOutcome::Updated)
+}
+
+pub async fn withdraw_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    expected_version: i32,
+) -> Result<DecisionOutcome, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let updated = sqlx::query(
+        "UPDATE staff_leave_requests SET status='withdrawn',reviewed_by=$5,reviewed_at=NOW(),review_note='Withdrawn by requester',version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND staff_id=$4 AND status='pending' AND version=$6",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(request_id)
+    .bind(staff_id)
+    .bind(actor_user_id)
+    .bind(expected_version)
+    .execute(&mut *tx)
+    .await?;
+    if updated.rows_affected() == 1 {
+        sqlx::query("UPDATE notifications SET is_read=TRUE,metadata_json=jsonb_set(metadata_json,'{status}','\"withdrawn\"'::jsonb,TRUE),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND resource_type='staff_leave_request' AND resource_id=$3")
+            .bind(tenant_id).bind(branch_id).bind(request_id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(DecisionOutcome::Updated);
+    }
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND staff_id=$4)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(request_id)
+    .bind(staff_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(if exists {
+        DecisionOutcome::Conflict
+    } else {
+        DecisionOutcome::NotFound
+    })
+}
+
+async fn notify_leave_managers(
+    tx: &mut PgConnection,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    request_id: &str,
+    title: &str,
+    body: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json)
+           SELECT $1,$2,u.id,$3,'staff_leave_request',$5,$6,'staff_leave_request',$7,$8
+             FROM users u
+             LEFT JOIN user_branch_roles ubr ON ubr.tenant_id=u.tenant_id AND ubr.user_id=u.id AND ubr.branch_id=$2 AND ubr.active=TRUE
+             LEFT JOIN roles r ON r.tenant_id=u.tenant_id AND r.id=COALESCE(ubr.role_id,u.role_id)
+            WHERE u.tenant_id=$1 AND u.active=TRUE AND u.id<>$3
+              AND COALESCE(ubr.branch_id,u.branch_id)=$2
+              AND (REGEXP_REPLACE(LOWER(COALESCE(ubr.role_name,u.role_name)), '[-_ ]', '', 'g') IN ('owner','admin','manager','regionalhead')
+                   OR ((COALESCE(r.permissions_json,'[]'::jsonb) ? $4 OR COALESCE(r.permissions_json,'[]'::jsonb) ? 'staff.app.leaves.manage')
+                       AND NOT (COALESCE(r.denied_permissions_json,'[]'::jsonb) ? $4)
+                       AND NOT (COALESCE(r.denied_permissions_json,'[]'::jsonb) ? 'staff.app.leaves.manage')))"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(actor_user_id).bind("staff.leave.manage").bind(title).bind(body).bind(request_id)
+    .bind(json!({"deepLink":"/staff/leave-management?status=pending","status":"pending"})).execute(&mut *tx).await?;
+    Ok(())
+}
+
+pub async fn restore_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    expected_version: i32,
+) -> Result<DecisionOutcome, sqlx::Error> {
+    let updated = sqlx::query(
+        "UPDATE staff_leave_requests SET status='pending',reviewed_by=NULL,reviewed_at=NULL,review_note='',version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='withdrawn' AND version=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(request_id)
+    .bind(expected_version)
+    .execute(db)
+    .await?;
+    if updated.rows_affected() == 1 {
+        return Ok(DecisionOutcome::Updated);
+    }
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(request_id)
+    .fetch_one(db)
+    .await?;
+    Ok(if exists {
+        DecisionOutcome::Conflict
+    } else {
+        DecisionOutcome::NotFound
+    })
 }
 
 pub async fn balances(

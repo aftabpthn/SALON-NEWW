@@ -11,7 +11,7 @@ type AttendanceColumn =
   | 'name' | 'code' | 'salary' | 'workingDays' | 'leaveBalance' | 'specialLeaveBalance'
   | 'leaveAvailed' | 'specialLeaveAvailed' | 'operationMeetings' | 'operationTasks' | 'penalty' | 'leavesAccrued'
   | 'weeklyOffAdjustment' | 'specialLeaveAdjustment' | 'revisedLeaveBalance'
-  | 'revisedSpecialLeaveBalance' | 'earnedSalary' | 'overtimePay' | 'commission' | 'grossPay'
+  | 'revisedSpecialLeaveBalance' | 'earnedSalary' | 'overtimePay' | 'serviceCommission' | 'productCommission' | 'commission' | 'grossPay'
   | 'deductions' | 'advanceRecovery' | 'netPay' | 'payrollStatus' | 'comments';
 
 type AttendanceSummaryRow = {
@@ -41,6 +41,10 @@ type AttendanceDetail = {
   id: string | null;
   businessDate: string;
   scheduledStatus: string | null;
+  scheduledShift1Start: string | null;
+  scheduledShift1End: string | null;
+  scheduledShift2Start: string | null;
+  scheduledShift2End: string | null;
   attendanceStatus: string | null;
   manualStatus: string | null;
   clockInAt: string | null;
@@ -95,7 +99,8 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     { key: 'leavesAccrued', label: 'Leaves Accrued' }, { key: 'weeklyOffAdjustment', label: 'Weekly Off Adjustment' },
     { key: 'specialLeaveAdjustment', label: 'Special Leave Adjustment' }, { key: 'revisedLeaveBalance', label: 'Revised Leave Balance' },
     { key: 'revisedSpecialLeaveBalance', label: 'Revised Special Leave Balance' }, { key: 'earnedSalary', label: 'Earned Salary' },
-    { key: 'overtimePay', label: 'OT Pay' }, { key: 'commission', label: 'Commission' }, { key: 'grossPay', label: 'Gross Pay' },
+    { key: 'overtimePay', label: 'OT Pay' }, { key: 'serviceCommission', label: 'Service Commission' },
+    { key: 'productCommission', label: 'Product Commission' }, { key: 'commission', label: 'Total Commission' }, { key: 'grossPay', label: 'Gross Pay' },
     { key: 'deductions', label: 'Deductions' }, { key: 'advanceRecovery', label: 'Advance Recovery' },
     { key: 'netPay', label: 'Net Pay' }, { key: 'payrollStatus', label: 'Payroll Status' }, { key: 'comments', label: 'Comments' },
   ];
@@ -282,7 +287,8 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
       `${row.operationMeetingPresent}/${row.operationMeetingAbsent}`, `${row.operationTaskCompleted}/${row.operationTaskMissed}`,
       this.money(row.penaltyPaise), row.leavesAccrued, row.weeklyOffAdjustment,
       row.specialLeaveAdjustment, row.revisedLeaveBalance, row.revisedSpecialLeaveBalance,
-      this.payrollMoney(row, 'earnedSalaryPaise'), this.payrollMoney(row, 'overtimePaise'), this.payrollMoney(row, 'commissionPaise'),
+      this.payrollMoney(row, 'earnedSalaryPaise'), this.payrollMoney(row, 'overtimePaise'),
+      this.payrollMoney(row, 'serviceCommissionPaise'), this.payrollMoney(row, 'productCommissionPaise'), this.payrollMoney(row, 'commissionPaise'),
       this.payrollMoney(row, 'grossPaise'), this.payrollMoney(row, 'deductionsPaise'), this.payrollMoney(row, 'advanceRecoveryPaise'),
       this.payrollMoney(row, 'netPaise'), this.payrollStatus(row), row.comments,
     ].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','));
@@ -298,6 +304,10 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
 
   openPayroll() {
     void this.router.navigate(['/staff/payroll'], { queryParams: { cycle: this.cycle, year: this.year, month: this.month, staffId: this.staffId || null } });
+  }
+
+  openCommissionSettings(row: AttendanceSummaryRow, tab: 'Services' | 'Products') {
+    void this.router.navigate(['/staff', row.staffId], { queryParams: { tab } });
   }
 
   money(value: number | null) {
@@ -335,6 +345,18 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     return (detail.attendanceStatus || detail.scheduledStatus || 'Not recorded').replaceAll('_', ' ');
   }
 
+  scheduleLabel(detail: AttendanceDetail) {
+    const shifts = [
+      this.shiftLabel(detail.scheduledShift1Start, detail.scheduledShift1End),
+      this.shiftLabel(detail.scheduledShift2Start, detail.scheduledShift2End),
+    ].filter(Boolean);
+    return shifts.join(' + ') || 'Not captured (legacy)';
+  }
+
+  sourceLabel(detail: AttendanceDetail) {
+    return detail.id ? `${detail.source || 'manual'} · calculated` : 'schedule only';
+  }
+
   operationLabel(operation: AttendanceOperation) {
     const status = operation.attendanceStatus || operation.taskStatus || operation.status;
     return `${operation.title} · ${operation.operationType.replaceAll('_', ' ')} · ${status || 'planned'}`;
@@ -347,6 +369,10 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   }
 
   private toIso(value: string) { return value ? new Date(value).toISOString() : null; }
+
+  private shiftLabel(start: string | null, end: string | null) {
+    return start && end ? `${start.slice(0, 5)}–${end.slice(0, 5)}` : '';
+  }
 
   private query(includeStaff = true) {
     const params = new URLSearchParams({ cycle: this.cycle, year: String(this.year), month: String(this.month) });

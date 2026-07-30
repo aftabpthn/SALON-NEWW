@@ -173,6 +173,7 @@
       <label>{{ 'inventory.ui.2dfbcefb7b' | translate }}<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">{{ 'inventory.ui.c74e4e7c5c' | translate }}</option><option value="fifo">{{ 'inventory.ui.07c257b166' | translate }}</option></select></label>
       <label>{{ 'inventory.ui.e3d400bee8' | translate }}<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
       <label>{{ 'inventory.ui.a692bbeff4' | translate }}<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
+      @if (supportsCountValueVarianceThreshold) { <label>Stock-count value approval (₹)<input type="number" min="0" step="0.01" [(ngModel)]="countValueVarianceThresholdRupees" /></label> }
       <label>Reorder history (days)<input type="number" min="14" max="365" [(ngModel)]="policy.reorderHistoryDays" /></label>
       <label>Reorder coverage (days)<input type="number" min="7" max="180" [(ngModel)]="policy.reorderCoverageDays" /></label>
       <label>Transfer base transport (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferBaseTransportRupees" /></label>

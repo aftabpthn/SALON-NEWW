@@ -134,3 +134,55 @@ variable "extra_cors_allowed_origins" {
   type        = list(string)
   default     = []
 }
+
+variable "support_email_receipt_rule_set_name" {
+  description = "Existing active SES receipt rule set that will receive support email. Required when support_email_recipient_map is non-empty."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = length(var.support_email_recipient_map) == 0 || length(trimspace(var.support_email_receipt_rule_set_name)) > 0
+    error_message = "support_email_receipt_rule_set_name is required when support_email_recipient_map is configured."
+  }
+}
+
+variable "support_email_recipient_map" {
+  description = "Inbound support address to authoritative tenant and branch scope. Empty disables the SES bridge."
+  type = map(object({
+    tenant_id = string
+    branch_id = string
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for recipient, scope in var.support_email_recipient_map :
+      length(split("@", trimspace(recipient))) == 2 &&
+      length(trimspace(scope.tenant_id)) > 0 &&
+      length(trimspace(scope.branch_id)) > 0
+    ]) && length(jsonencode(var.support_email_recipient_map)) <= 3000
+    error_message = "support_email_recipient_map requires valid addresses, non-empty tenant/branch IDs, and a JSON size up to 3000 bytes."
+  }
+}
+
+variable "support_email_webhook_url" {
+  description = "Optional public Rust support-email webhook URL. Defaults to the generated CloudFront /api endpoint."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.support_email_webhook_url == "" || startswith(var.support_email_webhook_url, "https://")
+    error_message = "support_email_webhook_url must use HTTPS."
+  }
+}
+
+variable "support_email_raw_retention_days" {
+  description = "Days to retain private raw MIME email for recovery and attachment audit."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.support_email_raw_retention_days >= 1 && var.support_email_raw_retention_days <= 365
+    error_message = "support_email_raw_retention_days must be between 1 and 365."
+  }
+}

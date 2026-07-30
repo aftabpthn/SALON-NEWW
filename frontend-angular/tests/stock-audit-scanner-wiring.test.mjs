@@ -17,4 +17,7 @@ for (const path of [
 assert.ok(scanner.includes('/inventory/scanner-events'));
 assert.ok(scanner.includes('OFFLINE_QUEUE_KEY'));
 assert.ok(scanner.includes('/inventory/stock-audits/${this.auditSessionId}/counts'));
+assert.ok(audit.includes('this.sessions[0]?.id'), 'stock audit must select the first available session on initial load');
+assert.ok(audit.includes("queryParams: { auditSessionId: this.selected.session.id }"), 'stock audit must hand the selected session to the scanner');
+assert.ok(scanner.includes("queryParamMap.get('auditSessionId')"), 'scanner must accept a stock audit session handoff');
 assert.ok(routes.includes("path: 'inventory/stock-audit'"));

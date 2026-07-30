@@ -5,6 +5,9 @@ import { IonContent, IonSpinner } from "@ionic/angular/standalone";
 import { environment } from "../../../environments/environment";
 import { StaffAppService } from "../../core/staff-app.service";
 
+const STAFF_LOGIN_PREFILL_KEY = "auraStaffLoginPrefill";
+type StaffLoginPrefill = { tenantId?: string; branchId?: string; loginId?: string };
+
 @Component({
   standalone: true,
   imports: [FormsModule, IonContent, IonSpinner],
@@ -177,7 +180,9 @@ export class StaffLoginPage {
   mfaSetupCode = "";
   recoveryCodes: string[] = [];
 
-  constructor(readonly staff: StaffAppService, private readonly router: Router) {}
+  constructor(readonly staff: StaffAppService, private readonly router: Router) {
+    this.restorePrefill();
+  }
 
   async login(event?: Event) {
     event?.preventDefault();
@@ -186,6 +191,7 @@ export class StaffLoginPage {
     this.message.set("");
     try {
       await this.staff.login({ tenantId: this.tenantId, branchId: this.branchId, loginId: this.loginId, password: this.password, mfaCode: this.mfaCode });
+      this.savePrefill();
       this.message.set("Staff session created. Opening dashboard...");
       await this.router.navigateByUrl("/staff/dashboard");
     } catch {
@@ -196,6 +202,25 @@ export class StaffLoginPage {
     }
   }
 
+
+  private restorePrefill(): void {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STAFF_LOGIN_PREFILL_KEY) || "null") as StaffLoginPrefill | null;
+      this.tenantId = saved?.tenantId || "";
+      this.branchId = saved?.branchId || "";
+      this.loginId = saved?.loginId || "";
+    } catch {
+      localStorage.removeItem(STAFF_LOGIN_PREFILL_KEY);
+    }
+  }
+
+  private savePrefill(): void {
+    localStorage.setItem(STAFF_LOGIN_PREFILL_KEY, JSON.stringify({
+      tenantId: this.tenantId.trim(),
+      branchId: this.branchId.trim(),
+      loginId: this.loginId.trim()
+    }));
+  }
   async changePassword(event?: Event) {
     event?.preventDefault();
     this.message.set("");

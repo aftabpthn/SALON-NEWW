@@ -35,7 +35,7 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
 
         @if (actionMessage()) { <section staffPageState class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
         @if (refreshWarning()) {
-          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Couldn’t refresh everything.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
+          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><div><p>Couldn’t refresh everything.</p>@for (error of optionalErrors(); track error) { <small>{{ error }}</small> }</div><button type="button" class="text-control" [disabled]="refreshing()" [attr.aria-busy]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
         }
 
         @if (initialLoading()) {
@@ -109,6 +109,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     window.addEventListener("aura:attendance-updated", this.staffDataUpdated);
     window.addEventListener("aura:tasks-updated", this.staffDataUpdated);
     window.addEventListener("aura:leaves-updated", this.staffDataUpdated);
+    window.addEventListener("aura:appointments-updated", this.staffDataUpdated);
     this.queuedActions.set(this.staff.offlineQueueSize());
     void this.load();
   }
@@ -117,6 +118,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     window.removeEventListener("aura:attendance-updated", this.staffDataUpdated);
     window.removeEventListener("aura:tasks-updated", this.staffDataUpdated);
     window.removeEventListener("aura:leaves-updated", this.staffDataUpdated);
+    window.removeEventListener("aura:appointments-updated", this.staffDataUpdated);
   }
   @HostListener("window:online") onOnline() { this.online.set(true); this.queuedActions.set(this.staff.offlineQueueSize()); void this.load(); }
   @HostListener("window:offline") onOffline() { this.online.set(false); }
@@ -170,7 +172,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       if (name === "preferences") this.preferences.set(result.value as StaffWorkspacePreferences);
     });
     this.optionalErrors.set(errors);
-    this.refreshWarning.set(hasData && errors.length > 0);
+    this.refreshWarning.set(errors.length > 0);
     this.queuedActions.set(this.staff.offlineQueueSize());
     this.initialLoading.set(false);
     this.refreshing.set(false);

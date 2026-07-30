@@ -18,6 +18,18 @@ pub struct SessionDetails {
     pub items: Vec<SessionItemView>,
     pub counts: Vec<repo::CountLineRecord>,
     pub findings: Vec<repo::FindingRecord>,
+    pub value_summary: ValueSummary,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValueSummary {
+    pub expected_value_paise: Option<i64>,
+    pub counted_value_paise: Option<i64>,
+    pub net_variance_value_paise: Option<i64>,
+    pub absolute_variance_value_paise: Option<i64>,
+    pub approval_threshold_paise: i64,
+    pub owner_approval_required: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -29,8 +41,17 @@ pub struct SessionItemView {
     pub sku: String,
     pub unit: String,
     pub expected_quantity: Option<i32>,
+    pub expected_unit_cost_paise: Option<i64>,
+    pub expected_value_paise: Option<i64>,
+    pub expected_source_ledger_id: Option<String>,
+    pub expected_ledger_movement_count: Option<i64>,
+    pub expected_provenance_status: Option<String>,
+    pub expected_movement_summary: Option<Value>,
     pub approved_quantity: Option<i32>,
     pub variance_quantity: Option<i32>,
+    pub counted_value_paise: Option<i64>,
+    pub variance_value_paise: Option<i64>,
+    pub variance_cause_suggestion: Option<String>,
     pub variance_reason: String,
     pub adjustment_ledger_id: Option<String>,
     pub posted_at: Option<DateTime<Utc>>,
@@ -68,13 +89,49 @@ pub async fn create(
     if !(1..=5).contains(&counters) || threshold < 0 {
         return Err(AppError::validation("invalid counter or recount threshold"));
     }
+    let policy =
+        crate::services::inventory_governance_service::policy(&state.db, tenant, branch).await?;
+    let variance_threshold_bps = policy
+        .get("countVarianceThresholdBps")
+        .and_then(Value::as_i64)
+        .unwrap_or(500) as i32;
+    let value_variance_threshold_paise = policy
+        .get("countValueVarianceThresholdPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(10_000);
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start stock audit"))?;
+    if repo::lock_snapshot_inventory(&mut tx, tenant, branch)
+        .await
+        .map_err(|_| AppError::internal("failed to lock inventory for stock audit"))?
+        == 0
+    {
+        return Err(AppError::validation(
+            "no active inventory items are available to count",
+        ));
+    }
+    let mismatch_count = repo::ledger_stock_mismatch_count(&mut tx, tenant, branch)
+        .await
+        .map_err(|_| AppError::internal("failed to verify inventory ledger integrity"))?;
+    if mismatch_count > 0 {
+        return Err(AppError::conflict(format!(
+            "{mismatch_count} active inventory item(s) do not match the stock ledger; resolve Operations Health exceptions before starting an audit"
+        )));
+    }
     let id = repo::create_session(
-        &mut tx, tenant, branch, name, blind, counters, threshold, actor,
+        &mut tx,
+        tenant,
+        branch,
+        name,
+        blind,
+        counters,
+        threshold,
+        variance_threshold_bps,
+        value_variance_threshold_paise,
+        actor,
     )
     .await
     .map_err(|_| AppError::internal("failed to create stock audit"))?;
@@ -110,26 +167,62 @@ pub async fn details(
         session.ok_or_else(|| AppError::not_found("stock audit session was not found"))?;
     let hide_expected = session.blind_counting
         && matches!(session.status.as_str(), "counting" | "recount_required");
+    let value_summary = value_summary(&session, &items, hide_expected)?;
     Ok(SessionDetails {
         session,
         counts,
         findings,
         items: items
             .into_iter()
-            .map(|item| SessionItemView {
-                id: item.id,
-                inventory_item_id: item.inventory_item_id,
-                item_name: item.item_name,
-                sku: item.sku,
-                unit: item.unit,
-                expected_quantity: (!hide_expected).then_some(item.expected_quantity),
-                approved_quantity: item.approved_quantity,
-                variance_quantity: item.variance_quantity,
-                variance_reason: item.variance_reason,
-                adjustment_ledger_id: item.adjustment_ledger_id,
-                posted_at: item.posted_at,
+            .map(|item| {
+                let expected_value =
+                    stock_value_paise(item.expected_quantity, item.expected_unit_cost_paise)?;
+                let counted_value = item
+                    .approved_quantity
+                    .map(|quantity| stock_value_paise(quantity, item.expected_unit_cost_paise))
+                    .transpose()?;
+                let variance_value = item
+                    .variance_quantity
+                    .map(|quantity| stock_value_paise(quantity, item.expected_unit_cost_paise))
+                    .transpose()?;
+                let variance_cause_suggestion = suggested_variance_cause(
+                    item.variance_quantity,
+                    &item.expected_movement_summary,
+                )
+                .map(str::to_owned);
+                Ok(SessionItemView {
+                    id: item.id,
+                    inventory_item_id: item.inventory_item_id,
+                    item_name: item.item_name,
+                    sku: item.sku,
+                    unit: item.unit,
+                    expected_quantity: (!hide_expected).then_some(item.expected_quantity),
+                    expected_unit_cost_paise: (!hide_expected)
+                        .then_some(item.expected_unit_cost_paise),
+                    expected_value_paise: (!hide_expected).then_some(expected_value),
+                    expected_source_ledger_id: if hide_expected {
+                        None
+                    } else {
+                        item.expected_source_ledger_id.clone()
+                    },
+                    expected_ledger_movement_count: (!hide_expected)
+                        .then_some(item.expected_ledger_movement_count),
+                    expected_provenance_status: (!hide_expected)
+                        .then(|| item.expected_provenance_status.clone()),
+                    expected_movement_summary: (!hide_expected)
+                        .then(|| item.expected_movement_summary.clone()),
+                    approved_quantity: item.approved_quantity,
+                    variance_quantity: item.variance_quantity,
+                    counted_value_paise: counted_value,
+                    variance_value_paise: variance_value,
+                    variance_cause_suggestion,
+                    variance_reason: item.variance_reason,
+                    adjustment_ledger_id: item.adjustment_ledger_id,
+                    posted_at: item.posted_at,
+                })
             })
-            .collect(),
+            .collect::<Result<Vec<_>, AppError>>()?,
+        value_summary,
     })
 }
 
@@ -410,21 +503,14 @@ pub async fn approve(
     let items = repo::session_items(&state.db, tenant, branch, session_id)
         .await
         .map_err(|_| AppError::internal("failed to load stock audit items"))?;
-    let policy =
-        crate::services::inventory_governance_service::policy(&state.db, tenant, branch).await?;
-    let threshold_bps = policy
-        .get("countVarianceThresholdBps")
-        .and_then(serde_json::Value::as_i64)
-        .unwrap_or(500);
-    let exceeds_threshold = items.iter().any(|item| {
-        let variance = i64::from(item.variance_quantity.unwrap_or_default()).abs();
-        let expected = i64::from(item.expected_quantity).abs();
-        variance > 0
-            && (expected == 0 || variance.saturating_mul(10_000) / expected.max(1) > threshold_bps)
-    });
+    let exceeds_threshold = owner_approval_required(
+        &items,
+        session.count_variance_threshold_bps,
+        session.count_value_variance_threshold_paise,
+    )?;
     if exceeds_threshold && !matches!(actor_role, "owner" | "admin") {
         return Err(AppError::forbidden(
-            "owner approval is required above the configured count variance threshold",
+            "owner approval is required above the configured quantity or value variance threshold",
         ));
     }
     let mut tx = state
@@ -806,14 +892,169 @@ fn text<'a>(value: &'a str, max: usize, name: &str) -> Result<&'a str, AppError>
     Ok(value)
 }
 
+fn stock_value_paise(quantity: i32, unit_cost_paise: i64) -> Result<i64, AppError> {
+    i64::from(quantity)
+        .checked_mul(unit_cost_paise)
+        .ok_or_else(|| AppError::internal("stock audit value exceeds supported range"))
+}
+
+fn suggested_variance_cause(
+    variance: Option<i32>,
+    movement_summary: &Value,
+) -> Option<&'static str> {
+    match variance.unwrap_or_default() {
+        value if value > 0 => Some("possible_missing_inbound"),
+        value if value < 0 => {
+            let sale = movement_summary
+                .get("saleQuantity")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            let consumption = movement_summary
+                .get("consumptionQuantity")
+                .and_then(Value::as_i64)
+                .unwrap_or_default();
+            if consumption < 0 && sale == 0 {
+                Some("possible_unrecorded_consumption")
+            } else if sale < 0 && consumption == 0 {
+                Some("possible_missing_sale_or_checkout")
+            } else {
+                Some("unaccounted")
+            }
+        }
+        _ => None,
+    }
+}
+
+fn variance_value_totals(
+    items: &[repo::SessionItemRecord],
+) -> Result<Option<(i64, i64)>, AppError> {
+    if items.iter().any(|item| item.variance_quantity.is_none()) {
+        return Ok(None);
+    }
+    items.iter().try_fold(Some((0_i64, 0_i64)), |totals, item| {
+        let (net, absolute) = totals.unwrap_or_default();
+        let value = stock_value_paise(
+            item.variance_quantity.unwrap_or_default(),
+            item.expected_unit_cost_paise,
+        )?;
+        let net = net.checked_add(value).ok_or_else(|| {
+            AppError::internal("stock audit net variance exceeds supported range")
+        })?;
+        let absolute = absolute
+            .checked_add(value.abs())
+            .ok_or_else(|| AppError::internal("stock audit exposure exceeds supported range"))?;
+        Ok(Some((net, absolute)))
+    })
+}
+
+fn owner_approval_required(
+    items: &[repo::SessionItemRecord],
+    quantity_threshold_bps: i32,
+    value_threshold_paise: i64,
+) -> Result<bool, AppError> {
+    let quantity_exceeded = items.iter().any(|item| {
+        let variance = i64::from(item.variance_quantity.unwrap_or_default()).abs();
+        let expected = i64::from(item.expected_quantity).abs();
+        variance > 0
+            && (expected == 0
+                || variance.saturating_mul(10_000) / expected.max(1)
+                    > i64::from(quantity_threshold_bps))
+    });
+    let value_exceeded = variance_value_totals(items)?
+        .is_some_and(|(_, absolute)| absolute > 0 && absolute >= value_threshold_paise);
+    Ok(quantity_exceeded || value_exceeded)
+}
+
+fn value_summary(
+    session: &repo::SessionRecord,
+    items: &[repo::SessionItemRecord],
+    hide_expected: bool,
+) -> Result<ValueSummary, AppError> {
+    let expected = items.iter().try_fold(0_i64, |total, item| {
+        total
+            .checked_add(stock_value_paise(
+                item.expected_quantity,
+                item.expected_unit_cost_paise,
+            )?)
+            .ok_or_else(|| AppError::internal("stock audit expected value exceeds supported range"))
+    })?;
+    let counted = if items.iter().all(|item| item.approved_quantity.is_some()) {
+        Some(items.iter().try_fold(0_i64, |total, item| {
+            total
+                .checked_add(stock_value_paise(
+                    item.approved_quantity.unwrap_or_default(),
+                    item.expected_unit_cost_paise,
+                )?)
+                .ok_or_else(|| {
+                    AppError::internal("stock audit counted value exceeds supported range")
+                })
+        })?)
+    } else {
+        None
+    };
+    let variance = variance_value_totals(items)?;
+    Ok(ValueSummary {
+        expected_value_paise: (!hide_expected).then_some(expected),
+        counted_value_paise: counted,
+        net_variance_value_paise: variance.map(|value| value.0),
+        absolute_variance_value_paise: variance.map(|value| value.1),
+        approval_threshold_paise: session.count_value_variance_threshold_paise,
+        owner_approval_required: variance
+            .map(|_| {
+                owner_approval_required(
+                    items,
+                    session.count_variance_threshold_bps,
+                    session.count_value_variance_threshold_paise,
+                )
+            })
+            .transpose()?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn multiple_counter_average_rounds_half_up() {
         let values = [4_i32, 5, 5];
         assert_eq!(
             (values.iter().sum::<i32>() + values.len() as i32 / 2) / values.len() as i32,
             5
+        );
+    }
+
+    #[test]
+    fn value_threshold_counts_gains_and_losses_without_netting_risk() {
+        assert_eq!(stock_value_paise(-2, 5_000).unwrap(), -10_000);
+        let values = [10_000_i64, -10_000];
+        let net = values.iter().sum::<i64>();
+        let absolute = values.iter().map(|value| value.abs()).sum::<i64>();
+        assert_eq!(net, 0);
+        assert_eq!(absolute, 20_000);
+        assert!(absolute >= 15_000);
+    }
+
+    #[test]
+    fn variance_cause_is_neutral_and_uses_snapshot_movement_context() {
+        assert_eq!(
+            suggested_variance_cause(Some(2), &json!({})),
+            Some("possible_missing_inbound")
+        );
+        assert_eq!(
+            suggested_variance_cause(Some(-1), &json!({"consumptionQuantity": -4})),
+            Some("possible_unrecorded_consumption")
+        );
+        assert_eq!(
+            suggested_variance_cause(Some(-1), &json!({"saleQuantity": -4})),
+            Some("possible_missing_sale_or_checkout")
+        );
+        assert_eq!(
+            suggested_variance_cause(
+                Some(-1),
+                &json!({"saleQuantity": -2, "consumptionQuantity": -2})
+            ),
+            Some("unaccounted")
         );
     }
 }

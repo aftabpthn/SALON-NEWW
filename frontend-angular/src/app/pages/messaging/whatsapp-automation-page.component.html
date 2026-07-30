@@ -3,7 +3,7 @@
   @if (error) {
     <p class="inline-error">{{ error }}</p>
   }
-  <nav class="tabs" aria-label="WhatsApp automation sections">@for (item of ['overview','inbox','rules','handoffs','campaigns','templates']; track item) {
+  <nav class="tabs" aria-label="WhatsApp automation sections">@for (item of ['overview','inbox','rules','handoffs','templates']; track item) {
     <button type="button" [class.active]="tab === item" [attr.aria-current]="tab === item ? 'page' : null" (click)="tab = item">{{ label(item) }}</button>
   }</nav>
 
@@ -38,18 +38,6 @@
   <tr><td>{{ row.threadId }}</td><td>{{ row.reason }}</td><td>{{ label(row.priority) }}</td><td>{{ label(row.status) }}</td><td>{{ row.assignedTo || '-' }}</td><td>{{ formatDate(row.createdAt) }}</td></tr>
 }</tbody></table></div>@if (!handoffs.length) {
 <div class="empty">No handoffs yet</div>
-}</section>
-}
-
-@if (tab === 'campaigns') {
-  <section class="panel"><div class="panel-head"><h2>Campaign planner</h2><span>{{ plans.length }} records</span></div><div class="form-grid"><input [(ngModel)]="planTitle" placeholder="Plan title" /><select [(ngModel)]="planType"><option value="empty_slot_fill">Empty slot fill</option><option value="inactive_client_recovery">Inactive client recovery</option><option value="membership_renewal">Membership renewal</option><option value="vip_retention">VIP retention</option></select><textarea [(ngModel)]="planMessage" placeholder="Approved message text"></textarea><button type="button" (click)="createPlan()" [disabled]="busy || !planTitle.trim() || !planMessage.trim()">Save draft</button></div><div class="table-wrap"><table><thead><tr><th scope="col">Title</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Scheduled</th><th scope="col">Actions</th></tr></thead><tbody>@for (row of plans; track row) {
-  <tr><td>{{ row.title }}</td><td>{{ label(row.campaignType) }}</td><td>{{ label(row.status) }}</td><td>{{ row.scheduledFor ? formatDate(row.scheduledFor) : '-' }}</td><td>@if (row.status === 'draft') {
-  <button type="button" (click)="approve(row)">Approve</button>
-  }@if (row.status === 'approved') {
-  <button type="button" (click)="schedule(row)">Schedule</button>
-}</td></tr>
-}</tbody></table></div>@if (!plans.length) {
-<div class="empty">No campaign plans yet</div>
 }</section>
 }
 

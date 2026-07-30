@@ -94,6 +94,11 @@ h2 {
   background: #f1fbf6;
   color: var(--dashboard-green);
 }
+.data-state.degraded {
+  border-color: #f6d58a;
+  background: #fff8e6;
+  color: #b45309;
+}
 
 .dashboard-titlebar button {
   color: var(--dashboard-ink);
