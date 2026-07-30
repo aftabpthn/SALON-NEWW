@@ -54,26 +54,26 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
           </section>
 
           <section class="account-grid">
-            <article class="summary-card premium-card">
+            <a class="summary-card premium-card" routerLink="/tabs/wishlist">
               <ion-icon name="heart-outline"></ion-icon>
               <strong>{{ savedSalonsCount() }} liked salons</strong>
               <span>Salons you have liked</span>
-            </article>
-            <article class="summary-card premium-card">
+            </a>
+            <a class="summary-card premium-card" routerLink="/tabs/saved-salons">
               <ion-icon name="bookmark-outline"></ion-icon>
               <strong>{{ marketplace.savedSalons().length }} saved salons</strong>
               <span>Your shortlist for later</span>
-            </article>
-            <article class="summary-card premium-card">
+            </a>
+            <a class="summary-card premium-card" routerLink="/tabs/bookings">
               <ion-icon name="sparkles-outline"></ion-icon>
               <strong>{{ upcomingCount() }} upcoming</strong>
               <span>Confirmed and pending visits</span>
-            </article>
-            <article class="summary-card premium-card">
+            </a>
+            <a class="summary-card premium-card" routerLink="/tabs/rewards">
               <ion-icon name="ribbon-outline"></ion-icon>
               <strong>{{ customer.membershipLabel || "Starter" }}</strong>
               <span>Loyalty and rewards status</span>
-            </article>
+            </a>
           </section>
 
           <aura-your-salons-list
@@ -429,6 +429,8 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       display: grid;
       gap: 7px;
       padding: 16px;
+      color: inherit;
+      text-decoration: none;
     }
 
     .summary-card ion-icon {

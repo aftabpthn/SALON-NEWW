@@ -20,8 +20,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
       @if (booking(); as booking) {
         <main class="page-narrow detail-page">
           <section class="itinerary-card" aria-labelledby="booking-service">
+            <button type="button" class="download-booking" aria-label="Download booking details" (click)="downloadInvoice($event)">
+              <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
+            </button>
             <div class="summary-top">
-              <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
+              <span class="booking-status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
               <h1 id="booking-service">{{ booking.serviceName }}</h1>
               <p>{{ booking.businessName }}</p>
             </div>
@@ -203,6 +206,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .detail-header ion-title { font-size: 1rem; font-weight: 850; letter-spacing: -0.015em; }
     .detail-page { display: grid; gap: 12px; max-width: 680px; }
     .itinerary-card {
+      position: relative;
       min-width: 0;
       overflow: hidden;
       border: 1px solid rgba(11, 47, 85, 0.24);
@@ -211,17 +215,45 @@ import { MarketplaceService } from "../../core/marketplace.service";
       background: var(--brand-900);
       box-shadow: 0 14px 34px rgba(6, 23, 43, 0.15);
     }
+    .download-booking {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 2;
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 13px;
+      color: #FFFFFF;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(10px);
+      font-size: 1.08rem;
+      cursor: pointer;
+    }
+    .download-booking:active { transform: scale(0.97); }
     .summary-top { padding: 16px 16px 12px; }
-    .summary-top .status-pill {
-      min-height: 26px;
-      padding: 5px 9px;
-      color: var(--brand-900);
-      border-color: rgba(255, 255, 255, 0.82);
-      background: #FFFFFF;
+    .booking-status-pill {
+      position: relative;
+      top: -16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      width: fit-content;
+      min-height: 20px;
+      padding: 4px 6px;
+      color: #047857;
+      border-color: rgba(52, 211, 153, 0.38);
+      background: #D1FAE5;
+      border-radius: 999px;
+      font-size: 0.58rem;
+      font-weight: 900;
+      line-height: 1;
       text-transform: capitalize;
       box-shadow: none;
     }
-    .summary-top .status-pill.closed { color: var(--muted); background: var(--surface-soft); }
+    .booking-status-pill.closed { color: var(--muted); background: var(--surface-soft); }
     .summary-top h1 {
       margin: 10px 0 3px;
       color: #FFFFFF;
@@ -431,7 +463,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .detail-page, .itinerary-card, .status-pill, .detail-actions ion-button, .utility-action, .option-row, .contact-options > summary .row-chevron, .more-options > summary::before, .policy-strip summary::before { animation: none; transition: none; }
+      .detail-page, .itinerary-card, .booking-status-pill, .detail-actions ion-button, .utility-action, .option-row, .contact-options > summary .row-chevron, .more-options > summary::before, .policy-strip summary::before { animation: none; transition: none; }
       .option-row:active { transform: none; }
     }
   `]

@@ -1,7 +1,7 @@
 import { Component, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
-import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToggle, IonToolbar } from "@ionic/angular/standalone";
+import { IonBackButton, IonButton, IonContent, IonIcon, IonToggle } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { fingerPrintOutline, phonePortraitOutline, trashOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
@@ -10,30 +10,44 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
 
 @Component({
   standalone: true,
-  imports: [FormsModule, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToggle, IonToolbar],
+  imports: [FormsModule, IonBackButton, IonButton, IonContent, IonIcon, IonToggle],
   template: `
-    <ion-header class="ion-no-border"><ion-toolbar><ion-buttons slot="start"><ion-back-button defaultHref="/tabs/profile"></ion-back-button></ion-buttons></ion-toolbar></ion-header>
     <ion-content>
       <main class="page-narrow settings-page">
-        <h1 class="page-title">Preferences</h1>
-        @if (marketplace.customer(); as customer) {
-          <section class="premium-card identity-card">
-            <div class="identity-avatar">{{ (customer.name || "?").charAt(0) }}</div>
+        <section class="settings-hero">
+          <div class="content-title-row">
+            <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
             <div>
-              <strong>{{ customer.name || "Aura customer" }}</strong>
-              <span>{{ customer.email || "No email saved" }}</span>
-              <span>{{ customer.phone || "No phone saved" }}</span>
-              <small>Signed in with {{ customer.authProvider || "customer login" }}</small>
+              <p class="settings-eyebrow">Account controls</p>
+              <h1 class="page-title">Preferences</h1>
             </div>
-          </section>
-        }
-        <section class="premium-card setting-row"><div><strong>Booking reminders</strong><span>Push reminders before appointments</span></div><ion-toggle [(ngModel)]="preferences.bookingReminders" (ionChange)="save()" aria-label="Booking reminders"></ion-toggle></section>
-        <section class="premium-card setting-row"><div><strong>Marketing offers</strong><span>Personalized beauty and wellness deals</span></div><ion-toggle [(ngModel)]="preferences.promotions" (ionChange)="save()" aria-label="Marketing offers"></ion-toggle></section>
-        <section class="premium-card setting-row"><div><strong>Loyalty alerts</strong><span>Rewards, points, and membership updates</span></div><ion-toggle [(ngModel)]="preferences.loyalty" (ionChange)="save()" aria-label="Loyalty alerts"></ion-toggle></section>
-        <section class="premium-card setting-row"><div><strong>Membership alerts</strong><span>Renewal, expiry, and benefit updates</span></div><ion-toggle [(ngModel)]="preferences.membership" (ionChange)="save()" aria-label="Membership alerts"></ion-toggle></section>
+          </div>
+          <p class="settings-intro">Manage alerts, login security, and devices connected to your Aura account.</p>
 
-        <section class="section-heading">
-          <h2>Device security</h2>
+          @if (marketplace.customer(); as customer) {
+            <section class="identity-card">
+              <div class="identity-avatar">{{ (customer.name || "?").charAt(0) }}</div>
+              <div>
+                <strong>{{ customer.name || "Aura customer" }}</strong>
+                <span>{{ customer.email || "No email saved" }}</span>
+                <span>{{ customer.phone || "No phone saved" }}</span>
+                <small>Signed in with {{ customer.authProvider || "customer login" }}</small>
+              </div>
+            </section>
+          }
+        </section>
+
+        <section class="settings-card" aria-labelledby="notification-settings-title">
+          <div class="settings-section-heading">
+            <p>Notifications</p>
+            <h2 id="notification-settings-title">Choose what reaches you</h2>
+          </div>
+          <div class="settings-list">
+            <section class="setting-row"><div><strong>Booking reminders</strong><span>Push reminders before appointments</span></div><ion-toggle [(ngModel)]="preferences.bookingReminders" (ionChange)="save()" aria-label="Booking reminders"></ion-toggle></section>
+            <section class="setting-row"><div><strong>Marketing offers</strong><span>Personalized beauty and wellness deals</span></div><ion-toggle [(ngModel)]="preferences.promotions" (ionChange)="save()" aria-label="Marketing offers"></ion-toggle></section>
+            <section class="setting-row"><div><strong>Loyalty alerts</strong><span>Rewards, points, and membership updates</span></div><ion-toggle [(ngModel)]="preferences.loyalty" (ionChange)="save()" aria-label="Loyalty alerts"></ion-toggle></section>
+            <section class="setting-row"><div><strong>Membership alerts</strong><span>Renewal, expiry, and benefit updates</span></div><ion-toggle [(ngModel)]="preferences.membership" (ionChange)="save()" aria-label="Membership alerts"></ion-toggle></section>
+          </div>
         </section>
 
         @if (message) {
@@ -43,26 +57,31 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
           <p class="error-text">{{ auth.error() }}</p>
         }
 
-        <section class="premium-card setting-row">
-          <div class="setting-copy">
-            <span class="setting-icon"><ion-icon name="finger-print-outline"></ion-icon></span>
+        <section class="settings-card" aria-labelledby="security-settings-title">
+          <div class="settings-section-heading device-heading">
             <div>
-              <strong>Biometric Login</strong>
-              <span>Optional Face ID, Touch ID, or fingerprint check when opening this device.</span>
-              @if (!auth.biometricSupported()) {
-              }
-            </div>
-          </div>
-          <ion-toggle [ngModel]="auth.biometricEnabled()" (ionChange)="toggleBiometric($event)" [disabled]="auth.loading() || !auth.biometricSupported()" aria-label="Biometric Login"></ion-toggle>
-        </section>
-
-        <section class="premium-card device-panel">
-          <div class="device-heading">
-            <div>
-              <strong>Active Devices</strong>
-              <span>Manage browsers and phones where your Aura account is signed in.</span>
+              <p>Device security</p>
+              <h2 id="security-settings-title">Protect your access</h2>
             </div>
             <ion-button size="small" fill="outline" (click)="loadDevices()" [disabled]="auth.loading()">Refresh</ion-button>
+          </div>
+
+          <section class="setting-row security-row">
+            <div class="setting-copy">
+              <span class="setting-icon"><ion-icon name="finger-print-outline"></ion-icon></span>
+              <div>
+                <strong>Biometric Login</strong>
+                <span>Optional Face ID, Touch ID, or fingerprint check when opening this device.</span>
+                @if (!auth.biometricSupported()) {
+                }
+              </div>
+            </div>
+            <ion-toggle [ngModel]="auth.biometricEnabled()" (ionChange)="toggleBiometric($event)" [disabled]="auth.loading() || !auth.biometricSupported()" aria-label="Biometric Login"></ion-toggle>
+          </section>
+
+          <div class="devices-title">
+            <strong>Active Devices</strong>
+            <span>Manage browsers and phones where your Aura account is signed in.</span>
           </div>
           @if (!devices.length) {
             <p class="empty-state">No active devices found yet.</p>
@@ -85,28 +104,98 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     </ion-content>
   `,
   styles: [`
-    .settings-page { display: grid; gap: 14px; }
+    .settings-page { display: grid; gap: 14px; padding-bottom: 32px; }
+    .settings-hero {
+      display: grid;
+      gap: 14px;
+      padding: 4px 0 2px;
+    }
+    .content-title-row { display: flex; align-items: center; gap: 10px; }
+    .content-title-row .page-title { margin: 0; color: var(--brand-950); font-size: clamp(2.1rem, 8vw, 3.4rem); font-weight: 900; letter-spacing: -0.055em; line-height: 0.95; }
+    .content-back-button {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      margin-left: -8px;
+      --color: var(--brand-950);
+      --icon-font-size: 25px;
+      --background: transparent;
+      --border-radius: 12px;
+      --padding-start: 0;
+      --padding-end: 0;
+      filter: drop-shadow(0.45px 0 0 var(--brand-950));
+    }
+    .settings-eyebrow,
+    .settings-section-heading p {
+      margin: 0 0 4px;
+      color: var(--primary);
+      font-size: 0.7rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .settings-intro {
+      max-width: 620px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 750;
+      line-height: 1.5;
+    }
     .identity-card {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       gap: 14px;
       align-items: center;
-      padding: 18px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 14px 34px rgba(6, 23, 43, 0.08);
     }
     .identity-avatar {
-      width: 58px;
-      height: 58px;
+      width: 56px;
+      height: 56px;
       display: grid;
       place-items: center;
-      border-radius: 20px;
+      border-radius: 18px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       font-size: 1.35rem;
       font-weight: 900;
     }
-    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px; }
-    .section-heading { margin-top: 10px; }
-    .section-heading h2 { margin: 0; font-size: 1.45rem; letter-spacing: 0; }
+    .settings-card {
+      overflow: hidden;
+      display: grid;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: #ffffff;
+      box-shadow: 0 16px 38px rgba(6, 23, 43, 0.08);
+    }
+    .settings-section-heading {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .settings-section-heading h2 {
+      margin: 0;
+      color: var(--brand-950);
+      font-size: clamp(1.3rem, 4vw, 1.65rem);
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+    }
+    .settings-list { display: grid; }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 16px 18px;
+      border-top: 1px solid rgba(203, 213, 225, 0.74);
+    }
+    .settings-list .setting-row:first-child { border-top: 0; }
+    .security-row { border-top: 0; }
     .setting-copy, .device-heading, .device-row { display: flex; align-items: center; gap: 12px; }
     .setting-icon {
       flex: 0 0 auto;
@@ -119,13 +208,21 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       background: var(--primary-soft);
       font-size: 1.14rem;
     }
-    .device-panel { display: grid; gap: 14px; padding: 18px; }
-    .device-heading { justify-content: space-between; gap: 16px; }
-    .device-row {
-      padding: 12px 0;
+    .device-heading { align-items: end; justify-content: space-between; gap: 16px; }
+    .devices-title {
+      display: grid;
+      gap: 4px;
+      padding: 16px 18px 4px;
       border-top: 1px solid var(--border);
     }
+    .device-row {
+      padding: 14px 18px;
+      border-top: 1px solid rgba(203, 213, 225, 0.74);
+    }
     .device-row div { min-width: 0; flex: 1; }
+    .settings-card > ion-button {
+      margin: 14px 18px 18px;
+    }
     .empty-state, .notice-text, .error-text {
       margin: 0;
       padding: 12px 14px;
@@ -136,13 +233,16 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     .empty-state { color: var(--muted); background: var(--surface-soft); }
     .notice-text { color: var(--primary); background: var(--primary-soft); border: 1px solid rgba(11, 70, 120, 0.22); }
     .error-text { color: #EF4444; background: #fff1f2; border: 1px solid rgba(225, 29, 72, 0.16); }
+    .settings-card .empty-state { margin: 14px 18px 0; }
     strong, span { display: block; }
-    strong { margin-bottom: 5px; }
-    span { color: var(--muted); line-height: 1.4; }
-    small { display: block; margin-top: 7px; color: var(--primary); font-weight: 800; }
+    strong { margin-bottom: 5px; color: var(--brand-950); font-weight: 900; }
+    span { color: var(--muted); font-size: 0.86rem; font-weight: 750; line-height: 1.4; }
+    small { display: block; margin-top: 7px; color: var(--primary); font-size: 0.76rem; font-weight: 850; }
     @media (max-width: 599px) {
+      .settings-page { gap: 12px; }
       .setting-row, .device-heading { align-items: flex-start; }
       .device-heading { flex-direction: column; }
+      .content-title-row .page-title { font-size: 2rem; }
     }
   `]
 })

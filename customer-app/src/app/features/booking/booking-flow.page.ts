@@ -4,18 +4,27 @@ import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, I
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { AvailabilityDay } from "../../core/api.types";
+import { AvailabilityDay, AvailabilitySlot, ServiceItem, StaffMember } from "../../core/api.types";
 
 const PENDING_BOOKING_INTENT_KEY = "auraCustomerPendingBookingIntent";
 
 type PendingBookingIntent = {
   slug: string;
+  items?: BookingFlowItem[];
+  serviceId?: string;
+  staffId?: string | null;
+  date: string;
+  slotStartAt?: string;
+  activeItemIndex?: number;
+  step: number;
+  savedAt: number;
+};
+
+type BookingFlowItem = {
   serviceId: string;
   staffId: string | null;
   date: string;
   slotStartAt: string;
-  step: number;
-  savedAt: number;
 };
 
 @Component({
@@ -62,12 +71,16 @@ type PendingBookingIntent = {
               <div class="section-heading"><div><h2 class="section-title">Choose a service</h2></div></div>
               <div class="service-list">
                 @for (service of business.services; track service.id) {
-                  <button class="service-choice premium-card" [class.selected]="selectedServiceId() === service.id" (click)="setService(service.id)">
+                  <button class="service-choice premium-card" [class.selected]="isServiceSelected(service.id)" (click)="toggleService(service.id)">
                     <div>
                       <h3>{{ service.name }}</h3>
                       <p>{{ service.description }}</p>
-                      <strong>{{ money(service.pricePaise) }} · {{ service.durationMinutes }} min</strong>
+                      <strong>{{ servicePriceLabel(service) }}</strong>
                     </div>
+                    <span class="flow-service-media">
+                      <img [src]="serviceImage(service, $index)" [alt]="service.name + ' service image'" loading="lazy" />
+                      <span class="choice-action">{{ isServiceSelected(service.id) ? "Added" : "Add" }}</span>
+                    </span>
                     @if (service.popular) { <span class="offer-pill">Popular</span> }
                   </button>
                 } @empty {
@@ -79,19 +92,31 @@ type PendingBookingIntent = {
 
           @if (step() === 2) {
             <section class="panel">
-              <div class="section-heading"><div><h2 class="section-title">Choose a professional</h2></div></div>
-              <div class="staff-list">
-                <button class="staff-choice premium-card" [class.selected]="selectedStaffId() === null" (click)="setStaff(null)">
-                  <div class="any-avatar"><ion-icon name="sparkles-outline"></ion-icon></div>
-                  <div><strong>Any available professional</strong></div>
-                  <em>Recommended</em>
-                </button>
-                @for (staff of business.staff; track staff.id) {
-                  <article class="staff-choice premium-card" [class.selected]="selectedStaffId() === staff.id" (click)="setStaff(staff.id)">
-                    <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
-                    <div><strong>{{ staff.name }}</strong><span>{{ staff.title }} @if (staff.rating) { · {{ staff.rating }} rating }</span></div>
-                    <button type="button" class="check-slots-button" (click)="checkStaffSlots($event, staff.id)">Check slots</button>
-                  </article>
+              <div class="section-heading"><div><h2 class="section-title">Choose professionals</h2><p class="muted">Pick staff for each selected service.</p></div></div>
+              <div class="multi-service-stack">
+                @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                  @if (serviceById(item.serviceId); as service) {
+                    <section class="service-schedule-card premium-card">
+                      <div class="service-schedule-head">
+                        <div><h3>{{ service.name }}</h3><small>{{ servicePriceLabel(service) }}</small></div>
+                        <span>{{ itemIndex + 1 }}</span>
+                      </div>
+                      <div class="staff-list compact">
+                        <button class="staff-choice premium-card" [class.selected]="item.staffId === null" (click)="setItemStaff(itemIndex, null)">
+                          <div class="any-avatar"><ion-icon name="sparkles-outline"></ion-icon></div>
+                          <div><strong>Any available professional</strong></div>
+                          <em>Recommended</em>
+                        </button>
+                        @for (staff of staffForService(service); track staff.id) {
+                          <article class="staff-choice premium-card" [class.selected]="item.staffId === staff.id" (click)="setItemStaff(itemIndex, staff.id)">
+                            <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
+                            <div><strong>{{ staff.name }}</strong><span>{{ staff.title }} @if (staff.rating) { · {{ staff.rating }} rating }</span></div>
+                            <button type="button" class="check-slots-button" (click)="checkItemSlots($event, itemIndex, staff.id)">Slots</button>
+                          </article>
+                        }
+                      </div>
+                    </section>
+                  }
                 }
               </div>
             </section>
@@ -99,13 +124,24 @@ type PendingBookingIntent = {
 
           @if (step() === 3) {
             <section class="panel">
-              <div class="section-heading"><div><h2 class="section-title">Pick date and time</h2></div></div>
+              <div class="section-heading"><div><h2 class="section-title">Pick date and time</h2><p class="muted">Each service needs its own non-overlapping slot.</p></div></div>
+              <div class="booking-item-tabs" aria-label="Selected services">
+                @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                  @if (serviceById(item.serviceId); as service) {
+                    <button type="button" [class.active]="activeItemIndex() === itemIndex" [class.done]="!!item.slotStartAt" (click)="setActiveItem(itemIndex)">
+                      <span>{{ itemIndex + 1 }}</span>
+                      <strong>{{ service.name }}</strong>
+                      <small>{{ itemSlotLabel(itemIndex) || "Choose time" }}</small>
+                    </button>
+                  }
+                }
+              </div>
               <article class="selected-staff-card premium-card">
                 <div class="any-avatar"><ion-icon name="person-outline"></ion-icon></div>
                 <div>
                   <span>Available times with</span>
-                  <strong>{{ staffName() }}</strong>
-                  @if (selectedStaffTitle()) { <small>{{ selectedStaffTitle() }}</small> }
+                  <strong>{{ activeStaffName() }}</strong>
+                  @if (activeService(); as service) { <small>{{ activeServiceLabel(service) }}</small> }
                 </div>
               </article>
               @if (marketplace.loading()) {
@@ -113,7 +149,7 @@ type PendingBookingIntent = {
               }
               <div class="date-row">
                 @for (date of availabilityDays(); track date.date) {
-                  <button class="date-card" [class.selected]="selectedDate() === date.date" [class.availability-full]="dateAvailabilityClass(date) === 'full'" [class.availability-many]="dateAvailabilityClass(date) === 'many'" [class.availability-partial]="dateAvailabilityClass(date) === 'partial'" (click)="setDate(date.date)">
+                  <button class="date-card" [class.selected]="activeItem().date === date.date" [class.availability-full]="dateAvailabilityClass(date) === 'full'" [class.availability-many]="dateAvailabilityClass(date) === 'many'" [class.availability-partial]="dateAvailabilityClass(date) === 'partial'" (click)="setDate(date.date)">
                     <strong>{{ date.dayLabel }}</strong>
                     <span>{{ date.label }}</span>
                     <em>{{ dateAvailabilityLabel(date) }}</em>
@@ -128,7 +164,7 @@ type PendingBookingIntent = {
                     <h3>{{ group.label }}</h3>
                     <div class="slot-grid">
                       @for (slot of group.slots; track slot.startAt) {
-                        <button class="slot" [disabled]="!slot.available" [class.selected]="selectedSlotStartAt() === slot.startAt" (click)="selectedSlotStartAt.set(slot.startAt)">
+                        <button class="slot" [disabled]="!isSlotSelectable(slot)" [class.selected]="activeItem().slotStartAt === slot.startAt" (click)="selectActiveSlot(slot)">
                           {{ slot.displayTime }}
                         </button>
                       }
@@ -147,9 +183,12 @@ type PendingBookingIntent = {
                 <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
                 <dl>
                   <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
-                  <div><dt>Service</dt><dd>{{ selectedService()?.name || "Not selected" }}</dd></div>
-                  <div><dt>Staff</dt><dd>{{ staffName() }}</dd></div>
-                  <div><dt>Time</dt><dd>{{ selectedSlotLabel() || "Not selected" }}</dd></div>
+                  <div><dt>Services</dt><dd>{{ selectedServices().length }} selected</dd></div>
+                  @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                    @if (serviceById(item.serviceId); as service) {
+                      <div><dt>{{ service.name }}</dt><dd>{{ itemStaffName(item) }} · {{ itemSlotLabel(itemIndex) || "No time" }}</dd></div>
+                    }
+                  }
                   <div><dt>Payment</dt><dd>Pay at salon</dd></div>
                 </dl>
               </article>
@@ -168,7 +207,7 @@ type PendingBookingIntent = {
         <div class="booking-cta sticky-cta">
           <div class="bottom-action-card">
             <div>
-              <small>{{ selectedService()?.name || "Select a service" }}</small>
+              <small>{{ selectedServicesSummary() || "Select services" }}</small>
               <strong>{{ bookingTotalLabel() || business.businessName }}</strong>
             </div>
             @if (step() < 4) {
@@ -235,7 +274,11 @@ type PendingBookingIntent = {
     .time-mode-row button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 10px; }
     .service-list, .staff-list, .slot-sections { display: grid; gap: 12px; }
     .service-choice, .staff-choice { width: 100%; display: grid; gap: 12px; align-items: center; padding: 16px; border-color: var(--border); color: var(--text); text-align: left; }
-    .service-choice { grid-template-columns: minmax(0, 1fr) auto; }
+    .service-choice { grid-template-columns: minmax(0, 1fr) 112px; align-items: start; }
+    .flow-service-media { display: grid; justify-items: center; color: inherit; }
+    .flow-service-media img { width: 108px; height: 88px; border-radius: 17px; object-fit: cover; background: var(--surface-soft); box-shadow: 0 10px 22px rgba(6, 23, 43, 0.1); }
+    .choice-action { min-width: 76px; min-height: 34px; margin-top: -14px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid rgba(11, 70, 120, 0.2); border-radius: 12px; color: var(--primary); background: #FFFFFF; font-size: 0.82rem; font-weight: 950; box-shadow: 0 8px 18px rgba(6, 23, 43, 0.1); }
+    .service-choice.selected .choice-action { color: #047857; border-color: rgba(16, 185, 129, 0.32); background: #D1FAE5; }
     .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(11, 70, 120, 0.48); background: var(--primary-soft); box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14); }
     .service-choice h3 { margin: 0 0 6px; font-size: 1.12rem; letter-spacing: -0.035em; }
     .service-choice p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
@@ -247,6 +290,22 @@ type PendingBookingIntent = {
     .staff-choice em { color: var(--primary-2); font-weight: 900; text-align: right; }
     .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(11, 70, 120, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
     .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
+    .multi-service-stack { display: grid; gap: 14px; }
+    .service-schedule-card { display: grid; gap: 12px; padding: 16px; }
+    .service-schedule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .service-schedule-head h3 { margin: 0 0 3px; font-size: 1rem; letter-spacing: -0.025em; }
+    .service-schedule-head small { color: var(--muted); font-weight: 850; }
+    .service-schedule-head > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-weight: 950; }
+    .staff-list.compact { gap: 8px; }
+    .staff-list.compact .staff-choice { padding: 11px; border-radius: 16px; }
+    .staff-list.compact .staff-choice img, .staff-list.compact .any-avatar { width: 44px; height: 44px; border-radius: 15px; }
+    .booking-item-tabs { display: grid; gap: 8px; margin-bottom: 14px; }
+    .booking-item-tabs button { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface); text-align: left; box-shadow: var(--shadow-soft); }
+    .booking-item-tabs button > span { grid-row: span 2; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-weight: 950; }
+    .booking-item-tabs button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .booking-item-tabs button small { color: var(--muted); font-weight: 800; }
+    .booking-item-tabs button.active { border-color: rgba(11, 70, 120, 0.44); background: var(--primary-soft); }
+    .booking-item-tabs button.done > span { color: #047857; background: #D1FAE5; }
     .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(11, 70, 120, 0.28); background: var(--primary-soft); }
     .selected-staff-card span, .selected-staff-card small { display: block; color: var(--muted); line-height: 1.35; }
     .selected-staff-card span { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -309,7 +368,10 @@ type PendingBookingIntent = {
 
       .stepper button span { display: none; }
       .booking-intent-row, .resource-grid, .time-mode-row { grid-template-columns: 1fr; }
-      .service-choice, .staff-choice { grid-template-columns: 1fr; }
+      .service-choice { grid-template-columns: minmax(0, 1fr) 98px; }
+      .flow-service-media img { width: 94px; height: 78px; border-radius: 15px; }
+      .choice-action { min-width: 68px; min-height: 31px; font-size: 0.78rem; }
+      .staff-choice { grid-template-columns: 1fr; }
       .staff-choice em { text-align: left; }
       .check-slots-button { justify-self: start; }
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -328,11 +390,14 @@ type PendingBookingIntent = {
   `]
 })
 export class BookingFlowPage implements OnInit {
-  readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.route.snapshot.queryParamMap.get("serviceId") ? 2 : 1)));
-  readonly selectedServiceId = signal(this.route.snapshot.queryParamMap.get("serviceId") ?? "");
-  readonly selectedStaffId = signal<string | null>(this.route.snapshot.queryParamMap.get("staffId") || null);
-  readonly selectedDate = signal(this.route.snapshot.queryParamMap.get("date") ?? "");
-  readonly selectedSlotStartAt = signal("");
+  readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.initialServiceIds().length ? 2 : 1)));
+  readonly bookingItems = signal<BookingFlowItem[]>(this.initialServiceIds().map((serviceId) => ({
+    serviceId,
+    staffId: this.route.snapshot.queryParamMap.get("staffId") || null,
+    date: this.route.snapshot.queryParamMap.get("date") ?? "",
+    slotStartAt: ""
+  })));
+  readonly activeItemIndex = signal(0);
   readonly rescheduleBookingId = this.route.snapshot.queryParamMap.get("rescheduleBookingId") ?? "";
   readonly steps = [
     { id: 1, label: "Service", icon: "sparkles-outline" },
@@ -342,14 +407,14 @@ export class BookingFlowPage implements OnInit {
   ];
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug()));
-  readonly selectedService = computed(() => this.business()?.services.find((service) => service.id === this.selectedServiceId()) ?? this.business()?.services[0] ?? null);
-  readonly selectedStaff = computed(() => this.selectedStaffId() ? this.business()?.staff.find((staff) => staff.id === this.selectedStaffId()) ?? null : null);
-  readonly staffName = computed(() => this.selectedStaffId() ? this.business()?.staff.find((staff) => staff.id === this.selectedStaffId())?.name ?? "Selected staff" : "Any available professional");
-  readonly selectedStaffTitle = computed(() => this.selectedStaff()?.title ?? "");
+  readonly selectedServices = computed(() => this.bookingItems().map((item) => this.serviceById(item.serviceId)).filter((service): service is ServiceItem => !!service));
+  readonly selectedService = computed(() => this.activeService() ?? this.selectedServices()[0] ?? null);
+  readonly activeItem = computed(() => this.bookingItems()[this.activeItemIndex()] ?? null);
+  readonly activeService = computed(() => this.activeItem() ? this.serviceById(this.activeItem()!.serviceId) : null);
+  readonly activeStaff = computed(() => this.activeItem()?.staffId ? this.business()?.staff.find((staff) => staff.id === this.activeItem()?.staffId) ?? null : null);
   readonly availabilityDays = computed(() => this.marketplace.availability());
-  readonly selectedAvailabilityDay = computed(() => this.availabilityDays().find((day) => day.date === this.selectedDate()) ?? this.availabilityDays()[0] ?? null);
+  readonly selectedAvailabilityDay = computed(() => this.availabilityDays().find((day) => day.date === (this.activeItem()?.date || "")) ?? this.availabilityDays()[0] ?? null);
   readonly slotGroups = computed(() => this.selectedAvailabilityDay()?.periods ?? []);
-  readonly selectedSlotLabel = computed(() => this.slotGroups().flatMap((group) => group.slots).find((slot) => slot.startAt === this.selectedSlotStartAt())?.displayTime ?? "");
 
   isRescheduling(): boolean {
     return !!this.rescheduleBookingId;
@@ -368,8 +433,8 @@ export class BookingFlowPage implements OnInit {
     if (!slug) return;
     await this.marketplace.loadBusiness(slug).catch(() => undefined);
     if (!this.isRescheduling()) this.restorePendingIntent();
-    if (!this.selectedServiceId() && this.business()?.services[0]) this.selectedServiceId.set(this.business()?.services[0].id ?? "");
-    if (!this.route.snapshot.queryParamMap.has("step") && (this.selectedServiceId() || this.route.snapshot.queryParamMap.get("serviceId"))) {
+    if (!this.bookingItems().length && this.business()?.services[0]) this.bookingItems.set([{ serviceId: this.business()?.services[0].id ?? "", staffId: null, date: "", slotStartAt: "" }]);
+    if (!this.route.snapshot.queryParamMap.has("step") && this.bookingItems().length) {
       this.step.set(2);
     } else if (this.step() < 1 || this.step() > 4) {
       this.step.set(1);
@@ -382,30 +447,42 @@ export class BookingFlowPage implements OnInit {
     if (this.step() === 3) void this.reloadAvailability();
   }
 
-  setService(serviceId: string) {
-    this.selectedServiceId.set(serviceId);
-    this.selectedSlotStartAt.set("");
+  toggleService(serviceId: string) {
+    this.bookingItems.update((items) => {
+      if (items.some((item) => item.serviceId === serviceId)) return items.filter((item) => item.serviceId !== serviceId);
+      return [...items, { serviceId, staffId: null, date: "", slotStartAt: "" }];
+    });
+    if (this.activeItemIndex() >= this.bookingItems().length) this.activeItemIndex.set(Math.max(this.bookingItems().length - 1, 0));
     void this.reloadAvailability();
   }
 
-  setStaff(staffId: string | null) {
-    this.selectedStaffId.set(staffId);
-    this.selectedSlotStartAt.set("");
+  isServiceSelected(serviceId: string): boolean {
+    return this.bookingItems().some((item) => item.serviceId === serviceId);
+  }
+
+  setItemStaff(index: number, staffId: string | null) {
+    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, staffId, slotStartAt: "" } : item));
+    this.activeItemIndex.set(index);
     void this.reloadAvailability();
   }
 
-  async checkStaffSlots(event: Event, staffId: string) {
+  async checkItemSlots(event: Event, index: number, staffId: string) {
     event.preventDefault();
     event.stopPropagation();
-    this.selectedStaffId.set(staffId);
-    this.selectedSlotStartAt.set("");
+    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, staffId, slotStartAt: "" } : item));
+    this.activeItemIndex.set(index);
     this.step.set(3);
     await this.reloadAvailability();
   }
 
   setDate(date: string) {
-    this.selectedDate.set(date);
-    this.selectedSlotStartAt.set("");
+    const index = this.activeItemIndex();
+    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, date, slotStartAt: "" } : item));
+    void this.reloadAvailability();
+  }
+
+  setActiveItem(index: number) {
+    this.activeItemIndex.set(index);
     void this.reloadAvailability();
   }
 
@@ -427,14 +504,14 @@ export class BookingFlowPage implements OnInit {
   }
 
   canContinue(): boolean {
-    if (this.step() === 1) return !!this.selectedService();
-    if (this.step() === 2) return !!this.selectedService();
-    if (this.step() === 3) return !!this.selectedSlotStartAt();
+    if (this.step() === 1) return this.bookingItems().length > 0;
+    if (this.step() === 2) return this.bookingItems().length > 0;
+    if (this.step() === 3) return this.bookingItems().length > 0 && this.bookingItems().every((item) => !!item.slotStartAt);
     return true;
   }
 
   canConfirm(): boolean {
-    return !!this.business() && !!this.selectedService() && !!this.selectedSlotStartAt();
+    return !!this.business() && this.bookingItems().length > 0 && this.bookingItems().every((item) => !!this.serviceById(item.serviceId) && !!item.slotStartAt);
   }
 
   money(pricePaise: number): string {
@@ -442,13 +519,36 @@ export class BookingFlowPage implements OnInit {
   }
 
   bookingTotalLabel(): string {
-    return this.money(this.selectedService()?.pricePaise ?? 0);
+    const total = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
+    const minutes = this.selectedServices().reduce((sum, service) => sum + service.durationMinutes, 0);
+    if (!total) return "";
+    return minutes > 0 ? `${this.money(total)} · ${minutes} min` : this.money(total);
+  }
+
+  servicePriceLabel(service: ServiceItem): string {
+    return service.durationMinutes > 0 ? `${this.money(service.pricePaise)} · ${service.durationMinutes} min` : this.money(service.pricePaise);
+  }
+
+  activeServiceLabel(service: ServiceItem): string {
+    return service.durationMinutes > 0 ? `${service.name} · ${service.durationMinutes} min` : service.name;
+  }
+
+  selectedServicesSummary(): string {
+    const count = this.selectedServices().length;
+    if (!count) return "";
+    return `${count} service${count === 1 ? "" : "s"} selected`;
+  }
+
+  serviceImage(service: ServiceItem, index: number): string {
+    const withImage = service as ServiceItem & { image?: string; imageUrl?: string; photoUrl?: string; thumbnailUrl?: string };
+    const business = this.business();
+    return withImage.image || withImage.imageUrl || withImage.photoUrl || withImage.thumbnailUrl || business?.galleryImages?.[index % Math.max(business.galleryImages.length, 1)] || business?.coverImage || "assets/icons/icon.svg";
   }
 
   async confirmBooking() {
     const business = this.business();
-    const service = this.selectedService();
-    if (!business || !service || !this.selectedSlotStartAt()) return;
+    const items = this.bookingItems();
+    if (!business || !items.length || !this.canConfirm()) return;
     if (!this.isRescheduling()) this.savePendingIntent();
     if (!this.marketplace.isAuthenticated()) {
       this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
@@ -462,54 +562,124 @@ export class BookingFlowPage implements OnInit {
     const slotStillAvailable = await this.revalidateSelectedSlot();
     if (!slotStillAvailable) return;
     if (this.rescheduleBookingId) {
+      const item = items[0];
       await this.marketplace.rescheduleBooking(this.rescheduleBookingId, {
-        startAt: this.selectedSlotStartAt(),
-        staffId: this.selectedStaffId() || undefined,
-        serviceId: this.selectedServiceId()
+        startAt: item.slotStartAt,
+        staffId: item.staffId || undefined,
+        serviceId: item.serviceId
       });
       await this.router.navigate(["/bookings", this.rescheduleBookingId], { replaceUrl: true });
       return;
     }
-    await this.marketplace.createBooking({
-      businessSlug: business.slug,
-      businessId: business.id,
-      serviceId: service.id,
-      staffId: this.selectedStaffId() || undefined,
-      startAt: this.selectedSlotStartAt(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      paymentMode: "pay_at_venue"
-    });
+    for (const item of items) {
+      await this.marketplace.createBooking({
+        businessSlug: business.slug,
+        businessId: business.id,
+        serviceId: item.serviceId,
+        staffId: item.staffId || undefined,
+        startAt: item.slotStartAt,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        paymentMode: "pay_at_venue"
+      });
+    }
     this.clearPendingIntent();
     this.router.navigateByUrl("/booking/success");
   }
 
   private async revalidateSelectedSlot(): Promise<boolean> {
-    const slot = this.selectedSlotStartAt();
-    await this.reloadAvailability();
-    const available = this.marketplace.availability()
-      .flatMap((day) => day.periods)
-      .flatMap((period) => period.slots)
-      .some((item) => item.startAt === slot && item.available);
-    if (!available) {
-      this.selectedSlotStartAt.set("");
-      this.step.set(3);
-      this.marketplace.error.set("That slot was just taken. Please choose another time.");
+    for (let index = 0; index < this.bookingItems().length; index += 1) {
+      this.activeItemIndex.set(index);
+      const item = this.bookingItems()[index];
+      await this.reloadAvailability();
+      const available = this.marketplace.availability()
+        .flatMap((day) => day.periods)
+        .flatMap((period) => period.slots)
+        .some((slot) => slot.startAt === item.slotStartAt && this.isSlotSelectable(slot));
+      if (!available) {
+        this.bookingItems.update((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, slotStartAt: "" } : row));
+        this.step.set(3);
+        this.marketplace.error.set("One selected slot was just taken or overlaps another service. Please choose another time.");
+        return false;
+      }
     }
-    return available;
+    return true;
   }
 
   private async reloadAvailability() {
     const business = this.business();
-    const service = this.selectedService();
+    const item = this.activeItem();
+    const service = this.activeService();
     if (!business || !service) return;
-    const queryDate = this.selectedDate() || new Date().toISOString().slice(0, 10);
+    const queryDate = item?.date || new Date().toISOString().slice(0, 10);
     const days = await this.marketplace.loadAvailability(business.slug, {
       serviceId: service.id,
-      staffId: this.selectedStaffId() || undefined,
+      staffId: item?.staffId || undefined,
       date: queryDate,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     }).catch(() => []);
-    if (!this.selectedDate() && days[0]) this.selectedDate.set(days[0].date);
+    if (item && !item.date && days[0]) {
+      const index = this.activeItemIndex();
+      this.bookingItems.update((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, date: days[0].date } : row));
+    }
+  }
+
+  serviceById(serviceId: string): ServiceItem | null {
+    return this.business()?.services.find((service) => service.id === serviceId) ?? null;
+  }
+
+  staffForService(service: ServiceItem): StaffMember[] {
+    return this.business()?.staff.filter((staff) => !staff.bookableServiceIds?.length || staff.bookableServiceIds.includes(service.id)) ?? [];
+  }
+
+  itemStaffName(item: BookingFlowItem): string {
+    return item.staffId ? this.business()?.staff.find((staff) => staff.id === item.staffId)?.name ?? "Selected staff" : "Any professional";
+  }
+
+  activeStaffName(): string {
+    const item = this.activeItem();
+    return item ? this.itemStaffName(item) : "Any available professional";
+  }
+
+  itemSlotLabel(index: number): string {
+    const item = this.bookingItems()[index];
+    if (!item?.slotStartAt) return "";
+    const slot = this.availabilityDays().flatMap((day) => day.periods).flatMap((period) => period.slots).find((row) => row.startAt === item.slotStartAt);
+    return slot?.displayTime ?? this.formatSlotTime(item.slotStartAt);
+  }
+
+  selectActiveSlot(slot: AvailabilitySlot) {
+    if (!this.isSlotSelectable(slot)) return;
+    const index = this.activeItemIndex();
+    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, slotStartAt: slot.startAt } : item));
+  }
+
+  isSlotSelectable(slot: AvailabilitySlot): boolean {
+    if (!slot.available) return false;
+    const activeService = this.activeService();
+    if (!activeService) return false;
+    const candidateStart = new Date(slot.startAt).getTime();
+    const candidateEnd = new Date(slot.endAt || new Date(candidateStart + activeService.durationMinutes * 60000).toISOString()).getTime();
+    if (!Number.isFinite(candidateStart) || !Number.isFinite(candidateEnd)) return false;
+    return !this.bookingItems().some((item, index) => {
+      if (index === this.activeItemIndex() || !item.slotStartAt) return false;
+      const service = this.serviceById(item.serviceId);
+      if (!service) return false;
+      const start = new Date(item.slotStartAt).getTime();
+      const end = start + service.durationMinutes * 60000;
+      return candidateStart < end && start < candidateEnd;
+    });
+  }
+
+  private formatSlotTime(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "Selected";
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  private initialServiceIds(): string[] {
+    const multi = this.route.snapshot.queryParamMap.get("serviceIds");
+    const ids = multi ? multi.split(",") : [this.route.snapshot.queryParamMap.get("serviceId") || ""];
+    return Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
   }
 
   private savePendingIntent() {
@@ -517,10 +687,9 @@ export class BookingFlowPage implements OnInit {
     if (!slug) return;
     const intent: PendingBookingIntent = {
       slug,
-      serviceId: this.selectedServiceId(),
-      staffId: this.selectedStaffId(),
-      date: this.selectedDate(),
-      slotStartAt: this.selectedSlotStartAt(),
+      items: this.bookingItems(),
+      activeItemIndex: this.activeItemIndex(),
+      date: this.activeItem()?.date || "",
       step: this.step(),
       savedAt: Date.now()
     };
@@ -541,10 +710,12 @@ export class BookingFlowPage implements OnInit {
         this.clearPendingIntent();
         return;
       }
-      if (intent.serviceId) this.selectedServiceId.set(intent.serviceId);
-      this.selectedStaffId.set(intent.staffId || null);
-      if (intent.date) this.selectedDate.set(intent.date);
-      if (intent.slotStartAt) this.selectedSlotStartAt.set(intent.slotStartAt);
+      if (intent.items?.length) {
+        this.bookingItems.set(intent.items);
+        this.activeItemIndex.set(Math.min(intent.activeItemIndex ?? 0, intent.items.length - 1));
+      } else if (intent.serviceId) {
+        this.bookingItems.set([{ serviceId: intent.serviceId, staffId: intent.staffId || null, date: intent.date || "", slotStartAt: intent.slotStartAt || "" }]);
+      }
       if (intent.step >= 1 && intent.step <= 4) this.step.set(intent.step);
     } catch {
       this.clearPendingIntent();

@@ -16,7 +16,7 @@ import {
 } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AuthService } from "../../core/auth.service";
-import { MySalonDashboard } from "../../core/api.types";
+import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.types";
 
 @Component({
   standalone: true,
@@ -226,12 +226,27 @@ import { MySalonDashboard } from "../../core/api.types";
           @if (!d.hasPrimarySalon) {
           <section class="ms-empty">
             <div class="ms-empty-icon"><ion-icon name="star-outline"></ion-icon></div>
-            <h2>No salon selected</h2>
-            <p>Visit and book at a salon to see your personal dashboard here.</p>
-            <ion-button class="primary-gradient" routerLink="/tabs/search">
-              <ion-icon name="search-outline" slot="start"></ion-icon>
-              Discover salons
-            </ion-button>
+            <h2>Choose your salon</h2>
+            <p>Select one of your booked or visited salons to unlock your personal dashboard.</p>
+            @if (salonChoices().length) {
+              <div class="ms-choice-list">
+                @for (salon of salonChoices(); track salon.tenantId + '-' + salon.branchId) {
+                  <button type="button" class="ms-choice" (click)="selectSalon(salon)" [disabled]="selectingSalon()">
+                    <span class="ms-choice-avatar">{{ salonInitials(salon.businessName) }}</span>
+                    <span>
+                      <strong>{{ salon.businessName }}</strong>
+                      <small>{{ salonVisitLabel(salon) }} · Last {{ formatDate(salon.lastVisitAt) }}</small>
+                    </span>
+                    <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </button>
+                }
+              </div>
+            } @else {
+              <ion-button class="primary-gradient" routerLink="/tabs/search">
+                <ion-icon name="search-outline" slot="start"></ion-icon>
+                Discover salons
+              </ion-button>
+            }
           </section>
           }
         } @else {
@@ -737,6 +752,62 @@ import { MySalonDashboard } from "../../core/api.types";
       max-width: 260px;
     }
 
+    .ms-choice-list {
+      width: 100%;
+      max-width: 360px;
+      display: grid;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .ms-choice {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.88);
+      text-align: left;
+      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.06);
+    }
+
+    .ms-choice-avatar {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--primary), var(--brand-600));
+      font-size: 0.82rem;
+      font-weight: 950;
+    }
+
+    .ms-choice strong,
+    .ms-choice small {
+      display: block;
+    }
+
+    .ms-choice strong {
+      font-size: 0.88rem;
+      font-weight: 950;
+    }
+
+    .ms-choice small {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .ms-choice > ion-icon {
+      color: var(--muted);
+      font-size: 1.1rem;
+    }
+
     /* ── Loading ── */
     .ms-loading {
       display: grid;
@@ -767,6 +838,21 @@ import { MySalonDashboard } from "../../core/api.types";
 })
 export class MySalonPage implements OnInit {
   readonly dash = signal<MySalonDashboard | null>(null);
+  readonly selectingSalon = signal(false);
+  readonly salonChoices = computed(() => {
+    const choices = new Map<string, CustomerSalonRelationship>();
+    const add = (salon: CustomerSalonRelationship | null | undefined) => {
+      if (!salon?.tenantId || !salon.branchId || !salon.businessId) return;
+      choices.set(`${salon.tenantId}:${salon.branchId}`, salon);
+    };
+    add(this.marketplace.suggestedSalon());
+    this.marketplace.mySalons().forEach(add);
+    return [...choices.values()].sort((left, right) => {
+      const visits = Number(right.visitCount || 0) - Number(left.visitCount || 0);
+      if (visits !== 0) return visits;
+      return new Date(right.lastVisitAt || 0).getTime() - new Date(left.lastVisitAt || 0).getTime();
+    });
+  });
 
   constructor(
     private readonly marketplace: MarketplaceService,
@@ -792,7 +878,26 @@ export class MySalonPage implements OnInit {
       void this.router.navigate(["/login"]);
       return;
     }
-    this.marketplace.loadMySalonDashboard().then((d) => this.dash.set(d)).catch(() => this.dash.set(null));
+    void this.loadDashboard();
+  }
+
+  async loadDashboard() {
+    await Promise.all([
+      this.marketplace.loadMySalons().catch(() => undefined),
+      this.marketplace.loadBookings().catch(() => undefined)
+    ]);
+    await this.marketplace.loadMySalonDashboard().then((d) => this.dash.set(d)).catch(() => this.dash.set(null));
+  }
+
+  async selectSalon(salon: CustomerSalonRelationship) {
+    if (this.selectingSalon()) return;
+    this.selectingSalon.set(true);
+    try {
+      await this.marketplace.setPrimarySalon(salon.tenantId, salon.branchId, salon.businessId, salon.businessName);
+      await this.loadDashboard();
+    } finally {
+      this.selectingSalon.set(false);
+    }
   }
 
   salonInitials(name: string): string {
@@ -815,5 +920,10 @@ export class MySalonPage implements OnInit {
   formatDateTime(iso: string): string {
     if (!iso) return "";
     return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  }
+
+  salonVisitLabel(salon: CustomerSalonRelationship): string {
+    const visits = Number(salon.visitCount || 1);
+    return `${visits} visit${visits === 1 ? "" : "s"}`;
   }
 }

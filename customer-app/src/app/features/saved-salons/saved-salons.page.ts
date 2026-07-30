@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
-import { AlertController, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
+import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { bookmark, locationOutline, searchOutline, star, storefrontOutline } from "ionicons/icons";
 import { Business } from "../../core/api.types";
@@ -9,14 +9,16 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon],
+  imports: [RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
       <main class="page saved-page">
         <header class="saved-header">
-          <div class="header-identity" aria-hidden="true"><ion-icon name="bookmark"></ion-icon></div>
           <div class="header-copy">
-            <h1>Saved salons</h1>
+            <div class="content-title-row">
+              <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+              <h1>Saved salons</h1>
+            </div>
             <p>{{ savedCount() }} {{ savedCount() === 1 ? "salon" : "salons" }} shortlisted for later</p>
           </div>
           <a class="discover-action" routerLink="/tabs/search">
@@ -154,7 +156,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .saved-header {
       display: grid;
-      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
       min-width: 0;
@@ -193,6 +195,26 @@ import { MarketplaceService } from "../../core/marketplace.service";
       font-weight: 900;
       letter-spacing: -0.035em;
       line-height: 1.08;
+    }
+
+    .content-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .content-back-button {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      margin-left: -8px;
+      --color: var(--brand-950);
+      --icon-font-size: 25px;
+      --background: transparent;
+      --border-radius: 12px;
+      --padding-start: 0;
+      --padding-end: 0;
+      filter: drop-shadow(0.45px 0 0 var(--brand-950));
     }
 
     .header-copy p {

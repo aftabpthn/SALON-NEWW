@@ -213,7 +213,17 @@ interface ConsultationChatMessage {
             @if (favoriteBusinesses().length) {
               <div class="business-rail favourites-rail">
                 @for (business of favoriteBusinesses(); track business.id) {
-                  <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+                  <a class="favourite-mini-card" [routerLink]="['/business', business.slug]">
+                    @if (businessImage(business)) {
+                      <img [src]="businessImage(business)" [alt]="business.businessName + ' cover'" loading="lazy" />
+                    } @else {
+                      <b aria-hidden="true">{{ businessInitials(business) }}</b>
+                    }
+                    <span>
+                      <strong>{{ business.businessName }}</strong>
+                      <small>{{ business.category || business.popularService || 'Salon' }}</small>
+                    </span>
+                  </a>
                 }
               </div>
             } @else {
@@ -310,8 +320,6 @@ interface ConsultationChatMessage {
             <nav class="customer-quick-actions" aria-label="Quick actions">
               <a routerLink="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><span>Bookings</span><small>Manage visits</small></a>
               <a routerLink="/tabs/offers"><ion-icon name="pricetag-outline"></ion-icon><span>Offers</span><small>Browse live deals</small></a>
-              <a routerLink="/tabs/profile"><ion-icon name="person-circle-outline"></ion-icon><span>Profile</span><small>Your details</small></a>
-              <a routerLink="/tabs/search"><ion-icon name="search-outline"></ion-icon><span>Explore</span><small>Discover more</small></a>
             </nav>
           </section>
         }
@@ -1723,6 +1731,53 @@ interface ConsultationChatMessage {
       text-decoration: none;
     }
     .favourites-empty strong { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); white-space: nowrap; }
+    .favourite-mini-card {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      min-height: 96px;
+      padding: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.07);
+      text-decoration: none;
+    }
+    .favourite-mini-card img,
+    .favourite-mini-card > b {
+      width: 72px;
+      height: 76px;
+      border-radius: 14px;
+    }
+    .favourite-mini-card img { display: block; object-fit: cover; }
+    .favourite-mini-card > b {
+      display: grid;
+      place-items: center;
+      color: #0b4678;
+      background: linear-gradient(145deg, #dff3fb, #bde6f7 45%, #8bd4e8);
+      font-size: 1rem;
+      font-weight: 950;
+    }
+    .favourite-mini-card > span { display: grid; gap: 5px; min-width: 0; }
+    .favourite-mini-card strong {
+      display: -webkit-box;
+      overflow: hidden;
+      font-size: 0.88rem;
+      line-height: 1.15;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .favourite-mini-card small {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .section-heading { align-items: end; }
     .section-title { margin-top: 3px; }
     .lower-actions { display: grid; gap: 12px; margin-top: 16px; opacity: 0.9; }
@@ -1841,6 +1896,23 @@ interface ConsultationChatMessage {
       }
       .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(-n + 4) { display: block !important; }
       .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(n + 5) { display: none !important; }
+      .home-page .favourites-rail .favourite-mini-card {
+        grid-template-columns: 52px minmax(0, 1fr);
+        gap: 8px;
+        min-width: 0;
+        min-height: 82px;
+        padding: 6px;
+        border-radius: 15px;
+      }
+      .home-page .favourites-rail .favourite-mini-card img,
+      .home-page .favourites-rail .favourite-mini-card > b {
+        width: 52px;
+        height: 68px;
+        border-radius: 11px;
+      }
+      .home-page .favourites-rail .favourite-mini-card strong { font-size: 0.76rem; }
+      .home-page .favourites-rail .favourite-mini-card small { font-size: 0.61rem; }
+      .home-page .favourites-rail .favourite-mini-card:nth-child(n + 5) { display: none; }
 
       .home-page .lower-actions {
         gap: 8px;

@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
-import { RouterLink } from "@angular/router";
+import { ActivatedRoute, RouterLink } from "@angular/router";
 import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline } from "ionicons/icons";
@@ -799,11 +799,16 @@ export class HelpPage implements OnInit {
     .filter((booking) => booking.status === "confirmed" || booking.status === "pending")
     .sort((a, b) => this.bookingTimestamp(a) - this.bookingTimestamp(b))[0] ?? null);
 
-  constructor(readonly marketplace: MarketplaceService) {
+  constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
     addIcons({ calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline });
   }
 
   ngOnInit() {
+    const topic = this.route.snapshot.queryParamMap.get("topic");
+    if (topic && this.categories.some((category) => category.key === topic)) {
+      this.activeCategory.set(topic as HelpCategory);
+      this.expandedItem.set(this.helpItems.find((item) => item.category === topic)?.id ?? null);
+    }
     if (!this.upcomingBooking()) {
       void this.marketplace.loadBookings("upcoming").catch(() => undefined);
     }

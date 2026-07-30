@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { ActivatedRoute, RouterLink } from "@angular/router";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonContent, IonIcon } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
@@ -20,9 +20,9 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     <ion-content [scrollY]="false" [fullscreen]="true" class="chat-content">
       <main class="chat-shell" [attr.aria-busy]="loading()">
         <header class="chat-header">
-          <a class="back-button" [routerLink]="bookingRoute()" aria-label="Back to booking details">
+          <button type="button" class="back-button" aria-label="Back to booking details" (click)="goBack()">
             <ion-icon name="arrow-back-outline" aria-hidden="true"></ion-icon>
-          </a>
+          </button>
           <div class="header-copy">
             <h1>{{ booking()?.businessName || thread()?.salonName || "Salon messages" }}</h1>
             <p>{{ bookingContext() }}</p>
@@ -166,7 +166,9 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       display: grid;
       place-items: center;
       border-radius: 50%;
+      border: 0;
       color: #FFFFFF;
+      background: transparent;
       font-size: 1.25rem;
       text-decoration: none;
       transition: background 180ms ease-out;
@@ -393,10 +395,16 @@ export class BookingChatPage implements OnInit, OnDestroy {
 
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly api: CustomerApiService,
     private readonly marketplace: MarketplaceService
   ) {
     addIcons({ arrowBackOutline, arrowUpOutline, calendarOutline, chatbubbleEllipsesOutline, chevronDownOutline, refreshOutline });
+  }
+
+  goBack() {
+    const bookingId = this.booking()?.id || this.route.snapshot.paramMap.get("id");
+    void this.router.navigate(bookingId ? ["/bookings", bookingId] : ["/tabs/bookings"], { replaceUrl: true });
   }
 
   ngOnInit() {

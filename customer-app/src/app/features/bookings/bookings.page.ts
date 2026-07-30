@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { AlertController, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
+import { AlertController, IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
 import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, chevronForwardOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
@@ -19,12 +19,15 @@ type WaitlistDialog = {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton],
+  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton],
   template: `
     <ion-content>
       <main class="page bookings-page">
         <section class="bookings-hero">
-          <h1 class="page-title">My bookings</h1>
+          <div class="content-title-row">
+            <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+            <h1 class="page-title">My bookings</h1>
+          </div>
           <div class="booking-command-grid">
             @for (item of bookingCommands; track item.label) {
               <article class="command-card premium-card">
@@ -161,6 +164,30 @@ type WaitlistDialog = {
       display: grid;
       gap: 10px;
       margin-bottom: 18px;
+    }
+
+    .content-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .content-back-button {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      margin-left: -8px;
+      --color: var(--brand-950);
+      --icon-font-size: 25px;
+      --background: transparent;
+      --border-radius: 12px;
+      --padding-start: 0;
+      --padding-end: 0;
+      filter: drop-shadow(0.45px 0 0 var(--brand-950));
+    }
+
+    .content-title-row .page-title {
+      margin: 0;
     }
 
     .bookings-hero .muted {
@@ -804,7 +831,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   readonly bookingCommands = [
     { label: "Rebooking", copy: "Repeat past visits faster", icon: "repeat-outline" },
     { label: "Waitlist", copy: "Join auto-fill queues", icon: "hourglass-outline" },
-    { label: "Digital check-in", copy: "Arrival and consent ready", icon: "checkmark-circle-outline" },
+    { label: "Check-in", copy: "Arrival and consent ready", icon: "checkmark-circle-outline" },
     { label: "Support", copy: "Chat and ticket handoff", icon: "chatbubbles-outline" }
   ];
   private midnightRefreshId: ReturnType<typeof setTimeout> | null = null;
