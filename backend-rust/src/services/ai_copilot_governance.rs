@@ -289,7 +289,7 @@ pub async fn decide_action(
 
     let action = CopilotAction::parse(&existing.action_type)
         .ok_or_else(|| AppError::internal("stored copilot action type is unsupported"))?;
-    if !holds_permission(claims, action.approver_permission()) {
+    if !scope_service::permission_allowed(claims, action.approver_permission()) {
         return Err(AppError::forbidden(format!(
             "approving this action requires the {} permission",
             action.approver_permission()
@@ -334,26 +334,6 @@ pub async fn list_actions(
     repository::list_approvals(db, tenant_id, &scope.branch_ids(), status, 100)
         .await
         .map_err(|_| AppError::internal("failed to load copilot actions"))
-}
-
-/// Explicit denial beats everything, then an explicit grant, then the role default.
-fn holds_permission(claims: &AuthClaims, permission: &str) -> bool {
-    if claims
-        .denied_permissions
-        .iter()
-        .any(|entry| entry == permission)
-    {
-        return false;
-    }
-    if claims.permissions.iter().any(|entry| entry == permission) {
-        return true;
-    }
-    // Owners and admins retain implicit management rights when a tenant has not
-    // enumerated permissions, matching how the rest of the API treats them.
-    matches!(
-        claims.role.trim().to_ascii_lowercase().as_str(),
-        "owner" | "admin"
-    )
 }
 
 /// One detected condition before it is written to the alert feed.

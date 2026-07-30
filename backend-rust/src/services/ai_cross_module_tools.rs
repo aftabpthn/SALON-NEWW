@@ -902,6 +902,7 @@ mod answer_tests {
             primary_branch_id: fixture.branch_ids[0].clone(),
             label: "2 authorized branches".into(),
             financials_visible: true,
+            allowed_domains: crate::services::ai_scope_service::AiDomain::ALL.to_vec(),
             disclosure: crate::services::ai_scope_service::ScopeDisclosure {
                 label: "2 authorized branches".into(),
                 branch_count: 2,

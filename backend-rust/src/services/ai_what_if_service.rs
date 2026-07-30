@@ -23,7 +23,10 @@ use crate::{
         ai_copilot_repository as copilot_repository, ai_scope_repository as scope_repository,
         membership_lifecycle_repository,
     },
-    services::profit_governance_service,
+    services::{
+        ai_scope_service::{self, AiDomain, ScopeRequest}, ai_tool_dispatcher,
+        auth_service::AuthClaims, profit_governance_service,
+    },
 };
 
 /// Window every simulation reads its baseline from.
@@ -235,20 +238,21 @@ fn spread(value: i64) -> (i64, i64) {
 }
 
 /// Runs a simulation. Reads only.
-pub async fn simulate(
+pub async fn simulate_authorized(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    role: &str,
+    claims: &AuthClaims,
     scenario: WhatIf,
 ) -> Result<WhatIfResult, AppError> {
     // Every scenario projects money or capacity, so it is management
     // information. The check happens before any figure is read.
-    if !can_simulate(role) {
-        return Err(AppError::forbidden(
-            "what-if simulation is not available for your role",
-        ));
-    }
+    ai_scope_service::require_domain(claims, AiDomain::Finance)?;
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest {
+        branch_id: Some(branch_id.to_string()),
+        ..Default::default()
+    }).await?;
+    scope.require_branch(branch_id)?;
     match scenario {
         WhatIf::ServiceDiscount {
             service_id,
@@ -902,11 +906,27 @@ async fn branch_improvement_plan(
     Ok(result)
 }
 
+#[cfg(test)]
 fn can_simulate(role: &str) -> bool {
     matches!(
         role.to_ascii_lowercase().as_str(),
         "owner" | "admin" | "manager" | "accountant" | "analyst"
     )
+}
+
+#[cfg(test)]
+async fn simulate(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    role: &str,
+    scenario: WhatIf,
+) -> Result<WhatIfResult, AppError> {
+    let permissions = if can_simulate(role) { &["finance.read"][..] } else { &[][..] };
+    let mut claims = crate::services::ai_tool_dispatcher::tests_support::claims(role, permissions, &[]);
+    claims.tenant_id = tenant_id.to_string();
+    claims.branch_id = Some(branch_id.to_string());
+    simulate_authorized(db, tenant_id, branch_id, &claims, scenario).await
 }
 
 /// "What would a discount do to profit?"

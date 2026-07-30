@@ -36,6 +36,9 @@ pub struct ToolScope {
     /// Whether money lines may be shown. Decided from permissions by the
     /// dispatcher, so a denied `finance.read` strips them even for an owner.
     pub financials_visible: bool,
+    /// Domains this login may read. Composite tools use this instead of
+    /// re-deciding access from a role name.
+    pub allowed_domains: Vec<crate::services::ai_scope_service::AiDomain>,
     /// The scope statement stamped onto every answer.
     pub disclosure: crate::services::ai_scope_service::ScopeDisclosure,
 }
@@ -51,6 +54,10 @@ impl ToolScope {
         self.branch_ids.len() > 1
     }
 
+    pub fn allows(&self, domain: crate::services::ai_scope_service::AiDomain) -> bool {
+        self.allowed_domains.contains(&domain)
+    }
+
     /// A one-branch scope, matching what the dispatcher builds for a login that
     /// holds exactly one branch.
     #[cfg(test)]
@@ -60,6 +67,7 @@ impl ToolScope {
             primary_branch_id: branch_id.to_string(),
             label: branch_id.to_string(),
             financials_visible,
+            allowed_domains: crate::services::ai_scope_service::AiDomain::ALL.to_vec(),
             disclosure: crate::services::ai_scope_service::ScopeDisclosure {
                 label: branch_id.to_string(),
                 branch_count: 1,
@@ -1642,7 +1650,7 @@ pub async fn run(
             business_overview(db, tenant_id, scope, scope.financials_visible).await
         }
         CopilotTool::BusinessDiagnostic => {
-            business_diagnostic(db, tenant_id, scope, actor).await
+            business_diagnostic(db, tenant_id, scope).await
         }
         CopilotTool::RegularClients => {
             regular_clients(db, tenant_id, scope, scope.financials_visible).await
@@ -3166,7 +3174,6 @@ async fn business_diagnostic(
     db: &PgPool,
     tenant_id: &str,
     scope: &ToolScope,
-    actor: &ToolActor,
 ) -> Result<CopilotAnswer, AppError> {
     const PARTS: &[CopilotTool] = &[
         CopilotTool::ProfitIntelligence,
@@ -3189,7 +3196,7 @@ async fn business_diagnostic(
     for part in PARTS {
         // Only run what this caller is entitled to. A skipped part is counted,
         // never described, so the answer does not leak what it withheld.
-        if !part.permitted_for(&actor.role) {
+        if !scope.allows(crate::services::ai_tool_dispatcher::tool_domain(*part)) {
             skipped += 1;
             continue;
         }
@@ -5267,6 +5274,14 @@ mod phase1_tool_foundation_tests {
         assert!(!CopilotTool::InventoryRisk.permitted_for("frontdesk"));
         // The branch snapshot is readable by the floor; its money lines are not.
         assert!(CopilotTool::BusinessOverview.permitted_for("frontdesk"));
+    }
+
+    #[test]
+    fn composite_scope_carries_domain_denials() {
+        let mut scope = ToolScope::for_test("branch-1", false);
+        scope.allowed_domains = vec![crate::services::ai_scope_service::AiDomain::Clients];
+        assert!(scope.allows(crate::services::ai_scope_service::AiDomain::Clients));
+        assert!(!scope.allows(crate::services::ai_scope_service::AiDomain::Finance));
     }
 
     /// A chip is never offered to a role that would be refused if they tapped it.
