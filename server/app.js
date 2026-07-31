@@ -852,12 +852,14 @@ export function createApp() {
 
 function resolveClientDist() {
   const candidates = [
+    join(process.cwd(), "customer-app", "www"),
+    join(process.cwd(), "customer-app", "dist", "browser"),
+    join(process.cwd(), "customer-app", "dist"),
+    join(process.cwd(), "www"),
     join(process.cwd(), "dist", "aura-salon-crm-pos", "browser"),
-    join(process.cwd(), "dist", "aura-salon-crm-pos")
+    join(process.cwd(), "dist", "aura-salon-crm-pos"),
+    join(process.cwd(), "dist"),
+    join(process.cwd(), "public")
   ];
   return candidates.find((candidate) => existsSync(join(candidate, "index.html"))) || "";
 }
-
-
-
-
