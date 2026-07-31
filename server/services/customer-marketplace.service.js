@@ -62,6 +62,12 @@ function unique(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
+function publicMediaUrl(value) {
+  const url = String(value || "").trim();
+  if (process.env.NODE_ENV === "production" && /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url)) return "";
+  return url;
+}
+
 function publicProfile(row) {
   if (!tableExists("business_notification_profiles")) return {};
   return db.prepare(`
@@ -340,14 +346,14 @@ function mapBusiness(row, { includeDetails = false } = {}) {
     ...profileGallery,
     ...(Array.isArray(theme.galleryImages) ? theme.galleryImages : []),
     ...(Array.isArray(seo.galleryImages) ? seo.galleryImages : [])
-  ].filter(Boolean);
+  ].map(publicMediaUrl).filter(Boolean);
   const startingPrice = services.length ? Math.min(...services.map((service) => service.pricePaise || 0).filter((price) => price > 0)) : 0;
   const timezone = row.timezone || DEFAULT_TIMEZONE;
   const businessName = profile.business_name || row.branchName;
   const city = profile.city || row.city || "";
   const address = profile.address || row.address || city || "";
   const description = profile.about_us || seo.description || theme.description || `${businessName} accepts online bookings in ${city || "your city"}.`;
-  const coverImage = socialLinks.coverImage || socialLinks.coverImageUrl || theme.coverImage || seo.image || profile.logo_url || "";
+  const coverImage = publicMediaUrl(socialLinks.coverImage || socialLinks.coverImageUrl || theme.coverImage || seo.image || profile.logo_url);
   return {
     id: row.branchId,
     slug: businessSlug(row),
@@ -366,7 +372,7 @@ function mapBusiness(row, { includeDetails = false } = {}) {
     mobileNumber: profile.mobile_number || "",
     telephoneNumber: profile.telephone_number || "",
     appointmentNumber: profile.appointment_number || "",
-    logoUrl: profile.logo_url || "",
+    logoUrl: publicMediaUrl(profile.logo_url),
     websiteUrl: socialLinks.website || "",
     instagramUrl: socialLinks.instagram || "",
     mapsUrl: socialLinks.mapsUrl || socialLinks.googleMaps || "",
