@@ -92,8 +92,37 @@ type BookingFlowItem = {
 
           @if (step() === 2) {
             <section class="panel">
-              <div class="section-heading"><div><h2 class="section-title">Choose professionals</h2><p class="muted">Pick staff for each selected service.</p></div></div>
+              <div class="section-heading">
+                <div>
+                  <h2 class="section-title">Choose professionals</h2>
+                  <p class="muted">
+                    @if (bookingItems().length > 1) {
+                      Select professional for <strong>Service {{ activeItemIndex() + 1 }} of {{ bookingItems().length }}</strong> ({{ activeService()?.name }}).
+                    } @else {
+                      Pick staff for your selected service.
+                    }
+                  </p>
+                </div>
+              </div>
+
               @if (bookingItems().length > 1) {
+                <div class="multi-service-progress-banner staff-banner">
+                  <p>Service {{ activeItemIndex() + 1 }} of {{ bookingItems().length }}: Pick staff for <strong>{{ activeService()?.name }}</strong></p>
+                  <small>{{ staffSelectedSummary() }}</small>
+                </div>
+
+                <div class="booking-item-tabs" aria-label="Selected services staff">
+                  @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                    @if (serviceById(item.serviceId); as service) {
+                      <button type="button" [class.active]="activeItemIndex() === itemIndex" [class.done]="item.staffId !== undefined" (click)="setActiveItem(itemIndex)">
+                        <span>{{ itemIndex + 1 }}</span>
+                        <strong>{{ service.name }}</strong>
+                        <small>{{ itemStaffName(item) }}</small>
+                      </button>
+                    }
+                  }
+                </div>
+
                 <div class="multi-staff-quick-bar">
                   <button type="button" class="quick-staff-btn" (click)="assignAnyStaffToAll()">
                     <ion-icon name="sparkles-outline"></ion-icon>
@@ -101,26 +130,38 @@ type BookingFlowItem = {
                   </button>
                 </div>
               }
+
               <div class="multi-service-stack">
-                @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                @if (activeItem(); as item) {
                   @if (serviceById(item.serviceId); as service) {
                     <section class="service-schedule-card premium-card">
                       <div class="service-schedule-head">
-                        <div><h3>{{ service.name }}</h3><small>{{ servicePriceLabel(service) }}</small></div>
-                        <span>{{ itemIndex + 1 }}</span>
+                        <div>
+                          <h3>{{ service.name }}</h3>
+                          <small>{{ servicePriceLabel(service) }}</small>
+                        </div>
+                        <span>{{ activeItemIndex() + 1 }} of {{ bookingItems().length }}</span>
                       </div>
                       <div class="staff-list compact">
-                        <button class="staff-choice premium-card" [class.selected]="item.staffId === null" (click)="setItemStaff(itemIndex, null)">
+                        <button class="staff-choice premium-card" [class.selected]="item.staffId === null" (click)="setItemStaff(activeItemIndex(), null)">
                           <div class="any-avatar"><ion-icon name="sparkles-outline"></ion-icon></div>
-                          <div><strong>Any available professional</strong></div>
+                          <div>
+                            <strong>Any available professional</strong>
+                            <span>Auto-matches top available specialist</span>
+                          </div>
                           <em>Recommended</em>
                         </button>
                         @for (staff of staffForService(service); track staff.id) {
-                          <article class="staff-choice premium-card" [class.selected]="item.staffId === staff.id" (click)="setItemStaff(itemIndex, staff.id)">
+                          <article class="staff-choice premium-card" [class.selected]="item.staffId === staff.id" (click)="setItemStaff(activeItemIndex(), staff.id)">
                             <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
-                            <div><strong>{{ staff.name }}</strong><span>{{ staff.title }} @if (staff.rating) { · {{ staff.rating }} rating }</span></div>
-                            <button type="button" class="check-slots-button" (click)="checkItemSlots($event, itemIndex, staff.id)">Slots</button>
+                            <div>
+                              <strong>{{ staff.name }}</strong>
+                              <span>{{ staff.title }} @if (staff.rating) { · {{ staff.rating }} rating }</span>
+                            </div>
+                            <button type="button" class="check-slots-button" (click)="checkItemSlots($event, activeItemIndex(), staff.id)">Pick Time</button>
                           </article>
+                        } @empty {
+                          <p class="muted">Any available professional will be assigned.</p>
                         }
                       </div>
                     </section>
@@ -490,8 +531,23 @@ export class BookingFlowPage implements OnInit {
 
   setItemStaff(index: number, staffId: string | null) {
     this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, staffId, slotStartAt: "" } : item));
-    this.activeItemIndex.set(index);
+    if (this.bookingItems().length > 1) {
+      const nextIndex = index + 1;
+      if (nextIndex < this.bookingItems().length) {
+        this.activeItemIndex.set(nextIndex);
+      } else {
+        this.activeItemIndex.set(index);
+      }
+    } else {
+      this.activeItemIndex.set(index);
+    }
     void this.reloadAvailability();
+  }
+
+  staffSelectedSummary(): string {
+    const total = this.bookingItems().length;
+    if (!total) return "";
+    return `Service ${this.activeItemIndex() + 1} of ${total}`;
   }
 
   async checkItemSlots(event: Event, index: number, staffId: string) {
