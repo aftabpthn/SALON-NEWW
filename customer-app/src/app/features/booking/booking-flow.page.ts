@@ -93,6 +93,14 @@ type BookingFlowItem = {
           @if (step() === 2) {
             <section class="panel">
               <div class="section-heading"><div><h2 class="section-title">Choose professionals</h2><p class="muted">Pick staff for each selected service.</p></div></div>
+              @if (bookingItems().length > 1) {
+                <div class="multi-staff-quick-bar">
+                  <button type="button" class="quick-staff-btn" (click)="assignAnyStaffToAll()">
+                    <ion-icon name="sparkles-outline"></ion-icon>
+                    Assign Any Professional to all {{ bookingItems().length }} services
+                  </button>
+                </div>
+              }
               <div class="multi-service-stack">
                 @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
                   @if (serviceById(item.serviceId); as service) {
@@ -125,6 +133,12 @@ type BookingFlowItem = {
           @if (step() === 3) {
             <section class="panel">
               <div class="section-heading"><div><h2 class="section-title">Pick date and time</h2><p class="muted">Each service needs its own non-overlapping slot.</p></div></div>
+              @if (bookingItems().length > 1) {
+                <div class="multi-service-progress-banner">
+                  <p>Step 3: Selecting slot for <strong>Service {{ activeItemIndex() + 1 }} of {{ bookingItems().length }}</strong> ({{ activeService()?.name }})</p>
+                  <small>{{ slotsSelectedSummary() }}</small>
+                </div>
+              }
               <div class="booking-item-tabs" aria-label="Selected services">
                 @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
                   @if (serviceById(item.serviceId); as service) {
@@ -139,7 +153,7 @@ type BookingFlowItem = {
               <article class="selected-staff-card premium-card">
                 <div class="any-avatar"><ion-icon name="person-outline"></ion-icon></div>
                 <div>
-                  <span>Available times with</span>
+                  <span>Available times for {{ activeService()?.name }}</span>
                   <strong>{{ activeStaffName() }}</strong>
                   @if (activeService(); as service) { <small>{{ activeServiceLabel(service) }}</small> }
                 </div>
@@ -181,12 +195,21 @@ type BookingFlowItem = {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
                 <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
-                <dl>
+                <dl class="multi-service-summary-dl">
                   <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
-                  <div><dt>Services</dt><dd>{{ selectedServices().length }} selected</dd></div>
+                  <div><dt>Selected Services</dt><dd>{{ selectedServices().length }} service{{ selectedServices().length === 1 ? "" : "s" }} ({{ bookingTotalLabel() }})</dd></div>
                   @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
                     @if (serviceById(item.serviceId); as service) {
-                      <div><dt>{{ service.name }}</dt><dd>{{ itemStaffName(item) }} · {{ itemSlotLabel(itemIndex) || "No time" }}</dd></div>
+                      <div class="confirm-service-row">
+                        <dt>
+                          <span><span class="step-num">{{ itemIndex + 1 }}</span><strong>{{ service.name }}</strong></span>
+                          <small>{{ servicePriceLabel(service) }}</small>
+                        </dt>
+                        <dd>
+                          <span><ion-icon name="person-outline"></ion-icon> {{ itemStaffName(item) }}</span>
+                          <span><ion-icon name="time-outline"></ion-icon> {{ itemSlotLabel(itemIndex) || "No time selected" }}</span>
+                        </dd>
+                      </div>
                     }
                   }
                   <div><dt>Payment</dt><dd>Pay at salon</dd></div>
@@ -196,6 +219,7 @@ type BookingFlowItem = {
                 <ion-icon name="checkmark-circle-outline"></ion-icon>
                 @if (marketplace.isAuthenticated()) {
                   <h3>Ready to book</h3>
+                  <p>Your {{ selectedServices().length }} appointment{{ selectedServices().length === 1 ? '' : 's' }} will be reserved immediately.</p>
                 } @else {
                   <h3>Sign in to reserve</h3>
                 }
@@ -382,11 +406,16 @@ type BookingFlowItem = {
       .check-slots-button { justify-self: start; }
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-    @media (min-width: 768px) {
-      .booking-hero { grid-template-columns: 260px minmax(0, 1fr); }
-      .confirm-grid { grid-template-columns: minmax(0, 1fr) 260px; }
-      .addon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    }
+    .multi-staff-quick-bar { margin-bottom: 12px; }
+    .quick-staff-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(11, 70, 120, 0.28); border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.84rem; font-weight: 900; }
+    .multi-service-progress-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 12px; border-radius: 18px; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-700, #0F4C81), var(--primary, #0B4678)); }
+    .multi-service-progress-banner p { margin: 0; font-size: 0.88rem; }
+    .multi-service-progress-banner small { opacity: 0.88; font-weight: 850; font-size: 0.78rem; }
+    .confirm-service-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto !important; align-items: start !important; gap: 8px !important; }
+    .confirm-service-row dt { display: grid; gap: 2px; text-align: left; }
+    .confirm-service-row dt .step-num { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 999px; color: #fff; background: var(--primary); font-size: 0.72rem; font-weight: 950; margin-right: 6px; }
+    .confirm-service-row dd { display: grid; gap: 4px; justify-items: end; text-align: right; font-size: 0.84rem; }
+    .confirm-service-row dd ion-icon { vertical-align: middle; margin-right: 2px; }
   `]
 })
 export class BookingFlowPage implements OnInit {
@@ -475,14 +504,24 @@ export class BookingFlowPage implements OnInit {
   }
 
   setDate(date: string) {
-    const index = this.activeItemIndex();
-    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, date, slotStartAt: "" } : item));
+    this.bookingItems.update((items) => items.map((item) => ({ ...item, date, slotStartAt: "" })));
     void this.reloadAvailability();
   }
 
   setActiveItem(index: number) {
     this.activeItemIndex.set(index);
     void this.reloadAvailability();
+  }
+
+  assignAnyStaffToAll() {
+    this.bookingItems.update((items) => items.map((item) => ({ ...item, staffId: null, slotStartAt: "" })));
+    void this.reloadAvailability();
+  }
+
+  slotsSelectedSummary(): string {
+    const selected = this.bookingItems().filter((item) => !!item.slotStartAt).length;
+    const total = this.bookingItems().length;
+    return `${selected} of ${total} slots chosen`;
   }
 
   dateAvailabilityClass(day: AvailabilityDay): "full" | "many" | "partial" {
@@ -521,7 +560,7 @@ export class BookingFlowPage implements OnInit {
     const total = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
     const minutes = this.selectedServices().reduce((sum, service) => sum + service.durationMinutes, 0);
     if (!total) return "";
-    return minutes > 0 ? `${this.money(total)} · ${minutes} min` : this.money(total);
+    return minutes > 0 ? `${this.money(total)} · Total ${minutes} min` : this.money(total);
   }
 
   servicePriceLabel(service: ServiceItem): string {
@@ -535,6 +574,11 @@ export class BookingFlowPage implements OnInit {
   selectedServicesSummary(): string {
     const count = this.selectedServices().length;
     if (!count) return "";
+    if (this.step() === 3 && count > 1) {
+      const set = this.bookingItems().filter((item) => !!item.slotStartAt).length;
+      if (set < count) return `${set} of ${count} slots chosen — Select time for next service`;
+      return `All ${count} slots selected`;
+    }
     return `${count} service${count === 1 ? "" : "s"} selected`;
   }
 
@@ -609,16 +653,19 @@ export class BookingFlowPage implements OnInit {
     const item = this.activeItem();
     const service = this.activeService();
     if (!business || !service) return;
-    const queryDate = item?.date || new Date().toISOString().slice(0, 10);
+    const queryDate = item?.date || this.bookingItems().find((row) => row.date)?.date || new Date().toISOString().slice(0, 10);
     const days = await this.marketplace.loadAvailability(business.slug, {
       serviceId: service.id,
       staffId: item?.staffId || undefined,
       date: queryDate,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
     }).catch(() => []);
-    if (item && !item.date && days[0]) {
-      const index = this.activeItemIndex();
-      this.bookingItems.update((items) => items.map((row, rowIndex) => rowIndex === index ? { ...row, date: days[0].date } : row));
+    if (days[0]?.date) {
+      const activeIdx = this.activeItemIndex();
+      this.bookingItems.update((items) => items.map((row, rowIndex) => {
+        if (!row.date || rowIndex === activeIdx) return { ...row, date: row.date || days[0].date };
+        return row;
+      }));
     }
   }
 
@@ -648,8 +695,25 @@ export class BookingFlowPage implements OnInit {
 
   selectActiveSlot(slot: AvailabilitySlot) {
     if (!this.isSlotSelectable(slot)) return;
-    const index = this.activeItemIndex();
-    this.bookingItems.update((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, slotStartAt: slot.startAt } : item));
+    const currentIndex = this.activeItemIndex();
+    const selectedDate = this.activeItem()?.date || "";
+
+    this.bookingItems.update((items) => items.map((item, index) => {
+      if (index === currentIndex) return { ...item, slotStartAt: slot.startAt };
+      if (!item.date && selectedDate) return { ...item, date: selectedDate };
+      return item;
+    }));
+
+    const nextUnsetIndex = this.bookingItems().findIndex((item, index) => index > currentIndex && !item.slotStartAt);
+    const anyUnsetIndex = this.bookingItems().findIndex((item) => !item.slotStartAt);
+
+    if (nextUnsetIndex !== -1) {
+      this.activeItemIndex.set(nextUnsetIndex);
+      void this.reloadAvailability();
+    } else if (anyUnsetIndex !== -1 && anyUnsetIndex !== currentIndex) {
+      this.activeItemIndex.set(anyUnsetIndex);
+      void this.reloadAvailability();
+    }
   }
 
   isSlotSelectable(slot: AvailabilitySlot): boolean {
