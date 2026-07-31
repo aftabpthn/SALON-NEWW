@@ -5,9 +5,11 @@ import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "
 import { addIcons } from "ionicons";
 import { firstValueFrom } from "rxjs";
 import {
+  arrowUndoOutline,
   briefcaseOutline,
   calendarOutline,
   cardOutline,
+  cashOutline,
   chatbubblesOutline,
   chevronForwardOutline,
   colorPaletteOutline,
@@ -15,7 +17,9 @@ import {
   heartCircleOutline,
   imagesOutline,
   informationCircleOutline,
+  linkOutline,
   peopleOutline,
+  phonePortraitOutline,
   receiptOutline,
   ribbonOutline,
   searchOutline,
@@ -38,6 +42,7 @@ import {
   CustomerMembership,
   CustomerMembershipPlan,
   CustomerPackage,
+  CustomerPayment,
   CustomerRewardSummary,
   CustomerWallet,
   CustomerWalletTransaction
@@ -156,7 +161,7 @@ const hubConfigs: Record<string, HubConfig> = {
   imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
-      <main class="page hub-page" [class.wallet-hub-page]="walletMode() || rewardsMode() || membershipsMode() || packagesMode() || familyMode() || referralsMode() || giftCardsMode() || corporateMode() || goalsMode() || slug() === 'support'">
+      <main class="page hub-page" [class.wallet-hub-page]="walletMode() || rewardsMode() || membershipsMode() || packagesMode() || paymentsMode() || familyMode() || referralsMode() || giftCardsMode() || corporateMode() || goalsMode() || slug() === 'support'">
         @if (bookingSupportMode()) {
           <section class="booking-support" aria-labelledby="booking-support-title">
             <header class="support-heading">
@@ -164,7 +169,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="support-eyebrow">Booking support</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="booking-support-title">How can we help?</h1>
                 </div>
                 <span>Send a request linked securely to your booking.</span>
@@ -268,7 +273,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Aura wallet</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="wallet-title">Wallet</h1>
                 </div>
                 <p class="wallet-intro">Your credits, refunds and wallet activity in one place.</p>
@@ -414,7 +419,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Aura invoices</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="invoices-title">Invoices</h1>
                 </div>
                 <p class="wallet-intro">Track due payments, past invoices and your payment history.</p>
@@ -566,13 +571,159 @@ const hubConfigs: Record<string, HubConfig> = {
               </section>
             }
           </section>
+        } @else if (paymentsMode()) {
+          <section class="wallet-screen" aria-labelledby="payments-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura payments</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="payments-title">Payments</h1>
+                </div>
+                <p class="wallet-intro">Every payment across your bookings and invoices, in one secure place.</p>
+              </div>
+              <a class="wallet-header-link" routerLink="/tabs/invoices" aria-label="View invoices">
+                <ion-icon class="wallet-header-receipt" name="receipt-outline" aria-hidden="true"></ion-icon>
+                <span>View invoices</span>
+                <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            </header>
+
+            @if (!marketplace.isAuthenticated()) {
+              <section class="wallet-state" aria-labelledby="payments-login-title">
+                <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-login-title">Log in to see your payments</h2>
+                <p>Your payment history is private to your Aura account.</p>
+                <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/payments' }">Log in</ion-button>
+              </section>
+            } @else if (marketplace.loading()) {
+              <section class="wallet-loading" role="status" aria-live="polite">
+                <span class="sr-only">Loading your payments</span>
+                <div class="wallet-balance-skeleton skeleton-block"></div>
+                <div class="wallet-content-grid">
+                  <div class="wallet-list-skeleton">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </section>
+            } @else if (marketplace.error()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="payments-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-error-title">We couldn’t load your payments</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else if (paymentsList(); as paymentList) {
+              <section class="wallet-balance-card" aria-labelledby="payments-summary-label">
+                <div class="wallet-balance-copy">
+                  <div class="wallet-status-row">
+                    <span class="wallet-status"><span aria-hidden="true"></span>{{ paymentList.length }} {{ paymentList.length === 1 ? "payment" : "payments" }} on record</span>
+                    <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+                  </div>
+                  <p id="payments-summary-label">Total paid</p>
+                  <strong>{{ money(paymentTotalPaid()) }}</strong>
+                  <small>{{ paymentLatestLabel() }}</small>
+                </div>
+                <div class="wallet-actions" aria-label="Payment actions">
+                  <a class="wallet-action wallet-action-primary" routerLink="/tabs/invoices">
+                    <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
+                    View invoices
+                  </a>
+                  <a class="wallet-action wallet-action-secondary" routerLink="/tabs/search">
+                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                    Explore services
+                  </a>
+                </div>
+              </section>
+
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="payments-history-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">History</p>
+                      <h2 id="payments-history-title">Payment activity</h2>
+                    </div>
+                    @if (paymentList.length) {
+                      <span>{{ paymentList.length }} {{ paymentList.length === 1 ? "record" : "records" }}</span>
+                    }
+                  </div>
+
+                  @if (paymentList.length) {
+                    <div class="wallet-transactions">
+                      @for (payment of paymentList; track payment.id) {
+                        <article class="wallet-transaction">
+                          <div class="transaction-icon transaction-debit">
+                            <ion-icon [name]="paymentModeIcon(payment.mode)" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ paymentModeLabel(payment.mode) }}</strong>
+                            <span>{{ paymentReferenceLabel(payment) }}</span>
+                            <small>{{ paymentDateLabel(payment.createdAt) }}</small>
+                          </div>
+                          <div class="transaction-value">
+                            <strong>{{ paymentAmount(payment.amountPaise) }}</strong>
+                            <small>{{ payment.invoiceNumber ? 'Invoice ' + payment.invoiceNumber : 'Booking payment' }}</small>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>No payments yet</h3>
+                      <p>Your booking and invoice payments will appear here automatically after each settlement.</p>
+                      <a routerLink="/tabs/search">Book a service <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="payments-guide-title">
+                  <p class="wallet-section-kicker">Payment guide</p>
+                  <h2 id="payments-guide-title">Know your payments</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>Payment methods</strong><small>UPI, card, wallet and cash are accepted wherever the salon enables them.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Payment links</strong><small>Invoice balances can be settled anytime from a secure payment link.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Refunds</strong><small>Eligible refunds move back to your wallet and appear in history here.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'payment' }">
+                    Payment and wallet help
+                    <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </a>
+                </aside>
+              </div>
+            } @else {
+              <section class="wallet-state" aria-labelledby="payments-unavailable-title">
+                <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-unavailable-title">Payment details are unavailable</h2>
+                <p>We didn’t receive payment data for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Refresh payments</ion-button>
+              </section>
+            }
+          </section>
         } @else if (rewardsMode()) {
           <section class="wallet-screen" aria-labelledby="rewards-title">
             <header class="wallet-heading">
               <div>
                 <p class="wallet-eyebrow">Aura rewards</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="rewards-title">Rewards</h1>
                 </div>
                 <p class="wallet-intro">Points, tier and booking rewards from your activity.</p>
@@ -709,7 +860,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Aura memberships</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="memberships-title">Memberships</h1>
                 </div>
                 <p class="wallet-intro">Active plans, benefits and available memberships.</p>
@@ -868,7 +1019,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow family-eyebrow">Family booking</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="family-title">Family profiles</h1>
                 </div>
                 <p class="wallet-intro">Profiles, preferences and shared bookings for your family.</p>
@@ -956,7 +1107,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Refer & earn</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="referrals-title">Referrals</h1>
                 </div>
                 <p class="wallet-intro">Invite friends and earn rewards when they book.</p>
@@ -1070,7 +1221,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Gift cards</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="giftcards-title">Gift cards</h1>
                 </div>
                 <p class="wallet-intro">Purchase, redeem and track your gift card balances.</p>
@@ -1200,7 +1351,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Corporate benefits</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="corporate-title">Corporate</h1>
                 </div>
                 <p class="wallet-intro">Workplace benefits, packages and reimbursements.</p>
@@ -1291,7 +1442,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Beauty goals</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="goals-title">Goals</h1>
                 </div>
                 <p class="wallet-intro">Track your treatment plans, routines and progress.</p>
@@ -1379,7 +1530,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Aura packages</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="packages-title">Packages</h1>
                 </div>
                 <p class="wallet-intro">Sessions, balances and package redemptions.</p>
@@ -1513,7 +1664,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <div>
                 <p class="wallet-eyebrow">Aura support</p>
                 <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
                   <h1 id="support-title">Help & support</h1>
                 </div>
                 <p class="wallet-intro">Your support tickets and help resources.</p>
@@ -1864,9 +2015,9 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .hub-tile.active {
       color: #FFFFFF;
-      border-color: transparent !important;
-      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800)) !important;
-      box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24) !important;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800));
+      box-shadow: 0 18px 44px rgba(11, 70, 120, 0.24);
     }
 
     .hub-tile ion-icon {
@@ -1961,9 +2112,9 @@ const hubConfigs: Record<string, HubConfig> = {
       padding: 4px 9px;
       border: 1px solid rgba(11, 70, 120, 0.32);
       border-radius: 999px;
-      color: #8A5B08 !important;
+      color: #8A5B08;
       background: rgba(246, 217, 148, 0.34);
-      font-size: 0.68rem !important;
+      font-size: 0.68rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       white-space: nowrap;
@@ -2638,11 +2789,11 @@ const hubConfigs: Record<string, HubConfig> = {
     }
 
     .invoice-due-label {
-      color: #B42318 !important;
+      color: #B42318;
     }
 
     .text-danger {
-      color: #B42318 !important;
+      color: #B42318;
     }
 
     .invoice-due .transaction-icon {
@@ -3020,6 +3171,8 @@ export class CustomerHubPage implements OnInit {
   readonly slug = computed(() => this.route.snapshot.data["hub"] as string || "rewards");
   readonly walletMode = computed(() => this.slug() === "wallet");
   readonly invoicesMode = computed(() => this.slug() === "invoices");
+  readonly paymentsMode = computed(() => this.slug() === "payments");
+  readonly hubBackHref = computed(() => (this.marketplace.salonMode() ? "/tabs/my-salon" : "/tabs/profile"));
   readonly rewardsMode = computed(() => this.slug() === "rewards");
   readonly membershipsMode = computed(() => this.slug() === "memberships");
   readonly packagesMode = computed(() => this.slug() === "packages");
@@ -3042,6 +3195,18 @@ export class CustomerHubPage implements OnInit {
   });
   readonly invoiceTotalOutstanding = computed(() => this.invoices().reduce((sum, inv) => sum + (inv.balancePaise || 0), 0));
   readonly invoiceDueCount = computed(() => this.invoices().filter((inv) => inv.balancePaise > 0).length);
+  readonly paymentsList = computed<CustomerPayment[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "invoiceId" in data[0] && "amountPaise" in data[0]) return data as CustomerPayment[];
+    return [];
+  });
+  readonly paymentTotalPaid = computed(() => this.paymentsList().reduce((sum, payment) => sum + (Number(payment.amountPaise) || 0), 0));
+  readonly paymentLatest = computed<CustomerPayment | null>(() =>
+    this.paymentsList().reduce<CustomerPayment | null>(
+      (latest, payment) => !latest || this.paymentDateValue(payment.createdAt) > this.paymentDateValue(latest.createdAt) ? payment : latest,
+      null
+    )
+  );
   readonly rewardsData = computed<CustomerRewardSummary | null>(() => {
     const data = this.marketplace.accountModule();
     return data && this.isRewards(data) ? data : null;
@@ -3120,9 +3285,11 @@ export class CustomerHubPage implements OnInit {
 
   constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly api: CustomerApiService) {
     addIcons({
+      arrowUndoOutline,
       briefcaseOutline,
       calendarOutline,
       cardOutline,
+      cashOutline,
       chatbubblesOutline,
       chevronForwardOutline,
       colorPaletteOutline,
@@ -3130,7 +3297,9 @@ export class CustomerHubPage implements OnInit {
       heartCircleOutline,
       imagesOutline,
       informationCircleOutline,
+      linkOutline,
       peopleOutline,
+      phonePortraitOutline,
       receiptOutline,
       ribbonOutline,
       searchOutline,
@@ -3368,6 +3537,64 @@ export class CustomerHubPage implements OnInit {
       month: "short",
       year: "numeric"
     }).format(date);
+  }
+
+  paymentAmount(paise: number): string {
+    const amount = Number(paise);
+    return Number.isFinite(amount) ? this.money(amount) : "—";
+  }
+
+  paymentModeLabel(mode: string | null | undefined): string {
+    const key = String(mode || "").toLowerCase();
+    const labels: Record<string, string> = {
+      upi: "UPI",
+      card: "Card",
+      netbanking: "Net banking",
+      wallet: "Wallet",
+      cash: "Cash",
+      "payment_link": "Payment link",
+      link: "Payment link",
+      emi: "EMI"
+    };
+    if (labels[key]) return labels[key];
+    if (!key) return "Payment";
+    return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  paymentModeIcon(mode: string | null | undefined): string {
+    const key = String(mode || "").toLowerCase();
+    if (key === "cash") return "cash-outline";
+    if (key === "upi" || key === "wallet") return "phone-portrait-outline";
+    if (key === "link" || key === "payment_link") return "link-outline";
+    return "card-outline";
+  }
+
+  paymentReferenceLabel(payment: CustomerPayment): string {
+    if (payment.reference && String(payment.reference).trim()) return "Ref · " + String(payment.reference).trim();
+    if (payment.invoiceNumber && String(payment.invoiceNumber).trim()) return "Invoice " + String(payment.invoiceNumber).trim();
+    return "Payment recorded";
+  }
+
+  paymentDateLabel(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  private paymentDateValue(value: string): number {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+
+  paymentLatestLabel(): string {
+    const latest = this.paymentLatest();
+    return latest ? "Latest payment · " + this.paymentDateLabel(latest.createdAt) : "Payments appear here after each booking settlement";
   }
 
   private recordsFor(data: CustomerAccountModule | null): HubRecord[] {

@@ -201,7 +201,7 @@ interface ConsultationChatMessage {
             </div>
             <div class="business-rail continue-rail">
               @for (business of recentlyViewed(); track business.id) {
-                <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+                <aura-business-card variant="miniRail" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
               }
             </div>
           </section>
@@ -237,7 +237,7 @@ interface ConsultationChatMessage {
             <div class="section-heading"><div><span class="section-kicker">Available now</span><h2 class="section-title">Offers from relevant salons</h2></div><a routerLink="/tabs/offers">All offers</a></div>
             <div class="business-rail">
               @for (business of relevantOffers(); track business.id) {
-                <aura-business-card variant="personal" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
+                <aura-business-card variant="rail" [business]="business" [userLocation]="currentLocation()"></aura-business-card>
               }
             </div>
           </section>
@@ -1248,8 +1248,8 @@ interface ConsultationChatMessage {
       }
 
       .home-search-wrap ion-searchbar {
-        width: 100% !important;
-        padding-right: 0 !important;
+        width: 100%;
+        padding-right: 0;
       }
 
       .live-consultation-card {
@@ -1294,7 +1294,7 @@ interface ConsultationChatMessage {
       .hero-category-strip,
       .location-notice,
       .live-consultation-card {
-        display: none !important;
+        display: none;
       }
 
       .location-row {
@@ -1345,8 +1345,8 @@ interface ConsultationChatMessage {
       }
 
       .home-search-wrap ion-searchbar {
-        width: 100% !important;
-        padding: 0 !important;
+        width: 100%;
+        padding: 0;
         --border-radius: 18px;
         --box-shadow: none;
       }
@@ -1363,7 +1363,7 @@ interface ConsultationChatMessage {
       .business-grid,
       .business-grid.recommended,
       .nearby-grid {
-        grid-template-columns: minmax(0, 1fr) !important;
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .mobile-secondary-section {
@@ -1373,12 +1373,13 @@ interface ConsultationChatMessage {
       }
 
       .section-heading {
-        align-items: end;
+        align-items: flex-start;
         gap: 12px;
         min-width: 0;
+        text-align: left;
       }
 
-      .section-heading > div { min-width: 0; }
+      .section-heading > div { min-width: 0; text-align: left; }
       .section-heading a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; white-space: nowrap; }
       .section-title { overflow-wrap: anywhere; }
     }
@@ -1462,24 +1463,24 @@ interface ConsultationChatMessage {
 
     @media (max-width: 599px) {
       .home-page { scroll-padding-top: 54px; }
-      ion-header { height: 44px !important; }
-      ion-toolbar { height: 44px !important; --min-height: 44px !important; }
-      .home-toolbar { grid-template-columns: auto 1fr !important; }
-      .aura-shine-brand { display: inline-flex !important; align-self: center; margin-top: 0; }
+      ion-header { height: 44px; }
+      ion-toolbar { height: 44px; --min-height: 44px; }
+      .home-toolbar { grid-template-columns: auto 1fr; }
+      .aura-shine-brand { display: inline-flex; align-self: center; margin-top: 0; }
       .location-copy { justify-self: end; text-align: right; }
       .location-row { justify-content: flex-end; }
-      .home-page .home-toolbar { min-height: 44px !important; padding-block: 2px !important; }
-      .home-page .location-row strong { font-size: 0.78rem !important; }
+      .home-page .home-toolbar { min-height: 44px; padding-block: 2px; }
+      .home-page .location-row strong { font-size: 0.78rem; }
       .home-page .hero { margin-top: 0; }
       .home-page .search-panel {
-        position: relative !important;
-        top: auto !important;
-        z-index: 2 !important;
-        display: block !important;
+        position: relative;
+        top: auto;
+        z-index: 2;
+        display: block;
         margin-inline: 0;
-        padding: 0 !important;
-        border-radius: 16px !important;
-        box-shadow: 0 7px 18px rgba(6, 23, 43, 0.08) !important;
+        padding: 0;
+        border-radius: 16px;
+        box-shadow: 0 7px 18px rgba(6, 23, 43, 0.08);
       }
       .home-page .home-search-wrap {
         position: relative;
@@ -1488,59 +1489,59 @@ interface ConsultationChatMessage {
         margin-inline: 0;
       }
       .home-page .home-search-wrap ion-searchbar {
-        width: 100% !important;
-        height: 42px !important;
-        min-height: 42px !important;
-        padding: 0 !important;
-        padding-right: 0 !important;
-        --padding-end: 112px !important;
-        --background: #ffffff !important;
-        --border-radius: 13px !important;
-        --box-shadow: none !important;
+        width: 100%;
+        height: 42px;
+        min-height: 42px;
+        padding: 0;
+        padding-right: 0;
+        --padding-end: 112px;
+        --background: #ffffff;
+        --border-radius: 13px;
+        --box-shadow: none;
         --icon-color: #6B7C8E;
         --placeholder-color: #8493A3;
         font-size: 0.82rem;
       }
       .home-page .home-control-row {
-        position: absolute !important;
+        position: absolute;
         top: 50%;
         right: 8px;
         z-index: 2;
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        gap: 0 !important;
-        padding: 0 !important;
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0;
+        padding: 0;
         border-radius: 22px;
         background: #ffffff;
         transform: translateY(-50%);
       }
       .home-page .home-control-button {
-        width: 34px !important;
-        min-width: 34px !important;
-        height: 34px !important;
-        min-height: 34px !important;
-        padding: 0 !important;
-        border-radius: 50% !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
+        width: 34px;
+        min-width: 34px;
+        height: 34px;
+        min-height: 34px;
+        padding: 0;
+        border-radius: 50%;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
       }
-      .home-page .home-control-button span { display: none !important; }
+      .home-page .home-control-button span { display: none; }
       .home-page .home-control-button ion-icon {
-        width: 14px !important;
-        height: 14px !important;
-        margin: 0 !important;
-        font-size: 14px !important;
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        font-size: 14px;
         opacity: 0.64;
       }
       .home-page .home-suggestion-panel {
-        left: 0 !important;
-        right: 0 !important;
-        width: auto !important;
+        left: 0;
+        right: 0;
+        width: auto;
       }
     }
       .home-page .business-grid.recommended aura-business-card { --card-image-ratio: 1.65; }
-      .home-page .business-grid.recommended { gap: 10px !important; }
+      .home-page .business-grid.recommended { gap: 10px; }
 
     @media (min-width: 1024px) {
       ion-header {
@@ -1778,7 +1779,7 @@ interface ConsultationChatMessage {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .section-heading { align-items: end; }
+    .section-heading { align-items: flex-start; text-align: left; }
     .section-title { margin-top: 3px; }
     .lower-actions { display: grid; gap: 12px; margin-top: 16px; opacity: 0.9; }
     .lower-actions .customer-quick-actions { display: grid; }
@@ -1794,17 +1795,17 @@ interface ConsultationChatMessage {
     @media (max-width: 900px) {
       .home-page .business-rail,
       .home-page .visited-rail {
-        grid-auto-flow: row !important;
-        grid-auto-columns: minmax(0, 1fr) !important;
-        grid-template-columns: minmax(0, 1fr) !important;
+        grid-auto-flow: row;
+        grid-auto-columns: minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         width: 100%;
         min-width: 0;
-        overflow: visible !important;
+        overflow: visible;
       }
       .home-page .business-rail aura-business-card {
-        display: block !important;
-        width: 100% !important;
-        min-width: 0 !important;
+        display: block;
+        width: 100%;
+        min-width: 0;
       }
       .dashboard-hero {
         display: grid;
@@ -1814,7 +1815,7 @@ interface ConsultationChatMessage {
       }
       .dashboard-hero .eyebrow,
       .dashboard-hero .page-title { display: none; }
-      .dashboard-hero .search-panel { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 6px !important; }
+      .dashboard-hero .search-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 6px; }
       .dashboard-hero .search-panel ion-button { width: 44px; min-width: 44px; height: 44px; font-size: 0; --padding-start: 0; --padding-end: 0; }
       .next-appointment {
         grid-template-columns: 54px minmax(0, 1fr) auto;
@@ -1850,12 +1851,12 @@ interface ConsultationChatMessage {
 
     @media (max-width: 599px) {
       .home-page .visited-rail {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         align-items: stretch;
       }
-      .home-page .visited-rail .visited-card:nth-child(-n + 4) { display: grid !important; }
-      .home-page .visited-rail .visited-card:nth-child(n + 5) { display: none !important; }
+      .home-page .visited-rail .visited-card:nth-child(-n + 4) { display: grid; }
+      .home-page .visited-rail .visited-card:nth-child(n + 5) { display: none; }
       .home-page .visited-rail .visited-card {
         grid-template-columns: 52px minmax(0, 1fr);
         grid-template-rows: auto auto;
@@ -1889,13 +1890,13 @@ interface ConsultationChatMessage {
 
       .home-page .business-rail.continue-rail,
       .home-page .business-rail.favourites-rail {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         align-items: stretch;
         margin-bottom: 4px;
       }
-      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(-n + 4) { display: block !important; }
-      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(n + 5) { display: none !important; }
+      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(-n + 4) { display: block; }
+      .home-page :is(.continue-rail, .favourites-rail) aura-business-card:nth-child(n + 5) { display: none; }
       .home-page .favourites-rail .favourite-mini-card {
         grid-template-columns: 52px minmax(0, 1fr);
         gap: 8px;
@@ -2533,7 +2534,11 @@ export class HomePage implements OnInit {
     const history = this.readRecentlyViewed();
     const businesses = this.marketplace.businesses();
     return history
-      .map((item) => businesses.find((business) => business.id === item.id || business.slug === item.slug))
+      .map((item) => {
+        const business = businesses.find((candidate) => candidate.id === item.id || candidate.slug === item.slug);
+        if (!business) return null;
+        return item.serviceName ? { ...business, popularService: item.serviceName } : business;
+      })
       .filter((business): business is Business => !!business)
       .slice(0, 6);
   }
@@ -2564,10 +2569,10 @@ export class HomePage implements OnInit {
       }));
   }
 
-  private readRecentlyViewed(): Array<{ id?: string; slug?: string }> {
+  private readRecentlyViewed(): Array<{ id?: string; slug?: string; serviceId?: string; serviceName?: string }> {
     try {
-      const value = JSON.parse(localStorage.getItem("aura_customer_recently_viewed_businesses") || "[]") as Array<{ id?: string; slug?: string }>;
-      return Array.isArray(value) ? value.slice(0, 12) : [];
+      const value = JSON.parse(localStorage.getItem("aura_customer_recently_viewed_businesses") || "[]") as Array<{ id?: string; slug?: string; serviceId?: string; serviceName?: string }>;
+      return Array.isArray(value) ? value.filter((item) => !!item.serviceId || !!item.serviceName).slice(0, 12) : [];
     } catch {
       return [];
     }

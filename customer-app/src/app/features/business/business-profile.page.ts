@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
-import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar } from "@ionic/angular/standalone";
+import { IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import {
   callOutline,
@@ -32,7 +32,7 @@ import { Subscription } from "rxjs";
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar],
+  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
       @if (business()) {
@@ -1638,7 +1638,7 @@ import { Subscription } from "rxjs";
       }
 
       .sticky-cta {
-        bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+        bottom: calc(8px + env(safe-area-inset-bottom));
       }
     }
 
@@ -1882,7 +1882,31 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     if (!this.isServiceSelected(serviceId)) {
       this.selectedServiceIds.update((ids) => [...ids, serviceId]);
     }
+    this.recordRecentlyViewedService(serviceId);
     this.closeServicePopup();
+  }
+
+  private recordRecentlyViewedService(serviceId: string) {
+    try {
+      const biz = this.business();
+      const service = biz?.services.find((item) => item.id === serviceId);
+      if (!biz || !service) return;
+      const key = "aura_customer_recently_viewed_businesses";
+      const current = JSON.parse(localStorage.getItem(key) || "[]") as Array<{ id?: string; slug?: string; serviceId?: string; serviceName?: string }>;
+      const next = [
+        {
+          id: biz.id,
+          slug: biz.slug,
+          serviceId: service.id,
+          serviceName: service.name,
+          viewedAt: new Date().toISOString()
+        },
+        ...current.filter((item) => item.id !== biz.id && item.slug !== biz.slug)
+      ].slice(0, 12);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // Recently viewed service history is optional.
+    }
   }
 
   isServiceSelected(serviceId: string): boolean {

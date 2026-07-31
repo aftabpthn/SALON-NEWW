@@ -19,6 +19,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       [class.highlighted]="highlighted"
       [class.variant-personal]="variant === 'personal'"
       [class.variant-discovery]="variant === 'discovery'"
+      [class.variant-rail]="variant === 'rail' || variant === 'miniRail'"
+      [class.variant-mini-rail]="variant === 'miniRail'"
       tabindex="0"
       (click)="openCard()"
       (keydown.enter)="openCard()"
@@ -53,7 +55,9 @@ import { MarketplaceService } from "../core/marketplace.service";
         </div>
         <h3>{{ business.businessName }}</h3>
         <p class="business-meta">
-          @if (business.category) {
+          @if (variant === 'miniRail' && business.popularService) {
+            <span class="business-category">{{ business.popularService }}</span>
+          } @else if (business.category) {
             <span class="business-category">{{ business.category }}</span>
           }
           @if (distanceLabel(); as location) {
@@ -347,9 +351,9 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     @media (max-width: 599px) {
-      :host-context(.business-rail) .business-card {
+      .business-card.variant-rail {
         grid-template-columns: 68px minmax(0, 1fr) 36px;
-        grid-template-rows: auto auto auto !important;
+        grid-template-rows: auto auto auto;
         gap: 3px 8px;
         align-items: center;
         width: 100%;
@@ -360,29 +364,29 @@ import { MarketplaceService } from "../core/marketplace.service";
         border-radius: 16px;
       }
 
-      :host-context(.business-rail) .cover {
+      .business-card.variant-rail .cover {
         grid-row: span 3;
         width: 68px;
         height: 68px;
         border-radius: 14px;
       }
 
-      :host-context(.business-rail) .content {
+      .business-card.variant-rail .content {
         display: contents;
       }
 
-      :host-context(.business-rail) .rating-pill,
-      :host-context(.business-rail) .cover-actions,
-      :host-context(.business-rail) .offer-pill,
-      :host-context(.business-rail) .topline,
-      :host-context(.business-rail) .service-row strong,
-      :host-context(.business-rail) .footer-row > span {
+      .business-card.variant-rail .rating-pill,
+      .business-card.variant-rail .cover-actions,
+      .business-card.variant-rail .offer-pill,
+      .business-card.variant-rail .topline,
+      .business-card.variant-rail .service-row strong,
+      .business-card.variant-rail .footer-row > span {
         display: none;
       }
 
-      :host-context(.business-rail) h3,
-      :host-context(.business-rail) .business-meta,
-      :host-context(.business-rail) .service-row {
+      .business-card.variant-rail h3,
+      .business-card.variant-rail .business-meta,
+      .business-card.variant-rail .service-row {
         min-width: 0;
         margin: 0;
         padding: 0;
@@ -393,7 +397,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
-      :host-context(.business-rail) h3 {
+      .business-card.variant-rail h3 {
         grid-column: 2;
         min-height: 0;
         display: block;
@@ -402,21 +406,21 @@ import { MarketplaceService } from "../core/marketplace.service";
         line-height: 1.05;
       }
 
-      :host-context(.business-rail) .business-meta,
-      :host-context(.business-rail) .service-row span {
+      .business-card.variant-rail .business-meta,
+      .business-card.variant-rail .service-row span {
         color: var(--muted);
         font-size: 0.72rem;
         font-weight: 900;
       }
 
-      :host-context(.business-rail) .footer-row {
+      .business-card.variant-rail .footer-row {
         grid-column: 3;
         grid-row: 1 / span 3;
         display: grid;
         padding: 0;
       }
 
-      :host-context(.business-rail) .footer-row ion-button {
+      .business-card.variant-rail .footer-row ion-button {
         width: 36px;
         min-width: 36px;
         height: 36px;
@@ -426,25 +430,25 @@ import { MarketplaceService } from "../core/marketplace.service";
         font-size: 0;
       }
 
-      :host-context(.business-rail) .business-location {
+      .business-card.variant-rail .business-location {
         display: none;
       }
 
       .business-card {
-        border-radius: 18px;
+        border-radius: 16px;
       }
 
       .cover {
         aspect-ratio: auto;
         width: 100%;
-        height: 116px;
+        height: 92px;
       }
 
       .cover-fallback span {
-        width: 60px;
-        height: 60px;
-        border-radius: 20px;
-        font-size: 1.25rem;
+        width: 52px;
+        height: 52px;
+        border-radius: 18px;
+        font-size: 1.12rem;
       }
 
       .cover-fallback small {
@@ -453,9 +457,9 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .cover img,
       .cover .image-fill {
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: cover !important;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .rating-pill {
@@ -471,25 +475,34 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .favorite,
       .save-salon {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
       }
 
       .content {
-        gap: 5px;
-        padding: 10px 12px 12px;
+        gap: 4px;
+        padding: 8px 10px 10px;
       }
 
       .topline {
         gap: 6px;
       }
 
+      .status-pill,
+      .countdown-pill,
+      .rating-pill,
+      .offer-pill {
+        min-height: 24px;
+        padding-inline: 8px;
+        font-size: 0.68rem;
+      }
+
       h3 {
-        margin-top: 2px;
-        font-size: 1.05rem;
-        min-height: 2.1em;
+        margin-top: 0;
+        font-size: 0.98rem;
+        min-height: 0;
         display: -webkit-box;
         overflow: hidden;
         -webkit-box-orient: vertical;
@@ -497,14 +510,18 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-meta {
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         line-height: 1.2;
       }
 
       .service-row {
-        margin-top: 4px;
-        padding: 9px 10px;
-        border-radius: 14px;
+        margin-top: 3px;
+        padding: 7px 9px;
+        border-radius: 12px;
+      }
+
+      .service-row strong {
+        font-size: 0.78rem;
       }
 
       .service-row span {
@@ -516,19 +533,20 @@ import { MarketplaceService } from "../core/marketplace.service";
       .footer-row {
         align-items: center;
         flex-direction: row;
-        gap: 8px;
-        padding-top: 4px;
+        gap: 6px;
+        padding-top: 2px;
       }
 
       .footer-row ion-button {
         width: auto;
-        min-width: 92px;
-        min-height: 36px;
+        min-width: 76px;
+        min-height: 32px;
         margin: 0;
       }
 
       .footer-row > span {
         min-width: 0;
+        font-size: 0.72rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -558,9 +576,9 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
     }
 
-    @media (max-width: 900px) {
-      :host-context(.business-rail) .business-card.variant-personal {
-        grid-template-rows: minmax(104px, auto) !important;
+    @media (min-width: 600px) and (max-width: 900px) {
+      .business-card.variant-rail {
+        grid-template-rows: minmax(104px, auto);
         grid-template-columns: 76px minmax(0, 1fr);
         align-items: stretch;
         width: 100%;
@@ -572,7 +590,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         border-radius: 16px;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .cover {
+      .business-card.variant-rail .cover {
         grid-row: 1;
         width: 76px;
         height: 100%;
@@ -581,7 +599,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         border-radius: 0;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .content {
+      .business-card.variant-rail .content {
         display: grid;
         align-content: center;
         gap: 4px;
@@ -589,14 +607,14 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding: 8px 9px;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .rating-pill,
-      :host-context(.business-rail) .business-card.variant-personal .cover-actions,
-      :host-context(.business-rail) .business-card.variant-personal .offer-pill,
-      :host-context(.business-rail) .business-card.variant-personal .topline {
+      .business-card.variant-rail .rating-pill,
+      .business-card.variant-rail .cover-actions,
+      .business-card.variant-rail .offer-pill,
+      .business-card.variant-rail .topline {
         display: none;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal h3 {
+      .business-card.variant-rail h3 {
         display: block;
         grid-column: auto;
         min-height: 0;
@@ -608,7 +626,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .business-meta {
+      .business-card.variant-rail .business-meta {
         display: flex;
         margin: 0;
         overflow: hidden;
@@ -617,14 +635,14 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .service-row span,
-      :host-context(.business-rail) .business-card.variant-personal .footer-row > span {
+      .business-card.variant-rail .service-row span,
+      .business-card.variant-rail .footer-row > span {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .footer-row {
+      .business-card.variant-rail .footer-row {
         display: grid;
         grid-column: auto;
         grid-row: auto;
@@ -634,7 +652,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding-top: 0;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .service-row {
+      .business-card.variant-rail .service-row {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 5px;
@@ -645,12 +663,12 @@ import { MarketplaceService } from "../core/marketplace.service";
         font-size: 0.68rem;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .service-row strong,
-      :host-context(.business-rail) .business-card.variant-personal .footer-row > span {
+      .business-card.variant-rail .service-row strong,
+      .business-card.variant-rail .footer-row > span {
         display: inline-flex;
       }
 
-      :host-context(.business-rail) .business-card.variant-personal .footer-row ion-button {
+      .business-card.variant-rail .footer-row ion-button {
         width: 68px;
         min-width: 68px;
         height: 36px;
@@ -746,33 +764,29 @@ import { MarketplaceService } from "../core/marketplace.service";
         margin: 0;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal,
-      :host-context(.favourites-rail) .business-card.variant-personal {
+      .business-card.variant-mini-rail {
         grid-template-columns: 52px minmax(0, 1fr);
-        grid-template-rows: 74px !important;
+        grid-template-rows: 74px;
         align-items: stretch;
         min-height: 74px;
         max-height: 74px;
         border-radius: 14px;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .cover,
-      :host-context(.favourites-rail) .business-card.variant-personal .cover {
+      .business-card.variant-mini-rail .cover {
         grid-row: 1;
         width: 52px;
         height: 74px;
         min-height: 0;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .content,
-      :host-context(.favourites-rail) .business-card.variant-personal .content {
+      .business-card.variant-mini-rail .content {
         align-content: center;
         gap: 3px;
         padding: 7px 8px;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal h3,
-      :host-context(.favourites-rail) .business-card.variant-personal h3 {
+      .business-card.variant-mini-rail h3 {
         display: -webkit-box;
         overflow: hidden;
         font-size: 0.78rem;
@@ -782,8 +796,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         -webkit-line-clamp: 2;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .business-meta,
-      :host-context(.favourites-rail) .business-card.variant-personal .business-meta {
+      .business-card.variant-mini-rail .business-meta {
         display: block;
         overflow: hidden;
         font-size: 0.61rem;
@@ -792,40 +805,31 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .rating-pill,
-      :host-context(.continue-rail) .business-card.variant-personal .cover-actions,
-      :host-context(.continue-rail) .business-card.variant-personal .offer-pill,
-      :host-context(.continue-rail) .business-card.variant-personal .topline,
-      :host-context(.continue-rail) .business-card.variant-personal .service-row,
-      :host-context(.continue-rail) .business-card.variant-personal .footer-row,
-      :host-context(.favourites-rail) .business-card.variant-personal .rating-pill,
-      :host-context(.favourites-rail) .business-card.variant-personal .cover-actions,
-      :host-context(.favourites-rail) .business-card.variant-personal .offer-pill,
-      :host-context(.favourites-rail) .business-card.variant-personal .topline,
-      :host-context(.favourites-rail) .business-card.variant-personal .service-row,
-      :host-context(.favourites-rail) .business-card.variant-personal .footer-row {
-        display: none !important;
+      .business-card.variant-mini-rail .rating-pill,
+      .business-card.variant-mini-rail .cover-actions,
+      .business-card.variant-mini-rail .offer-pill,
+      .business-card.variant-mini-rail .topline,
+      .business-card.variant-mini-rail .service-row,
+      .business-card.variant-mini-rail .footer-row {
+        display: none;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback,
-      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback {
+      .business-card.variant-mini-rail .cover-fallback {
         width: 100%;
         height: 100%;
         border-radius: 12px;
         padding: 0;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback span,
-      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback span {
+      .business-card.variant-mini-rail .cover-fallback span {
         width: 36px;
         height: 36px;
         border-radius: 10px;
         font-size: 0.85rem;
       }
 
-      :host-context(.continue-rail) .business-card.variant-personal .cover-fallback small,
-      :host-context(.favourites-rail) .business-card.variant-personal .cover-fallback small {
-        display: none !important;
+      .business-card.variant-mini-rail .cover-fallback small {
+        display: none;
       }
     }
 
@@ -839,7 +843,7 @@ export class BusinessCardComponent implements OnInit {
   @Input() featured = false;
   @Input() selectable = false;
   @Input() highlighted = false;
-  @Input() variant: "default" | "personal" | "discovery" = "default";
+  @Input() variant: "default" | "personal" | "discovery" | "rail" | "miniRail" = "default";
   @Input() displayDistanceKm: number | null | undefined = undefined;
   @Input() userLocation: { lat: number; lng: number } | null = null;
   @Output() cardSelect = new EventEmitter<Business>();
@@ -997,7 +1001,6 @@ export class BusinessCardComponent implements OnInit {
   }
 
   openCard() {
-    this.recordRecentlyViewed();
     if (this.selectable) {
       this.cardSelect.emit(this.business);
       return;
@@ -1050,21 +1053,4 @@ export class BusinessCardComponent implements OnInit {
     }
   }
 
-  private recordRecentlyViewed() {
-    try {
-      const key = "aura_customer_recently_viewed_businesses";
-      const current = JSON.parse(localStorage.getItem(key) || "[]") as Array<{ id?: string; slug?: string }>;
-      const next = [
-        {
-          id: this.business.id,
-          slug: this.business.slug,
-          viewedAt: new Date().toISOString()
-        },
-        ...current.filter((item) => item.id !== this.business.id && item.slug !== this.business.slug)
-      ].slice(0, 12);
-      localStorage.setItem(key, JSON.stringify(next));
-    } catch {
-      // Browsing history is optional; booking and search must still work if storage is blocked.
-    }
-  }
 }

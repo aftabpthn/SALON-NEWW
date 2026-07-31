@@ -1,4 +1,9 @@
-@use "./theme/responsive";
+@use "./theme/tokens";
+@use "./theme/typography";
+@use "./theme/spacing";
+@use "./theme/utilities";
+@use "./theme/ionic";
+@use "./theme/_responsive" as responsive-foundation;
 
 @import "@ionic/angular/css/core.css";
 @import "@ionic/angular/css/normalize.css";
@@ -121,7 +126,6 @@ ion-button,
 .slot,
 .favorite,
 .check-slots-button,
-.business-card,
 .bottom-action-card,
 .premium-card,
 .glass-card,
@@ -601,9 +605,9 @@ ion-button:active,
 button:disabled,
 ion-button[disabled],
 .slot:disabled {
-  transform: none !important;
-  filter: grayscale(0.15) opacity(0.56) !important;
-  box-shadow: none !important;
+  transform: none;
+  filter: grayscale(0.15) opacity(0.56);
+  box-shadow: none;
 }
 
 button:focus-visible,
@@ -714,8 +718,8 @@ ion-button::part(native)::after {
   .favorite:hover,
   .check-slots-button:hover {
     transform: translateY(-3px);
-    border-color: rgba(11, 70, 120, 0.38) !important;
-    box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12), 0 0 24px rgba(11, 70, 120, 0.1) !important;
+    border-color: rgba(11, 70, 120, 0.38);
+    box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12), 0 0 24px rgba(11, 70, 120, 0.1);
     filter: saturate(1.08) brightness(1.03);
   }
 
@@ -1123,7 +1127,6 @@ select,
 
 .premium-card,
 .glass-card,
-.business-card,
 .state-card,
 .summary-card,
 .metric-card,
@@ -1151,16 +1154,15 @@ select,
 .selected-staff-card,
 .reschedule-card,
 .modal-card {
-  border-color: var(--border) !important;
-  color: var(--text) !important;
+  border-color: var(--border);
+  color: var(--text);
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96) 48%, rgba(231, 240, 248, 0.82)) !important;
-  box-shadow: var(--shadow-soft) !important;
+    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96) 48%, rgba(231, 240, 248, 0.82));
+  box-shadow: var(--shadow-soft);
 }
 
 .premium-card *,
 .glass-card *,
-.business-card *,
 .state-card *,
 .summary-card *,
 .booking-card *,
@@ -1171,9 +1173,6 @@ select,
 
 .section-title,
 .page-title,
-h1,
-h2,
-h3,
 strong,
 dt,
 dd {
@@ -1184,8 +1183,6 @@ dd {
 .category,
 .address,
 small,
-span,
-p,
 label,
 .helper,
 .step-copy {
@@ -1198,7 +1195,7 @@ label,
 .helper,
 .step-copy,
 .bottom-action-card small {
-  color: var(--muted) !important;
+  color: var(--muted);
 }
 
 .eyebrow,
@@ -1208,7 +1205,7 @@ label,
 .timeline ion-icon,
 .settings-menu ion-icon,
 .profile-menu ion-icon {
-  color: var(--primary) !important;
+  color: var(--primary);
 }
 
 .pill,
@@ -1222,10 +1219,10 @@ label,
 .service-row,
 .summary-row,
 .info-row {
-  border-color: var(--border) !important;
-  color: var(--text) !important;
-  background: var(--surface) !important;
-  box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08) !important;
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
 }
 
 .pill.active,
@@ -1235,20 +1232,20 @@ label,
 .date-pill.active,
 .time-pill.active,
 .slot.selected {
-  color: #FFFFFF !important;
-  border-color: transparent !important;
-  background: var(--primary) !important;
-  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.2) !important;
+  color: #FFFFFF;
+  border-color: transparent;
+  background: var(--primary);
+  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.2);
   animation: aura-selected-glow 3.2s ease-in-out infinite;
 }
 
 .date-card.selected,
 .service-choice.selected,
 .staff-choice.selected {
-  color: var(--text) !important;
-  border-color: rgba(11, 70, 120, 0.42) !important;
-  background: var(--primary-soft) !important;
-  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14) !important;
+  color: var(--text);
+  border-color: rgba(11, 70, 120, 0.42);
+  background: var(--primary-soft);
+  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14);
 }
 
 .status-pill,
@@ -1259,8 +1256,8 @@ label,
 }
 
 .offer-pill {
-  color: #FFFFFF !important;
-  background: var(--primary) !important;
+  color: #FFFFFF;
+  background: var(--primary);
 }
 
 .plain-input,
@@ -1268,27 +1265,26 @@ input,
 textarea,
 select,
 ion-searchbar {
-  color: var(--text) !important;
+  color: var(--text);
 }
 
 .plain-input::placeholder,
 input::placeholder,
 textarea::placeholder {
-  color: rgba(82, 101, 121, 0.72) !important;
+  color: rgba(82, 101, 121, 0.72);
 }
 
 .hero-search,
 .search-popover,
 .suggestion-panel,
 .location-panel {
-  border-color: var(--border) !important;
-  background: rgba(255, 255, 255, 0.96) !important;
-  box-shadow: 0 28px 70px rgba(6, 23, 43, 0.14) !important;
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 70px rgba(6, 23, 43, 0.14);
 }
 
 .premium-card,
 .glass-card,
-.business-card,
 .state-card,
 .summary-card,
 .metric-card,
@@ -1324,7 +1320,6 @@ textarea::placeholder {
 
 .premium-card:nth-of-type(2),
 .glass-card:nth-of-type(2),
-.business-card:nth-of-type(2),
 .metric-card:nth-of-type(2),
 .quick-card:nth-of-type(2) {
   animation-delay: 60ms, 720ms;
@@ -1332,7 +1327,6 @@ textarea::placeholder {
 
 .premium-card:nth-of-type(3),
 .glass-card:nth-of-type(3),
-.business-card:nth-of-type(3),
 .metric-card:nth-of-type(3),
 .quick-card:nth-of-type(3) {
   animation-delay: 110ms, 1.2s;
@@ -1340,7 +1334,6 @@ textarea::placeholder {
 
 .premium-card:nth-of-type(4),
 .glass-card:nth-of-type(4),
-.business-card:nth-of-type(4),
 .metric-card:nth-of-type(4),
 .quick-card:nth-of-type(4) {
   animation-delay: 160ms, 1.8s;
@@ -1349,7 +1342,6 @@ textarea::placeholder {
 @media (hover: hover) and (pointer: fine) {
   .premium-card:hover,
   .glass-card:hover,
-  .business-card:hover,
   .state-card:hover,
   .summary-card:hover,
   .metric-card:hover,
@@ -1373,28 +1365,26 @@ textarea::placeholder {
   .reschedule-card:hover,
   .modal-card:hover,
   .bottom-action-card:hover {
-    transform: translate3d(0, -3px, 0) scale(1.002) !important;
-    border-color: rgba(11, 70, 120, 0.4) !important;
+    transform: translate3d(0, -3px, 0) scale(1.002);
+    border-color: rgba(11, 70, 120, 0.4);
     box-shadow:
       0 34px 74px rgba(6, 23, 43, 0.18),
       0 14px 30px rgba(11, 70, 120, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+      inset 0 1px 0 rgba(255, 255, 255, 0.78);
     filter: saturate(1.06) brightness(1.025);
     animation-play-state: paused;
   }
 
   .premium-card:hover .image-fill,
   .glass-card:hover .image-fill,
-  .business-card:hover .image-fill,
   .hero-card:hover .image-fill,
   .profile-card:hover .image-fill {
-    transform: translate3d(0, -2px, 28px) scale(1.055) !important;
+    transform: translate3d(0, -2px, 28px) scale(1.055);
     filter: saturate(1.05) contrast(1.02);
   }
 
   .premium-card:hover ion-icon,
   .glass-card:hover ion-icon,
-  .business-card:hover ion-icon,
   .state-card:hover ion-icon,
   .summary-card:hover ion-icon,
   .metric-card:hover ion-icon,
@@ -1419,10 +1409,10 @@ textarea::placeholder {
   .slot:not(:disabled):hover,
   .favorite:hover,
   .check-slots-button:hover {
-    transform: translate3d(0, -2px, 0) scale(1.003) !important;
+    transform: translate3d(0, -2px, 0) scale(1.003);
     box-shadow:
       0 20px 42px rgba(6, 23, 43, 0.14),
-      0 8px 18px rgba(11, 70, 120, 0.1) !important;
+      0 8px 18px rgba(11, 70, 120, 0.1);
   }
 }
 
@@ -1442,11 +1432,10 @@ ion-button:active,
 .slot:not(:disabled):active,
 .favorite:active,
 .check-slots-button:active,
-.business-card:active,
 .premium-card:active,
 .glass-card:active,
 .bottom-action-card:active {
-  transform: translate3d(0, 1px, 0) scale(0.988) !important;
+  transform: translate3d(0, 1px, 0) scale(0.988);
   filter: saturate(1.03) brightness(0.98);
 }
 
@@ -1475,21 +1464,21 @@ ion-button:active,
   animation-name: aura-card-in;
   animation-duration: var(--motion-slow);
   animation-iteration-count: 1;
-  overflow: hidden !important;
-  transform: none !important;
+  overflow: hidden;
+  transform: none;
 }
 
 .menu.premium-card:hover,
 .settings-menu.premium-card:hover {
-  transform: none !important;
-  border-color: var(--border) !important;
-  box-shadow: var(--shadow-soft) !important;
-  filter: none !important;
+  transform: none;
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+  filter: none;
 }
 
 .menu a,
 .settings-menu a {
-  transform: none !important;
+  transform: none;
   transform-style: flat;
   backface-visibility: visible;
   border-radius: 0;
@@ -1505,26 +1494,26 @@ ion-button:active,
   .settings-menu a:hover {
     position: relative;
     z-index: 2;
-    transform: none !important;
-    border-color: rgba(11, 70, 120, 0.28) !important;
+    transform: none;
+    border-color: rgba(11, 70, 120, 0.28);
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9)) !important;
+      linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.82),
       inset 0 -1px 0 rgba(11, 70, 120, 0.18),
       inset 10px 0 18px rgba(11, 70, 120, 0.1),
-      inset -10px 0 18px rgba(6, 23, 43, 0.04) !important;
+      inset -10px 0 18px rgba(6, 23, 43, 0.04);
   }
 
   .menu a:hover ion-icon,
   .settings-menu a:hover ion-icon {
-    transform: translateY(-1px) scale(1.08) !important;
+    transform: translateY(-1px) scale(1.08);
   }
 }
 
 .menu a:active,
 .settings-menu a:active {
-  transform: none !important;
+  transform: none;
   filter: brightness(0.99);
 }
 
@@ -1532,12 +1521,11 @@ ion-button:active,
 .settings-menu a:hover::after,
 .menu a:active::after,
 .settings-menu a:active::after {
-  transform: translateX(390%) rotate(12deg) !important;
+  transform: translateX(390%) rotate(12deg);
 }
 
 /* AuraSalon responsive design-system layer.
    Keep page-specific styles intact, but normalize cross-platform layout behavior. */
-.business-card .cover,
 .professional-card > img,
 .hero-visual,
 .service-chip img,
@@ -1546,15 +1534,6 @@ ion-button:active,
   aspect-ratio: var(--card-image-ratio);
 }
 
-.business-card {
-  grid-template-rows: auto minmax(0, 1fr) !important;
-}
-
-.business-card .cover {
-  min-height: 0 !important;
-}
-
-.business-card .image-fill,
 .professional-card > img,
 .hero-visual img,
 .service-chip img,
@@ -1587,12 +1566,12 @@ ion-button:active,
   .hub-grid,
   .metric-grid,
   .results {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .search-shell,
   .aura-dashboard {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1606,7 +1585,7 @@ ion-button:active,
   .metric-grid,
   .results,
   .customer-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .hero,
@@ -1622,22 +1601,22 @@ ion-button:active,
   }
 
   .hero {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr) !important;
-    min-height: auto !important;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+    min-height: auto;
   }
 
   .hero-visual {
-    display: flex !important;
+    display: flex;
   }
 
   .filter-panel {
-    display: none !important;
+    display: none;
   }
 
   .aura-map-card .live-map,
   .live-map {
     min-height: 340px;
-    height: min(48vh, 420px) !important;
+    height: min(48vh, 420px);
   }
 
   .bottom-sheet {
@@ -1665,7 +1644,7 @@ ion-button:active,
   .filter-panel {
     position: sticky;
     top: calc(var(--page-top) + 12px);
-    display: grid !important;
+    display: grid;
   }
 
   .bottom-sheet {
@@ -1769,39 +1748,39 @@ ion-button:active,
 html,
 body,
 ion-app {
-  background: var(--customer-bg-premium) !important;
-  color: var(--customer-text) !important;
+  background: var(--customer-bg-premium);
+  color: var(--customer-text);
 }
 
 body {
-  background: var(--customer-bg-premium) !important;
+  background: var(--customer-bg-premium);
 }
 
 ion-content {
-  --background: var(--customer-bg-premium) !important;
-  color: var(--customer-text) !important;
+  --background: var(--customer-bg-premium);
+  color: var(--customer-text);
 }
 
 ion-toolbar {
-  --background: rgba(255, 255, 255, 0.92) !important;
-  --color: var(--customer-text) !important;
-  --border-color: var(--customer-border) !important;
+  --background: rgba(255, 255, 255, 0.92);
+  --color: var(--customer-text);
+  --border-color: var(--customer-border);
   box-shadow: 0 10px 28px rgba(6, 23, 43, 0.06);
 }
 
 ion-searchbar {
-  --background: var(--customer-surface) !important;
-  --border-radius: 16px !important;
-  --box-shadow: var(--customer-shadow-soft) !important;
-  --color: var(--customer-text) !important;
-  --placeholder-color: var(--customer-muted) !important;
+  --background: var(--customer-surface);
+  --border-radius: 16px;
+  --box-shadow: var(--customer-shadow-soft);
+  --color: var(--customer-text);
+  --placeholder-color: var(--customer-muted);
 }
 
 ion-tab-bar {
-  --background: rgba(255, 255, 255, 0.94) !important;
-  --border: 1px solid var(--customer-border) !important;
-  border-color: var(--customer-border-strong) !important;
-  box-shadow: 0 22px 52px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78) !important;
+  --background: rgba(255, 255, 255, 0.94);
+  --border: 1px solid var(--customer-border);
+  border-color: var(--customer-border-strong);
+  box-shadow: 0 22px 52px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
 ion-tab-bar::before {
@@ -1814,16 +1793,16 @@ ion-tab-bar::before {
 }
 
 ion-tab-button {
-  --color: var(--customer-muted) !important;
-  --color-selected: var(--customer-primary) !important;
-  --background-hover: rgba(11, 70, 120, 0.08) !important;
-  --background-focused: var(--primary-soft) !important;
+  --color: var(--customer-muted);
+  --color-selected: var(--customer-primary);
+  --background-hover: rgba(11, 70, 120, 0.08);
+  --background-focused: var(--primary-soft);
 }
 
 ion-tab-button.tab-selected ion-icon {
-  color: #FFFFFF !important;
-  background: linear-gradient(135deg, var(--brand-600), var(--brand-700)) !important;
-  box-shadow: 0 10px 22px rgba(11, 70, 120, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.82) !important;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--brand-600), var(--brand-700));
+  box-shadow: 0 10px 22px rgba(11, 70, 120, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.82);
 }
 
 .page,
@@ -1834,9 +1813,9 @@ ion-tab-button.tab-selected ion-icon {
 }
 
 .page-title {
-  color: var(--customer-text) !important;
-  letter-spacing: 0 !important;
-  line-height: 1.02 !important;
+  color: var(--customer-text);
+  letter-spacing: 0;
+  line-height: 1.02;
 }
 
 .section-title,
@@ -1844,13 +1823,13 @@ h1,
 h2,
 h3,
 strong {
-  letter-spacing: 0 !important;
+  letter-spacing: 0;
 }
 
 .eyebrow,
 .section-link,
 .section-heading a {
-  color: var(--customer-primary) !important;
+  color: var(--customer-primary);
 }
 
 .muted,
@@ -1858,7 +1837,7 @@ strong {
 .address,
 .helper,
 .step-copy {
-  color: var(--customer-muted) !important;
+  color: var(--customer-muted);
 }
 
 p,
@@ -1868,7 +1847,6 @@ small {
 
 .premium-card,
 .glass-card,
-.business-card,
 .state-card,
 .summary-card,
 .metric-card,
@@ -1896,43 +1874,42 @@ small {
 .wishlist-hero,
 .chat-bot-shell,
 .composer-card {
-  border-color: var(--customer-border) !important;
-  border-radius: 18px !important;
+  border-color: var(--customer-border);
+  border-radius: 18px;
   color: var(--customer-text);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96)),
-    var(--customer-surface) !important;
-  box-shadow: var(--customer-shadow-soft) !important;
+    var(--customer-surface);
+  box-shadow: var(--customer-shadow-soft);
 }
 
 .premium-card:hover,
 .glass-card:hover,
-.business-card:hover,
 .booking-card:hover,
 .service-card:hover,
 .staff-card:hover,
 .offer-card:hover,
 .quick-card:hover {
-  border-color: var(--customer-border-strong) !important;
-  box-shadow: var(--customer-shadow) !important;
+  border-color: var(--customer-border-strong);
+  box-shadow: var(--customer-shadow);
 }
 
 .primary-gradient,
 ion-button.primary-gradient {
-  --background: var(--primary) !important;
-  --background-hover: var(--primary-hover) !important;
-  --background-activated: var(--primary-active) !important;
-  --color: #FFFFFF !important;
-  --box-shadow: 0 14px 30px rgba(11, 70, 120, 0.24) !important;
+  --background: var(--primary);
+  --background-hover: var(--primary-hover);
+  --background-activated: var(--primary-active);
+  --color: #FFFFFF;
+  --box-shadow: 0 14px 30px rgba(11, 70, 120, 0.24);
 }
 
 .secondary-button,
 ion-button.secondary-button {
-  --border-color: var(--customer-border-strong) !important;
-  --color: var(--customer-primary) !important;
-  --background: var(--customer-surface) !important;
-  --background-hover: var(--primary-soft) !important;
-  --background-focused: var(--primary-soft) !important;
+  --border-color: var(--customer-border-strong);
+  --color: var(--customer-primary);
+  --background: var(--customer-surface);
+  --background-hover: var(--primary-soft);
+  --background-focused: var(--primary-soft);
 }
 
 .pill,
@@ -1950,11 +1927,11 @@ ion-button.secondary-button {
 .staff-choice,
 .date-card,
 .slot {
-  border-color: var(--customer-border) !important;
-  border-radius: 14px !important;
-  color: var(--customer-text) !important;
-  background: var(--customer-surface) !important;
-  box-shadow: 0 8px 20px rgba(6, 23, 43, 0.06) !important;
+  border-color: var(--customer-border);
+  border-radius: 14px;
+  color: var(--customer-text);
+  background: var(--customer-surface);
+  box-shadow: 0 8px 20px rgba(6, 23, 43, 0.06);
 }
 
 .pill.active,
@@ -1964,32 +1941,32 @@ ion-button.secondary-button {
 .date-pill.active,
 .time-pill.active,
 .slot.selected {
-  color: #fff !important;
-  background: var(--primary) !important;
-  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2) !important;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2);
 }
 
 .date-card.selected,
 .service-choice.selected,
 .staff-choice.selected {
-  color: var(--text) !important;
-  border-color: rgba(11, 70, 120, 0.42) !important;
-  background: var(--primary-soft) !important;
-  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.14) !important;
+  color: var(--text);
+  border-color: rgba(11, 70, 120, 0.42);
+  background: var(--primary-soft);
+  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.14);
 }
 
 .status-pill,
 .rating-pill,
 .offer-pill,
 .countdown-pill {
-  border-color: rgba(11, 70, 120, 0.18) !important;
-  background: var(--primary-soft) !important;
-  color: var(--customer-primary) !important;
+  border-color: rgba(11, 70, 120, 0.18);
+  background: var(--primary-soft);
+  color: var(--customer-primary);
 }
 
 .offer-pill {
-  color: #FFFFFF !important;
-  background: var(--primary) !important;
+  color: #FFFFFF;
+  background: var(--primary);
 }
 
 input,
@@ -1999,26 +1976,26 @@ select,
 ion-list,
 ion-item,
 ion-segment {
-  border-color: var(--customer-border) !important;
-  color: var(--customer-text) !important;
-  background: var(--customer-surface) !important;
+  border-color: var(--customer-border);
+  color: var(--customer-text);
+  background: var(--customer-surface);
 }
 
 ion-item {
-  --background: var(--customer-surface) !important;
-  --color: var(--customer-text) !important;
-  --border-color: var(--customer-border) !important;
+  --background: var(--customer-surface);
+  --color: var(--customer-text);
+  --border-color: var(--customer-border);
 }
 
 ion-segment {
-  --background: var(--customer-surface) !important;
+  --background: var(--customer-surface);
 }
 
 ion-segment-button {
-  --color: var(--customer-muted) !important;
-  --color-checked: var(--customer-primary) !important;
-  --indicator-color: var(--customer-primary) !important;
-  --background-checked: var(--primary-soft) !important;
+  --color: var(--customer-muted);
+  --color-checked: var(--customer-primary);
+  --indicator-color: var(--customer-primary);
+  --background-checked: var(--primary-soft);
 }
 
 .hero-search,
@@ -2026,9 +2003,9 @@ ion-segment-button {
 .suggestion-panel,
 .location-panel,
 .bottom-action-card {
-  border-color: var(--customer-border) !important;
-  background: rgba(255, 255, 255, 0.96) !important;
-  box-shadow: var(--customer-shadow) !important;
+  border-color: var(--customer-border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--customer-shadow);
 }
 
 .business-grid,
@@ -2044,21 +2021,20 @@ ion-segment-button {
 .staff-grid,
 .time-grid,
 .booking-grid {
-  gap: 14px !important;
+  gap: 14px;
 }
 
-.business-card .cover,
 .wishlist-card img,
 .hero-visual,
 .map-preview-card img,
 .professional-card > img {
-  border-radius: 16px !important;
+  border-radius: 16px;
   overflow: hidden;
 }
 
 .empty,
 .state-card {
-  border-style: dashed !important;
+  border-style: dashed;
   text-align: center;
 }
 
@@ -2066,13 +2042,13 @@ ion-segment-button {
   .page,
   .page-narrow,
   .app-container {
-    width: min(calc(100% - 20px), var(--container-mobile)) !important;
-    padding-top: 10px !important;
-    padding-bottom: calc(92px + var(--safe-bottom)) !important;
+    width: min(calc(100% - 20px), var(--container-mobile));
+    padding-top: 10px;
+    padding-bottom: calc(92px + var(--safe-bottom));
   }
 
   .home-page.page {
-    padding-top: 4px !important;
+    padding-top: 4px;
   }
 
   ion-header,
@@ -2089,108 +2065,111 @@ ion-segment-button {
 
   ion-searchbar {
     min-height: 48px;
-    padding: 0 !important;
-    --border-radius: 14px !important;
-    --box-shadow: 0 6px 18px rgba(6, 23, 43, 0.08) !important;
+    padding: 0;
+    --border-radius: 14px;
+    --box-shadow: 0 6px 18px rgba(6, 23, 43, 0.08);
   }
 
   ion-tab-bar {
-    width: min(100% - 18px, 430px) !important;
-    height: 66px !important;
-    margin-bottom: calc(8px + var(--safe-bottom)) !important;
-    border-radius: 20px !important;
+    position: fixed;
+    left: calc(18px + clamp(96px, 28vw, 116px));
+    right: 8px;
+    bottom: calc(10px + var(--safe-bottom));
+    width: auto;
+    height: 60px;
+    min-height: 60px;
+    margin: 0;
+    border-radius: 20px;
   }
 
   ion-tab-bar::before {
-    inset: 5px !important;
-    border-radius: 16px !important;
+    inset: 5px;
+    border-radius: 16px;
   }
 
   ion-tab-button {
-    min-width: 0 !important;
-    min-height: 58px !important;
-    font-size: 0.74rem !important;
+    min-width: 0;
+    min-height: 58px;
+    font-size: 0.74rem;
   }
 
   ion-tab-button ion-icon {
-    font-size: 1.15rem !important;
+    font-size: 1.15rem;
   }
 
   ion-tab-button.tab-selected ion-icon {
-    padding: 5px !important;
+    padding: 5px;
   }
 
   .home-toolbar {
-    gap: 8px !important;
-    padding: 8px 0 !important;
+    gap: 8px;
+    padding: 8px 0;
   }
 
   .location-copy > span,
   .location-row button,
   .toolbar-actions {
-    display: none !important;
+    display: none;
   }
 
   .location-row strong {
-    max-width: 100% !important;
-    font-size: 0.92rem !important;
+    max-width: 100%;
+    font-size: 0.92rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .hero {
-    display: grid !important;
-    gap: 14px !important;
-    padding: 0 !important;
-    margin: 0 0 14px !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    border: 0 !important;
+    display: grid;
+    gap: 14px;
+    padding: 0;
+    margin: 0 0 14px;
+    background: transparent;
+    box-shadow: none;
+    border: 0;
   }
 
   .hero-copy {
-    display: grid !important;
-    gap: 10px !important;
+    display: grid;
+    gap: 10px;
   }
 
   .hero-copy .muted,
   .live-consultation-card,
   .aura-dashboard,
   .welcome-card {
-    display: none !important;
+    display: none;
   }
 
-  .page-title,
-  .hero h1,
-  h1 {
-    margin: 0 !important;
-    font-size: clamp(1.65rem, 7.6vw, 2.25rem) !important;
-    line-height: 1.03 !important;
-    letter-spacing: -0.035em !important;
+  .page-title {
+    margin: 0;
+    font-size: clamp(1.65rem, 7.6vw, 2.25rem);
+    line-height: 1.03;
+    letter-spacing: -0.035em;
   }
 
   .search-panel {
-    position: sticky !important;
-    top: calc(58px + var(--safe-top)) !important;
-    z-index: 18 !important;
-    display: grid !important;
-    gap: 9px !important;
-    padding: 10px !important;
-    border: 1px solid var(--customer-border) !important;
-    border-radius: 18px !important;
-    background: rgba(255, 255, 255, 0.96) !important;
-    box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09) !important;
+    position: sticky;
+    top: calc(58px + var(--safe-top));
+    z-index: 18;
+    display: grid;
+    gap: 9px;
+    padding: 10px;
+    border: 1px solid var(--customer-border);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09);
     backdrop-filter: blur(18px);
   }
 
   .search-panel ion-button {
-    display: none !important;
+    display: none;
   }
 
   .home-search-wrap,
   .home-search-wrap ion-searchbar {
-    width: 100% !important;
+    width: 100%;
   }
 
   .home-control-row,
@@ -2199,25 +2178,25 @@ ion-segment-button {
   .category-rail,
   .business-rail,
   .visited-rail {
-    display: grid !important;
-    grid-auto-flow: column !important;
-    grid-auto-columns: max-content !important;
-    gap: 8px !important;
-    overflow-x: auto !important;
-    padding: 1px 2px 8px !important;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 1px 2px 8px;
     scroll-snap-type: x proximity;
   }
 
   .business-rail aura-business-card {
-    display: block !important;
-    width: min(178px, 47vw) !important;
-    min-width: min(178px, 47vw) !important;
-    height: 68px !important;
+    display: block;
+    width: min(178px, 47vw);
+    min-width: min(178px, 47vw);
+    height: 68px;
     scroll-snap-align: start;
   }
 
   .visited-card {
-    height: 68px !important;
+    height: 68px;
   }
 
   .home-control-button,
@@ -2225,117 +2204,117 @@ ion-segment-button {
   .category-chip,
   .quick-chip,
   .filter-chip {
-    min-height: 38px !important;
-    padding: 0 13px !important;
-    border-radius: 999px !important;
-    font-size: 0.82rem !important;
-    font-weight: 900 !important;
-    white-space: nowrap !important;
+    min-height: 38px;
+    padding: 0 13px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 900;
+    white-space: nowrap;
   }
 
   .search-page .sticky-search.fresha-search-card {
-    position: static !important;
-    display: block !important;
-    padding: 6px !important;
-    border-radius: 14px !important;
+    position: static;
+    display: block;
+    padding: 6px;
+    border-radius: 14px;
   }
 
   .search-page .search-input-wrap {
-    position: static !important;
-    display: flex !important;
-    align-items: center !important;
-    min-height: 46px !important;
-    gap: 6px !important;
-    width: 100% !important;
+    position: static;
+    display: flex;
+    align-items: center;
+    min-height: 46px;
+    gap: 6px;
+    width: 100%;
   }
 
   .search-page .search-input-wrap ion-searchbar {
-    order: 1 !important;
-    flex: 1 1 auto !important;
-    width: auto !important;
-    min-width: 0 !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
+    order: 1;
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    padding-left: 0;
+    padding-right: 0;
   }
 
   .search-page .search-input-wrap .fresha-filter-row {
-    order: 2 !important;
-    margin-left: auto !important;
-    margin-top: 0 !important;
-    align-self: center !important;
-    position: static !important;
-    top: auto !important;
-    left: auto !important;
-    right: auto !important;
-    z-index: 5 !important;
-    display: flex !important;
-    flex: 0 0 auto !important;
-    grid-auto-flow: unset !important;
-    grid-auto-columns: unset !important;
-    gap: 6px !important;
-    height: 34px !important;
-    overflow: visible !important;
-    padding: 0 !important;
-    transform: none !important;
-    scroll-snap-type: none !important;
+    order: 2;
+    margin-left: auto;
+    margin-top: 0;
+    align-self: center;
+    position: static;
+    top: auto;
+    left: auto;
+    right: auto;
+    z-index: 5;
+    display: flex;
+    flex: 0 0 auto;
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    gap: 6px;
+    height: 34px;
+    overflow: visible;
+    padding: 0;
+    transform: none;
+    scroll-snap-type: none;
   }
 
   .search-page .search-input-wrap .control-button {
-    width: 34px !important;
-    min-width: 34px !important;
-    height: 34px !important;
-    min-height: 34px !important;
-    display: inline-grid !important;
-    align-self: center !important;
-    place-items: center !important;
-    align-items: center !important;
-    justify-items: center !important;
-    line-height: 1 !important;
-    padding: 0 !important;
-    border-radius: 999px !important;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    display: inline-grid;
+    align-self: center;
+    place-items: center;
+    align-items: center;
+    justify-items: center;
+    line-height: 1;
+    padding: 0;
+    border-radius: 999px;
   }
 
   .search-page .search-input-wrap .control-button span,
   .search-page .search-input-wrap .control-button small,
   .search-page .search-input-wrap .quick-filter-row {
-    display: none !important;
+    display: none;
   }
 
   .search-page .search-input-wrap .control-button ion-icon {
-    width: 18px !important;
-    height: 18px !important;
-    margin: 0 !important;
-    font-size: 18px !important;
-    line-height: 1 !important;
-    transform: translate(0, 0) !important;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    font-size: 18px;
+    line-height: 1;
+    transform: translate(0, 0);
   }
 
   .search-page .search-input-wrap .control-button ion-icon::part(icon) {
-    display: block !important;
+    display: block;
   }
 
   .home-control-button.map {
-    background: #ffffff !important;
+    background: #ffffff;
   }
 
   .section-heading {
-    display: flex !important;
-    align-items: center !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    gap: 10px !important;
-    margin: 18px 0 10px !important;
+    display: flex;
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 18px 0 10px;
   }
 
   .section-title,
   .section-heading h2 {
-    font-size: 1.15rem !important;
-    line-height: 1.1 !important;
+    font-size: 1.15rem;
+    line-height: 1.1;
   }
 
   .section-heading p,
   .section-heading small {
-    display: none !important;
+    display: none;
   }
 
   .business-grid,
@@ -2350,12 +2329,11 @@ ion-segment-button {
   .service-grid,
   .staff-grid,
   .booking-grid {
-    display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
-  .business-card,
   .search-card,
   .booking-card,
   .offer-card,
@@ -2365,19 +2343,17 @@ ion-segment-button {
   .metric-card,
   .premium-card,
   .glass-card {
-    border-radius: 14px !important;
-    box-shadow: 0 4px 14px rgba(6, 23, 43, 0.07) !important;
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(6, 23, 43, 0.07);
   }
 
-  .business-card,
   .search-card,
   .offer-card {
-    position: relative !important;
-    border: 1px solid rgba(11, 70, 120, 0.1) !important;
-    background: #FFFFFF !important;
+    position: relative;
+    border: 1px solid rgba(11, 70, 120, 0.1);
+    background: #FFFFFF;
   }
 
-  .business-card::after,
   .search-card::after,
   .offer-card::after {
     content: "";
@@ -2388,99 +2364,93 @@ ion-segment-button {
     pointer-events: none;
   }
 
-  .business-card {
-    overflow: hidden !important;
-  }
-
-  .business-card .cover,
-  .business-card img,
   .wishlist-card img,
   .professional-card > img {
-    aspect-ratio: 16 / 9 !important;
-    object-fit: cover !important;
-    border-radius: 12px !important;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 12px;
   }
 
   .rating-pill,
   .status-pill,
   .offer-pill,
   .countdown-pill {
-    min-height: 26px !important;
-    padding: 0 9px !important;
-    border-radius: 999px !important;
-    font-size: 0.72rem !important;
-    font-weight: 950 !important;
+    min-height: 26px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 950;
   }
 
   .service-scroller,
   .offer-rail,
   .quick-actions,
   .service-rail {
-    display: grid !important;
-    grid-auto-flow: column !important;
-    grid-auto-columns: minmax(138px, 42vw) !important;
-    gap: 10px !important;
-    overflow-x: auto !important;
-    padding: 2px 2px 10px !important;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(138px, 42vw);
+    gap: 10px;
+    overflow-x: auto;
+    padding: 2px 2px 10px;
     scroll-snap-type: x proximity;
   }
 
   .service-chip,
   .quick-card {
     scroll-snap-align: start;
-    min-height: 142px !important;
-    border-radius: 18px !important;
+    min-height: 142px;
+    border-radius: 18px;
   }
 
   .service-chip img {
-    height: 82px !important;
-    object-fit: cover !important;
-    border-radius: 14px !important;
+    height: 82px;
+    object-fit: cover;
+    border-radius: 14px;
   }
 
   .service-scroller {
-    grid-auto-columns: min(178px, 47vw) !important;
-    gap: 8px !important;
+    grid-auto-columns: min(178px, 47vw);
+    gap: 8px;
   }
 
   .service-chip {
-    width: min(178px, 47vw) !important;
-    min-width: min(178px, 47vw) !important;
-    height: 68px !important;
-    min-height: 68px !important;
-    display: grid !important;
-    grid-template-columns: 42px minmax(0, 1fr) !important;
-    grid-template-rows: auto auto !important;
-    align-items: center !important;
-    gap: 3px 8px !important;
-    padding: 7px !important;
+    width: min(178px, 47vw);
+    min-width: min(178px, 47vw);
+    height: 68px;
+    min-height: 68px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    gap: 3px 8px;
+    padding: 7px;
     scroll-snap-align: start;
   }
 
   .service-chip img {
-    grid-row: span 2 !important;
-    width: 42px !important;
-    height: 42px !important;
-    border-radius: 14px !important;
+    grid-row: span 2;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
   }
 
   .service-chip span,
   .service-chip strong {
-    min-width: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .service-chip span {
-    align-self: end !important;
-    font-size: 0.76rem !important;
-    line-height: 1.05 !important;
+    align-self: end;
+    font-size: 0.76rem;
+    line-height: 1.05;
   }
 
   .service-chip strong {
-    align-self: start !important;
-    font-size: 0.72rem !important;
+    align-self: start;
+    font-size: 0.72rem;
   }
 
   .home-page::before {
@@ -2501,57 +2471,57 @@ ion-segment-button {
   }
 
   .home-page .hero {
-    min-height: 0 !important;
-    margin-bottom: 10px !important;
+    min-height: 0;
+    margin-bottom: 10px;
   }
 
   .home-page .hero-copy {
-    align-content: start !important;
+    align-content: start;
   }
 
   .home-page .search-panel {
-    position: relative !important;
-    top: auto !important;
-    z-index: 1 !important;
+    position: relative;
+    top: auto;
+    z-index: 1;
   }
 
   .visited-card {
-    width: min(178px, 47vw) !important;
-    min-width: min(178px, 47vw) !important;
-    grid-template-columns: 42px minmax(0, 1fr) 26px !important;
-    grid-template-rows: auto auto auto !important;
-    align-items: center !important;
-    gap: 4px 10px !important;
-    min-height: 68px !important;
-    padding: 7px !important;
+    width: min(178px, 47vw);
+    min-width: min(178px, 47vw);
+    grid-template-columns: 42px minmax(0, 1fr) 26px;
+    grid-template-rows: auto auto auto;
+    align-items: center;
+    gap: 4px 10px;
+    min-height: 68px;
+    padding: 7px;
     scroll-snap-align: start;
   }
 
   .visited-card img {
-    grid-row: span 3 !important;
-    width: 42px !important;
-    height: 42px !important;
-    aspect-ratio: 1 / 1 !important;
-    object-fit: cover !important;
+    grid-row: span 3;
+    width: 42px;
+    height: 42px;
+    aspect-ratio: 1 / 1;
+    object-fit: cover;
   }
 
   .visited-card span,
   .visited-card strong,
   .visited-card small {
-    min-width: 0 !important;
-    max-width: 100% !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    word-break: normal !important;
-    overflow-wrap: normal !important;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
   }
 
   .visited-card ion-icon {
-    grid-row: span 3 !important;
-    width: 26px !important;
-    height: 26px !important;
-    padding: 5px !important;
+    grid-row: span 3;
+    width: 26px;
+    height: 26px;
+    padding: 5px;
   }
 
   .home-suggestion-panel,
@@ -2559,46 +2529,45 @@ ion-segment-button {
   .suggestion-panel,
   .filter-popover,
   .bottom-sheet {
-    left: 10px !important;
-    right: 10px !important;
-    width: auto !important;
-    max-width: none !important;
-    border-radius: 18px !important;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    border-radius: 18px;
   }
 
   .bottom-action-card,
   .sticky-cta {
-    right: 10px !important;
-    bottom: calc(82px + var(--safe-bottom)) !important;
-    left: 10px !important;
-    width: auto !important;
-    border-radius: 18px !important;
+    right: 10px;
+    bottom: calc(82px + var(--safe-bottom));
+    left: 10px;
+    width: auto;
+    border-radius: 18px;
   }
 
   .onboarding {
-    padding: 10px !important;
+    padding: 10px;
   }
 
   .onboarding .hero {
-    padding: 22px !important;
-    border: 1px solid var(--customer-border) !important;
-    border-radius: 24px !important;
-    background: rgba(255, 255, 255, 0.94) !important;
-    box-shadow: var(--customer-shadow-soft) !important;
+    padding: 22px;
+    border: 1px solid var(--customer-border);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: var(--customer-shadow-soft);
   }
 
   .onboarding h1 {
-    font-size: clamp(2rem, 11vw, 3.15rem) !important;
+    font-size: clamp(2rem, 11vw, 3.15rem);
   }
 
   .feature-grid {
-    grid-template-columns: 1fr !important;
-    gap: 8px !important;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .premium-card,
   .glass-card,
-  .business-card,
   .state-card,
   .summary-card,
   .metric-card,
@@ -2626,7 +2595,7 @@ ion-segment-button {
   .wishlist-hero,
   .chat-bot-shell,
   .composer-card {
-    border-radius: 16px !important;
+    border-radius: 16px;
   }
 
   .section-heading {
@@ -2649,152 +2618,123 @@ ion-segment-button {
 }
 @media (max-width: 599px) {
   ion-tab-bar {
-    height: 58px !important;
-    min-height: 58px !important;
-    padding: 2px 3px !important;
+    position: fixed;
+    left: calc(18px + clamp(96px, 28vw, 116px));
+    right: 8px;
+    bottom: calc(10px + var(--safe-bottom));
+    width: auto;
+    height: 60px;
+    min-height: 60px;
+    margin: 0;
+    padding: 2px 3px;
   }
 
   ion-tab-button {
-    min-height: 52px !important;
-    padding: 2px 0 !important;
-    font-size: 0.62rem !important;
+    min-height: 52px;
+    padding: 2px 0;
+    font-size: 0.62rem;
   }
 
   ion-tab-button ion-icon {
-    font-size: 1.05rem !important;
+    font-size: 1.05rem;
   }
 
   ion-tab-button ion-label {
-    display: block !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
-    white-space: nowrap !important;
-    font-size: 0.62rem !important;
-    line-height: 1 !important;
+    display: block;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    font-size: 0.62rem;
+    line-height: 1;
        }
 }
-@media (max-width: 599px) {
-  .business-grid aura-business-card .business-card .cover,
-  .results aura-business-card .business-card .cover {
-    aspect-ratio: 2.8 / 1 !important;
-  }
-
-  .business-grid aura-business-card .business-card .content,
-  .results aura-business-card .business-card .content {
-    gap: 3px !important;
-    padding: 8px !important;
-  }
-
-  .business-grid aura-business-card .business-card .address,
-  .results aura-business-card .business-card .address,
-  .business-grid aura-business-card .business-card .category,
-  .results aura-business-card .business-card .category {
-    display: none !important;
-  }
-
-  .business-grid aura-business-card .business-card h3,
-  .results aura-business-card .business-card h3 {
-    font-size: 0.98rem !important;
-    line-height: 1.05 !important;
-  }
-
-  .business-grid aura-business-card .business-card .service-row,
-  .results aura-business-card .business-card .service-row {
-    margin-top: 2px !important;
-    padding: 6px !important;
-  }
-
-  .business-grid aura-business-card .business-card .footer-row,
-  .results aura-business-card .business-card .footer-row {
-    padding-top: 2px !important;
-  }
-}/* End Aura Shine customer app premium SaaS polish layer. */
+/* End Aura Shine customer app premium SaaS polish layer. */
 
 
 /* Mobile search card final override */
 @media (max-width: 599px) {
   .search-page {
-    padding-top: 0 !important;
+    padding-top: 0;
   }
 
   .search-page .fresha-search-top {
-    width: calc(100% + 20px) !important;
-    margin-top: -4px !important;
-    margin-left: -10px !important;
-    grid-template-columns: 28px minmax(0, 1fr) auto 28px !important;
-    min-height: 46px !important;
-    margin-bottom: 7px !important;
-    padding: 2px 5px !important;
-    border-radius: 13px !important;
+    width: calc(100% + 20px);
+    margin-top: -4px;
+    margin-left: -10px;
+    grid-template-columns: 28px minmax(0, 1fr) auto 28px;
+    min-height: 46px;
+    margin-bottom: 7px;
+    padding: 2px 5px;
+    border-radius: 13px;
   }
 
   .search-page .fresha-search-top h1 {
-    overflow: visible !important;
-    font-size: 0.74rem !important;
-    line-height: 1 !important;
-        text-overflow: clip !important;
+    overflow: visible;
+    font-size: 0.74rem;
+    line-height: 1;
+        text-overflow: clip;
   }
 
   .search-page .fresha-search-top p {
-    margin-top: 0 !important;
-    font-size: 0.56rem !important;
-    line-height: 1 !important;
+    margin-top: 0;
+    font-size: 0.56rem;
+    line-height: 1;
   }
 
   .search-page .fresha-search-top .back-button,
   .search-page .fresha-search-top .map-toggle-button {
-    width: 28px !important;
-    min-width: 28px !important;
-    height: 28px !important;
-    padding: 0 !important;
-    font-size: 0.72rem !important;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 0.72rem;
   }
 
   .search-page .fresha-search-top .header-change-button {
-    min-height: 24px !important;
-    padding: 0 6px !important;
-    font-size: 0.56rem !important;
+    min-height: 24px;
+    padding: 0 6px;
+    font-size: 0.56rem;
   }
 
   .search-page .fresha-search-card {
-    display: block !important;
-    padding: 0 8px !important;
-    border-radius: 16px !important;
-    background: #fff !important;
+    display: block;
+    padding: 0 8px;
+    border-radius: 16px;
+    background: #fff;
   }
 
   .search-page .search-input-wrap {
-    display: flex !important;
-    min-height: 42px !important;
-    gap: 2px !important;
+    display: flex;
+    min-height: 42px;
+    gap: 2px;
   }
 
   .search-page .fresha-search-card ion-searchbar {
-    min-height: 42px !important;
-    --padding-start: 0 !important;
-    --padding-end: 0 !important;
-    --background: transparent !important;
-    --box-shadow: none !important;
+    min-height: 42px;
+    --padding-start: 0;
+    --padding-end: 0;
+    --background: transparent;
+    --box-shadow: none;
   }
 
   .search-page .search-input-wrap .control-button {
-    width: 26px !important;
-    min-width: 26px !important;
-    height: 32px !important;
-    min-height: 32px !important;
-    padding: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
+    width: 26px;
+    min-width: 26px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .search-page .search-input-wrap .control-button span,
   .search-page .search-input-wrap .control-button small {
-    display: none !important;
+    display: none;
   }
 
   .search-page .search-input-wrap .control-button ion-icon {
-    font-size: 0.9rem !important;
+    font-size: 0.9rem;
   }
 }
 
@@ -2952,20 +2892,20 @@ ion-segment-button {
 
 /* Premium customer discovery header spacing override */
 .premium-discovery-top {
-  gap: 24px !important;
+  gap: 24px;
 }
 
 .premium-topbar {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  gap: 24px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
   min-height: 180px;
 }
 
 .premium-back {
-  width: 42px !important;
-  height: 42px !important;
+  width: 42px;
+  height: 42px;
   flex: 0 0 42px;
 }
 
@@ -2974,18 +2914,18 @@ ion-segment-button {
 }
 
 .premium-heading h1 {
-  margin: 0 0 16px !important;
-  font-size: 34px !important;
-  font-weight: 700 !important;
-  line-height: 1.08 !important;
-  letter-spacing: -0.045em !important;
+  margin: 0 0 16px;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
 }
 
 .premium-location {
   min-height: 32px;
   width: 100%;
   justify-content: flex-start;
-  gap: 8px !important;
+  gap: 8px;
 }
 
 .premium-location span {
@@ -2994,27 +2934,27 @@ ion-segment-button {
 
 @media (max-width: 599px) {
   .premium-discovery-top {
-    gap: 24px !important;
+    gap: 24px;
     min-height: 0;
   }
 
   .premium-topbar {
-    gap: 24px !important;
+    gap: 24px;
     min-height: 180px;
   }
 
   .premium-back {
-    width: 42px !important;
-    height: 42px !important;
+    width: 42px;
+    height: 42px;
   }
 
   .premium-heading h1 {
-    font-size: 34px !important;
-    line-height: 1.08 !important;
+    font-size: 34px;
+    line-height: 1.08;
   }
 
   .premium-location span {
-    font-size: 0.88rem !important;
+    font-size: 0.88rem;
   }
 }
 
@@ -3022,28 +2962,28 @@ ion-segment-button {
 /* Premium hero v2: compact 240px discovery header */
 .premium-discovery-top {
   box-sizing: border-box;
-  min-height: 240px !important;
-  padding: 0 24px 20px !important;
-  gap: 20px !important;
+  min-height: 240px;
+  padding: 0 24px 20px;
+  gap: 20px;
   background: var(--app-bg);
   background-image: radial-gradient(circle at 52% 20%, rgba(11, 70, 120, 0.1), transparent 42%);
 }
 
 .premium-topbar {
-  display: grid !important;
-  grid-template-columns: 44px minmax(0, 1fr) 44px !important;
-  align-items: start !important;
-  gap: 0 16px !important;
-  min-height: 0 !important;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 0 16px;
+  min-height: 0;
 }
 
 .premium-back,
 .premium-location-button {
-  width: 44px !important;
-  min-width: 44px !important;
-  height: 44px !important;
-  border: 0 !important;
-  box-shadow: 0 8px 20px rgba(39, 30, 22, 0.08) !important;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border: 0;
+  box-shadow: 0 8px 20px rgba(39, 30, 22, 0.08);
 }
 
 .premium-heading {
@@ -3064,17 +3004,17 @@ ion-segment-button {
 }
 
 .premium-heading h1 {
-  margin: 0 0 16px !important;
-  font-size: 36px !important;
-  font-weight: 700 !important;
-  line-height: 38px !important;
-  letter-spacing: -0.8px !important;
+  margin: 0 0 16px;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 38px;
+  letter-spacing: -0.8px;
 }
 
 .premium-location {
   min-height: 32px;
   width: 100%;
-  justify-content: space-between !important;
+  justify-content: space-between;
 }
 
 .premium-location span {
@@ -3083,25 +3023,25 @@ ion-segment-button {
 
 .premium-search-box,
 .sticky-search.fresha-search-card {
-  margin-top: 0 !important;
+  margin-top: 0;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top {
-    min-height: 240px !important;
-    padding: 0 24px 16px !important;
-    gap: 20px !important;
+    min-height: 240px;
+    padding: 0 24px 16px;
+    gap: 20px;
   }
 
   .premium-topbar {
-    grid-template-columns: 44px minmax(0, 1fr) 44px !important;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
   }
 
   .premium-back,
   .premium-location-button {
-    width: 44px !important;
-    min-width: 44px !important;
-    height: 44px !important;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
   }
 
   .premium-heading {
@@ -3109,138 +3049,138 @@ ion-segment-button {
   }
 
   .premium-heading h1 {
-    font-size: 36px !important;
-    line-height: 38px !important;
+    font-size: 36px;
+    line-height: 38px;
   }
 }
 
 
 /* Search-only top: keep the bar, remove hero chrome */
 .premium-discovery-top {
-  min-height: 0 !important;
-  padding: 0 24px !important;
-  gap: 0 !important;
-  background: var(--app-bg) !important;
-  background-image: none !important;
+  min-height: 0;
+  padding: 0 24px;
+  gap: 0;
+  background: var(--app-bg);
+  background-image: none;
 }
 
 .premium-discovery-top .sticky-search.fresha-search-card {
   width: 100%;
-  margin: 0 !important;
+  margin: 0;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top {
-    padding: 0 12px !important;
+    padding: 0 12px;
   }
 
   .premium-discovery-top .sticky-search.fresha-search-card {
-    margin: 0 !important;
+    margin: 0;
   }
 }
 
 
 /* Compact full-width search bar */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  width: calc(100% + 48px) !important;
-  margin-left: -24px !important;
-  padding: 0 8px !important;
+  width: calc(100% + 48px);
+  margin-left: -24px;
+  padding: 0 8px;
 }
 
 .premium-discovery-top .search-input-wrap {
-  min-height: 48px !important;
+  min-height: 48px;
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  min-height: 48px !important;
+  min-height: 48px;
 }
 
 .premium-discovery-top .search-input-wrap .control-button {
-  width: 30px !important;
-  min-width: 30px !important;
-  height: 30px !important;
-  min-height: 30px !important;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top .sticky-search.fresha-search-card {
-    width: calc(100% + 24px) !important;
-    margin-left: -12px !important;
+    width: calc(100% + 24px);
+    margin-left: -12px;
   }
 
   .premium-discovery-top .search-input-wrap,
   .premium-discovery-top .fresha-search-card ion-searchbar {
-    min-height: 48px !important;
+    min-height: 48px;
   }
 }
 
 
 /* Glass search surface */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  --background: rgba(255, 255, 255, 0.78) !important;
-  --box-shadow: 0 10px 26px rgba(39, 30, 22, 0.08) !important;
+  --background: rgba(255, 255, 255, 0.78);
+  --box-shadow: 0 10px 26px rgba(39, 30, 22, 0.08);
   backdrop-filter: blur(14px);
 }
 
 
 /* Restore previous search bar surface */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  border: 1px solid var(--border) !important;
-  background: rgba(255, 255, 255, 0.96) !important;
-  box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09) !important;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09);
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  --background: #ffffff !important;
-  --box-shadow: none !important;
+  --background: #ffffff;
+  --box-shadow: none;
   backdrop-filter: none;
 }
 
 
 /* Final premium search surface alignment */
 .premium-discovery-top {
-  display: grid !important;
-  min-height: 0 !important;
-  padding: 12px 24px 18px !important;
-  gap: 14px !important;
-  overflow: visible !important;
-  background: var(--app-bg) !important;
-  background-image: none !important;
+  display: grid;
+  min-height: 0;
+  padding: 12px 24px 18px;
+  gap: 14px;
+  overflow: visible;
+  background: var(--app-bg);
+  background-image: none;
 }
 
 .premium-discovery-top .sticky-search.fresha-search-card {
-  position: relative !important;
-  inset: auto !important;
-  display: block !important;
-  width: 100% !important;
-  height: auto !important;
-  min-height: 58px !important;
-  margin: 0 !important;
-  padding: 4px !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 18px !important;
-  background: #fff !important;
-  box-shadow: 0 10px 26px rgba(6, 23, 43, 0.1) !important;
-  overflow: visible !important;
+  position: relative;
+  inset: auto;
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 58px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(6, 23, 43, 0.1);
+  overflow: visible;
 }
 
 .premium-discovery-top .sticky-search.fresha-search-card:focus-within {
-  border-color: var(--focus) !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 12px 28px rgba(6, 23, 43, 0.12) !important;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 12px 28px rgba(6, 23, 43, 0.12);
 }
 
 .premium-discovery-top .search-input-wrap {
-  display: flex !important;
-  align-items: center !important;
-  width: 100% !important;
-  min-height: 50px !important;
-  gap: 4px !important;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 50px;
+  gap: 4px;
 }
 
 .premium-discovery-top .search-native-input {
@@ -3250,10 +3190,10 @@ ion-segment-button {
   min-height: 44px;
   margin: 0;
   padding: 0 12px;
-  border: 0 !important;
+  border: 0;
   outline: 0;
-  color: var(--text) !important;
-  background: transparent !important;
+  color: var(--text);
+  background: transparent;
   box-shadow: none;
   font: inherit;
 }
@@ -3264,15 +3204,15 @@ ion-segment-button {
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  min-width: 0 !important;
-  min-height: 50px !important;
-  padding: 0 !important;
-  --background: transparent !important;
-  --box-shadow: none !important;
-  --padding-start: 0 !important;
-  --padding-end: 0 !important;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0;
+  --background: transparent;
+  --box-shadow: none;
+  --padding-start: 0;
+  --padding-end: 0;
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar::part(input) {
@@ -3285,38 +3225,38 @@ ion-segment-button {
 }
 
 .premium-discovery-top .search-input-wrap .fresha-filter-row {
-  display: flex !important;
-  flex: 0 0 auto !important;
-  width: auto !important;
-  margin-left: auto !important;
-  margin-right: -4px !important;
-  padding: 0 !important;
-  gap: 4px !important;
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+  margin-left: auto;
+  margin-right: -4px;
+  padding: 0;
+  gap: 4px;
 }
 
 .premium-discovery-top .search-input-wrap .filter-sort-actions {
-  display: flex !important;
-  gap: 0 !important;
+  display: flex;
+  gap: 0;
 }
 
 .premium-discovery-top .search-input-wrap .control-button {
-  display: grid !important;
-  place-items: center !important;
-  width: 40px !important;
-  min-width: 40px !important;
-  height: 40px !important;
-  min-height: 40px !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 12px !important;
-  color: var(--muted) !important;
-  background: transparent !important;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  background: transparent;
   position: relative;
 }
 
 .premium-discovery-top .search-input-wrap .control-button.active {
-  color: var(--primary) !important;
-  background: var(--primary-soft) !important;
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .premium-discovery-top .search-input-wrap .control-button[data-count]::after {
@@ -3340,104 +3280,104 @@ ion-segment-button {
 
 .premium-discovery-top .search-input-wrap .control-button span,
 .premium-discovery-top .search-input-wrap .control-button small {
-  display: none !important;
+  display: none;
 }
 
 .premium-chip-row {
-  margin: 0 !important;
-  padding: 0 0 2px !important;
+  margin: 0;
+  padding: 0 0 2px;
 }
 
 .premium-result-row {
-  margin: 0 !important;
+  margin: 0;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top {
-    padding: 10px 16px 16px !important;
+    padding: 10px 16px 16px;
   }
 
   .premium-discovery-top .sticky-search.fresha-search-card {
-    min-height: 56px !important;
-    padding-inline: 8px !important;
+    min-height: 56px;
+    padding-inline: 8px;
   }
 
   .premium-discovery-top .search-input-wrap,
   .premium-discovery-top .fresha-search-card ion-searchbar {
-    min-height: 48px !important;
+    min-height: 48px;
   }
 }
 
 
 /* Full bleed premium search bar */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  width: calc(100% + 16px) !important;
-  margin-left: -8px !important;
+  width: calc(100% + 16px);
+  margin-left: -8px;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top .sticky-search.fresha-search-card {
-    width: calc(100% + 16px) !important;
-    margin-left: -8px !important;
+    width: calc(100% + 16px);
+    margin-left: -8px;
   }
 }
 
 
 /* Short premium search bar */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  min-height: 52px !important;
-  padding-block: 3px !important;
+  min-height: 52px;
+  padding-block: 3px;
 }
 
 .premium-discovery-top .search-input-wrap,
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  min-height: 44px !important;
+  min-height: 44px;
 }
 
 .premium-discovery-top .search-input-wrap .control-button {
-  height: 40px !important;
-  min-height: 40px !important;
+  height: 40px;
+  min-height: 40px;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top .sticky-search.fresha-search-card {
-    min-height: 52px !important;
+    min-height: 52px;
   }
 
   .premium-discovery-top .search-input-wrap,
   .premium-discovery-top .fresha-search-card ion-searchbar {
-    min-height: 44px !important;
+    min-height: 44px;
   }
 }
 
 
 /* Extra-short premium search bar */
 .premium-discovery-top .sticky-search.fresha-search-card {
-  min-height: 52px !important;
-  padding-block: 3px !important;
-  border-radius: 18px !important;
+  min-height: 52px;
+  padding-block: 3px;
+  border-radius: 18px;
 }
 
 .premium-discovery-top .search-input-wrap,
 .premium-discovery-top .fresha-search-card ion-searchbar {
-  min-height: 44px !important;
+  min-height: 44px;
 }
 
 .premium-discovery-top .search-input-wrap .control-button {
-  width: 40px !important;
-  min-width: 40px !important;
-  height: 40px !important;
-  min-height: 40px !important;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
 }
 
 @media (max-width: 599px) {
   .premium-discovery-top .sticky-search.fresha-search-card {
-    min-height: 52px !important;
+    min-height: 52px;
   }
 
   .premium-discovery-top .search-input-wrap,
   .premium-discovery-top .fresha-search-card ion-searchbar {
-    min-height: 44px !important;
+    min-height: 44px;
   }
 }
 
@@ -3446,18 +3386,18 @@ ion-segment-button {
 .search-page,
 .search-page::before,
 .premium-discovery-top {
-  background-color: var(--app-bg) !important;
+  background-color: var(--app-bg);
 }
 
 .premium-discovery-top {
-  background-image: none !important;
+  background-image: none;
 }
 
 
 /* Inline map control with result count */
 .premium-result-row {
-  position: relative !important;
-  display: block !important;
+  position: relative;
+  display: block;
   min-height: 62px;
 }
 
@@ -3466,7 +3406,7 @@ ion-segment-button {
 }
 
 .premium-result-row .premium-map-switch {
-  position: absolute !important;
+  position: absolute;
   top: 0;
   right: 0;
 }
@@ -3474,21 +3414,21 @@ ion-segment-button {
 
 /* Tight result handoff */
 .search-page .premium-discovery-top {
-  margin-bottom: 0 !important;
-  padding-bottom: 0 !important;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 
 .search-page .search-shell {
-  gap: 0 !important;
+  gap: 0;
 }
 
 .search-page .results-panel .result-meta {
-  margin: 0 0 4px !important;
-  padding: 0 0 4px !important;
+  margin: 0 0 4px;
+  padding: 0 0 4px;
 }
 
 
 /* Remove duplicate result meta */
 .search-page .results-panel .result-meta {
-  display: none !important;
+  display: none;
 }

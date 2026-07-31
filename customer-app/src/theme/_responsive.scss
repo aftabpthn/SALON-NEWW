@@ -54,3 +54,8 @@ $aura-breakpoints: (
   margin-inline: auto;
   padding-block: var(--page-top) var(--page-bottom);
 }
+
+@media (max-width: 599px) {
+  .page-title { font-size: clamp(1.65rem, 7.6vw, 2.25rem); }
+  .section-title { font-size: 1.08rem; }
+}

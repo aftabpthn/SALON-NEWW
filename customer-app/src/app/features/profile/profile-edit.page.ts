@@ -270,7 +270,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
       animation-iteration-count: 1;
-      transform: none !important;
+      transform: none;
       transform-style: flat;
       transition: box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
     }
@@ -282,7 +282,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .edit-profile-page .hero-card,
     .edit-profile-page .editor-card {
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1) !important;
+      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
     }
 
     .edit-profile-page .hero-card *,
@@ -293,25 +293,25 @@ import { MarketplaceService } from "../../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .edit-profile-page .hero-card:hover,
       .edit-profile-page .editor-card:hover {
-        transform: none !important;
-        filter: none !important;
-        animation-play-state: running !important;
-        box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1) !important;
+        transform: none;
+        filter: none;
+        animation-play-state: running;
+        box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
       }
 
       .edit-profile-page .hero-card:hover ion-icon,
       .edit-profile-page .editor-card:hover ion-icon,
       .edit-profile-page .hero-card:hover .section-icon,
       .edit-profile-page .editor-card:hover .section-icon {
-        transform: none !important;
-        animation: none !important;
+        transform: none;
+        animation: none;
       }
     }
 
     .edit-profile-page .hero-card:active,
     .edit-profile-page .editor-card:active {
-      transform: none !important;
-      filter: none !important;
+      transform: none;
+      filter: none;
     }
 
     h1,
@@ -484,11 +484,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
       animation-iteration-count: 1;
-      transform: none !important;
+      transform: none;
     }
 
     .danger-card .muted {
-      color: var(--muted) !important;
+      color: var(--muted);
       font-weight: 700;
     }
 
@@ -514,7 +514,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       --padding-start: 16px;
       --inner-padding-end: 16px;
       --min-height: 72px;
-      transform: none !important;
+      transform: none;
       transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
     }
 
@@ -533,14 +533,14 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .delete-input-row ion-input::part(label) {
-      color: var(--primary) !important;
+      color: var(--primary);
       font-weight: 900;
     }
 
     .delete-input-row ion-input.has-focus::part(label),
     .delete-input-row ion-input.ion-focused::part(label),
     .delete-input-row:focus-within ion-input::part(label) {
-      color: var(--primary) !important;
+      color: var(--primary);
     }
 
     .delete-input-row ion-input::part(native) {
@@ -558,12 +558,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .danger-card:hover,
       .delete-input-row:hover {
-        transform: none !important;
-        filter: none !important;
+        transform: none;
+        filter: none;
       }
 
       .danger-card:hover {
-        box-shadow: var(--shadow-soft) !important;
+        box-shadow: var(--shadow-soft);
       }
     }
 

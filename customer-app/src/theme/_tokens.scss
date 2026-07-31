@@ -1,0 +1,14 @@
+/* Customer app design-token bridge. Source values live in variables.scss. */
+:root {
+  --font-sans: var(--ion-font-family);
+  --color-text-primary: var(--text);
+  --color-text-muted: var(--muted);
+  --color-surface-primary: var(--surface);
+  --color-surface-muted: var(--surface-soft);
+  --color-border-default: var(--border);
+  --color-action-primary: var(--primary);
+  --radius-card: var(--radius-lg);
+  --radius-control: var(--radius-md);
+  --shadow-elevated: var(--shadow-card);
+  --shadow-raised: var(--shadow-soft);
+}

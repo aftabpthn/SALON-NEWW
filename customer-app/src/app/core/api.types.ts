@@ -792,7 +792,8 @@ export interface MySalonDashboardWallet {
     id: string;
     type: string;
     amountPaise: number;
-    description: string;
+    description?: string;
+    notes?: string;
     createdAt: string;
   }>;
 }
@@ -818,10 +819,37 @@ export interface MySalonDashboardPackage {
   sessionsUsed: number;
 }
 
+export interface MySalonDashboardGiftCard {
+  id: string;
+  code: string;
+  balancePaise: number;
+  expiryDate: string;
+  status: string;
+}
+
+export interface MySalonDashboardInvoice {
+  id: string;
+  invoiceNumber: string;
+  totalPaise: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface MySalonDashboardNotification {
+  id: string;
+  title?: string;
+  message: string;
+  createdAt: string;
+  readAt?: string | null;
+}
+
 export interface MySalonDashboard {
   hasPrimarySalon: boolean;
   salon: {
+    tenantId?: string;
+    branchId?: string;
     name: string;
+    businessName?: string;
     address: string;
     city: string;
     phone: string;
@@ -830,6 +858,9 @@ export interface MySalonDashboard {
     hoursLabel: string;
     ratingAverage: number;
     ratingCount: number;
+    logoImage?: string;
+    coverImage?: string;
+    policies?: string[];
   } | null;
   wallet: MySalonDashboardWallet | null;
   loyalty: MySalonDashboardLoyalty | null;
@@ -839,10 +870,12 @@ export interface MySalonDashboard {
   services: MySalonDashboardService[];
   staff: MySalonDashboardStaff[];
   offers: MySalonDashboardOffer[];
+  giftCards?: MySalonDashboardGiftCard[];
+  invoices?: MySalonDashboardInvoice[];
+  notifications?: MySalonDashboardNotification[];
   relationship: {
     visitCount: number;
     type: string;
     lastVisitAt: string;
   } | null;
 }
-

@@ -440,10 +440,10 @@ interface ProfessionalResult {
       min-height: 44px;
       margin: 0;
       padding: 0 8px 0 10px;
-      border: 0 !important;
+      border: 0;
       outline: 0;
-      color: var(--text) !important;
-      background: transparent !important;
+      color: var(--text);
+      background: transparent;
       box-shadow: none;
       font: inherit;
     }
@@ -835,19 +835,19 @@ interface ProfessionalResult {
     .aura-map-card.premium-card,
     .aura-map-card.premium-card:hover,
     .aura-map-card.premium-card:active {
-      transform: none !important;
-      transform-style: flat !important;
-      filter: none !important;
-      animation-play-state: paused !important;
+      transform: none;
+      transform-style: flat;
+      filter: none;
+      animation-play-state: paused;
       transition:
         border-color 180ms ease,
         box-shadow 180ms ease,
-        background 180ms ease !important;
+        background 180ms ease;
     }
 
     .aura-map-card.premium-card:hover {
-      border-color: var(--border) !important;
-      box-shadow: var(--shadow-card) !important;
+      border-color: var(--border);
+      box-shadow: var(--shadow-card);
     }
 
     .aura-map-card.fullscreen-map {
@@ -860,7 +860,7 @@ interface ProfessionalResult {
       max-height: calc(100vh - 32px);
       border-radius: 28px;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98));
-      box-shadow: 0 30px 90px rgba(6, 23, 43, 0.24) !important;
+      box-shadow: 0 30px 90px rgba(6, 23, 43, 0.24);
     }
 
     .aura-map-card.fullscreen-map .map-copy,
@@ -880,8 +880,8 @@ interface ProfessionalResult {
     }
     .aura-map-card.premium-card:hover ion-icon,
     .aura-map-card.premium-card:active ion-icon {
-      transform: none !important;
-      animation: none !important;
+      transform: none;
+      animation: none;
     }
 
     .aura-map-card h2,
@@ -920,8 +920,8 @@ interface ProfessionalResult {
     .live-map,
     .live-map:hover,
     .live-map:active {
-      transform: none !important;
-      filter: none !important;
+      transform: none;
+      filter: none;
     }
 
     .live-map:active {
@@ -991,13 +991,13 @@ interface ProfessionalResult {
     .live-map .user-pin,
     .live-map .user-pin:hover,
     .live-map .user-pin:active {
-      transform: translate(-50%, -50%) !important;
-      animation: none !important;
+      transform: translate(-50%, -50%);
+      animation: none;
       transition:
         background 160ms ease,
         border-color 160ms ease,
         box-shadow 160ms ease,
-        outline-color 160ms ease !important;
+        outline-color 160ms ease;
     }
 
     .live-map .map-controls button,
@@ -1006,12 +1006,12 @@ interface ProfessionalResult {
     .live-map .map-state button,
     .live-map .map-state button:hover,
     .live-map .map-state button:active {
-      transform: none !important;
-      animation: none !important;
+      transform: none;
+      animation: none;
     }
 
     .live-map button::after {
-      display: none !important;
+      display: none;
     }
 
     .user-pin {
@@ -2201,16 +2201,16 @@ interface ProfessionalResult {
       }
 
       .fresha-search-top h1 {
-        font-size: 15px !important;
-        line-height: 1 !important;
-        letter-spacing: 0.04em !important;
-        text-transform: uppercase !important;
+        font-size: 15px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
 
       .fresha-search-top p {
         margin-top: 2px;
-        font-size: 0.72rem !important;
-        font-weight: 950 !important;
+        font-size: 0.72rem;
+        font-weight: 950;
       }
 
       .back-button,
@@ -2269,15 +2269,15 @@ interface ProfessionalResult {
 
       .sticky-search.fresha-search-card .search-input-wrap ion-searchbar {
         flex: 1 1 auto;
-        width: auto !important;
+        width: auto;
         min-width: 0;
-        padding-right: 0 !important;
+        padding-right: 0;
       }
 
       .sticky-search.fresha-search-card .search-input-wrap {
-        position: relative !important;
-        display: flex !important;
-        align-items: center !important;
+        position: relative;
+        display: flex;
+        align-items: center;
         gap: 6px;
         width: 100%;
         min-width: 0;
@@ -2290,10 +2290,10 @@ interface ProfessionalResult {
       }
 
       .fresha-filter-row {
-        position: absolute !important;
-        top: 50% !important;
-        right: -10px !important;
-        left: auto !important;
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        left: auto;
         z-index: 5;
         display: flex;
         flex: 0 0 auto;
@@ -2305,26 +2305,26 @@ interface ProfessionalResult {
         height: 34px;
         padding: 0;
         overflow: visible;
-        translate: 0 -50% !important;
+        translate: 0 -50%;
       }
 
       .search-native-input {
-        padding-right: 84px !important;
+        padding-right: 84px;
       }
 
       .control-button {
         width: 34px;
         min-width: 34px;
         height: 34px;
-        min-height: 34px !important;
-        padding: 0 !important;
+        min-height: 34px;
+        padding: 0;
         border-radius: 999px;
         justify-content: center;
       }
 
       .control-button span,
       .control-button small {
-        display: none !important;
+        display: none;
       }
 
       .control-button ion-icon {
@@ -2335,11 +2335,11 @@ interface ProfessionalResult {
       }
 
       .quick-filter-row {
-        display: none !important;
+        display: none;
       }
 
       .active-summary-row {
-        display: none !important;
+        display: none;
       }
 
       .selected-area-row {

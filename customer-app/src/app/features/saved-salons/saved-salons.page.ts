@@ -626,8 +626,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       .card-action,
       .remove-action,
       .skeleton-line {
-        animation: none !important;
-        transition: none !important;
+        animation: none;
+        transition: none;
       }
     }
   `]

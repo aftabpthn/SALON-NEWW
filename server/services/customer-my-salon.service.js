@@ -248,13 +248,18 @@ function loyaltyForClient(tenantId, clientId) {
 
 // ─── Membership ───────────────────────────────────────────────────
 
-function membershipForClient(clientId) {
+function membershipForClient(clientId, tenantId) {
   if (!tableExists("memberships")) return null;
+  const clauses = ["clientId = @clientId", "status = 'active'"];
+  const params = { clientId, tenantId };
+  if (hasColumn("memberships", "tenantId")) {
+    clauses.push("(tenantId = @tenantId OR COALESCE(tenantId, '') = '')");
+  }
   const row = db
     .prepare(
-      `SELECT * FROM memberships WHERE clientId = @clientId AND status = 'active' ORDER BY datetime(createdAt) DESC LIMIT 1`
+      `SELECT * FROM memberships WHERE ${clauses.join(" AND ")} ORDER BY datetime(createdAt) DESC LIMIT 1`
     )
-    .get({ clientId });
+    .get(params);
   if (!row) return null;
   return {
     id: row.id,
@@ -266,6 +271,80 @@ function membershipForClient(clientId) {
     status: row.status || "active",
     createdAt: row.createdAt || "",
   };
+}
+
+// ─── Gift Cards ──────────────────────────────────────────────────
+
+function giftCardsForClient(tenantId, clientId) {
+  if (!tableExists("gift_cards")) return [];
+  const clauses = [];
+  const params = { tenantId, clientId };
+  if (hasColumn("gift_cards", "tenantId")) {
+    clauses.push("(tenantId = @tenantId OR tenant_id = @tenantId)");
+  }
+  if (hasColumn("gift_cards", "clientId")) {
+    clauses.push("(clientId = @clientId OR customer_id = @clientId)");
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db
+    .prepare(`SELECT * FROM gift_cards ${where} ORDER BY datetime(createdAt) DESC LIMIT 5`)
+    .all(params);
+
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code || r.display_code_last4 || "GIFT",
+    balancePaise: paiseFromRupees(r.balancePaise || r.balance || r.initial_value || 0),
+    expiryDate: r.expiryDate || r.expiry_date || "",
+    status: r.status || "active",
+  }));
+}
+
+// ─── Invoices ────────────────────────────────────────────────────
+
+function invoicesForClient(tenantId, clientId) {
+  if (!tableExists("invoices")) return [];
+  const clauses = [];
+  const params = { tenantId, clientId };
+  if (hasColumn("invoices", "tenantId")) {
+    clauses.push("(tenantId = @tenantId OR tenant_id = @tenantId)");
+  }
+  if (hasColumn("invoices", "clientId")) {
+    clauses.push("(clientId = @clientId OR customer_id = @clientId)");
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = db
+    .prepare(`SELECT * FROM invoices ${where} ORDER BY datetime(createdAt) DESC LIMIT 5`)
+    .all(params);
+
+  return rows.map((r) => ({
+    id: r.id,
+    invoiceNumber: r.invoiceNumber || r.invoice_no || `INV-${r.id.slice(0, 6)}`,
+    totalPaise: paiseFromRupees(r.grand_total_paise ? r.grand_total_paise / 100 : r.total || r.grand_total || 0),
+    status: r.status || r.payment_status || "paid",
+    createdAt: r.createdAt || r.created_at || "",
+  }));
+}
+
+// ─── Notifications ───────────────────────────────────────────────
+
+function notificationsForClient(tenantId, clientId) {
+  if (!tableExists("notifications")) return [];
+  const clauses = ["(clientId = @clientId OR COALESCE(clientId, '') = '')"];
+  const params = { tenantId, clientId };
+  if (hasColumn("notifications", "tenantId")) {
+    clauses.push("(tenantId = @tenantId OR COALESCE(tenantId, '') = '')");
+  }
+  const rows = db
+    .prepare(`SELECT * FROM notifications WHERE ${clauses.join(" AND ")} ORDER BY datetime(createdAt) DESC LIMIT 5`)
+    .all(params);
+
+  return rows.map((n) => ({
+    id: n.id,
+    title: n.title || "Salon Update",
+    message: n.message || "",
+    createdAt: n.createdAt || "",
+    readAt: n.readAt || null,
+  }));
 }
 
 // ─── Packages ─────────────────────────────────────────────────────
@@ -281,6 +360,8 @@ function packagesForTenant(tenantId) {
       id: item.id,
       name: item.name,
       pricePaise: paiseFromRupees(item.price),
+      sessionsTotal: Number(item.packageCredits || item.validityDays || 5),
+      sessionsUsed: Number(item.sessionsUsed || 0),
       status: item.status || "active",
       createdAt: item.createdAt || "",
     }));
@@ -304,7 +385,7 @@ function recentBookings(access, tenantId) {
     staffName: row.staffName || "",
     startAt: row.startAt || "",
     status: row.status || "",
-    totalPaise: paiseFromRupees(row.totalAmount || row.total || 0),
+    totalPricePaise: paiseFromRupees(row.totalAmount || row.total || 0),
   }));
 }
 
@@ -360,7 +441,7 @@ function salonStaff(tenantId, branchId) {
       id: s.id,
       name: s.name,
       role: s.role || "",
-      specialty: s.specialty || "",
+      specialty: s.specialty || s.role || "Salon Specialist",
       avatar: s.avatar || s.photo || "",
     }));
 }
@@ -387,7 +468,8 @@ function activeOffers(tenantId, branchId) {
     title: r.title || "",
     discountType: r.discountType || "",
     discountValue: Number(r.discountValue || 0),
-    endDate: r.endDate || "",
+    validFrom: r.startDate || "",
+    validTo: r.endDate || "",
   }));
 }
 
@@ -409,6 +491,9 @@ export function getMySalonDashboard(access) {
       services: [],
       staff: [],
       offers: [],
+      giftCards: [],
+      invoices: [],
+      notifications: [],
       relationship: null,
     };
   }
@@ -436,13 +521,16 @@ export function getMySalonDashboard(access) {
     ? loyaltyForClient(tenantId, access.userId)
     : { points: 0, tier: "Classic" };
   const membership = clientRow
-    ? membershipForClient(access.userId)
+    ? membershipForClient(access.userId, tenantId)
     : null;
   const packages = packagesForTenant(tenantId);
   const bookings = recentBookings(access, tenantId);
   const services = salonServices(tenantId, branchId);
   const staff = salonStaff(tenantId, branchId);
   const offers = activeOffers(tenantId, branchId);
+  const giftCards = giftCardsForClient(tenantId, access.userId);
+  const invoices = invoicesForClient(tenantId, access.userId);
+  const notifications = notificationsForClient(tenantId, access.userId);
 
   return {
     hasPrimarySalon: true,
@@ -455,6 +543,9 @@ export function getMySalonDashboard(access) {
     services,
     staff,
     offers,
+    giftCards,
+    invoices,
+    notifications,
     relationship: relationship
       ? {
           visitCount: relationship.visitCount,

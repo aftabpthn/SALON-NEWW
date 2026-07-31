@@ -240,10 +240,10 @@ type BookingFlowItem = {
       font-weight: 900;
       letter-spacing: -0.025em;
     }
-    .booking-page.editing { padding-top: 8px !important; }
+    .booking-page.editing { padding-top: 8px; }
     .booking-page.editing .stepper { margin-top: 2px; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
-    .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)) !important; }
+    .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)); }
     .booking-hero { display: grid; gap: 18px; align-items: center; padding: 14px; }
     .booking-hero img { width: 100%; aspect-ratio: 16 / 10; height: auto; border-radius: 24px; object-fit: cover; }
     .booking-hero .page-title { font-size: clamp(2rem, 5vw, 3.6rem); }

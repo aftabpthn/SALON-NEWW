@@ -1,9 +1,11 @@
-import { Component, HostListener, signal } from "@angular/core";
-import { Router, RouterLink, RouterLinkActive } from "@angular/router";
+import { Component, HostListener, OnInit, signal } from "@angular/core";
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from "@angular/router";
+import { filter } from "rxjs";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronForwardOutline, closeOutline, compass, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, compass, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
+import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
   standalone: true,
@@ -31,7 +33,15 @@ import { AuthService } from "../../core/auth.service";
           <ion-icon name="sparkles-outline"></ion-icon>
           <strong>My Salon Mode</strong>
         </div>
-        <button type="button" class="salon-mode-exit" (click)="exitSalonMode()">Exit</button>
+        <div class="salon-mode-actions">
+          @if (!onSalonDashboard()) {
+            <button type="button" class="salon-mode-back" (click)="goToSalon()">
+              <ion-icon name="chevron-back-outline" aria-hidden="true"></ion-icon>
+              Salon
+            </button>
+          }
+          <button type="button" class="salon-mode-exit" (click)="exitSalonMode()">Exit</button>
+        </div>
       </header>
     }
     <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive()" aria-label="Customer app quick header">
@@ -184,7 +194,7 @@ import { AuthService } from "../../core/auth.service";
     }
 
     .salon-mode-hidden {
-      display: none !important;
+      display: none;
     }
 
     .salon-mode-toggle {
@@ -271,6 +281,31 @@ import { AuthService } from "../../core/auth.service";
       font-size: 1.15rem;
     }
 
+    .salon-mode-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .salon-mode-back {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(11, 70, 120, 0.22);
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--primary);
+      background: #ffffff;
+      font-size: 0.78rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .salon-mode-back ion-icon {
+      font-size: 0.9rem;
+    }
+
     .salon-mode-exit {
       min-width: 64px;
       min-height: 36px;
@@ -285,16 +320,16 @@ import { AuthService } from "../../core/auth.service";
     }
 
     ion-tabs.salon-mode-active {
-      padding-top: 58px !important;
+      padding-top: 58px;
     }
 
     @media (max-width: 599px) {
       .salon-mode-toggle {
-        position: fixed !important;
-        left: 8px !important;
-        right: auto !important;
-        bottom: calc(10px + env(safe-area-inset-bottom)) !important;
-        width: clamp(96px, 28vw, 116px) !important;
+        position: fixed;
+        left: 8px;
+        right: auto;
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        width: clamp(96px, 28vw, 116px);
         height: 60px;
         min-height: 60px;
         padding: 5px 6px;
@@ -319,14 +354,14 @@ import { AuthService } from "../../core/auth.service";
       }
 
       ion-tab-bar {
-        position: fixed !important;
-        left: calc(18px + clamp(96px, 28vw, 116px)) !important;
-        right: 8px !important;
-        bottom: calc(10px + env(safe-area-inset-bottom)) !important;
-        width: auto !important;
-        height: 60px !important;
-        min-height: 60px !important;
-        margin: 0 !important;
+        position: fixed;
+        left: calc(18px + clamp(96px, 28vw, 116px));
+        right: 8px;
+        bottom: calc(10px + env(safe-area-inset-bottom));
+        width: auto;
+        height: 60px;
+        min-height: 60px;
+        margin: 0;
         border-radius: 20px;
         box-sizing: border-box;
         overflow: hidden;
@@ -405,7 +440,7 @@ import { AuthService } from "../../core/auth.service";
 
     @media (max-width: 1023px) {
       .mobile-topbar {
-        display: none !important;
+        display: none;
       }
 
       ion-tabs {
@@ -421,7 +456,7 @@ import { AuthService } from "../../core/auth.service";
       .mobile-topbar,
       .mobile-menu-backdrop,
       .mobile-menu-sheet {
-        display: none !important;
+        display: none;
       }
 
       ion-tabs {
@@ -700,7 +735,7 @@ import { AuthService } from "../../core/auth.service";
       padding: 12px 14px;
       border: 1px solid rgba(225, 29, 72, 0.16);
       border-radius: 16px;
-      color: #EF4444 !important;
+      color: #EF4444;
       background: #fff1f2;
     }
 
@@ -895,7 +930,7 @@ import { AuthService } from "../../core/auth.service";
     }
   `]
 })
-export class TabsPage {
+export class TabsPage implements OnInit {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
   private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/profile"];
@@ -904,8 +939,15 @@ export class TabsPage {
   private swipeStartRoute = "";
   private swipeTracking = false;
 
-  constructor(readonly auth: AuthService, private readonly router: Router) {
-    addIcons({ compass, compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+  constructor(readonly auth: AuthService, private readonly router: Router, private readonly marketplace: MarketplaceService) {
+    addIcons({ compass, compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+  }
+
+  ngOnInit(): void {
+    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
+      if (!this.marketplace.salonMode() || this.normalizeSwipeRoute(this.router.url) !== "/tabs/home") return;
+      void this.router.navigateByUrl("/tabs/my-salon", { replaceUrl: true });
+    });
   }
 
   @HostListener("window:storage")
@@ -960,10 +1002,19 @@ export class TabsPage {
   }
 
   salonModeActive(): boolean {
+    return this.marketplace.salonMode();
+  }
+
+  onSalonDashboard(): boolean {
     return this.normalizeSwipeRoute(this.router.url) === "/tabs/my-salon";
   }
 
+  goToSalon(): void {
+    void this.router.navigateByUrl("/tabs/my-salon");
+  }
+
   exitSalonMode() {
+    this.marketplace.exitSalonMode();
     this.closeMenu();
     void this.router.navigateByUrl("/tabs/home");
   }

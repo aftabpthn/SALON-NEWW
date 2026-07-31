@@ -210,6 +210,102 @@ import { MarketplaceService } from "../core/marketplace.service";
       gap: 8px;
       margin-top: 4px;
     }
+
+    @media (max-width: 599px) {
+      .my-salon-card {
+        gap: 8px;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .salon-header {
+        grid-template-columns: 40px minmax(0, 1fr) 36px;
+        gap: 9px;
+      }
+
+      .prompt-card {
+        grid-template-columns: 40px minmax(0, 1fr);
+        gap: 9px;
+      }
+
+      .salon-initials {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+      }
+
+      .salon-info .label {
+        font-size: 0.62rem;
+        letter-spacing: 0.04em;
+      }
+
+      .salon-info h3 {
+        font-size: 0.92rem;
+        line-height: 1.1;
+      }
+
+      .salon-info small {
+        font-size: 0.68rem;
+      }
+
+      .change-salon {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+      }
+
+      .salon-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .action-pill {
+        min-width: 0;
+        gap: 4px;
+        padding: 8px 6px;
+        border-radius: 12px;
+        font-size: 0.72rem;
+        white-space: nowrap;
+      }
+
+      .action-pill span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .action-pill ion-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .prompt-content {
+        gap: 3px;
+      }
+
+      .prompt-content h3 {
+        font-size: 0.88rem;
+        line-height: 1.15;
+      }
+
+      .prompt-content p {
+        font-size: 0.72rem;
+        line-height: 1.28;
+      }
+
+      .prompt-actions {
+        gap: 6px;
+        margin-top: 3px;
+      }
+
+      .prompt-actions ion-button {
+        min-height: 34px;
+        font-size: 0.68rem;
+        --padding-start: 10px;
+        --padding-end: 10px;
+      }
+    }
   `]
 })
 export class MySalonCardComponent {

@@ -62,7 +62,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
       animation-iteration-count: 1;
-      transform: none !important;
+      transform: none;
     }
 
     .check {
@@ -126,9 +126,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     @media (hover: hover) and (pointer: fine) {
       .success-card:hover {
-        transform: none !important;
-        filter: none !important;
-        box-shadow: var(--shadow-soft) !important;
+        transform: none;
+        filter: none;
+        box-shadow: var(--shadow-soft);
       }
     }
   `]

@@ -55,10 +55,36 @@ export class MarketplaceService {
   readonly suggestedSalon = signal<CustomerSalonRelationship | null>(null);
   readonly salonOffers = signal<PublicOffersResponse | null>(null);
   readonly mySalonDashboard = signal<MySalonDashboard | null>(null);
+  private readonly salonModeStore = signal(false);
+  readonly salonMode = this.salonModeStore.asReadonly();
   private favoritesLoaded = false;
   private savedSalonsLoaded = false;
 
-  constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {}
+  constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {
+    try {
+      this.salonModeStore.set(localStorage.getItem("aura_salon_mode") === "1");
+    } catch {
+      this.salonModeStore.set(false);
+    }
+  }
+
+  enterSalonMode(): void {
+    this.salonModeStore.set(true);
+    try {
+      localStorage.setItem("aura_salon_mode", "1");
+    } catch {
+      // storage unavailable — mode stays active for this session
+    }
+  }
+
+  exitSalonMode(): void {
+    this.salonModeStore.set(false);
+    try {
+      localStorage.removeItem("aura_salon_mode");
+    } catch {
+      // storage unavailable — mode already off for this session
+    }
+  }
 
   async loadPublicBusinesses(params: SearchBusinessesParams = {}): Promise<Business[]> {
     return this.run("Unable to load businesses", async () => {

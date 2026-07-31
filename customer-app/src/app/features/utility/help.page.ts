@@ -554,14 +554,14 @@ interface HelpItem {
     }
 
     .security-button {
-      margin-top: 2px !important;
+      margin-top: 2px;
       --border-color: var(--brand-700);
-      --border-radius: 12px !important;
+      --border-radius: 12px;
       --color: var(--brand-700);
       --padding-start: 13px;
       --padding-end: 13px;
       font-size: 0.84rem;
-      font-weight: 800 !important;
+      font-weight: 800;
     }
 
     @media (max-width: 599px) {
@@ -733,7 +733,7 @@ interface HelpItem {
 
       .security-button {
         grid-column: 1 / -1;
-        min-width: 0 !important;
+        min-width: 0;
       }
     }
 

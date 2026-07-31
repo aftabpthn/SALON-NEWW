@@ -376,7 +376,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
     .pass-card h2 {
       margin: 6px 0 8px;
-      color: #ffffff !important;
+      color: #ffffff;
       letter-spacing: -0.04em;
     }
 
