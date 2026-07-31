@@ -433,9 +433,8 @@ export class BookingFlowPage implements OnInit {
     if (!slug) return;
     await this.marketplace.loadBusiness(slug).catch(() => undefined);
     if (!this.isRescheduling()) this.restorePendingIntent();
-    if (!this.bookingItems().length && this.business()?.services[0]) this.bookingItems.set([{ serviceId: this.business()?.services[0].id ?? "", staffId: null, date: "", slotStartAt: "" }]);
-    if (!this.route.snapshot.queryParamMap.has("step") && this.bookingItems().length) {
-      this.step.set(2);
+    if (!this.route.snapshot.queryParamMap.has("step")) {
+      this.step.set(this.bookingItems().length ? 2 : 1);
     } else if (this.step() < 1 || this.step() > 4) {
       this.step.set(1);
     }

@@ -35,11 +35,11 @@ import { Subscription } from "rxjs";
   imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
-      @if (business()) {
+      @if (business(); as b) {
       <main class="profile-page">
         <section class="cover">
           <ion-back-button class="cover-back-button" defaultHref="/tabs/home"></ion-back-button>
-          <img [src]="business().coverImage || business().galleryImages[0] || business().logoUrl || 'assets/icons/icon.svg'" [alt]="business().businessName + ' cover image'" />
+          <img [src]="b.coverImage || b.galleryImages[0] || b.logoUrl || 'assets/icons/icon.svg'" [alt]="b.businessName + ' cover image'" />
           <div class="cover-overlay"></div>
           <div class="cover-actions">
             <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
@@ -51,9 +51,9 @@ import { Subscription } from "rxjs";
             <ion-button fill="clear" shape="round" aria-label="Share business"><ion-icon name="share-outline"></ion-icon></ion-button>
           </div>
           <div class="cover-copy">
-            <div class="hero-business-name" role="heading" aria-level="1">{{ business().businessName }}</div>
-            <p>{{ business().area }}, {{ business().city }}</p>
-            <span class="hero-open-pill" [class.closed]="!business().isOpen">{{ business().isOpen ? "Open now" : "Closed now" }}</span>
+            <div class="hero-business-name" role="heading" aria-level="1">{{ b.businessName }}</div>
+            <p>{{ b.area }}, {{ b.city }}</p>
+            <span class="hero-open-pill" [class.closed]="!b.isOpen">{{ b.isOpen ? "Open now" : "Closed now" }}</span>
           </div>
         </section>
 
@@ -61,13 +61,13 @@ import { Subscription } from "rxjs";
           <div class="main-column">
             <section class="intro premium-card">
               <div>
-                <p class="eyebrow">{{ business().area }}, {{ business().city }}</p>
-                <h2>{{ business().description }}</h2>
+                <p class="eyebrow">{{ b.area }}, {{ b.city }}</p>
+                <h2>{{ b.description }}</h2>
               </div>
               <div class="stat-grid">
-                <span><strong>{{ business().ratingAverage }}</strong> {{ business().ratingCount }} reviews</span>
-                <span><strong>{{ business().distanceKm }} km</strong> from you</span>
-                <span><strong>{{ business().hoursLabel || business().nextAvailableSlot }}</strong> timing</span>
+                <span><strong>{{ b.ratingAverage }}</strong> {{ b.ratingCount }} reviews</span>
+                <span><strong>{{ b.distanceKm }} km</strong> from you</span>
+                <span><strong>{{ b.hoursLabel || b.nextAvailableSlot }}</strong> timing</span>
               </div>
               @if (isAuthenticated()) {
                 <div class="primary-salon-strip">
@@ -81,9 +81,9 @@ import { Subscription } from "rxjs";
                 </div>
               }
               <div class="trust-row">
-                <span><ion-icon name="sparkles-outline"></ion-icon>{{ business().services.length }} services</span>
-                <span><ion-icon name="people-outline"></ion-icon>{{ business().staff.length }} professionals</span>
-                <span><ion-icon name="time-outline"></ion-icon>{{ business().hoursLabel || "Hours published" }}</span>
+                <span><ion-icon name="sparkles-outline"></ion-icon>{{ b.services.length }} services</span>
+                <span><ion-icon name="people-outline"></ion-icon>{{ b.staff.length }} professionals</span>
+                <span><ion-icon name="time-outline"></ion-icon>{{ b.hoursLabel || "Hours published" }}</span>
                 <span><ion-icon name="card-outline"></ion-icon>{{ paymentLabel() }}</span>
               </div>
             </section>
@@ -117,8 +117,8 @@ import { Subscription } from "rxjs";
                 </div>
               </div>
               <div class="gallery-strip">
-                @for (image of business().galleryImages; track image) {
-                  <img [src]="image" [alt]="business().businessName + ' gallery image'" loading="lazy" />
+                @for (image of b.galleryImages; track image) {
+                  <img [src]="image" [alt]="b.businessName + ' gallery image'" loading="lazy" />
                 } @empty {
                   <section class="state-card premium-card"><h2>No gallery available</h2></section>
                 }
@@ -148,7 +148,7 @@ import { Subscription } from "rxjs";
                   class="service-search-input"
                   [ngModel]="serviceQuery()"
                   (ngModelChange)="serviceQuery.set($event)"
-                  placeholder="Search services in {{ business().businessName }}..."
+                  placeholder="Search services in {{ b.businessName }}..."
                   aria-label="Search salon services" />
                 @if (serviceQuery()) {
                   <button type="button" class="clear-search-btn" (click)="serviceQuery.set('')" aria-label="Clear search">
@@ -164,7 +164,7 @@ import { Subscription } from "rxjs";
                     class="category-pill"
                     [class.active]="!selectedCategory()"
                     (click)="selectedCategory.set('')">
-                    All ({{ business().services.length }})
+                    All ({{ b.services.length }})
                   </button>
                   @for (cat of availableCategories(); track cat) {
                     <button
@@ -271,14 +271,14 @@ import { Subscription } from "rxjs";
                 </div>
               </div>
               <div class="staff-grid">
-                @for (staff of business().staff; track staff.id) {
+                @for (staff of b.staff; track staff.id) {
                   <article class="staff-card premium-card">
                     <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
                     <strong>{{ staff.name }}</strong>
                     <span>{{ staff.title }}</span>
                     <small>Star {{ staff.rating }} · {{ staff.specialty }}</small>
                     <em>{{ staff.nextAvailable }}</em>
-                    <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="['/business', business().slug, 'book']">Book with {{ staff.name.split(' ')[0] }}</ion-button>
+                    <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="['/business', b.slug, 'book']">Book with {{ staff.name.split(' ')[0] }}</ion-button>
                   </article>
                 } @empty {
                   <section class="state-card premium-card"><h2>No staff available</h2></section>
@@ -293,7 +293,7 @@ import { Subscription } from "rxjs";
                 </div>
               </div>
               <div class="review-grid">
-                @for (review of business().reviews; track review.id) {
+                @for (review of b.reviews; track review.id) {
                   <article class="review-card premium-card">
                     <span class="rating-pill">Star {{ review.rating }}</span>
                     <p>{{ review.text }}</p>
@@ -342,9 +342,9 @@ import { Subscription } from "rxjs";
             <section class="info-grid">
               <article class="premium-card info-card">
                 <h2>Location</h2>
-                <p><ion-icon name="location-outline"></ion-icon>{{ business().address }}</p>
+                <p><ion-icon name="location-outline"></ion-icon>{{ b.address }}</p>
                 <div class="info-actions">
-                  <ion-button size="small" fill="outline" class="secondary-button" [href]="business().mapsUrl || undefined" target="_blank">
+                  <ion-button size="small" fill="outline" class="secondary-button" [href]="b.mapsUrl || undefined" target="_blank">
                     <ion-icon name="navigate-outline" slot="start"></ion-icon>
                     Directions
                   </ion-button>
@@ -353,31 +353,31 @@ import { Subscription } from "rxjs";
                     Call
                   </ion-button>
                 </div>
-                <span class="muted">{{ business().area }}, {{ business().city }} {{ business().postalCode || "" }}</span>
+                <span class="muted">{{ b.area }}, {{ b.city }} {{ b.postalCode || "" }}</span>
               </article>
               <article class="premium-card info-card">
                 <h2>Hours</h2>
-                @for (day of business().businessHours; track day.day) {
+                @for (day of b.businessHours || []; track day.day) {
                   <p class="hours-row"><strong>{{ day.label }}</strong><span>{{ day.display }}{{ day.note ? " · " + day.note : "" }}</span></p>
                 } @empty {
-                  <p class="muted">{{ business().hoursLabel || "Business hours have not been published yet." }}</p>
+                  <p class="muted">{{ b.hoursLabel || "Business hours have not been published yet." }}</p>
                 }
               </article>
               <article class="premium-card info-card">
                 <h2>Contact</h2>
-                @if (business().phone || business().appointmentNumber || business().mobileNumber) {
-                  <p><ion-icon name="call-outline"></ion-icon>{{ business().appointmentNumber || business().mobileNumber || business().phone }}</p>
+                @if (b.phone || b.appointmentNumber || b.mobileNumber) {
+                  <p><ion-icon name="call-outline"></ion-icon>{{ b.appointmentNumber || b.mobileNumber || b.phone }}</p>
                 }
-                @if (business().websiteUrl) {
-                  <p><ion-icon name="navigate-outline"></ion-icon>{{ business().websiteUrl }}</p>
+                @if (b.websiteUrl) {
+                  <p><ion-icon name="navigate-outline"></ion-icon>{{ b.websiteUrl }}</p>
                 }
-                @if (business().instagramUrl) {
-                  <p><ion-icon name="sparkles-outline"></ion-icon>{{ business().instagramUrl }}</p>
+                @if (b.instagramUrl) {
+                  <p><ion-icon name="sparkles-outline"></ion-icon>{{ b.instagramUrl }}</p>
                 }
               </article>
               <article class="premium-card info-card">
                 <h2>Policies</h2>
-                @for (policy of business().policies; track policy) {
+                @for (policy of b.policies || []; track policy) {
                   <p>{{ policy }}</p>
                 } @empty {
                   <p class="muted">No public policies have been published yet.</p>
@@ -387,22 +387,22 @@ import { Subscription } from "rxjs";
           </div>
 
           <aside class="booking-rail premium-card">
-            <span class="rating-pill">Star {{ business().ratingAverage }}</span>
+            <span class="rating-pill">Star {{ b.ratingAverage }}</span>
             @if (selectedServices().length) {
               <h2>{{ selectedServices().length }} service{{ selectedServices().length === 1 ? "" : "s" }} selected</h2>
               <p class="muted">{{ selectedServicesLabel() }}</p>
             } @else {
-              <h2>Book {{ business().popularService || business().category }}</h2>
-              <p class="muted">Starts from {{ money(business().startingPricePaise) }}. Next available {{ business().nextAvailableSlot || "after selecting a service" }}.</p>
+              <h2>Book {{ b.popularService || b.category }}</h2>
+              <p class="muted">Starts from {{ money(b.startingPricePaise || 0) }}. Next available {{ b.nextAvailableSlot || "after selecting a service" }}.</p>
             }
-            @if (business().hasOffer) {
-              <div class="rail-offer">{{ business().offerText }}</div>
+            @if (b.hasOffer) {
+              <div class="rail-offer">{{ b.offerText }}</div>
             }
-            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Next slot</span><strong>{{ business().nextAvailableSlot || "Check availability" }}</strong></div>
-            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Hours</span><strong>{{ business().hoursLabel || "Published" }}</strong></div>
-            <div class="rail-row"><span><ion-icon name="location-outline"></ion-icon> Area</span><strong>{{ business().area }}</strong></div>
+            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Next slot</span><strong>{{ b.nextAvailableSlot || "Check availability" }}</strong></div>
+            <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Hours</span><strong>{{ b.hoursLabel || "Published" }}</strong></div>
+            <div class="rail-row"><span><ion-icon name="location-outline"></ion-icon> Area</span><strong>{{ b.area }}</strong></div>
             <div class="rail-row"><span><ion-icon name="card-outline"></ion-icon> Payment</span><strong>{{ paymentLabel() }}</strong></div>
-            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
+            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', b.slug || b.id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
           </aside>
         </section>
       </main>
@@ -415,11 +415,11 @@ import { Subscription } from "rxjs";
               <small class="selected-service-name">{{ selectedServices().length }} service{{ selectedServices().length === 1 ? "" : "s" }} selected</small>
               <strong>{{ selectedServicesLabel() }}</strong>
             } @else {
-              <small>From {{ money(business().startingPricePaise) }}</small>
-              <strong>{{ business().nextAvailableSlot || "Check availability" }}</strong>
+              <small>From {{ money(b.startingPricePaise || 0) }}</small>
+              <strong>{{ b.nextAvailableSlot || "Check availability" }}</strong>
             }
           </div>
-          <ion-button class="primary-gradient" [routerLink]="['/business', business().slug || business().id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
+          <ion-button class="primary-gradient" [routerLink]="['/business', b.slug || b.id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
         </div>
       </div>
       }
@@ -1755,7 +1755,12 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
   readonly serviceQuery = signal<string>("");
   readonly selectedCategory = signal<string>("");
 
-  readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
+  readonly business = computed(() => {
+    const slug = this.slug();
+    const business = slug ? this.marketplace.findBusiness(slug) : null;
+    if (!business && slug) this.reload();
+    return business;
+  });
   readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
   readonly isPrimarySalon = computed(() => {
     const biz = this.business();
