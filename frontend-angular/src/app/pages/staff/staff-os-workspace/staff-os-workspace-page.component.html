@@ -102,7 +102,7 @@
                   <as-date-picker [ariaLabel]="field.label" [(value)]="actionValues[field.key]" [disabled]="actionSaving"></as-date-picker>
                 }
                 @case ('number') {
-                  <input [name]="field.key" type="number" step="1" [ngModel]="actionValues[field.key]" (ngModelChange)="actionValues[field.key] = String($event ?? '')" [disabled]="actionSaving" />
+                  <input [name]="field.key" type="number" step="1" [ngModel]="actionValues[field.key]" (ngModelChange)="actionValues[field.key] = $event?.toString() ?? ''" [disabled]="actionSaving" />
                 }
                 @case ('textarea') {
                   <textarea [name]="field.key" rows="3" maxlength="4000" [(ngModel)]="actionValues[field.key]" [disabled]="actionSaving"></textarea>

@@ -1,7 +1,7 @@
 use axum::body::Bytes;
 use chrono::{Duration as ChronoDuration, NaiveDate};
 use futures_util::{stream, StreamExt};
-use reqwest::{header, Url};
+use reqwest::{header, Response, StatusCode, Url};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -19,7 +19,9 @@ use crate::{
     config::Settings,
     models::{
         common::AppError,
-        migration::{CreateLargeImportJobRequest, MigrationMode, MigrationProvider},
+        migration::{
+            CreateLargeImportJobRequest, MigrationEntity, MigrationMode, MigrationProvider,
+        },
         migration_file::{CompleteMigrationUploadRequest, CreateMigrationUploadRequest},
     },
     repositories::integration_repository::{self, ClaimedConnectorSyncJob},
@@ -30,6 +32,9 @@ use crate::{
 };
 
 const MAX_PROVIDER_FILE_BYTES: u64 = 500 * 1024 * 1024;
+const MAX_PROVIDER_REQUEST_ATTEMPTS: usize = 5;
+const MAX_PROVIDER_RETRY_DELAY_SECONDS: u64 = 60;
+const MAX_PROVIDER_CONCURRENCY: usize = 8;
 const ZENOTI_PAGE_SIZE: usize = 100;
 const MAX_ZENOTI_ROWS_PER_DATASET: usize = 1_000_000;
 
@@ -192,6 +197,9 @@ async fn ingest_and_queue(
                 .get("retentionDays")
                 .and_then(Value::as_i64)
                 .unwrap_or(90) as i32,
+            evidence_kind: None,
+            supplier_batch: None,
+            cutover_id: None,
         },
     )
     .await?;
@@ -232,6 +240,7 @@ async fn ingest_and_queue(
     )
     .await?;
     let mut queued = Vec::new();
+    let mut cutover_required = Vec::new();
     if config
         .get("autoQueue")
         .and_then(Value::as_bool)
@@ -263,6 +272,14 @@ async fn ingest_and_queue(
                 if !seen.insert((sheet.id.clone(), entity.as_str())) {
                     continue;
                 }
+                if matches!(
+                    entity,
+                    MigrationEntity::PurchaseBills | MigrationEntity::Inventory
+                ) {
+                    cutover_required.push(json!({"entity":entity.as_str(),"sheet":sheet.name}));
+                    continue;
+                }
+                let import_mode = mode;
                 let import = migration_large_import_service::create_job(
                     db,
                     &job.tenant_id,
@@ -271,7 +288,10 @@ async fn ingest_and_queue(
                     CreateLargeImportJobRequest {
                         source_file_id: completed.source_file.id.clone(),
                         entity,
-                        mode,
+                        mode: import_mode,
+                        posting_mode: None,
+                        cutover_id: None,
+                        cutover_date: None,
                         mapping: BTreeMap::new(),
                         duplicate_decisions: BTreeMap::new(),
                         mapping_id: None,
@@ -280,10 +300,11 @@ async fn ingest_and_queue(
                         allow_partial_import: false,
                         source_provider,
                         source_sheet: sheet.id.clone(),
+                        header_source_sheet: String::new(),
                     },
                 )
                 .await?;
-                queued.push(json!({"jobId":import.id,"entity":entity.as_str(),"sheet":sheet.name,"mode":mode.as_str()}));
+                queued.push(json!({"jobId":import.id,"entity":entity.as_str(),"sheet":sheet.name,"mode":import_mode.as_str()}));
             }
         }
     }
@@ -293,7 +314,8 @@ async fn ingest_and_queue(
             "provider": provider.code(),
             "sourceFileId": completed.source_file.id,
             "sourceSha256": completed.source_file.sha256,
-            "queuedImports": queued
+            "queuedImports": queued,
+            "cutoverRequired": cutover_required
         }),
         config
             .get("accountId")
@@ -313,20 +335,7 @@ async fn download_dingg(config: &Value, token: &str) -> Result<PathBuf, AppError
     )?;
     let client = pinned_https_client(&url).await?;
     let authorization = provider_authorization(config, token)?;
-    let response = client
-        .get(url)
-        .header(header::AUTHORIZATION, authorization)
-        .send()
-        .await
-        .map_err(|_| {
-            AppError::service_unavailable("DINGG_UNAVAILABLE", "DINGG export is unavailable")
-        })?;
-    if !response.status().is_success() {
-        return Err(AppError::service_unavailable(
-            "DINGG_REJECTED",
-            "DINGG export authorization was rejected",
-        ));
-    }
+    let response = provider_get(&client, url.as_str(), &authorization, "DINGG").await?;
     if response
         .content_length()
         .is_some_and(|length| length > MAX_PROVIDER_FILE_BYTES)
@@ -442,7 +451,7 @@ async fn snapshot_zenoti(config: &Value, token: &str) -> Result<PathBuf, AppErro
                 Ok::<_, AppError>((guest_id, gift_cards, loyalty))
             }
         }))
-        .buffer_unordered(8)
+        .buffer_unordered(MAX_PROVIDER_CONCURRENCY)
         .collect::<Vec<_>>()
         .await;
         for result in child_results {
@@ -500,7 +509,7 @@ async fn snapshot_zenoti(config: &Value, token: &str) -> Result<PathBuf, AppErro
                 let authorization = &authorization;
                 async move { fetch_zenoti_invoice(client, authorization, &invoice_id).await }
             }))
-            .buffer_unordered(8)
+            .buffer_unordered(MAX_PROVIDER_CONCURRENCY)
             .collect::<Vec<_>>()
             .await;
             for invoice in invoices {
@@ -877,20 +886,7 @@ async fn fetch_zenoti_json(
     authorization: &str,
     endpoint: &str,
 ) -> Result<Value, AppError> {
-    let response = client
-        .get(endpoint)
-        .header(header::AUTHORIZATION, authorization)
-        .send()
-        .await
-        .map_err(|_| {
-            AppError::service_unavailable("ZENOTI_UNAVAILABLE", "Zenoti API is unavailable")
-        })?;
-    if !response.status().is_success() {
-        return Err(AppError::service_unavailable(
-            "ZENOTI_REJECTED",
-            "Zenoti API authorization or scope was rejected",
-        ));
-    }
+    let response = provider_get(client, endpoint, authorization, "ZENOTI").await?;
     response
         .json()
         .await
@@ -1012,20 +1008,7 @@ async fn fetch_zenoti_pages(
         url.query_pairs_mut()
             .append_pair("page", &page.to_string())
             .append_pair("size", &ZENOTI_PAGE_SIZE.to_string());
-        let response = client
-            .get(url)
-            .header(header::AUTHORIZATION, authorization)
-            .send()
-            .await
-            .map_err(|_| {
-                AppError::service_unavailable("ZENOTI_UNAVAILABLE", "Zenoti API is unavailable")
-            })?;
-        if !response.status().is_success() {
-            return Err(AppError::service_unavailable(
-                "ZENOTI_REJECTED",
-                "Zenoti API authorization or scope was rejected",
-            ));
-        }
+        let response = provider_get(client, url.as_str(), authorization, "ZENOTI").await?;
         let payload: Value = response
             .json()
             .await
@@ -1048,6 +1031,88 @@ async fn fetch_zenoti_pages(
         }
     }
     Ok(rows)
+}
+
+async fn provider_get(
+    client: &reqwest::Client,
+    endpoint: &str,
+    authorization: &str,
+    provider: &'static str,
+) -> Result<Response, AppError> {
+    for attempt in 0..MAX_PROVIDER_REQUEST_ATTEMPTS {
+        match client
+            .get(endpoint)
+            .header(header::AUTHORIZATION, authorization)
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => return Ok(response),
+            Ok(response)
+                if attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS
+                    && (response.status() == StatusCode::TOO_MANY_REQUESTS
+                        || response.status().is_server_error()) =>
+            {
+                tokio::time::sleep(provider_retry_delay(response.headers(), attempt)).await;
+            }
+            Ok(response) => return Err(provider_status_error(provider, response.status())),
+            Err(_error) if attempt + 1 < MAX_PROVIDER_REQUEST_ATTEMPTS => {
+                tokio::time::sleep(provider_retry_delay(&header::HeaderMap::new(), attempt)).await;
+            }
+            Err(_) => return Err(provider_unavailable(provider)),
+        }
+    }
+    Err(provider_unavailable(provider))
+}
+
+fn provider_retry_delay(headers: &header::HeaderMap, attempt: usize) -> std::time::Duration {
+    let seconds = headers
+        .get(header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(1_u64 << attempt.min(5))
+        .clamp(1, MAX_PROVIDER_RETRY_DELAY_SECONDS);
+    std::time::Duration::from_secs(seconds)
+}
+
+fn provider_status_error(provider: &'static str, status: StatusCode) -> AppError {
+    let suffix = if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        "CREDENTIAL_EXPIRED"
+    } else if status == StatusCode::TOO_MANY_REQUESTS {
+        "RATE_LIMITED"
+    } else if status.is_server_error() {
+        "UNAVAILABLE"
+    } else {
+        "REJECTED"
+    };
+    AppError::service_unavailable(
+        provider_error_code(provider, suffix),
+        match suffix {
+            "CREDENTIAL_EXPIRED" => format!("{provider} credential is expired or unauthorized"),
+            "RATE_LIMITED" => format!("{provider} rate limit remained active after retries"),
+            "UNAVAILABLE" => format!("{provider} service is unavailable after retries"),
+            _ => format!("{provider} request was rejected"),
+        },
+    )
+}
+
+fn provider_unavailable(provider: &'static str) -> AppError {
+    AppError::service_unavailable(
+        provider_error_code(provider, "UNAVAILABLE"),
+        format!("{provider} service is unavailable after retries"),
+    )
+}
+
+fn provider_error_code(provider: &str, suffix: &str) -> &'static str {
+    match (provider, suffix) {
+        ("ZENOTI", "CREDENTIAL_EXPIRED") => "ZENOTI_CREDENTIAL_EXPIRED",
+        ("ZENOTI", "RATE_LIMITED") => "ZENOTI_RATE_LIMITED",
+        ("ZENOTI", "REJECTED") => "ZENOTI_REJECTED",
+        ("DINGG", "CREDENTIAL_EXPIRED") => "DINGG_CREDENTIAL_EXPIRED",
+        ("DINGG", "RATE_LIMITED") => "DINGG_RATE_LIMITED",
+        ("DINGG", "REJECTED") => "DINGG_REJECTED",
+        ("DINGG", _) => "DINGG_UNAVAILABLE",
+        _ => "ZENOTI_UNAVAILABLE",
+    }
 }
 
 fn rows_csv(rows: &[Value]) -> Result<Vec<u8>, AppError> {
@@ -1303,6 +1368,20 @@ mod tests {
     fn blocks_private_exports_and_flattens_nested_rows() {
         assert!(validate_export_url("https://127.0.0.1/export.xlsx").is_err());
         assert!(validate_export_url("https://exports.example.com/export.xlsx").is_ok());
+        assert_eq!(
+            provider_error_code("ZENOTI", "CREDENTIAL_EXPIRED"),
+            "ZENOTI_CREDENTIAL_EXPIRED"
+        );
+        assert_eq!(
+            provider_error_code("DINGG", "RATE_LIMITED"),
+            "DINGG_RATE_LIMITED"
+        );
+        let mut headers = header::HeaderMap::new();
+        headers.insert(header::RETRY_AFTER, header::HeaderValue::from_static("999"));
+        assert_eq!(
+            provider_retry_delay(&headers, 0),
+            std::time::Duration::from_secs(MAX_PROVIDER_RETRY_DELAY_SECONDS)
+        );
         let row = flatten_record(&json!({"personal_info":{"first_name":"Aftab"}}));
         assert_eq!(row.get("first_name").map(String::as_str), Some("Aftab"));
     }

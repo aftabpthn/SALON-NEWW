@@ -170,7 +170,7 @@ pub async fn get(db: &PgPool, tenant: &str, branch: &str, id: &str) -> Result<Ex
         .ok_or_else(|| AppError::not_found("export job was not found"))
 }
 pub async fn process_due(state: &AppState) -> Result<usize, AppError> {
-    let sql=format!("WITH due AS (SELECT id FROM report_export_jobs WHERE status='queued' AND available_at<=NOW() AND expires_at>NOW() ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 4) UPDATE report_export_jobs j SET status='processing',attempts=j.attempts+1,updated_at=NOW() FROM due WHERE j.id=due.id RETURNING {}",SELECT);
+    let sql=format!("WITH due AS (SELECT id FROM report_export_jobs WHERE status='queued' AND available_at<=NOW() AND expires_at>NOW() ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 4) UPDATE report_export_jobs j SET status='processing',attempts=j.attempts+1,updated_at=NOW() FROM due WHERE j.id=due.id RETURNING j.{}",SELECT.replace(',', ",j."));
     let jobs = sqlx::query_as::<_, ExportJob>(&sql)
         .fetch_all(&state.db)
         .await

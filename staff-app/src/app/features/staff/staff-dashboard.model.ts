@@ -127,8 +127,8 @@ function isActiveStatus(status: string): boolean {
   return ["in-service", "in service", "inprogress", "in progress", "running", "active", "started"].includes(String(status || "").trim().toLowerCase());
 }
 
-function isOpenAttendance(item: StaffToday["attendance"][number]): boolean {
-  return !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || ""));
+export function isOpenAttendance(item: StaffToday["attendance"][number]): boolean {
+  return Boolean(item.clockInAt) && !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || ""));
 }
 
 function timeLabel(value: string): string {

@@ -5,7 +5,7 @@ use chrono::{Duration, NaiveDate, Utc};
 use crate::{
     models::common::AppError,
     repositories::{
-        purchase_order_event_repository,
+        migration_repository, purchase_order_event_repository,
         purchase_repository::{
             self, PurchaseOrderLineRecord, PurchaseOrderRecord, PurchaseReceipt,
             PurchaseReceiptLine, SupplierAdvanceRecord, SupplierPaymentRecord,
@@ -29,12 +29,14 @@ pub struct ReceiptInput {
     pub shipping_paise: i64,
     pub handling_paise: i64,
     pub idempotency_key: String,
+    pub backdated_operational_approval: bool,
     pub lines: Vec<ReceiptLineInput>,
 }
 
 pub struct ReceiptLineInput {
     pub inventory_item_id: String,
     pub quantity: i32,
+    pub free_quantity: i32,
     pub unit_cost_paise: i64,
     pub discount_bps: i32,
     pub gst_percent: Option<i32>,
@@ -108,6 +110,7 @@ pub struct CreatedId {
 pub struct ReceiptDetails {
     pub receipt: PurchaseReceipt,
     pub lines: Vec<PurchaseReceiptLine>,
+    pub warnings: Vec<String>,
 }
 
 struct CalculatedLine {
@@ -117,6 +120,7 @@ struct CalculatedLine {
     units_per_package: i32,
     stock_quantity: i32,
     quantity: i32,
+    free_quantity: i32,
     delivered_quantity: i32,
     ordered_quantity: Option<i32>,
     short_quantity: i32,
@@ -152,6 +156,7 @@ pub async fn receive(
     tenant_id: &str,
     branch_id: &str,
     actor_user_id: &str,
+    actor_role: &str,
     input: ReceiptInput,
 ) -> Result<ReceiptDetails, AppError> {
     let supplier = if let Some(id) = input
@@ -210,6 +215,53 @@ pub async fn receive(
         "supplierInvoiceDate",
     )?
     .unwrap_or(received_date);
+    let cutover = migration_repository::get_cutover(&state.db, tenant_id, branch_id, None)
+        .await
+        .map_err(|_| AppError::internal("failed to validate the migration cutover boundary"))?;
+    let backdated = cutover.as_ref().is_some_and(|cutover| {
+        is_backdated_live_grn(
+            cutover.status.as_str(),
+            supplier_invoice_date,
+            cutover.cutover_date,
+        )
+    });
+    if backdated {
+        if !input.backdated_operational_approval {
+            return Err(AppError::validation_code(
+                "BACKDATED_GRN_HISTORY_ONLY_REQUIRED",
+                "This invoice belongs in Historical Purchase Bills; Owner approval is required to post it as an operational GRN",
+            ));
+        }
+        if !matches!(
+            actor_role.trim().to_ascii_lowercase().as_str(),
+            "owner" | "superadmin" | "super-admin"
+        ) {
+            return Err(AppError::forbidden(
+                "Owner approval is required for a backdated operational GRN",
+            ));
+        }
+        if cutover
+            .as_ref()
+            .and_then(|cutover| cutover.reconciliation.get("status"))
+            .and_then(serde_json::Value::as_str)
+            != Some("matched")
+        {
+            return Err(AppError::validation_code(
+                "BACKDATED_GRN_RECONCILIATION_REQUIRED",
+                "Migration reconciliation must be matched before a backdated operational GRN can be posted",
+            ));
+        }
+    }
+    let historical_collision = purchase_repository::historical_invoice_collision(
+        &state.db,
+        tenant_id,
+        branch_id,
+        &supplier_name,
+        &supplier_gstin,
+        &invoice_number,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to check the historical purchase register"))?;
     let due_date = input
         .due_date
         .as_deref()
@@ -239,7 +291,17 @@ pub async fn receive(
         tx.rollback()
             .await
             .map_err(|_| AppError::internal("failed to finish duplicate GRN"))?;
-        return Ok(ReceiptDetails { receipt, lines });
+        return Ok(ReceiptDetails {
+            receipt,
+            lines,
+            warnings: historical_collision
+                .then(|| {
+                    "Invoice also exists in Historical Purchase Bills; verify the cross-register reconciliation"
+                        .to_string()
+                })
+                .into_iter()
+                .collect(),
+        });
     }
     let purchase_order_id = input
         .purchase_order_id
@@ -273,6 +335,7 @@ pub async fn receive(
     let mut item_ids = HashSet::new();
     for line in input.lines {
         if line.quantity <= 0
+            || line.free_quantity < 0
             || line.unit_cost_paise < 0
             || !(0..=10_000).contains(&line.discount_bps)
             || line.damaged_quantity < 0
@@ -341,7 +404,12 @@ pub async fn receive(
             line.damaged_quantity,
             line.rejected_quantity,
         );
-        let stock_quantity = base_quantity(accepted, units_per_package)?;
+        let stock_quantity = base_quantity(
+            accepted
+                .checked_add(line.free_quantity)
+                .ok_or_else(|| AppError::validation("GRN free quantity is too large"))?,
+            units_per_package,
+        )?;
         let variance_reason = line.variance_reason.trim().to_string();
         if (excess > 0 || line.damaged_quantity > 0 || line.rejected_quantity > 0)
             && variance_reason.is_empty()
@@ -385,7 +453,8 @@ pub async fn receive(
             units_per_package,
             stock_quantity,
             quantity: accepted,
-            delivered_quantity: line.quantity,
+            free_quantity: line.free_quantity,
+            delivered_quantity: line.quantity.saturating_add(line.free_quantity),
             ordered_quantity,
             short_quantity: short,
             excess_quantity: excess,
@@ -474,6 +543,17 @@ pub async fn receive(
     )
     .await
     .map_err(|_| AppError::conflict("supplier invoice or idempotency key already exists"))?;
+    if backdated {
+        purchase_repository::record_backdated_operational_approval(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &receipt.id,
+            actor_user_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to record backdated GRN approval"))?;
+    }
     let mut saved_lines = Vec::with_capacity(calculated.len());
     for line in calculated {
         if let Some(order_id) = purchase_order_id {
@@ -526,6 +606,7 @@ pub async fn receive(
             &line.batch_number,
             &line.batch_barcode,
             line.expiry_date,
+            line.free_quantity,
         )
         .await
         .map_err(|_| AppError::internal("failed to save GRN line"))?;
@@ -630,6 +711,13 @@ pub async fn receive(
     Ok(ReceiptDetails {
         receipt,
         lines: saved_lines,
+        warnings: historical_collision
+            .then(|| {
+                "Invoice also exists in Historical Purchase Bills; verify the cross-register reconciliation"
+                    .to_string()
+            })
+            .into_iter()
+            .collect(),
     })
 }
 
@@ -646,7 +734,27 @@ pub async fn details(
     let lines = purchase_repository::lines(&state.db, tenant_id, branch_id, id)
         .await
         .map_err(|_| AppError::internal("failed to load GRN lines"))?;
-    Ok(ReceiptDetails { receipt, lines })
+    let historical_collision = purchase_repository::historical_invoice_collision(
+        &state.db,
+        tenant_id,
+        branch_id,
+        &receipt.supplier_name,
+        &receipt.supplier_gstin,
+        &receipt.supplier_invoice_number,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to check the historical purchase register"))?;
+    Ok(ReceiptDetails {
+        receipt,
+        lines,
+        warnings: historical_collision
+            .then(|| {
+                "Invoice also exists in Historical Purchase Bills; verify the cross-register reconciliation"
+                    .to_string()
+            })
+            .into_iter()
+            .collect(),
+    })
 }
 
 pub async fn create_order(
@@ -1380,12 +1488,18 @@ fn parse_optional_date(
         .transpose()
 }
 
+fn is_backdated_live_grn(status: &str, invoice_date: NaiveDate, cutover_date: NaiveDate) -> bool {
+    status == "live" && invoice_date <= cutover_date
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        base_quantity, discounted_cost, div_round, proportional_allocations, receiving_variance,
-        remaining_weighted_cost, return_tax_breakdown, transition_target, weighted_cost,
+        base_quantity, discounted_cost, div_round, is_backdated_live_grn, proportional_allocations,
+        receiving_variance, remaining_weighted_cost, return_tax_breakdown, transition_target,
+        weighted_cost,
     };
+    use chrono::NaiveDate;
     #[test]
     fn weighted_cost_uses_received_quantity() {
         assert_eq!(weighted_cost(10, 100, 10, 200), 150);
@@ -1394,6 +1508,7 @@ mod tests {
     #[test]
     fn one_box_of_ten_kits_adds_ten_stock_units() {
         assert_eq!(base_quantity(1, 10).unwrap(), 10);
+        assert_eq!(base_quantity(2 + 1, 10).unwrap(), 30); // two paid plus one free
         assert!(base_quantity(i32::MAX, 10).is_err());
     }
 
@@ -1431,5 +1546,17 @@ mod tests {
             vec![50, 34, 17]
         );
         assert_eq!(div_round(5, 2), 3);
+    }
+
+    #[test]
+    fn only_live_pre_cutover_invoices_need_backdated_approval() {
+        let cutover = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
+        assert!(is_backdated_live_grn("live", cutover, cutover));
+        assert!(!is_backdated_live_grn(
+            "live",
+            NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+            cutover
+        ));
+        assert!(!is_backdated_live_grn("reconciled", cutover, cutover));
     }
 }

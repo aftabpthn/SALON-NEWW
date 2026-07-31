@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('scheduled staff supports drag ordering, A-Z sorting, and saved order', () => {
+test('scheduled staff supports drag ordering, A-Z sorting, and applies the current view', () => {
   const component = read('../src/app/pages/appointments/appointments-page.component.ts');
   const template = read('../src/app/pages/appointments/appointments-page.component.html');
 
@@ -12,7 +12,8 @@ test('scheduled staff supports drag ordering, A-Z sorting, and saved order', () 
   assert.match(template, /dropScheduledStaff\(person\.id, \$event\)/);
   assert.match(template, /sortScheduledStaffAlphabetically\(\)/);
   assert.match(component, /localeCompare\(second\.name/);
-  assert.match(component, /orderedIds: this\.staff\.map/);
+  assert.match(template, /\(click\)="saveScheduledStaff\(\)"\>Apply<\/button>/);
+  assert.doesNotMatch(component, /scheduledStaffKey|localStorage\.setItem\(this\.scheduledStaffKey/);
 });
 
 test('staff calendar keeps readable columns with a visible horizontal scrollbar', () => {

@@ -1,6 +1,6 @@
 <section class="inbox-page">
   <header class="page-header">
-    <div class="title-switch"><h1>SMS Center</h1><nav><button type="button" [class.active]="mode === 'center'" (click)="setMode('center')">Control</button><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button></nav></div>
+    <div class="title-switch"><h1>SMS Center</h1><nav><button type="button" [class.active]="mode === 'center'" (click)="setMode('center')">Control</button><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button>@if (canUsePrivateStaffChat) { <button type="button" [class.active]="mode === 'private'" (click)="setMode('private')">Staff private</button> }</nav></div>
     <div class="provider-state">
       <span [class.ready]="providerReady('whatsapp')">WhatsApp</span>
       <span [class.ready]="providerReady('sms')">SMS</span>
@@ -108,7 +108,7 @@
           }
         </section>
       </div>
-    } @else {
+    } @else if (mode === 'team') {
       <section class="team-chat-shell">
         <header><div><strong>Branch team</strong><small>Internal messages</small></div></header>
         <div class="message-list team-message-list">
@@ -131,6 +131,40 @@
           <button class="primary" type="button" (click)="sendTeamMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
         </footer>
       </section>
+    } @else {
+      <div class="inbox-shell">
+        <aside class="thread-list">
+          @for (conversation of privateConversations; track conversation.id) {
+            <button type="button" [class.active]="conversation.id === selectedPrivateConversationId" (click)="loadPrivateConversation(conversation.id)">
+              <span><strong>{{ conversation.title || 'Staff' }}</strong><small>{{ conversation.messageCount }} messages</small></span>
+              <small>{{ conversation.lastMessageAt ? formatDateTime(conversation.lastMessageAt) : 'No messages yet' }}</small>
+            </button>
+          }
+          @if (loading) { <div class="empty">Loading conversations…</div> }
+          @if (!loading && !privateConversations.length) { <div class="empty">No private staff chats yet</div> }
+        </aside>
+        <section class="conversation private-conversation">
+          @if (selectedPrivateConversation; as conversation) {
+            <header><div><strong>{{ conversation.title || 'Staff' }}</strong><small>Private owner conversation</small></div></header>
+            <div class="message-list">
+              @for (message of privateMessages; track message.id) {
+                <article [class.outbound]="isOwnMessage(message)">
+                  <strong>{{ message.senderName }}</strong>
+                  <p>{{ message.body }}</p>
+                  <small>{{ formatDateTime(message.createdAt) }}</small>
+                </article>
+              }
+              @if (!privateMessages.length) { <div class="empty">No messages yet</div> }
+            </div>
+            <footer>
+              <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Reply privately"></textarea>
+              <button class="primary" type="button" (click)="sendPrivateMessage()" [disabled]="busy || !reply.trim()">{{ busy ? 'Sending…' : 'Send' }}</button>
+            </footer>
+          } @else {
+            <div class="empty conversation-empty">Select a private staff conversation</div>
+          }
+        </section>
+      </div>
     }
   }
 

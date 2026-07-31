@@ -12,8 +12,8 @@ use crate::{
         AiSessionRecord, AiVoiceCallOpportunity, AiVoiceCallRecord, AiVoiceCallReportSummary,
     },
     services::{
-        ai_copilot_tools::{self, CopilotAnswer},
         ai_channel_service,
+        ai_copilot_tools::{self, CopilotAnswer},
         ai_scope_service::{self, ScopeRequest},
         ai_tool_dispatcher,
         auth_service::AuthClaims,
@@ -1291,7 +1291,6 @@ fn contains_any(value: &str, words: &[&str]) -> bool {
     words.iter().any(|word| value.contains(word))
 }
 
-
 fn ensure_channel(governance: &AiGovernanceRecord, channel: &str) -> Result<(), AppError> {
     let allowed = governance
         .allowed_channels
@@ -1452,10 +1451,9 @@ fn owner_claims() -> AuthClaims {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_governance, local_response, provider_payload, redact, AuthClaims,
-        ProviderEnvelope, ProviderResponse,
+        default_governance, local_response, provider_payload, redact, AuthClaims, ProviderEnvelope,
+        ProviderResponse,
     };
-
 
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
 
@@ -1636,11 +1634,13 @@ mod phase0_flow_tests {
         let tenant = Uuid::new_v4().to_string();
         let branch = Uuid::new_v4().to_string();
         let user = format!("aiuser_{}", Uuid::new_v4().simple());
-        sqlx::query("INSERT INTO tenants(id,name,status) VALUES ($1::UUID,'Aura Salon Group','active')")
-            .bind(&tenant)
-            .execute(db)
-            .await
-            .expect("tenant seeded");
+        sqlx::query(
+            "INSERT INTO tenants(id,name,status) VALUES ($1::UUID,'Aura Salon Group','active')",
+        )
+        .bind(&tenant)
+        .execute(db)
+        .await
+        .expect("tenant seeded");
         sqlx::query(
             "INSERT INTO branches(id,tenant_id,name,scope_id,active) VALUES ($2::UUID,$1::UUID,'Andheri West','andheri-west',TRUE)",
         )
@@ -1741,7 +1741,11 @@ mod phase0_flow_tests {
         let stored = transcript(&db, &scope.tenant, &scope.branch, &session.id)
             .await
             .expect("transcript loads");
-        assert_eq!(stored.len(), 2, "user message and assistant reply are stored");
+        assert_eq!(
+            stored.len(),
+            2,
+            "user message and assistant reply are stored"
+        );
         assert_eq!(stored[0].role, "user");
         assert_eq!(stored[0].body, "Hi");
         assert_eq!(stored[1].role, "assistant");
@@ -1833,7 +1837,11 @@ mod phase0_flow_tests {
             "a draft must still require explicit confirmation"
         );
         assert!(
-            !booking.assistant_message.body.to_ascii_lowercase().contains("confirmed"),
+            !booking
+                .assistant_message
+                .body
+                .to_ascii_lowercase()
+                .contains("confirmed"),
             "the copilot must never claim a booking is confirmed"
         );
 
@@ -1901,7 +1909,9 @@ mod phase0_flow_tests {
             .await
             .expect_err("the same submission id must not be stored twice");
         assert!(
-            format!("{repeat:?}").to_ascii_lowercase().contains("conflict"),
+            format!("{repeat:?}")
+                .to_ascii_lowercase()
+                .contains("conflict"),
             "a repeat submission is a conflict the drawer can ignore, got: {repeat:?}"
         );
 

@@ -86,6 +86,7 @@ export class InventoryPageComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   readonly language = inject(LanguageService);
+  get canApproveBackdatedGrn() { return this.auth.hasRole('owner', 'superadmin', 'super-admin'); }
   readonly tabs: { id: Tab; labelKey: string }[] = [
     { id: 'products', labelKey: 'inventory.products' },
     { id: 'batches', labelKey: 'inventory.batchesExpiry' },
@@ -200,7 +201,7 @@ export class InventoryPageComponent implements OnInit {
   orderOptimizations: TransferOptimization[] = [];
   orderOptimizerSignature = '';
   orderOptimizerAcknowledged = '';
-  grnDraft = { supplierId: '', purchaseOrderId: '', invoiceNumber: '', invoiceDate: '', receivedDate: '', dueDate: '', challanNumber: '', deliveryReference: '', shippingRupees: null as number | null, handlingRupees: null as number | null, lines: [this.emptyLine()] as EntryLine[] };
+  grnDraft = { supplierId: '', purchaseOrderId: '', invoiceNumber: '', invoiceDate: '', receivedDate: '', dueDate: '', challanNumber: '', deliveryReference: '', shippingRupees: null as number | null, handlingRupees: null as number | null, backdatedOperationalApproval: false, lines: [this.emptyLine()] as EntryLine[] };
   grnScanCode = '';
   grnScanBusy = false;
   private grnScanStarted = false;
@@ -833,7 +834,7 @@ export class InventoryPageComponent implements OnInit {
   async openGrn(order?: Order) {
     this.clearFeedback();
     this.grnScanCode = ''; this.grnScanStarted = false;
-    this.grnDraft = { supplierId: order?.supplierId ?? '', purchaseOrderId: order?.id ?? '', invoiceNumber: '', invoiceDate: '', receivedDate: '', dueDate: '', challanNumber: '', deliveryReference: '', shippingRupees: order ? order.shippingPaise / 100 : null, handlingRupees: order ? order.handlingPaise / 100 : null, lines: [this.emptyLine()] };
+    this.grnDraft = { supplierId: order?.supplierId ?? '', purchaseOrderId: order?.id ?? '', invoiceNumber: '', invoiceDate: '', receivedDate: '', dueDate: '', challanNumber: '', deliveryReference: '', shippingRupees: order ? order.shippingPaise / 100 : null, handlingRupees: order ? order.handlingPaise / 100 : null, backdatedOperationalApproval: false, lines: [this.emptyLine()] };
     if (order) {
       try {
         const details = await this.get<{ order: Order; lines: OrderLine[] }>(`/purchases/orders/${order.id}`);
@@ -1178,7 +1179,7 @@ export class InventoryPageComponent implements OnInit {
     const supplier = this.suppliers.find((row) => row.id === this.grnDraft.supplierId);
     const lines = this.validLines(this.grnDraft.lines, true);
     if (!supplier || !this.grnDraft.invoiceNumber.trim() || !this.grnDraft.invoiceDate || !lines.length) { this.error = this.language.text('inventory.message.d2dbbb62ba'); return; }
-    await this.mutate(this.api.post('/purchases/grn', { supplierId: supplier.id, purchaseOrderId: this.grnDraft.purchaseOrderId || null, supplierName: supplier.name, supplierGstin: supplier.gstin, supplierInvoiceNumber: this.grnDraft.invoiceNumber.trim(), supplierInvoiceDate: this.grnDraft.invoiceDate, receivedDate: this.grnDraft.receivedDate || null, dueDate: this.grnDraft.dueDate || null, challanNumber: this.grnDraft.challanNumber.trim(), deliveryReference: this.grnDraft.deliveryReference.trim(), shippingPaise: this.toPaise(this.grnDraft.shippingRupees), handlingPaise: this.toPaise(this.grnDraft.handlingRupees), idempotencyKey: crypto.randomUUID(), lines }), 'GRN posted');
+    await this.mutate(this.api.post('/purchases/grn', { supplierId: supplier.id, purchaseOrderId: this.grnDraft.purchaseOrderId || null, supplierName: supplier.name, supplierGstin: supplier.gstin, supplierInvoiceNumber: this.grnDraft.invoiceNumber.trim(), supplierInvoiceDate: this.grnDraft.invoiceDate, receivedDate: this.grnDraft.receivedDate || null, dueDate: this.grnDraft.dueDate || null, challanNumber: this.grnDraft.challanNumber.trim(), deliveryReference: this.grnDraft.deliveryReference.trim(), shippingPaise: this.toPaise(this.grnDraft.shippingRupees), handlingPaise: this.toPaise(this.grnDraft.handlingRupees), backdatedOperationalApproval: this.grnDraft.backdatedOperationalApproval, idempotencyKey: crypto.randomUUID(), lines }), 'GRN posted');
   }
 
   async saveReturn() {
@@ -1215,12 +1216,14 @@ export class InventoryPageComponent implements OnInit {
   private async mutate(request: any, success: string, close = true) {
     this.saving = true; this.clearFeedback();
     try {
-      await firstValueFrom(request);
-      this.notice = success;
+      const response: any = await firstValueFrom(request);
+      const warnings = response?.data?.warnings as string[] | undefined;
+      const notice = warnings?.length ? `${success} · ${warnings.join(' · ')}` : success;
+      this.notice = notice;
       if (close) this.drawer = null;
       this.clearReferenceCache();
       await this.reload();
-      this.notice = success;
+      this.notice = notice;
     } catch (error) {
       this.error = this.message(error, this.language.text('inventory.message.78b92a0634'));
     } finally {

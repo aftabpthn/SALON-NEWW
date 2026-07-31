@@ -20,7 +20,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (loadError()) { <section staffPageState class="notice feedback-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !loadError() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadFeedback()) {
         <section class="grid two feedback-layout">

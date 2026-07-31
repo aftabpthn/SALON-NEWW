@@ -4,11 +4,13 @@
       <span class="eyebrow">{{ workspaceLabel }}</span>
       <div class="title-row">
         <h1>Command Center</h1>
-        <span class="live-pill" [ngClass]="liveState">
+        <button type="button" class="live-pill" [ngClass]="liveState" (click)="apiStatusOpen = !apiStatusOpen" [attr.aria-expanded]="apiStatusOpen" aria-controls="api-status-panel">
           <i class="bi bi-database-check" aria-hidden="true"></i>
           {{ liveStateLabel }}
-        </span>
+          <i class="bi" [ngClass]="apiStatusOpen ? 'bi-chevron-up' : 'bi-chevron-down'" aria-hidden="true"></i>
+        </button>
       </div>
+      <p class="command-purpose">Kahan risk hai, kyun hai aur kya action lena hai</p>
     </div>
     <div class="header-actions">
       <span class="branch-chip"><i class="bi bi-diagram-3" aria-hidden="true"></i>{{ branchLabel }}</span>
@@ -18,6 +20,24 @@
       </button>
     </div>
   </header>
+
+  @if (apiStatusOpen) {
+    <section id="api-status-panel" class="panel api-status-panel" aria-label="Live API status">
+      <header class="panel-header">
+        <div><span class="eyebrow">Live connections</span><h2>API status</h2></div>
+        <span><strong>{{ connectedApiCount }}/{{ apiStatusRows.length }}</strong> connected</span>
+      </header>
+      <div class="api-source-grid">
+        @for (api of apiStatusRows; track api.source) {
+          <article class="api-source-row" [attr.data-state]="api.state">
+            <span class="api-state-dot" aria-hidden="true"></span>
+            <div><strong>{{ api.label }}</strong><small>{{ api.endpoint }}</small></div>
+            <span><b>{{ label(api.state) }}</b><small>{{ updatedLabel(api.updatedAt) }}</small></span>
+          </article>
+        }
+      </div>
+    </section>
+  }
 
   <section class="kpi-grid" aria-label="Executive metrics">
     <article class="kpi-card">
@@ -34,7 +54,7 @@
     </article>
     <article class="kpi-card">
       <span class="icon-badge red"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i></span>
-      <div><span>Priority actions</span>@if (controlsLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ actions.length }}</strong> }</div>
+      <div><span>Priority actions</span>@if (priorityQueueLoading) { <strong class="skeleton">—</strong> } @else { <strong>{{ prioritizedActions.length }}</strong> }</div>
     </article>
     <article class="kpi-card">
       <span class="icon-badge amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span>
@@ -73,27 +93,128 @@
 
     <article class="panel action-panel">
       <header class="panel-header">
-        <div><span class="eyebrow">Today</span><h2>Action queue</h2></div>
-        <a routerLink="/reports/profit-intelligence">View all <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        <div><span class="eyebrow">Live priorities</span><h2>Action queue</h2></div>
+        <span><strong>{{ prioritizedActions.length }}</strong> actions</span>
       </header>
-      @if (controlsLoading) {
+      @if (actionStatus) { <div class="inline-status">{{ actionStatus }}</div> }
+      @if (actionError) { <div class="inline-status error">{{ actionError }}</div> }
+      @if (priorityQueueLoading && prioritizedActions.length === 0) {
         <div class="compact-state"><span class="spinner" aria-hidden="true"></span>Loading actions</div>
-      } @else if (errors.has('actions')) {
-        <div class="compact-state">Actions unavailable</div>
-      } @else if (visibleActions.length === 0) {
+      } @else if (prioritizedActions.length === 0) {
         <div class="compact-state">No records yet</div>
       } @else {
         <div class="action-list">
-          @for (action of visibleActions; track action.id) {
-            <article>
+          @for (action of prioritizedActions; track action.id) {
+            <article class="action-row" [class.overdue]="isActionOverdue(action)">
               <span class="priority-dot" [ngClass]="action.priority" aria-hidden="true"></span>
-              <div><strong>{{ action.title }}</strong><span>{{ action.message }}</span></div>
-              <b>{{ money(action.impactPaise) }}</b>
+              <a class="action-body" [routerLink]="action.route">
+                <strong>{{ action.title }}</strong>
+                <span>{{ action.source }} · {{ action.message }}</span>
+                <small>Why: {{ action.message }} · Expected: {{ action.expectedImpact }}</small>
+                @if (action.managedActionId) {
+                  <small [class.risk]="isActionOverdue(action)">{{ action.ownerName || 'Owner pending' }} · {{ label(action.status || '') }} · Due {{ dateTime(action.dueAt) }} @if (isActionOverdue(action)) { · SLA overdue }</small>
+                }
+              </a>
+              <b>{{ action.metric }}</b>
+              @if (canManageProfitActions) {
+                <span class="action-controls">
+                  @if (!action.managedActionId) {
+                    <button type="button" [disabled]="!!actionBusy" (click)="createGovernedAction(action)">Assign</button>
+                  } @else if (canApproveAction(action)) {
+                    <button type="button" [disabled]="!!actionBusy" (click)="transitionGovernedAction(action, 'approve')">Approve</button>
+                    <button type="button" [disabled]="!!actionBusy" (click)="transitionGovernedAction(action, 'dismiss')">Dismiss</button>
+                  } @else if (action.status === 'pending') {
+                    <small>Independent approval pending</small>
+                  } @else if (action.status === 'approved') {
+                    <button type="button" [disabled]="!!actionBusy" (click)="transitionGovernedAction(action, 'complete')">Complete</button>
+                    <button type="button" [disabled]="!!actionBusy" (click)="transitionGovernedAction(action, 'rollback')">Roll back</button>
+                  }
+                </span>
+              }
             </article>
           }
         </div>
       }
+      @if (recentActionHistory.length) {
+        <section class="action-history" aria-label="Recent governed action history">
+          <h3>Recent history · {{ actionAudit.length }} audit events</h3>
+          @for (action of recentActionHistory; track action.id) {
+            <div><span><strong>{{ action.title }}</strong><small>{{ label(action.status) }} · {{ dateTime(action.completedAt || action.dismissedAt || action.updatedAt) }}</small></span>@if (canManageProfitActions) { <button type="button" [disabled]="!!actionBusy" (click)="rollbackHistoryAction(action)">Roll back</button> }</div>
+          }
+        </section>
+      }
     </article>
+  </section>
+
+  <section class="panel intelligence-panel">
+    <header class="panel-header">
+      <div><span class="eyebrow">Predictive control</span><h2>AI Forecasts &amp; Escalation</h2></div>
+      @if (canReadAi) { <button type="button" [disabled]="forecastRunning" (click)="runForecasts()"><i class="bi bi-stars" aria-hidden="true"></i>{{ forecastRunning ? 'Running' : 'Run forecasts' }}</button> }
+    </header>
+    @if (!canReadAi) {
+      <div class="compact-state">Access restricted</div>
+    } @else {
+      @if (intelligenceError) { <div class="inline-status error">{{ intelligenceError }}</div> }
+      <div class="forecast-grid" aria-label="Revenue stock demand and no-show forecasts">
+        @for (card of forecastCards; track card.kind) {
+          <article>
+            <span class="eyebrow">{{ card.run?.computedBy ? label(card.run?.computedBy || '') : 'Awaiting run' }}</span>
+            <h3>{{ card.label }}</h3>
+            @if (intelligenceLoading && !card.run) {
+              <div class="mini-empty"><span class="spinner" aria-hidden="true"></span>Loading</div>
+            } @else if (!card.run) {
+              <div class="mini-empty">No saved forecast</div>
+            } @else {
+              <strong>{{ forecastRange(card.prediction) }}</strong>
+              <small>{{ card.prediction?.subjectName || 'No subject with sufficient history' }} · {{ label(card.prediction?.confidence || 'insufficient') }}</small>
+              <p>{{ card.prediction?.signals?.join(' · ') || card.run.basis }}</p>
+              <small>{{ card.run.modelVersion }} · {{ dateTime(card.run.historyEnd) }}</small>
+            }
+          </article>
+        }
+      </div>
+
+      <div class="intelligence-detail-grid">
+        <section aria-label="AI risk explanation and escalation">
+          <header class="subsection-header"><div><span class="eyebrow">Explainable AI</span><h3>Risk briefing</h3></div><b>{{ briefing?.automationActive ? 'Auto escalation active' : 'Automation unavailable' }} @if (briefing?.automationActive) { · {{ briefing?.scanIntervalMinutes }} min }</b></header>
+          @if (intelligenceLoading && !briefing) {
+            <div class="section-empty"><span class="spinner" aria-hidden="true"></span>Loading briefing</div>
+          } @else if (!briefing?.sections?.length) {
+            <div class="section-empty">No active risk briefing</div>
+          } @else {
+            <div class="briefing-list">
+              @for (section of briefing?.sections || []; track section.signal) {
+                <article>
+                  <a [routerLink]="section.openReportLink"><strong>{{ section.headline }}</strong><small>{{ section.whyItMatters }}</small></a>
+                  <p>{{ section.evidence.join(' · ') }}</p>
+                  <span><b>Impact: {{ section.expectedImpact }}</b><small>{{ section.recommendedAction }} · {{ label(section.confidence) }}</small></span>
+                  <div class="briefing-actions">
+                    <button type="button" [disabled]="!!actionBusy" (click)="decideBriefing(section.signal, 'acknowledge')">Acknowledge</button>
+                    <button type="button" [disabled]="!!actionBusy" (click)="decideBriefing(section.signal, 'snooze')">Snooze 24h</button>
+                    <button type="button" [disabled]="!!actionBusy" (click)="decideBriefing(section.signal, 'dismiss')">Dismiss</button>
+                  </div>
+                </article>
+              }
+            </div>
+          }
+        </section>
+
+        <section aria-label="Branch anomaly comparison">
+          <header class="subsection-header"><div><span class="eyebrow">Multi branch</span><h3>Anomaly comparison</h3></div><label>Signal<select [(ngModel)]="branchSignal" (change)="loadBranchAnomalies()">@for (option of branchSignals; track option[0]) { <option [value]="option[0]">{{ option[1] }}</option> }</select></label></header>
+          @if (branchAnomalyLoading) {
+            <div class="section-empty"><span class="spinner" aria-hidden="true"></span>Comparing branches</div>
+          } @else if (!branchAnomalies.length) {
+            <div class="section-empty">No branch anomalies</div>
+          } @else {
+            <div class="anomaly-list">
+              @for (row of branchAnomalies; track row.branchId) {
+                <article><span><strong>{{ row.branchName }}</strong><small>{{ row.headline }}</small><em>{{ row.evidence.join(' · ') }}</em></span><b>{{ label(row.confidence) }}</b></article>
+              }
+            </div>
+          }
+        </section>
+      </div>
+    }
   </section>
 
   <section class="panel profit-panel">
@@ -325,10 +446,12 @@
           </div>
         </section>
         <section aria-label="Staff coach">
-          <h3>Staff Coach</h3>
+          <h3>Revenue Actions</h3>
           <div class="growth-list">
             @for (staff of staffCoachHighlights; track staff.staffId) {
-              <article><span><strong>{{ staff.staffName || staff.staffId }}</strong><small>{{ staff.coachingFocus }} · {{ staff.serviceCount }} services</small></span><div class="growth-row-actions"><b [class.risk]="staff.priority === 'high'">{{ label(staff.priority) }}</b><button type="button" [disabled]="growthActionBusy" (click)="createStaffGoal(staff)">Create goal</button></div></article>
+              @for (opportunity of staff.opportunities; track opportunity.key) {
+                <article><span><strong>{{ opportunity.title }} · {{ staff.staffName || staff.staffId }}</strong><small>{{ opportunity.reason }} {{ opportunity.currentValue }} → {{ opportunity.targetValue }} {{ opportunity.metricUnit }} · due {{ opportunity.deadline | date:'dd/MM/yyyy' }}</small></span><div class="growth-row-actions"><b [class.risk]="opportunity.priority === 'high'">{{ money(opportunity.projectedImpactPaise) }}</b>@if (opportunity.status === 'recommended') { <button type="button" [disabled]="growthActionBusy" (click)="createStaffGoal(staff, opportunity)">Assign action</button> } @else { <b>{{ label(opportunity.actionStatus || opportunity.status) }} · actual {{ money(opportunity.actualImpactPaise || 0) }}</b> }</div></article>
+              }
             } @empty { <div class="mini-empty">No records yet</div> }
           </div>
         </section>

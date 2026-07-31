@@ -200,7 +200,11 @@ pub async fn service_revenue_impact(
             .gap("No billed revenue in the previous period, so the share of the change is not measurable.")
             .confidence_level("low");
     } else {
-        answer = answer.confidence_level(if declining.len() >= 3 { "high" } else { "medium" });
+        answer = answer.confidence_level(if declining.len() >= 3 {
+            "high"
+        } else {
+            "medium"
+        });
     }
     Ok(answer)
 }
@@ -365,7 +369,10 @@ pub async fn staff_decline_cause(
     else {
         return Ok(CopilotAnswer::for_tool(
             CopilotTool::StaffDeclineCause,
-            format!("No staff member in {} billed less than the previous period.", scope.label),
+            format!(
+                "No staff member in {} billed less than the previous period.",
+                scope.label
+            ),
         )
         .source_module("appointments.completed")
         .trend_window()
@@ -374,9 +381,14 @@ pub async fn staff_decline_cause(
         .with_data(json!({ "staff": [] })));
     };
 
-    let utilization_now = safe_percent(worst.current_booked_minutes, worst.current_scheduled_minutes.max(1));
-    let utilization_before =
-        safe_percent(worst.previous_booked_minutes, worst.previous_scheduled_minutes.max(1));
+    let utilization_now = safe_percent(
+        worst.current_booked_minutes,
+        worst.current_scheduled_minutes.max(1),
+    );
+    let utilization_before = safe_percent(
+        worst.previous_booked_minutes,
+        worst.previous_scheduled_minutes.max(1),
+    );
 
     let headline = match cause {
         "low_bookings" => format!(
@@ -492,7 +504,10 @@ pub async fn branch_margin_outlier(
     if billing.is_empty() {
         return Ok(CopilotAnswer::for_tool(
             CopilotTool::BranchMarginOutlier,
-            format!("No branch in {} billed anything in the last {TREND_DAYS} days.", scope.label),
+            format!(
+                "No branch in {} billed anything in the last {TREND_DAYS} days.",
+                scope.label
+            ),
         )
         .source_module("pos.sales")
         .trend_window()
@@ -519,7 +534,10 @@ pub async fn branch_margin_outlier(
     let Some(worst) = ranked else {
         return Ok(CopilotAnswer::for_tool(
             CopilotTool::BranchMarginOutlier,
-            format!("Only one branch in {} has billing activity, so there is nothing to compare.", scope.label),
+            format!(
+                "Only one branch in {} has billing activity, so there is nothing to compare.",
+                scope.label
+            ),
         )
         .source_module("pos.sales")
         .trend_window()
@@ -649,8 +667,8 @@ mod tests {
 #[cfg(test)]
 mod routing_tests {
     use crate::services::ai_copilot_tools::{detect, CopilotTool};
-    use crate::services::ai_tool_dispatcher::tool_domain;
     use crate::services::ai_scope_service::AiDomain;
+    use crate::services::ai_tool_dispatcher::tool_domain;
 
     /// The four cross-module questions must reach the cross-module tool, not the
     /// single-module tool whose wording they contain.
@@ -674,8 +692,8 @@ mod routing_tests {
                 CopilotTool::BranchMarginOutlier,
             ),
         ] {
-            let matched = detect(question)
-                .unwrap_or_else(|| panic!("no tool matched {question:?}"));
+            let matched =
+                detect(question).unwrap_or_else(|| panic!("no tool matched {question:?}"));
             assert_eq!(matched.tool, expected, "wrong tool for {question:?}");
         }
     }
@@ -902,7 +920,6 @@ mod answer_tests {
             primary_branch_id: fixture.branch_ids[0].clone(),
             label: "2 authorized branches".into(),
             financials_visible: true,
-            allowed_domains: crate::services::ai_scope_service::AiDomain::ALL.to_vec(),
             disclosure: crate::services::ai_scope_service::ScopeDisclosure {
                 label: "2 authorized branches".into(),
                 branch_count: 2,
@@ -940,7 +957,10 @@ mod answer_tests {
             .expect("the tool answers");
         assert_answer_contract(&answer);
         assert!(
-            answer.sources.iter().any(|source| source == "finance.revenue"),
+            answer
+                .sources
+                .iter()
+                .any(|source| source == "finance.revenue"),
             "the revenue half must be named as a source: {:?}",
             answer.sources
         );
@@ -979,7 +999,13 @@ mod answer_tests {
 
         let cause = answer.data["cause"].as_str().expect("a stated cause");
         assert!(
-            ["low_bookings", "performance", "both", "insufficient_history"].contains(&cause),
+            [
+                "low_bookings",
+                "performance",
+                "both",
+                "insufficient_history"
+            ]
+            .contains(&cause),
             "unexpected cause {cause:?}"
         );
         // Bookings fell 4 -> 1 with the same bill each time, so this is demand.

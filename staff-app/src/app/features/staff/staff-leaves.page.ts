@@ -1,6 +1,6 @@
 import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { StaffAppService, StaffLeave, StaffLeaveBalance } from "../../core/staff-app.service";
+import { isQueuedMutation, StaffAppService, StaffLeave, StaffLeaveBalance } from "../../core/staff-app.service";
 import { businessDate, displayBusinessDate, parseDisplayBusinessDate } from "../../core/business-date";
 import { StaffDatePickerComponent } from "../../shared/staff-date-picker.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -21,7 +21,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (loadError()) { <section staffPageState class="notice leaves-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !loadError() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadLeaves()) {
         <section class="grid three leaves-kpis">
@@ -39,7 +38,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                   <span>{{ leaveBalanceValue(balance) }} left</span>
                 </div>
               } @empty {
-                @if (!loading() && !loadError()) { <div class="leaves-empty"><p>No leave balances configured.</p><small>CRM leave policies must be configured before balances appear.</small></div> }
+                @if (!loading() && balancesUnavailable()) { <div class="leaves-empty"><p>Leave balances unavailable.</p><small>Retry to load CRM leave policy balances.</small></div> }
+                @else if (!loading()) { <div class="leaves-empty"><p>No leave balances configured.</p><small>CRM leave policies must be configured before balances appear.</small></div> }
               }
             </div>
           </article>
@@ -58,7 +58,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                   }</div>
                 </div>
               } @empty {
-                @if (!loading() && !loadError()) { <div class="leaves-empty"><p>No leave requests yet.</p><small>Submitted CRM leave requests and approval status will appear here.</small></div> }
+                @if (!loading() && requestsUnavailable()) { <div class="leaves-empty"><p>Leave requests unavailable.</p><small>Retry to load this month's CRM leave requests.</small></div> }
+                @else if (!loading()) { <div class="leaves-empty"><p>No leave requests this month.</p><small>Submitted CRM leave requests and approval status will appear here.</small></div> }
               }
             </div>
           </article>
@@ -113,6 +114,8 @@ export class StaffLeavesPage implements OnInit {
   readonly message = signal("");
   readonly localError = signal("");
   readonly loadError = signal("");
+  readonly requestsUnavailable = signal(false);
+  readonly balancesUnavailable = signal(false);
   readonly availableLeaveTypes = computed(() => [...new Set([...this.balances().map((balance) => balance.leaveType), "unpaid"])]);
   readonly totalBalance = computed(() => this.balances().reduce((total, balance) => total + this.leaveBalanceValue(balance), 0));
   readonly pendingCount = computed(() => this.leaves().filter((leave) => leave.status === "pending").length);
@@ -134,13 +137,20 @@ export class StaffLeavesPage implements OnInit {
     }
     if (silent) this.refreshing.set(true); else this.loading.set(true);
     this.loadError.set("");
+    this.requestsUnavailable.set(false);
+    this.balancesUnavailable.set(false);
     try {
-      const [leaves, balances] = await Promise.all([this.staff.leaves(), this.staff.leaveBalances()]);
-      this.leaves.set(leaves);
-      this.balances.set(balances);
+      const [requestsResult, balancesResult] = await Promise.allSettled([this.staff.leaves(), this.staff.leaveBalances()]);
+      if (requestsResult.status === "fulfilled") this.leaves.set(requestsResult.value);
+      else this.requestsUnavailable.set(true);
+      if (balancesResult.status === "fulfilled") this.balances.set(balancesResult.value);
+      else this.balancesUnavailable.set(true);
+      if (this.requestsUnavailable() || this.balancesUnavailable()) {
+        this.loadError.set(this.requestsUnavailable() && this.balancesUnavailable()
+          ? "Unable to load leave requests and balances."
+          : this.requestsUnavailable() ? "Leave requests could not be loaded." : "Leave balances could not be loaded.");
+      }
       if (!this.availableLeaveTypes().includes(this.leaveType)) this.leaveType = this.availableLeaveTypes()[0] || "unpaid";
-    } catch {
-      this.loadError.set(this.staff.error() || "Unable to load leaves.");
     } finally {
       this.loading.set(false);
       this.refreshing.set(false);
@@ -192,13 +202,13 @@ export class StaffLeavesPage implements OnInit {
     }
     this.submitting.set(true);
     try {
-      const result = await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate, endDate, reason: this.leaveReason.trim() }) as { queued?: boolean; duplicate?: boolean };
+      const result = await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate, endDate, reason: this.leaveReason.trim() });
       this.leaveReason = "";
-      if (result?.queued) {
+      if (isQueuedMutation(result)) {
         this.message.set("You are offline. Leave request queued and will send after reconnecting.");
         return;
       }
-      this.message.set(result?.duplicate ? "This leave request is already pending." : "Leave request sent.");
+      this.message.set("Leave request sent.");
       await this.load(true);
       if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:leaves-updated"));
     } catch {

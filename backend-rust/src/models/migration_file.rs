@@ -16,6 +16,9 @@ pub struct CreateMigrationUploadRequest {
     pub expected_sha256: Option<String>,
     #[serde(default = "default_retention_days")]
     pub retention_days: i32,
+    pub evidence_kind: Option<String>,
+    pub supplier_batch: Option<String>,
+    pub cutover_id: Option<String>,
 }
 
 fn default_retention_days() -> i32 {
@@ -54,6 +57,9 @@ pub struct MigrationUploadSession {
     pub updated_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub retention_days: i32,
+    pub evidence_kind: String,
+    pub supplier_batch: String,
+    pub cutover_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,6 +71,7 @@ pub struct MigrationSourceArtifact {
     pub detected_content_type: String,
     pub size_bytes: i64,
     pub sha256: String,
+    pub page_count: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -90,6 +97,7 @@ pub struct MigrationSourceFile {
     pub retention_until: DateTime<Utc>,
     pub purged_at: Option<DateTime<Utc>>,
     pub manifest: Value,
+    pub page_count: i32,
     pub artifacts: Vec<MigrationSourceArtifact>,
     pub created_at: DateTime<Utc>,
 }
@@ -149,4 +157,20 @@ pub struct MigrationUploadPartReceipt {
 pub struct CompleteMigrationUploadResponse {
     pub session: MigrationUploadSession,
     pub source_file: MigrationSourceFile,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoricalEvidenceGroupDecisionRequest {
+    pub cutover_id: String,
+    pub supplier_batch: String,
+    pub group_key: String,
+    pub decision: String,
+    pub approved_page_count: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoricalEvidenceCutoverApprovalRequest {
+    pub cutover_id: String,
 }

@@ -30,7 +30,6 @@ assert.match(component, /this\.notificationStaffId = this\.staff\[0\]\.id/);
 assert.match(template, /<as-date-picker/);
 assert.match(template, /class="setup-drawer"/);
 assert.match(template, /type="number"[^>]*placeholder="Enter amount"/);
-assert.match(views, /label: 'Add rule'.+section=adjustments&create=1/);
 assert.match(views, /label: 'Add fine rule'.+kind=fine&create=1/);
 assert.match(views, /label: 'Apply staff fine'.+route: '\/staff\/attendance-summary'/);
 assert.match(selfDashboard, /payroll_rules: Value/);

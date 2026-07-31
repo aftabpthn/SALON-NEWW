@@ -1,11 +1,12 @@
+import { DatePipe } from "@angular/common";
 import { Component, OnInit, signal } from "@angular/core";
-import { StaffAppService, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
+import { StaffAppService, StaffEnterpriseOs, StaffRosterItem } from "../../core/staff-app.service";
 import { addBusinessDays, businessDate } from "../../core/business-date";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
   standalone: true,
-  imports: [StaffPageStateComponent],
+  imports: [DatePipe, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head">
@@ -23,15 +24,16 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
         </div>
       </header>
 
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading calendar...</section> }
-      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (loading() && !calendar()) { <section staffPageState class="state" [loading]="true">Loading calendar...</section> }
+      @if (loadError()) { <section staffPageState class="notice"><span>{{ loadError() }}</span><button class="link-button" type="button" (click)="load()">Retry</button></section> }
+      @if (timelineError() && calendar()) { <section class="optional-warning" role="status"><span aria-hidden="true">!</span><div><p>Appointment timeline could not refresh.</p><small>Your shift calendar remains available.</small></div><button type="button" class="text-control" (click)="loadTimeline()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice" [class.success]="message().startsWith('Shift') || message().startsWith('Calendar')">{{ message() }}</section> }
 
       @if (canReadCalendar()) {
         @if (view() === 'day') {
           <section class="grid two">
             <article class="panel">
-              <div class="panel-title"><h2>Selected day</h2><span>{{ selectedDate() }}</span></div>
+              <div class="panel-title"><h2>Selected day</h2><span>{{ displayDate(selectedDate()) }}</span></div>
               <div class="calendar-day">
                 @for (shift of daySchedules(); track shift.id) {
                   <div class="calendar-slot">
@@ -48,7 +50,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               <div class="panel-title"><h2>Queue hint</h2><span>{{ os()?.timeline?.length || 0 }}</span></div>
               <div class="list">
                 @for (item of os()?.timeline?.slice(0, 6) || []; track item.id) {
-                  <div class="row"><div class="row-main"><strong>Assigned appointment</strong><small>{{ item.startAt }} · {{ item.state }}</small></div><span class="badge">{{ item.status }}</span></div>
+                  <div class="row"><div class="row-main"><strong>{{ item.serviceNames.join(', ') || 'Assigned appointment' }}</strong><small>{{ item.startAt | date:'dd/MM/yyyy, h:mm a' }} · {{ item.state }}</small></div><span class="badge">{{ item.status }}</span></div>
                 } @empty { <p class="empty">No appointment timeline items.</p> }
               </div>
             </article>
@@ -57,10 +59,10 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
           <section class="calendar-week">
             @for (item of weekSchedules(); track item.id) {
               <article class="panel" draggable="true" (dragstart)="dragSchedule(item)" (dragover)="$event.preventDefault()" (drop)="dropSchedule(item.date)">
-                <div class="panel-title"><h2>{{ item.date || 'Scheduled' }}</h2><span>{{ item.status }}</span></div>
+                <div class="panel-title"><h2>{{ displayDate(item.date) }}</h2><span>{{ item.status }}</span></div>
                 <strong>{{ item.startTime || '-' }} - {{ item.endTime || '-' }}</strong>
                 <p class="muted">{{ item.type || 'roster' }}</p>
-                <small>{{ (item.status === 'cancelled') ? 'Cancelled shift' : 'Drag this card onto another date card to reschedule.' }}</small>
+                <small>{{ item.status === 'weekly_off' ? 'Weekly off' : 'Drag this card onto another date card to reschedule.' }}</small>
                 <div class="row-actions">
                    @if (canUpdateCalendar()) {
                      <button class="link-button" type="button" (click)="startMove(item)">Move</button>
@@ -76,7 +78,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                       </div>
                     </div>
                     } @else if (canUpdateCalendar()) {
-                      <button class="link-button" type="button" (click)="changeStatus(item, item.status === 'cancelled' ? 'scheduled' : 'cancelled')">{{ item.status === 'cancelled' ? 'Reinstate' : 'Cancel' }}</button>
+                      @if (item.status === 'working' || item.status === 'weekly_off' || item.status === 'not_set') {
+                        <button class="link-button" type="button" (click)="changeStatus(item, item.status === 'weekly_off' ? 'working' : 'weekly_off')">{{ item.status === 'weekly_off' ? 'Reinstate' : 'Mark off' }}</button>
+                      }
                     }
                   </div>
               </article>
@@ -86,8 +90,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       }
 
       <section class="panel">
-        <div class="panel-title"><h2>Quick help</h2><span>{{ canUpdateCalendar() ? 'action enabled' : 'view mode' }}</span></div>
-        <small class="muted">Use Move/Cancel to adjust shifts. Drag cards in week mode for quick date-only reschedule.</small>
+        <div class="panel-title"><h2>CRM schedule source</h2><span>{{ canUpdateCalendar() ? 'action enabled' : 'view mode' }}</span></div>
+        <small class="muted">Schedules are published from CRM Availability. Use Move or Mark off to adjust a shift; week cards support date-only drag rescheduling.</small>
       </section>
     </section>
   `,
@@ -96,8 +100,10 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 })
 export class StaffCalendarPage implements OnInit {
   readonly os = signal<StaffEnterpriseOs | null>(null);
-  readonly today = signal<StaffToday | null>(null);
+  readonly calendar = signal<StaffRosterItem[] | null>(null);
   readonly loading = signal(false);
+  readonly loadError = signal("");
+  readonly timelineError = signal("");
   readonly view = signal<"day" | "week">("day");
   readonly message = signal("");
   readonly selectedDate = signal(businessDate());
@@ -115,18 +121,32 @@ export class StaffCalendarPage implements OnInit {
   async load() {
     const generation = ++this.loadGeneration;
     this.loading.set(true);
+    this.loadError.set("");
+    this.timelineError.set("");
     try {
       const from = this.view() === "day" ? this.selectedDate() : this.weekStart();
       const to = this.view() === "day" ? this.selectedDate() : this.weekEnd();
-      const [today, os] = await Promise.all([
-        this.staff.today(this.selectedDate()),
-        this.staff.enterpriseOs({ from, to })
-      ]);
+      const calendar = await this.staff.calendar(from, to);
       if (generation !== this.loadGeneration) return;
-      this.today.set(today);
-      this.os.set(os);
+      this.calendar.set(calendar);
+      void this.loadTimeline(from, to, generation);
+    } catch {
+      if (generation === this.loadGeneration) this.loadError.set(this.staff.error() || "Unable to load calendar.");
     } finally {
       if (generation === this.loadGeneration) this.loading.set(false);
+    }
+  }
+
+  async loadTimeline(from?: string, to?: string, generation = this.loadGeneration) {
+    if (!this.staff.hasPermission("staff.app.appointments.read")) { this.os.set(null); return; }
+    this.timelineError.set("");
+    try {
+      const rangeFrom = from || (this.view() === "day" ? this.selectedDate() : this.weekStart());
+      const rangeTo = to || (this.view() === "day" ? this.selectedDate() : this.weekEnd());
+      const os = await this.staff.enterpriseOs({ from: rangeFrom, to: rangeTo }, false);
+      if (generation === this.loadGeneration) this.os.set(os);
+    } catch {
+      if (generation === this.loadGeneration) this.timelineError.set("Unable to load appointment timeline.");
     }
   }
 
@@ -167,13 +187,13 @@ export class StaffCalendarPage implements OnInit {
 
   daySchedules() {
     const date = this.selectedDate();
-    return this.os()?.calendar?.filter((item) => item.date === date) || [];
+    return this.calendar()?.filter((item) => item.date === date) || [];
   }
 
   weekSchedules() {
     const from = this.weekStart();
     const to = this.weekEnd();
-    return (this.os()?.calendar || []).filter((item) => item.date >= from && item.date <= to);
+    return (this.calendar() || []).filter((item) => item.date >= from && item.date <= to);
   }
 
   dragSchedule(item: { id: string; version?: number; startTime: string; endTime: string }) {
@@ -237,6 +257,11 @@ export class StaffCalendarPage implements OnInit {
     } catch {
       this.message.set(this.staff.error() || "Unable to update shift status.");
     }
+  }
+
+  displayDate(value: string): string {
+    const [year, month, day] = value.split("-");
+    return year && month && day ? `${day}/${month}/${year}` : value || "-";
   }
 
   private startOfWeek(date: string): string {

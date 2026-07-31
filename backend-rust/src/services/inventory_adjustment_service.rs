@@ -163,6 +163,7 @@ pub async fn record_backbar_usage(
             client_id,
             input.appointment_id,
             input.service_id,
+            input.staff_id,
         )
         .await
         .map_err(|_| AppError::internal("failed to validate client attribution"))?;

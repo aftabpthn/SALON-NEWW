@@ -179,6 +179,12 @@ pub struct ProfitActionTransitionRequest {
     pub realized_impact_paise: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfitActionRollbackRequest {
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfitAction {

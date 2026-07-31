@@ -1701,11 +1701,12 @@ mod tests {
     /// Seed a two-branch tenant with activity in both branches, granting the
     /// user access to only one. Every query is then checked against that grant.
     async fn seed(db: &PgPool) -> Fixture {
-        let tenant_id: String =
-            sqlx::query_scalar("INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id")
-                .fetch_one(db)
-                .await
-                .unwrap();
+        let tenant_id: String = sqlx::query_scalar(
+            "INSERT INTO tenants(name,scope_id) VALUES('Aura Salon Group','') RETURNING scope_id",
+        )
+        .fetch_one(db)
+        .await
+        .unwrap();
 
         let mut branch_ids = Vec::new();
         for (name, code, region, zone, cluster) in [
@@ -1986,10 +1987,9 @@ mod tests {
         assert_eq!(scoped[0].zone_name, "Hyderabad");
 
         // The tenant-wide path is what owners use, and it must see both.
-        let unrestricted =
-            authorized_branches(&pool, &fixture.tenant_id, &fixture.user_id, true)
-                .await
-                .unwrap();
+        let unrestricted = authorized_branches(&pool, &fixture.tenant_id, &fixture.user_id, true)
+            .await
+            .unwrap();
         assert_eq!(unrestricted.len(), 2);
 
         let directory = tenant_branch_directory(&pool, &fixture.tenant_id)
@@ -2016,7 +2016,11 @@ mod tests {
         let scoped = authorized_branches(&pool, &fixture.tenant_id, &fixture.user_id, false)
             .await
             .unwrap();
-        assert_eq!(scoped.len(), 1, "a lapsed deputation must not widen the scope");
+        assert_eq!(
+            scoped.len(),
+            1,
+            "a lapsed deputation must not widen the scope"
+        );
         assert_eq!(scoped[0].branch_id, fixture.authorized_branch_id);
     }
 
@@ -2091,7 +2095,11 @@ mod tests {
                 consumption_variance(&pool, &fixture.tenant_id, &scoped, start, end, grouping)
                     .await
                     .unwrap();
-            assert_eq!(rows.len(), 1, "grouping {grouping:?} leaked or dropped rows");
+            assert_eq!(
+                rows.len(),
+                1,
+                "grouping {grouping:?} leaked or dropped rows"
+            );
             assert_eq!(rows[0].branch_id, fixture.authorized_branch_id);
             assert_eq!(rows[0].expected_quantity, 2);
             assert_eq!(rows[0].actual_quantity, 5);
@@ -2201,7 +2209,10 @@ mod tests {
         let first = upsert_alert(&pool, build()).await.unwrap();
         assert_eq!(first.occurrence_count, 1);
         let second = upsert_alert(&pool, build()).await.unwrap();
-        assert_eq!(second.id, first.id, "a repeat detection must not create a row");
+        assert_eq!(
+            second.id, first.id,
+            "a repeat detection must not create a row"
+        );
         assert_eq!(second.occurrence_count, 2);
 
         let scoped = vec![fixture.authorized_branch_id.clone()];

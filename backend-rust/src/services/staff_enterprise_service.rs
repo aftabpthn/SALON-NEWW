@@ -159,6 +159,53 @@ pub struct VersionRequest {
     pub version: i32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleQuizQuestionRequest {
+    pub id: Option<String>,
+    pub question: String,
+    pub options: Vec<String>,
+    pub correct_index: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleDocumentRequest {
+    pub document_key: Option<String>,
+    pub document_type: String,
+    pub category: String,
+    pub title: String,
+    pub content: String,
+    pub effective_date: NaiveDate,
+    pub expires_on: Option<NaiveDate>,
+    pub mandatory_acknowledgement: Option<bool>,
+    pub training_attachment_url: Option<String>,
+    pub quiz: Option<Vec<StaffRuleQuizQuestionRequest>>,
+    pub quiz_pass_score: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleAcknowledgementRequest {
+    pub answers: Option<Vec<i32>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleViolationRequest {
+    pub document_id: String,
+    pub staff_id: String,
+    pub details: String,
+    pub occurred_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleViolationResolutionRequest {
+    pub version: i32,
+    pub resolution_note: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RosterCoverageResponse {
@@ -187,7 +234,36 @@ pub struct ManpowerForecastResult {
     pub shortage_staff_count: Option<i32>,
     pub confidence: String,
     pub recommendation: Option<String>,
+    pub shortage_alert_count: i64,
+    pub overstaffing_alert_count: i64,
+    pub leave_impact_alert_count: i64,
+    pub skills_shortage_alert_count: i64,
+    pub rows: Vec<ManpowerPlanningRow>,
     pub evidence: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManpowerPlanningRow {
+    pub date: NaiveDate,
+    pub hour_start: String,
+    pub hour_end: String,
+    pub shift: String,
+    pub department: String,
+    pub appointment_count: i64,
+    pub demand_minutes: i64,
+    pub required_staff_count: i64,
+    pub scheduled_staff_count: i64,
+    pub leave_staff_count: i64,
+    pub leave_impact_count: i64,
+    pub shortage_staff_count: i64,
+    pub overstaffed_count: i64,
+    pub resource_count: i64,
+    pub resource_shortage_count: i64,
+    pub qualified_staff_count: i64,
+    pub skills_shortage_count: i64,
+    pub alert: String,
+    pub recommendation: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,6 +387,7 @@ pub struct StaffEnterpriseCommandCenter {
     pub top_staff: Vec<StaffPerformanceRow>,
     pub attention_queue: Value,
     pub recommendations: Value,
+    pub equipment_intelligence: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -331,6 +408,7 @@ pub struct CoachingGoalRequest {
     pub metric_unit: String,
     pub target_value: i64,
     pub current_value: Option<i64>,
+    pub projected_impact_paise: Option<i64>,
     pub due_date: NaiveDate,
     pub action_title: String,
     pub action_description: Option<String>,
@@ -1072,13 +1150,32 @@ pub async fn manpower_forecast(
     });
     let shortage = required.map(|count| (count - source.active_staff as i32).max(0));
     let confidence = forecast_confidence(&source);
+    let rows = repository::manpower_planning_rows(db, t, b, from, to)
+        .await
+        .map_err(internal("load hourly manpower plan"))?
+        .into_iter()
+        .map(manpower_planning_row)
+        .collect::<Vec<_>>();
+    let shortage_alert_count = rows
+        .iter()
+        .filter(|row| row.shortage_staff_count > 0)
+        .count() as i64;
+    let overstaffing_alert_count =
+        rows.iter().filter(|row| row.overstaffed_count > 0).count() as i64;
+    let leave_impact_alert_count =
+        rows.iter().filter(|row| row.leave_impact_count > 0).count() as i64;
+    let skills_shortage_alert_count = rows
+        .iter()
+        .filter(|row| row.skills_shortage_count > 0)
+        .count() as i64;
     let evidence = json!({
         "activeStaff": source.active_staff,
         "historicalAppointmentMinutes": source.historical_appointment_minutes,
         "historicalAppointmentDays": source.historical_appointment_days,
         "attendanceStaffDays": source.attendance_staff_days,
         "averageWorkedMinutesPerStaffDay": capacity_per_staff_day,
-        "futureBookedMinutes": source.future_booked_minutes
+        "futureBookedMinutes": source.future_booked_minutes,
+        "planningRows": &rows
     });
     let saved = if let Some(actor) = actor {
         Some(
@@ -1119,6 +1216,11 @@ pub async fn manpower_forecast(
         recommendation: shortage
             .filter(|count| *count > 0)
             .map(|_| "add_temporary_coverage_or_hire".to_string()),
+        shortage_alert_count,
+        overstaffing_alert_count,
+        leave_impact_alert_count,
+        skills_shortage_alert_count,
+        rows,
         evidence,
     })
 }
@@ -1682,7 +1784,15 @@ pub async fn enterprise_command_center(
     to: NaiveDate,
 ) -> Result<StaffEnterpriseCommandCenter, AppError> {
     validate_period(from, to, 367, "enterprise command center")?;
-    let (performance, approvals, tasks, sales, recommendations) = tokio::try_join!(
+    let (
+        performance,
+        approvals,
+        tasks,
+        sales,
+        mut recommendations,
+        equipment_departments,
+        equipment_resources,
+    ) = tokio::try_join!(
         staff_advanced_service::performance(db, t, b, from, to, ""),
         async {
             repository::list_approval_requests(db, t, b, "")
@@ -1700,7 +1810,19 @@ pub async fn enterprise_command_center(
                 .await
                 .map_err(internal("load management recommendations"))
         },
+        async {
+            repository::equipment_department_rows(db, t, b, from, to, "")
+                .await
+                .map_err(internal("load equipment demand"))
+        },
+        async {
+            repository::equipment_resource_rows(db, t, b, from, to, "")
+                .await
+                .map_err(internal("load equipment utilization"))
+        },
     )?;
+    let equipment_intelligence =
+        build_equipment_intelligence(&equipment_departments, &equipment_resources, &approvals);
     let pending_approvals = approvals
         .iter()
         .filter(|row| row.status == "pending")
@@ -1709,6 +1831,19 @@ pub async fn enterprise_command_center(
         .iter()
         .filter(|row| is_due_training(&row.task_type, &row.status, row.due_at, Utc::now()))
         .count();
+    if let Some(rows) = recommendations.as_array_mut() {
+        rows.extend(sales.iter().filter(|row| row.invoice_count > 0).map(|row| {
+            let conversion = retail_conversion_percent(row.product_invoice_count, row.invoice_count);
+            json!({
+                "type":"staff_product_performance",
+                "title":format!("{} retail conversion: {}%", row.staff_name, conversion),
+                "reason":"Attributed product invoices divided by all attributed invoices in the selected period",
+                "priority":if conversion == 0 { "high" } else if conversion < 20 { "medium" } else { "low" },
+                "evidence":{"staffId":row.staff_id,"productInvoices":row.product_invoice_count,"invoices":row.invoice_count,"productRevenuePaise":row.product_revenue_paise},
+                "route":"/staff/control-center?tab=command"
+            })
+        }));
+    }
     let mut top_staff = performance.rows.clone();
     top_staff.sort_by(|a, b| b.score.cmp(&a.score));
     top_staff.truncate(5);
@@ -1739,7 +1874,116 @@ pub async fn enterprise_command_center(
         top_staff,
         attention_queue,
         recommendations,
+        equipment_intelligence,
     })
+}
+
+pub async fn staff_equipment_intelligence(
+    db: &PgPool,
+    t: &str,
+    b: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    staff_id: &str,
+) -> Result<Value, AppError> {
+    let (departments, resources) = tokio::try_join!(
+        async {
+            repository::equipment_department_rows(db, t, b, from, to, staff_id)
+                .await
+                .map_err(internal("load staff equipment demand"))
+        },
+        async {
+            repository::equipment_resource_rows(db, t, b, from, to, staff_id)
+                .await
+                .map_err(internal("load staff equipment utilization"))
+        },
+    )?;
+    Ok(build_equipment_intelligence(&departments, &resources, &[]))
+}
+
+fn build_equipment_intelligence(
+    departments: &[EquipmentDepartmentRecord],
+    resources: &[EquipmentResourceRecord],
+    approvals: &[ApprovalRequestRecord],
+) -> Value {
+    let mut recommendations = Vec::new();
+    let department_rows = departments.iter().map(|row| {
+        let shortage = (row.peak_hourly_demand - row.active_resources).max(0);
+        let projected_revenue = row.equipment_lost_bookings * row.average_value_paise;
+        let inactive = resources.iter().find(|resource| !resource.active && resource.department == row.department);
+        let kind = row.resource_kinds.first().or(row.constraint_resource_kinds.first()).cloned().unwrap_or_default();
+        let donor = if kind.is_empty() { None } else { resources.iter().find(|resource| {
+            resource.active && resource.department != row.department && resource.kind == kind
+                && utilization_percent(resource.booked_minutes, departments.iter().find(|department| department.department == resource.department).map_or(0, |department| department.demand_slots)).is_some_and(|value| value <= 20)
+        }) };
+        if shortage > 0 && row.equipment_lost_bookings > 0 {
+            let (action, resource_id, resource_name, title) = if let Some(resource) = donor {
+                ("transfer", resource.id.clone(), resource.name.clone(), format!("Transfer {} capacity to {}", resource.name, row.department))
+            } else if let Some(resource) = inactive {
+                ("maintenance", resource.id.clone(), resource.name.clone(), format!("Restore {} for {} demand", resource.name, row.department))
+            } else if !kind.is_empty() {
+                ("purchase", row.department.clone(), kind.clone(), format!("Add {} capacity for {}", kind, row.department))
+            } else {
+                ("configure", row.department.clone(), String::new(), format!("Configure {} resource types", row.department))
+            };
+            let key = format!("equipment:{action}:{}", resource_id.to_lowercase().replace(' ', "-"));
+            let approval = approvals.iter().find(|approval| approval.entity_type == "equipment_recommendation" && approval.entity_id == key);
+            recommendations.push(json!({
+                "key":key,"actionType":action,"approvalRequired":action != "configure",
+                "approvalStatus":approval.map(|item| item.status.as_str()),"approvalId":approval.map(|item| item.id.as_str()),
+                "title":title,"reason":"Persisted equipment-related lost bookings coincide with peak resource shortage.",
+                "priority":"critical","department":row.department,"equipmentKind":if action == "purchase" { resource_name } else { kind.clone() },
+                "estimatedAdditionalAppointments":row.equipment_lost_bookings,"estimatedRevenuePaise":projected_revenue,
+                "evidence":{"lostBookings":row.equipment_lost_bookings,"peakHourlyDemand":row.peak_hourly_demand,"activeResources":row.active_resources,"shortage":shortage,"averageAppointmentValuePaise":row.average_value_paise},
+                "route":"/appointments"
+            }));
+        } else if row.appointment_count > 0 && row.active_resources == 0 && row.inactive_resources == 0 {
+            recommendations.push(json!({
+                "key":format!("equipment:configure:{}", row.department.to_lowercase().replace(' ', "-")),
+                "actionType":"configure","approvalRequired":false,"approvalStatus":Value::Null,
+                "title":format!("Configure {} appointment resources", row.department),
+                "reason":"Appointments exist but no department resource is configured; an exact equipment purchase cannot be inferred.",
+                "priority":"high","department":row.department,"equipmentKind":"",
+                "estimatedAdditionalAppointments":0,"estimatedRevenuePaise":0,
+                "evidence":{"appointments":row.appointment_count,"unassignedAppointments":row.unassigned_appointments,"peakHourlyDemand":row.peak_hourly_demand},
+                "route":"/appointments"
+            }));
+        }
+        json!({
+            "department":row.department,"appointments":row.appointment_count,"unassignedAppointments":row.unassigned_appointments,
+            "bookedMinutes":row.booked_minutes,"peakHourlyDemand":row.peak_hourly_demand,"activeResources":row.active_resources,
+            "inactiveResources":row.inactive_resources,"capacityShortage":shortage,"equipmentLostBookings":row.equipment_lost_bookings,
+            "estimatedAdditionalAppointments":row.equipment_lost_bookings,"estimatedRevenuePaise":projected_revenue
+        })
+    }).collect::<Vec<_>>();
+    let resource_rows = resources.iter().map(|row| {
+        let demand_slots = departments.iter().find(|department| department.department == row.department).map_or(0, |department| department.demand_slots);
+        json!({"id":row.id,"name":row.name,"kind":row.kind,"department":row.department,"active":row.active,
+          "appointments":row.appointment_count,"bookedMinutes":row.booked_minutes,"demandWindowUtilizationPercent":utilization_percent(row.booked_minutes,demand_slots)})
+    }).collect::<Vec<_>>();
+    json!({
+        "summary":{
+            "activeResources":departments.iter().map(|row| row.active_resources).sum::<i64>(),
+            "unassignedAppointments":departments.iter().map(|row| row.unassigned_appointments).sum::<i64>(),
+            "shortageDepartments":departments.iter().filter(|row| row.peak_hourly_demand > row.active_resources).count(),
+            "equipmentLostBookings":departments.iter().map(|row| row.equipment_lost_bookings).sum::<i64>(),
+            "estimatedAdditionalAppointments":departments.iter().map(|row| row.equipment_lost_bookings).sum::<i64>(),
+            "estimatedRevenuePaise":departments.iter().map(|row| row.equipment_lost_bookings * row.average_value_paise).sum::<i64>()
+        },
+        "departments":department_rows,"resources":resource_rows,"recommendations":recommendations
+    })
+}
+
+fn utilization_percent(booked_minutes: i64, demand_slots: i64) -> Option<i64> {
+    (demand_slots > 0).then(|| (booked_minutes.max(0) * 100 / (demand_slots * 60)).clamp(0, 100))
+}
+
+fn retail_conversion_percent(product_invoices: i64, invoices: i64) -> i64 {
+    if invoices > 0 {
+        (product_invoices.max(0) * 100 / invoices).clamp(0, 100)
+    } else {
+        0
+    }
 }
 
 pub async fn staff_skill_matrix(
@@ -1850,6 +2094,256 @@ pub async fn assign_training(
     .await
 }
 
+pub async fn create_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: StaffRuleDocumentRequest,
+) -> Result<StaffRuleDocumentRecord, AppError> {
+    let document_type = required_enum(&request.document_type, &["rule", "sop"], "document type")?;
+    let category = required_enum(
+        &request.category,
+        &["service", "hygiene", "attendance", "behavior", "safety"],
+        "rule category",
+    )?;
+    let title = required(&request.title, 180, "title")?;
+    let content = required(&request.content, 20_000, "content")?;
+    if request
+        .expires_on
+        .is_some_and(|date| date < request.effective_date)
+    {
+        return Err(AppError::validation(
+            "expiry must be on or after the effective date",
+        ));
+    }
+    let attachment = clean(
+        request.training_attachment_url.as_deref().unwrap_or(""),
+        1000,
+        "training attachment URL",
+    )?;
+    if !attachment.is_empty()
+        && !attachment.starts_with("https://")
+        && !attachment.starts_with("http://")
+        && !attachment.starts_with('/')
+    {
+        return Err(AppError::validation("training attachment URL is invalid"));
+    }
+    let questions = request.quiz.unwrap_or_default();
+    if questions.len() > 20 {
+        return Err(AppError::validation(
+            "quiz can contain at most 20 questions",
+        ));
+    }
+    let mut quiz = Vec::with_capacity(questions.len());
+    for (index, question) in questions.into_iter().enumerate() {
+        let prompt = required(&question.question, 500, "quiz question")?;
+        if !(2..=6).contains(&question.options.len())
+            || question.correct_index >= question.options.len()
+        {
+            return Err(AppError::validation(
+                "quiz options or correct answer are invalid",
+            ));
+        }
+        let options = question
+            .options
+            .iter()
+            .map(|option| required(option, 200, "quiz option"))
+            .collect::<Result<Vec<_>, _>>()?;
+        let question_id = clean(question.id.as_deref().unwrap_or(""), 100, "question ID")?;
+        quiz.push(json!({
+            "id": if question_id.is_empty() { format!("q{}", index + 1) } else { question_id },
+            "question": prompt,
+            "options": options,
+            "correctIndex": question.correct_index
+        }));
+    }
+    let pass_score = if quiz.is_empty() {
+        0
+    } else {
+        request.quiz_pass_score.unwrap_or(80)
+    };
+    if !quiz.is_empty() && !(1..=100).contains(&pass_score) {
+        return Err(AppError::validation(
+            "quiz pass score must be between 1 and 100",
+        ));
+    }
+    let document_key = match request.document_key.as_deref() {
+        Some(value) if !value.trim().is_empty() => required(value, 100, "document key")?,
+        _ => uuid::Uuid::new_v4().to_string(),
+    };
+    repository::create_staff_rule_document(
+        db,
+        tenant,
+        branch,
+        actor,
+        &document_key,
+        &document_type,
+        &category,
+        &title,
+        &content,
+        request.effective_date,
+        request.expires_on,
+        request.mandatory_acknowledgement.unwrap_or(true),
+        &attachment,
+        &Value::Array(quiz),
+        pass_score,
+    )
+    .await
+    .map_err(db_write(
+        "rule version already exists",
+        "create staff rule document",
+    ))
+}
+
+pub async fn list_staff_rules_center(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+) -> Result<Value, AppError> {
+    repository::list_staff_rules_center(db, tenant, branch)
+        .await
+        .map_err(internal("load staff rules center"))
+}
+
+pub async fn publish_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    actor: &str,
+) -> Result<StaffRuleDocumentRecord, AppError> {
+    repository::publish_staff_rule_document(db, tenant, branch, id, version, actor)
+        .await
+        .map_err(internal("publish staff rule document"))?
+        .ok_or_else(stale)
+}
+
+pub async fn unpublish_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    actor: &str,
+) -> Result<StaffRuleDocumentRecord, AppError> {
+    repository::unpublish_staff_rule_document(db, tenant, branch, id, version, actor)
+        .await
+        .map_err(internal("unpublish staff rule document"))?
+        .ok_or_else(stale)
+}
+
+pub async fn list_self_staff_rules(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff_id: &str,
+) -> Result<Value, AppError> {
+    repository::list_self_staff_rules(db, tenant, branch, staff_id)
+        .await
+        .map_err(internal("load staff rules"))
+}
+
+pub async fn mark_staff_rule_read(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    staff_id: &str,
+) -> Result<StaffRuleStatusRecord, AppError> {
+    repository::mark_staff_rule_read(db, tenant, branch, document_id, staff_id)
+        .await
+        .map_err(internal("mark staff rule read"))?
+        .ok_or_else(|| AppError::not_found("current rule not found"))
+}
+
+pub async fn acknowledge_staff_rule(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    staff_id: &str,
+    request: StaffRuleAcknowledgementRequest,
+) -> Result<StaffRuleStatusRecord, AppError> {
+    let document =
+        repository::staff_rule_document_for_acknowledgement(db, tenant, branch, document_id)
+            .await
+            .map_err(internal("load staff rule"))?
+            .ok_or_else(|| AppError::not_found("current rule not found"))?;
+    let answers = request.answers.unwrap_or_default();
+    let (score, passed) = quiz_result(&document.quiz_json, &answers, document.quiz_pass_score)?;
+    repository::acknowledge_staff_rule(
+        db,
+        tenant,
+        branch,
+        document_id,
+        staff_id,
+        &json!(answers),
+        score,
+        passed,
+    )
+    .await
+    .map_err(internal("acknowledge staff rule"))
+}
+
+pub async fn create_staff_rule_violation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: StaffRuleViolationRequest,
+) -> Result<StaffRuleViolationRecord, AppError> {
+    let details = required(&request.details, 4000, "violation details")?;
+    repository::create_staff_rule_violation(
+        db,
+        tenant,
+        branch,
+        &required(&request.document_id, 100, "document ID")?,
+        &required(&request.staff_id, 100, "staff ID")?,
+        &details,
+        request.occurred_at.unwrap_or_else(Utc::now),
+        actor,
+    )
+    .await
+    .map_err(internal("record staff rule violation"))?
+    .ok_or_else(|| AppError::not_found("staff member or rule not found"))
+}
+
+pub async fn resolve_staff_rule_violation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    actor: &str,
+    request: StaffRuleViolationResolutionRequest,
+) -> Result<StaffRuleViolationRecord, AppError> {
+    let note = required(&request.resolution_note, 4000, "resolution note")?;
+    repository::resolve_staff_rule_violation(db, tenant, branch, id, request.version, &note, actor)
+        .await
+        .map_err(internal("resolve staff rule violation"))?
+        .ok_or_else(stale)
+}
+
+fn quiz_result(quiz: &Value, answers: &[i32], pass_score: i32) -> Result<(i32, bool), AppError> {
+    let questions = quiz
+        .as_array()
+        .ok_or_else(|| AppError::internal("stored quiz is invalid"))?;
+    if questions.is_empty() {
+        return Ok((0, true));
+    }
+    if answers.len() != questions.len() || answers.iter().any(|answer| *answer < 0) {
+        return Err(AppError::validation("answer every quiz question"));
+    }
+    let correct = questions
+        .iter()
+        .zip(answers)
+        .filter(|(question, answer)| question["correctIndex"].as_i64() == Some(i64::from(**answer)))
+        .count();
+    let score = ((correct * 100) / questions.len()) as i32;
+    Ok((score, score >= pass_score))
+}
+
 pub async fn coaching_insights(
     db: &PgPool,
     t: &str,
@@ -1888,7 +2382,12 @@ pub async fn create_coaching_goal(
     actor: &str,
     request: CoachingGoalRequest,
 ) -> Result<CoachingGoalRecord, AppError> {
-    if request.target_value <= 0 || request.current_value.is_some_and(|value| value < 0) {
+    if request.target_value <= 0
+        || request.current_value.is_some_and(|value| value < 0)
+        || request
+            .projected_impact_paise
+            .is_some_and(|value| value < 0)
+    {
         return Err(AppError::validation("coaching goal values are invalid"));
     }
     let goal_type = required_enum(
@@ -1897,6 +2396,11 @@ pub async fn create_coaching_goal(
             "revenue",
             "appointments",
             "rebooking",
+            "product_upsell",
+            "package_membership",
+            "client_retention",
+            "service_mix",
+            "average_bill",
             "attendance",
             "training",
             "utilization",
@@ -1930,6 +2434,7 @@ pub async fn create_coaching_goal(
         &metric_unit,
         request.target_value,
         request.current_value,
+        request.projected_impact_paise,
         request.due_date,
         &action_title,
         &action_description,
@@ -2071,6 +2576,74 @@ fn ceil_div(value: i64, divisor: i64) -> i64 {
         0
     } else {
         1 + (value - 1) / divisor
+    }
+}
+
+fn manpower_planning_row(row: ManpowerPlanningRecord) -> ManpowerPlanningRow {
+    let required = ceil_div(row.demand_minutes, 60);
+    let shortage = (required - row.scheduled_staff_count).max(0);
+    let overstaffed = (row.scheduled_staff_count - required).max(0);
+    let leave_impact =
+        shortage - (required - row.scheduled_staff_count - row.leave_staff_count).max(0);
+    let resource_shortage = (required - row.resource_count).max(0);
+    let skills_shortage = (required - row.qualified_staff_count).max(0);
+    let alert = if shortage > 0 || resource_shortage > 0 || skills_shortage > 0 {
+        "shortage"
+    } else if overstaffed > 0 {
+        "overstaffed"
+    } else {
+        "balanced"
+    };
+    let mut actions = Vec::new();
+    if shortage > 0 {
+        actions.push(format!("Add {shortage} scheduled staff"));
+    }
+    if leave_impact > 0 {
+        actions.push(format!("Approved leave creates {leave_impact} gap"));
+    }
+    if resource_shortage > 0 {
+        actions.push(format!("Add {resource_shortage} workstation/resource"));
+    }
+    if skills_shortage > 0 {
+        actions.push(format!("Assign or train {skills_shortage} qualified staff"));
+    }
+    if shortage == 0 && overstaffed > 0 {
+        actions.push(format!(
+            "Move {overstaffed} available staff to a shortage slot"
+        ));
+    }
+    let hour = row.hour_start.hour();
+    ManpowerPlanningRow {
+        date: row.slot_date,
+        hour_start: format!("{:02}:00", hour),
+        hour_end: format!("{:02}:00", hour + 1),
+        shift: if (6..14).contains(&hour) {
+            "Morning"
+        } else if (14..22).contains(&hour) {
+            "Evening"
+        } else {
+            "Night"
+        }
+        .to_string(),
+        department: row.department,
+        appointment_count: row.appointment_count,
+        demand_minutes: row.demand_minutes,
+        required_staff_count: required,
+        scheduled_staff_count: row.scheduled_staff_count,
+        leave_staff_count: row.leave_staff_count,
+        leave_impact_count: leave_impact,
+        shortage_staff_count: shortage,
+        overstaffed_count: overstaffed,
+        resource_count: row.resource_count,
+        resource_shortage_count: resource_shortage,
+        qualified_staff_count: row.qualified_staff_count,
+        skills_shortage_count: skills_shortage,
+        alert: alert.to_string(),
+        recommendation: if actions.is_empty() {
+            "Coverage is balanced".to_string()
+        } else {
+            actions.join("; ")
+        },
     }
 }
 
@@ -2408,12 +2981,14 @@ fn db_write(duplicate: &'static str, a: &'static str) -> impl FnOnce(sqlx::Error
 
 #[cfg(test)]
 mod tests {
-    use super::{calculate_rule, calculate_rule_with_rounding};
     use super::{
-        ceil_div, early_departure_minutes, forecast_confidence, is_due_training, quiet_delay,
-        render_template, sort_ranked_candidates, ManpowerSourceRecord, RankedStaffCandidate,
+        build_equipment_intelligence, ceil_div, early_departure_minutes, forecast_confidence,
+        is_due_training, manpower_planning_row, quiet_delay, quiz_result, render_template,
+        retail_conversion_percent, sort_ranked_candidates, EquipmentDepartmentRecord,
+        ManpowerPlanningRecord, ManpowerSourceRecord, RankedStaffCandidate,
     };
-    use chrono::NaiveTime;
+    use super::{calculate_rule, calculate_rule_with_rounding};
+    use chrono::{NaiveDate, NaiveTime};
     use serde_json::json;
     use std::collections::HashMap;
     #[test]
@@ -2460,6 +3035,31 @@ mod tests {
     }
 
     #[test]
+    fn hourly_manpower_plan_reports_leave_resource_and_skill_gaps() {
+        let row = manpower_planning_row(ManpowerPlanningRecord {
+            slot_date: NaiveDate::from_ymd_opt(2026, 7, 30).unwrap(),
+            hour_start: NaiveTime::from_hms_opt(11, 0, 0).unwrap(),
+            department: "Hair".to_string(),
+            appointment_count: 2,
+            demand_minutes: 120,
+            scheduled_staff_count: 1,
+            leave_staff_count: 1,
+            resource_count: 1,
+            qualified_staff_count: 1,
+        });
+        assert_eq!((row.required_staff_count, row.shortage_staff_count), (2, 1));
+        assert_eq!(
+            (
+                row.leave_impact_count,
+                row.resource_shortage_count,
+                row.skills_shortage_count
+            ),
+            (1, 1, 1)
+        );
+        assert_eq!(row.alert, "shortage");
+    }
+
+    #[test]
     fn staff_notifications_render_known_values_and_defer_quiet_hours() {
         let variables = HashMap::from([
             ("staff.firstName".to_string(), "Aftab".to_string()),
@@ -2497,6 +3097,55 @@ mod tests {
             now
         ));
         assert!(!is_due_training("general", "open", Some(now), now));
+    }
+
+    #[test]
+    fn retail_conversion_uses_product_invoices_and_handles_empty_periods() {
+        assert_eq!(retail_conversion_percent(2, 8), 25);
+        assert_eq!(retail_conversion_percent(0, 0), 0);
+        assert_eq!(retail_conversion_percent(12, 10), 100);
+    }
+
+    #[test]
+    fn equipment_recommendations_require_real_loss_evidence() {
+        let department = |lost| EquipmentDepartmentRecord {
+            department: "Hair".to_string(),
+            appointment_count: 8,
+            unassigned_appointments: 3,
+            booked_minutes: 480,
+            average_value_paise: 1_500_00,
+            peak_hourly_demand: 3,
+            demand_slots: 8,
+            active_resources: 1,
+            inactive_resources: 0,
+            resource_kinds: vec!["chair".to_string()],
+            constraint_resource_kinds: Vec::new(),
+            equipment_lost_bookings: lost,
+        };
+        assert_eq!(
+            build_equipment_intelligence(&[department(0)], &[], &[])["recommendations"]
+                .as_array()
+                .unwrap()
+                .len(),
+            0
+        );
+        let intelligence = build_equipment_intelligence(&[department(2)], &[], &[]);
+        assert_eq!(intelligence["recommendations"][0]["actionType"], "purchase");
+        assert_eq!(
+            intelligence["recommendations"][0]["estimatedRevenuePaise"],
+            300_000
+        );
+    }
+
+    #[test]
+    fn rule_quiz_blocks_acknowledgement_until_passed() {
+        let quiz = json!([
+            {"correctIndex":1},
+            {"correctIndex":0}
+        ]);
+        assert_eq!(quiz_result(&quiz, &[1, 1], 80).unwrap(), (50, false));
+        assert_eq!(quiz_result(&quiz, &[1, 0], 80).unwrap(), (100, true));
+        assert!(quiz_result(&quiz, &[1], 80).is_err());
     }
 
     #[test]

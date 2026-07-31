@@ -15,14 +15,20 @@ use crate::{
         common::{ApiResponse, ApiResult, AppError},
         migration::{
             AnalyzeMigrationRequest, ApproveMigrationMappingRequest, CreateImportJobRequest,
-            CreateLargeImportJobRequest, ImportJob, MigrationAlias, MigrationAnalysisReport,
-            MigrationApprovalRequest, MigrationImportChunk, MigrationMapping,
-            MigrationMappingApproval, MigrationMappingSuggestionRequest, MigrationRecoveryReport,
-            MigrationTemplate, SaveMigrationAliasRequest, SaveMigrationMappingRequest,
+            CreateLargeImportJobRequest, CreateMigrationCutoverRequest,
+            HistoricalPurchaseMappingDecision, HistoricalPurchaseMappingDecisionRequest,
+            HistoricalPurchaseMappingKind, ImportJob, MigrationAlias, MigrationAnalysisReport,
+            MigrationApprovalRequest, MigrationCutover, MigrationCutoverStatus,
+            MigrationImportChunk, MigrationMapping, MigrationMappingApproval,
+            MigrationMappingSuggestionRequest, MigrationMappingVersion, MigrationRecoveryReport,
+            MigrationSelectiveRetryRequest, MigrationTemplate,
+            OpeningPayableControlsApprovalRequest, SaveMigrationAliasRequest,
+            SaveMigrationMappingRequest, TransitionMigrationCutoverRequest,
         },
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
-            CreateMigrationUploadRequest, MigrationSourceFile, MigrationSourceProfile,
+            CreateMigrationUploadRequest, HistoricalEvidenceCutoverApprovalRequest,
+            HistoricalEvidenceGroupDecisionRequest, MigrationSourceFile, MigrationSourceProfile,
             MigrationUploadPartReceipt, MigrationUploadSession,
         },
     },
@@ -31,8 +37,13 @@ use crate::{
         security::{require_security_manage, require_security_read},
     },
     services::{
-        auth_service::AuthClaims, integration_service, migration_file_service,
-        migration_large_import_service, migration_service,
+        auth_service::AuthClaims,
+        integration_service, migration_file_service, migration_large_import_service,
+        migration_service,
+        purchase_bill_drafts_service::{
+            self as purchase_bill_drafts, HistoricalBulkArchiveInput, HistoricalBulkStartInput,
+            HistoricalPilotDocumentInput,
+        },
     },
     state::AppState,
 };
@@ -105,6 +116,78 @@ pub fn router() -> Router<AppState> {
                 .layer(DefaultBodyLimit::max(IMPORT_JSON_BODY_LIMIT_BYTES)),
         )
         .route(
+            "/settings/integrations/historical-purchase-bills",
+            get(list_historical_purchase_bills),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-bills/:id",
+            get(historical_purchase_bill_detail),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-evidence",
+            get(historical_purchase_evidence_report),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-evidence/group-decisions",
+            post(decide_historical_purchase_evidence_group),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-evidence/cutover-approval",
+            post(approve_historical_purchase_evidence_cutover),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-pilot",
+            get(historical_purchase_pilot_report).post(start_historical_purchase_pilot),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-pilot/group-decisions",
+            post(decide_historical_purchase_pilot_group),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-bulk",
+            get(historical_purchase_bulk_report).post(start_historical_purchase_bulk),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-bulk/:id/archive",
+            post(archive_historical_purchase_bulk),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-mapping-report",
+            get(historical_purchase_mapping_report),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-mappings/:kind",
+            get(list_historical_purchase_mappings),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-mappings/:kind/:source_key/decisions",
+            post(decide_historical_purchase_mapping),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-mappings/:kind/:source_key/versions",
+            get(list_historical_purchase_mapping_versions),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-mappings/:kind/:source_key/rollback/:version",
+            post(rollback_historical_purchase_mapping),
+        )
+        .route(
+            "/settings/integrations/migration-cutovers/active",
+            get(active_migration_cutover),
+        )
+        .route(
+            "/settings/integrations/migration-cutovers",
+            post(save_migration_cutover),
+        )
+        .route(
+            "/settings/integrations/migration-cutovers/:id/transition",
+            post(transition_migration_cutover),
+        )
+        .route(
+            "/settings/integrations/migration-cutovers/:id/proof-pack",
+            get(download_cutover_proof_pack),
+        )
+        .route(
             "/settings/integrations/import-templates",
             get(import_templates),
         )
@@ -115,6 +198,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/import-mappings",
             get(list_import_mappings).post(save_import_mapping),
+        )
+        .route(
+            "/settings/integrations/import-mappings/:id/versions",
+            get(list_import_mapping_versions),
+        )
+        .route(
+            "/settings/integrations/import-mappings/:id/rollback/:version",
+            post(rollback_import_mapping),
         )
         .route(
             "/settings/integrations/import-aliases",
@@ -169,6 +260,14 @@ pub fn router() -> Router<AppState> {
             post(decide_import_approval),
         )
         .route(
+            "/settings/integrations/import-jobs/:id/opening-payable-controls",
+            post(approve_opening_payable_controls),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/yellow-approval",
+            post(approve_import_yellow_warnings),
+        )
+        .route(
             "/settings/integrations/import-jobs/:id/governance",
             get(import_governance_report),
         )
@@ -187,6 +286,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/import-jobs/:id/failed-rows",
             get(download_import_failed_rows),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/error-exports/:kind",
+            get(download_import_error_export),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/quarantine/retry",
+            post(retry_import_quarantine),
         )
         .route(
             "/settings/integrations/import-jobs/:id/rollback-impact",
@@ -262,6 +369,12 @@ struct DeliveryQuery {
 #[derive(Deserialize)]
 struct LimitQuery {
     limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HistoricalEvidenceQuery {
+    cutover_id: String,
 }
 
 #[derive(Deserialize)]
@@ -537,13 +650,318 @@ async fn webhook_logs(
 }
 async fn list_import_jobs(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<ImportJob>> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::list_jobs(&s.db, &t, &b).await?,
     )))
 }
+async fn list_historical_purchase_bills(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+) -> ApiResult<Vec<Value>> {
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::historical_purchase_bills(&s.db, &t, &b).await?,
+    )))
+}
+
+async fn historical_purchase_bill_detail(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::historical_purchase_bill(&s.db, &t, &b, &id).await?,
+    )))
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HistoricalMappingQuery {
+    #[serde(default)]
+    provider: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct HistoricalPilotStartRequest {
+    cutover_id: String,
+    documents: Vec<HistoricalPilotDocumentInput>,
+}
+
+async fn historical_purchase_evidence_report(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<HistoricalEvidenceQuery>,
+) -> ApiResult<Value> {
+    require_migration_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_file_service::historical_evidence_report(&s.db, &t, &b, &query.cutover_id)
+            .await?,
+    )))
+}
+
+async fn decide_historical_purchase_evidence_group(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<HistoricalEvidenceGroupDecisionRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_file_service::decide_historical_evidence_group(&s.db, &t, &b, &c.sub, request)
+            .await?,
+    )))
+}
+
+async fn approve_historical_purchase_evidence_cutover(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<HistoricalEvidenceCutoverApprovalRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    require_cutover_owner(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_file_service::approve_historical_evidence_cutover(
+            &s.db,
+            &t,
+            &b,
+            &c.sub,
+            &c.role,
+            &request.cutover_id,
+        )
+        .await?,
+    )))
+}
+
+async fn historical_purchase_pilot_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<HistoricalEvidenceQuery>,
+) -> ApiResult<Value> {
+    require_migration_read(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::historical_pilot_report(&state, &tenant, &branch, &query.cutover_id)
+            .await?,
+    )))
+}
+
+async fn start_historical_purchase_pilot(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<HistoricalPilotStartRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::start_historical_pilot(
+            &state,
+            &tenant,
+            &branch,
+            &claims.sub,
+            &request.cutover_id,
+            request.documents,
+        )
+        .await?,
+    )))
+}
+
+async fn decide_historical_purchase_pilot_group(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<HistoricalEvidenceGroupDecisionRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::decide_historical_pilot_group(
+            &state, &tenant, &branch, &claims.sub, request,
+        )
+        .await?,
+    )))
+}
+
+async fn historical_purchase_bulk_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<HistoricalEvidenceQuery>,
+) -> ApiResult<Value> {
+    require_migration_read(&claims)?;
+    require_historical_financial_read(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::historical_bulk_report(&state, &tenant, &branch, &query.cutover_id)
+            .await?,
+    )))
+}
+
+async fn start_historical_purchase_bulk(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<HistoricalBulkStartInput>,
+) -> ApiResult<Value> {
+    require_migration_manage(&claims)?;
+    require_historical_financial_read(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::start_historical_bulk(&state, &tenant, &branch, &claims.sub, request)
+            .await?,
+    )))
+}
+
+async fn archive_historical_purchase_bulk(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<HistoricalBulkArchiveInput>,
+) -> ApiResult<Value> {
+    require_migration_manage(&claims)?;
+    require_historical_financial_read(&claims)?;
+    require_cutover_owner(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_bill_drafts::archive_historical_bulk(
+            &state,
+            &tenant,
+            &branch,
+            &claims.sub,
+            &id,
+            request,
+        )
+        .await?,
+    )))
+}
+
+async fn list_historical_purchase_mappings(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+    Path(kind): Path<HistoricalPurchaseMappingKind>,
+    Query(query): Query<HistoricalMappingQuery>,
+) -> ApiResult<Vec<Value>> {
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::historical_purchase_mapping_sources(
+            &s.db,
+            &t,
+            &b,
+            kind,
+            &query.provider,
+        )
+        .await?,
+    )))
+}
+
+async fn historical_purchase_mapping_report(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+) -> ApiResult<Value> {
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::historical_purchase_mapping_report(&s.db, &t, &b).await?,
+    )))
+}
+
+async fn decide_historical_purchase_mapping(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+    Path((kind, source_key)): Path<(HistoricalPurchaseMappingKind, String)>,
+    Query(query): Query<HistoricalMappingQuery>,
+    Json(request): Json<HistoricalPurchaseMappingDecisionRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    require_historical_financial_read(&c)?;
+    if matches!(request.decision, HistoricalPurchaseMappingDecision::Create) {
+        require_historical_catalog_create(&c, kind)?;
+    }
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::decide_historical_purchase_mapping(
+            &s.db,
+            &t,
+            &b,
+            kind,
+            &query.provider,
+            &source_key,
+            request,
+            &c.sub,
+        )
+        .await?,
+    )))
+}
+
+async fn rollback_historical_purchase_mapping(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+    Path((kind, source_key, version)): Path<(HistoricalPurchaseMappingKind, String, i32)>,
+    Query(query): Query<HistoricalMappingQuery>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::rollback_historical_purchase_mapping(
+            &s.db,
+            &t,
+            &b,
+            kind,
+            &query.provider,
+            &source_key,
+            version,
+            &c.sub,
+        )
+        .await?,
+    )))
+}
+
+async fn list_historical_purchase_mapping_versions(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Extension(c): Extension<AuthClaims>,
+    Path((kind, source_key)): Path<(HistoricalPurchaseMappingKind, String)>,
+    Query(query): Query<HistoricalMappingQuery>,
+) -> ApiResult<Vec<Value>> {
+    require_historical_financial_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::historical_purchase_mapping_versions(
+            &s.db,
+            &t,
+            &b,
+            kind,
+            &query.provider,
+            &source_key,
+        )
+        .await?,
+    )))
+}
+
 async fn import_templates() -> ApiResult<Vec<MigrationTemplate>> {
     Ok(Json(ApiResponse::ok(migration_service::templates())))
 }
@@ -563,8 +981,10 @@ async fn import_adapters() -> ApiResult<Vec<Value>> {
 }
 async fn list_import_mappings(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<MigrationMapping>> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::list_mappings(&s.db, &t, &b).await?,
@@ -585,8 +1005,10 @@ async fn save_import_mapping(
 
 async fn list_import_aliases(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<MigrationAlias>> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::list_aliases(&s.db, &t, &b).await?,
@@ -669,6 +1091,108 @@ fn require_migration_manage(claims: &AuthClaims) -> Result<(), AppError> {
     require_migration_permission(claims, "data_migration.manage")
 }
 
+fn require_historical_catalog_create(
+    claims: &AuthClaims,
+    kind: HistoricalPurchaseMappingKind,
+) -> Result<(), AppError> {
+    let role = claims.role.to_ascii_lowercase();
+    if matches!(
+        role.as_str(),
+        "owner" | "admin" | "superadmin" | "super-admin"
+    ) {
+        return Ok(());
+    }
+    let required = match kind {
+        HistoricalPurchaseMappingKind::Product => ["inventory.manage", "inventory.write"],
+        HistoricalPurchaseMappingKind::Vendor => ["purchases.manage", "inventory.manage"],
+    };
+    if required.iter().any(|permission| {
+        !claims
+            .denied_permissions
+            .iter()
+            .any(|denied| denied == permission)
+            && claims
+                .permissions
+                .iter()
+                .any(|granted| granted == permission)
+    }) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "catalog create permission is required for this mapping decision",
+        ))
+    }
+}
+
+fn require_migration_export(claims: &AuthClaims) -> Result<(), AppError> {
+    require_sensitive_migration_permission(claims, "data_migration.export")
+}
+
+fn require_historical_financial_read(claims: &AuthClaims) -> Result<(), AppError> {
+    require_migration_read(claims)?;
+    require_sensitive_migration_permission(claims, "data_migration.historical_financial")
+}
+
+fn require_sensitive_migration_permission(
+    claims: &AuthClaims,
+    permission: &str,
+) -> Result<(), AppError> {
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|item| item == permission);
+    let privileged_role = matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "superadmin" | "super-admin"
+    );
+    let granted = claims.permissions.iter().any(|item| item == permission);
+    if !denied && (privileged_role || granted) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "sensitive data migration permission is required",
+        ))
+    }
+}
+
+fn require_cutover_owner(claims: &AuthClaims) -> Result<(), AppError> {
+    if matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "superadmin" | "super-admin"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "Owner approval is required for freeze and go-live",
+        ))
+    }
+}
+
+fn require_opening_payable_finance(claims: &AuthClaims) -> Result<(), AppError> {
+    require_migration_manage(claims)?;
+    let denied = claims
+        .denied_permissions
+        .iter()
+        .any(|item| item == "finance.write");
+    let role_allowed = matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "superadmin" | "super-admin"
+    );
+    if !denied
+        && (role_allowed
+            || claims
+                .permissions
+                .iter()
+                .any(|item| item == "finance.write"))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "finance approval permission is required",
+        ))
+    }
+}
+
 fn require_migration_permission(claims: &AuthClaims, permission: &str) -> Result<(), AppError> {
     let denied = claims
         .denied_permissions
@@ -685,11 +1209,79 @@ fn require_migration_permission(claims: &AuthClaims, permission: &str) -> Result
         Err(AppError::forbidden("data migration permission is required"))
     }
 }
+
+async fn active_migration_cutover(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Option<MigrationCutover>> {
+    require_migration_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::active_cutover(&s.db, &t, &b).await?,
+    )))
+}
+
+async fn save_migration_cutover(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<CreateMigrationCutoverRequest>,
+) -> ApiResult<MigrationCutover> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::save_cutover(&s.db, &t, &b, &c.sub, &c.role, request).await?,
+    )))
+}
+
+async fn transition_migration_cutover(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<TransitionMigrationCutoverRequest>,
+) -> ApiResult<MigrationCutover> {
+    require_migration_manage(&c)?;
+    if matches!(
+        request.target_status,
+        MigrationCutoverStatus::InventoryFrozen
+            | MigrationCutoverStatus::SnapshotApproved
+            | MigrationCutoverStatus::Live
+    ) {
+        require_cutover_owner(&c)?;
+    }
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::transition_cutover(&s.db, &t, &b, &id, &c.sub, &c.role, request).await?,
+    )))
+}
+
+async fn download_cutover_proof_pack(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    require_migration_export(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let pack = migration_service::cutover_proof_pack(&s.db, &s.settings, &t, &b, &id).await?;
+    let content = serde_json::to_vec_pretty(&pack)
+        .map_err(|_| AppError::internal("failed to serialize cutover proof pack"))?;
+    attachment_response(content, "application/json", "migration-cutover-proof-pack.json")
+}
+
 async fn analyze_import(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(request): Json<AnalyzeMigrationRequest>,
 ) -> ApiResult<MigrationAnalysisReport> {
+    if request.duplicate_decisions.is_empty() {
+        require_migration_read(&c)?;
+    } else {
+        require_migration_manage(&c)?;
+    }
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::analyze(&s.db, &t, &b, request).await?,
@@ -726,6 +1318,7 @@ async fn profile_import_source(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<MigrationSourceProfile> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_file_service::source_profile(&s.db, &t, &b, &c.sub, &id).await?,
@@ -781,9 +1374,11 @@ async fn cancel_import_job(
 }
 async fn list_import_chunks(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Vec<MigrationImportChunk>> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_large_import_service::list_chunks(&s.db, &t, &b, &id).await?,
@@ -825,15 +1420,77 @@ async fn decide_import_approval(
     require_migration_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let approved = request.approved;
+    let opening_payable = migration_service::governance_report(&s.db, &t, &b, &id)
+        .await?
+        .pointer("/job/entity")
+        .and_then(Value::as_str)
+        == Some("opening-payables");
+    if opening_payable {
+        require_cutover_owner(&c)?;
+    }
     migration_service::decide_approval(&s.db, &t, &b, &id, &c.sub, request).await?;
     Ok(Json(ApiResponse::ok(json!({"approved":approved}))))
 }
 
-async fn import_governance_report(
+async fn approve_opening_payable_controls(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<OpeningPayableControlsApprovalRequest>,
+) -> ApiResult<Value> {
+    require_opening_payable_finance(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    migration_service::approve_opening_payable_controls(&s.db, &t, &b, &id, &c.sub, request)
+        .await?;
+    Ok(Json(ApiResponse::ok(json!({"approved":true}))))
+}
+
+async fn list_import_mapping_versions(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<MigrationMappingVersion>> {
+    require_migration_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::list_mapping_versions(&s.db, &t, &b, &id).await?,
+    )))
+}
+
+async fn rollback_import_mapping(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((id, version)): Path<(String, i32)>,
+) -> ApiResult<MigrationMapping> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_service::rollback_mapping(&s.db, &t, &b, &id, version, &c.sub).await?,
+    )))
+}
+
+async fn approve_import_yellow_warnings(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    migration_service::approve_yellow_warnings(&s.db, &t, &b, &id, &c.sub).await?;
+    Ok(Json(ApiResponse::ok(json!({"approved":true}))))
+}
+
+async fn import_governance_report(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::governance_report(&s.db, &t, &b, &id).await?,
@@ -842,16 +1499,23 @@ async fn import_governance_report(
 
 async fn import_failure_assistant(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::failure_assistant(&s.db, &s.settings, &t, &b, &id).await?,
     )))
 }
 
-async fn import_monitoring(State(s): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
+async fn import_monitoring(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::monitoring(&s.db, &t, &b).await?,
@@ -860,9 +1524,11 @@ async fn import_monitoring(State(s): State<AppState>, headers: HeaderMap) -> Api
 
 async fn import_rollback_impact(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_service::rollback_impact(&s.db, &t, &b, &id).await?,
@@ -871,9 +1537,11 @@ async fn import_rollback_impact(
 
 async fn download_import_proof_pack(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
+    require_migration_export(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let pack = migration_service::proof_pack(&s.db, &s.settings, &t, &b, &id).await?;
     let content = serde_json::to_vec_pretty(&pack)
@@ -883,9 +1551,11 @@ async fn download_import_proof_pack(
 
 async fn download_import_failed_rows(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
+    require_migration_export(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let content = migration_service::failed_rows_csv(&s.db, &t, &b, &id).await?;
     attachment_response(
@@ -893,6 +1563,37 @@ async fn download_import_failed_rows(
         "text/csv; charset=utf-8",
         "migration-failed-rows.csv",
     )
+}
+
+async fn download_import_error_export(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((id, kind)): Path<(String, String)>,
+) -> Result<Response, AppError> {
+    require_migration_export(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let content = migration_service::error_export_csv(&s.db, &t, &b, &id, &kind).await?;
+    attachment_response(
+        content.into_bytes(),
+        "text/csv; charset=utf-8",
+        &format!("migration-{kind}.csv"),
+    )
+}
+
+async fn retry_import_quarantine(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<MigrationSelectiveRetryRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_large_import_service::selective_retry(&s.db, &t, &b, &id, &c.sub, request)
+            .await?,
+    )))
 }
 
 fn attachment_response(
@@ -933,9 +1634,11 @@ async fn create_import_upload(
 
 async fn get_import_upload(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<MigrationUploadSession> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_file_service::get_upload(&s.db, &t, &b, &id).await?,
@@ -976,8 +1679,10 @@ async fn complete_import_upload(
 
 async fn list_import_source_files(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<MigrationSourceFile>> {
+    require_migration_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         migration_file_service::list_source_files(&s.db, &t, &b).await?,
@@ -991,6 +1696,7 @@ async fn download_import_source_evidence(
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
     use tokio::io::AsyncReadExt;
+    require_migration_export(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let evidence = migration_file_service::open_evidence(&s.db, &t, &b, &c.sub, &id).await?;
     let stream = futures_util::stream::try_unfold(evidence.file, |mut file| async move {
@@ -1109,4 +1815,44 @@ async fn openapi() -> Json<Value> {
         "/pos/z-reports/{date}/export":{"get":{"security":[{"bearerAuth":[]}],"summary":"Export accounting data as JSON, CSV, or Tally XML","parameters":[{"name":"date","in":"path","required":true,"schema":{"type":"string","format":"date"}},{"name":"format","in":"query","schema":{"type":"string","enum":["json","csv","tally"]}}],"responses":{"200":{"description":"Accounting export"}}}}
       }
     }))
+}
+
+#[cfg(test)]
+mod migration_permission_tests {
+    use super::*;
+
+    fn claims(role: &str, permissions: &[&str], denied: &[&str]) -> AuthClaims {
+        AuthClaims {
+            sub: "user".into(),
+            tenant_id: "tenant".into(),
+            branch_id: Some("branch".into()),
+            role: role.into(),
+            role_id: None,
+            permissions: permissions.iter().map(|value| (*value).into()).collect(),
+            denied_permissions: denied.iter().map(|value| (*value).into()).collect(),
+            masked_fields: Vec::new(),
+            max_discount_paise: None,
+            max_refund_paise: None,
+            max_cash_movement_paise: None,
+            permission_version: 1,
+            session_id: "session".into(),
+            mfa_enrollment_required: false,
+            token_type: "access".into(),
+            jti: "jti".into(),
+            iat: 0,
+            exp: usize::MAX,
+        }
+    }
+
+    #[test]
+    fn sensitive_migration_access_requires_privileged_role_or_explicit_permission() {
+        assert!(require_migration_export(&claims("owner", &[], &[])).is_ok());
+        assert!(require_migration_export(&claims("manager", &[], &[])).is_err());
+        assert!(
+            require_migration_export(&claims("staff", &["data_migration.export"], &[])).is_ok()
+        );
+        assert!(
+            require_migration_export(&claims("owner", &[], &["data_migration.export"])).is_err()
+        );
+    }
 }

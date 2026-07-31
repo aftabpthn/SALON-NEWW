@@ -46,6 +46,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       }
 
       @if (canReadReports() && business(); as data) {
+        @if (sourceGaps(data).length) {
+          <section class="panel"><div class="panel-title"><h2>CRM source status</h2><span>{{ sourceGaps(data).length }} missing</span></div><div class="list">@for (gap of sourceGaps(data); track gap) { <div class="row"><strong>{{ gap }}</strong><span class="badge">No records in range</span></div> }</div></section>
+        }
         <section class="grid four">
           <article class="kpi"><span>Appointments</span><strong>{{ data.summary.appointments }}</strong><small>selected range</small></article>
           <article class="kpi"><span>Completed</span><strong>{{ data.summary.completedServices }}</strong><small>finished services</small></article>
@@ -88,7 +91,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             <div class="panel-title"><h2>Service history</h2><span>{{ data.pagination.appointmentTotal }}</span></div>
             <div class="list">
               @for (item of data.appointments; track item.id) {
-                <div class="row"><div class="row-main"><strong>{{ item.clientName || 'Assigned appointment' }} @if (item.preferredClient) { · Preferred }</strong><small>{{ item.startAt | date:'medium' }} · {{ item.serviceNames.join(', ') || 'Service' }}@if (item.serviceDepartments.length) { · {{ item.serviceDepartments.join(', ') }}}</small><small>Shifted {{ item.rescheduleCount }} times@if (item.lastServiceAt) { · Last service {{ item.lastServiceAt | date:'dd/MM/yyyy' }}}</small></div><span class="badge">{{ item.status }}</span></div>
+                <div class="row"><div class="row-main"><strong>{{ item.clientName || 'Assigned appointment' }} @if (item.preferredClient) { · Preferred }</strong><small>{{ item.startAt | date:'dd/MM/yyyy, h:mm a' }} · {{ item.serviceNames.join(', ') || 'Service' }}@if (item.serviceDepartments.length) { · {{ item.serviceDepartments.join(', ') }}}</small><small>Shifted {{ item.rescheduleCount }} times@if (item.lastServiceAt) { · Last service {{ item.lastServiceAt | date:'dd/MM/yyyy' }}}</small></div><span class="badge">{{ item.status }}</span></div>
               } @empty { <p class="empty">No work in this report window.</p> }
             </div>
             @if (data.pagination.appointmentHasMore) { <div class="row-actions permission-actions"><button class="button" type="button" [disabled]="loadingMore()" (click)="load(false)">{{ loadingMore() ? 'Loading...' : 'Load More' }}</button></div> }
@@ -97,7 +100,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             <div class="panel-title"><h2>Service sales</h2><span>{{ data.performance.invoiceCount }}</span></div>
             <div class="list">
               @for (sale of data.serviceInvoices; track sale.saleId + ':' + sale.id) {
-                <div class="row"><div class="row-main"><strong>{{ sale.serviceName }}</strong><small>{{ sale.createdAt | date:'short' }}@if (data.permissions.serviceAmount) { · {{ sale.netTotalPaise | paiseInr }}}</small></div><span class="badge">{{ sale.status }}</span></div>
+                <div class="row"><div class="row-main"><strong>{{ sale.serviceName }}</strong><small>{{ sale.createdAt | date:'dd/MM/yyyy, h:mm a' }}@if (data.permissions.serviceAmount) { · {{ sale.netTotalPaise | paiseInr }}}</small></div><span class="badge">{{ sale.status }}</span></div>
               } @empty { <p class="empty">No sales entries visible.</p> }
             </div>
           </article>
@@ -178,6 +181,14 @@ export class StaffReportsPage implements OnInit {
   cap(value: number): number { return Math.max(0, Math.min(100, Number(value || 0))); }
 
   completionPercent(day: StaffBusiness["dailyBreakdown"][number]): number { return day.appointments ? this.cap(day.completedServices * 100 / day.appointments) : 0; }
+  sourceGaps(data: StaffBusiness): string[] {
+    return [
+      !data.services.length && "Active service catalogue — CRM Services",
+      !data.summary.appointments && "Assigned appointments — CRM Appointments",
+      !data.performance.dutyMinutes && "Published schedule or attendance — CRM Availability / Attendance",
+      data.permissions.serviceAmount && !data.performance.invoiceCount && "Completed service sales — CRM POS"
+    ].filter((value): value is string => !!value);
+  }
 
   async quickRange(daysBack: number) {
     this.historyMode = false;

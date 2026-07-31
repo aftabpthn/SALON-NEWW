@@ -14,7 +14,7 @@ test('staff profile photos reach authenticated appointment avatars', () => {
   assert.match(backend, /pub photo_url: String/);
   assert.match(backend, /FROM staff_profiles/);
   assert.match(appointments, /this\.api\.getBlob\(url\)/);
-  assert.match(appointments, /!knownIds\.has\(person\.id\) \|\| selected\.has\(person\.id\)/);
+  assert.match(appointments, /scheduledStaffSelection = Object\.fromEntries\(this\.staff\.map/);
   assert.match(template, /@if \(column\.photoUrl\)/);
   assert.match(staff, /Photo must be JPG or PNG/);
   assert.match(staffTemplate, /accept="image\/jpeg,image\/png"/);

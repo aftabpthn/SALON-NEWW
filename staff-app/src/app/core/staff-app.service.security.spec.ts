@@ -131,6 +131,17 @@ describe("StaffAppService security behavior", () => {
     expect(service.hasPermission("staff.app.business.read")).toBe(false);
   });
 
+  it("maps notifications.manage to Staff notification updates", async () => {
+    const manager = { ...user("manager"), role: "manager", permissions: ["notifications.manage"] };
+    const { service } = serviceWith((_method, url) => url.endsWith("/auth/login")
+      ? of({ ...loginSession("manager"), user: manager })
+      : of({}));
+
+    await service.login({ tenantId: "tenant-one", loginId: "manager.staff", password: "password" });
+
+    expect(service.hasPermission("staff.app.notifications.manage")).toBe(true);
+  });
+
   it("rejects protected management roles even when linked to a staff profile", async () => {
     const owner = { ...user("owner"), role: "Owner", permissions: ["staff.app.dashboard.read"] };
     const { service } = serviceWith((_method, url) => url.endsWith("/auth/login")
@@ -275,7 +286,7 @@ describe("StaffAppService security behavior", () => {
     }
   });
 
-  it("scopes queued entries to the current user, tenant, and session and clears them on account change", async () => {
+  it("scopes queued entries to the current user and tenant and clears them on account change", async () => {
     let activeSession = loginSession("one");
     const { service } = serviceWith((_method, url) => url.endsWith("/auth/login") ? of(activeSession) : of({}));
     await service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" });
@@ -286,8 +297,7 @@ describe("StaffAppService security behavior", () => {
 
     expect(isQueuedMutation(result)).toBe(true);
     expect(entry).toMatchObject({ userId: "one", tenantId: "tenant-one", method: "PATCH", state: "pending" });
-    expect(entry["sessionId"]).toEqual(expect.any(String));
-    expect(entry["sessionId"]).not.toBe("");
+    expect(entry).not.toHaveProperty("sessionId");
 
     setOnline(true);
     activeSession = loginSession("two");
@@ -296,6 +306,32 @@ describe("StaffAppService security behavior", () => {
     expect(service.user()?.id).toBe("two");
     expect(service.offlineQueueSize()).toBe(0);
     expect(localStorage.getItem("auraStaffOfflineQueue")).toBeNull();
+  });
+
+  it("flushes the same user's queued action after app reload and session refresh", async () => {
+    const first = serviceWith((_method, url) => url.endsWith("/auth/login") ? of(loginSession("one")) : of({}));
+    await first.service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" });
+    setOnline(false);
+    await first.service.completeTask("task-1", 3);
+    const legacyQueue = storedQueue();
+    if (!legacyQueue[0]) throw new Error("Expected queued action.");
+    legacyQueue[0]["sessionId"] = "stale-random-session";
+    localStorage.setItem("auraStaffOfflineQueue", JSON.stringify(legacyQueue));
+
+    const payload = btoa(JSON.stringify({ tenant_id: "tenant-one" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    const token = `header.${payload}.signature`;
+    setOnline(true);
+    const restored = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/refresh")) return of({ accessToken: token, user: user("one") });
+      if (method === "PATCH" && url.endsWith("/staff/self/tasks/task-1/status")) return of({ updated: true });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+
+    await expect(restored.service.restoreSession()).resolves.toBe(true);
+    await expect(restored.service.flushOfflineActions()).resolves.toBe(1);
+
+    expect(restored.http.calls.some((call) => call.method === "PATCH" && call.url.endsWith("/staff/self/tasks/task-1/status"))).toBe(true);
+    expect(restored.service.offlineQueueSize()).toBe(0);
   });
 
   it("returns a queued mutation result and reuses its idempotency key during flush", async () => {

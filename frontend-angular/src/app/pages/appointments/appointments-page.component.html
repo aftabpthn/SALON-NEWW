@@ -273,7 +273,7 @@
                             class="slot"
                             type="button"
                             [attr.aria-label]="'Open slot ' + time + ' for ' + column.title"
-                            (click)="openColumnSlot(columnIndex, time, $event)"
+                            (click)="openColumnSlot(columnIndex, time)"
                             (mouseenter)="showSlotTime(column, time, $event)"
                             (mousemove)="moveSlotTime($event)"
                             (mouseleave)="hideSlotTime()"
@@ -376,24 +376,6 @@
     </section>
   </section>
 
-  @if (slotAction) {
-    <div
-      class="slot-action-popover"
-      [style.left.px]="slotAction.left"
-      [style.top.px]="slotAction.top"
-      role="dialog"
-      aria-label="Slot actions"
-      >
-      <div class="slot-action-title">
-        <strong>{{ slotAction.time }}</strong>
-        <button class="slot-action-close" type="button" aria-label="Close slot actions" (click)="slotAction = null">&times;</button>
-      </div>
-      <button type="button" (click)="openSlotAction('booking')">New booking</button>
-      <button type="button" (click)="openSlotAction('block')">Block time</button>
-      <button type="button" (click)="openSlotAction('waitlist')">Add to waitlist</button>
-    </div>
-  }
-
   @if (scheduledStaffOpen) {
     <section class="scheduled-staff-popover" aria-label="Scheduled staff">
       <header>
@@ -442,7 +424,7 @@
         <footer>
           <button type="button" (click)="resetScheduledStaff()">Reset</button>
           <button type="button" (click)="closeScheduledStaff()">Cancel</button>
-          <button class="primary accent" type="button" (click)="saveScheduledStaff()">Save</button>
+          <button class="primary accent" type="button" (click)="saveScheduledStaff()">Apply</button>
         </footer>
       </section>
     }
@@ -713,6 +695,30 @@
               </select>
             </label>
           }
+          @if (activeCommand === 'waitlist') {
+            <div class="field-row">
+              <label>
+                Constraint
+                <select [(ngModel)]="commandConstraintType" name="commandConstraintType">
+                  <option value="none">None</option>
+                  <option value="capacity_full">Capacity full</option>
+                  <option value="resource_unavailable">Resource unavailable</option>
+                  <option value="equipment_maintenance">Equipment maintenance</option>
+                </select>
+              </label>
+              @if (commandConstraintType !== 'none') {
+                <label>
+                  Resource
+                  <select [(ngModel)]="commandConstraintResourceKind" name="commandConstraintResourceKind">
+                    <option value="">Not specified</option>
+                    <option value="chair">Chair</option>
+                    <option value="room">Room</option>
+                    <option value="workstation">Workstation</option>
+                  </select>
+                </label>
+              }
+            </div>
+          }
           @if (activeCommand === 'block') {
             <fieldset class="block-staff-picker">
               <legend>Staff</legend>
@@ -784,7 +790,7 @@
                 <article>
                   <div>
                     <strong>{{ activeCommand === 'waitlist' ? waitlistLabel($any(entry)) : blackoutLabel($any(entry)) }}</strong>
-                    <small>{{ $any(entry).reason || $any(entry).notes || 'No reason' }}</small>
+                    <small>{{ activeCommand === 'waitlist' ? (waitlistConstraintLabel($any(entry)) || $any(entry).notes || 'No reason') : ($any(entry).reason || 'No reason') }}</small>
                   </div>
                   <button type="button" (click)="activeCommand === 'waitlist' ? removeWaitlist(entry.id) : removeBlackout(entry.id)">Remove</button>
                 </article>
@@ -1090,7 +1096,7 @@
                           @for (recommendation of line.recommendations.slice(0, 3); track recommendation.staffId; let rank = $index) {
                             <button type="button" [class.selected]="line.staffId === recommendation.staffId" (click)="applyStaffRecommendation(line, recommendation)">
                               <span><b>{{ rank + 1 }}. {{ recommendation.staffName }}</b>@if (recommendation.preferredClient) { <em>Preferred client</em> }</span>
-                              <small>{{ recommendation.recommendationReason }}</small>
+                              <small><b>Why this staff?</b> {{ recommendation.recommendationReason }}</small>
                               @if (recommendationMeta(recommendation)) { <small>{{ recommendationMeta(recommendation) }}</small> }
                             </button>
                           }

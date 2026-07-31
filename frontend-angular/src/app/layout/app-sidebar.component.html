@@ -7,8 +7,8 @@
         [routerLinkActiveOptions]="{ exact: group.exact }"
         [class.menu-open]="openGroup === group.label"
         >
-        @if (group.label === 'Dashboard') {
-          <a class="rail-link" [routerLink]="group.route" [attr.aria-label]="'nav.' + group.label | translate" (click)="closeMenu()">
+        @if (group.links.length === 1) {
+          <a class="rail-link" [routerLink]="group.links[0].route" [attr.aria-label]="'nav.' + group.label | translate" (click)="closeMenu()">
             <i class="bi" [class]="'bi ' + group.icon" aria-hidden="true"></i>
             <span class="rail-label">{{ 'nav.' + group.label | translate }}</span>
           </a>
@@ -27,7 +27,7 @@
           </button>
         }
         <span class="rail-tooltip" aria-hidden="true">{{ 'nav.' + group.label | translate }}</span>
-        @if (group.label !== 'Dashboard') {
+        @if (group.links.length > 1) {
           <section
             class="flyout"
             [id]="'nav-menu-' + group.label.toLowerCase()"

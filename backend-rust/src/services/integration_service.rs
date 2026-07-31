@@ -1421,8 +1421,12 @@ fn random_connector_token(bytes: usize) -> String {
 fn connector_token_hash(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))
 }
-fn safe_connector_error(_error: &AppError) -> String {
-    "provider connection check failed".into()
+fn safe_connector_error(error: &AppError) -> String {
+    if error.code().starts_with("ZENOTI_") || error.code().starts_with("DINGG_") {
+        error.code().into()
+    } else {
+        "provider connection check failed".into()
+    }
 }
 
 fn validate_scopes(scopes: &[String]) -> Result<(), AppError> {

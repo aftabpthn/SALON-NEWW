@@ -86,6 +86,7 @@ export class AppSidebarComponent {
       { label: 'Purchase Orders', icon: 'bi-file-earmark-text', route: '/purchase-orders', exact: false },
       { label: 'Purchase Bill Entry', icon: 'bi-receipt-cutoff', route: '/purchase-bill-entry', exact: false },
       { label: 'Purchase Bill Register', icon: 'bi-journal-text', route: '/purchase-bill-register', exact: false },
+      { label: 'Old Purchase Bills', icon: 'bi-archive', route: '/purchase-bills/history', exact: false },
       { label: 'AI Bill Drafts', icon: 'bi-file-earmark-check', route: '/purchase-bill-drafts', exact: false },
       { label: 'Advanced Controls', icon: 'bi-shield-check', route: '/inventory/advanced-controls', exact: false },
       { label: 'GL Reconciliation', icon: 'bi-journal-check', route: '/inventory/gl-reconciliation', exact: false },

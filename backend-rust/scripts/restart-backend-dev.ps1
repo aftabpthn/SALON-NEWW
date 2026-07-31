@@ -8,6 +8,21 @@ $backendRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $sourceExe = Join-Path $backendRoot 'target\debug\aura-shine-backend.exe'
 $runtimeDir = Join-Path $backendRoot '.codex-runtime\backend-dev'
 $runtimeExe = Join-Path $runtimeDir 'aura-shine-backend.exe'
+$localEnv = Join-Path $backendRoot '.env'
+
+# Local dev must use the same AI credentials as the companion AI container.
+# Explicitly load these values because inherited shell variables otherwise win over dotenv.
+if (Test-Path -LiteralPath $localEnv) {
+    foreach ($name in @('AI_SERVICE_URL', 'AI_SERVICE_TOKEN')) {
+        $line = Get-Content -LiteralPath $localEnv | Where-Object { $_ -match "^$name=" } | Select-Object -First 1
+        if ($line) {
+            $value = $line.Substring($line.IndexOf('=') + 1).Trim().Trim('"').Trim("'")
+            if ($name -ne 'AI_SERVICE_TOKEN' -or $value.Length -ge 32) {
+                Set-Item -LiteralPath "Env:$name" -Value $value
+            }
+        }
+    }
+}
 
 function Get-BackendListeners {
     $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue

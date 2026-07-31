@@ -607,6 +607,40 @@ pub async fn transition_action(
     }
 }
 
+pub async fn rollback_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_id: &str,
+    actor_user_id: &str,
+    note: Option<String>,
+) -> Result<ProfitAction, AppError> {
+    let note = note.unwrap_or_default();
+    if note.trim().is_empty() || note.len() > 500 {
+        return Err(AppError::validation(
+            "rollback note must be 1 to 500 characters",
+        ));
+    }
+    match profit_governance_repository::rollback_action(
+        db,
+        tenant_id,
+        branch_id,
+        action_id,
+        actor_user_id,
+        note.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to roll back profit action"))?
+    {
+        ActionTransitionOutcome::NotFound => Err(AppError::not_found("profit action not found")),
+        ActionTransitionOutcome::InvalidStatus => Err(AppError::conflict(
+            "only approved, completed, or dismissed actions can be rolled back",
+        )),
+        ActionTransitionOutcome::SelfApproval => unreachable!("rollback has no self-approval path"),
+        ActionTransitionOutcome::Updated(action) => Ok(action),
+    }
+}
+
 struct ProfitActionCandidate {
     action_type: String,
     title: String,

@@ -1,10 +1,11 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use aes_gcm::{
@@ -18,7 +19,11 @@ use rand_core::{OsRng, RngCore};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use tokio::io::{AsyncRead, AsyncWriteExt, ReadBuf};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, ReadBuf},
+    net::TcpStream,
+    time::timeout,
+};
 use uuid::Uuid;
 use zip::ZipArchive;
 
@@ -28,12 +33,16 @@ use crate::{
         migration::{MigrationEntity, MigrationProvider},
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
-            CreateMigrationUploadRequest, MigrationSourceArtifact, MigrationSourceColumnProfile,
-            MigrationSourceFile, MigrationSourceProfile, MigrationSourceSheet,
-            MigrationUploadPartReceipt, MigrationUploadSession,
+            CreateMigrationUploadRequest, HistoricalEvidenceGroupDecisionRequest,
+            MigrationSourceArtifact, MigrationSourceColumnProfile, MigrationSourceFile,
+            MigrationSourceProfile, MigrationSourceSheet, MigrationUploadPartReceipt,
+            MigrationUploadSession,
         },
     },
-    repositories::migration_file_repository::{self, NewSourceArtifact, NewSourceFile},
+    repositories::{
+        migration_file_repository::{self, NewSourceArtifact, NewSourceFile},
+        migration_repository,
+    },
     services::migration_adapter_service,
 };
 
@@ -59,6 +68,7 @@ struct PreparedArtifact {
     size_bytes: i64,
     sha256: String,
     storage_key: String,
+    page_count: i32,
 }
 
 struct PreparedEvidence {
@@ -68,6 +78,7 @@ struct PreparedEvidence {
     detected_content_type: String,
     manifest: Value,
     artifacts: Vec<PreparedArtifact>,
+    page_count: i32,
 }
 
 pub struct EvidenceDownload {
@@ -76,6 +87,13 @@ pub struct EvidenceDownload {
     pub content_type: String,
     pub sha256: String,
     pub size_bytes: i64,
+}
+
+pub struct EvidenceDocument {
+    pub file_name: String,
+    pub content_type: String,
+    pub sha256: String,
+    pub bytes: Vec<u8>,
 }
 
 pub struct TemporaryEvidenceFile {
@@ -155,6 +173,56 @@ pub async fn create_upload(
     let content_type = normalize_content_type(request.content_type.as_deref());
     validate_declared_content_type(&extension, &content_type)?;
     let expected_sha256 = normalize_sha256(request.expected_sha256.as_deref())?;
+    let evidence_kind = request.evidence_kind.unwrap_or_default().trim().to_string();
+    let supplier_batch = request
+        .supplier_batch
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let cutover_id = request.cutover_id.unwrap_or_default().trim().to_string();
+    if !matches!(
+        evidence_kind.as_str(),
+        "" | "historical_bill" | "physical_inventory" | "supplier_outstanding"
+    ) || (evidence_kind == "historical_bill") != !supplier_batch.is_empty()
+    {
+        return Err(AppError::validation(
+            "historical bill evidence requires a supplier batch",
+        ));
+    }
+    if !evidence_kind.is_empty() {
+        if cutover_id.is_empty() {
+            return Err(AppError::validation("Phase 1 evidence requires cutoverId"));
+        }
+        if !migration_file_repository::evidence_cutover_exists(
+            db,
+            tenant_id,
+            branch_id,
+            &cutover_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate migration cutover"))?
+        {
+            return Err(AppError::validation(
+                "the Phase 1 cutover was not found for this branch",
+            ));
+        }
+        if !expected_sha256.is_empty() {
+            if let Some((_, file_name)) =
+                migration_file_repository::find_historical_evidence_duplicate(
+                    db,
+                    tenant_id,
+                    branch_id,
+                    &expected_sha256,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to check evidence duplicate"))?
+            {
+                return Err(AppError::conflict(format!(
+                    "duplicate evidence already exists: {file_name}"
+                )));
+            }
+        }
+    }
     let row = migration_file_repository::create_session(
         db,
         tenant_id,
@@ -168,6 +236,9 @@ pub async fn create_upload(
         &expected_sha256,
         request.provider.as_str(),
         request.retention_days,
+        &evidence_kind,
+        &supplier_batch,
+        &cutover_id,
     )
     .await
     .map_err(|_| AppError::internal("failed to create migration upload session"))?;
@@ -324,7 +395,7 @@ pub async fn complete_upload(
     })
     .await
     .map_err(|_| AppError::internal("migration evidence worker stopped"))?;
-    let prepared = match prepared {
+    let mut prepared = match prepared {
         Ok(value) => value,
         Err(message) => {
             let _ = migration_file_repository::release_completion(
@@ -334,18 +405,47 @@ pub async fn complete_upload(
             return Err(AppError::validation(message));
         }
     };
+    let malware_scan = match scan_prepared_evidence(
+        &prepared,
+        tenant_id,
+        branch_id,
+        &session.file_extension,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            cleanup_prepared(&prepared);
+            let _ = migration_file_repository::release_completion(
+                db,
+                tenant_id,
+                branch_id,
+                id,
+                "migration source malware scan did not pass",
+            )
+            .await;
+            return Err(error);
+        }
+    };
+    prepared.manifest["malwareScan"] = malware_scan;
+    let file_format = if session.file_extension == "jpg" {
+        "jpeg"
+    } else {
+        &session.file_extension
+    };
     let source = NewSourceFile {
         id: &prepared.source_id,
         original_file_name: &session.original_file_name,
         file_extension: &session.file_extension,
         declared_content_type: &session.declared_content_type,
         detected_content_type: &prepared.detected_content_type,
-        file_format: &session.file_extension,
+        file_format,
         size_bytes: session.expected_size_bytes,
         sha256: &prepared.sha256,
         storage_key: &prepared.storage_key,
         encryption_scheme: EVIDENCE_ENCRYPTION_SCHEME,
         manifest_json: &prepared.manifest,
+        page_count: prepared.page_count,
     };
     let artifacts = prepared
         .artifacts
@@ -358,13 +458,13 @@ pub async fn complete_upload(
             size_bytes: item.size_bytes,
             sha256: &item.sha256,
             storage_key: &item.storage_key,
+            page_count: item.page_count,
         })
         .collect::<Vec<_>>();
-    if migration_file_repository::complete_session(
+    if let Err(error) = migration_file_repository::complete_session(
         db, tenant_id, branch_id, actor, id, &source, &artifacts,
     )
     .await
-    .is_err()
     {
         cleanup_prepared(&prepared);
         let _ = migration_file_repository::release_completion(
@@ -372,12 +472,26 @@ pub async fn complete_upload(
             tenant_id,
             branch_id,
             id,
-            "failed to persist source evidence",
+            if error
+                .to_string()
+                .contains("HISTORICAL_PURCHASE_EVIDENCE_DUPLICATE")
+            {
+                "duplicate historical purchase evidence"
+            } else {
+                "failed to persist source evidence"
+            },
         )
         .await;
-        return Err(AppError::internal(
-            "failed to persist migration source evidence",
-        ));
+        return Err(
+            if error
+                .to_string()
+                .contains("HISTORICAL_PURCHASE_EVIDENCE_DUPLICATE")
+            {
+                AppError::conflict("duplicate historical purchase evidence is blocked")
+            } else {
+                AppError::internal("failed to persist migration source evidence")
+            },
+        );
     }
     remove_session_parts(tenant_id, branch_id, id).await;
     Ok(CompleteMigrationUploadResponse {
@@ -411,6 +525,261 @@ pub async fn list_source_files(
             source_model(row, row_artifacts)
         })
         .collect())
+}
+
+pub async fn historical_evidence_report(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    cutover_id: &str,
+) -> Result<Value, AppError> {
+    let cutover_id = cutover_id.trim();
+    if cutover_id.is_empty() {
+        return Err(AppError::validation("cutoverId is required"));
+    }
+    let cutover = migration_repository::get_cutover(db, tenant_id, branch_id, Some(cutover_id))
+        .await
+        .map_err(|_| AppError::internal("failed to load Phase 1 cutover"))?
+        .ok_or_else(|| AppError::not_found("Phase 1 cutover was not found"))?;
+    let sources = migration_file_repository::list_historical_evidence_sources(
+        db, tenant_id, branch_id, cutover_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load historical purchase evidence"))?;
+    let failures = migration_file_repository::list_historical_evidence_failures(
+        db, tenant_id, branch_id, cutover_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load evidence failures"))?;
+    let decisions = migration_file_repository::list_historical_evidence_group_decisions(
+        db, tenant_id, branch_id, cutover_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load grouping decisions"))?;
+    let cutover_approval = migration_file_repository::historical_evidence_cutover_approval(
+        db, tenant_id, branch_id, cutover_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load cutover approval"))?;
+    let decision_map = decisions
+        .into_iter()
+        .map(|item| ((item.supplier_batch.clone(), item.group_key.clone()), item))
+        .collect::<HashMap<_, _>>();
+
+    #[derive(Default)]
+    struct Group {
+        pages: i32,
+        files: HashSet<String>,
+        signals: HashSet<&'static str>,
+        confidence: i32,
+    }
+    let mut groups = BTreeMap::<(String, String), Group>::new();
+    let mut files = Vec::new();
+    let mut total_pages = 0_i32;
+    let mut historical_files = 0_usize;
+    let mut physical_inventory_ready = false;
+    let mut supplier_outstanding_ready = false;
+    let mut unidentified = HashSet::new();
+    for source in sources {
+        total_pages += source.page_count;
+        match source.evidence_kind.as_str() {
+            "historical_bill" => {
+                historical_files += 1;
+                if source
+                    .supplier_batch
+                    .eq_ignore_ascii_case("Unidentified-Supplier")
+                {
+                    unidentified.insert(source.supplier_batch.clone());
+                }
+                let artifacts = source
+                    .artifacts_json
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                if artifacts.is_empty() {
+                    let (group_key, confidence, signal) =
+                        suggested_group(&source.original_file_name, source.file_format == "pdf");
+                    let group = groups
+                        .entry((source.supplier_batch.clone(), group_key))
+                        .or_default();
+                    group.pages += source.page_count;
+                    group.files.insert(source.source_file_id.clone());
+                    group.confidence = group.confidence.max(confidence);
+                    group.signals.insert(signal);
+                } else {
+                    for artifact in &artifacts {
+                        let entry = artifact
+                            .get("entryName")
+                            .and_then(Value::as_str)
+                            .unwrap_or("");
+                        let format = artifact.get("format").and_then(Value::as_str).unwrap_or("");
+                        let pages = artifact
+                            .get("pageCount")
+                            .and_then(Value::as_i64)
+                            .unwrap_or(0) as i32;
+                        let (group_key, confidence, signal) =
+                            suggested_group(entry, format == "pdf");
+                        let group = groups
+                            .entry((source.supplier_batch.clone(), group_key))
+                            .or_default();
+                        group.pages += pages;
+                        group.files.insert(source.source_file_id.clone());
+                        group.confidence = group.confidence.max(confidence);
+                        group.signals.insert(signal);
+                    }
+                }
+            }
+            "physical_inventory" => physical_inventory_ready = true,
+            "supplier_outstanding" => supplier_outstanding_ready = true,
+            _ => {}
+        }
+        files.push(json!({"id":source.id,"sourceFileId":source.source_file_id,"kind":source.evidence_kind,"supplierBatch":source.supplier_batch,"originalFileName":source.original_file_name,"format":source.file_format,"sizeBytes":source.size_bytes,"sha256":source.sha256,"pageCount":source.page_count,"uploadedBy":source.uploaded_by,"createdAt":source.created_at,"artifacts":source.artifacts_json}));
+    }
+    let group_rows = groups.into_iter().map(|((supplier_batch, group_key), group)| {
+        let decision = decision_map.get(&(supplier_batch.clone(), group_key.clone()));
+        json!({"supplierBatch":supplier_batch,"groupKey":group_key,"detectedPageCount":group.pages,"approvedPageCount":decision.map(|item| item.approved_page_count),"status":decision.map(|item| item.decision.as_str()).unwrap_or("suggested"),"confidencePercentage":group.confidence / 100,"signals":group.signals.into_iter().collect::<Vec<_>>(),"sourceFileCount":group.files.len(),"decidedBy":decision.map(|item| item.actor_user_id.as_str()),"decidedAt":decision.map(|item| item.created_at)})
+    }).collect::<Vec<_>>();
+    let grouping_approved = group_rows
+        .iter()
+        .filter(|group| group["detectedPageCount"].as_i64().unwrap_or(0) > 1)
+        .all(|group| group["status"] == "approved");
+    let failure_rows = failures.into_iter().map(|row| {
+        let error = row.last_error.to_ascii_lowercase();
+        let classification = if error.contains("duplicate") { "duplicate" } else if error.contains("password") || error.contains("encrypt") { "password_protected" } else if error.contains("corrupt") || error.contains("truncated") || error.contains("invalid") { "corrupt" } else { "failed" };
+        json!({"uploadSessionId":row.id,"fileName":row.original_file_name,"supplierBatch":row.supplier_batch,"kind":row.evidence_kind,"status":classification,"message":row.last_error,"updatedAt":row.updated_at})
+    }).collect::<Vec<_>>();
+    let unresolved_failures = failure_rows
+        .iter()
+        .filter(|row| row["status"] != "duplicate")
+        .count();
+    let cutover_approved = cutover_approval.is_some();
+    let complete = historical_files > 0
+        && unresolved_failures == 0
+        && grouping_approved
+        && cutover_approved
+        && physical_inventory_ready
+        && supplier_outstanding_ready;
+    let total_files = files.len();
+    Ok(json!({
+        "cutover": cutover,
+        "cutoverApproval": cutover_approval.map(|item| json!({"approvedBy":item.actor_user_id,"approvedRole":item.actor_role,"approvedAt":item.created_at})),
+        "files": files,
+        "failures": failure_rows,
+        "groups": group_rows,
+        "summary": {"totalFiles":total_files,"totalPages":total_pages,"historicalBillFiles":historical_files,"unidentifiedSupplierBatches":unidentified.into_iter().collect::<Vec<_>>(),"physicalInventoryReady":physical_inventory_ready,"supplierOutstandingReady":supplier_outstanding_ready,"groupingApproved":grouping_approved,"cutoverApproved":cutover_approved,"checksumVerified":unresolved_failures==0,"historicalStockEffect":0,"historicalAccountingEffect":0,"historicalGstEffect":0,"liveCrmWrites":0,"complete":complete}
+    }))
+}
+
+pub async fn decide_historical_evidence_group(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    request: HistoricalEvidenceGroupDecisionRequest,
+) -> Result<Value, AppError> {
+    let decision = request.decision.trim().to_ascii_lowercase();
+    if !matches!(decision.as_str(), "approved" | "rejected")
+        || request.approved_page_count <= 0
+        || request.supplier_batch.trim().is_empty()
+        || request.group_key.trim().is_empty()
+    {
+        return Err(AppError::validation(
+            "group decision, supplier batch, group key and positive page count are required",
+        ));
+    }
+    let report =
+        historical_evidence_report(db, tenant_id, branch_id, request.cutover_id.trim()).await?;
+    let exists = report["groups"].as_array().is_some_and(|groups| {
+        groups.iter().any(|group| {
+            group["supplierBatch"] == request.supplier_batch.trim()
+                && group["groupKey"] == request.group_key.trim()
+        })
+    });
+    if !exists {
+        return Err(AppError::not_found(
+            "document grouping suggestion was not found",
+        ));
+    }
+    migration_file_repository::decide_historical_evidence_group(
+        db,
+        tenant_id,
+        branch_id,
+        actor,
+        request.cutover_id.trim(),
+        request.supplier_batch.trim(),
+        request.group_key.trim(),
+        &decision,
+        request.approved_page_count,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save grouping decision"))?;
+    historical_evidence_report(db, tenant_id, branch_id, request.cutover_id.trim()).await
+}
+
+pub async fn approve_historical_evidence_cutover(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    role: &str,
+    cutover_id: &str,
+) -> Result<Value, AppError> {
+    let cutover_id = cutover_id.trim();
+    if !migration_file_repository::evidence_cutover_exists(db, tenant_id, branch_id, cutover_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate migration cutover"))?
+    {
+        return Err(AppError::not_found("Phase 1 cutover was not found"));
+    }
+    if migration_file_repository::historical_evidence_cutover_approval(
+        db, tenant_id, branch_id, cutover_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load cutover approval"))?
+    .is_none()
+    {
+        migration_file_repository::approve_historical_evidence_cutover(
+            db, tenant_id, branch_id, actor, role, cutover_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to approve Phase 1 cutover"))?;
+    }
+    historical_evidence_report(db, tenant_id, branch_id, cutover_id).await
+}
+
+fn suggested_group(name: &str, intrinsic_document: bool) -> (String, i32, &'static str) {
+    let normalized = name.replace('\\', "/");
+    let path = Path::new(&normalized);
+    if let Some(parent) = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+    {
+        return (parent.to_string(), 9500, "zip_folder");
+    }
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("document");
+    if intrinsic_document {
+        return (stem.to_string(), 10000, "single_pdf");
+    }
+    let lower = stem.to_ascii_lowercase();
+    for marker in ["-page-", "_page_", " page ", "-p", "_p"] {
+        if let Some(index) = lower.rfind(marker).filter(|index| {
+            lower[index + marker.len()..]
+                .bytes()
+                .all(|byte| byte.is_ascii_digit())
+        }) {
+            return (
+                stem[..index].trim_matches(['-', '_', ' ']).to_string(),
+                8000,
+                "page_sequence",
+            );
+        }
+    }
+    (stem.to_string(), 6000, "filename")
 }
 
 pub async fn get_source_file(
@@ -503,6 +872,107 @@ pub async fn open_evidence(
         content_type: row.detected_content_type,
         sha256: row.sha256,
         size_bytes: row.size_bytes,
+    })
+}
+
+pub async fn read_evidence_document(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    source_id: &str,
+    artifact_id: Option<&str>,
+) -> Result<EvidenceDocument, AppError> {
+    let source = migration_file_repository::get_source_file(db, tenant_id, branch_id, source_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load migration evidence document"))?
+        .ok_or_else(|| AppError::not_found("migration evidence document was not found"))?;
+    if source.evidence_status != "verified" || !source.read_only {
+        return Err(AppError::conflict(
+            "migration evidence document is unavailable",
+        ));
+    }
+    if source.retention_until <= Utc::now() {
+        purge_expired_evidence(db, &source).await?;
+        return Err(AppError::conflict(
+            "migration evidence retention period has expired",
+        ));
+    }
+
+    let selected = if let Some(id) = artifact_id.filter(|value| !value.trim().is_empty()) {
+        let artifact =
+            migration_file_repository::list_artifacts(db, tenant_id, branch_id, source_id)
+                .await
+                .map_err(|_| AppError::internal("failed to load migration evidence artifacts"))?
+                .into_iter()
+                .find(|artifact| artifact.id == id)
+                .ok_or_else(|| AppError::not_found("migration evidence artifact was not found"))?;
+        (
+            artifact.entry_name,
+            artifact.detected_content_type,
+            artifact.file_format,
+            artifact.storage_key,
+            artifact.sha256,
+            artifact.size_bytes,
+        )
+    } else {
+        if source.file_format == "zip" {
+            return Err(AppError::validation(
+                "select a verified document inside the ZIP evidence",
+            ));
+        }
+        (
+            source.original_file_name.clone(),
+            source.detected_content_type.clone(),
+            source.file_format.clone(),
+            source.storage_key.clone(),
+            source.sha256.clone(),
+            source.size_bytes,
+        )
+    };
+    if selected.5 > 50 * 1024 * 1024 {
+        return Err(AppError::validation(
+            "evidence document exceeds the 50 MB review limit",
+        ));
+    }
+
+    let encrypted_path = storage_path(&selected.3, true)?;
+    let scheme = source.encryption_scheme.clone();
+    let tenant = tenant_id.to_string();
+    let branch = branch_id.to_string();
+    let format = selected.2.clone();
+    let expected_hash = selected.4.clone();
+    let materialized = tokio::task::spawn_blocking(move || {
+        materialize_verified_source(
+            &encrypted_path,
+            &scheme,
+            &tenant,
+            &branch,
+            &format,
+            &expected_hash,
+        )
+    })
+    .await
+    .map_err(|_| AppError::internal("migration evidence reader stopped"))??;
+    let read_result = tokio::fs::read(&materialized.path).await;
+    if materialized.cleanup_on_drop {
+        let _ = fs::remove_file(&materialized.path);
+    }
+    let bytes =
+        read_result.map_err(|_| AppError::not_found("migration evidence file is unavailable"))?;
+    if bytes.len() as i64 != selected.5 {
+        return Err(AppError::conflict(
+            "migration evidence size verification failed",
+        ));
+    }
+    migration_file_repository::audit_evidence_read(db, tenant_id, branch_id, actor, source_id)
+        .await
+        .map_err(|_| AppError::internal("failed to audit migration evidence access"))?;
+    Ok(EvidenceDocument {
+        file_name: selected.0,
+        content_type: selected.1,
+        sha256: selected.4,
+        bytes,
     })
 }
 
@@ -794,7 +1264,7 @@ fn source_profile_blocking(
                     });
                 }
             }
-            _ => return Err(AppError::validation("unsupported migration source format")),
+            _ => continue,
         }
     }
     if sheets.is_empty() {
@@ -1030,7 +1500,7 @@ fn round_percentage(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
 
-fn normalize_profile_header(value: &str) -> String {
+pub(crate) fn normalize_profile_header(value: &str) -> String {
     let mut normalized = String::new();
     for character in value.trim().chars() {
         if character.is_ascii_alphanumeric() {
@@ -1319,7 +1789,7 @@ fn source_columns_blocking(sources: &[WorkerSource]) -> Result<Vec<String>, AppE
                     .collect::<Vec<_>>()
             }
             "xlsx" => xlsx_source_columns(source)?,
-            _ => return Err(AppError::validation("unsupported migration source format")),
+            _ => continue,
         };
         let mut source_seen = HashSet::new();
         for header in headers {
@@ -1427,6 +1897,9 @@ fn session_model(
         updated_at: row.updated_at,
         completed_at: row.completed_at,
         retention_days: row.retention_days,
+        evidence_kind: row.evidence_kind,
+        supplier_batch: row.supplier_batch,
+        cutover_id: row.cutover_id,
     }
 }
 
@@ -1456,6 +1929,7 @@ fn source_model(
         retention_until: row.retention_until,
         purged_at: row.purged_at,
         manifest: row.manifest_json,
+        page_count: row.page_count,
         artifacts: artifacts
             .into_iter()
             .map(|item| MigrationSourceArtifact {
@@ -1465,6 +1939,7 @@ fn source_model(
                 detected_content_type: item.detected_content_type,
                 size_bytes: item.size_bytes,
                 sha256: item.sha256,
+                page_count: item.page_count,
             })
             .collect(),
         created_at: row.created_at,
@@ -1489,9 +1964,12 @@ fn validate_file_name(value: &str) -> Result<(String, String), AppError> {
         .and_then(|value| value.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !matches!(extension.as_str(), "csv" | "xlsx" | "zip") {
+    if !matches!(
+        extension.as_str(),
+        "csv" | "xlsx" | "zip" | "pdf" | "png" | "jpg" | "jpeg" | "webp"
+    ) {
         return Err(AppError::validation(
-            "only CSV, XLSX and ZIP files are supported",
+            "only CSV, XLSX, ZIP, PDF, PNG, JPEG and WebP files are supported",
         ));
     }
     let stem = Path::new(name)
@@ -1556,6 +2034,10 @@ fn validate_declared_content_type(extension: &str, content_type: &str) -> Result
             content_type,
             "application/zip" | "application/x-zip-compressed" | "application/octet-stream"
         ),
+        "pdf" => matches!(content_type, "application/pdf" | "application/octet-stream"),
+        "png" => matches!(content_type, "image/png" | "application/octet-stream"),
+        "jpg" | "jpeg" => matches!(content_type, "image/jpeg" | "application/octet-stream"),
+        "webp" => matches!(content_type, "image/webp" | "application/octet-stream"),
         _ => false,
     };
     if valid {
@@ -1761,7 +2243,7 @@ fn prepare_evidence(
         if !expected_sha256.is_empty() && sha256 != expected_sha256 {
             return Err("source file SHA-256 does not match the upload manifest".into());
         }
-        let (detected_content_type, mut manifest, mut artifacts) = inspect_source(
+        let (detected_content_type, mut manifest, mut artifacts, page_count) = inspect_source(
             &temp_path,
             &session.file_extension,
             &artifact_dir,
@@ -1798,6 +2280,7 @@ fn prepare_evidence(
             detected_content_type,
             manifest,
             artifacts,
+            page_count,
         })
     })();
     if result.is_err() {
@@ -1813,7 +2296,7 @@ fn inspect_source(
     extension: &str,
     artifact_dir: &Path,
     artifact_key: &str,
-) -> Result<(String, Value, Vec<PreparedArtifact>), String> {
+) -> Result<(String, Value, Vec<PreparedArtifact>, i32), String> {
     if extension == "zip" {
         validate_zip_magic(path)?;
     }
@@ -1824,6 +2307,7 @@ fn inspect_source(
                 "text/csv".into(),
                 json!({"format":"csv","zipEntryCount":0,"extractedBytes":0}),
                 Vec::new(),
+                0,
             ))
         }
         "xlsx" => {
@@ -1832,15 +2316,54 @@ fn inspect_source(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into(),
                 json!({"format":"xlsx","workbookEntries":summary.0,"workbookUncompressedBytes":summary.1}),
                 Vec::new(),
+                0,
             ))
         }
         "zip" => {
             let artifacts = extract_zip(path, artifact_dir, artifact_key)?;
             let extracted_bytes: i64 = artifacts.iter().map(|item| item.size_bytes).sum();
+            let page_count = artifacts.iter().map(|item| item.page_count).sum();
             Ok((
                 "application/zip".into(),
-                json!({"format":"zip","zipEntryCount":artifacts.len(),"extractedBytes":extracted_bytes,"limits":{"maxEntries":MAX_ZIP_ENTRIES,"maxEntryBytes":MAX_ZIP_ENTRY_BYTES,"maxTotalBytes":MAX_ZIP_TOTAL_BYTES,"maxCompressionRatio":MAX_COMPRESSION_RATIO}}),
+                json!({"format":"zip","zipEntryCount":artifacts.len(),"extractedBytes":extracted_bytes,"pageCount":page_count,"limits":{"maxEntries":MAX_ZIP_ENTRIES,"maxEntryBytes":MAX_ZIP_ENTRY_BYTES,"maxTotalBytes":MAX_ZIP_TOTAL_BYTES,"maxCompressionRatio":MAX_COMPRESSION_RATIO}}),
                 artifacts,
+                page_count,
+            ))
+        }
+        "pdf" => {
+            let page_count = validate_pdf(path)?;
+            Ok((
+                "application/pdf".into(),
+                json!({"format":"pdf","pageCount":page_count}),
+                Vec::new(),
+                page_count,
+            ))
+        }
+        "png" => {
+            validate_png(path)?;
+            Ok((
+                "image/png".into(),
+                json!({"format":"png","pageCount":1}),
+                Vec::new(),
+                1,
+            ))
+        }
+        "jpg" | "jpeg" => {
+            validate_jpeg(path)?;
+            Ok((
+                "image/jpeg".into(),
+                json!({"format":"jpeg","pageCount":1}),
+                Vec::new(),
+                1,
+            ))
+        }
+        "webp" => {
+            validate_webp(path)?;
+            Ok((
+                "image/webp".into(),
+                json!({"format":"webp","pageCount":1}),
+                Vec::new(),
+                1,
             ))
         }
         _ => Err("unsupported migration source format".into()),
@@ -2019,6 +2542,12 @@ fn extract_zip(
         let mut entry = archive
             .by_index(index)
             .map_err(|_| "ZIP entry could not be read")?;
+        if entry.encrypted() {
+            return Err(format!(
+                "password-protected ZIP entry is not supported: {}",
+                entry.name()
+            ));
+        }
         if entry.is_dir() {
             continue;
         }
@@ -2040,7 +2569,10 @@ fn extract_zip(
             .and_then(|value| value.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
-        if !matches!(extension.as_str(), "csv" | "xlsx") {
+        if !matches!(
+            extension.as_str(),
+            "csv" | "xlsx" | "pdf" | "png" | "jpg" | "jpeg" | "webp"
+        ) {
             return Err(format!("unsupported ZIP entry: {entry_name}"));
         }
         let declared_size = entry.size();
@@ -2073,15 +2605,33 @@ fn extract_zip(
         if copied != declared_size {
             return Err("ZIP entry size does not match its manifest".into());
         }
-        let (content_type, format) = if extension == "csv" {
-            validate_csv(&output_path)?;
-            ("text/csv", "csv")
-        } else {
-            validate_xlsx(&output_path)?;
-            (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "xlsx",
-            )
+        let (content_type, format, page_count) = match extension.as_str() {
+            "csv" => {
+                validate_csv(&output_path)?;
+                ("text/csv", "csv", 0)
+            }
+            "xlsx" => {
+                validate_xlsx(&output_path)?;
+                (
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "xlsx",
+                    0,
+                )
+            }
+            "pdf" => ("application/pdf", "pdf", validate_pdf(&output_path)?),
+            "png" => {
+                validate_png(&output_path)?;
+                ("image/png", "png", 1)
+            }
+            "jpg" | "jpeg" => {
+                validate_jpeg(&output_path)?;
+                ("image/jpeg", "jpeg", 1)
+            }
+            "webp" => {
+                validate_webp(&output_path)?;
+                ("image/webp", "webp", 1)
+            }
+            _ => return Err(format!("ZIP attachment MIME does not match: {entry_name}")),
         };
         let sha256 = hash_file(&output_path)?;
         artifacts.push(PreparedArtifact {
@@ -2092,12 +2642,247 @@ fn extract_zip(
             size_bytes: copied as i64,
             sha256,
             storage_key: format!("{artifact_key}/{id}.{extension}"),
+            page_count,
         });
     }
     if artifacts.is_empty() {
-        return Err("ZIP archive contains no CSV or XLSX source files".into());
+        return Err("ZIP archive contains no supported evidence files".into());
     }
     Ok(artifacts)
+}
+
+async fn scan_prepared_evidence(
+    prepared: &PreparedEvidence,
+    tenant_id: &str,
+    branch_id: &str,
+    extension: &str,
+) -> Result<Value, AppError> {
+    scan_stored_evidence(
+        &prepared.storage_key,
+        &prepared.sha256,
+        extension,
+        tenant_id,
+        branch_id,
+    )
+    .await?;
+    for artifact in &prepared.artifacts {
+        scan_stored_evidence(
+            &artifact.storage_key,
+            &artifact.sha256,
+            &artifact.format,
+            tenant_id,
+            branch_id,
+        )
+        .await?;
+    }
+    Ok(json!({
+        "engine": "clamd",
+        "status": "clean",
+        "scannedObjects": prepared.artifacts.len() + 1,
+        "scannedAt": Utc::now()
+    }))
+}
+
+async fn scan_stored_evidence(
+    storage_key: &str,
+    expected_hash: &str,
+    extension: &str,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<(), AppError> {
+    let encrypted_path = storage_path(storage_key, true)?;
+    let tenant = tenant_id.to_string();
+    let branch = branch_id.to_string();
+    let extension = extension.to_string();
+    let expected_hash = expected_hash.to_string();
+    let materialized = tokio::task::spawn_blocking(move || {
+        materialize_verified_source(
+            &encrypted_path,
+            EVIDENCE_ENCRYPTION_SCHEME,
+            &tenant,
+            &branch,
+            &extension,
+            &expected_hash,
+        )
+    })
+    .await
+    .map_err(|_| AppError::internal("migration malware scan worker stopped"))??;
+    let result = scan_file_with_clamd(&materialized.path).await;
+    if materialized.cleanup_on_drop {
+        let _ = tokio::fs::remove_file(&materialized.path).await;
+    }
+    result
+}
+
+async fn scan_file_with_clamd(path: &Path) -> Result<(), AppError> {
+    let address = std::env::var("MIGRATION_CLAMD_ADDRESS")
+        .map_err(|_| AppError::internal("migration malware scanner is not configured"))?;
+    let mut stream = timeout(Duration::from_secs(10), TcpStream::connect(address.trim()))
+        .await
+        .map_err(|_| AppError::internal("migration malware scanner connection timed out"))?
+        .map_err(|_| AppError::internal("migration malware scanner is unavailable"))?;
+    stream
+        .write_all(b"zINSTREAM\0")
+        .await
+        .map_err(|_| AppError::internal("migration malware scan could not start"))?;
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|_| AppError::internal("migration source could not be scanned"))?;
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(|_| AppError::internal("migration source could not be scanned"))?;
+        if read == 0 {
+            break;
+        }
+        stream
+            .write_all(&(read as u32).to_be_bytes())
+            .await
+            .map_err(|_| AppError::internal("migration malware scanner disconnected"))?;
+        stream
+            .write_all(&buffer[..read])
+            .await
+            .map_err(|_| AppError::internal("migration malware scanner disconnected"))?;
+    }
+    stream
+        .write_all(&0_u32.to_be_bytes())
+        .await
+        .map_err(|_| AppError::internal("migration malware scan could not finish"))?;
+    let mut response = Vec::new();
+    let mut reader = BufReader::new(stream.take(4096));
+    timeout(
+        Duration::from_secs(120),
+        reader.read_until(0, &mut response),
+    )
+    .await
+    .map_err(|_| AppError::internal("migration malware scan timed out"))?
+    .map_err(|_| AppError::internal("migration malware scan result is unavailable"))?;
+    if !response.ends_with(&[0]) {
+        return Err(AppError::internal(
+            "migration malware scanner returned an incomplete result",
+        ));
+    }
+    parse_clamd_verdict(&response)
+}
+
+fn parse_clamd_verdict(response: &[u8]) -> Result<(), AppError> {
+    let verdict = String::from_utf8_lossy(&response);
+    if verdict.trim_end_matches(['\0', '\r', '\n']).ends_with("OK") {
+        Ok(())
+    } else if verdict.contains("FOUND") {
+        Err(AppError::validation(
+            "migration source was rejected by malware scanning",
+        ))
+    } else {
+        Err(AppError::internal(
+            "migration malware scanner returned an invalid result",
+        ))
+    }
+}
+
+fn validate_pdf(path: &Path) -> Result<i32, String> {
+    let mut file = File::open(path).map_err(|_| "PDF evidence could not be opened")?;
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut carry = Vec::new();
+    let mut pages = 0_i32;
+    let mut encrypted = false;
+    let mut eof = false;
+    let mut first = true;
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|_| "PDF evidence could not be read")?;
+        if read == 0 {
+            break;
+        }
+        if first {
+            first = false;
+            if !buffer[..read].starts_with(b"%PDF-") {
+                return Err("PDF signature does not match the file extension".into());
+            }
+        }
+        let overlap = carry.len();
+        carry.extend_from_slice(&buffer[..read]);
+        let start = overlap.saturating_sub(16);
+        for index in start..carry.len() {
+            if carry[index..].starts_with(b"/Encrypt") {
+                encrypted = true;
+            }
+            if carry[index..].starts_with(b"%%EOF") {
+                eof = true;
+            }
+            if carry[index..].starts_with(b"/Type") {
+                let mut cursor = index + 5;
+                while carry.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+                    cursor += 1;
+                }
+                if cursor + 5 > overlap
+                    && carry.get(cursor..).is_some_and(|tail| {
+                        tail.starts_with(b"/Page") && tail.get(5) != Some(&b's')
+                    })
+                {
+                    pages += 1;
+                }
+            }
+        }
+        if carry.len() > 32 {
+            carry.drain(..carry.len() - 32);
+        }
+    }
+    if encrypted {
+        return Err("password-protected PDF files are not supported".into());
+    }
+    if !eof {
+        return Err("PDF evidence is corrupt or truncated".into());
+    }
+    Ok(pages)
+}
+
+fn validate_png(path: &Path) -> Result<(), String> {
+    let mut file = File::open(path).map_err(|_| "PNG evidence could not be opened")?;
+    let mut header = [0_u8; 24];
+    file.read_exact(&mut header)
+        .map_err(|_| "PNG evidence is corrupt or truncated")?;
+    if &header[..8] != b"\x89PNG\r\n\x1a\n"
+        || &header[12..16] != b"IHDR"
+        || header[16..24].iter().all(|byte| *byte == 0)
+    {
+        return Err("PNG signature or dimensions are invalid".into());
+    }
+    Ok(())
+}
+
+fn validate_jpeg(path: &Path) -> Result<(), String> {
+    let mut file = File::open(path).map_err(|_| "JPEG evidence could not be opened")?;
+    let mut start = [0_u8; 3];
+    file.read_exact(&mut start)
+        .map_err(|_| "JPEG evidence is corrupt or truncated")?;
+    file.seek(SeekFrom::End(-2))
+        .map_err(|_| "JPEG evidence is corrupt or truncated")?;
+    let mut end = [0_u8; 2];
+    file.read_exact(&mut end)
+        .map_err(|_| "JPEG evidence is corrupt or truncated")?;
+    if start != [0xff, 0xd8, 0xff] || end != [0xff, 0xd9] {
+        return Err("JPEG signature is invalid".into());
+    }
+    Ok(())
+}
+
+fn validate_webp(path: &Path) -> Result<(), String> {
+    let size = fs::metadata(path)
+        .map_err(|_| "WebP evidence metadata is unavailable")?
+        .len();
+    let mut file = File::open(path).map_err(|_| "WebP evidence could not be opened")?;
+    let mut header = [0_u8; 12];
+    file.read_exact(&mut header)
+        .map_err(|_| "WebP evidence is corrupt or truncated")?;
+    let declared = u32::from_le_bytes(header[4..8].try_into().unwrap()) as u64 + 8;
+    if &header[..4] != b"RIFF" || &header[8..] != b"WEBP" || declared != size {
+        return Err("WebP signature or size is invalid".into());
+    }
+    Ok(())
 }
 
 fn assert_safe_ratio(size: u64, compressed: u64) -> Result<(), String> {
@@ -2436,13 +3221,21 @@ async fn remove_session_parts(tenant_id: &str, branch_id: &str, id: &str) {
 mod tests {
     use super::{
         assert_safe_ratio, decrypt_evidence_file, encrypt_evidence_file, extract_zip,
-        has_binary_magic, normalize_sha256, sha256_hex, source_columns_blocking,
-        source_profile_blocking, validate_csv, validate_file_name, validate_xlsx, WorkerSource,
+        has_binary_magic, normalize_sha256, parse_clamd_verdict, sha256_hex, source_columns_blocking,
+        source_profile_blocking, suggested_group, validate_csv, validate_file_name, validate_pdf,
+        validate_xlsx, WorkerSource,
     };
     use crate::models::migration::{MigrationEntity, MigrationProvider};
     use std::{fs, io::Write, path::PathBuf};
     use uuid::Uuid;
     use zip::{write::SimpleFileOptions, ZipWriter};
+
+    #[test]
+    fn malware_verdict_is_fail_closed() {
+        assert!(parse_clamd_verdict(b"stream: OK\0").is_ok());
+        assert!(parse_clamd_verdict(b"stream: Eicar-Test-Signature FOUND\0").is_err());
+        assert!(parse_clamd_verdict(b"stream: UNKNOWN\0").is_err());
+    }
 
     #[test]
     fn file_intake_rejects_traversal_reserved_names_bad_hashes_and_zip_bombs() {
@@ -2456,6 +3249,25 @@ mod tests {
         assert!(assert_safe_ratio(201, 1).is_err());
         assert!(has_binary_magic(b"%PDF-1.7"));
         assert!(!has_binary_magic(b"name,email\r\n"));
+    }
+
+    #[test]
+    fn historical_evidence_groups_pages_without_extracting_bill_data() {
+        assert_eq!(
+            suggested_group("TW-517/page-2.jpg", false),
+            ("TW-517".into(), 9500, "zip_folder")
+        );
+        assert_eq!(
+            suggested_group("TW-517-page-1.png", false),
+            ("TW-517".into(), 8000, "page_sequence")
+        );
+        let root = test_dir();
+        let pdf = root.join("bill.pdf");
+        fs::write(&pdf, b"%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n%%EOF").unwrap();
+        assert_eq!(validate_pdf(&pdf).unwrap(), 1);
+        fs::write(&pdf, b"%PDF-1.7\n/Encrypt\n%%EOF").unwrap();
+        assert!(validate_pdf(&pdf).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

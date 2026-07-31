@@ -18,12 +18,9 @@ const SUPPORTED_LANGUAGES: [&str; 25] = [
     "zh-CN",
     "ja-JP",
     "tr-TR",
-    "nb-NO",
     "es-ES",
     "fr-FR",
     "id-ID",
-    "da-DK",
-    "hu-HU",
     "de-DE",
     "it-IT",
     "nl-NL",
@@ -34,6 +31,9 @@ const SUPPORTED_LANGUAGES: [&str; 25] = [
     "ru-RU",
     "pl-PL",
     "sv-SE",
+    "ur-PK",
+    "pa-IN",
+    "bn-BD",
 ];
 const DATE_FORMATS: [&str; 3] = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"];
 

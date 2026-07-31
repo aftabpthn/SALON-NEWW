@@ -82,7 +82,10 @@ pub async fn conversations(
     let mut rows = vec![team];
     let mut private_rows = sqlx::query_as::<_, StaffChatConversation>(
         r#"SELECT conversation.id,'private-owner'::TEXT AS conversation_type,
-                  COALESCE(NULLIF(owner.full_name,''),owner.email,'Owner')::TEXT AS title,
+                  CASE WHEN conversation.owner_user_id=$3
+                    THEN COALESCE(NULLIF(staff_user.full_name,''),staff_user.email,'Staff')
+                    ELSE COALESCE(NULLIF(owner.full_name,''),owner.email,'Owner')
+                  END::TEXT AS title,
                   conversation.branch_id,
                   ARRAY(SELECT participant.user_id FROM staff_private_conversation_participants participant
                          WHERE participant.conversation_id=conversation.id ORDER BY participant.user_id) AS participant_user_ids,
@@ -95,10 +98,11 @@ pub async fn conversations(
               AND current_participant.tenant_id=$1 AND current_participant.branch_id=$2
               AND current_participant.user_id=$3
              JOIN users owner ON owner.id=conversation.owner_user_id AND owner.tenant_id=$1 AND owner.active=TRUE
+             JOIN users staff_user ON staff_user.id=conversation.staff_user_id AND staff_user.tenant_id=$1 AND staff_user.active=TRUE
              LEFT JOIN staff_private_chat_messages message ON message.conversation_id=conversation.id
             WHERE conversation.tenant_id=$1 AND conversation.branch_id=$2
             GROUP BY conversation.id,conversation.branch_id,conversation.created_at,conversation.updated_at,
-                     owner.full_name,owner.email
+                     conversation.owner_user_id,owner.full_name,owner.email,staff_user.full_name,staff_user.email
             ORDER BY GREATEST(conversation.updated_at,COALESCE(MAX(message.created_at),conversation.created_at)) DESC"#,
     )
     .bind(tenant_id)

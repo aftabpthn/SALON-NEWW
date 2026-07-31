@@ -5,7 +5,8 @@ use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
-    services::{staff_advanced_service, staff_enterprise_service},
+    repositories::inventory_repository,
+    services::{growth_intelligence_service, staff_advanced_service, staff_enterprise_service},
 };
 
 #[derive(Clone, Copy)]
@@ -407,6 +408,7 @@ pub async fn appointment_history(
               'startAt',appointment.start_at,'endAt',appointment.end_at,'status',appointment.status,
               'chair',COALESCE((SELECT resource.name FROM appointment_resources resource WHERE resource.tenant_id=appointment.tenant_id AND resource.branch_id=appointment.branch_id AND resource.id=appointment.chair_room_id),''),
               'source',appointment.source,'businessDate',(appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,'state',appointment.status,
+              'clientId',appointment.client_id,
               'clientName',CASE WHEN $14 THEN COALESCE((SELECT TRIM(CONCAT_WS(' ',client.first_name,client.last_name)) FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),'') ELSE '' END,
               'preferredClient',CASE WHEN $14 THEN COALESCE((SELECT client.preferred_staff_id=appointment.staff_id FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),FALSE) ELSE FALSE END,
               'rescheduleTimeline',COALESCE((SELECT jsonb_agg(jsonb_build_object('action',activity.action,'changedAt',activity.created_at,'reason',activity.reason,'changedBy',activity.changed_by,'fromStartAt',activity.old_data->>'startAt','toStartAt',activity.new_data->>'startAt') ORDER BY activity.created_at) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND (activity.branch_id=appointment.branch_id OR activity.branch_id='') AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED','CALENDAR_MOVED')),'[]'::jsonb),
@@ -486,6 +488,7 @@ pub async fn enterprise_os(
               'startAt',appointment.start_at,'endAt',appointment.end_at,'status',appointment.status,
               'chair',COALESCE((SELECT resource.name FROM appointment_resources resource WHERE resource.id=appointment.chair_room_id),''),
               'source',appointment.source,
+              'clientId',appointment.client_id,
               'clientName',COALESCE((SELECT TRIM(CONCAT_WS(' ',client.first_name,client.last_name)) FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),''),
               'preferredClient',COALESCE((SELECT client.preferred_staff_id=appointment.staff_id FROM clients client WHERE client.tenant_id=appointment.tenant_id AND client.branch_id=appointment.branch_id AND client.id=appointment.client_id),FALSE),
               'rescheduleTimeline',COALESCE((SELECT jsonb_agg(jsonb_build_object('action',activity.action,'changedAt',activity.created_at,'reason',activity.reason,'changedBy',activity.changed_by,'fromStartAt',activity.old_data->>'startAt','toStartAt',activity.new_data->>'startAt') ORDER BY activity.created_at) FROM appointment_activity activity WHERE activity.tenant_id=appointment.tenant_id AND (activity.branch_id=appointment.branch_id OR activity.branch_id='') AND activity.appointment_id=appointment.id AND activity.action IN ('BOOKING_RESCHEDULED','RESCHEDULE_APPROVED','CALENDAR_MOVED')),'[]'::jsonb),
@@ -506,21 +509,7 @@ pub async fn enterprise_os(
     .fetch_all(db)
     .await
     .map_err(|_| AppError::internal("failed to load staff enterprise appointments"))?;
-    let calendar = sqlx::query_scalar::<_, Value>(
-        r#"SELECT jsonb_build_object(
-              'id',id,'date',schedule_date,'startTime',shift1_start,'endTime',shift1_end,
-              'type','shift','status',status,'version',version)
-            FROM staff_schedules WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
-              AND schedule_date BETWEEN $4 AND $5 ORDER BY schedule_date"#,
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(&staff_id)
-    .bind(from)
-    .bind(to)
-    .fetch_all(db)
-    .await
-    .map_err(|_| AppError::internal("failed to load staff calendar"))?;
+    let calendar = roster_for_staff(db, tenant_id, branch_id, &staff_id, from, to).await?;
     let tasks = sqlx::query_scalar::<_, Value>(
         r#"SELECT jsonb_build_object('id',id,'title',title,'priority',priority,'status',status,
               'dueAt',due_at,'assignedBy',assigned_by,'checklist','[]'::jsonb)
@@ -554,6 +543,14 @@ pub async fn enterprise_os(
         .find(|row| row.staff_id == staff_id)
         .cloned()
         .ok_or_else(|| AppError::not_found("linked employee profile not found"))?;
+    let revenue_opportunities = growth_intelligence_service::revenue_opportunities_for_staff(
+        db, tenant_id, branch_id, &staff_id,
+    )
+    .await?;
+    let equipment_intelligence = staff_enterprise_service::staff_equipment_intelligence(
+        db, tenant_id, branch_id, from, to, &staff_id,
+    )
+    .await?;
     let mut ranked = performance_rows
         .iter()
         .filter(|row| row.score.is_some())
@@ -661,16 +658,69 @@ pub async fn enterprise_os(
         "timeline":timeline,"serviceTimers":[],
         "performance":{"revenue":performance.revenue_paise,"completedServices":performance.completed_appointments,
           "avgUtilization":performance.utilization_percent,"avgRating":performance.rating,"productivityScore":performance.score,
-          "strengths":performance.strengths,"opportunities":performance.opportunities},
+          "strengths":performance.strengths,"opportunities":performance.opportunities,
+          "appointmentsCount":performance.appointments_count,"completionPercent":performance.completion_percent,
+          "targetRevenuePaise":performance.target_revenue_paise,"revenueTargetPercent":performance.revenue_target_percent,
+          "uniqueClients":performance.unique_clients,"repeatClients":performance.repeat_clients,"repeatClientPercent":performance.repeat_client_percent,
+          "presentDays":performance.present_days,"absentDays":performance.absent_days,"workedMinutes":performance.worked_minutes,
+          "overtimeMinutes":performance.overtime_minutes,"lateMinutes":performance.late_minutes,"earlyLeaveMinutes":performance.early_leave_minutes,
+          "operationTaskCompleted":performance.operation_task_completed,"operationTaskMissed":performance.operation_task_missed,
+          "revenueOpportunities":revenue_opportunities,"equipmentIntelligence":equipment_intelligence},
         "leaderboard":leaderboard,
         "gamification":{"points":points,"level":if points > 0 { points / 500 + 1 } else { 0 },
           "stars":performance.score.map(|value| ((value + 19) / 20).clamp(1,5)).unwrap_or(0),
-          "activeDays":performance.present_days,"dailyStreak":0,"monthlyStreak":0,"badges":badges},
+          "activeDays":performance.present_days,"dailyStreak":0,"monthlyStreak":0,"badges":badges,
+          "sourceStatus":{"appointments":performance.appointments_count > 0,"attendance":performance.present_days + performance.absent_days > 0,
+            "schedule":performance.utilization_percent.is_some(),"clients":performance.unique_clients > 0,
+            "revenueTarget":performance.target_revenue_paise.is_some(),"sharedReview":performance.rating.is_some()}},
         "notifications":notifications,"tasks":tasks,"calendar":calendar,
         "reports":{"selected":{"days":days,"revenue":performance.revenue_paise,"services":performance.completed_appointments,
           "productivityScore":performance.score,"rating":performance.rating}},
         "generatedAt":now,"workedMinutes":performance.worked_minutes
     }))
+}
+
+pub async fn self_roster(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<Value>, AppError> {
+    if to < from || (to - from).num_days() > 62 {
+        return Err(AppError::validation(
+            "staff date range must be 63 days or less",
+        ));
+    }
+    let staff_id =
+        staff_enterprise_service::self_staff_id(db, tenant_id, branch_id, user_id).await?;
+    roster_for_staff(db, tenant_id, branch_id, &staff_id, from, to).await
+}
+
+async fn roster_for_staff(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<Value>, AppError> {
+    sqlx::query_scalar::<_, Value>(
+        r#"SELECT jsonb_build_object(
+              'id',id,'date',schedule_date,'startTime',shift1_start,'endTime',shift1_end,
+              'type','shift','status',status,'version',version)
+            FROM staff_schedules WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
+              AND schedule_date BETWEEN $4 AND $5 ORDER BY schedule_date"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(from)
+    .bind(to)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load staff roster"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -705,9 +755,9 @@ pub async fn business(
             from = first;
             to = last;
         }
-    } else if to < from || (to - from).num_days() > 92 {
+    } else if to < from || (to - from).num_days() > 366 {
         return Err(AppError::validation(
-            "staff business range must be 93 days or less",
+            "staff business range must be one year or less",
         ));
     }
     let page = page.max(1);
@@ -760,14 +810,14 @@ pub async fn business(
               'completedMinutes',COALESCE(SUM(EXTRACT(EPOCH FROM (end_at-start_at))::BIGINT/60) FILTER(WHERE LOWER(status) IN ('completed','billed','paid')),0),
               'workedMinutes',COALESCE(SUM(EXTRACT(EPOCH FROM (end_at-start_at))::BIGINT/60) FILTER(WHERE LOWER(status) IN ('completed','billed','paid')),0),
               'bills',COALESCE((SELECT COUNT(DISTINCT sale.id) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2
-                AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
-              'subtotalPaise',COALESCE((SELECT SUM(sale.subtotal_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
-              'discountPaise',COALESCE((SELECT SUM(sale.discount_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+                AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+              'subtotalPaise',COALESCE((SELECT SUM(sale.subtotal_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+              'discountPaise',COALESCE((SELECT SUM(sale.discount_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
               'couponDiscountPaise',0,'afterDiscountPaise',0,
-              'gstPaise',COALESCE((SELECT SUM(sale.tax_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
-              'totalPaise',COALESCE((SELECT SUM(sale.total_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
-              'paidPaise',COALESCE((SELECT SUM(sale.paid_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
-              'duePaise',COALESCE((SELECT SUM(GREATEST(sale.total_paise-sale.paid_paise,0)) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,sale.created_at::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0))
+              'gstPaise',COALESCE((SELECT SUM(sale.tax_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+              'totalPaise',COALESCE((SELECT SUM(sale.total_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+              'paidPaise',COALESCE((SELECT SUM(sale.paid_paise) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0),
+              'duePaise',COALESCE((SELECT SUM(GREATEST(sale.total_paise-sale.paid_paise,0)) FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.staff_id=$3 AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND sale.status NOT IN ('draft','cancelled','voided')),0))
             FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
               AND (start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5"#,
     )
@@ -793,11 +843,40 @@ pub async fn business(
     summary["totalPaise"] = service_totals["netTotalPaise"].clone();
     summary["paidPaise"] = Value::Null;
     summary["duePaise"] = Value::Null;
+    let estimated_worked_minutes = summary["workedMinutes"].as_i64().unwrap_or_default();
+    let (actual_worked_minutes, duty_minutes) = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT
+              COALESCE((SELECT SUM(worked_minutes) FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0)::BIGINT,
+              COALESCE((SELECT SUM(COALESCE(EXTRACT(EPOCH FROM (shift1_end-shift1_start))/60,0)+COALESCE(EXTRACT(EPOCH FROM (shift2_end-shift2_start))/60,0)) FROM staff_schedules WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND schedule_date BETWEEN $4 AND $5 AND status='working'),0)::BIGINT"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to)
+    .fetch_one(db).await.map_err(|_| AppError::internal("failed to load staff work minutes"))?;
+    let worked_minutes = if actual_worked_minutes > 0 {
+        actual_worked_minutes
+    } else {
+        estimated_worked_minutes
+    };
+    summary["workedMinutes"] = json!(worked_minutes);
     let services = sqlx::query_scalar::<_, Value>(
-        "SELECT jsonb_build_object('id',id,'name',name,'category',category) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY name,id",
+        "SELECT jsonb_build_object('id',id,'name',name,'category',category,'productConsumption',COALESCE(product_consumption_json,'[]'::JSONB)) FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY name,id",
     )
     .bind(tenant_id).bind(branch_id).fetch_all(db).await
     .map_err(|_| AppError::internal("failed to load staff business services"))?;
+    let products = sqlx::query_scalar::<_, Value>(
+        "SELECT jsonb_build_object('id',id,'name',name,'brand',brand,'unit',unit,'stockQuantity',stock_quantity,'reorderPoint',reorder_point,'dualUseStock',dual_use_stock) FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY name,id",
+    )
+    .bind(tenant_id).bind(branch_id).fetch_all(db).await
+    .map_err(|_| AppError::internal("failed to load staff product usage items"))?;
+    let mut product_usage_history = inventory_repository::list_backbar_usage(
+        db, tenant_id, branch_id, None, &staff_id, "", "", 50,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load staff product usage history"))?;
+    if !visible.client_name {
+        product_usage_history
+            .iter_mut()
+            .for_each(|row| row.client_name.clear());
+    }
     let mut performance = sqlx::query_scalar::<_, Value>(
         r#"SELECT jsonb_build_object(
           'statusCounts',(SELECT jsonb_build_object(
@@ -810,13 +889,13 @@ pub async fn business(
             'noShow',COUNT(*) FILTER(WHERE LOWER(status) IN ('no-show','no show','noshow')),
             'other',COUNT(*) FILTER(WHERE LOWER(status) NOT IN ('booked','scheduled','pending','queued','confirmed','arrived','checked-in','checked_in','in-service','in service','inprogress','in progress','started','active','running','completed','billed','paid','checked-out','checked_out','checkout','done','cancelled','canceled','voided','no-show','no show','noshow')))
             FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND (start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $4 AND $5),
-          'invoiceCount',COALESCE((SELECT COUNT(*) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND COALESCE(business_date,created_at::DATE) BETWEEN $4 AND $5 AND status NOT IN ('draft','cancelled','voided')),0),
+          'invoiceCount',COALESCE((SELECT COUNT(*) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND COALESCE(business_date,(created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5 AND status NOT IN ('draft','cancelled','voided')),0),
           'actualWorkedMinutes',COALESCE((SELECT SUM(worked_minutes) FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0),
           'estimatedWorkedMinutes',$6::BIGINT,
           'attendanceMinutes',COALESCE((SELECT SUM(worked_minutes+break_minutes) FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0),
           'breakMinutes',COALESCE((SELECT SUM(break_minutes) FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0),
           'dutyMinutes',$7::BIGINT,
-          'utilizationPercent',CASE WHEN $7::BIGINT>0 THEN ROUND(COALESCE((SELECT SUM(worked_minutes) FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0)::NUMERIC*100/$7::BIGINT,1) ELSE NULL END,
+          'utilizationPercent',CASE WHEN $7::BIGINT>0 THEN ROUND($6::NUMERIC*100/$7::BIGINT,1) ELSE NULL END,
           'attributedGrossPaise',CASE WHEN $8 THEN COALESCE((SELECT SUM(base_paise) FROM pos_staff_commission_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0) ELSE NULL END,
           'attributedDiscountPaise',CASE WHEN $8 THEN 0 ELSE NULL END,'attributedCouponDiscountPaise',CASE WHEN $8 THEN 0 ELSE NULL END,
           'attributedAfterDiscountPaise',CASE WHEN $8 THEN COALESCE((SELECT SUM(base_paise) FROM pos_staff_commission_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date BETWEEN $4 AND $5),0) ELSE NULL END,
@@ -831,11 +910,13 @@ pub async fn business(
           'giftCardRevenuePaise',CASE WHEN $8 THEN COALESCE((SELECT SUM(snapshot.base_paise) FROM pos_staff_commission_snapshots snapshot JOIN pos_sale_lines line ON line.id=snapshot.sale_line_id WHERE snapshot.tenant_id=$1 AND snapshot.branch_id=$2 AND snapshot.staff_id=$3 AND snapshot.business_date BETWEEN $4 AND $5 AND line.line_type='gift_card'),0) ELSE NULL END)"#,
     )
     .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to)
-    .bind(summary["workedMinutes"].as_i64().unwrap_or_default())
-    .bind(summary["scheduledMinutes"].as_i64().unwrap_or_default()).bind(visible.service_amount)
+    .bind(worked_minutes)
+    .bind(duty_minutes).bind(visible.service_amount)
     .bind(summary["paidPaise"].as_i64().unwrap_or_default()).bind(summary["duePaise"].as_i64().unwrap_or_default())
     .bind(summary["bills"].as_i64().unwrap_or_default()).bind(summary["totalPaise"].as_i64().unwrap_or_default())
     .fetch_one(db).await.map_err(|_| AppError::internal("failed to load staff business performance"))?;
+    performance["actualWorkedMinutes"] = json!(actual_worked_minutes);
+    performance["estimatedWorkedMinutes"] = json!(estimated_worked_minutes);
     performance["invoiceCount"] = service_totals["bills"].clone();
     performance["attributedGrossPaise"] = service_totals["grossPaise"].clone();
     performance["attributedDiscountPaise"] = service_totals["discountPaise"].clone();
@@ -853,6 +934,29 @@ pub async fn business(
         } else {
             Value::Null
         };
+    let (product_invoices, attributed_invoices) = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT COUNT(DISTINCT snapshot.sale_id) FILTER(WHERE line.line_type='product')::BIGINT,
+                  COUNT(DISTINCT snapshot.sale_id)::BIGINT
+           FROM pos_staff_commission_snapshots snapshot
+           JOIN pos_sale_lines line ON line.tenant_id=snapshot.tenant_id AND line.branch_id=snapshot.branch_id AND line.id=snapshot.sale_line_id
+           WHERE snapshot.tenant_id=$1 AND snapshot.branch_id=$2 AND snapshot.staff_id=$3 AND snapshot.business_date BETWEEN $4 AND $5"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(&staff_id).bind(from).bind(to)
+    .fetch_one(db).await.map_err(|_| AppError::internal("failed to load staff retail conversion"))?;
+    performance["productInvoiceCount"] = if visible.service_amount {
+        json!(product_invoices)
+    } else {
+        Value::Null
+    };
+    performance["retailConversionPercent"] = if visible.service_amount {
+        json!(if attributed_invoices > 0 {
+            (product_invoices * 100 / attributed_invoices).clamp(0, 100)
+        } else {
+            0
+        })
+    } else {
+        Value::Null
+    };
     let daily_breakdown = sqlx::query_scalar::<_, Value>(
         r#"SELECT jsonb_build_object('date',(start_at AT TIME ZONE 'Asia/Kolkata')::DATE,
           'appointments',COUNT(*),'completedServices',COUNT(*) FILTER(WHERE LOWER(status) IN ('completed','billed','paid')),
@@ -896,7 +1000,8 @@ pub async fn business(
           "discount":visible.discount,"tax":visible.tax,"serviceAmount":visible.service_amount,"commission":visible.commission},
         "summary":summary,
         "performance":performance,
-        "earnings":earnings,"targets":[],"services":services,"dailyBreakdown":daily_breakdown,
+        "earnings":earnings,"targets":[],"services":services,"products":products,
+        "productUsageHistory":product_usage_history,"dailyBreakdown":daily_breakdown,
         "pagination":{"page":page,"pageSize":page_size,"totalItems":total_items,"totalPages":total_pages,"hasMore":page<total_pages,
           "appointmentTotal":appointment_total,"appointmentPages":appointment_pages,"appointmentHasMore":page<appointment_pages,"serviceTotal":service_total},
         "appointments":appointments,"serviceInvoices":service_data["rows"]

@@ -43,7 +43,7 @@ type AppointmentSettings = {
   colors: AppointmentColorSetting[];
 };
 
-type ChairRoomOption = { id: string; name: string; kind: string };
+type ChairRoomOption = { id: string; name: string; kind: string; department: string };
 type AuthPermissionOption = {
   code: string;
   label: string;
@@ -204,7 +204,9 @@ export class SettingsPageComponent implements OnInit {
   saving = false;
   chairRooms: ChairRoomOption[] = [];
   chairRoomName = '';
-  chairRoomKind: 'chair' | 'room' = 'chair';
+  chairRoomKind: 'chair' | 'room' | 'workstation' = 'chair';
+  chairRoomDepartment = 'Hair';
+  readonly resourceDepartments = ['Hair', 'Nails', 'Skin', 'Spa', 'Reception'];
   chairRoomError = '';
   chairRoomSaving = false;
   roles: ManagedAuthRole[] = [];
@@ -1092,11 +1094,12 @@ export class SettingsPageComponent implements OnInit {
       await firstValueFrom(this.api.post('/api/v1/appointment-resources', {
         name,
         kind: this.chairRoomKind,
+        department: this.chairRoomDepartment,
       }));
       this.chairRoomName = '';
       await this.loadChairRooms();
     } catch {
-      this.chairRoomError = 'Unable to add chair or room';
+      this.chairRoomError = 'Unable to add area resource';
     } finally {
       this.chairRoomSaving = false;
     }
@@ -1111,6 +1114,7 @@ export class SettingsPageComponent implements OnInit {
           id: String(item?.id || ''),
           name: String(item?.name || ''),
           kind: String(item?.kind || 'chair'),
+          department: String(item?.department || 'Unassigned'),
         }))
         .filter((item) => item.id && item.name);
     } catch {

@@ -7,7 +7,7 @@
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::{
@@ -15,11 +15,11 @@ use crate::{
     repositories::ai_scope_repository::{self as repository, AiCopilotAlertRecord},
     routes::context::current_business_date,
     services::{
-        ai_scoped_copilot_tools,
         ai_scope_service::{
-            self as scope_service, AiDomain, AnalysisPeriod, ResolvedScope, ScopeRequest,
-            format_money_paise, safe_percent,
+            self as scope_service, format_money_paise, safe_percent, AiDomain, AnalysisPeriod,
+            ResolvedScope, ScopeRequest,
         },
+        ai_scoped_copilot_tools,
         auth_service::AuthClaims,
     },
 };
@@ -197,14 +197,9 @@ pub async fn propose_action(
     scope_service::require_domain(claims, action.domain())?;
 
     let language = scope_service::detect_language("", None);
-    let scope = scope_service::resolve_scope(
-        db,
-        tenant_id,
-        claims,
-        &request.scope,
-        language.language,
-    )
-    .await?;
+    let scope =
+        scope_service::resolve_scope(db, tenant_id, claims, &request.scope, language.language)
+            .await?;
     if scope.is_empty() {
         return Err(AppError::forbidden(
             "no branch is authorized for this login, so no action can be proposed",
@@ -268,7 +263,11 @@ pub async fn decide_action(
     let status = match request.decision.trim().to_ascii_lowercase().as_str() {
         "approved" | "approve" => "approved",
         "rejected" | "reject" => "rejected",
-        _ => return Err(AppError::validation("decision must be approved or rejected")),
+        _ => {
+            return Err(AppError::validation(
+                "decision must be approved or rejected",
+            ))
+        }
     };
 
     let language = scope_service::detect_language("", None);
@@ -289,7 +288,7 @@ pub async fn decide_action(
 
     let action = CopilotAction::parse(&existing.action_type)
         .ok_or_else(|| AppError::internal("stored copilot action type is unsupported"))?;
-    if !scope_service::permission_allowed(claims, action.approver_permission()) {
+    if !holds_permission(claims, action.approver_permission()) {
         return Err(AppError::forbidden(format!(
             "approving this action requires the {} permission",
             action.approver_permission()
@@ -334,6 +333,26 @@ pub async fn list_actions(
     repository::list_approvals(db, tenant_id, &scope.branch_ids(), status, 100)
         .await
         .map_err(|_| AppError::internal("failed to load copilot actions"))
+}
+
+/// Explicit denial beats everything, then an explicit grant, then the role default.
+fn holds_permission(claims: &AuthClaims, permission: &str) -> bool {
+    if claims
+        .denied_permissions
+        .iter()
+        .any(|entry| entry == permission)
+    {
+        return false;
+    }
+    if claims.permissions.iter().any(|entry| entry == permission) {
+        return true;
+    }
+    // Owners and admins retain implicit management rights when a tenant has not
+    // enumerated permissions, matching how the rest of the API treats them.
+    matches!(
+        claims.role.trim().to_ascii_lowercase().as_str(),
+        "owner" | "admin"
+    )
 }
 
 /// One detected condition before it is written to the alert feed.
@@ -404,9 +423,7 @@ pub async fn scan_alerts(
         candidates.extend(detect_branch_alerts(db, tenant_id, &branch_ids, &period).await?);
     }
     if scope_service::domain_allowed(claims, AiDomain::Staff) {
-        candidates.extend(
-            detect_staff_alerts(db, tenant_id, &branch_ids, &period, &scope).await?,
-        );
+        candidates.extend(detect_staff_alerts(db, tenant_id, &branch_ids, &period, &scope).await?);
     }
     if scope_service::domain_allowed(claims, AiDomain::Inventory) {
         candidates.extend(detect_inventory_alerts(db, tenant_id, &branch_ids, &period).await?);
@@ -619,7 +636,12 @@ async fn detect_branch_alerts(
         if booked_total >= 20 && no_show_rate >= NO_SHOW_RATE_THRESHOLD_PERCENT {
             candidates.push(AlertCandidate {
                 alert_type: "high_no_show_risk".into(),
-                severity: if no_show_rate >= 25.0 { "high" } else { "medium" }.into(),
+                severity: if no_show_rate >= 25.0 {
+                    "high"
+                } else {
+                    "medium"
+                }
+                .into(),
                 subject_type: "branch".into(),
                 subject_id: row.branch_id.clone(),
                 subject_name: row.branch_name.clone(),
@@ -725,7 +747,10 @@ async fn detect_staff_alerts(
                 subject_id: row.staff_id.clone(),
                 subject_name: row.staff_name.clone(),
                 branch_id: row.branch_id.clone(),
-                title: format!("{} is {} services short of target", row.staff_name, shortfall),
+                title: format!(
+                    "{} is {} services short of target",
+                    row.staff_name, shortfall
+                ),
                 detail: format!(
                     "{} completed against a target of {}.",
                     row.completed_appointments, row.target_count
@@ -783,7 +808,12 @@ async fn detect_inventory_alerts(
                 "unusual_product_consumption"
             }
             .into(),
-            severity: if overuse_percent >= 50.0 { "high" } else { "medium" }.into(),
+            severity: if overuse_percent >= 50.0 {
+                "high"
+            } else {
+                "medium"
+            }
+            .into(),
             subject_type: "product".into(),
             subject_id: row.group_id.clone(),
             subject_name: row.group_name.clone(),
@@ -931,7 +961,12 @@ async fn detect_client_alerts(
         .filter(|row| row.churn_risk_clients >= 10)
         .map(|row| AlertCandidate {
             alert_type: "client_churn_opportunity".into(),
-            severity: if row.churn_risk_clients >= 50 { "high" } else { "medium" }.into(),
+            severity: if row.churn_risk_clients >= 50 {
+                "high"
+            } else {
+                "medium"
+            }
+            .into(),
             subject_type: "branch".into(),
             subject_id: row.branch_id.clone(),
             subject_name: row.branch_name.clone(),
@@ -970,7 +1005,12 @@ async fn detect_membership_alerts(
         .filter(|row| row.expiring_count > 0)
         .map(|row| AlertCandidate {
             alert_type: "membership_expiry".into(),
-            severity: if row.expiring_count >= 25 { "high" } else { "medium" }.into(),
+            severity: if row.expiring_count >= 25 {
+                "high"
+            } else {
+                "medium"
+            }
+            .into(),
             subject_type: "membership".into(),
             subject_id: row.membership_id.clone(),
             subject_name: row.membership_name.clone(),

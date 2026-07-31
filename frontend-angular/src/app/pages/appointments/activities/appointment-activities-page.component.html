@@ -1,29 +1,29 @@
 <section class="activity-page">
   <header class="command-strip">
     <div>
-      <span class="section-label">Appointments</span>
-      <h1>Appointment activities</h1>
+      <span class="section-label">{{ 'appointments.activities.sectionLabel' | translate }}</span>
+      <h1>{{ 'appointments.activities.title' | translate }}</h1>
     </div>
     <div class="command-actions">
-      <a routerLink="/appointments">Calendar</a>
-      <button type="button" (click)="reload()" [disabled]="loading">{{ loading ? 'Loading' : 'Refresh' }}</button>
+      <a routerLink="/appointments">{{ 'appointments.activities.linkCalendar' | translate }}</a>
+      <button type="button" (click)="reload()" [disabled]="loading">{{ loading ? ('appointments.activities.buttonLoading' | translate) : ('appointments.activities.buttonRefresh' | translate) }}</button>
     </div>
   </header>
 
   <section class="activity-workspace">
     <div class="filters">
-      <input type="search" [(ngModel)]="search" placeholder="Search appointment, client, staff or service" />
+      <input type="search" [(ngModel)]="search" placeholder="{{ 'appointments.activities.searchPlaceholder' | translate }}" />
       <select [(ngModel)]="status">
-        <option value="">All statuses</option>
-        <option value="booked">Booked</option>
-        <option value="arrived">Arrived</option>
-        <option value="in-service">In service</option>
-        <option value="completed">Completed</option>
-        <option value="billed">Billed</option>
-        <option value="cancelled">Cancelled</option>
-        <option value="no-show">No-show</option>
+        <option value="">{{ 'appointments.activities.status.all' | translate }}</option>
+        <option value="booked">{{ 'appointments.activities.status.booked' | translate }}</option>
+        <option value="arrived">{{ 'appointments.activities.status.arrived' | translate }}</option>
+        <option value="in-service">{{ 'appointments.activities.status.inService' | translate }}</option>
+        <option value="completed">{{ 'appointments.activities.status.completed' | translate }}</option>
+        <option value="billed">{{ 'appointments.activities.status.billed' | translate }}</option>
+        <option value="cancelled">{{ 'appointments.activities.status.cancelled' | translate }}</option>
+        <option value="no-show">{{ 'appointments.activities.status.noShow' | translate }}</option>
       </select>
-      <span>{{ filteredRows.length }} records</span>
+      <span>{{ 'appointments.activities.recordsCount' | translate: { count: filteredRows.length } }}</span>
     </div>
 
     @if (error) {
@@ -34,26 +34,35 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th scope="col">Appointment</th><th scope="col">Client</th><th scope="col">Staff</th><th scope="col">Service</th><th scope="col">Time</th><th scope="col">Status</th><th scope="col">Invoice</th><th scope="col">Activity</th></tr>
+            <tr>
+              <th scope="col">{{ 'appointments.activities.table.appointment' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.client' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.staff' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.service' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.time' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.status' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.invoice' | translate }}</th>
+              <th scope="col">{{ 'appointments.activities.table.activity' | translate }}</th>
+            </tr>
           </thead>
           <tbody>
             @for (row of filteredRows; track row) {
               <tr (click)="open(row)" [class.selected]="selected?.appointmentId === row.appointmentId">
-                <td [attr.title]="row.appointmentId"><strong>{{ bookingId(row.appointmentId) }}</strong><small>{{ row.timelineCount || 0 }} events</small></td>
+                <td [attr.title]="row.appointmentId"><strong>{{ bookingId(row.appointmentId) }}</strong><small>{{ 'appointments.activities.timeline.events' | translate:{ count: row.timelineCount || 0 } }}</small></td>
                 <td><strong>{{ clientLabel(row) }}</strong><small>{{ row.clientPhone || '-' }}</small></td>
                 <td>{{ staffLabel(row) }}</td>
                 <td>{{ serviceLabel(row) }}</td>
                 <td>{{ formatDateTime(row.appointmentStartAt) }}</td>
                 <td><span class="status-pill">{{ statusText(row.status) }}</span></td>
                 <td>{{ row.invoiceNumber || '-' }}</td>
-                <td><button type="button" (click)="open(row); $event.stopPropagation()">View</button></td>
+                <td><button type="button" (click)="open(row); $event.stopPropagation()">{{ 'appointments.activities.view' | translate }}</button></td>
               </tr>
             }
           </tbody>
         </table>
       </div>
     } @else {
-      <div class="empty-state"><strong>No records yet</strong></div>
+      <div class="empty-state"><strong>{{ 'appointments.activities.empty.noRows' | translate }}</strong></div>
     }
 
   </section>
@@ -62,31 +71,34 @@
     <aside class="detail-drawer">
       <header>
         <div>
-          <span class="section-label">Appointment</span>
+          <span class="section-label">{{ 'appointments.activities.appointment' | translate }}</span>
           <h2>{{ clientLabel(row) }}</h2>
           <small>{{ serviceLabel(row) }} · {{ formatDateTime(row.appointmentStartAt) }}</small>
         </div>
-        <button type="button" aria-label="Close activity details" (click)="close()">×</button>
+        <button type="button" [attr.aria-label]="'appointments.activities.closeDetailsAria' | translate" (click)="close()">×</button>
       </header>
       <div class="detail-grid">
-        <article><span>Staff</span><strong>{{ staffLabel(row) }}</strong></article>
-        <article><span>Status</span><strong>{{ statusText(row.status) }}</strong></article>
-        <article><span>Invoice</span><strong>{{ row.invoiceNumber || 'Not billed' }}</strong></article>
-        <article><span>Payment</span><strong>{{ statusText(row.paymentStatus || 'unpaid') }}</strong></article>
+        <article><span>{{ 'appointments.activities.detail.staff' | translate }}</span><strong>{{ staffLabel(row) }}</strong></article>
+        <article><span>{{ 'appointments.activities.detail.status' | translate }}</span><strong>{{ statusText(row.status) }}</strong></article>
+        <article><span>{{ 'appointments.activities.detail.invoice' | translate }}</span><strong>{{ row.invoiceNumber || ('appointments.activities.invoice.notBilled' | translate) }}</strong></article>
+        <article><span>{{ 'appointments.activities.detail.payment' | translate }}</span><strong>{{ statusText(row.paymentStatus || 'unpaid') }}</strong></article>
       </div>
       <section class="timeline-section">
-        <div class="section-title"><h3>Activity timeline</h3><span>{{ row.timeline?.length || 0 }} events</span></div>
+        <div class="section-title">
+          <h3>{{ 'appointments.activities.timeline.title' | translate }}</h3>
+          <span>{{ 'appointments.activities.timeline.events' | translate: { count: row.timeline?.length || 0 } }}</span>
+        </div>
         @if (row.timeline?.length) {
           <div class="timeline">
             @for (event of row.timeline; track event) {
               <article>
                 <span class="timeline-dot"></span>
-                <div><strong>{{ statusText(event.action) }}</strong><small>{{ eventTime(event) }}</small><p>{{ event.reason || 'Appointment updated' }}</p></div>
+                <div><strong>{{ statusText(event.action) }}</strong><small>{{ eventTime(event) }}</small><p>{{ event.reason || ('appointments.activities.timeline.updated' | translate) }}</p></div>
               </article>
             }
           </div>
         } @else {
-          <div class="empty-state"><strong>No activity yet</strong></div>
+          <div class="empty-state"><strong>{{ 'appointments.activities.timeline.empty' | translate }}</strong></div>
         }
       </section>
     </aside>

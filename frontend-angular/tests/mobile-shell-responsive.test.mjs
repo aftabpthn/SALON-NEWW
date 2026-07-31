@@ -16,6 +16,8 @@ assert.match(header, /aria-controls="primary-navigation"/);
 assert.match(header, /\[attr\.aria-expanded\]="mobileNavOpen"/);
 assert.match(sidebar, /id="primary-navigation"/);
 assert.match(sidebar, /class="rail-label"/);
+assert.match(sidebar, /@if \(group\.links\.length === 1\)[\s\S]*\[routerLink\]="group\.links\[0\]\.route"/);
+assert.match(sidebar, /@if \(group\.links\.length > 1\)[\s\S]*class="flyout"/);
 assert.match(globalCss, /\.app-shell\.mobile-nav-open \.mobile-nav-backdrop/);
 assert.match(globalCss, /@media \(max-width: 760px\)[\s\S]*grid-template-columns: 1fr/);
 assert.match(sidebarCss, /:host\(\.mobile-open\)[\s\S]*transform: translateX\(0\)/);

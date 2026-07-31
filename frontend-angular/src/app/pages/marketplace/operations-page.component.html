@@ -1,61 +1,36 @@
 <main class="operations-page">
-  <header class="page-header"><div><h1>Operations</h1></div><button type="button" (click)="reload()" [disabled]="loading">Refresh</button></header>
-  <nav class="tabs" aria-label="Operations sections"><button type="button" [class.active]="tab === 'outcall'" [attr.aria-current]="tab === 'outcall' ? 'page' : null" (click)="tab = 'outcall'">Outcall Operations</button><button type="button" [class.active]="tab === 'marketplace'" [attr.aria-current]="tab === 'marketplace' ? 'page' : null" (click)="tab = 'marketplace'">Marketplace Operations</button></nav>
-  @if (error) {
-    <p class="error" role="alert">{{ error }}</p>
-  }
+  <header class="page-header"><h1>Operations</h1><div class="header-actions"><span class="provider" [class.ready]="mapsProvider.live">Maps {{ mapsProvider.live ? 'live' : 'approval required' }}</span><button type="button" (click)="reload()" [disabled]="loading">Refresh</button></div></header>
+  <nav class="tabs" aria-label="Operations sections"><button type="button" [class.active]="tab === 'outcall'" (click)="tab = 'outcall'">Dispatch</button><button type="button" [class.active]="tab === 'marketplace'" (click)="tab = 'marketplace'">Marketplace</button></nav>
+  @if (error) { <p class="error" role="alert">{{ error }}</p> } @if (message) { <p class="success" role="status">{{ message }}</p> }
 
   @if (tab === 'outcall') {
-    <section class="grid outcall-grid">
-      <article class="card"><h2>Travel zones</h2><form (ngSubmit)="saveZone()"><input name="zoneName" [(ngModel)]="zone.name" placeholder="Zone name" required><input name="serviceArea" [(ngModel)]="zone.serviceArea" placeholder="Service area"><input name="zoneMinutes" [(ngModel)]="zone.travelMinutes" type="number" min="0" placeholder="Travel minutes" required><button type="submit" class="primary" [disabled]="saving">Save zone</button></form><div class="chip-list">@for (row of zones; track row) {
-      <span>{{ row.name }} · {{ row.travelMinutes }} min</span>
-      }@if (!loading && !zones.length) {
-      <p>No travel zones yet</p>
-    }</div></article>
-    <article class="card"><h2>Field jobs</h2><form (ngSubmit)="createJob()"><input name="jobAddress" [(ngModel)]="job.address" placeholder="Client address" required><select name="jobZone" [(ngModel)]="job.travelZoneId"><option value="">Travel zone</option>@for (row of zones; track row) {
-    <option [value]="row.id">{{ row.name }}</option>
-    }</select><input name="jobMinutes" [(ngModel)]="job.travelMinutes" type="number" min="0" placeholder="Travel minutes" required><button type="submit" class="primary" [disabled]="saving">Create field job</button></form>@if (jobs.length) {
-    <div class="list">@for (row of jobs; track row) {
-      <article><strong>{{ row.address }}</strong><span>{{ row.staffName }} · {{ row.travelMinutes }} min</span><div><span class="status">{{ row.status }}</span>@if (row.status === 'created' || row.status === 'assigned') {
-      <button type="button" (click)="updateJob(row, 'en_route')">En route</button>
-      }@if (row.status === 'en_route') {
-      <button type="button" (click)="updateJob(row, 'arrived')">Arrived</button>
-      }@if (row.status === 'arrived') {
-      <button type="button" (click)="updateJob(row, 'completed')">Complete</button>
-    }</div></article>
-  }</div>
-} @else {
-  @if (!loading) {
-    <p class="empty">No field jobs yet</p>
-  }
-}</article>
-</section>
-}
+    <section class="dispatch-layout">
+      <article class="card create-card"><h2>Appointment dispatch</h2><form (ngSubmit)="createJob()">
+        <label>Appointment<select name="appointment" [(ngModel)]="job.appointmentId" (ngModelChange)="selectAppointment()" required><option value="">Select appointment</option>@for (row of appointments; track row.id) { <option [value]="row.id">{{ row.startAt | date:'dd/MM/yyyy, HH:mm' }} · {{ row.clientName }} · {{ row.serviceNames }}</option> }</select></label>
+        <label>Service address<input name="jobAddress" [(ngModel)]="job.address" (ngModelChange)="job.destinationLatitude = null; job.destinationLongitude = null" placeholder="Service address" required></label>
+        <label>Staff<select name="jobStaff" [(ngModel)]="job.staffId"><option value="">AI recommendation · {{ recommendedStaffName() }}</option>@for (row of staff; track row.id) { <option [value]="row.id">{{ row.name }} · {{ row.activeJobs }} active</option> }</select></label>
+        <label>Travel zone<select name="jobZone" [(ngModel)]="job.travelZoneId" required><option value="">Select zone</option>@for (row of zones; track row.id) { <option [value]="row.id">{{ row.name }} · {{ row.travelMinutes }} min</option> }</select></label>
+        <label>Travel minutes<input name="jobMinutes" [(ngModel)]="job.travelMinutes" type="number" min="0" max="1440" placeholder="Fallback minutes"></label>
+        <label>Priority<select name="priority" [(ngModel)]="job.priority"><option [ngValue]="1">Critical</option><option [ngValue]="2">High</option><option [ngValue]="3">Normal</option><option [ngValue]="4">Low</option></select></label>
+        <button type="submit" class="primary" [disabled]="saving || !job.appointmentId || !job.travelZoneId || !job.address">Create field job</button>
+      </form>@if (!loading && !appointments.length) { <p class="empty">No eligible appointments</p> }</article>
 
-@if (tab === 'marketplace') {
-  <section class="grid marketplace-grid">
-    <article class="card"><h2>Listing approval</h2><form (ngSubmit)="saveListing()"><input name="listingName" [(ngModel)]="listing.listingName" placeholder="Public listing name" required><input name="commission" [(ngModel)]="listing.commissionBps" type="number" min="0" max="10000" placeholder="Commission basis points" required><input name="ranking" [(ngModel)]="listing.rankingScore" type="number" placeholder="Ranking score" required><button type="submit" class="primary" [disabled]="saving">Save listing</button></form>@if (listings.length) {
-    <div class="list">@for (row of listings; track row) {
-      <article><strong>{{ row.listingName }}</strong><span>{{ row.commissionBps / 100 }}% commission · ranking {{ row.rankingScore }}</span><div><span class="status">{{ row.status }}</span>@if (row.status !== 'approved') {
-      <button type="button" (click)="decideListing(row, 'approved')">Approve</button>
-      }@if (row.status !== 'rejected') {
-      <button type="button" (click)="decideListing(row, 'rejected')">Reject</button>
-    }</div></article>
-  }</div>
-} @else {
-  @if (!loading) {
-    <p class="empty">No listings awaiting review</p>
+      <article class="card"><h2>Prioritized action queue</h2><div class="list queue">@for (row of prioritizedJobs(); track row.id) {
+        <article [class.overdue]="row.overdue"><div class="row-title"><strong>{{ row.clientName }} · {{ row.address }}</strong><span class="status">{{ row.status }}</span></div><span>{{ row.staffName }} · {{ distance(row.routeDistanceMeters) }} · {{ row.travelMinutes }} min</span><span [class.risk]="row.overdue">{{ riskReason(row) }}</span><div class="finance"><span>Surcharge {{ money(row.distanceSurchargePaise) }}</span><span>Billed {{ money(row.billedRevenuePaise) }}</span><strong>Profit {{ money(row.profitPaise) }}</strong></div><div class="actions">@if (row.status === 'created') { <select [name]="'assign-' + row.id" [(ngModel)]="row.staffId"><option value="">Select staff</option>@for (member of staff; track member.id) { <option [value]="member.id">{{ member.name }} · {{ member.activeJobs }} active</option> }</select><button type="button" (click)="assignJob(row)" [disabled]="!row.staffId">Assign</button> }<button type="button" (click)="notify(row, 'whatsapp')" [disabled]="!messagingProviders.whatsapp">WhatsApp ETA</button><button type="button" (click)="notify(row, 'sms')" [disabled]="!messagingProviders.sms">SMS ETA</button><button type="button" (click)="updateJob(row, 'cancelled')">Cancel</button></div></article>
+      } @empty { @if (!loading) { <p class="empty">No open field jobs</p> } }</div></article>
+    </section>
+
+    <section class="grid">
+      <article class="card"><h2>Travel zones & payout rules</h2><form (ngSubmit)="saveZone()"><input name="zoneName" [(ngModel)]="zone.name" placeholder="Zone name" required><input name="serviceArea" [(ngModel)]="zone.serviceArea" placeholder="Service area"><input name="zoneMinutes" [(ngModel)]="zone.travelMinutes" type="number" min="0" placeholder="Minutes" required><input name="zoneSla" [(ngModel)]="zone.slaMinutes" type="number" min="1" placeholder="SLA minutes"><input name="baseCharge" [(ngModel)]="zone.baseSurchargePaise" type="number" min="0" placeholder="Base surcharge paise"><input name="perKm" [(ngModel)]="zone.perKmSurchargePaise" type="number" min="0" placeholder="Per-km surcharge paise"><input name="staffKm" [(ngModel)]="zone.staffPerKmPaise" type="number" min="0" placeholder="Staff payout/km paise"><button class="primary" type="submit" [disabled]="saving">Save zone</button></form><div class="chip-list">@for (row of zones; track row.id) { <span>{{ row.name }} · SLA {{ row.slaMinutes }}m · {{ money(row.baseSurchargePaise) }} + {{ money(row.perKmSurchargePaise) }}/km</span> } @empty { <p>No travel zones yet</p> }</div></article>
+      <article class="card"><h2>Demand forecast</h2><div class="list">@for (row of demand; track row.zoneId) { <article><div class="row-title"><strong>{{ row.zoneName }}</strong><span>{{ row.forecast7d }} forecast / 7 days</span></div><small>{{ row.jobs90d }} jobs in 90 days</small></article> } @empty { <p class="empty">No zone history yet</p> }</div></article>
+    </section>
   }
-}</article>
-<article class="card"><h2>Verified reviews</h2>@if (reviews.length) {
-<div class="list">@for (row of reviews; track row) {
-  <article><strong>{{ row.platform }} · {{ row.rating || '—' }}/5</strong><p>{{ row.reviewText || 'No review text' }}</p><div><span class="status">{{ row.decision || 'pending' }}</span><button type="button" (click)="moderateReview(row, 'approved')">Approve</button><button type="button" (click)="moderateReview(row, 'escalated')">Escalate</button></div></article>
-}</div>
-} @else {
-  @if (!loading) {
-    <p class="empty">No verified reviews to moderate</p>
+
+  @if (tab === 'marketplace') {
+    <section class="grid marketplace-grid">
+      <article class="card"><h2>Connector</h2><form (ngSubmit)="createConnection()"><input name="provider" [(ngModel)]="connection.provider" placeholder="Provider key" required><input name="displayName" [(ngModel)]="connection.displayName" placeholder="Display name" required><input name="account" [(ngModel)]="connection.externalAccountId" placeholder="External account ID"><button class="primary" type="submit" [disabled]="saving">Connect</button></form>@if (connectorSecret) { <p class="secret" role="status">Copy once: <code>{{ connectorSecret }}</code></p> }<div class="list">@for (row of connections; track row.id) { <article><div class="row-title"><strong>{{ row.displayName }}</strong><span class="status">{{ row.status }}</span></div><span>{{ row.provider }} · secret ••••{{ row.secretLastFour }}</span><span>{{ row.failedEvents }} failed events · last success {{ row.lastSuccessAt ? (row.lastSuccessAt | date:'dd/MM/yyyy, HH:mm') : 'never' }}</span>@if (row.lastError) { <small class="risk">{{ row.lastError }}</small> }</article> } @empty { <p class="empty">No marketplace connections</p> }</div>@if (failedEvents.length) { <h3>Webhook retries</h3><div class="list">@for (event of failedEvents; track event.id) { <article><strong>{{ event.eventType }} · {{ event.providerEventId }}</strong><span>Attempt {{ event.attempts }}/{{ event.maxAttempts }} · {{ event.lastError || 'Processing failed' }}</span><button type="button" (click)="retryEvent(event)" [disabled]="saving || event.attempts >= event.maxAttempts">Retry</button></article> }</div> }</article>
+      <article class="card"><h2>Listing approval</h2><form (ngSubmit)="saveListing()"><input name="listingName" [(ngModel)]="listing.listingName" placeholder="Public listing name" required><input name="commission" [(ngModel)]="listing.commissionBps" type="number" min="0" max="10000" placeholder="Commission basis points" required><input name="ranking" [(ngModel)]="listing.rankingScore" type="number" placeholder="Ranking score" required><button type="submit" class="primary" [disabled]="saving">Save listing</button></form><div class="list">@for (row of listings; track row.id) { <article><div class="row-title"><strong>{{ row.listingName }}</strong><span class="status">{{ row.status }}</span></div><span>{{ row.commissionBps / 100 }}% commission · ranking {{ row.rankingScore }}</span><div class="actions"><button type="button" (click)="decideListing(row, 'approved')">Approve</button><button type="button" (click)="decideListing(row, 'rejected')">Reject</button></div></article> } @empty { <p class="empty">No listing configured</p> }</div></article>
+      <article class="card"><h2>Verified reviews</h2><div class="list">@for (row of reviews; track row.id) { <article><div class="row-title"><strong>{{ row.platform }} · {{ row.rating || '—' }}/5</strong><span class="status">{{ row.decision || 'pending' }}</span></div><p>{{ row.reviewText || 'No review text' }}</p><div class="actions"><button type="button" (click)="moderateReview(row, 'approved')">Approve</button><button type="button" (click)="moderateReview(row, 'escalated')">Escalate</button></div></article> } @empty { <p class="empty">No verified reviews</p> }</div></article>
+    </section>
   }
-}</article>
-</section>
-}
 </main>

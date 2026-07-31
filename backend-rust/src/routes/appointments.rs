@@ -353,6 +353,10 @@ pub(crate) struct SmartWaitlistPayload {
     notes: String,
     #[serde(default)]
     preferred_slot_at: Option<String>,
+    #[serde(default)]
+    constraint_type: String,
+    #[serde(default)]
+    constraint_resource_kind: String,
 }
 
 #[derive(Deserialize)]
@@ -537,6 +541,8 @@ pub(crate) struct AppointmentResourcePayload {
     pub(crate) name: String,
     #[serde(default)]
     pub(crate) kind: String,
+    #[serde(default)]
+    pub(crate) department: String,
 }
 
 #[derive(Serialize)]
@@ -544,6 +550,7 @@ pub(crate) struct AppointmentResourceResponse {
     id: String,
     name: String,
     kind: String,
+    department: String,
     active: bool,
 }
 
@@ -601,6 +608,38 @@ fn appointment_settings_json(value: Value) -> Value {
         .is_object()
         .then_some(value)
         .unwrap_or_else(|| json!({}))
+}
+
+fn waitlist_constraint(payload: &SmartWaitlistPayload) -> Result<(&str, &str), ApiError> {
+    let constraint_type = payload.constraint_type.trim();
+    let constraint_type = if constraint_type.is_empty() {
+        "none"
+    } else {
+        constraint_type
+    };
+    let resource_kind = payload.constraint_resource_kind.trim();
+    if !matches!(
+        constraint_type,
+        "none" | "resource_unavailable" | "capacity_full" | "equipment_maintenance"
+    ) {
+        return Err(ApiError::bad_request("invalid waitlist constraint_type"));
+    }
+    if !matches!(resource_kind, "" | "chair" | "room" | "workstation") {
+        return Err(ApiError::bad_request(
+            "invalid waitlist constraint_resource_kind",
+        ));
+    }
+    if constraint_type != "none" && payload.service_ids.is_empty() {
+        return Err(ApiError::bad_request(
+            "service required for a capacity constraint",
+        ));
+    }
+    if constraint_type == "none" && !resource_kind.is_empty() {
+        return Err(ApiError::bad_request(
+            "resource kind requires a capacity constraint",
+        ));
+    }
+    Ok((constraint_type, resource_kind))
 }
 
 #[cfg(test)]
@@ -673,6 +712,27 @@ mod blackout_tests {
         let json = result.ok().unwrap();
         assert!(json.contains("variant-1"));
         assert!(json.contains("addon-1"));
+    }
+
+    #[test]
+    fn validates_structured_waitlist_constraints() {
+        let mut payload = SmartWaitlistPayload {
+            tenant_id: None,
+            branch_id: None,
+            customer_id: "client".into(),
+            service_ids: vec!["service".into()],
+            preferred_staff_id: None,
+            notes: String::new(),
+            preferred_slot_at: None,
+            constraint_type: "capacity_full".into(),
+            constraint_resource_kind: "chair".into(),
+        };
+        assert_eq!(
+            waitlist_constraint(&payload).ok(),
+            Some(("capacity_full", "chair"))
+        );
+        payload.constraint_resource_kind = "machine".into();
+        assert!(waitlist_constraint(&payload).is_err());
     }
 }
 
@@ -772,6 +832,8 @@ pub(crate) struct WaitlistPayloadOut {
     preferred_slot_at: String,
     status: String,
     created_at: String,
+    constraint_type: String,
+    constraint_resource_kind: String,
 }
 
 pub(crate) fn scope_from_headers(
@@ -1470,7 +1532,7 @@ async fn list_appointment_resources(
     headers: HeaderMap,
 ) -> Result<Json<Vec<AppointmentResourceResponse>>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
-    let rows = sqlx::query("SELECT id, name, kind, active FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY kind, name")
+    let rows = sqlx::query("SELECT id, name, kind, department, active FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY department, kind, name")
         .bind(&tenant_id)
         .bind(&branch_id)
         .fetch_all(&state.db)
@@ -1482,6 +1544,7 @@ async fn list_appointment_resources(
                 id: row.try_get("id").unwrap_or_default(),
                 name: row.try_get("name").unwrap_or_default(),
                 kind: row.try_get("kind").unwrap_or_else(|_| "chair".to_string()),
+                department: row.try_get("department").unwrap_or_default(),
                 active: row.try_get("active").unwrap_or(true),
             })
             .collect(),
@@ -1498,17 +1561,27 @@ async fn create_appointment_resource(
     if name.is_empty() {
         return Err(ApiError::bad_request("chair or room name is required"));
     }
-    let kind = if payload.kind.trim().eq_ignore_ascii_case("room") {
-        "room"
-    } else {
-        "chair"
+    let kind = match payload.kind.trim().to_ascii_lowercase().as_str() {
+        "room" => "room",
+        "workstation" => "workstation",
+        _ => "chair",
     };
-    let row = sqlx::query("INSERT INTO appointment_resources (id, tenant_id, branch_id, name, kind) VALUES ($1,$2,$3,$4,$5) RETURNING id, name, kind, active")
+    let department = payload.department.trim();
+    if department.len() > 80 {
+        return Err(ApiError::bad_request("resource department is too long"));
+    }
+    let department = if department.is_empty() {
+        "Unassigned"
+    } else {
+        department
+    };
+    let row = sqlx::query("INSERT INTO appointment_resources (id, tenant_id, branch_id, name, kind, department) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, kind, department, active")
         .bind(uuid::Uuid::new_v4().to_string())
         .bind(&tenant_id)
         .bind(&branch_id)
         .bind(name)
         .bind(kind)
+        .bind(department)
         .fetch_one(&state.db)
         .await
         .map_err(|_| ApiError::conflict("chair or room already exists"))?;
@@ -1516,6 +1589,7 @@ async fn create_appointment_resource(
         id: row.try_get("id").unwrap_or_default(),
         name: row.try_get("name").unwrap_or_default(),
         kind: row.try_get("kind").unwrap_or_default(),
+        department: row.try_get("department").unwrap_or_default(),
         active: row.try_get("active").unwrap_or(true),
     }))
 }
@@ -2481,12 +2555,13 @@ async fn add_waitlist(
         .clone()
         .unwrap_or_else(|| now.to_rfc3339());
     let preferred_slot_at = parse_datetime(&preferred_slot_at, "preferred_slot_at")?;
+    let (constraint_type, constraint_resource_kind) = waitlist_constraint(&payload)?;
 
     let row = sqlx::query(
         "INSERT INTO appointment_waitlist (
-            id, tenant_id, branch_id, customer_id, service_ids_json, preferred_staff_id, preferred_slot_at, status, notes, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         RETURNING id, tenant_id, branch_id, customer_id, service_ids_json, preferred_slot_at, status, notes, created_at
+            id, tenant_id, branch_id, customer_id, service_ids_json, preferred_staff_id, preferred_slot_at, status, notes, constraint_type, constraint_resource_kind, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING id, tenant_id, branch_id, customer_id, service_ids_json, preferred_slot_at, status, notes, constraint_type, constraint_resource_kind, created_at
         ",
     )
     .bind(&id)
@@ -2498,6 +2573,8 @@ async fn add_waitlist(
     .bind(preferred_slot_at)
     .bind("pending")
     .bind(&payload.notes)
+    .bind(constraint_type)
+    .bind(constraint_resource_kind)
     .bind(now)
     .bind(now)
     .fetch_one(&state.db)
@@ -2525,6 +2602,8 @@ async fn add_waitlist(
             .try_get("status")
             .unwrap_or_else(|_| "pending".to_string()),
         created_at: created_at.to_rfc3339(),
+        constraint_type: row.try_get("constraint_type").unwrap_or_default(),
+        constraint_resource_kind: row.try_get("constraint_resource_kind").unwrap_or_default(),
     }))
 }
 
@@ -2534,7 +2613,7 @@ async fn list_waitlist(
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let rows = sqlx::query(
-        "SELECT id, customer_id, service_ids_json, preferred_slot_at, status, notes, created_at
+        "SELECT id, customer_id, service_ids_json, preferred_slot_at, status, notes, constraint_type, constraint_resource_kind, created_at
          FROM appointment_waitlist
          WHERE tenant_id=$1 AND branch_id=$2 AND status='pending'
          ORDER BY preferred_slot_at, created_at",
@@ -2552,6 +2631,8 @@ async fn list_waitlist(
         "preferredSlotAt": row.try_get::<DateTime<Utc>, _>("preferred_slot_at").map(|value| value.to_rfc3339()).unwrap_or_default(),
         "status": row.try_get::<String, _>("status").unwrap_or_default(),
         "notes": row.try_get::<String, _>("notes").unwrap_or_default(),
+        "constraintType": row.try_get::<String, _>("constraint_type").unwrap_or_default(),
+        "constraintResourceKind": row.try_get::<String, _>("constraint_resource_kind").unwrap_or_default(),
     })).collect()))
 }
 

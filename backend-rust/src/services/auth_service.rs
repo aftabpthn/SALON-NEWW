@@ -387,6 +387,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff App",
     },
     PermissionDefinition {
+        code: "staff.app.rules.read",
+        label: "Show Staff App rules and SOP",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "staff.app.tasks.manage",
         label: "Update Staff App tasks",
         group: "Staff App",
@@ -903,7 +908,7 @@ fn claims(
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_access_token, issue_scoped_token_pair, password_meets_policy,
+        decode_access_token, issue_scoped_token_pair, password_meets_policy, permission_definition,
         staff_app_permission_allowed, TokenScope,
     };
 
@@ -959,5 +964,15 @@ mod tests {
         assert!(!password_meets_policy("short"));
         assert!(password_meets_policy("twelve-chars"));
         assert!(!password_meets_policy(&"x".repeat(129)));
+    }
+
+    #[test]
+    fn rules_permission_is_registered_for_custom_roles() {
+        let permission = permission_definition("staff.app.rules.read")
+            .expect("rules permission should be configurable");
+
+        assert_eq!(permission.group, "Staff App");
+        assert_eq!(permission.action(), "read");
+        assert_eq!(permission.scope(), "self");
     }
 }

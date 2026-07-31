@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { parseCsv } from './csv-import';
-import { DataMigrationStore, ImportAnalysis, ImportAnalysisRow, ImportEntity, ImportJob, ImportMapping, MigrationSourceProfile, SourceFile } from './data-migration.store';
+import { DataMigrationStore, DuplicateDecision, ImportAnalysis, ImportAnalysisRow, ImportEntity, ImportJob, ImportMapping, ImportMappingVersion, MigrationCutoverStatus, MigrationQuarantineRecord, MigrationSourceProfile, SourceFile } from './data-migration.store';
 
 type Tab = 'Overview' | 'Integrations' | 'API Keys' | 'Webhooks' | 'Imports' | 'Exports';
 type Provider = { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string };
@@ -13,13 +15,12 @@ type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 
 type ConnectorSyncJob = { id: string; provider: string; triggerSource: string; status: string; attempts: number; lastError: string; createdAt: string; completedAt?: string };
 type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; ipAllowlistJson: string[]; rateLimitPerMinute: number; status: string; lastUsedAt?: string; createdAt: string };
 type WebhookRow = { id: string; name: string; endpointUrl: string; events: string[]; active: boolean; updatedAt: string };
-type UploadSession = { id: string; missingParts: number[]; receivedBytes: number; expectedSizeBytes: number; status: string };
 type MappingAlternative = { targetField: string; confidencePercentage: number; reasons: string[]; rejectionReasons: string[]; requiredTransformation: string };
 type MappingDecision = { sourceColumn: string; targetField?: string; candidates: string[]; aliasLevel: string; confidence: 'green' | 'yellow' | 'red'; confidencePercentage: number; collision: boolean; reason: string; alternativeTargets: MappingAlternative[]; suggestionReasons: string[]; rejectionReasons: string[]; detectedDataType: string; sampleEvidence: string[]; requiredTransformation?: string; approved: boolean; approvalId?: string; approvedBy?: string; approvedAt?: string };
-type MappingSuggestions = { source: string; ruleVersion: string; fingerprint: string; semanticSource: string; semanticAdvisory: Record<string, string>; suggestions: Record<string, string>; unmatchedColumns: string[]; decisions: MappingDecision[]; approvalRequiredIssues: string[]; hardBlockingIssues: string[]; blockingIssues: string[] };
+type MappingSuggestions = { source: string; ruleVersion: string; fingerprint: string; headerFingerprint: string; profileMatch: 'exact' | 'drift' | 'none'; savedProfile?: { id: string; name: string; mappingVersion: number; approvedBy: string; approvedAt: string; headerFingerprint: string; columnCount: number }; headerDiff: { added: string[]; removed: string[] }; semanticSource: string; semanticAdvisory: Record<string, string>; suggestions: Record<string, string>; unmatchedColumns: string[]; decisions: MappingDecision[]; approvalRequiredIssues: string[]; hardBlockingIssues: string[]; blockingIssues: string[] };
 
 @Component({
-    selector: 'page-integrations-data', imports: [CommonModule, FormsModule],
+    selector: 'page-integrations-data', imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
     templateUrl: './integrations-data-page.component.html', styleUrls: ['./integrations-data-page.component.css', './integrations-data-connectors.css']
 })
 export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
@@ -31,13 +32,19 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   readonly webhookEvents = ['client.created', 'appointment.created', 'appointment.status_changed', 'sale.status_changed'];
   readonly migrationProviders = ['auto', 'zenoti', 'dingg', 'salonist', 'fresha', 'tally', 'busy', 'marg', 'excel', 'csv', 'manual'];
   activeTab: Tab = 'Imports'; providers: Provider[] = []; connectors: ConnectorRow[] = []; connectorJobs: ConnectorSyncJob[] = []; apiKeys: ApiKeyRow[] = []; webhooks: WebhookRow[] = [];
-  drawer: 'import' | 'api-key' | 'webhook' | 'governance' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; selectedJob: ImportJob | null = null;
-  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; mappingRuleVersion = ''; mappingFingerprint = ''; mappingSemanticSource = ''; semanticAdvisory: Record<string, string> = {}; suggestedMapping: Record<string, string> = {}; mappingOverrides: Record<string, string> = {}; mappingDecisions: MappingDecision[] = []; approvalRequiredIssues: string[] = []; hardBlockingIssues: string[] = []; blockingMappingIssues: string[] = []; approvedAliasTargets: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, 'merge' | 'keep' | 'link'> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[], ipAllowlist: '', rateLimitPerMinute: 60 };
+  drawer: 'import' | 'cutover' | 'api-key' | 'webhook' | 'governance' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; postingMode: 'history_only' | 'opening_snapshot' | 'opening_payable' | 'live_receipt' = 'history_only'; cutoverId = ''; cutoverDate = ''; selectedJob: ImportJob | null = null;
+  cutoverDraft = { id: '', businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', cutoverDate: '', cutoverTime: '00:00', historicalPeriodEndDate: '', historicalPeriodEndTime: '23:59' };
+  snapshotChecksum = '';
+  goLiveApprovalNote = '';
+  goLiveObservationHours = '72';
+  fileName = ''; csvText = ''; rowCount = 0; selectedMappingId = ''; mappingName = ''; mappingSource = ''; mappingRuleVersion = ''; mappingFingerprint = ''; mappingHeaderFingerprint = ''; mappingProfileMatch: 'exact' | 'drift' | 'none' = 'none'; matchedSavedProfile: MappingSuggestions['savedProfile']; mappingHeaderDiff = { added: [] as string[], removed: [] as string[] }; mappingVersions: ImportMappingVersion[] = []; rollbackVersion = 0; mappingSemanticSource = ''; semanticAdvisory: Record<string, string> = {}; suggestedMapping: Record<string, string> = {}; mappingOverrides: Record<string, string> = {}; mappingDecisions: MappingDecision[] = []; approvalRequiredIssues: string[] = []; hardBlockingIssues: string[] = []; blockingMappingIssues: string[] = []; approvedAliasTargets: Record<string, string> = {}; importAnalysis: ImportAnalysis | null = null; duplicateDecisions: Record<string, DuplicateDecision> = {}; chunkSize = 5000; allowPartialImport = false; apiKeyDraft = { name: '', scopes: ['clients.read'] as string[], ipAllowlist: '', rateLimitPerMinute: 60 };
   webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] as string[] }; revealedSecret = '';
   netsuiteAccountId = '';
   migrationConnectorDraft = { credential: '', authScheme: 'api_key', centerIds: '', startDate: '', endDate: '', exportUrl: '', sourceFileName: 'dingg-export.xlsx', mode: 'dry-run' as 'dry-run' | 'commit' };
   selectedSourceFile: File | null = null; selectedSourceFileId = ''; uploadSessionId = ''; uploadProgress = 0; uploadStatus = '';
-  sourceProvider = 'auto'; evidenceRetentionDays = 90; sourceProfile: MigrationSourceProfile | null = null; selectedSourceSheet = '';
+  sourceProvider = 'auto'; evidenceRetentionDays = 90; sourceProfile: MigrationSourceProfile | null = null; selectedSourceSheet = ''; selectedHeaderSourceSheet = '';
+  quarantineSelected: Record<string, boolean> = {}; quarantineCorrections: Record<string, string> = {};
+  openingPayableOffsetAccount: 'OWNER_EQUITY' | 'RETAINED_EARNINGS' = 'OWNER_EQUITY';
   private refreshTimer = 0;
   busy = false; loading = true; error = '';
 
@@ -46,12 +53,19 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   get importMappings() { return this.migration.mappings(); }
   get importTemplates() { return this.migration.templates(); }
   get governance() { return this.migration.governance(); }
+  get activeCutover() { return this.migration.activeCutover(); }
+  get historicalPurchaseBills() { return this.migration.historicalPurchaseBills(); }
   get canViewApiClients() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('security.read', 'security.manage'); }
   get canManageApiClients() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('security.manage'); }
   get canManageMigrations() { return this.auth.hasAccess(['owner', 'admin', 'manager', 'superadmin', 'super-admin'], ['data_migration.manage']); }
+  get canExportMigrations() { return this.auth.hasAccess(['owner', 'admin', 'superadmin', 'super-admin'], ['data_migration.export']); }
+  get canApproveOpeningPayableFinance() { return this.canManageMigrations && this.auth.hasAccess(['owner', 'admin', 'superadmin', 'super-admin'], ['finance.write']); }
+  get canApproveCutoverOwnerActions() { return this.auth.hasRole('owner', 'superadmin', 'super-admin'); }
+  get nextCutoverStatus(): MigrationCutoverStatus | null { const current = this.activeCutover?.status; return current ? ({ draft: 'history_importing', history_importing: 'inventory_frozen', inventory_frozen: 'snapshot_approved', snapshot_approved: 'snapshot_applied', snapshot_applied: 'reconciled', reconciled: 'live', live: null } as const)[current] : null; }
+  get nextCutoverNeedsOwner() { return this.nextCutoverStatus === 'inventory_frozen' || this.nextCutoverStatus === 'snapshot_approved' || this.nextCutoverStatus === 'live'; }
   get visibleTabs() { return this.canViewApiClients ? this.tabs : this.tabs.filter((tab) => tab !== 'API Keys'); }
 
-  async ngOnInit() { if (new URL(location.href).searchParams.get('connector')) this.activeTab = 'Integrations'; await this.reload(); this.refreshTimer = window.setInterval(() => { if (!this.busy && this.jobs.some((job) => ['staging', 'queued', 'processing'].includes(job.status))) void this.reloadImportData(); }, 5000); }
+  async ngOnInit() { if (new URL(location.href).searchParams.get('connector')) this.activeTab = 'Integrations'; await this.reload(); this.refreshTimer = window.setInterval(() => { if (!this.busy && this.jobs.some((job) => ['staging', 'dependency_pending', 'queued', 'processing'].includes(job.status))) void this.reloadImportData(); }, 5000); }
   ngOnDestroy() { window.clearInterval(this.refreshTimer); }
   async reload() {
     this.loading = true; this.error = '';
@@ -72,16 +86,40 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     finally { this.loading = false; }
   }
 
-  openImport() { this.entity = ''; this.mode = 'dry-run'; this.fileName = ''; this.csvText = ''; this.rowCount = 0; this.selectedMappingId = ''; this.mappingName = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.chunkSize = 5000; this.allowPartialImport = false; this.selectedSourceFile = null; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = ''; this.sourceProvider = 'auto'; this.evidenceRetentionDays = 90; this.sourceProfile = null; this.selectedSourceSheet = ''; this.selectedJob = null; this.migration.clearGovernance(); this.drawer = 'import'; }
+  openImport() { this.entity = ''; this.mode = 'dry-run'; this.postingMode = 'history_only'; this.cutoverId = this.activeCutover?.id || ''; this.cutoverDate = this.activeCutover?.cutoverDate || ''; this.fileName = ''; this.csvText = ''; this.rowCount = 0; this.selectedMappingId = ''; this.mappingName = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingHeaderFingerprint = ''; this.mappingProfileMatch = 'none'; this.matchedSavedProfile = undefined; this.mappingHeaderDiff = { added: [], removed: [] }; this.mappingVersions = []; this.rollbackVersion = 0; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.chunkSize = 5000; this.allowPartialImport = false; this.selectedSourceFile = null; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = ''; this.sourceProvider = 'auto'; this.evidenceRetentionDays = 90; this.sourceProfile = null; this.selectedSourceSheet = ''; this.selectedHeaderSourceSheet = ''; this.selectedJob = null; this.migration.clearGovernance(); this.drawer = 'import'; }
+  openCutover() { const cutover = this.activeCutover; const timezone = cutover?.businessTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; const cutoverParts = cutover ? this.zonedParts(cutover.cutoverAt, timezone) : null; const historicalParts = cutover ? this.zonedParts(cutover.historicalPeriodEnd, timezone) : null; this.cutoverDraft = { id: cutover?.id || '', businessTimezone: timezone, cutoverDate: cutover?.cutoverDate || '', cutoverTime: cutoverParts?.time || '00:00', historicalPeriodEndDate: historicalParts?.date || cutover?.cutoverDate || '', historicalPeriodEndTime: historicalParts?.time || '23:59' }; this.drawer = 'cutover'; }
   queueEvidence(file: SourceFile) { this.openImport(); this.fileName = file.originalFileName; this.selectedSourceFileId = file.id; this.uploadStatus = 'Evidence verified'; void this.action(() => this.profileSource(), 'Source profile could not be loaded'); }
+  canQueueSource(file: SourceFile) { return ['csv', 'xlsx', 'zip'].includes(file.format); }
   openApiKey() { if (!this.canManageApiClients) return; this.apiKeyDraft = { name: '', scopes: ['clients.read'], ipAllowlist: '', rateLimitPerMinute: 60 }; this.revealedSecret = ''; this.drawer = 'api-key'; }
   openWebhook() { this.webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] }; this.revealedSecret = ''; this.drawer = 'webhook'; }
   closeDrawer() { if (!this.busy) { this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); } }
   toggleScope(scope: string) { this.apiKeyDraft.scopes = this.toggle(this.apiKeyDraft.scopes, scope); }
   toggleEvent(event: string) { this.webhookDraft.events = this.toggle(this.webhookDraft.events, event); }
 
+  async saveCutover() {
+    const draft = this.cutoverDraft;
+    if (!draft.id.trim() || !draft.cutoverDate || !draft.historicalPeriodEndDate) { this.error = 'Cutover ID, cutover date and historical period end are required'; return; }
+    await this.action(async () => {
+      await firstValueFrom(this.api.post('/settings/integrations/migration-cutovers', { id: draft.id.trim(), businessTimezone: draft.businessTimezone.trim(), cutoverDate: draft.cutoverDate, cutoverAt: this.zonedIso(draft.cutoverDate, draft.cutoverTime, draft.businessTimezone), historicalPeriodEnd: this.zonedIso(draft.historicalPeriodEndDate, draft.historicalPeriodEndTime, draft.businessTimezone) }));
+      this.drawer = ''; await this.reloadImportData();
+    }, 'Cutover could not be saved');
+  }
+
+  async advanceCutover() {
+    const cutover = this.activeCutover; const targetStatus = this.nextCutoverStatus;
+    if (!cutover || !targetStatus) return;
+    if (targetStatus === 'snapshot_approved' && !/^[0-9a-f]{64}$/i.test(this.snapshotChecksum.trim())) { this.error = 'Snapshot approval requires a valid SHA-256 checksum'; return; }
+    const observationPeriodHours = Number(this.goLiveObservationHours);
+    if (targetStatus === 'live' && !this.goLiveApprovalNote.trim()) { this.error = 'Owner go-live approval note is required'; return; }
+    if (targetStatus === 'live' && (!Number.isInteger(observationPeriodHours) || observationPeriodHours < 24 || observationPeriodHours > 72)) { this.error = 'Rollback observation window must be between 24 and 72 hours'; return; }
+    if ((targetStatus === 'inventory_frozen' || targetStatus === 'snapshot_approved' || targetStatus === 'live') && !confirm(targetStatus === 'inventory_frozen' ? 'Freeze all stock movements for this branch?' : targetStatus === 'snapshot_approved' ? 'Approve this physical stock snapshot as Owner?' : 'Go live and release the inventory freeze?')) return;
+    await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/migration-cutovers/${cutover.id}/transition`, { targetStatus, snapshotChecksum: targetStatus === 'snapshot_approved' ? this.snapshotChecksum.trim() : null, observationPeriodHours: targetStatus === 'live' ? observationPeriodHours : null, note: targetStatus === 'live' ? this.goLiveApprovalNote.trim() : '' })); this.snapshotChecksum = ''; this.goLiveApprovalNote = ''; await this.reloadImportData(); }, 'Cutover transition was blocked');
+  }
+
+  async downloadCutoverProofPack() { const cutover = this.activeCutover; if (!cutover || !this.canExportMigrations) return; await this.action(async () => this.downloadBlob(await firstValueFrom(this.api.getBlob(`/settings/integrations/migration-cutovers/${cutover.id}/proof-pack`)), `migration-cutover-proof-${cutover.id}.json`), 'Cutover proof pack could not be downloaded'); }
+
   async chooseFile(event: Event) {
-    const input = event.target as HTMLInputElement; const file = input.files?.[0]; this.error = ''; this.csvText = ''; this.fileName = ''; this.rowCount = 0; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.selectedSourceFileId = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = '';
+    const input = event.target as HTMLInputElement; const file = input.files?.[0]; this.error = ''; this.csvText = ''; this.fileName = ''; this.rowCount = 0; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; this.selectedSourceFileId = ''; this.selectedSourceSheet = ''; this.selectedHeaderSourceSheet = ''; this.uploadSessionId = ''; this.uploadProgress = 0; this.uploadStatus = '';
     if (!file) return;
     this.selectedSourceFile = file;
     this.busy = true;
@@ -90,9 +128,13 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     finally { this.busy = false; input.value = ''; }
   }
   async resumeSourceUpload() { if (!this.selectedSourceFile || !this.uploadSessionId) return; await this.action(() => this.uploadSourceFile(this.selectedSourceFile!), 'Source upload could not be resumed'); }
-  entityChanged() { this.selectedMappingId = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; const match = this.sourceProfile?.sheets.find((sheet) => sheet.targets.includes(this.entity as ImportEntity)); this.selectedSourceSheet = match?.id || ''; }
+  entityChanged() { if (this.isThreeLayerEntity) { this.mode = 'dry-run'; this.postingMode = this.entity === 'inventory' ? 'opening_snapshot' : this.entity === 'opening-payables' ? 'opening_payable' : 'history_only'; } else { this.cutoverId = ''; this.cutoverDate = ''; } this.selectedMappingId = ''; this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingHeaderFingerprint = ''; this.mappingProfileMatch = 'none'; this.matchedSavedProfile = undefined; this.mappingHeaderDiff = { added: [], removed: [] }; this.mappingVersions = []; this.rollbackVersion = 0; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; this.duplicateDecisions = {}; const match = this.sourceProfile?.sheets.find((sheet) => sheet.targets.includes(this.entity as ImportEntity)); this.selectedSourceSheet = match?.id || ''; this.selectedHeaderSourceSheet = ''; }
   get sourceSheets() { return (this.sourceProfile?.sheets || []).filter((sheet) => sheet.importable && (!this.entity || sheet.targets.includes(this.entity as ImportEntity))); }
+  get purchaseHeaderSheets() { return (this.sourceProfile?.sheets || []).filter((sheet) => sheet.importable && sheet.id !== this.selectedSourceSheet); }
+  sourceSheetChanged() { if (this.selectedHeaderSourceSheet === this.selectedSourceSheet) this.selectedHeaderSourceSheet = ''; this.mappingContextChanged(); }
+  get isThreeLayerEntity() { return this.entity === 'purchase-bills' || this.entity === 'inventory' || this.entity === 'opening-payables'; }
   get availableMappings() { return this.importMappings.filter((mapping) => mapping.entity === this.entity); }
+  get selectedMapping() { return this.importMappings.find((mapping) => mapping.id === this.selectedMappingId); }
   get activeTemplate() { return this.importTemplates.find((template) => template.entity === this.entity); }
   get mappingReviewDecisions() { return this.mappingDecisions; }
   get greenMappingCount() { return this.mappingDecisions.filter((decision) => decision.confidence === 'green').length; }
@@ -103,11 +145,11 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   hasUnresolvedDuplicates() { return !!this.importAnalysis?.rows.some((row) => row.status === 'duplicate' && !this.duplicateDecisions[this.duplicateDecisionKey(row)]); }
   async analyzeImport() {
     if (!this.entity || (!this.csvText && !this.selectedSourceFileId)) return;
+    if (this.selectedSourceFileId && this.isThreeLayerEntity && (!this.cutoverId.trim() || !this.cutoverDate)) { this.error = 'Cutover ID and date are required'; return; }
     if (this.selectedSourceFileId) {
       await this.action(async () => {
-        await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, entity: this.entity, mode: 'dry-run', mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: false }));
+        await this.queueSourceDryRun();
         this.drawer = '';
-        await this.reloadImportData();
       }, 'Import analysis could not be queued');
       return;
     }
@@ -121,7 +163,8 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
     await this.action(async () => {
       const request = this.mappingEvaluationRequest();
       const result = await firstValueFrom(this.api.post<ApiEnvelope<MappingSuggestions>>('/settings/integrations/import-mapping-suggestions', request));
-      this.selectedMappingId = '';
+      this.selectedMappingId = result.data?.profileMatch === 'exact' ? result.data.savedProfile?.id || '' : '';
+      await this.loadMappingVersions();
       this.suggestedMapping = result.data?.suggestions || {};
       this.mappingDecisions = result.data?.decisions || [];
       this.approvalRequiredIssues = result.data?.approvalRequiredIssues || [];
@@ -131,6 +174,10 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
       this.mappingSource = result.data?.source || 'rust_deterministic';
       this.mappingRuleVersion = result.data?.ruleVersion || '';
       this.mappingFingerprint = result.data?.fingerprint || '';
+      this.mappingHeaderFingerprint = result.data?.headerFingerprint || '';
+      this.mappingProfileMatch = result.data?.profileMatch || 'none';
+      this.matchedSavedProfile = result.data?.savedProfile;
+      this.mappingHeaderDiff = result.data?.headerDiff || { added: [], removed: [] };
       this.mappingSemanticSource = result.data?.semanticSource || '';
       this.semanticAdvisory = result.data?.semanticAdvisory || {};
       if (this.csvText && !this.selectedSourceFileId) {
@@ -138,7 +185,14 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
         this.importAnalysis = analysis.data || null;
       } else {
         this.importAnalysis = null;
-        this.uploadStatus = 'Mapping ready';
+        if (!this.blockingMappingIssues.length && (!this.isThreeLayerEntity || (this.cutoverId.trim() && this.cutoverDate))) {
+          await this.queueSourceDryRun();
+          this.uploadStatus = 'Mapping ready · dry-run queued';
+        } else if (!this.blockingMappingIssues.length) {
+          this.uploadStatus = 'Mapping ready · enter cutover ID and date';
+        } else {
+          this.uploadStatus = 'Mapping requires review';
+        }
       }
     }, 'Mapping suggestions could not be generated');
   }
@@ -154,29 +208,36 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   }
   async ignoreMappingColumn(decision: MappingDecision) { if (!this.canManageMigrations) return; this.mappingOverrides[decision.sourceColumn] = '__ignore'; await this.suggestMapping(); }
   async chooseDuplicateDecision(row: ImportAnalysisRow, decision: string) {
+    if (!this.canManageMigrations) return;
     const key = this.duplicateDecisionKey(row);
-    if (!decision) delete this.duplicateDecisions[key]; else this.duplicateDecisions[key] = decision as 'merge' | 'keep' | 'link';
+    if (!decision) delete this.duplicateDecisions[key]; else this.duplicateDecisions[key] = decision as DuplicateDecision;
     await this.analyzeImport();
   }
   async saveCurrentMapping() {
-    if (!this.entity || !this.mappingName.trim() || !this.importAnalysis) return;
+    if (!this.entity || !this.mappingName.trim() || !this.mappingFingerprint || this.blockingMappingIssues.length) return;
     await this.action(async () => {
-      const result = await firstValueFrom(this.api.post<ApiEnvelope<ImportMapping>>('/settings/integrations/import-mappings', { name: this.mappingName.trim(), entity: this.entity, mapping: this.importAnalysis!.mapping, sourceColumns: Object.keys(this.importAnalysis!.mapping) }));
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<ImportMapping>>('/settings/integrations/import-mappings', { name: this.mappingName.trim(), entity: this.entity, mapping: this.suggestedMapping, evaluation: this.mappingEvaluationRequest(), fingerprint: this.mappingFingerprint }));
       if (result.data) this.selectedMappingId = result.data.id;
       await this.migration.reload();
+      await this.loadMappingVersions();
     }, 'Import mapping could not be saved');
   }
+  async mappingSelectionChanged() { this.mappingSource = ''; this.mappingRuleVersion = ''; this.mappingFingerprint = ''; this.mappingHeaderFingerprint = ''; this.mappingProfileMatch = 'none'; this.matchedSavedProfile = undefined; this.mappingHeaderDiff = { added: [], removed: [] }; this.mappingSemanticSource = ''; this.semanticAdvisory = {}; this.suggestedMapping = {}; this.mappingOverrides = {}; this.mappingDecisions = []; this.approvalRequiredIssues = []; this.hardBlockingIssues = []; this.blockingMappingIssues = []; this.approvedAliasTargets = {}; this.importAnalysis = null; await this.loadMappingVersions(); }
+  mappingContextChanged() { this.selectedMappingId = ''; void this.mappingSelectionChanged(); }
+  async loadMappingVersions() { this.mappingVersions = []; this.rollbackVersion = 0; if (!this.selectedMappingId) return; const result = await firstValueFrom(this.api.get<ApiEnvelope<ImportMappingVersion[]>>(`/settings/integrations/import-mappings/${this.selectedMappingId}/versions`)); this.mappingVersions = result.data || []; }
+  async rollbackMapping() { if (!this.canManageMigrations || !this.selectedMappingId || this.rollbackVersion < 1 || !confirm(`Rollback this mapping to version ${this.rollbackVersion}? A new audited version will be created.`)) return; await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-mappings/${this.selectedMappingId}/rollback/${this.rollbackVersion}`, {})); await this.migration.reload(); await this.loadMappingVersions(); }, 'Mapping rollback failed'); }
   async applyImport() {
     if (!this.entity || (!this.csvText && !this.selectedSourceFileId)) return;
     if (!this.canManageMigrations) { this.error = 'Data migration manage permission is required'; return; }
+    if (this.isThreeLayerEntity && (!this.cutoverId.trim() || !this.cutoverDate)) { this.error = 'Cutover ID and date are required'; return; }
     if (this.blockingMappingIssues.length) { this.error = 'Resolve Yellow approvals and Red blockers before creating the import job'; return; }
     if (this.selectedSourceFileId) {
-      await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, entity: this.entity, mode: this.mode, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: this.allowPartialImport })); this.drawer = ''; await this.reloadImportData(); }, 'Large import job could not be created');
+      await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, headerSourceSheet: this.selectedHeaderSourceSheet, entity: this.entity, mode: this.mode, postingMode: this.isThreeLayerEntity ? this.postingMode : null, cutoverId: this.isThreeLayerEntity ? this.cutoverId.trim() : null, cutoverDate: this.isThreeLayerEntity ? this.cutoverDate : null, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: this.allowPartialImport })); this.drawer = ''; await this.reloadImportData(); }, 'Large import job could not be created');
       return;
     }
     if (!this.importAnalysis) { await this.analyzeImport(); if (!this.importAnalysis) return; }
     if (this.importAnalysis.summary.errorRows || this.hasUnresolvedDuplicates()) { this.error = 'Resolve row errors and duplicate decisions before creating the job'; return; }
-    await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs', { entity: this.entity, sourceProvider: this.sourceProvider, fileName: this.fileName, mode: this.mode, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions })); this.drawer = ''; await this.reloadImportData(); }, 'Import job could not be created');
+    await this.action(async () => { await firstValueFrom(this.api.post('/settings/integrations/import-jobs', { entity: this.entity, sourceProvider: this.sourceProvider, fileName: this.fileName, mode: this.mode, postingMode: this.isThreeLayerEntity ? this.postingMode : null, cutoverId: this.isThreeLayerEntity ? this.cutoverId.trim() : null, cutoverDate: this.isThreeLayerEntity ? this.cutoverDate : null, csv: this.csvText, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions })); this.drawer = ''; await this.reloadImportData(); }, 'Import job could not be created');
   }
   async downloadEvidence(file: SourceFile) { await this.action(async () => this.downloadBlob(await firstValueFrom(this.api.getBlob(`/settings/integrations/import-source-files/${file.id}/evidence`)), file.originalFileName), 'Source evidence could not be downloaded'); }
   async saveApiKey() { if (!this.canManageApiClients || !this.apiKeyDraft.name.trim() || !this.apiKeyDraft.scopes.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/api-keys', { ...this.apiKeyDraft, ipAllowlist: this.apiKeyDraft.ipAllowlist.split(/[\s,]+/).filter(Boolean) })); this.revealedSecret = result.data?.apiKey || ''; await this.reload(); }, 'API key could not be created'); }
@@ -222,40 +283,41 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   async pause(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/pause`, {})); await this.reloadImportData(); }, 'Import job could not be paused'); }
   async retryFailed(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/retry-failed`, {})); await this.reloadImportData(); }, 'Failed chunks could not be retried'); }
   async cancelImport(job: ImportJob) { if (!confirm(`Cancel ${job.fileName}?`)) return; await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/cancel`, {})); await this.reloadImportData(); }, 'Import job could not be cancelled'); }
-  async decideApproval(job: ImportJob, approved: boolean) { if (!approved && !confirm(`Reject ${job.fileName}? The import will be cancelled.`)) return; await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/approval`, { approved, note: '' })); await this.reloadImportData(); }, 'Only the assigned owner can decide this approval'); }
-  async reviewJob(job: ImportJob) { this.selectedJob = job; this.drawer = 'governance'; await this.action(async () => { await this.migration.loadGovernance(job.id); if (job.status === 'failed') await this.migration.loadFailureAssistant(job.id); }, 'Governance report could not be loaded'); }
+  async decideApproval(job: ImportJob, approved: boolean) { if (!approved && !confirm(`Reject ${job.fileName}? The import will be cancelled.`)) return; await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/approval`, { approved, note: '' })); this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); await this.reloadImportData(); }, 'Commit approval is blocked until Yellow, Red, duplicate and dependency issues are resolved'); }
+  async approveYellowWarnings(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/yellow-approval`, {})); await this.migration.loadGovernance(job.id); await this.reloadImportData(); }, 'Current Yellow warnings could not be approved'); }
+  async approveOpeningPayableFinance(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/opening-payable-controls`, { openingBalanceAccount: this.openingPayableOffsetAccount, payableAccount: 'ACCOUNTS_PAYABLE', supplierAdvanceAccount: 'SUPPLIER_ADVANCE_ASSET', note: '' })); await this.migration.loadGovernance(job.id); await this.reloadImportData(); }, 'Opening payable finance approval is blocked'); }
+  async reviewJob(job: ImportJob) { this.selectedJob = job; this.quarantineSelected = {}; this.quarantineCorrections = {}; this.drawer = 'governance'; await this.action(async () => { await this.migration.loadGovernance(job.id); const account = this.governance?.openingPayablePreview?.summary?.openingBalanceAccount; this.openingPayableOffsetAccount = account === 'RETAINED_EARNINGS' ? 'RETAINED_EARNINGS' : 'OWNER_EQUITY'; for (const row of this.governance?.quarantine.records || []) this.quarantineCorrections[this.quarantineKey(row)] = JSON.stringify(row.correction || {}, null, 0); if (job.status === 'failed') await this.migration.loadFailureAssistant(job.id); }, 'Governance report could not be loaded'); }
   async downloadProofPack(job: ImportJob) { await this.action(async () => { const blob = await firstValueFrom(this.api.getBlob(`/settings/integrations/import-jobs/${job.id}/proof-pack`)); this.downloadBlob(blob, `migration-proof-${job.id}.json`); }, 'Proof pack could not be downloaded'); }
   async downloadFailedRows(job: ImportJob) { await this.action(async () => { const blob = await firstValueFrom(this.api.getBlob(`/settings/integrations/import-jobs/${job.id}/failed-rows`)); this.downloadBlob(blob, `migration-failed-rows-${job.id}.csv`); }, 'Failed rows could not be exported'); }
+  quarantineKey(row: MigrationQuarantineRecord) { return `${row.sourceSheet}:${row.sourceRowNumber}`; }
+  async retryQuarantine(job: ImportJob, only?: MigrationQuarantineRecord) {
+    if (!this.canManageMigrations) return;
+    const rows = only ? [only] : (this.governance?.quarantine.records || []).filter((row) => this.quarantineSelected[this.quarantineKey(row)]);
+    if (!rows.length) { this.error = 'Select at least one retry-eligible quarantined row'; return; }
+    const sheets = new Set(rows.map((row) => row.sourceSheet));
+    if (sheets.size !== 1) { this.error = 'Retry one source sheet per batch'; return; }
+    let payload: { sourceSheet: string; sourceRowNumber: number; corrections: Record<string, string> }[];
+    try {
+      payload = rows.map((row) => { const corrections = JSON.parse(this.quarantineCorrections[this.quarantineKey(row)] || '{}'); if (!corrections || Array.isArray(corrections) || typeof corrections !== 'object' || Object.values(corrections).some((value) => typeof value !== 'string')) throw new Error(); return { sourceSheet: row.sourceSheet, sourceRowNumber: row.sourceRowNumber, corrections }; });
+    } catch { this.error = 'Corrections must be a JSON object with source-column string values'; return; }
+    if (!confirm(`Approve and retry ${rows.length} corrected row(s)? Successful rows will not be rerun.`)) return;
+    await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/quarantine/retry`, { rows: payload, approvePartial: true })); await this.migration.loadGovernance(job.id); await this.reloadImportData(); this.quarantineSelected = {}; }, 'Selective retry could not be queued');
+  }
+  async downloadErrorExport(job: ImportJob, kind: string) { await this.action(async () => this.downloadBlob(await firstValueFrom(this.api.getBlob(`/settings/integrations/import-jobs/${job.id}/error-exports/${kind}`)), `migration-${kind}-${job.id}.csv`), 'Migration error export failed'); }
   async rollback(job: ImportJob) { await this.action(async () => { const result = await firstValueFrom(this.api.get<ApiEnvelope<any>>(`/settings/integrations/import-jobs/${job.id}/rollback-impact`)); const impact = result.data; if (!impact?.safeToRollback) throw new Error('Rollback has dependent records or the job is not completed'); const actions = impact.actions || {}; if (!confirm(`Rollback ${job.fileName}? Delete ${actions.wouldDelete || 0}, restore ${actions.wouldRestore || 0}, unlink ${actions.wouldUnlink || 0}.`)) return; await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/rollback`, {})); this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); await this.reload(); }, 'Import rollback was blocked'); }
   async exportClients() { await this.action(async () => { const result = await firstValueFrom(this.api.get<ApiEnvelope<any[]>>('/clients/bulk/export?pageSize=5000')); this.download(JSON.stringify(result.data || [], null, 2), `clients-${new Date().toISOString().slice(0, 10)}.json`, 'application/json'); }, 'Client export failed'); }
   downloadStaffTemplate() { this.download('employeeCode,firstName,lastName,email,mobilePhone,jobTitle,active\r\n', 'staff-import-template.csv', 'text/csv'); }
   async downloadOpenApi() { await this.action(async () => { const spec = await firstValueFrom(this.api.get<any>('/openapi.json')); this.download(JSON.stringify(spec, null, 2), 'aurashine-openapi-v1.json', 'application/json'); }, 'OpenAPI export failed'); }
   formatDate(value?: string) { return value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—'; }
+  formatBusinessTime(value: string, timezone: string) { return new Intl.DateTimeFormat('en-GB', { dateStyle: 'short', timeStyle: 'short', timeZone: timezone }).format(new Date(value)); }
   providerLabel(value: string) { return value ? value[0].toUpperCase() + value.slice(1) : 'Provider'; }
   private async action(action: () => Promise<void>, fallback: string) { this.busy = true; this.error = ''; try { await action(); } catch (error) { this.error = this.message(error, fallback); } finally { this.busy = false; } }
   private async uploadSourceFile(file: File) {
     const extension = file.name.split('.').pop()?.toLowerCase();
     if (!extension || !['csv', 'xlsx', 'zip'].includes(extension)) throw new Error('Only CSV, XLSX and ZIP files are supported');
-    if (!file.size || file.size > 500 * 1024 * 1024) throw new Error('File must be between 1 byte and 500 MB');
-    const partSize = 8 * 1024 * 1024; const totalParts = Math.ceil(file.size / partSize);
-    let session: UploadSession;
-    if (!this.uploadSessionId) {
-      const created = await firstValueFrom(this.api.post<ApiEnvelope<UploadSession>>('/settings/integrations/import-uploads', { fileName: file.name, provider: this.sourceProvider, contentType: file.type || 'application/octet-stream', sizeBytes: file.size, totalParts, retentionDays: this.evidenceRetentionDays }));
-      if (!created.data) throw new Error('Upload session was not created'); this.uploadSessionId = created.data.id; session = created.data;
-    } else {
-      const existing = await firstValueFrom(this.api.get<ApiEnvelope<UploadSession>>(`/settings/integrations/import-uploads/${this.uploadSessionId}`));
-      if (!existing.data) throw new Error('Upload session was not found'); session = existing.data;
-    }
     this.uploadStatus = 'Uploading';
-    for (const partNumber of session.missingParts) {
-      const chunk = file.slice((partNumber - 1) * partSize, Math.min(partNumber * partSize, file.size), file.type || 'application/octet-stream');
-      const hash = await this.sha256(chunk);
-      const receipt = await firstValueFrom(this.api.putBytes<ApiEnvelope<{ session: UploadSession }>>(`/settings/integrations/import-uploads/${this.uploadSessionId}/parts/${partNumber}`, chunk, { 'X-Part-Sha256': hash }));
-      this.uploadProgress = Math.round(100 * (receipt.data?.session.receivedBytes || 0) / file.size);
-    }
-    const completed = await firstValueFrom(this.api.post<ApiEnvelope<{ sourceFile: SourceFile }>>(`/settings/integrations/import-uploads/${this.uploadSessionId}/complete`, {}));
-    if (!completed.data?.sourceFile) throw new Error('Source evidence was not finalized');
-    this.fileName = file.name; this.selectedSourceFileId = completed.data.sourceFile.id; this.uploadProgress = 100; this.uploadStatus = 'Evidence verified';
+    const completed = await this.migration.uploadSourceFile(file, { provider: this.sourceProvider, retentionDays: this.evidenceRetentionDays, sessionId: this.uploadSessionId }, (progress) => this.uploadProgress = progress);
+    this.uploadSessionId = completed.sessionId; this.fileName = file.name; this.selectedSourceFileId = completed.sourceFile.id; this.uploadStatus = 'Evidence verified';
     await this.profileSource();
     await this.reloadImportData();
     if (extension === 'csv' && file.size <= 5_000_000) {
@@ -266,12 +328,14 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   private mappingEvaluationRequest() {
     const sourceColumns = parseCsv(this.csvText)[0] || [];
     return this.selectedSourceFileId
-      ? { entity: this.entity, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, sourceFileId: this.selectedSourceFileId, mapping: this.mappingOverrides }
+      ? { entity: this.entity, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, headerSourceSheet: this.selectedHeaderSourceSheet, sourceFileId: this.selectedSourceFileId, mapping: this.mappingOverrides }
       : { entity: this.entity, sourceProvider: this.sourceProvider, sourceColumns, mapping: this.mappingOverrides };
   }
-  private async profileSource() { if (!this.selectedSourceFileId) return; const result = await firstValueFrom(this.api.get<ApiEnvelope<MigrationSourceProfile>>(`/settings/integrations/import-source-files/${this.selectedSourceFileId}/profile`)); this.sourceProfile = result.data || null; if (this.sourceProvider === 'auto' && result.data?.provider) this.sourceProvider = result.data.provider; const match = result.data?.sheets.find((sheet) => sheet.importable && (!this.entity || sheet.targets.includes(this.entity as ImportEntity))); this.selectedSourceSheet = match?.id || ''; if (!this.entity && match?.targets.length) this.entity = match.targets[0]; }
+  private async profileSource() { if (!this.selectedSourceFileId) return; const result = await firstValueFrom(this.api.get<ApiEnvelope<MigrationSourceProfile>>(`/settings/integrations/import-source-files/${this.selectedSourceFileId}/profile`)); this.sourceProfile = result.data || null; if (this.sourceProvider === 'auto' && result.data?.provider) this.sourceProvider = result.data.provider; const match = result.data?.sheets.find((sheet) => sheet.importable && (!this.entity || sheet.targets.includes(this.entity as ImportEntity))); this.selectedSourceSheet = match?.id || ''; this.selectedHeaderSourceSheet = ''; if (!this.entity && match?.targets.length) this.entity = match.targets[0]; }
   private async reloadImportData() { await this.migration.reload(); }
-  private async sha256(blob: Blob) { const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join(''); }
+  private async queueSourceDryRun() { await firstValueFrom(this.api.post('/settings/integrations/import-jobs/from-source', { sourceFileId: this.selectedSourceFileId, sourceProvider: this.sourceProvider, sourceSheet: this.selectedSourceSheet, headerSourceSheet: this.selectedHeaderSourceSheet, entity: this.entity, mode: 'dry-run', postingMode: this.isThreeLayerEntity ? this.postingMode : null, cutoverId: this.isThreeLayerEntity ? this.cutoverId.trim() : null, cutoverDate: this.isThreeLayerEntity ? this.cutoverDate : null, mapping: this.selectedMappingId ? {} : this.suggestedMapping, mappingId: this.selectedMappingId || null, duplicateDecisions: this.duplicateDecisions, chunkSize: this.chunkSize, allowPartialImport: false })); await this.reloadImportData(); }
+  private zonedParts(iso: string, timezone: string) { const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso)).map((part) => [part.type, part.value])); return { date: `${parts['year']}-${parts['month']}-${parts['day']}`, time: `${parts['hour']}:${parts['minute']}` }; }
+  private zonedIso(date: string, time: string, timezone: string) { const match = `${date}T${time}`.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/); if (!match) throw new Error('Date and time are invalid'); const wanted = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5]); let instant = wanted; for (let pass = 0; pass < 3; pass++) { const parts = this.zonedParts(new Date(instant).toISOString(), timezone); const rendered = Date.parse(`${parts.date}T${parts.time}:00Z`); instant += wanted - rendered; } const result = new Date(instant).toISOString(); const verified = this.zonedParts(result, timezone); if (verified.date !== date || verified.time !== time) throw new Error('Selected time does not exist in the business timezone'); return result; }
   private toggle(values: string[], value: string) { return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]; }
   private migrationDateIso(value: string) { const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return match ? `${match[3]}-${match[2]}-${match[1]}` : null; }
   private downloadBlob(blob: Blob, name: string) { const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); }

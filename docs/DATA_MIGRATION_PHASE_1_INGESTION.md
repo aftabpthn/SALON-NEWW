@@ -4,7 +4,7 @@ Status: implemented on 29/07/2026. Scope ends after verified source profiling; i
 
 ## Supported intake
 
-- Multipart CSV, XLSX and ZIP upload.
+- Multipart CSV, XLSX, ZIP, PDF, PNG, JPEG and WebP upload.
 - Zenoti authenticated API snapshots through the existing connector.
 - DINGG authenticated export download through the existing connector.
 - Approved Salonist, Fresha, Tally, Busy, Marg, Excel, CSV and Manual provider exports through the same fixed intake.
@@ -32,7 +32,13 @@ Configured retention is `retentionDays` from 1 to 3650, default 90. When expired
 - Filename traversal, reserved Windows names, unsafe MIME/extension combinations and mismatched part/full hashes are rejected.
 - CSV must be UTF-8, non-binary, parseable, have headers and contain a non-empty data row.
 - XLSX must be a valid OOXML ZIP with required records, safe paths/ratios, at least one populated worksheet and no encrypted/password-protected package.
-- ZIP is restricted to 300 CSV/XLSX entries, 250 MB per entry, 1 GB extracted total and 200:1 maximum compression ratio. Duplicate names, symlinks and unsafe paths are rejected.
+- ZIP is restricted to 300 CSV/XLSX/PDF/image entries, 250 MB per entry, 1 GB extracted total and 200:1 maximum compression ratio. Duplicate names, symlinks, password-protected entries and unsafe paths are rejected.
+
+## Historical purchase evidence collection
+
+`GET /api/v1/settings/integrations/historical-purchase-evidence?cutoverId=...` returns the branch-scoped Phase 1 evidence index, upload failures, grouping suggestions, unidentified supplier batches, Owner cutover approval and completion checks. Historical bills require a supplier batch; physical inventory counts and supplier closing-balance statements use separate evidence kinds. Direct PDF/image evidence and supported ZIP attachments use the same encryption, SHA-256, malware scan, tenant/branch isolation and immutable storage path as other migration sources.
+
+Grouping suggestions use the immutable filename, ZIP folder and page-sequence evidence available in Phase 1. Every multi-page suggestion remains incomplete until an authenticated migration manager records the verified page count and approval. The branch cutover requires a separate Owner/superadmin approval. These endpoints write only migration evidence, decisions, cutover approval and audit records; they never post inventory, accounting, GST or supplier payable entries.
 
 ## Column profile contract
 

@@ -1,0 +1,2 @@
+ALTER TABLE supplier_opening_payable_imports
+  DROP CONSTRAINT IF EXISTS supplier_opening_payable_imp_source_outstanding_total_pai_check;

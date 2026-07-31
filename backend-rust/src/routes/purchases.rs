@@ -139,6 +139,8 @@ struct ReceiptRequest {
     #[serde(default)]
     handling_paise: i64,
     idempotency_key: String,
+    #[serde(default)]
+    backdated_operational_approval: bool,
     lines: Vec<ReceiptLineRequest>,
 }
 
@@ -147,6 +149,8 @@ struct ReceiptRequest {
 struct ReceiptLineRequest {
     inventory_item_id: String,
     quantity: i32,
+    #[serde(default)]
+    free_quantity: i32,
     unit_cost_paise: i64,
     #[serde(default)]
     discount_bps: i32,
@@ -484,12 +488,14 @@ async fn receive(
         shipping_paise: payload.shipping_paise,
         handling_paise: payload.handling_paise,
         idempotency_key: payload.idempotency_key,
+        backdated_operational_approval: payload.backdated_operational_approval,
         lines: payload
             .lines
             .into_iter()
             .map(|line| ReceiptLineInput {
                 inventory_item_id: line.inventory_item_id,
                 quantity: line.quantity,
+                free_quantity: line.free_quantity,
                 unit_cost_paise: line.unit_cost_paise,
                 discount_bps: line.discount_bps,
                 gst_percent: line.gst_percent,
@@ -503,7 +509,15 @@ async fn receive(
             .collect(),
     };
     Ok(Json(ApiResponse::ok(
-        purchase_service::receive(&state, &tenant_id, &branch_id, &claims.sub, input).await?,
+        purchase_service::receive(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.role,
+            input,
+        )
+        .await?,
     )))
 }
 

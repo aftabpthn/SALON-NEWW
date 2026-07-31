@@ -93,7 +93,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(pos_enterprise::public_router())
         .merge(payment_platform::public_router())
         .merge(scim::router())
-        .merge(integrations::public_router());
+        .merge(integrations::public_router())
+        .merge(operations::public_router());
 
     let protected_api = Router::new()
         .merge(auth::protected_router())

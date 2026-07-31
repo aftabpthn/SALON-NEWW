@@ -94,6 +94,12 @@ const ACCOUNTS: &[AccountMeta] = &[
         current: true,
     },
     AccountMeta {
+        code: "SUPPLIER_ADVANCE_ASSET",
+        name: "Supplier Advance",
+        group: AccountGroup::Asset,
+        current: true,
+    },
+    AccountMeta {
         code: "FIXED_ASSETS",
         name: "Fixed Assets",
         group: AccountGroup::Asset,

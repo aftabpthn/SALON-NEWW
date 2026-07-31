@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const routes = readFileSync('src/app/app.routes.ts', 'utf8');
 const sidebar = readFileSync('src/app/layout/app-sidebar.component.ts', 'utf8');
+const header = readFileSync('src/app/layout/app-header.component.ts', 'utf8');
 const page = readFileSync('src/app/pages/dashboard/command-center/command-center-page.component.ts', 'utf8');
 const template = readFileSync('src/app/pages/dashboard/command-center/command-center-page.component.html', 'utf8');
 const settings = readFileSync('src/app/pages/settings/settings-page.component.ts', 'utf8');
@@ -16,11 +17,17 @@ const branchService = readFileSync('../backend-rust/src/services/branch_service.
 const walletService = readFileSync('../backend-rust/src/services/wallet_service.rs', 'utf8');
 const analyticsService = readFileSync('../backend-rust/src/services/analytics_service.rs', 'utf8');
 const analyticsRepository = readFileSync('../backend-rust/src/repositories/analytics_repository.rs', 'utf8');
+const reportRoutes = readFileSync('../backend-rust/src/routes/reports.rs', 'utf8');
+const governanceRepository = readFileSync('../backend-rust/src/repositories/profit_governance_repository.rs', 'utf8');
+const governanceService = readFileSync('../backend-rust/src/services/profit_governance_service.rs', 'utf8');
+const briefingService = readFileSync('../backend-rust/src/services/ai_briefing_service.rs', 'utf8');
+const backendMain = readFileSync('../backend-rust/src/main.rs', 'utf8');
+const rollbackMigration = readFileSync('../backend-rust/migrations/0339_profit_action_rollback.sql', 'utf8');
 
 test('Command Center preserves management access in route and sidebar', () => {
   assert.match(routes, /roles: \['owner', 'admin', 'super-admin', 'manager', 'analyst'\], permissions: \['reports\.read'\], deniedRedirect: '\/dashboard'/);
-  assert.match(sidebar, /hasRole\('owner', 'admin', 'super-admin', 'manager', 'analyst'\)/);
-  assert.match(sidebar, /hasPermission\('reports\.read'\)/);
+  assert.match(sidebar, /filter\(\(group\) => this\.canNavigate\(group\.route\)\)/);
+  assert.match(sidebar, /this\.auth\.hasAccess\(access\.roles, access\.permissions\)/);
 });
 
 test('Command Center gates restricted data and actions with current claims', () => {
@@ -29,6 +36,22 @@ test('Command Center gates restricted data and actions with current claims', () 
     assert.ok(template.includes(gate), `${gate} is not rendered`);
   }
   assert.match(template, /Access restricted/);
+});
+
+test('Header notifications open their related CRM screen', () => {
+  assert.match(header, /navigateByUrl\(this\.notificationLink\(notification\)\)/);
+  assert.match(header, /metadata\?\.sections[\s\S]*openReportLink/);
+  for (const target of [
+    '/staff/control-center?tab=governance',
+    '/staff/leave-management',
+    '/staff/control-center?tab=content',
+    '/appointments',
+    '/inventory',
+    '/pos/invoices',
+    '/marketing',
+    '/sms-center',
+  ]) assert.ok(header.includes(`'${target}'`), `${target} notification target is missing`);
+  assert.match(header, /!link\.startsWith\('\/'\) \|\| link\.startsWith\('\/\/'\)/);
 });
 
 test('Command Center loads real branch APIs without a redundant health request', () => {
@@ -48,6 +71,71 @@ test('Command Center loads real branch APIs without a redundant health request',
     assert.ok(page.includes(endpoint), `${endpoint} is not wired`);
   }
   assert.doesNotMatch(page, /this\.api\.health\(/);
+});
+
+test('Command Center explains its purpose and reports API state at the top', () => {
+  assert.match(template, /Kahan risk hai, kyun hai aur kya action lena hai/);
+  assert.match(template, /\{\{ liveStateLabel \}\}/);
+  for (const status of ['Checking APIs', 'All APIs connected', 'APIs unavailable']) {
+    assert.ok(page.includes(status), `${status} is missing`);
+  }
+  assert.match(page, /`\$\{this\.errors\.size\} APIs unavailable`/);
+});
+
+test('API drill-down tracks each live source and action queue uses real risk data', () => {
+  assert.match(template, /\(click\)="apiStatusOpen = !apiStatusOpen"/);
+  assert.match(template, /@for \(api of apiStatusRows; track api\.source\)/);
+  assert.match(page, /sourceUpdatedAt\.set\(source, new Date\(\)\)/);
+  assert.match(page, /this\.errors\.delete\(source\)/);
+  for (const source of ['this.actions.map', 'this.inventoryCommand?.signals', 'this.paymentRisk?.openCount', 'this.locationConflicts.map', 'this.growth?.revenueLeaks']) {
+    assert.ok(page.includes(source), `${source} is missing from the priority queue`);
+  }
+  assert.match(page, /priority\(right\.priority\) - priority\(left\.priority\)/);
+  assert.match(template, /\[routerLink\]="action\.route"/);
+  assert.match(template, /<span>Priority actions<\/span>[\s\S]*prioritizedActions\.length/);
+});
+
+test('Command Center connects all four saved forecasts, explanations, and branch anomalies', () => {
+  for (const kind of ['revenue_forecast', 'inventory_reorder_risk', 'service_demand', 'no_show_risk']) {
+    assert.ok(page.includes(`/api/v1/ai/predictions/${kind}/latest`), `${kind} latest forecast is not loaded`);
+    assert.ok(page.includes(`/api/v1/ai/predictions/${kind}`), `${kind} cannot be refreshed`);
+  }
+  assert.match(page, /\/api\/v1\/ai\/briefing\/daily/);
+  assert.match(page, /\/api\/v1\/ai\/briefing\/compare\/\$\{encodeURIComponent\(this\.branchSignal\)\}/);
+  assert.match(template, /AI Forecasts &amp; Escalation/);
+  assert.match(template, /Why: \{\{ action\.message \}\} · Expected: \{\{ action\.expectedImpact \}\}/);
+  assert.match(template, /Auto escalation active[\s\S]*scanIntervalMinutes/);
+});
+
+test('Priority actions expose owner, deadline, SLA and approval-first transitions', () => {
+  assert.match(page, /\/api\/v1\/profit-intelligence\/actions\?status=all&limit=200/);
+  assert.match(page, /\/api\/v1\/profit-intelligence\/governance\/audit\?limit=100/);
+  assert.match(page, /actions\/\$\{encodeURIComponent\(action\.managedActionId\)\}\/\$\{transition\}/);
+  assert.match(template, /action\.ownerName \|\| 'Owner pending'/);
+  assert.match(template, /SLA overdue/);
+  for (const transition of ['approve', 'complete', 'dismiss', 'rollback']) {
+    assert.ok(template.includes(`transitionGovernedAction(action, '${transition}')`), `${transition} action is not rendered`);
+  }
+  assert.match(page, /createdByUserId !== this\.auth\.userId/);
+});
+
+test('Action rollback is scoped, audited and reopens linked governance state', () => {
+  assert.match(reportRoutes, /\/profit-intelligence\/actions\/:id\/rollback[\s\S]*post\(rollback_profit_action\)/);
+  assert.match(reportRoutes, /rollback_profit_action[\s\S]*ensure_profit_governance_approver/);
+  assert.match(governanceService, /rollback note must be 1 to 500 characters/);
+  assert.match(governanceRepository, /WHERE action\.tenant_id=\$1 AND action\.branch_id=\$2 AND action\.id=\$3[\s\S]*FOR UPDATE OF action/);
+  assert.match(governanceRepository, /UPDATE profit_action_queue[\s\S]*status='pending'/);
+  assert.match(governanceRepository, /UPDATE profit_governance_approvals SET status='pending'/);
+  assert.match(governanceRepository, /UPDATE profit_governance_decisions SET status='pending'/);
+  assert.match(governanceRepository, /"action_rolled_back"/);
+  assert.match(rollbackMigration, /'action_rolled_back'/);
+});
+
+test('Briefing advertises the same cadence used by its automatic worker', () => {
+  assert.match(briefingService, /BRIEFING_WORKER_INTERVAL_SECONDS: u64 = 21_600/);
+  assert.match(briefingService, /automation_active: true/);
+  assert.match(briefingService, /scan_interval_minutes: BRIEFING_WORKER_INTERVAL_SECONDS \/ 60/);
+  assert.match(backendMain, /BRIEFING_WORKER_INTERVAL_SECONDS[\s\S]{0,300}run_daily_briefing_worker/);
 });
 
 test('Executive Overview uses matching today and 30-day real-data columns', () => {

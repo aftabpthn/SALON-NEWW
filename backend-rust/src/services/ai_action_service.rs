@@ -37,12 +37,7 @@ use sqlx::PgPool;
 
 use crate::{
     models::common::AppError, repositories::ai_action_repository as action_repository,
-    services::{
-        ai_scope_service::{self, AiDomain, ScopeRequest},
-        ai_tool_dispatcher,
-        auth_service::AuthClaims,
-        staff_advanced_service,
-    },
+    services::staff_advanced_service,
 };
 
 /// The actions the copilot may draft. Every one either creates a *draft* record
@@ -149,42 +144,31 @@ impl ActionKind {
         )
     }
 
-    fn domain(self) -> AiDomain {
+    /// Roles allowed to confirm this action.
+    fn allowed_roles(self) -> &'static [&'static str] {
         match self {
-            Self::CreateOfferDraft | Self::CreateCampaignDraft => AiDomain::Marketing,
-            Self::CreateWhatsAppDraft | Self::OpenClientProfile => AiDomain::Clients,
-            Self::CreateFollowUpTask
-            | Self::CreateCoachingTask
-            | Self::CreateMembershipFollowUp
-            | Self::OpenStaffReport => AiDomain::Staff,
-            Self::PrepareBookingDraft => AiDomain::Appointments,
-            Self::PrepareMembershipRenewal | Self::OpenMembership => AiDomain::Memberships,
-            Self::CreateReorderProposal => AiDomain::Inventory,
-            Self::OpenServiceReport => AiDomain::Services,
-            Self::ContinueBilling => AiDomain::Pos,
+            // A discount draft is a commercial decision even before publication.
+            Self::CreateOfferDraft | Self::CreateCampaignDraft => &["owner", "admin", "manager"],
+            Self::OpenStaffReport => &["owner", "admin", "manager", "analyst"],
+            Self::PrepareMembershipRenewal | Self::OpenMembership => {
+                &["owner", "admin", "manager", "frontdesk", "receptionist"]
+            }
+            Self::OpenServiceReport => &["owner", "admin", "manager", "analyst", "accountant"],
+            _ => &[
+                "owner",
+                "admin",
+                "manager",
+                "staff",
+                "frontdesk",
+                "receptionist",
+                "analyst",
+            ],
         }
     }
 
-    fn manage_permissions(self) -> &'static [&'static str] {
-        match self {
-            Self::CreateOfferDraft | Self::CreateCampaignDraft => &["marketing.manage"],
-            Self::CreateWhatsAppDraft => &["clients.manage"],
-            Self::CreateFollowUpTask
-            | Self::CreateCoachingTask
-            | Self::CreateMembershipFollowUp => &["staff.manage", "staff.app.tasks.manage"],
-            Self::PrepareBookingDraft => &["appointments.manage"],
-            Self::PrepareMembershipRenewal => &["memberships.manage"],
-            Self::CreateReorderProposal => &["inventory.manage"],
-            Self::ContinueBilling => &["pos.manage"],
-            _ => &[],
-        }
-    }
-
-    pub fn permitted_for(self, claims: &AuthClaims) -> bool {
-        ai_scope_service::domain_allowed(claims, self.domain())
-            && (self.manage_permissions().is_empty()
-                || self.manage_permissions().iter()
-                    .any(|permission| ai_scope_service::permission_allowed(claims, permission)))
+    pub fn permitted_for(self, role: &str) -> bool {
+        self.allowed_roles()
+            .contains(&role.to_ascii_lowercase().as_str())
     }
 
     /// The CRM screen that owns this change. Executing a draft never bypasses
@@ -294,15 +278,6 @@ pub struct ConfirmDraftRequest {
     pub idempotency_key: String,
 }
 
-async fn require_branch_scope(
-    db: &PgPool, tenant_id: &str, branch_id: &str, claims: &AuthClaims,
-) -> Result<(), AppError> {
-    ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest {
-        branch_id: Some(branch_id.to_string()),
-        ..Default::default()
-    }).await?.require_branch(branch_id)
-}
-
 fn to_draft(record: action_repository::ActionDraftRecord) -> ActionDraft {
     let kind = ActionKind::from_name(&record.action_type);
     ActionDraft {
@@ -329,22 +304,34 @@ fn to_draft(record: action_repository::ActionDraftRecord) -> ActionDraft {
 }
 
 /// Raises a draft. Creates no business record and changes nothing.
-pub async fn create_draft_authorized(
+pub async fn create_draft(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    claims: &AuthClaims,
+    role: &str,
+    user_id: &str,
     request: CreateDraftRequest,
 ) -> Result<ActionDraft, AppError> {
-    require_branch_scope(db, tenant_id, branch_id, claims).await?;
     let kind = ActionKind::from_name(&request.action_type)
         .ok_or_else(|| AppError::validation("that action is not available"))?;
     // Drafting is gated too. Offering a button the caller could never confirm
     // is a worse experience than not offering it.
-    if !kind.permitted_for(claims) {
-        audit(db, tenant_id, branch_id, None, kind, "refused", &claims.sub, &claims.role,
-            "permission may not draft this action").await;
-        return Err(AppError::forbidden("this action is not available for your permissions"));
+    if !kind.permitted_for(role) {
+        audit(
+            db,
+            tenant_id,
+            branch_id,
+            None,
+            kind,
+            "refused",
+            user_id,
+            role,
+            "role may not draft this action",
+        )
+        .await;
+        return Err(AppError::forbidden(
+            "this action is not available for your role",
+        ));
     }
     let summary = if request.summary.trim().is_empty() {
         format!("{} — {}", kind.name(), kind.confirmation_note())
@@ -361,62 +348,41 @@ pub async fn create_draft_authorized(
         kind.requires_confirmation(),
         &request.payload,
         &json!(kind.refresh_targets()),
-        &claims.sub,
+        user_id,
     )
     .await
     .map_err(|error| {
         tracing::error!(%error, action = kind.name(), "failed to store action draft");
         AppError::internal("failed to create the action draft")
     })?;
-    audit(db, tenant_id, branch_id, Some(&record.id), kind, "drafted", &claims.sub, &claims.role, "").await;
+    audit(
+        db,
+        tenant_id,
+        branch_id,
+        Some(&record.id),
+        kind,
+        "drafted",
+        user_id,
+        role,
+        "",
+    )
+    .await;
     Ok(to_draft(record))
-}
-
-#[cfg(test)]
-fn legacy_claims(tenant_id: &str, branch_id: &str, role: &str, user_id: &str) -> AuthClaims {
-    let permissions: &[&str] = match role.to_ascii_lowercase().as_str() {
-        "owner" | "admin" | "manager" => &["tenant.read", "management.write", "appointments.manage", "clients.manage", "marketing.manage", "memberships.manage", "inventory.manage", "pos.manage", "staff.app.tasks.manage"],
-        "frontdesk" | "receptionist" => &["appointments.read", "appointments.manage", "clients.read", "clients.manage", "memberships.read", "memberships.manage", "staff.read", "staff.app.tasks.manage"],
-        "staff" => &["staff.read", "staff.app.tasks.manage", "appointments.read"],
-        "analyst" => &["reports.read", "staff.read", "services.read", "clients.read"],
-        "accountant" => &["finance.read", "services.read", "pos.read"],
-        _ => &[],
-    };
-    let mut claims = crate::services::ai_tool_dispatcher::tests_support::claims(role, permissions, &[]);
-    claims.tenant_id = tenant_id.to_string();
-    claims.branch_id = Some(branch_id.to_string());
-    claims.sub = user_id.to_string();
-    claims
-}
-
-#[cfg(test)]
-async fn create_draft(db: &PgPool, tenant_id: &str, branch_id: &str, role: &str, user_id: &str, request: CreateDraftRequest) -> Result<ActionDraft, AppError> {
-    create_draft_authorized(db, tenant_id, branch_id, &legacy_claims(tenant_id, branch_id, role, user_id), request).await
-}
-
-#[cfg(test)]
-async fn confirm_draft(db: &PgPool, tenant_id: &str, branch_id: &str, role: &str, user_id: &str, draft_id: &str, request: ConfirmDraftRequest) -> Result<ActionDraft, AppError> {
-    confirm_draft_authorized(db, tenant_id, branch_id, &legacy_claims(tenant_id, branch_id, role, user_id), draft_id, request).await
-}
-
-#[cfg(test)]
-async fn cancel_draft(db: &PgPool, tenant_id: &str, branch_id: &str, role: &str, user_id: &str, draft_id: &str) -> Result<ActionDraft, AppError> {
-    cancel_draft_authorized(db, tenant_id, branch_id, &legacy_claims(tenant_id, branch_id, role, user_id), draft_id).await
 }
 
 /// Confirms a draft and records approval to open its owning CRM screen.
 ///
 /// Permission and current state are re-checked here rather than trusted from
 /// draft time: a role can be revoked, or the draft already actioned, in between.
-pub async fn confirm_draft_authorized(
+pub async fn confirm_draft(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    claims: &AuthClaims,
+    role: &str,
+    user_id: &str,
     draft_id: &str,
     request: ConfirmDraftRequest,
 ) -> Result<ActionDraft, AppError> {
-    require_branch_scope(db, tenant_id, branch_id, claims).await?;
     let idempotency_key = request.idempotency_key.trim();
     if idempotency_key.is_empty() || idempotency_key.chars().count() > 120 {
         return Err(AppError::validation("idempotencyKey is required"));
@@ -424,14 +390,10 @@ pub async fn confirm_draft_authorized(
 
     // A replay of the same draft and key returns the first approval. A key used
     // for another draft is a conflict instead of leaking or approving it.
-    if let Some(existing) = action_repository::by_idempotency_key(
-        db,
-        tenant_id,
-        branch_id,
-        idempotency_key,
-    )
-        .await
-        .map_err(|_| AppError::internal("failed to check the idempotency key"))?
+    if let Some(existing) =
+        action_repository::by_idempotency_key(db, tenant_id, branch_id, idempotency_key)
+            .await
+            .map_err(|_| AppError::internal("failed to check the idempotency key"))?
     {
         if existing.id != draft_id {
             return Err(AppError::conflict(
@@ -440,13 +402,35 @@ pub async fn confirm_draft_authorized(
         }
         let kind = ActionKind::from_name(&existing.action_type)
             .ok_or_else(|| AppError::validation("that action is no longer available"))?;
-        if !kind.permitted_for(claims) {
-            audit(db, tenant_id, branch_id, Some(&existing.id), kind, "refused", &claims.sub, &claims.role,
-                "permission may not replay this approval").await;
-            return Err(AppError::forbidden("this action is not available for your permissions"));
+        if !kind.permitted_for(role) {
+            audit(
+                db,
+                tenant_id,
+                branch_id,
+                Some(&existing.id),
+                kind,
+                "refused",
+                user_id,
+                role,
+                "role may not replay this approval",
+            )
+            .await;
+            return Err(AppError::forbidden(
+                "this action is not available for your role",
+            ));
         }
-        audit(db, tenant_id, branch_id, Some(&existing.id), kind, "replayed", &claims.sub, &claims.role,
-            "approval replayed with the same key").await;
+        audit(
+            db,
+            tenant_id,
+            branch_id,
+            Some(&existing.id),
+            kind,
+            "replayed",
+            user_id,
+            role,
+            "approval replayed with the same key",
+        )
+        .await;
         return Ok(to_draft(existing));
     }
 
@@ -458,18 +442,40 @@ pub async fn confirm_draft_authorized(
         .ok_or_else(|| AppError::validation("that action is no longer available"))?;
 
     // Re-checked at the moment of approval, not taken from the draft.
-    if !kind.permitted_for(claims) {
-        audit(db, tenant_id, branch_id, Some(&record.id), kind, "refused", &claims.sub, &claims.role,
-            "permission may not confirm this action").await;
-        return Err(AppError::forbidden("this action is not available for your permissions"));
+    if !kind.permitted_for(role) {
+        audit(
+            db,
+            tenant_id,
+            branch_id,
+            Some(&record.id),
+            kind,
+            "refused",
+            user_id,
+            role,
+            "role may not confirm this action",
+        )
+        .await;
+        return Err(AppError::forbidden(
+            "this action is not available for your role",
+        ));
     }
     // `executing` is undecided: a previous attempt claimed it and did not
     // finish, so this call is a retry rather than a second decision. It is safe
     // to proceed because the CRM write is keyed on the draft — the retry finds
     // the existing record instead of writing another.
     if !matches!(record.status.as_str(), "draft" | "executing") {
-        audit(db, tenant_id, branch_id, Some(&record.id), kind, "refused", &claims.sub, &claims.role,
-            "draft was already decided").await;
+        audit(
+            db,
+            tenant_id,
+            branch_id,
+            Some(&record.id),
+            kind,
+            "refused",
+            user_id,
+            role,
+            "draft was already decided",
+        )
+        .await;
         return Err(AppError::conflict("that action draft was already decided"));
     }
 
@@ -477,15 +483,14 @@ pub async fn confirm_draft_authorized(
     // conditional UPDATE off `status='draft'`, so of two concurrent
     // confirmations exactly one proceeds past this point and exactly one CRM
     // record is ever created. The loser is told the draft was already decided.
-    let claimed = action_repository::claim_for_execution(
-        db, tenant_id, branch_id, &record.id, &claims.sub,
-    )
-    .await
-    .map_err(|error| {
-        tracing::error!(%error, action = kind.name(), "failed to claim action draft");
-        AppError::internal("failed to approve the action draft")
-    })?
-    .ok_or_else(|| AppError::conflict("that action draft was already decided"))?;
+    let claimed =
+        action_repository::claim_for_execution(db, tenant_id, branch_id, &record.id, user_id)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, action = kind.name(), "failed to claim action draft");
+                AppError::internal("failed to approve the action draft")
+            })?
+            .ok_or_else(|| AppError::conflict("that action draft was already decided"))?;
 
     // Task-shaped work is completed here through the CRM's own service. Anything
     // that moves money or reaches a client is handed to the screen that owns it.
@@ -504,7 +509,7 @@ pub async fn confirm_draft_authorized(
             db,
             tenant_id,
             branch_id,
-            &claims.sub,
+            user_id,
             kind,
             &claimed.id,
             &claimed.payload,
@@ -530,7 +535,14 @@ pub async fn confirm_draft_authorized(
                     tracing::error!(%release, action = kind.name(), "failed to release action claim");
                 }
                 audit(
-                    db, tenant_id, branch_id, Some(&claimed.id), kind, "failed", &claims.sub, &claims.role,
+                    db,
+                    tenant_id,
+                    branch_id,
+                    Some(&claimed.id),
+                    kind,
+                    "failed",
+                    user_id,
+                    role,
                     error.message(),
                 )
                 .await;
@@ -545,7 +557,7 @@ pub async fn confirm_draft_authorized(
         &record.id,
         idempotency_key,
         &result,
-        &claims.sub,
+        user_id,
     )
     .await
     .map_err(|error| {
@@ -555,7 +567,18 @@ pub async fn confirm_draft_authorized(
     // A concurrent confirmation won the race and moved it out of 'draft'.
     .ok_or_else(|| AppError::conflict("that action draft was already decided"))?;
 
-    audit(db, tenant_id, branch_id, Some(&approved.id), kind, "approved", &claims.sub, &claims.role, "").await;
+    audit(
+        db,
+        tenant_id,
+        branch_id,
+        Some(&approved.id),
+        kind,
+        "approved",
+        user_id,
+        role,
+        "",
+    )
+    .await;
     Ok(to_draft(approved))
 }
 
@@ -641,29 +664,31 @@ async fn execute_through_crm(
 }
 
 /// Cancels a draft. Nothing runs.
-pub async fn cancel_draft_authorized(
+pub async fn cancel_draft(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    claims: &AuthClaims,
+    role: &str,
+    user_id: &str,
     draft_id: &str,
 ) -> Result<ActionDraft, AppError> {
-    require_branch_scope(db, tenant_id, branch_id, claims).await?;
-    let existing = action_repository::by_id(db, tenant_id, branch_id, draft_id)
-        .await.map_err(|_| AppError::internal("failed to load the action draft"))?
-        .ok_or_else(|| AppError::not_found("that action draft was not found"))?;
-    let kind = ActionKind::from_name(&existing.action_type)
-        .ok_or_else(|| AppError::validation("that action is no longer available"))?;
-    if !kind.permitted_for(claims) {
-        return Err(AppError::forbidden("this action is not available for your permissions"));
-    }
-    let record = action_repository::cancel(db, tenant_id, branch_id, draft_id, &claims.sub)
+    let record = action_repository::cancel(db, tenant_id, branch_id, draft_id, user_id)
         .await
         .map_err(|_| AppError::internal("failed to cancel the action draft"))?
         .ok_or_else(|| AppError::not_found("that action draft was not found"))?;
     if let Some(kind) = ActionKind::from_name(&record.action_type) {
-        audit(db, tenant_id, branch_id, Some(&record.id), kind, "cancelled", &claims.sub, &claims.role, "")
-            .await;
+        audit(
+            db,
+            tenant_id,
+            branch_id,
+            Some(&record.id),
+            kind,
+            "cancelled",
+            user_id,
+            role,
+            "",
+        )
+        .await;
     }
     Ok(to_draft(record))
 }
@@ -683,7 +708,15 @@ async fn audit(
     detail: &str,
 ) {
     if let Err(error) = action_repository::record_audit(
-        db, tenant_id, branch_id, draft_id, kind.name(), event, actor_id, actor_role, detail,
+        db,
+        tenant_id,
+        branch_id,
+        draft_id,
+        kind.name(),
+        event,
+        actor_id,
+        actor_role,
+        detail,
     )
     .await
     {
@@ -770,18 +803,8 @@ mod phase5_action_tests {
         assert!(!ActionKind::OpenStaffReport.requires_confirmation());
         assert!(ActionKind::ContinueBilling.requires_confirmation());
         // Commercial drafts are restricted even before publication.
-        assert!(!ActionKind::CreateOfferDraft.permitted_for(&legacy_claims("tenant1", "branch1", "receptionist", "user1")));
-        assert!(ActionKind::CreateOfferDraft.permitted_for(&legacy_claims("tenant1", "branch1", "manager", "user1")));
-    }
-
-    #[test]
-    fn action_grants_are_exact_and_denials_win() {
-        let granted = crate::services::ai_tool_dispatcher::tests_support::claims(
-            "custom operator", &["marketing.read", "marketing.manage"], &[]);
-        assert!(ActionKind::CreateOfferDraft.permitted_for(&granted));
-        let denied = crate::services::ai_tool_dispatcher::tests_support::claims(
-            "owner", &["marketing.read", "marketing.manage"], &["marketing.manage"]);
-        assert!(!ActionKind::CreateOfferDraft.permitted_for(&denied));
+        assert!(!ActionKind::CreateOfferDraft.permitted_for("receptionist"));
+        assert!(ActionKind::CreateOfferDraft.permitted_for("manager"));
     }
 
     async fn connect() -> Option<PgPool> {
@@ -848,7 +871,9 @@ mod phase5_action_tests {
         assert_eq!(first.result["approved"], true);
         assert_eq!(first.result["executed"], false);
         assert!(
-            first.refresh_targets.contains(&"marketing.offers".to_string()),
+            first
+                .refresh_targets
+                .contains(&"marketing.offers".to_string()),
             "the UI must be told what to reload"
         );
 
@@ -876,7 +901,10 @@ mod phase5_action_tests {
         .fetch_one(&db)
         .await
         .expect("count runs");
-        assert_eq!(approved, 1, "a replayed confirmation must not approve twice");
+        assert_eq!(
+            approved, 1,
+            "a replayed confirmation must not approve twice"
+        );
 
         // A different key on an already-decided draft is a conflict, not a
         // second approval.
@@ -892,7 +920,10 @@ mod phase5_action_tests {
             },
         )
         .await;
-        assert!(again.is_err(), "an already-decided draft must not approve again");
+        assert!(
+            again.is_err(),
+            "an already-decided draft must not approve again"
+        );
 
         cleanup(&db, &tenant).await;
     }
@@ -934,15 +965,17 @@ mod phase5_action_tests {
             },
         )
         .await;
-        assert!(refused.is_err(), "an unauthorized confirmation must be refused");
+        assert!(
+            refused.is_err(),
+            "an unauthorized confirmation must be refused"
+        );
 
         // The draft is untouched.
-        let still: String =
-            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
-                .bind(&draft.id)
-                .fetch_one(&db)
-                .await
-                .expect("draft reloads");
+        let still: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&db)
+            .await
+            .expect("draft reloads");
         assert_eq!(still, "draft");
 
         // The refusal is on the record.
@@ -1132,7 +1165,11 @@ mod controlled_action_tests {
             ActionKind::CreateCoachingTask,
             ActionKind::CreateMembershipFollowUp,
         ] {
-            assert!(kind.executes_on_approval(), "{} should complete", kind.name());
+            assert!(
+                kind.executes_on_approval(),
+                "{} should complete",
+                kind.name()
+            );
         }
     }
 
@@ -1161,12 +1198,11 @@ mod controlled_action_tests {
         assert_eq!(draft.status, "draft");
 
         // Nothing exists yet: a draft is not a task.
-        let before: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
-                .bind(&tenant_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
+            .bind(&tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(before, 0, "drafting must not write the task");
 
         let approved = confirm_draft(
@@ -1189,8 +1225,7 @@ mod controlled_action_tests {
             "an executed action must say so"
         );
         assert_eq!(
-            approved.result["execution"]["service"],
-            "staff_advanced_service.create_task",
+            approved.result["execution"]["service"], "staff_advanced_service.create_task",
             "the write must go through the CRM's own service"
         );
 
@@ -1242,12 +1277,11 @@ mod controlled_action_tests {
         assert!(format!("{error:?}").to_lowercase().contains("title"));
 
         // The draft must not be left looking approved.
-        let status: String =
-            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
-                .bind(&draft.id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(
             status, "draft",
             "a failed write must leave the draft undecided, not approved"
@@ -1287,19 +1321,34 @@ mod controlled_action_tests {
         let key = ConfirmDraftRequest {
             idempotency_key: "confirm-key-3".into(),
         };
-        confirm_draft(&pool, &tenant_id, &branch_id, "manager", "approver-1", &draft.id, key.clone())
-            .await
-            .expect("first approval");
-        confirm_draft(&pool, &tenant_id, &branch_id, "manager", "approver-1", &draft.id, key)
-            .await
-            .expect("the replay returns the first approval");
+        confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            key.clone(),
+        )
+        .await
+        .expect("first approval");
+        confirm_draft(
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &draft.id,
+            key,
+        )
+        .await
+        .expect("the replay returns the first approval");
 
-        let tasks: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
-                .bind(&tenant_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM staff_tasks WHERE tenant_id=$1")
+            .bind(&tenant_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(tasks, 1, "a replayed approval must not write twice");
     }
 
@@ -1344,14 +1393,28 @@ mod controlled_action_tests {
 
         let key = "shared-key";
         confirm_draft(
-            &pool, &tenant_id, &branch_id, "manager", "approver-1", &first.id,
-            ConfirmDraftRequest { idempotency_key: key.into() },
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "manager",
+            "approver-1",
+            &first.id,
+            ConfirmDraftRequest {
+                idempotency_key: key.into(),
+            },
         )
         .await
         .expect("first branch approves");
         confirm_draft(
-            &pool, &tenant_id, &other_branch, "manager", "approver-1", &second.id,
-            ConfirmDraftRequest { idempotency_key: key.into() },
+            &pool,
+            &tenant_id,
+            &other_branch,
+            "manager",
+            "approver-1",
+            &second.id,
+            ConfirmDraftRequest {
+                idempotency_key: key.into(),
+            },
         )
         .await
         .expect("the same key in another branch is a separate approval");
@@ -1390,7 +1453,9 @@ mod controlled_action_tests {
         )
         .await
         .expect_err("a role without the right must not confirm");
-        assert!(format!("{error:?}").to_lowercase().contains("not available"));
+        assert!(format!("{error:?}")
+            .to_lowercase()
+            .contains("not available"));
     }
 
     /// Two confirmations arriving at once must produce one CRM task, not two.
@@ -1451,7 +1516,9 @@ mod controlled_action_tests {
         assert_eq!(winners, 1, "exactly one confirmation may succeed");
         let loser = left.err().or(right.err()).expect("one confirmation loses");
         assert!(
-            format!("{loser:?}").to_lowercase().contains("already decided"),
+            format!("{loser:?}")
+                .to_lowercase()
+                .contains("already decided"),
             "the loser must be told the draft was already decided, got {loser:?}"
         );
 
@@ -1462,14 +1529,16 @@ mod controlled_action_tests {
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(tasks, 1, "a raced confirmation must not duplicate the CRM task");
+        assert_eq!(
+            tasks, 1,
+            "a raced confirmation must not duplicate the CRM task"
+        );
 
-        let status: String =
-            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
-                .bind(&draft.id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(status, "approved", "the winner's approval must be recorded");
     }
 
@@ -1507,12 +1576,11 @@ mod controlled_action_tests {
         .await
         .expect_err("the CRM write fails");
 
-        let status: String =
-            sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
-                .bind(&draft.id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM ai_action_drafts WHERE id=$1")
+            .bind(&draft.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(
             status, "draft",
             "a failed write must leave the draft confirmable, not stuck executing"
@@ -1644,7 +1712,11 @@ mod controlled_action_tests {
 
         // Reproduce the post-crash state exactly: claimed, executed, unapproved.
         let claimed = action_repository::claim_for_execution(
-            &pool, &tenant_id, &branch_id, &draft.id, "approver-1",
+            &pool,
+            &tenant_id,
+            &branch_id,
+            &draft.id,
+            "approver-1",
         )
         .await
         .expect("the claim query runs")
@@ -1670,7 +1742,10 @@ mod controlled_action_tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(stuck, "executing", "the fixture must reproduce a stuck claim");
+        assert_eq!(
+            stuck, "executing",
+            "the fixture must reproduce a stuck claim"
+        );
 
         // The retry.
         let recovered = confirm_draft(
@@ -1779,7 +1854,11 @@ mod controlled_action_tests {
         .expect("the draft is created");
 
         action_repository::claim_for_execution(
-            &pool, &tenant_id, &branch_id, &draft.id, "approver-1",
+            &pool,
+            &tenant_id,
+            &branch_id,
+            &draft.id,
+            "approver-1",
         )
         .await
         .expect("the claim query runs")
@@ -1885,7 +1964,9 @@ mod controlled_action_tests {
         .await
         .expect_err("a cancelled draft must not execute");
         assert!(
-            format!("{refused:?}").to_lowercase().contains("already decided"),
+            format!("{refused:?}")
+                .to_lowercase()
+                .contains("already decided"),
             "got {refused:?}"
         );
 

@@ -304,6 +304,51 @@ const ENDPOINT_REQUIREMENTS: &[EndpointRequirement] = &[
     EndpointRequirement {
         group: "content",
         method: "GET",
+        path: "/staff/rules",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/rules",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/rules/:id/publish",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/rules/:id/unpublish",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/rules/violations",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "POST",
+        path: "/staff/rules/violations/:id/resolve",
+    },
+    EndpointRequirement {
+        group: "staff-app",
+        method: "GET",
+        path: "/staff-self/rules",
+    },
+    EndpointRequirement {
+        group: "staff-app",
+        method: "POST",
+        path: "/staff-self/rules/:id/read",
+    },
+    EndpointRequirement {
+        group: "staff-app",
+        method: "POST",
+        path: "/staff-self/rules/:id/acknowledge",
+    },
+    EndpointRequirement {
+        group: "content",
+        method: "GET",
         path: "/staff/tasks",
     },
     EndpointRequirement {

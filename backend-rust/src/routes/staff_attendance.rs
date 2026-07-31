@@ -5,6 +5,7 @@ use axum::{
     Extension, Json, Router,
 };
 use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use passkey_auth::AuthenticationResponse;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::FromRow;
@@ -18,7 +19,10 @@ use crate::{
         },
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_attendance_service, staff_enterprise_service},
+    services::{
+        auth_service::{self, AuthClaims},
+        staff_attendance_service, staff_enterprise_service, webauthn_service,
+    },
     state::AppState,
 };
 
@@ -34,6 +38,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff-attendance/:staff_id/details", get(get_details))
         .route("/staff-attendance/clock-in", post(clock_in))
+        .route(
+            "/staff-attendance/biometric/begin",
+            post(begin_biometric_clock_in),
+        )
         .route(
             "/staff-attendance/early-departure-requests",
             get(list_early_departure_requests).post(create_early_departure_request),
@@ -112,10 +120,11 @@ struct FaceScanEvidence {
     latitude: f64,
     longitude: f64,
     accuracy_meters: Option<f64>,
-    liveness_prompt: Option<String>,
-    liveness_response: Option<String>,
-    provider_event_id: Option<String>,
+    challenge_id: Option<String>,
+    credential: Option<AuthenticationResponse>,
 }
+
+const ATTENDANCE_WEBAUTHN_PURPOSE: &str = "staff-attendance";
 
 #[derive(Debug, FromRow)]
 struct FaceAttendancePolicy {
@@ -151,6 +160,7 @@ async fn list_early_departure_requests(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<crate::repositories::staff_enterprise_repository::ApprovalRequestRecord>> {
+    ensure_attendance_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         staff_enterprise_service::list_self_early_departures(
@@ -169,6 +179,7 @@ async fn create_early_departure_request(
     headers: HeaderMap,
     Json(payload): Json<staff_enterprise_service::EarlyDepartureRequest>,
 ) -> ApiResult<crate::repositories::staff_enterprise_repository::ApprovalRequestRecord> {
+    ensure_attendance_manage(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let row = staff_enterprise_service::request_early_departure(
         &state.db,
@@ -242,6 +253,7 @@ async fn get_summary(
     headers: HeaderMap,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
+    ensure_attendance_read(&claims)?;
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id = self_scoped_staff_id(
@@ -275,9 +287,14 @@ async fn recalculate_summary(
 
 async fn save_summary(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<SaveSummaryRequest>,
 ) -> ApiResult<Vec<staff_attendance_service::AttendanceSummaryRow>> {
+    ensure_attendance_manage(&claims)?;
+    if !is_attendance_manager(&claims) {
+        return Err(AppError::forbidden("Attendance manager access is required"));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let rows = staff_attendance_service::save_adjustments(
         &state.db,
@@ -307,6 +324,7 @@ async fn get_details(
     Path(staff_id): Path<String>,
     Query(query): Query<SummaryQuery>,
 ) -> ApiResult<Vec<crate::repositories::staff_attendance_repository::AttendanceDetailRecord>> {
+    ensure_attendance_read(&claims)?;
     validate_cycle(query.cycle.as_deref())?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
@@ -329,6 +347,7 @@ async fn enforce_face_attendance_policy(
     tenant_id: &str,
     branch_id: &str,
     staff_id: &str,
+    user_id: &str,
     evidence: Option<&FaceScanEvidence>,
 ) -> Result<(), AppError> {
     let Some(evidence) = evidence else {
@@ -482,11 +501,7 @@ async fn enforce_face_attendance_policy(
             ));
         }
     }
-    let prompt = evidence.liveness_prompt.as_deref().unwrap_or("").trim();
-    let response = evidence.liveness_response.as_deref().unwrap_or("").trim();
-    if policy.liveness_mode == "basic"
-        && (prompt.is_empty() || response.is_empty() || prompt != response)
-    {
+    if policy.liveness_mode == "provider" {
         record_face_exception(
             state,
             tenant_id,
@@ -494,7 +509,7 @@ async fn enforce_face_attendance_policy(
             staff_id,
             evidence.device_uid.trim(),
             source_ip,
-            "liveness_failed",
+            "trusted_provider_required",
             Some(evidence.latitude),
             Some(evidence.longitude),
             evidence.accuracy_meters,
@@ -502,15 +517,43 @@ async fn enforce_face_attendance_policy(
             face_evidence_json(evidence),
         )
         .await;
-        return Err(AppError::validation("face liveness check failed"));
+        return Err(AppError::forbidden(
+            "provider face attendance must come from an approved biometric gateway",
+        ));
     }
-    if policy.liveness_mode == "provider"
-        && evidence
-            .provider_event_id
-            .as_deref()
-            .unwrap_or("")
-            .trim()
-            .is_empty()
+    let challenge_id = evidence.challenge_id.as_deref().unwrap_or("").trim();
+    let Some(credential) = evidence.credential.as_ref() else {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            evidence.device_uid.trim(),
+            source_ip,
+            "biometric_verification_failed",
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            evidence.accuracy_meters,
+            Some(distance),
+            face_evidence_json(evidence),
+        )
+        .await;
+        return Err(AppError::unauthenticated(
+            "biometric verification is required",
+        ));
+    };
+    if challenge_id.is_empty()
+        || webauthn_service::finish_authentication_for_purpose(
+            &state.db,
+            &state.settings,
+            tenant_id,
+            Some(user_id),
+            ATTENDANCE_WEBAUTHN_PURPOSE,
+            challenge_id,
+            credential,
+        )
+        .await
+        .is_err()
     {
         record_face_exception(
             state,
@@ -519,7 +562,7 @@ async fn enforce_face_attendance_policy(
             staff_id,
             evidence.device_uid.trim(),
             source_ip,
-            "provider_liveness_required",
+            "biometric_verification_failed",
             Some(evidence.latitude),
             Some(evidence.longitude),
             evidence.accuracy_meters,
@@ -527,8 +570,8 @@ async fn enforce_face_attendance_policy(
             face_evidence_json(evidence),
         )
         .await;
-        return Err(AppError::validation(
-            "provider liveness verification is required",
+        return Err(AppError::unauthenticated(
+            "biometric verification could not be verified",
         ));
     }
     Ok(())
@@ -583,7 +626,7 @@ async fn record_face_exception(
 }
 
 fn face_evidence_json(evidence: &FaceScanEvidence) -> Value {
-    json!({"accuracyMeters": evidence.accuracy_meters, "hasProviderEvent": evidence.provider_event_id.as_deref().unwrap_or("").trim() != "", "livenessPrompt": evidence.liveness_prompt})
+    json!({"accuracyMeters": evidence.accuracy_meters, "verification": if evidence.challenge_id.as_deref().unwrap_or("").trim().is_empty() { "missing" } else { "webauthn" }})
 }
 fn valid_geo(latitude: f64, longitude: f64) -> bool {
     latitude.is_finite()
@@ -777,12 +820,33 @@ async fn list_face_exceptions(
     .map_err(|_| AppError::internal("failed to load face attendance exceptions"))?;
     Ok(Json(ApiResponse::ok(rows)))
 }
+
+async fn begin_biometric_clock_in(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<webauthn_service::AuthenticationStart> {
+    ensure_attendance_manage(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let challenge = webauthn_service::begin_authentication_for_purpose(
+        &state.db,
+        &state.settings,
+        &tenant_id,
+        &claims.sub,
+        ATTENDANCE_WEBAUTHN_PURPOSE,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(challenge)))
+}
+
 async fn clock_in(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<ClockInRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    ensure_attendance_manage(&claims)?;
+    ensure_self_business_date(&claims, payload.business_date)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id = self_scoped_staff_id(
         &state,
@@ -793,13 +857,14 @@ async fn clock_in(
     )
     .await?;
     let source = payload.source.as_deref().unwrap_or("manual").trim();
-    if source == "staff-app-face" {
+    if matches!(source, "staff-app-face" | "staff-app-biometric") {
         enforce_face_attendance_policy(
             &state,
             &headers,
             &tenant_id,
             &branch_id,
             &staff_id,
+            &claims.sub,
             payload.face_scan.as_ref(),
         )
         .await?;
@@ -810,7 +875,11 @@ async fn clock_in(
         &branch_id,
         &staff_id,
         payload.business_date,
-        payload.clock_in_at,
+        if is_attendance_manager(&claims) {
+            payload.clock_in_at
+        } else {
+            None
+        },
         source,
         payload.comments.as_deref().unwrap_or("").trim(),
     )
@@ -824,6 +893,8 @@ async fn clock_out(
     headers: HeaderMap,
     Json(payload): Json<ClockOutRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    ensure_attendance_manage(&claims)?;
+    ensure_self_business_date(&claims, payload.business_date)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let self_service = !is_attendance_manager(&claims);
     let staff_id = self_scoped_staff_id(
@@ -840,7 +911,11 @@ async fn clock_out(
         &branch_id,
         &staff_id,
         payload.business_date,
-        payload.clock_out_at,
+        if is_attendance_manager(&claims) {
+            payload.clock_out_at
+        } else {
+            None
+        },
         if self_service {
             0
         } else {
@@ -858,6 +933,8 @@ async fn start_break(
     headers: HeaderMap,
     Json(payload): Json<BreakRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceBreakRecord> {
+    ensure_attendance_manage(&claims)?;
+    ensure_self_business_date(&claims, payload.business_date)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id = self_scoped_staff_id(
         &state,
@@ -885,6 +962,8 @@ async fn end_break(
     headers: HeaderMap,
     Json(payload): Json<BreakRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    ensure_attendance_manage(&claims)?;
+    ensure_self_business_date(&claims, payload.business_date)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id = self_scoped_staff_id(
         &state,
@@ -925,6 +1004,58 @@ fn is_attendance_manager(claims: &AuthClaims) -> bool {
         .any(|role| role.eq_ignore_ascii_case(&claims.role))
 }
 
+const STAFF_APP_ROLES: &[&str] = &["owner", "admin", "manager", "staff"];
+const ATTENDANCE_READ_LEGACY: &[&str] = &[
+    "staff.app.attendance.manage",
+    "staff.attendance.read",
+    "staff.self_manage",
+    "allow:staff-checkin-checkout",
+    "read:staff",
+];
+const ATTENDANCE_MANAGE_LEGACY: &[&str] = &[
+    "staff.self_manage",
+    "staff_self.write",
+    "allow:staff-checkin-checkout",
+    "write:staff",
+];
+
+fn ensure_attendance_read(claims: &AuthClaims) -> Result<(), AppError> {
+    ensure_staff_app_permission(claims, "staff.app.attendance.read", ATTENDANCE_READ_LEGACY)
+}
+
+fn ensure_attendance_manage(claims: &AuthClaims) -> Result<(), AppError> {
+    ensure_staff_app_permission(
+        claims,
+        "staff.app.attendance.manage",
+        ATTENDANCE_MANAGE_LEGACY,
+    )
+}
+
+fn ensure_staff_app_permission(
+    claims: &AuthClaims,
+    permission: &str,
+    legacy: &[&str],
+) -> Result<(), AppError> {
+    if auth_service::staff_app_permission_allowed(claims, permission, STAFF_APP_ROLES, legacy) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("Staff App permission is required"))
+    }
+}
+
+fn ensure_self_business_date(claims: &AuthClaims, requested: NaiveDate) -> Result<(), AppError> {
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("valid IST offset"))
+        .date_naive();
+    if is_attendance_manager(claims) || requested == today {
+        Ok(())
+    } else {
+        Err(AppError::validation(
+            "self-service attendance must use the current business date",
+        ))
+    }
+}
+
 async fn correct_attendance(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -932,6 +1063,7 @@ async fn correct_attendance(
     Path((staff_id, business_date)): Path<(String, NaiveDate)>,
     Json(payload): Json<AttendanceCorrectionRequest>,
 ) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceRecord> {
+    ensure_attendance_manage(&claims)?;
     if !is_attendance_manager(&claims) {
         return Err(AppError::forbidden("Attendance manager access is required"));
     }

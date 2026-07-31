@@ -1,0 +1,293 @@
+<main class="archive-page">
+  <header class="page-head">
+    <div>
+      <nav class="breadcrumb"><a routerLink="/settings/integrations-data">Data Migration</a><span>/</span><span>Old Purchase Bills</span></nav>
+      <div class="title-row"><h1>Old Purchase Bills</h1><span class="history-badge">ⓘ Historical only · no stock effect</span></div>
+    </div>
+    <div class="head-actions">
+      <button type="button" [disabled]="!canExport || !filteredBills.length" (click)="exportBills()">⇩ Export</button>
+      <button type="button" [disabled]="!canExport || !filteredBills.length" (click)="exportEvidenceIndex()">▤ Evidence</button>
+      <button type="button" [disabled]="loading" (click)="reload()">↻ Reload</button>
+    </div>
+  </header>
+
+  @if (error) { <div class="error" role="alert">{{ error }}</div> }
+
+  <nav class="tabs" aria-label="Historical purchase views">
+    <button type="button" [class.active]="activeTab === 'evidence'" (click)="setTab('evidence')">Evidence Collection <span>{{ evidence?.summary?.totalFiles || 0 }}</span></button>
+    <button type="button" [class.active]="activeTab === 'pilot'" (click)="setTab('pilot')">Pilot Review <span>{{ pilot?.summary?.uploadedDocuments || 0 }}</span></button>
+    <button type="button" [class.active]="activeTab === 'bulk'" (click)="setTab('bulk')">Bulk Archive <span>{{ bulk?.batches?.length || 0 }}</span></button>
+    <button type="button" [class.active]="activeTab === 'bills'" (click)="setTab('bills')">Bills <span>{{ bills.length }}</span></button>
+    <button type="button" [class.active]="activeTab === 'products'" (click)="setTab('products')">Products <span>{{ products.length }}</span></button>
+    <button type="button" [class.active]="activeTab === 'vendors'" (click)="setTab('vendors')">Vendors <span>{{ vendors.length }}</span></button>
+    <button type="button" [class.active]="activeTab === 'unmapped'" (click)="setTab('unmapped')">Unmapped Products <span>{{ unmappedProducts.length }}</span></button>
+    <button type="button" [class.active]="activeTab === 'reconciliation'" (click)="setTab('reconciliation')">Reconciliation</button>
+  </nav>
+
+  @if (activeTab === 'evidence') {
+    <section class="evidence-control">
+      <header><div><h2>Immutable evidence collection</h2></div><span class="status" [class.warning]="!evidence?.summary?.complete">{{ evidence?.summary?.complete ? 'Complete' : 'In progress' }}</span></header>
+      @if (cutover; as currentCutover) {
+        <div class="cutover-row"><div><small>Historical period end</small><strong>{{ currentCutover.historicalPeriodEnd | date:'dd/MM/yyyy, HH:mm' }}</strong></div><div><small>Opening stock / live start</small><strong>{{ currentCutover.cutoverAt | date:'dd/MM/yyyy, HH:mm' }}</strong></div><div><small>Branch</small><strong>{{ currentCutover.branchId }}</strong></div><button type="button" [disabled]="busy || !canApproveCutover || evidence?.summary?.cutoverApproved" (click)="approveCutover()">{{ evidence?.summary?.cutoverApproved ? 'Owner approved' : 'Approve cutover' }}</button></div>
+        <div class="upload-grid">
+          <label>Evidence type<select [(ngModel)]="evidenceKind"><option value="historical_bill">Historical bills</option><option value="physical_inventory">Physical inventory count</option><option value="supplier_outstanding">Supplier outstanding statement</option></select></label>
+          @if (evidenceKind === 'historical_bill') { <label>Supplier batch<input maxlength="120" placeholder="Supplier-name or Unidentified-Supplier" [(ngModel)]="supplierBatch" /></label> }
+          <label>Retention days<input type="number" min="1" max="3650" [(ngModel)]="evidenceRetentionDays" /></label>
+          <label class="file-picker">Files<input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.csv,.xlsx" [disabled]="busy || !canManage" (change)="uploadEvidence($event)" /></label>
+        </div>
+        @if (uploadStatus) { <div class="upload-progress"><span>{{ uploadStatus }}</span><progress max="100" [value]="uploadProgress"></progress><strong>{{ uploadProgress }}%</strong></div> }
+      } @else { <div class="empty">Create the branch cutover in Data Migration before collecting evidence</div> }
+    </section>
+
+    @if (evidence; as report) {
+      <section class="completion-grid" aria-label="Evidence collection completion">
+        <div><span>Files / pages</span><strong>{{ report.summary.totalFiles }} / {{ report.summary.totalPages }}</strong></div>
+        <div><span>Checksums</span><strong>{{ report.summary.checksumVerified ? 'Verified' : 'Blocked' }}</strong></div>
+        <div><span>Grouping</span><strong>{{ report.summary.groupingApproved ? 'Approved' : 'Pending' }}</strong></div>
+        <div><span>Physical inventory</span><strong>{{ report.summary.physicalInventoryReady ? 'Ready' : 'Pending' }}</strong></div>
+        <div><span>Supplier outstanding</span><strong>{{ report.summary.supplierOutstandingReady ? 'Ready' : 'Pending' }}</strong></div>
+        <div><span>Cutover</span><strong>{{ report.summary.cutoverApproved ? 'Owner approved' : 'Pending' }}</strong></div>
+        <div><span>Stock / GL / GST</span><strong>0 / 0 / 0</strong></div>
+        <div><span>Live CRM writes</span><strong>{{ report.summary.liveCrmWrites }}</strong></div>
+      </section>
+
+      <section class="table-card evidence-files"><div class="table-scroll"><table><thead><tr><th>File</th><th>Type</th><th>Supplier batch</th><th>Pages</th><th>Size</th><th>SHA-256</th><th>Uploaded by</th><th>Evidence</th></tr></thead><tbody>@for (file of report.files; track file.id) { <tr><td><strong>{{ file.originalFileName }}</strong><small>{{ file.createdAt | date:'dd/MM/yyyy, HH:mm' }}</small></td><td>{{ file.kind.replaceAll('_', ' ') }}</td><td>{{ file.supplierBatch || '—' }}</td><td>{{ file.pageCount || 'Verify in grouping' }}</td><td>{{ file.sizeBytes | number }} B</td><td><code>{{ file.sha256 }}</code></td><td>{{ file.uploadedBy }}</td><td><button type="button" [disabled]="!canExport || busy" (click)="downloadEvidence({ sourceFileId: file.sourceFileId, originalFileName: file.originalFileName })">Download</button></td></tr> } @empty { <tr><td colspan="8" class="empty">No evidence files yet</td></tr> }</tbody></table></div></section>
+
+      <section class="grouping-card"><header><div><strong>Document grouping</strong><small>Low-confidence suggestions require approval</small></div></header><div class="group-list">@for (group of report.groups; track group.supplierBatch + group.groupKey) { <article><div><strong>{{ group.groupKey }}</strong><small>{{ group.supplierBatch }} · {{ group.confidencePercentage }}% · {{ group.signals.join(', ') }}</small></div><label>Verified pages<input type="number" min="1" [(ngModel)]="group.approvedPageCount" [placeholder]="group.detectedPageCount ? '' + group.detectedPageCount : ''" /></label><span class="status" [class.warning]="group.status !== 'approved'">{{ group.status }}</span><button type="button" [disabled]="busy || !canManage" (click)="decideGroup(group, 'approved')">Approve</button><button class="danger" type="button" [disabled]="busy || !canManage" (click)="decideGroup(group, 'rejected')">Reject</button></article> } @empty { <div class="empty">No bill pages ready for grouping</div> }</div></section>
+
+      @if (report.failures.length) { <section class="failure-card"><header><strong>Blocked files</strong></header>@for (failure of report.failures; track failure.uploadSessionId) { <div><strong>{{ failure.fileName }}</strong><span>{{ failure.status }}</span><small>{{ failure.message }}</small></div> }</section> }
+      @if (report.summary.unidentifiedSupplierBatches.length) { <section class="failure-card"><header><strong>Unidentified suppliers</strong></header>@for (batch of report.summary.unidentifiedSupplierBatches; track batch) { <div><strong>{{ batch }}</strong></div> }</section> }
+
+      <section class="table-card evidence-files">
+        <header><div><strong>Pilot selection</strong><small>Select 20–50 representative approved bill documents</small></div><button type="button" [disabled]="busy || !canManage || !report.summary.cutoverApproved || pilotSelection.size < 20 || pilotSelection.size > 50" (click)="startPilot()">Start pilot ({{ pilotSelection.size }})</button></header>
+        <div class="table-scroll"><table><thead><tr><th>Select</th><th>Document</th><th>Supplier batch</th><th>Pages</th><th>SHA-256</th></tr></thead><tbody>
+          @for (candidate of pilotCandidates; track candidate.key) {
+            <tr><td><input type="checkbox" [checked]="pilotSelected(candidate)" [disabled]="busy || !!pilot?.documents?.length" (change)="togglePilot(candidate, $any($event.target).checked)" [attr.aria-label]="'Select ' + candidate.fileName" /></td><td><strong>{{ candidate.fileName }}</strong></td><td>{{ candidate.supplierBatch }}</td><td>{{ candidate.pageCount }}</td><td><code>{{ candidate.sha256 }}</code></td></tr>
+          } @empty { <tr><td colspan="5" class="empty">No historical bill evidence available for the pilot</td></tr> }
+        </tbody></table></div>
+      </section>
+    }
+  }
+
+  @if (activeTab === 'pilot') {
+    @if (pilot; as report) {
+      <section class="completion-grid" aria-label="Pilot reconciliation">
+        <div><span>Documents / recognized</span><strong>{{ report.summary.uploadedDocuments }} / {{ report.summary.recognizedBills }}</strong></div>
+        <div><span>Pages / lines</span><strong>{{ report.summary.totalPages }} / {{ report.summary.extractedProductLines }}</strong></div>
+        <div><span>Failed / quarantined</span><strong>{{ report.summary.failedOrQuarantinedDocuments }}</strong></div>
+        <div><span>Duplicate files / bills</span><strong>{{ report.summary.duplicateFilesOrBills }}</strong></div>
+        <div><span>Silent skips</span><strong>{{ report.summary.silentSkippedDocuments }}</strong></div>
+        <div><span>Supplier mapped</span><strong>{{ report.summary.mappedSuppliers }} / {{ report.summary.uploadedDocuments }}</strong></div>
+        <div><span>Product mapped</span><strong>{{ report.summary.mappedProducts }} / {{ report.summary.extractedProductLines }}</strong></div>
+        <div><span>Financially reconciled</span><strong>{{ report.summary.financiallyReconciledDocuments }} / {{ report.summary.uploadedDocuments }}</strong></div>
+        <div><span>Average confidence</span><strong>{{ percentBps(report.summary.averageConfidenceBps) }}</strong></div>
+        <div><span>Stock / GL / GST</span><strong>0 / 0 / 0</strong></div>
+      </section>
+      <section class="completion-grid" aria-label="Extraction accuracy">
+        <div><span>Supplier accuracy</span><strong>{{ percentBps(report.accuracy.supplier.accuracyBps) }} / {{ percentBps(report.accuracy.supplier.thresholdBps) }}</strong></div>
+        <div><span>Invoice number / date</span><strong>{{ percentBps(report.accuracy.invoiceNumberAndDate.accuracyBps) }} / {{ percentBps(report.accuracy.invoiceNumberAndDate.thresholdBps) }}</strong></div>
+        <div><span>Financial accuracy</span><strong>{{ percentBps(report.accuracy.financial.accuracyBps) }} / {{ percentBps(report.accuracy.financial.thresholdBps) }}</strong></div>
+        <div><span>Product-line detection</span><strong>{{ percentBps(report.accuracy.productLineDetection.accuracyBps) }} / {{ percentBps(report.accuracy.productLineDetection.thresholdBps) }}</strong></div>
+        <div><span>Quantity / rate / tax</span><strong>{{ percentBps(report.accuracy.quantityRateAndTax.accuracyBps) }} / {{ percentBps(report.accuracy.quantityRateAndTax.thresholdBps) }}</strong></div>
+        <div><span>Batch / expiry</span><strong>{{ percentBps(report.accuracy.batchAndExpiry.accuracyBps) }} / {{ percentBps(report.accuracy.batchAndExpiry.thresholdBps) }}</strong></div>
+        <div><span>Supplier mapping</span><strong>{{ percentBps(report.accuracy.supplierMapping.accuracyBps) }} / {{ percentBps(report.accuracy.supplierMapping.thresholdBps) }}</strong></div>
+        <div><span>Product mapping</span><strong>{{ percentBps(report.accuracy.productMapping.accuracyBps) }} / {{ percentBps(report.accuracy.productMapping.thresholdBps) }}</strong></div>
+      </section>
+      <section class="grouping-card" aria-label="Content-based page grouping">
+        <header><div><strong>Content-based page grouping</strong><small>Supplier, invoice, date, carry-forward total, page sequence and layout</small></div><span class="status" [class.warning]="report.summary.groupingApprovalRequired || report.summary.groupingBlocked">{{ report.summary.groupedBills }} grouped · {{ report.summary.groupingApprovalRequired }} approvals</span></header>
+        <div class="group-list">
+          @for (group of report.grouping.suggestions; track group.groupKey) {
+            <article><div><strong>{{ group.fileNames.join(' + ') }}</strong><small>{{ group.supplierBatch }} · {{ percentBps(group.confidenceBps) }} · {{ group.signals.join(', ') }}</small></div><label>Detected pages<input type="number" [value]="group.detectedPageCount" readonly /></label><span class="status" [class.warning]="group.confidenceLevel !== 'green'">{{ group.confidenceLevel }} · {{ group.status.replaceAll('_', ' ') }}</span><button type="button" [disabled]="busy || !canManage || group.status === 'auto_grouped' || group.confidenceLevel === 'red'" (click)="decidePilotGroup(group, 'approved')">Approve</button><button class="danger" type="button" [disabled]="busy || !canManage || group.status === 'rejected'" (click)="decidePilotGroup(group, 'rejected')">Reject</button></article>
+          } @empty { <div class="empty">No cross-file page groups detected</div> }
+        </div>
+      </section>
+      <section class="table-card"><div class="table-scroll"><table><thead><tr><th>Document</th><th>Supplier / invoice</th><th>Lines</th><th>Confidence</th><th>Status</th><th>Review</th></tr></thead><tbody>
+        @for (document of report.documents; track document.draftId) {
+          <tr><td><strong>{{ document.fileName }}</strong><small><code>{{ document.sha256 }}</code></small></td><td>{{ document.supplierName || 'Unrecognized' }}<small>{{ document.billNumber || 'No invoice number' }}</small></td><td>{{ document.lineCount }}</td><td>{{ percentBps(document.confidenceBps) }}</td><td><span class="status" [class.warning]="document.status !== 'reviewed'">{{ document.status }}</span>@if (document.blockingIssues.length) { <small>{{ document.blockingIssues.length }} blockers</small> }</td><td><a class="button-link" [routerLink]="['/purchase-bill-drafts', document.draftId]">Open review</a></td></tr>
+        } @empty { <tr><td colspan="6" class="empty">Pilot has not started</td></tr> }
+      </tbody></table></div></section>
+    } @else { <div class="empty-card">Create and Owner-approve the branch cutover before starting the pilot</div> }
+  }
+
+  @if (activeTab === 'bulk') {
+    <section class="evidence-control">
+      <header><div><h2>Supplier bulk archive</h2></div><span class="status history">History only</span></header>
+      <div class="bulk-form">
+        <label>Evidence batch<select [(ngModel)]="bulkSourceFileId" (ngModelChange)="selectBulkSource()"><option value="">Select verified ZIP or document</option>@for (file of bulkSources; track file.sourceFileId) { <option [value]="file.sourceFileId">{{ file.originalFileName }}</option> }</select></label>
+        <label>Supplier batch<input maxlength="120" [(ngModel)]="bulkSupplierBatch" /></label>
+        <label>Provider<select [(ngModel)]="bulkProvider"><option value="auto">Auto</option><option value="tally">Tally</option><option value="busy">Busy</option><option value="marg">Marg</option><option value="manual">Manual</option></select></label>
+        <label>Expected bills<input type="number" min="1" max="250" [(ngModel)]="bulkExpectedBillCount" /></label>
+        <label>Expected total (₹, optional)<input inputmode="decimal" [(ngModel)]="bulkExpectedTotalRupees" /></label>
+        <label>Mapping version<input type="number" min="1" [(ngModel)]="bulkMappingVersion" /></label>
+        <label>Workers<select [(ngModel)]="bulkWorkerLimit"><option [ngValue]="1">1</option><option [ngValue]="2">2</option><option [ngValue]="3">3</option><option [ngValue]="4">4</option></select></label>
+        <button type="button" [disabled]="busy || !canManage || !bulkSourceFileId || !bulkExpectedBillCount || !bulkMappingVersion" (click)="startBulk()">Start batch</button>
+      </div>
+    </section>
+
+    @if (bulk?.batches?.length) {
+      <section class="bulk-approval">
+        <label>Owner exception reason<input maxlength="500" [(ngModel)]="bulkApprovalReason" /></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="bulkAllowPartial" /> Approve partial archive</label>
+        <label class="check"><input type="checkbox" [(ngModel)]="bulkAllowLiveCollisions" /> Approve explained live collisions</label>
+      </section>
+    }
+
+    @for (batch of bulk?.batches || []; track batch.jobId) {
+      <section class="table-card bulk-batch">
+        <header>
+          <div><strong>{{ batch.supplierBatch }}</strong><small>{{ batch.provider }} · {{ batch.postingMode }} · mapping v{{ batch.mappingVersion }} · {{ batch.workerLimit }} workers</small></div>
+          <div class="batch-actions">
+            <span class="status" [class.warning]="batch.jobStatus !== 'completed'">{{ batch.jobStatus }}</span>
+            <button type="button" [disabled]="busy || !canManage || !['queued','processing'].includes(batch.jobStatus)" (click)="controlBulk(batch, 'pause')">Pause</button>
+            <button type="button" [disabled]="busy || !canManage || batch.jobStatus !== 'paused'" (click)="controlBulk(batch, 'resume')">Resume</button>
+            <button class="danger" type="button" [disabled]="busy || !canManage || ['completed','cancelled'].includes(batch.jobStatus)" (click)="controlBulk(batch, 'cancel')">Cancel</button>
+            <button type="button" [disabled]="busy || !canApproveBulk || !batch.summary.ready" (click)="archiveBulk(batch)">Archive ready</button>
+          </div>
+        </header>
+        <div class="completion-grid">
+          <div><span>Expected / documents</span><strong>{{ batch.expectedBillCount }} / {{ batch.summary.totalDocuments }}</strong></div>
+          <div><span>Extracted / review</span><strong>{{ batch.summary.ready + batch.summary.archived }} / {{ batch.summary.reviewRequired }}</strong></div>
+          <div><span>Quarantine / failed</span><strong>{{ batch.summary.quarantined }} / {{ batch.summary.failed }}</strong></div>
+          <div><span>Duplicates / archived</span><strong>{{ batch.summary.duplicates }} / {{ batch.summary.archived }}</strong></div>
+          <div><span>Pages</span><strong>{{ batch.summary.totalPages }}</strong></div>
+          <div><span>Source / archive total</span><strong>{{ money(batch.summary.sourceTotalPaise) }} / {{ money(batch.summary.archiveTotalPaise) }}</strong></div>
+          <div><span>Accounted</span><strong>{{ batch.summary.accounted }} / {{ batch.expectedBillCount }}</strong></div>
+          <div><span>Stock / GL / GST / payable</span><strong>0 / 0 / 0 / 0</strong></div>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>Document</th><th>Supplier / invoice</th><th>Pages</th><th>Total</th><th>Confidence</th><th>Status</th><th>Failure</th><th>Review</th><th>Evidence</th></tr></thead><tbody>
+          @for (item of batch.items; track item.id) {
+            <tr><td><strong>{{ item.fileName }}</strong><small><code>{{ item.sha256 }}</code></small></td><td>{{ item.supplierName || 'Unidentified' }}<small>{{ item.invoiceNumber || 'Missing invoice' }}</small></td><td>{{ item.pageCount }}</td><td>{{ money(item.totalPaise) }}</td><td>{{ percentBps(item.confidenceBps) }}</td><td><span class="status" [class.warning]="!['ready','archived','duplicate'].includes(item.status)">{{ item.status }}</span><small>Attempt {{ item.attempts }}</small></td><td>{{ item.errorCode || '—' }}<small>{{ item.errorMessage || item.suggestedCorrection }}</small></td><td><a class="button-link" [routerLink]="['/purchase-bill-drafts', item.draftId]">Open review</a></td><td><button type="button" [disabled]="busy || !canExport" (click)="downloadEvidence({ sourceFileId: item.sourceFileId, originalFileName: item.fileName })">Download</button></td></tr>
+          } @empty { <tr><td colspan="9" class="empty">No documents in this batch</td></tr> }
+        </tbody></table></div>
+      </section>
+    } @empty { <div class="empty-card">No bulk archive batches yet</div> }
+  }
+
+  @if (activeTab === 'bills') {
+    <section class="filter-card">
+      <label class="search"><span>⌕</span><input aria-label="Search invoice, vendor or source file" placeholder="Invoice, vendor or source file" [(ngModel)]="search" /></label>
+      <select aria-label="Provider" [(ngModel)]="provider"><option value="">Provider</option>@for (item of providers; track item) { <option [value]="item">{{ item }}</option> }</select>
+      <select aria-label="Vendor" [(ngModel)]="vendor"><option value="">Vendor</option>@for (item of vendorNames; track item) { <option [value]="item">{{ item }}</option> }</select>
+      <as-date-picker ariaLabel="From date" [value]="fromDate" (valueChange)="fromDate = $event" />
+      <as-date-picker ariaLabel="To date" [value]="toDate" (valueChange)="toDate = $event" />
+      <select aria-label="Mapping status" [(ngModel)]="mappingStatus"><option value="">Mapping status</option><option value="mapped">Mapped</option><option value="unmapped">Unmapped</option></select>
+      <button type="button" (click)="clearFilters()">Clear</button>
+    </section>
+
+    <section class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Invoice</th><th>Vendor</th><th>Invoice date</th><th>Provider</th><th>Tax</th><th>Total</th><th>Mapping</th><th>Evidence</th><th>Import job</th><th>Status</th></tr></thead>
+          <tbody>
+            @if (loading) { @for (row of [1,2,3,4,5]; track row) { <tr class="skeleton"><td colspan="10"><span></span></td></tr> } }
+            @else { @for (bill of filteredBills; track bill.id) {
+              <tr tabindex="0" (click)="openBill(bill)" (keydown.enter)="openBill(bill)">
+                <td><strong>{{ bill.invoiceNumber }}</strong><small>{{ bill.documentType }}</small></td>
+                <td>{{ bill.supplierName || '—' }}</td><td>{{ formatDate(bill.invoiceDate) }}</td><td>{{ bill.provider }}</td>
+                <td>{{ money(bill.taxPaise, bill.currency) }}</td><td><strong>{{ money(bill.totalPaise, bill.currency) }}</strong></td>
+                <td><span class="status" [class.warning]="bill.unmappedProductCount">{{ bill.unmappedProductCount ? bill.unmappedProductCount + ' unmapped' : 'Mapped' }}</span></td>
+                <td><button class="link-button" type="button" [disabled]="!canExport || busy || !bill.sourceFileId" (click)="$event.stopPropagation(); downloadEvidence({ sourceFileId: bill.sourceFileId, originalFileName: bill.sourceFileName })">{{ bill.sourceFileName || 'Unavailable' }}</button></td>
+                <td>{{ bill.externalBillId || '—' }}</td><td><span class="status history">Historical only</span>@if (bill.liveRegisterCollision) { <small class="collision">Live collision</small> }</td>
+              </tr>
+            } @empty { <tr><td colspan="10" class="empty">No historical purchase bills yet</td></tr> } }
+          </tbody>
+        </table>
+      </div>
+      <footer><span>♢ Stock effect: 0</span><span>·</span><span>Accounting effect: 0</span><strong>{{ filteredBills.length }} bill(s)</strong></footer>
+    </section>
+  }
+
+  @if (activeTab === 'products' || activeTab === 'unmapped') {
+    @if (mappingReport; as mapping) {
+      <section class="completion-grid" aria-label="Product mapping reconciliation">
+        <div><span>Historical products</span><strong>{{ mapping.historicalProducts }}</strong></div>
+        <div><span>Linked / created</span><strong>{{ mapping.linkedProducts }} / {{ mapping.createdProducts }}</strong></div>
+        <div><span>Historical-only / rejected</span><strong>{{ mapping.historicalOnlyProducts }} / {{ mapping.rejectedProducts }}</strong></div>
+        <div><span>Pending / drifted</span><strong>{{ mapping.pendingProducts }} / {{ mapping.driftedMappings }}</strong></div>
+      </section>
+    }
+    <section class="mapping-toolbar"><label>Bulk Green approval reason<input maxlength="500" [(ngModel)]="bulkMappingReason" /></label><button type="button" [disabled]="busy || !canManage || !bulkMappingReason.trim()" (click)="bulkApproveMappings('product')">Approve selected Green</button></section>
+    <section class="mapping-grid">
+      @for (row of (activeTab === 'unmapped' ? unmappedProducts : products); track row.sourceKey) {
+        <article class="mapping-card">
+          <header><div><strong>{{ sourceText(row, 'name') }}</strong><small>{{ row.provider }} · {{ sourceText(row, 'sku') }} · {{ sourceText(row, 'barcode') }}</small></div><div class="mapping-state"><label class="check"><input type="checkbox" [checked]="bulkMappingSelected(row)" [disabled]="busy || !greenCandidate(row)" (change)="toggleBulkMapping(row, $any($event.target).checked)" [attr.aria-label]="'Select Green mapping for ' + sourceText(row, 'name')" /> Green</label><span class="status" [class.warning]="!row.currentMapping || row.sourceDrift">{{ mappingLabel(row) }}</span></div></header>
+          <dl><div><dt>Bills / lines</dt><dd>{{ sourceText(row, 'billCount') }} / {{ sourceText(row, 'lineCount') }}</dd></div><div><dt>Historical qty</dt><dd>{{ sourceText(row, 'historicalQuantity') }} {{ sourceText(row, 'unit') }}</dd></div><div><dt>Brand / variant</dt><dd>{{ sourceText(row, 'brand') }} · {{ sourceText(row, 'size') }} · {{ sourceText(row, 'shade') }} · {{ sourceText(row, 'color') }}</dd></div></dl>
+          <div class="mapping-costs"><span>Latest {{ money(sourceNumber(row, 'latestCostPaise')) }}</span><span>Min {{ money(sourceNumber(row, 'minimumCostPaise')) }}</span><span>Max {{ money(sourceNumber(row, 'maximumCostPaise')) }}</span><span>Average {{ money(sourceNumber(row, 'averageCostPaise')) }}</span><span>{{ sourceText(row, 'firstPurchaseDate') }} — {{ sourceText(row, 'lastPurchaseDate') }}</span></div>
+          @if (row.candidates.length) { <label class="candidate-select">CRM candidate<select [(ngModel)]="mappingTargets[row.sourceKey]"><option value="">Top suggestion</option>@for (candidate of row.candidates; track candidate.targetId) { <option [value]="candidate.targetId">{{ candidate.name }} · {{ candidate.confidencePercentage }}% · {{ candidate.governance }}</option> }</select></label> }
+          @if (selectedCandidate(row); as candidate) { <div class="candidate" [class.red]="candidate.governance === 'red'"><span>Selected: <strong>{{ candidate.name }}</strong></span><span>{{ candidate.confidencePercentage }}% · {{ candidate.governance }}</span></div>@if (mappingWarnings(candidate).length) { <ul class="mapping-warnings">@for (warning of mappingWarnings(candidate); track warning) { <li>{{ warning }}</li> }</ul> } }
+          @if (row.sourceDrift) { <div class="drift-warning">Source format changed since the saved mapping.</div> }
+          <div class="mapping-review"><label>Decision reason<input maxlength="500" [(ngModel)]="mappingReasons[row.sourceKey]" /></label>@if (selectedCandidateHasUnitWarning(row)) { <label class="check"><input type="checkbox" [checked]="isApproved(unitApprovals, row)" (change)="setApproval(unitApprovals, row, $any($event.target).checked)" /> Approve unit conversion</label> }@if (row.sourceDrift) { <label class="check"><input type="checkbox" [checked]="isApproved(driftApprovals, row)" (change)="setApproval(driftApprovals, row, $any($event.target).checked)" /> Approve source drift</label> }</div>
+          <footer><button type="button" [disabled]="busy || !canManage || !selectedCandidate(row) || selectedCandidateIsRed(row)" (click)="decide(row, 'link')">Link selected</button><button type="button" [disabled]="busy || !canManage || !canCreateProduct" (click)="openMappingCreate(row)">Create product</button><button type="button" [disabled]="busy || !canManage" (click)="decide(row, 'keep_historical_only')">Keep historical only</button><button class="danger" type="button" [disabled]="busy || !canManage" (click)="decide(row, 'reject')">Reject</button><button type="button" [disabled]="busy || !row.currentMapping" (click)="openMappingHistory(row)">Versions</button></footer>
+        </article>
+      } @empty { <div class="empty-card">{{ activeTab === 'unmapped' ? 'No unmapped products' : 'No historical products yet' }}</div> }
+    </section>
+  }
+
+  @if (activeTab === 'vendors') {
+    @if (mappingReport; as mapping) {
+      <section class="completion-grid" aria-label="Vendor mapping reconciliation"><div><span>Historical vendors</span><strong>{{ mapping.historicalVendors }}</strong></div><div><span>Linked / created</span><strong>{{ mapping.linkedVendors }} / {{ mapping.createdVendors }}</strong></div><div><span>Historical-only / rejected</span><strong>{{ mapping.historicalOnlyVendors }} / {{ mapping.rejectedVendors }}</strong></div><div><span>Pending / drifted</span><strong>{{ mapping.pendingVendors }} / {{ mapping.driftedMappings }}</strong></div></section>
+    }
+    <section class="mapping-toolbar"><label>Bulk Green approval reason<input maxlength="500" [(ngModel)]="bulkMappingReason" /></label><button type="button" [disabled]="busy || !canManage || !bulkMappingReason.trim()" (click)="bulkApproveMappings('vendor')">Approve selected Green</button></section>
+    <section class="mapping-grid">
+      @for (row of vendors; track row.sourceKey) {
+        <article class="mapping-card"><header><div><strong>{{ sourceText(row, 'name') }}</strong><small>{{ row.provider }} · {{ sourceText(row, 'gstin') }} · {{ sourceText(row, 'vendorCode') }}</small></div><div class="mapping-state"><label class="check"><input type="checkbox" [checked]="bulkMappingSelected(row)" [disabled]="busy || !greenCandidate(row)" (change)="toggleBulkMapping(row, $any($event.target).checked)" [attr.aria-label]="'Select Green mapping for ' + sourceText(row, 'name')" /> Green</label><span class="status" [class.warning]="!row.currentMapping || row.sourceDrift">{{ mappingLabel(row) }}</span></div></header>
+          <dl><div><dt>Bills</dt><dd>{{ sourceText(row, 'billCount') }}</dd></div><div><dt>Phone</dt><dd>{{ sourceText(row, 'phone') }}</dd></div><div><dt>Email</dt><dd>{{ sourceText(row, 'email') }}</dd></div></dl>
+          @if (row.candidates.length) { <label class="candidate-select">CRM candidate<select [(ngModel)]="mappingTargets[row.sourceKey]"><option value="">Top suggestion</option>@for (candidate of row.candidates; track candidate.targetId) { <option [value]="candidate.targetId">{{ candidate.name }} · {{ candidate.confidencePercentage }}% · {{ candidate.governance }}</option> }</select></label> }
+          @if (selectedCandidate(row); as candidate) { <div class="candidate" [class.red]="candidate.governance === 'red'"><span>Selected: <strong>{{ candidate.name }}</strong></span><span>{{ candidate.confidencePercentage }}% · {{ candidate.governance }}</span></div>@if (mappingWarnings(candidate).length) { <ul class="mapping-warnings">@for (warning of mappingWarnings(candidate); track warning) { <li>{{ warning }}</li> }</ul> } }
+          @if (row.sourceDrift) { <div class="drift-warning">Source format changed since the saved mapping.</div> }
+          <div class="mapping-review"><label>Decision reason<input maxlength="500" [(ngModel)]="mappingReasons[row.sourceKey]" /></label>@if (row.sourceDrift) { <label class="check"><input type="checkbox" [checked]="isApproved(driftApprovals, row)" (change)="setApproval(driftApprovals, row, $any($event.target).checked)" /> Approve source drift</label> }</div>
+          <footer><button type="button" [disabled]="busy || !canManage || !selectedCandidate(row) || selectedCandidateIsRed(row)" (click)="decide(row, 'link')">Link selected</button><button type="button" [disabled]="busy || !canManage || !canCreateVendor" (click)="openMappingCreate(row)">Create vendor</button><button type="button" [disabled]="busy || !canManage" (click)="decide(row, 'keep_historical_only')">Keep historical only</button><button class="danger" type="button" [disabled]="busy || !canManage" (click)="decide(row, 'reject')">Reject</button><button type="button" [disabled]="busy || !row.currentMapping" (click)="openMappingHistory(row)">Versions</button></footer>
+        </article>
+      } @empty { <div class="empty-card">No historical vendors yet</div> }
+    </section>
+  }
+
+  @if (activeTab === 'reconciliation') {
+    <section class="reconciliation-card">
+      <header><div><strong>{{ cutover ? 'Cutover ' + cutover.id : 'No active cutover' }}</strong><small>{{ cutover ? formatDate(cutover.cutoverDate) + ' · ' + cutover.status : 'Create a cutover from Data Migration before reconciliation' }}</small></div>@if (reconciliation) { <span class="status" [class.warning]="reconciliation.status !== 'matched'">{{ reconciliation.status }}</span> }</header>
+      @if (reconciliation; as report) {
+        <div class="metrics"><div><span>Source bills</span><strong>{{ report.historical.sourceBillCount }}</strong></div><div><span>Archived bills</span><strong>{{ report.historical.archiveBillCount }}</strong></div><div><span>Source lines</span><strong>{{ report.historical.sourceLineCount }}</strong></div><div><span>Archived lines</span><strong>{{ report.historical.archiveLineCount }}</strong></div><div><span>Unmapped products</span><strong>{{ report.historical.unmappedProducts }}</strong></div><div><span>Attachments</span><strong>{{ report.historical.archiveAttachmentCount }}</strong></div><div><span>Historical posting effect</span><strong>{{ money(report.accounting.historicalPostingEffectPaise) }}</strong></div><div><span>GST effect</span><strong>{{ money(report.accounting.gstEffectPaise) }}</strong></div></div>
+        @if (report.blockers.length) { <ul class="blockers">@for (blocker of report.blockers; track blocker) { <li>{{ blocker }}</li> }</ul> }
+      } @else { <div class="empty">No reconciliation result yet</div> }
+    </section>
+  }
+</main>
+
+@if (drawerLoading || selectedBill) {
+  <div class="drawer-backdrop" (click)="selectedBill = null"></div>
+  <aside class="detail-drawer" aria-label="Historical bill detail">
+    <header><strong>Historical bill</strong><button type="button" aria-label="Close" (click)="selectedBill = null">×</button></header>
+    @if (drawerLoading) { <div class="drawer-loading">Loading bill…</div> }
+    @if (selectedBill; as bill) {
+      <div class="drawer-body">
+        <section><h2>Bill summary</h2><dl class="summary"><div><dt>Invoice</dt><dd>{{ bill.invoiceNumber }}</dd></div><div><dt>Vendor</dt><dd>{{ bill.supplierName || '—' }}</dd></div><div><dt>Invoice date</dt><dd>{{ formatDate(bill.invoiceDate) }}</dd></div><div><dt>Provider</dt><dd>{{ bill.provider }}</dd></div><div><dt>Tax</dt><dd>{{ money(bill.taxPaise, bill.currency) }}</dd></div><div><dt>Total</dt><dd>{{ money(bill.totalPaise, bill.currency) }}</dd></div><div><dt>Mapping</dt><dd>{{ bill.unmappedProductCount ? bill.unmappedProductCount + ' unmapped' : 'Mapped' }}</dd></div><div><dt>Import job</dt><dd>{{ bill.importJobId }}</dd></div><div><dt>Status</dt><dd><span class="status history">Historical only</span></dd></div></dl></section>
+        <section><h2>Source evidence</h2>@for (file of bill.files; track file.id) { <article class="file"><div><strong>{{ file.originalFileName }}</strong><small>{{ file.mediaType }} · {{ file.sha256 | slice:0:16 }}…</small></div><button type="button" [disabled]="busy || !canExport" (click)="downloadEvidence(file)">⇩ Download evidence</button></article> } @empty { <div class="empty">No evidence file linked</div> }</section>
+        <section><h2>Product lines</h2><div class="line-list">@for (line of bill.lines; track line.id) { <article><header><strong>{{ line.originalProductName }}</strong><span>{{ money(line.totalPaise, bill.currency) }}</span></header><small>{{ line.sku || 'No SKU' }} · Qty {{ line.purchasedQuantity }} {{ line.stockUnit }} · Rate {{ money(line.unitCostPaise, bill.currency) }}</small><small>{{ line.mappedProductName || 'Unmapped product' }} · Row {{ line.sourceRowNumber }}@if (line.batchNumber) { · Batch {{ line.batchNumber }} }</small></article> } @empty { <div class="empty">No product lines</div> }</div></section>
+      </div>
+      <footer><span>Stock 0 · Accounting 0</span><button type="button" (click)="selectedBill = null">Close</button></footer>
+    }
+  </aside>
+}
+
+@if (mappingDrawer; as drawer) {
+  <div class="drawer-backdrop" (click)="mappingDrawer = null"></div>
+  <aside class="detail-drawer" aria-label="Historical mapping review">
+    <header><strong>{{ drawer.mode === 'create' ? 'Create and map ' + drawer.row.identityType : 'Mapping versions' }}</strong><button type="button" aria-label="Close" (click)="mappingDrawer = null">×</button></header>
+    <div class="drawer-body">
+      <section><h2>Source identity</h2><dl class="summary"><div><dt>Name</dt><dd>{{ sourceText(drawer.row, 'name') }}</dd></div><div><dt>Provider</dt><dd>{{ drawer.row.provider }}</dd></div><div><dt>Source key</dt><dd><code>{{ drawer.row.sourceKey }}</code></dd></div><div><dt>Bills</dt><dd>{{ sourceText(drawer.row, 'billCount') }}</dd></div></dl></section>
+      @if (drawer.mode === 'create') {
+        <section class="mapping-create"><h2>CRM {{ drawer.row.identityType }}</h2><label>Name<input maxlength="200" [(ngModel)]="mappingCreate.name" (input)="titleCaseCreate('name')" /></label>
+          @if (drawer.row.identityType === 'product') {
+            <label>SKU<input maxlength="120" [(ngModel)]="mappingCreate.sku" /></label><label>Barcode<input maxlength="120" [(ngModel)]="mappingCreate.barcode" /></label><label>Brand<input maxlength="120" [(ngModel)]="mappingCreate.brand" (input)="titleCaseCreate('brand')" /></label><label>Category<input maxlength="120" [(ngModel)]="mappingCreate.category" (input)="titleCaseCreate('category')" /></label><label>Stock unit<input maxlength="40" [(ngModel)]="mappingCreate.unit" /></label><label>Package unit<input maxlength="40" [(ngModel)]="mappingCreate.packageUnit" /></label><label>Units per package<input inputmode="numeric" pattern="[0-9]*" [(ngModel)]="mappingCreate.unitsPerPackage" /></label><label class="check"><input type="checkbox" [checked]="isApproved(unitApprovals, drawer.row)" (change)="setApproval(unitApprovals, drawer.row, $any($event.target).checked)" /> Approve conversion if units differ</label>
+          } @else {
+            <label>Vendor code<input maxlength="120" [(ngModel)]="mappingCreate.code" /></label><label>GSTIN<input maxlength="30" [(ngModel)]="mappingCreate.gstin" /></label><label>Phone<input maxlength="30" [(ngModel)]="mappingCreate.phone" /></label><label>Email<input maxlength="254" [(ngModel)]="mappingCreate.email" /></label><label>Address<input maxlength="500" [(ngModel)]="mappingCreate.address" /></label>
+          }
+          <label>Decision reason<input maxlength="500" [(ngModel)]="mappingReasons[drawer.row.sourceKey]" /></label>
+        </section>
+      } @else {
+        <section><h2>Immutable decisions</h2><div class="version-list">@if (drawer.loading) { <div class="drawer-loading">Loading versions…</div> } @else { @for (version of drawer.versions; track version.version) { <article><div><strong>v{{ version.version }} · {{ version.decision.replaceAll('_', ' ') }}</strong><small>{{ version.approvedAt | date:'dd/MM/yyyy, HH:mm' }} · {{ version.reason || 'No reason recorded' }}</small>@if (version.rollbackOfVersion) { <small>Rollback of v{{ version.rollbackOfVersion }}</small> }</div><button type="button" [disabled]="busy || !canManage || version.version === drawer.row.currentMapping?.version" (click)="rollbackMapping(version)">Restore</button></article> } @empty { <div class="empty">No versions yet</div> } }</div></section>
+      }
+    </div>
+    <footer><span>Stock · GL · GST · payable effect 0</span>@if (drawer.mode === 'create') { <button type="button" [disabled]="busy" (click)="saveMappingCreate()">Create and map</button> } @else { <button type="button" (click)="mappingDrawer = null">Close</button> }</footer>
+  </aside>
+}

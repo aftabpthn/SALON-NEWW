@@ -21,6 +21,7 @@ export type BackbarService = {
 export type BackbarItem = {
   id: string;
   name: string;
+  brand: string;
   sku: string;
   unit: string;
   stockQuantity: number;
@@ -45,6 +46,7 @@ export type BackbarUsage = {
   id: string;
   inventoryItemId: string;
   itemName: string;
+  itemBrand: string;
   serviceId?: string;
   serviceName: string;
   staffId?: string;

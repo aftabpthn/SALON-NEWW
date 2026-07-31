@@ -22,7 +22,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       }
       @if (loadError()) { <section staffPageState class="notice payroll-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !loadError() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canSeePayroll()) {
         <section class="grid three payroll-kpis">
@@ -38,6 +37,11 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               <span><b>Type</b>{{ label(payProfile.rateType) }}</span>
               <span><b>Effective from</b>{{ displayDate(payProfile.effectiveFrom) }}</span>
             </div>
+          </section>
+        } @else if (!loading() && !loadError()) {
+          <section class="panel payroll-profile">
+            <div class="panel-title"><h2>Pay setup</h2><span>CRM pending</span></div>
+            <div class="payroll-empty"><p>No active pay rate configured.</p><small>Add the staff pay rate in CRM Staff → Payroll before payroll can be generated.</small></div>
           </section>
         }
         <section class="panel">
