@@ -874,6 +874,17 @@ export interface CustomerNotification {
   metadata?: Record<string, unknown>;
 }
 
+export interface FieldJobTracking {
+  appointmentId?: string;
+  status: string;
+  scheduledStartAt?: string;
+  travelMinutes: number;
+  remainingEtaSeconds?: number;
+  lastLocationAt?: string;
+  completedAt?: string;
+  staffName: string;
+}
+
 export type CustomerPaymentRecord =
   | CustomerPayment
   | CustomerPaymentMethod

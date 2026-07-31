@@ -2,12 +2,13 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Observable, catchError, finalize, forkJoin, of } from 'rxjs';
+import { Observable, catchError, finalize, forkJoin, of, tap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch' | 'growth';
+type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'action-audit' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch' | 'growth' | 'forecast-revenue' | 'forecast-stock' | 'forecast-demand' | 'forecast-no-show' | 'briefing' | 'branch-anomaly';
+type ForecastKind = 'revenue_forecast' | 'inventory_reorder_risk' | 'service_demand' | 'no_show_risk';
 
 type DashboardSnapshot = {
   totalAppointments: number;
@@ -65,11 +66,111 @@ type AdvancedProfit = {
 
 type ProfitAction = {
   id: string;
+  approvalId?: string | null;
+  actionType: string;
   title: string;
   message: string;
   impactPaise: number;
   priority: string;
   status: string;
+  sourceType: string;
+  sourceId: string;
+  ownerUserId?: string | null;
+  ownerName?: string | null;
+  dueAt?: string | null;
+  slaMinutes?: number | null;
+  evidenceJson?: Record<string, unknown>;
+  expectedImpactPaise: number;
+  realizedImpactPaise: number;
+  payloadJson?: Record<string, unknown>;
+  createdByUserId: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  dismissedAt?: string | null;
+};
+
+type PriorityAction = {
+  id: string;
+  source: string;
+  title: string;
+  message: string;
+  priority: string;
+  metric: string;
+  impactPaise: number;
+  route: string;
+  sourceType: string;
+  sourceId: string;
+  ownerName?: string | null;
+  dueAt?: string | null;
+  slaMinutes?: number | null;
+  status?: string;
+  managedActionId?: string;
+  createdByUserId?: string;
+  expectedImpact: string;
+};
+
+type Prediction = {
+  subjectKind: string;
+  subjectId: string;
+  subjectName: string;
+  lowerValue: number;
+  upperValue: number;
+  unit: string;
+  confidence: string;
+  sampleSize: number;
+  dataSufficient: boolean;
+  signals: string[];
+};
+
+type PredictionRun = {
+  runId: string;
+  kind: ForecastKind;
+  modelVersion: string;
+  computedBy: string;
+  historyStart: string;
+  historyEnd: string;
+  predictions: Prediction[];
+  insufficientSubjects: number;
+  basis: string;
+  disclaimer: string;
+};
+
+type BriefingSection = {
+  signal: string;
+  headline: string;
+  whyItMatters: string;
+  evidence: string[];
+  recommendedAction: string;
+  expectedImpact: string;
+  openReportLink: string;
+  confidence: string;
+  source: string;
+  period: string;
+};
+
+type AiBriefing = {
+  generatedAt: string;
+  sections: BriefingSection[];
+  suppressed: string[];
+  quiet: boolean;
+  automationActive: boolean;
+  scanIntervalMinutes: number;
+};
+
+type BranchAnomaly = {
+  branchId: string;
+  branchName: string;
+  headline: string;
+  confidence: string;
+  evidence: string[];
+};
+
+type GovernanceAuditEvent = {
+  id: string;
+  eventType: string;
+  actorUserId: string;
+  detailsJson: Record<string, unknown>;
+  createdAt: string;
 };
 
 type InventoryCommandSignal = {
@@ -376,6 +477,27 @@ type GrowthIntelligence = {
     noShowCount: number;
     priority: string;
     coachingFocus: string;
+    opportunities: Array<{
+      key: string;
+      title: string;
+      reason: string;
+      suggestedAction: string;
+      ownerStaffId: string;
+      ownerStaffName: string;
+      metricUnit: string;
+      currentValue: number;
+      targetValue: number;
+      projectedImpactPaise: number;
+      deadline: string;
+      priority: string;
+      status: string;
+      goalId?: string | null;
+      actionId?: string | null;
+      actionStatus?: string | null;
+      baselineValue?: number | null;
+      actualValue: number;
+      actualImpactPaise?: number | null;
+    }>;
   }>;
   digitalTwin: Array<{
     key: string;
@@ -399,6 +521,34 @@ const EMPTY_SNAPSHOT: DashboardSnapshot = {
   recentCompletedAppointments: 0,
 };
 
+const FORECASTS: Array<{ kind: ForecastKind; source: Source; label: string }> = [
+  { kind: 'revenue_forecast', source: 'forecast-revenue', label: 'Revenue forecast' },
+  { kind: 'inventory_reorder_risk', source: 'forecast-stock', label: 'Stock forecast' },
+  { kind: 'service_demand', source: 'forecast-demand', label: 'Demand forecast' },
+  { kind: 'no_show_risk', source: 'forecast-no-show', label: 'No-show forecast' },
+];
+
+const API_SOURCES: Array<{ source: Source; label: string; endpoint: string; access?: 'inventory' | 'payments' | 'locations' | 'ai' | 'governance' }> = [
+  { source: 'snapshot', label: 'Executive dashboard', endpoint: '/api/v1/reports/dashboard' },
+  { source: 'profit', label: 'Profit summary', endpoint: '/api/v1/profit-intelligence/summary' },
+  { source: 'advanced', label: 'Profit intelligence', endpoint: '/api/v1/profit-intelligence/advanced' },
+  { source: 'dues', label: 'Due recovery', endpoint: '/api/v1/reports/due-recovery' },
+  { source: 'appointments', label: 'Appointment report', endpoint: '/api/v1/reports/appointments' },
+  { source: 'actions', label: 'Profit actions', endpoint: '/api/v1/profit-intelligence/actions' },
+  { source: 'action-audit', label: 'Action audit', endpoint: '/api/v1/profit-intelligence/governance/audit', access: 'governance' },
+  { source: 'inventory-command', label: 'Inventory command', endpoint: '/api/v1/inventory/command-center', access: 'inventory' },
+  { source: 'payments', label: 'Payment modes', endpoint: '/api/v1/reports/payment-modes' },
+  { source: 'payment-risk', label: 'Payment risk', endpoint: '/api/v1/pos/fraud-summary', access: 'payments' },
+  { source: 'payment-providers', label: 'Payment providers', endpoint: '/api/v1/pos/payment-providers', access: 'payments' },
+  { source: 'franchise', label: 'Franchise controls', endpoint: '/api/v1/settings/franchise-controls', access: 'locations' },
+  { source: 'membership-settings', label: 'Sharing settings', endpoint: '/api/v1/membership-enterprise/settings', access: 'locations' },
+  { source: 'multi-branch', label: 'Multi-branch report', endpoint: '/api/v1/settings/multi-branch/command-center', access: 'locations' },
+  { source: 'growth', label: 'Growth intelligence', endpoint: '/api/v1/reports/growth-intelligence' },
+  ...FORECASTS.map(({ kind, source, label }) => ({ source, label, endpoint: `/api/v1/ai/predictions/${kind}/latest`, access: 'ai' as const })),
+  { source: 'briefing', label: 'AI risk briefing', endpoint: '/api/v1/ai/briefing/daily', access: 'ai' },
+  { source: 'branch-anomaly', label: 'Branch anomaly comparison', endpoint: '/api/v1/ai/briefing/compare', access: 'ai' },
+];
+
 @Component({
     selector: 'page-command-center',
     imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
@@ -415,6 +565,10 @@ export class CommandCenterPageComponent implements OnInit {
   dues: DueRecovery[] = [];
   appointmentGroups: AppointmentGroup[] = [];
   actions: ProfitAction[] = [];
+  actionAudit: GovernanceAuditEvent[] = [];
+  actionBusy = '';
+  actionStatus = '';
+  actionError = '';
   inventoryCommand: InventoryCommandCenter | null = null;
   inventoryRecommendationBusy = '';
   inventoryRecommendationError = '';
@@ -425,6 +579,20 @@ export class CommandCenterPageComponent implements OnInit {
   membershipSettings: MembershipSettings | null = null;
   multiBranch: MultiBranchCommandCenter | null = null;
   growth: GrowthIntelligence | null = null;
+  forecasts: Partial<Record<ForecastKind, PredictionRun | null>> = {};
+  briefing: AiBriefing | null = null;
+  branchAnomalies: BranchAnomaly[] = [];
+  branchSignal = 'margin_movement';
+  readonly branchSignals = [
+    ['margin_movement', 'Margin movement'], ['service_decline', 'Service demand'],
+    ['staff_performance', 'Staff performance'], ['client_churn_opportunity', 'Client churn'],
+    ['membership_expiry', 'Membership expiry'], ['stock_risk', 'Stock risk'],
+    ['offer_performance', 'Offer performance'],
+  ];
+  intelligenceLoading = true;
+  forecastRunning = false;
+  intelligenceError = '';
+  branchAnomalyLoading = true;
   locationStartDate = this.dateOffset(-29);
   locationEndDate = this.dateOffset(0);
   locationRegion = '';
@@ -448,7 +616,9 @@ export class CommandCenterPageComponent implements OnInit {
   locationLoading = true;
   growthLoading = true;
   updatedAt: Date | null = null;
+  apiStatusOpen = false;
   readonly errors = new Set<Source>();
+  readonly sourceUpdatedAt = new Map<Source, Date>();
 
   ngOnInit(): void {
     this.refresh();
@@ -462,6 +632,8 @@ export class CommandCenterPageComponent implements OnInit {
     this.loadPayments();
     this.loadLocations();
     this.loadGrowth();
+    this.loadIntelligence();
+    this.loadBranchAnomalies();
   }
 
   get branchLabel(): string {
@@ -496,8 +668,17 @@ export class CommandCenterPageComponent implements OnInit {
       || this.auth.hasPermission('settings.manage', 'management.write');
   }
 
+  get canReadAi(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager', 'staff', 'frontdesk', 'receptionist', 'accountant', 'analyst', 'inventorymanager')
+      || this.auth.hasPermission('ai.concierge.read', 'reports.read', 'clients.read', 'staff.analytics.read', 'memberships.read', 'pos.read');
+  }
+
+  get canManageProfitActions(): boolean {
+    return this.auth.hasRole('owner', 'admin', 'manager');
+  }
+
   get loading(): boolean {
-    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.paymentLoading || this.locationLoading || this.growthLoading;
+    return this.snapshotLoading || this.financeLoading || this.controlsLoading || this.paymentLoading || this.locationLoading || this.growthLoading || this.intelligenceLoading || this.branchAnomalyLoading;
   }
 
   get liveState(): 'loading' | 'live' | 'partial' | 'unavailable' {
@@ -507,7 +688,27 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   get liveStateLabel(): string {
-    return ({ loading: 'Loading', live: 'Live data', partial: 'Partial data', unavailable: 'API unavailable' })[this.liveState];
+    return ({ loading: 'Checking APIs', live: 'All APIs connected', partial: `${this.errors.size} APIs unavailable`, unavailable: 'APIs unavailable' })[this.liveState];
+  }
+
+  get apiStatusRows(): Array<{ source: Source; label: string; endpoint: string; state: 'connected' | 'refreshing' | 'unavailable' | 'waiting'; updatedAt: Date | null }> {
+    return API_SOURCES.filter(({ access }) => !access
+      || (access === 'inventory' && this.canReadInventory)
+      || (access === 'payments' && this.canReadPaymentControls)
+      || (access === 'locations' && this.canReadLocations)
+      || (access === 'ai' && this.canReadAi)
+      || (access === 'governance' && this.canManageProfitActions))
+      .map(({ source, label, endpoint }) => ({
+        source,
+        label,
+        endpoint,
+        state: this.errors.has(source) ? 'unavailable' : this.sourceLoading(source) ? 'refreshing' : this.sourceUpdatedAt.has(source) ? 'connected' : 'waiting',
+        updatedAt: this.sourceUpdatedAt.get(source) ?? null,
+      }));
+  }
+
+  get connectedApiCount(): number {
+    return this.apiStatusRows.filter(({ state }) => state === 'connected').length;
   }
 
   get outstandingPaise(): number {
@@ -518,8 +719,56 @@ export class CommandCenterPageComponent implements OnInit {
     return this.appointmentGroups.reduce((total, row) => total + Number(row.count || 0), 0);
   }
 
-  get visibleActions(): ProfitAction[] {
-    return this.actions.slice(0, 5);
+  get priorityQueueLoading(): boolean {
+    return this.controlsLoading || this.paymentLoading || this.locationLoading || this.growthLoading;
+  }
+
+  get prioritizedActions(): PriorityAction[] {
+    const persistedSources = new Set(this.actions.map((action) => `${action.sourceType}:${action.sourceId}`));
+    const paymentRisk = this.paymentRisk?.openCount
+      ? [{
+          id: 'payment-risk', source: 'Payments', title: 'Review payment risk cases',
+          message: `${this.paymentRisk.highRiskCount} high-risk of ${this.paymentRisk.openCount} open cases`,
+          priority: this.paymentRisk.highRiskCount ? 'critical' : 'high',
+          metric: this.paymentRisk.amountAtRiskPaise ? this.money(this.paymentRisk.amountAtRiskPaise) : `${this.paymentRisk.openCount} cases`,
+          impactPaise: this.paymentRisk.amountAtRiskPaise, route: '/pos/enterprise', sourceType: 'payment', sourceId: 'open-risk-cases',
+          expectedImpact: this.paymentRisk.amountAtRiskPaise ? `${this.money(this.paymentRisk.amountAtRiskPaise)} protected` : 'Reduce unresolved payment risk',
+        } satisfies PriorityAction]
+      : [];
+    const items: PriorityAction[] = [
+      ...this.actions.filter((action) => ['pending', 'approved'].includes(action.status)).map((action) => ({
+        id: `profit-${action.id}`, source: this.label(action.sourceType), title: action.title, message: action.message,
+        priority: action.priority, metric: this.money(action.expectedImpactPaise || action.impactPaise), impactPaise: action.expectedImpactPaise || action.impactPaise,
+        route: this.safeActionRoute(action.payloadJson?.['route'], '/reports/profit-intelligence'), sourceType: action.sourceType, sourceId: action.sourceId,
+        ownerName: action.ownerName, dueAt: action.dueAt, slaMinutes: action.slaMinutes, status: action.status,
+        managedActionId: action.id, createdByUserId: action.createdByUserId,
+        expectedImpact: action.expectedImpactPaise ? `${this.money(action.expectedImpactPaise)} expected` : 'Impact will be recorded on completion',
+      })),
+      ...(this.inventoryCommand?.signals ?? [])
+        .filter((signal) => signal.metricValue > 0 && signal.severity !== 'healthy')
+        .map((signal) => ({ id: `inventory-${signal.key}`, source: 'Inventory', title: signal.label, message: signal.detail, priority: signal.severity, metric: this.inventorySignalValue(signal), impactPaise: signal.metric === 'money' ? signal.metricValue : 0, route: signal.route, sourceType: 'inventory', sourceId: signal.key, expectedImpact: signal.actionLabel || 'Reduce inventory exposure' })),
+      ...paymentRisk,
+      ...this.locationConflicts.map((conflict, index) => ({ id: `location-${conflict.branchId}-${conflict.kind}-${index}`, source: 'Locations', title: `${conflict.branchName || 'Network'} · ${this.label(conflict.kind)}`, message: conflict.message, priority: conflict.severity, metric: this.label(conflict.severity), impactPaise: 0, route: '/settings', sourceType: 'location', sourceId: `${conflict.branchId || 'network'}:${conflict.kind}`, expectedImpact: 'Restore branch configuration consistency' })),
+      ...(this.growth?.revenueLeaks ?? []).map((leak, index) => ({ id: `growth-${leak.kind}-${index}`, source: 'Growth', title: leak.title, message: leak.message, priority: leak.severity, metric: this.money(leak.impactPaise), impactPaise: leak.impactPaise, route: '/reports/profit-intelligence', sourceType: 'growth', sourceId: `${leak.kind}:${index}`, expectedImpact: leak.impactPaise ? `${this.money(leak.impactPaise)} recovery opportunity` : leak.nextAction })),
+    ];
+    const priority = (value: string) => ({ critical: 4, high: 3, medium: 2, warning: 2, low: 1 }[String(value || '').toLowerCase()] ?? 0);
+    return items.filter((action) => action.managedActionId || !persistedSources.has(`${action.sourceType}:${action.sourceId}`))
+      .sort((left, right) => priority(right.priority) - priority(left.priority) || right.impactPaise - left.impactPaise).slice(0, 8);
+  }
+
+  get recentActionHistory(): ProfitAction[] {
+    return this.actions.filter((action) => ['completed', 'dismissed'].includes(action.status)).slice(0, 5);
+  }
+
+  get forecastCards(): Array<{ kind: ForecastKind; label: string; run: PredictionRun | null; prediction?: Prediction }> {
+    return FORECASTS.map(({ kind, label }) => {
+      const run = this.forecasts[kind] ?? null;
+      const sufficient = (run?.predictions ?? []).filter((prediction) => prediction.dataSufficient);
+      const prediction = [...sufficient].sort((left, right) => kind === 'inventory_reorder_risk'
+        ? left.lowerValue - right.lowerValue
+        : right.upperValue - left.upperValue)[0];
+      return { kind, label, run, prediction };
+    });
   }
 
   get topProfitContributors(): ProfitDimension[] {
@@ -883,12 +1132,116 @@ export class CommandCenterPageComponent implements OnInit {
     return String(value || 'Unknown').replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  updatedLabel(): string {
-    return this.updatedAt
+  updatedLabel(updatedAt: Date | null = this.updatedAt): string {
+    return updatedAt
       ? new Intl.DateTimeFormat('en-GB', {
           day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-        }).format(this.updatedAt)
+        }).format(updatedAt)
       : 'Not updated';
+  }
+
+  dateTime(value?: string | null): string {
+    if (!value) return 'Not assigned';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'Not assigned' : new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    }).format(date);
+  }
+
+  isActionOverdue(action: PriorityAction): boolean {
+    return Boolean(action.dueAt && ['pending', 'approved'].includes(action.status || '') && new Date(action.dueAt).getTime() < Date.now());
+  }
+
+  canApproveAction(action: PriorityAction): boolean {
+    return this.canManageProfitActions && action.status === 'pending' && action.createdByUserId !== this.auth.userId;
+  }
+
+  forecastRange(prediction?: Prediction): string {
+    if (!prediction) return 'Insufficient history';
+    const value = (amount: number) => prediction.unit === 'paise'
+      ? this.money(amount)
+      : `${Math.round(amount)} ${this.label(prediction.unit)}`;
+    return `${value(prediction.lowerValue)} – ${value(prediction.upperValue)}`;
+  }
+
+  createGovernedAction(action: PriorityAction): void {
+    if (!this.canManageProfitActions || this.actionBusy) return;
+    if (!window.confirm(`Assign ${action.title} with an approval SLA?`)) return;
+    this.actionBusy = action.id;
+    this.actionError = '';
+    this.actionStatus = '';
+    const priority = ['critical', 'high'].includes(action.priority.toLowerCase()) ? 'high'
+      : ['medium', 'warning'].includes(action.priority.toLowerCase()) ? 'medium' : 'low';
+    this.api.post('/api/v1/profit-intelligence/actions', {
+      actionType: 'resolve_risk', title: action.title, message: action.message,
+      impactPaise: action.impactPaise, expectedImpactPaise: action.impactPaise,
+      priority, sourceType: action.sourceType, sourceId: action.sourceId,
+      notes: 'Created from Command Center', payload: { route: action.route },
+      evidence: { source: action.source, reason: action.message, expectedImpact: action.expectedImpact },
+    }).pipe(finalize(() => (this.actionBusy = ''))).subscribe({
+      next: () => { this.actionStatus = 'Action assigned for independent approval'; this.loadControls(); },
+      error: (error) => { this.actionError = this.apiError(error, 'Unable to assign action'); },
+    });
+  }
+
+  transitionGovernedAction(action: PriorityAction, transition: 'approve' | 'complete' | 'dismiss' | 'rollback'): void {
+    if (!action.managedActionId || !this.canManageProfitActions || this.actionBusy) return;
+    const note = transition === 'rollback'
+      ? window.prompt('Rollback reason')?.trim()
+      : transition === 'dismiss'
+        ? window.prompt('Dismissal reason')?.trim()
+        : `${this.label(transition)} from Command Center`;
+    if ((transition === 'rollback' || transition === 'dismiss') && !note) return;
+    if (!window.confirm(`${this.label(transition)} ${action.title}?`)) return;
+    this.actionBusy = action.managedActionId;
+    this.actionError = '';
+    this.actionStatus = '';
+    this.api.post(`/api/v1/profit-intelligence/actions/${encodeURIComponent(action.managedActionId)}/${transition}`, { note })
+      .pipe(finalize(() => (this.actionBusy = ''))).subscribe({
+        next: () => { this.actionStatus = `${action.title}: ${transition === 'rollback' ? 'rolled back' : this.label(transition)}`; this.loadControls(); },
+        error: (error) => { this.actionError = this.apiError(error, `Unable to ${transition} action`); },
+      });
+  }
+
+  rollbackHistoryAction(action: ProfitAction): void {
+    this.transitionGovernedAction({
+      id: action.id, source: this.label(action.sourceType), title: action.title, message: action.message,
+      priority: action.priority, metric: this.money(action.expectedImpactPaise), impactPaise: action.expectedImpactPaise,
+      route: this.safeActionRoute(action.payloadJson?.['route'], '/reports/profit-intelligence'), sourceType: action.sourceType,
+      sourceId: action.sourceId, status: action.status, managedActionId: action.id, createdByUserId: action.createdByUserId,
+      expectedImpact: this.money(action.expectedImpactPaise),
+    }, 'rollback');
+  }
+
+  runForecasts(): void {
+    if (!this.canReadAi || this.forecastRunning) return;
+    this.forecastRunning = true;
+    this.intelligenceError = '';
+    forkJoin({
+      revenue: this.optional('forecast-revenue', this.api.post<ApiEnvelope<PredictionRun> | PredictionRun>('/api/v1/ai/predictions/revenue_forecast', {})),
+      stock: this.optional('forecast-stock', this.api.post<ApiEnvelope<PredictionRun> | PredictionRun>('/api/v1/ai/predictions/inventory_reorder_risk', {})),
+      demand: this.optional('forecast-demand', this.api.post<ApiEnvelope<PredictionRun> | PredictionRun>('/api/v1/ai/predictions/service_demand', {})),
+      noShow: this.optional('forecast-no-show', this.api.post<ApiEnvelope<PredictionRun> | PredictionRun>('/api/v1/ai/predictions/no_show_risk', {})),
+    }).pipe(finalize(() => (this.forecastRunning = false))).subscribe(({ revenue, stock, demand, noShow }) => {
+      this.forecasts = {
+        revenue_forecast: this.unwrap(revenue) ?? null,
+        inventory_reorder_risk: this.unwrap(stock) ?? null,
+        service_demand: this.unwrap(demand) ?? null,
+        no_show_risk: this.unwrap(noShow) ?? null,
+      };
+      this.touch();
+    });
+  }
+
+  decideBriefing(signal: string, decision: 'acknowledge' | 'snooze' | 'dismiss'): void {
+    if (!this.canReadAi || this.actionBusy) return;
+    this.actionBusy = `briefing-${signal}`;
+    this.actionError = '';
+    this.api.post(`/api/v1/ai/briefing/signals/${encodeURIComponent(signal)}/decision`, { decision, snoozeHours: decision === 'snooze' ? 24 : 0 })
+      .pipe(finalize(() => (this.actionBusy = ''))).subscribe({
+        next: () => { this.actionStatus = `${this.label(signal)}: ${this.label(decision)}`; this.loadIntelligence(); },
+        error: (error) => { this.actionError = this.apiError(error, 'Unable to update AI signal'); },
+      });
   }
 
   private loadSnapshot(): void {
@@ -921,14 +1274,18 @@ export class CommandCenterPageComponent implements OnInit {
   private loadControls(): void {
     this.controlsLoading = true;
     forkJoin({
-      actions: this.optional('actions', this.api.get<ApiEnvelope<ProfitAction[]> | ProfitAction[]>('/api/v1/profit-intelligence/actions?status=active&priority=high&limit=200')),
+      actions: this.optional('actions', this.api.get<ApiEnvelope<ProfitAction[]> | ProfitAction[]>('/api/v1/profit-intelligence/actions?status=all&limit=200')),
+      audit: this.canManageProfitActions
+        ? this.optional('action-audit', this.api.get<ApiEnvelope<GovernanceAuditEvent[]> | GovernanceAuditEvent[]>('/api/v1/profit-intelligence/governance/audit?limit=100'))
+        : of(null),
       inventoryCommand: this.canReadInventory
         ? this.optional('inventory-command', this.api.get<ApiEnvelope<InventoryCommandCenter> | InventoryCommandCenter>('/api/v1/inventory/command-center'))
         : of(null),
-    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, inventoryCommand }) => {
+    }).pipe(finalize(() => (this.controlsLoading = false))).subscribe(({ actions, audit, inventoryCommand }) => {
       this.actions = this.unwrap(actions) ?? [];
+      this.actionAudit = this.unwrap(audit) ?? [];
       this.inventoryCommand = this.unwrap(inventoryCommand) ?? null;
-      if (actions || inventoryCommand) this.touch();
+      if (actions || audit || inventoryCommand) this.touch();
     });
   }
 
@@ -987,6 +1344,47 @@ export class CommandCenterPageComponent implements OnInit {
       });
   }
 
+  private loadIntelligence(): void {
+    if (!this.canReadAi) {
+      this.intelligenceLoading = false;
+      this.forecasts = {};
+      this.briefing = null;
+      return;
+    }
+    this.intelligenceLoading = true;
+    forkJoin({
+      revenue: this.optional('forecast-revenue', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/revenue_forecast/latest')),
+      stock: this.optional('forecast-stock', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/inventory_reorder_risk/latest')),
+      demand: this.optional('forecast-demand', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/service_demand/latest')),
+      noShow: this.optional('forecast-no-show', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/no_show_risk/latest')),
+      briefing: this.optional('briefing', this.api.get<ApiEnvelope<AiBriefing> | AiBriefing>('/api/v1/ai/briefing/daily')),
+    }).pipe(finalize(() => (this.intelligenceLoading = false))).subscribe(({ revenue, stock, demand, noShow, briefing }) => {
+      this.forecasts = {
+        revenue_forecast: this.unwrap(revenue) ?? null,
+        inventory_reorder_risk: this.unwrap(stock) ?? null,
+        service_demand: this.unwrap(demand) ?? null,
+        no_show_risk: this.unwrap(noShow) ?? null,
+      };
+      this.briefing = this.unwrap(briefing) ?? null;
+      if (revenue || stock || demand || noShow || briefing) this.touch();
+    });
+  }
+
+  loadBranchAnomalies(): void {
+    if (!this.canReadAi) {
+      this.branchAnomalyLoading = false;
+      this.branchAnomalies = [];
+      return;
+    }
+    this.branchAnomalyLoading = true;
+    this.optional('branch-anomaly', this.api.get<ApiEnvelope<BranchAnomaly[]> | BranchAnomaly[]>(`/api/v1/ai/briefing/compare/${encodeURIComponent(this.branchSignal)}`))
+      .pipe(finalize(() => (this.branchAnomalyLoading = false)))
+      .subscribe((rows) => {
+        this.branchAnomalies = this.unwrap(rows) ?? [];
+        if (rows) this.touch();
+      });
+  }
+
 
   createCampaignDraft(plan: GrowthIntelligence['campaignPlanner'][number]): void {
     if (this.growthActionBusy) return;
@@ -1005,17 +1403,17 @@ export class CommandCenterPageComponent implements OnInit {
       });
   }
 
-  createStaffGoal(staff: GrowthIntelligence['staffCoach'][number]): void {
+  createStaffGoal(staff: GrowthIntelligence['staffCoach'][number], opportunity: GrowthIntelligence['staffCoach'][number]['opportunities'][number]): void {
     if (this.growthActionBusy) return;
-    if (!window.confirm(`Create a coaching goal for ${staff.staffName || staff.staffId}?`)) return;
+    if (!window.confirm(`Assign ${opportunity.title} to ${staff.staffName || staff.staffId}?`)) return;
     this.growthActionBusy = true;
     this.growthActionStatus = '';
     this.growthActionError = '';
-    this.api.post(`/api/v1/reports/growth-intelligence/staff/${encodeURIComponent(staff.staffId)}/coaching-goal`, {})
+    this.api.post(`/api/v1/reports/growth-intelligence/staff/${encodeURIComponent(staff.staffId)}/coaching-goal`, { opportunityKey: opportunity.key })
       .pipe(finalize(() => (this.growthActionBusy = false)))
       .subscribe({
         next: () => {
-          this.growthActionStatus = `Coaching goal created for ${staff.staffName || staff.staffId}`;
+          this.growthActionStatus = `${opportunity.title} assigned to ${staff.staffName || staff.staffId}`;
           this.loadGrowth();
         },
         error: (error) => { this.growthActionError = this.apiError(error, 'Unable to create coaching goal'); },
@@ -1035,10 +1433,29 @@ export class CommandCenterPageComponent implements OnInit {
   }
 
   private optional<T>(source: Source, request: Observable<T>): Observable<T | null> {
-    return request.pipe(catchError(() => {
+    return request.pipe(tap(() => {
+      this.errors.delete(source);
+      this.sourceUpdatedAt.set(source, new Date());
+    }), catchError(() => {
       this.errors.add(source);
       return of(null);
     }));
+  }
+
+  private sourceLoading(source: Source): boolean {
+    if (source === 'snapshot') return this.snapshotLoading;
+    if (['profit', 'advanced', 'dues', 'appointments'].includes(source)) return this.financeLoading;
+    if (['actions', 'action-audit', 'inventory-command'].includes(source)) return this.controlsLoading;
+    if (['payments', 'payment-risk', 'payment-providers'].includes(source)) return this.paymentLoading;
+    if (['franchise', 'membership-settings', 'multi-branch'].includes(source)) return this.locationLoading;
+    if (['forecast-revenue', 'forecast-stock', 'forecast-demand', 'forecast-no-show', 'briefing'].includes(source)) return this.intelligenceLoading || this.forecastRunning;
+    if (source === 'branch-anomaly') return this.branchAnomalyLoading;
+    return this.growthLoading;
+  }
+
+  private safeActionRoute(value: unknown, fallback: string): string {
+    const route = typeof value === 'string' ? value.trim() : '';
+    return route.startsWith('/') && !route.startsWith('//') ? route : fallback;
   }
 
   private unwrap<T>(response: ApiEnvelope<T> | T | null): T | undefined {

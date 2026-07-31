@@ -14,12 +14,9 @@ export type LanguageCode =
   | 'zh-CN'
   | 'ja-JP'
   | 'tr-TR'
-  | 'nb-NO'
   | 'es-ES'
   | 'fr-FR'
   | 'id-ID'
-  | 'da-DK'
-  | 'hu-HU'
   | 'de-DE'
   | 'it-IT'
   | 'nl-NL'
@@ -29,7 +26,10 @@ export type LanguageCode =
   | 'fil-PH'
   | 'ru-RU'
   | 'pl-PL'
-  | 'sv-SE';
+  | 'sv-SE'
+  | 'ur-PK'
+  | 'pa-IN'
+  | 'bn-BD';
 export type LanguageDisplayMode = 'single' | 'bilingual';
 export type TranslationParams = Record<string, string | number>;
 
@@ -43,12 +43,9 @@ export const LANGUAGE_OPTIONS: ReadonlyArray<{ code: LanguageCode; label: string
   { code: 'zh-CN', label: '中文 (Chinese)' },
   { code: 'ja-JP', label: '日本語 (Japanese)' },
   { code: 'tr-TR', label: 'Turkish' },
-  { code: 'nb-NO', label: 'Norwegian' },
   { code: 'es-ES', label: 'Spanish' },
   { code: 'fr-FR', label: 'Français' },
   { code: 'id-ID', label: 'Indonesian' },
-  { code: 'da-DK', label: 'Danish' },
-  { code: 'hu-HU', label: 'Hungarian' },
   { code: 'de-DE', label: 'German' },
   { code: 'it-IT', label: 'Italian' },
   { code: 'nl-NL', label: 'Dutch' },
@@ -59,6 +56,9 @@ export const LANGUAGE_OPTIONS: ReadonlyArray<{ code: LanguageCode; label: string
   { code: 'ru-RU', label: 'Russian' },
   { code: 'pl-PL', label: 'Polish' },
   { code: 'sv-SE', label: 'Swedish' },
+  { code: 'ur-PK', label: 'Urdu' },
+  { code: 'pa-IN', label: 'Punjabi' },
+  { code: 'bn-BD', label: 'Bengali' },
 ];
 
 export interface LanguagePreferences {
@@ -244,8 +244,17 @@ export class LanguageService {
   }
 
   private lookup(language: LanguageCode, key: string, params: TranslationParams): string {
-    const template = this.catalogs.get(language)?.[key] ?? english[key as keyof typeof english] ?? key;
+    const catalog = this.catalogs.get(language);
+    const template = catalog?.[key] ?? english[key as keyof typeof english] ?? this.humanizeKey(key);
     return template.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name] ?? `{${name}}`));
+  }
+
+  private humanizeKey(key: string): string {
+    const candidate = key.includes('.') ? key.split('.').slice(-1)[0] : key;
+    return candidate
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .trim();
   }
 
   private normalize(preferences: LanguagePreferences): LanguagePreferences {

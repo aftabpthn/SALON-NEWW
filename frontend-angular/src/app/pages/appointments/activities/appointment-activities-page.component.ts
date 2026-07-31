@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../../shared/services/api.service';
+import { LanguageService } from '../../../core/i18n/language.service';
+import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 
 type ActivityEvent = {
   id: string;
@@ -37,12 +39,13 @@ type AppointmentActivityRow = {
 
 @Component({
     selector: 'page-appointment-activities',
-    imports: [FormsModule, RouterLink],
+    imports: [FormsModule, RouterLink, TranslatePipe],
     templateUrl: './appointment-activities-page.component.html',
     styleUrls: ['./appointment-activities-page.component.css']
 })
 export class AppointmentActivitiesPageComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly language = inject(LanguageService);
 
   rows: AppointmentActivityRow[] = [];
   selected: AppointmentActivityRow | null = null;
@@ -86,7 +89,7 @@ export class AppointmentActivitiesPageComponent implements OnInit {
       if (this.selected) this.selected = this.rows.find((row) => row.appointmentId === this.selected?.appointmentId) ?? null;
     } catch (error: any) {
       this.rows = [];
-      this.error = error?.error?.message || 'Unable to load appointment activities';
+      this.error = error?.error?.message || this.language.text('appointments.activities.unableToLoad');
     } finally {
       this.loading = false;
     }
@@ -120,7 +123,39 @@ export class AppointmentActivitiesPageComponent implements OnInit {
   }
 
   statusText(value?: string): string {
-    return String(value || 'Booked').replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const normalized = String(value || 'booked').trim().toLowerCase();
+    const key = this.statusLabelKey(normalized);
+    if (key) {
+      return this.language.text(key);
+    }
+    return this.humanizeStatus(value);
+  }
+
+  private statusLabelKey(value: string): string | undefined {
+    const normalized = value
+      .toLowerCase()
+      .replace(/[_\s]+/g, '-')
+      .replace(/--+/g, '-')
+      .trim();
+    return ({
+      booked: 'appointments.activities.status.booked',
+      arrived: 'appointments.activities.status.arrived',
+      'in-service': 'appointments.activities.status.inService',
+      completed: 'appointments.activities.status.completed',
+      billed: 'appointments.activities.status.billed',
+      cancelled: 'appointments.activities.status.cancelled',
+      'no-show': 'appointments.activities.status.noShow',
+      unpaid: 'appointments.activities.paymentStatus.unpaid',
+      paid: 'appointments.activities.paymentStatus.paid',
+      'partially-paid': 'appointments.activities.paymentStatus.partiallyPaid',
+      partial: 'appointments.activities.paymentStatus.partiallyPaid',
+    } as const)[normalized];
+  }
+
+  private humanizeStatus(value?: string): string {
+    return String(value || 'Booked')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   eventTime(event: ActivityEvent): string {

@@ -3,14 +3,14 @@ use crate::{
         common::AppError,
         migration::{
             MigrationAlias, MigrationAnalysisReport, MigrationAnalysisRow,
-            MigrationAnalysisSummary, MigrationDuplicateDecision, MigrationEntity,
-            MigrationMappingDecision, MigrationProvider, MigrationRowIssue, MigrationRowStatus,
-            MigrationTargetAlternative, MigrationTemplate, MigrationTemplateColumn,
-            NewMigrationRowResult,
+            MigrationAnalysisSummary, MigrationDuplicateDecision, MigrationDuplicatePreview,
+            MigrationDuplicateSignal, MigrationEntity, MigrationMappingDecision, MigrationProvider,
+            MigrationRowIssue, MigrationRowStatus, MigrationTargetAlternative, MigrationTemplate,
+            MigrationTemplateColumn, NewMigrationRowResult,
         },
         migration_file::MigrationSourceColumnProfile,
     },
-    repositories::migration_repository,
+    repositories::{migration_large_import_repository, migration_repository},
     services::{client_service, outgoing_funds_service},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -38,6 +38,27 @@ const MIGRATION_CONTRACT_VERSION: &str = "2026-07-phase2-v1";
 pub(crate) const MIGRATION_TRANSFORMER_VERSION: &str = "2026-07-phase5-v1";
 const MIGRATION_SAFETY_RULE_VERSION: &str = "2026-07-phase6-v1";
 const MIGRATION_CROSS_FIELD_RULE_VERSION: &str = "2026-07-phase7-v1";
+const MIGRATION_DEPENDENCY_RULE_VERSION: &str = "2026-07-phase8-v1";
+
+fn is_dependency_issue(code: &str) -> bool {
+    matches!(
+        code,
+        "DEPENDENCY_NOT_FOUND"
+            | "APPOINTMENT_CLIENT_NOT_FOUND"
+            | "APPOINTMENT_STAFF_NOT_FOUND"
+            | "APPOINTMENT_SERVICE_NOT_FOUND"
+            | "MEMBERSHIP_CLIENT_NOT_FOUND"
+            | "MEMBERSHIP_PLAN_NOT_FOUND"
+            | "PAYMENT_INVOICE_NOT_FOUND"
+            | "REFUND_INVOICE_NOT_FOUND"
+            | "REFUND_PAYMENT_NOT_FOUND"
+            | "COMMISSION_INVOICE_NOT_FOUND"
+            | "COMMISSION_SALE_LINE_NOT_FOUND"
+            | "COMMISSION_STAFF_NOT_FOUND"
+            | "STOCK_PRODUCT_NOT_FOUND"
+            | "FILE_OWNER_NOT_FOUND"
+    )
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -152,6 +173,7 @@ fn field_metadata(entity: MigrationEntity, column: &ColumnContract) -> FieldMeta
         (MigrationEntity::Inventory, "product")
         | (MigrationEntity::PurchaseBills, "product")
         | (MigrationEntity::StockMovements, "product") => Some(MigrationEntity::Products),
+        (MigrationEntity::OpeningPayables, "supplier") => Some(MigrationEntity::Suppliers),
         (MigrationEntity::ClientMemberships, "client")
         | (MigrationEntity::Appointments, "client")
         | (MigrationEntity::Sales, "client")
@@ -237,6 +259,13 @@ fn field_metadata(entity: MigrationEntity, column: &ColumnContract) -> FieldMeta
                 "paid",
             ][..],
             "calculated_when_blank",
+        ),
+        (MigrationEntity::OpeningPayables, "balanceSide") => {
+            (&["debit", "credit"][..], "row_rejected_when_blank")
+        }
+        (MigrationEntity::OpeningPayables, "openingBalanceAccount") => (
+            &["owner_equity", "retained_earnings"][..],
+            "row_rejected_when_blank",
         ),
         (MigrationEntity::Files, "ownerType") => {
             (&["client", "staff"][..], "row_rejected_when_blank")
@@ -750,6 +779,21 @@ const INVENTORY_COLUMNS: &[ColumnContract] = &[
         ["product", "product id", "product name", "sku", "item code"]
     ),
     column!(
+        "location",
+        true,
+        ["location", "store", "warehouse", "inventory location"]
+    ),
+    column!(
+        "stockUnit",
+        false,
+        ["stock unit", "base unit", "inventory unit", "unit"]
+    ),
+    column!(
+        "unitConversionApproved",
+        false,
+        ["unit conversion approved", "conversion approved"]
+    ),
+    column!(
         "openingStock",
         true,
         [
@@ -763,7 +807,72 @@ const INVENTORY_COLUMNS: &[ColumnContract] = &[
     column!(
         "unitCostPaise",
         false,
-        ["unit cost paise", "cost paise", "unit cost", "cost price"]
+        [
+            "source unit cost paise",
+            "source cost paise",
+            "unit cost paise"
+        ]
+    ),
+    column!(
+        "approvedUnitCostPaise",
+        true,
+        ["approved unit cost paise", "approved stock unit cost paise"]
+    ),
+    column!("costMethod", true, ["cost method", "valuation cost method"]),
+    column!(
+        "valuationPaise",
+        false,
+        ["valuation paise", "stock value paise", "inventory value"]
+    ),
+    column!(
+        "batchesJson",
+        false,
+        ["batches json", "batch breakdown", "batch details"]
+    ),
+    column!(
+        "unbatchedQuantity",
+        false,
+        ["unbatched quantity", "without batch quantity"]
+    ),
+    column!(
+        "approvedUnbatched",
+        false,
+        ["approved unbatched", "allow unbatched"]
+    ),
+    column!(
+        "negativeStockApproved",
+        false,
+        ["negative stock approved", "allow negative stock"]
+    ),
+    column!(
+        "locationApproved",
+        false,
+        ["location approved", "approve new location"]
+    ),
+    column!(
+        "sellableQuantity",
+        false,
+        ["sellable quantity", "saleable quantity"]
+    ),
+    column!(
+        "backbarQuantity",
+        false,
+        ["backbar quantity", "back bar quantity"]
+    ),
+    column!("damagedQuantity", false, ["damaged quantity"]),
+    column!("expiredQuantity", false, ["expired quantity"]),
+    column!("quarantinedQuantity", false, ["quarantined quantity"]),
+    column!("inTransitQuantity", false, ["in transit quantity"]),
+    column!(
+        "countedBy",
+        true,
+        ["counted by", "counter user id", "counted by user id"]
+    ),
+    column!("notes", false, ["notes", "count notes", "remarks"]),
+    column!(
+        "snapshotAt",
+        true,
+        ["snapshot at", "snapshot date", "stock date", "as of"]
     ),
 ];
 
@@ -1079,20 +1188,100 @@ const PURCHASE_BILL_COLUMNS: &[ColumnContract] = &[
     column!("supplierName", true, ["supplier name", "vendor name"]),
     column!("supplierGstin", false, ["supplier gstin", "gstin"]),
     column!(
+        "supplierExternalId",
+        false,
+        ["supplier external id", "vendor id"]
+    ),
+    column!("supplierCode", false, ["supplier code", "vendor code"]),
+    column!("supplierPhone", false, ["supplier phone", "vendor phone"]),
+    column!("supplierEmail", false, ["supplier email", "vendor email"]),
+    column!(
         "invoiceNumber",
         true,
         ["invoice number", "invoice no", "bill no"]
     ),
-    column!("receivedDate", true, ["received date", "bill date"]),
-    column!("product", true, ["product", "product id", "sku"]),
+    column!("invoiceDate", true, ["invoice date", "bill date"]),
+    column!("receivedDate", false, ["received date", "grn date"]),
+    column!("currency", false, ["currency", "currency code"]),
+    column!("documentType", false, ["document type", "bill type"]),
+    column!(
+        "sourceStatus",
+        false,
+        ["source status", "bill status", "status"]
+    ),
+    column!("paymentStatus", false, ["payment status", "paid status"]),
+    column!("product", false, ["product", "product id"]),
+    column!("productName", false, ["product name", "item name"]),
+    column!("sku", false, ["sku", "product sku"]),
+    column!("barcode", false, ["barcode", "ean", "upc"]),
+    column!("sourceProductId", false, ["source product id", "item id"]),
+    column!("brand", false, ["brand", "product brand"]),
+    column!("size", false, ["size", "product size"]),
+    column!("shade", false, ["shade", "shade number", "shade no"]),
+    column!("color", false, ["color", "colour"]),
+    column!(
+        "vendorCatalogCode",
+        false,
+        ["vendor catalog code", "supplier item code", "vendor sku"]
+    ),
+    column!(
+        "sourceLineId",
+        false,
+        ["source line id", "bill line id", "line id"]
+    ),
+    column!("packageUnit", false, ["package unit", "purchase unit"]),
+    column!("stockUnit", false, ["stock unit", "base unit"]),
+    column!("unitsPerPackage", false, ["units per package", "pack size"]),
     column!("quantity", true, ["quantity", "qty"]),
+    column!(
+        "acceptedQuantity",
+        false,
+        ["accepted quantity", "accepted qty"]
+    ),
+    column!(
+        "damagedQuantity",
+        false,
+        ["damaged quantity", "damaged qty"]
+    ),
+    column!(
+        "rejectedQuantity",
+        false,
+        ["rejected quantity", "rejected qty"]
+    ),
     column!("unitCostPaise", true, ["unit cost paise", "cost paise"]),
     column!("taxablePaise", true, ["taxable paise"]),
     column!("cgstPaise", false, ["cgst paise"]),
     column!("sgstPaise", false, ["sgst paise"]),
     column!("igstPaise", false, ["igst paise"]),
     column!("totalPaise", true, ["total paise"]),
+    column!(
+        "billTotalPaise",
+        false,
+        ["bill total paise", "invoice total paise"]
+    ),
     column!("gstPercent", false, ["gst percent", "gst rate"]),
+    column!(
+        "discountPaise",
+        false,
+        ["discount paise", "bill discount paise"]
+    ),
+    column!("shippingPaise", false, ["shipping paise", "freight paise"]),
+    column!(
+        "handlingPaise",
+        false,
+        ["handling paise", "handling charge paise"]
+    ),
+    column!(
+        "batchNumber",
+        false,
+        ["batch number", "batch no", "lot number"]
+    ),
+    column!("expiryDate", false, ["expiry date", "expiration date"]),
+    column!(
+        "billFileName",
+        false,
+        ["bill file name", "bill image", "attachment"]
+    ),
 ];
 
 const REFUND_COLUMNS: &[ColumnContract] = &[
@@ -1301,6 +1490,55 @@ const STOCK_MOVEMENT_COLUMNS: &[ColumnContract] = &[
     ),
 ];
 
+const OPENING_PAYABLE_COLUMNS: &[ColumnContract] = &[
+    column!(
+        "oldExternalId",
+        true,
+        ["external id", "old id", "opening payable id"]
+    ),
+    column!(
+        "supplier",
+        true,
+        ["supplier", "supplier id", "vendor", "vendor id"]
+    ),
+    column!(
+        "outstandingAmountPaise",
+        true,
+        ["outstanding amount paise", "balance paise", "amount paise"]
+    ),
+    column!(
+        "balanceSide",
+        true,
+        ["balance side", "debit credit", "dr cr"]
+    ),
+    column!("currency", true, ["currency", "currency code"]),
+    column!("dueDate", false, ["due date"]),
+    column!(
+        "sourceOutstandingTotalPaise",
+        true,
+        [
+            "source outstanding total paise",
+            "opening payable total paise"
+        ]
+    ),
+    column!(
+        "openingBalanceAccount",
+        true,
+        ["opening balance account", "offset account"]
+    ),
+    column!(
+        "historicalBillAllocationsJson",
+        false,
+        ["historical bill allocations", "bill allocations json"]
+    ),
+    column!(
+        "unallocatedApproved",
+        false,
+        ["unallocated approved", "approve unallocated balance"]
+    ),
+    column!("gstPaise", false, ["gst paise", "tax paise"]),
+];
+
 pub fn templates() -> Vec<MigrationTemplate> {
     [
         MigrationEntity::Clients,
@@ -1318,6 +1556,7 @@ pub fn templates() -> Vec<MigrationTemplate> {
         MigrationEntity::Payments,
         MigrationEntity::Expenses,
         MigrationEntity::PurchaseBills,
+        MigrationEntity::OpeningPayables,
         MigrationEntity::Refunds,
         MigrationEntity::GiftCards,
         MigrationEntity::Loyalty,
@@ -1485,6 +1724,7 @@ pub(crate) async fn prepare_table_with_version(
         provided_mapping,
         duplicate_decisions,
         transformation_version,
+        None,
         &mut financial_state,
     )
     .await
@@ -1502,6 +1742,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
     provided_mapping: &BTreeMap<String, String>,
     duplicate_decisions: &BTreeMap<String, MigrationDuplicateDecision>,
     transformation_version: &str,
+    projection_job_id: Option<&str>,
     financial_state: &mut HashMap<String, i64>,
 ) -> Result<PreparedMigration, AppError> {
     if transformation_version != MIGRATION_TRANSFORMER_VERSION {
@@ -1570,7 +1811,8 @@ pub(crate) async fn prepare_table_with_version_and_state(
         let external_id = mapped_cell(source_row, &field_indexes, "oldExternalId");
         let mut row_errors = transformed.errors;
         let mut row_warnings = transformed.warnings;
-        if !external_id.is_empty()
+        if entity != MigrationEntity::PurchaseBills
+            && !external_id.is_empty()
             && !seen_external_ids.insert(external_id.trim().to_ascii_lowercase())
         {
             push_issue(
@@ -1631,6 +1873,8 @@ pub(crate) async fn prepare_table_with_version_and_state(
                         tenant,
                         branch,
                         &normalized_phone,
+                        &email,
+                        &external_id,
                     )
                     .await
                     .map_err(|_| AppError::internal("failed to analyze client duplicates"))?
@@ -1892,6 +2136,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
             MigrationEntity::Products => {
                 let sku = mapped_cell(source_row, &field_indexes, "sku");
                 let name = mapped_cell(source_row, &field_indexes, "name");
+                let barcode = mapped_cell(source_row, &field_indexes, "barcode");
                 let gst = parse_i32_field_default(
                     &mapped_cell(source_row, &field_indexes, "gstPercent"),
                     "gstPercent",
@@ -1921,8 +2166,8 @@ pub(crate) async fn prepare_table_with_version_and_state(
                     );
                 }
                 if row_errors.is_empty() {
-                    if let Some((target_id, _)) = migration_repository::find_master_duplicate(
-                        db, tenant, branch, entity, &sku,
+                    if let Some((target_id, _)) = migration_repository::find_product_duplicate(
+                        db, tenant, branch, &sku, &barcode,
                     )
                     .await
                     .map_err(|_| AppError::internal("failed to analyze product duplicates"))?
@@ -1978,10 +2223,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
                         json!(mapped_cell(source_row, &field_indexes, "hsnCode")),
                     ),
                     ("gst_percent".into(), json!(gst)),
-                    (
-                        "barcode".into(),
-                        json!(mapped_cell(source_row, &field_indexes, "barcode")),
-                    ),
+                    ("barcode".into(), json!(barcode)),
                     (
                         "batch_tracked".into(),
                         json!(parse_boolean_default(
@@ -2041,66 +2283,445 @@ pub(crate) async fn prepare_table_with_version_and_state(
                     }
                 }
                 payload.extend([
-                    ("code".into(), json!(code)), ("name".into(), json!(name)),
-                    ("gstin".into(), json!(mapped_cell(source_row, &field_indexes, "gstin").to_ascii_uppercase())),
-                    ("contact_name".into(), json!(mapped_cell(source_row, &field_indexes, "contactName"))),
-                    ("phone".into(), json!(mapped_cell(source_row, &field_indexes, "phone"))),
+                    ("code".into(), json!(code)),
+                    ("name".into(), json!(name)),
+                    (
+                        "gstin".into(),
+                        json!(
+                            mapped_cell(source_row, &field_indexes, "gstin").to_ascii_uppercase()
+                        ),
+                    ),
+                    (
+                        "contact_name".into(),
+                        json!(mapped_cell(source_row, &field_indexes, "contactName")),
+                    ),
+                    (
+                        "phone".into(),
+                        json!(mapped_cell(source_row, &field_indexes, "phone")),
+                    ),
                     ("email".into(), json!(email)),
-                    ("address".into(), json!(mapped_cell(source_row, &field_indexes, "address"))),
-                    ("payment_terms_days".into(), json!(parse_i32_field_default(&mapped_cell(source_row, &field_indexes, "paymentTermsDays"), "paymentTermsDays", 0, 0, &mut row_errors))),
-                    ("active".into(), json!(parse_active(&mapped_cell(source_row, &field_indexes, "active"), &mut row_errors))),
+                    (
+                        "address".into(),
+                        json!(mapped_cell(source_row, &field_indexes, "address")),
+                    ),
+                    (
+                        "payment_terms_days".into(),
+                        json!(parse_i32_field_default(
+                            &mapped_cell(source_row, &field_indexes, "paymentTermsDays"),
+                            "paymentTermsDays",
+                            0,
+                            0,
+                            &mut row_errors
+                        )),
+                    ),
+                    (
+                        "active".into(),
+                        json!(parse_active(
+                            &mapped_cell(source_row, &field_indexes, "active"),
+                            &mut row_errors
+                        )),
+                    ),
                 ]);
             }
             MigrationEntity::Inventory => {
                 let product = mapped_cell(source_row, &field_indexes, "product");
-                let opening_stock = parse_i32_field(
-                    &mapped_cell(source_row, &field_indexes, "openingStock"),
-                    "openingStock",
-                    1,
-                    &mut row_errors,
-                );
+                let location =
+                    mapped_cell(source_row, &field_indexes, "location").to_ascii_uppercase();
                 if product.is_empty() {
                     push_issue(&mut row_errors, "REQUIRED_FIELD", "product is required");
                 }
+                if location.is_empty() {
+                    push_issue(&mut row_errors, "REQUIRED_FIELD", "location is required");
+                }
+                let location_approved = parse_boolean_default(
+                    &mapped_cell(source_row, &field_indexes, "locationApproved"),
+                    false,
+                    "locationApproved",
+                    &mut row_errors,
+                );
+                if !location.is_empty()
+                    && !migration_repository::opening_stock_location_exists(
+                        db, tenant, branch, &location,
+                    )
+                    .await
+                    .map_err(|_| AppError::internal("failed to validate inventory location"))?
+                {
+                    if location_approved {
+                        push_issue(
+                            &mut row_warnings,
+                            "NEW_LOCATION_APPROVAL_USED",
+                            "new inventory location requires explicit governance approval",
+                        );
+                    } else {
+                        push_issue(
+                            &mut row_errors,
+                            "UNKNOWN_INVENTORY_LOCATION",
+                            "location must already exist or locationApproved must be true",
+                        );
+                    }
+                }
                 let resolved = if row_errors.is_empty() {
-                    migration_repository::resolve_inventory_item(db, tenant, branch, &product)
-                        .await
-                        .map_err(|_| AppError::internal("failed to resolve inventory product"))?
+                    migration_repository::resolve_inventory_snapshot_product(
+                        db, tenant, branch, &product,
+                    )
+                    .await
+                    .map_err(|_| AppError::internal("failed to resolve inventory product"))?
                 } else {
                     None
                 };
-                let (item_id, current_cost) = match resolved {
+                let (
+                    item_id,
+                    _current_cost,
+                    base_unit,
+                    package_unit,
+                    units_per_package,
+                    batch_tracked,
+                ) = match resolved {
                     Some(value) => value,
                     None => {
                         if row_errors.is_empty() {
                             push_issue(
                                 &mut row_errors,
-                                "DEPENDENCY_NOT_FOUND",
-                                "product must be imported before opening stock",
+                                "SNAPSHOT_PRODUCT_MAPPING_REQUIRED",
+                                "snapshot product must map to an existing CRM product",
                             );
                         }
-                        (String::new(), 0)
+                        (String::new(), 0, String::new(), String::new(), 1, false)
                     }
                 };
-                if !item_id.is_empty() && !seen.insert(item_id.clone()) {
+                let requested_unit = mapped_cell(source_row, &field_indexes, "stockUnit");
+                let stock_unit = if requested_unit.is_empty() {
+                    base_unit.clone()
+                } else {
+                    requested_unit
+                };
+                let multiplier = if stock_unit.eq_ignore_ascii_case(&base_unit) {
+                    1
+                } else if stock_unit.eq_ignore_ascii_case(&package_unit) {
+                    units_per_package
+                } else {
+                    push_issue(
+                        &mut row_errors,
+                        "STOCK_UNIT_CONVERSION_REQUIRED",
+                        "stock unit must match the product base unit or approved package unit",
+                    );
+                    1
+                };
+                let unit_conversion_approved = parse_boolean_default(
+                    &mapped_cell(source_row, &field_indexes, "unitConversionApproved"),
+                    false,
+                    "unitConversionApproved",
+                    &mut row_errors,
+                );
+                if multiplier != 1 && !unit_conversion_approved {
+                    push_issue(
+                        &mut row_errors,
+                        "UNIT_CONVERSION_APPROVAL_REQUIRED",
+                        "package-to-base conversion requires unitConversionApproved",
+                    );
+                }
+                let source_quantity = mapped_cell(source_row, &field_indexes, "openingStock");
+                let opening_stock = parse_fixed_stock_quantity(
+                    &source_quantity,
+                    multiplier,
+                    "openingStock",
+                    true,
+                    &mut row_errors,
+                );
+                let classification_fields = [
+                    ("sellableQuantity", "sellable"),
+                    ("backbarQuantity", "backbar"),
+                    ("damagedQuantity", "damaged"),
+                    ("expiredQuantity", "expired"),
+                    ("quarantinedQuantity", "quarantined"),
+                    ("inTransitQuantity", "inTransit"),
+                ];
+                let classifications_supplied = classification_fields.iter().any(|(field, _)| {
+                    !mapped_cell(source_row, &field_indexes, field)
+                        .trim()
+                        .is_empty()
+                });
+                let mut classifications = serde_json::Map::new();
+                for (field, key) in classification_fields {
+                    let quantity = parse_fixed_stock_quantity(
+                        &mapped_cell(source_row, &field_indexes, field),
+                        multiplier,
+                        field,
+                        false,
+                        &mut row_errors,
+                    );
+                    if quantity < 0 {
+                        push_issue(
+                            &mut row_errors,
+                            "NEGATIVE_CLASSIFICATION_QUANTITY",
+                            "stock classification quantities cannot be negative",
+                        );
+                    }
+                    classifications.insert(key.into(), json!(quantity));
+                }
+                if classifications_supplied {
+                    let available = available_classification_total(&classifications);
+                    if available != Some(i64::from(opening_stock)) {
+                        push_issue(
+                            &mut row_errors,
+                            "STOCK_CLASSIFICATION_TOTAL_MISMATCH",
+                            "openingStock must equal sellableQuantity plus backbarQuantity; damaged, expired, quarantined and in-transit quantities are excluded",
+                        );
+                    }
+                } else {
+                    classifications.insert("sellable".into(), json!(opening_stock));
+                }
+                let unbatched_quantity = parse_fixed_stock_quantity(
+                    &mapped_cell(source_row, &field_indexes, "unbatchedQuantity"),
+                    multiplier,
+                    "unbatchedQuantity",
+                    false,
+                    &mut row_errors,
+                );
+                let approved_unbatched = parse_boolean_default(
+                    &mapped_cell(source_row, &field_indexes, "approvedUnbatched"),
+                    false,
+                    "approvedUnbatched",
+                    &mut row_errors,
+                );
+                let negative_stock_approved = parse_boolean_default(
+                    &mapped_cell(source_row, &field_indexes, "negativeStockApproved"),
+                    false,
+                    "negativeStockApproved",
+                    &mut row_errors,
+                );
+                let (batches_json, batch_quantity) = parse_snapshot_batches(
+                    &mapped_cell(source_row, &field_indexes, "batchesJson"),
+                    multiplier,
+                    &mut row_errors,
+                );
+                if batch_tracked && batches_json.as_array().is_none_or(Vec::is_empty) {
+                    push_issue(
+                        &mut row_errors,
+                        "BATCH_TOTALS_REQUIRED",
+                        "batch-tracked product requires batchesJson",
+                    );
+                }
+                if !batch_tracked && batches_json.as_array().is_some_and(|rows| !rows.is_empty()) {
+                    push_issue(
+                        &mut row_errors,
+                        "BATCH_NOT_ALLOWED",
+                        "non-batch product cannot contain batch quantities",
+                    );
+                }
+                if batch_tracked && unbatched_quantity != 0 && !approved_unbatched {
+                    push_issue(
+                        &mut row_errors,
+                        "UNBATCHED_STOCK_APPROVAL_REQUIRED",
+                        "unbatched quantity requires explicit approval",
+                    );
+                }
+                if batch_quantity.checked_add(unbatched_quantity) != Some(opening_stock)
+                    && batch_tracked
+                {
+                    push_issue(
+                        &mut row_errors,
+                        "BATCH_TOTAL_MISMATCH",
+                        "total stock must equal batch stock plus approved unbatched stock",
+                    );
+                }
+                if opening_stock < 0 && !negative_stock_approved {
+                    push_issue(
+                        &mut row_errors,
+                        "NEGATIVE_STOCK_APPROVAL_REQUIRED",
+                        "negative stock requires the branch policy and explicit approval",
+                    );
+                }
+                if !item_id.is_empty()
+                    && !seen.insert(format!("{item_id}|{}", location.to_ascii_lowercase()))
+                {
                     push_issue(
                         &mut row_errors,
                         "DUPLICATE_SOURCE_KEY",
-                        "opening stock for this product appears twice in CSV",
+                        "opening stock for this product and location appears twice",
                     );
                 }
-                let unit_cost = parse_i64_field_default(
-                    &mapped_cell(source_row, &field_indexes, "unitCostPaise"),
-                    "unitCostPaise",
+                let (latest_cost, weighted_cost) = if item_id.is_empty() {
+                    (None, None)
+                } else {
+                    migration_repository::historical_inventory_cost_suggestions(
+                        db, tenant, branch, &item_id, &base_unit,
+                    )
+                    .await
+                    .map_err(|_| {
+                        AppError::internal("failed to calculate historical cost evidence")
+                    })?
+                };
+                let source_cost_value = mapped_cell(source_row, &field_indexes, "unitCostPaise");
+                let source_cost = (!source_cost_value.trim().is_empty()).then(|| {
+                    parse_i64_field(&source_cost_value, "unitCostPaise", 0, &mut row_errors)
+                });
+                let source_valuation_value =
+                    mapped_cell(source_row, &field_indexes, "valuationPaise");
+                let source_valuation = (!source_valuation_value.trim().is_empty()).then(|| {
+                    parse_i64_field(
+                        &source_valuation_value,
+                        "valuationPaise",
+                        i64::MIN,
+                        &mut row_errors,
+                    )
+                });
+                let source_system_cost = source_cost.or_else(|| {
+                    source_valuation
+                        .and_then(|value| rounded_unit_cost_from_valuation(value, opening_stock))
+                });
+                let approved_cost_value =
+                    mapped_cell(source_row, &field_indexes, "approvedUnitCostPaise");
+                if approved_cost_value.trim().is_empty() {
+                    push_issue(
+                        &mut row_errors,
+                        "APPROVED_STOCK_UNIT_COST_REQUIRED",
+                        "approvedUnitCostPaise is required and must be per stock unit",
+                    );
+                }
+                let approved_cost = parse_i64_field_default(
+                    &approved_cost_value,
+                    "approvedUnitCostPaise",
                     0,
-                    current_cost,
+                    0,
                     &mut row_errors,
                 );
+                let cost_method = mapped_cell(source_row, &field_indexes, "costMethod")
+                    .trim()
+                    .to_ascii_lowercase()
+                    .replace(' ', "_")
+                    .replace('-', "_");
+                let expected_cost = match cost_method.as_str() {
+                    "latest_historical_purchase_cost" => latest_cost,
+                    "weighted_average_historical_cost" => weighted_cost,
+                    "current_source_system_valuation" => source_system_cost,
+                    "manual_approved_cost" => Some(approved_cost),
+                    _ => {
+                        push_issue(
+                            &mut row_errors,
+                            "INVALID_COST_METHOD",
+                            "costMethod must select latest historical, weighted historical, source-system or manual approved cost",
+                        );
+                        None
+                    }
+                };
+                if expected_cost.is_none() && cost_method != "manual_approved_cost" {
+                    push_issue(
+                        &mut row_errors,
+                        "SELECTED_COST_EVIDENCE_MISSING",
+                        "the selected cost method has no matching stock-unit evidence",
+                    );
+                } else if expected_cost.is_some_and(|value| value != approved_cost) {
+                    push_issue(
+                        &mut row_errors,
+                        "APPROVED_COST_EVIDENCE_MISMATCH",
+                        "approvedUnitCostPaise must match the selected evidence; use manual_approved_cost for a different value",
+                    );
+                }
+                let valuation = opening_valuation_paise(opening_stock, approved_cost).unwrap_or_else(
+                    || {
+                        push_issue(
+                            &mut row_errors,
+                            "OPENING_VALUATION_OVERFLOW",
+                            "opening quantity multiplied by approved unit cost exceeds integer paise range",
+                        );
+                        0
+                    },
+                );
+                let snapshot_at = parse_required_datetime(
+                    &mapped_cell(source_row, &field_indexes, "snapshotAt"),
+                    "snapshotAt",
+                    &mut row_errors,
+                )
+                .unwrap_or_default();
+                if let Ok(snapshot_date) = DateTime::parse_from_rfc3339(&snapshot_at) {
+                    for batch in batches_json.as_array().into_iter().flatten() {
+                        if batch
+                            .get("expiryDate")
+                            .and_then(Value::as_str)
+                            .filter(|value| !value.is_empty())
+                            .and_then(|value| NaiveDate::parse_from_str(value, "%Y-%m-%d").ok())
+                            .is_some_and(|expiry| expiry < snapshot_date.date_naive())
+                            && batch.get("quantity").and_then(Value::as_i64).unwrap_or(0) > 0
+                        {
+                            push_issue(
+                                &mut row_errors,
+                                "EXPIRED_BATCH_SELLABLE_BLOCKED",
+                                "expired batch quantity cannot be included in opening sellable stock; record it in expiredQuantity",
+                            );
+                        }
+                    }
+                }
+                let counted_by = mapped_cell(source_row, &field_indexes, "countedBy");
+                if counted_by.is_empty() {
+                    push_issue(&mut row_errors, "REQUIRED_FIELD", "countedBy is required");
+                } else if !migration_repository::opening_stock_counter_exists(
+                    db,
+                    tenant,
+                    branch,
+                    &counted_by,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to validate counted-by user"))?
+                {
+                    push_issue(
+                        &mut row_errors,
+                        "COUNTED_BY_USER_INVALID",
+                        "countedBy must be an active user with access to this branch",
+                    );
+                }
+                let approved_unbatched_quantity = if batch_tracked {
+                    unbatched_quantity
+                } else {
+                    opening_stock
+                };
                 payload.extend([
                     ("product_reference".into(), json!(product)),
                     ("inventory_item_id".into(), json!(item_id)),
+                    ("location_code".into(), json!(location)),
+                    ("stock_unit".into(), json!(base_unit)),
                     ("opening_stock".into(), json!(opening_stock)),
-                    ("unit_cost_paise".into(), json!(unit_cost)),
+                    ("source_quantity".into(), json!(source_quantity)),
+                    ("source_unit".into(), json!(stock_unit)),
+                    ("unit_multiplier".into(), json!(multiplier)),
+                    (
+                        "unit_conversion_approved".into(),
+                        json!(unit_conversion_approved),
+                    ),
+                    ("location_approved".into(), json!(location_approved)),
+                    (
+                        "classifications_json".into(),
+                        Value::Object(classifications),
+                    ),
+                    ("counted_by".into(), json!(counted_by)),
+                    (
+                        "count_notes".into(),
+                        json!(mapped_cell(source_row, &field_indexes, "notes")),
+                    ),
+                    ("source_unit_cost_paise".into(), json!(source_cost)),
+                    ("source_valuation_paise".into(), json!(source_valuation)),
+                    (
+                        "suggested_source_system_cost_paise".into(),
+                        json!(source_system_cost),
+                    ),
+                    ("suggested_latest_cost_paise".into(), json!(latest_cost)),
+                    (
+                        "suggested_weighted_average_cost_paise".into(),
+                        json!(weighted_cost),
+                    ),
+                    ("cost_method".into(), json!(cost_method)),
+                    ("unit_cost_paise".into(), json!(approved_cost)),
+                    ("valuation_paise".into(), json!(valuation)),
+                    ("batches_json".into(), batches_json),
+                    (
+                        "approved_unbatched_quantity".into(),
+                        json!(approved_unbatched_quantity),
+                    ),
+                    (
+                        "negative_stock_approved".into(),
+                        json!(negative_stock_approved),
+                    ),
+                    ("snapshot_at".into(), json!(snapshot_at)),
                 ]);
             }
             MigrationEntity::ClientMemberships => {
@@ -2509,6 +3130,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
                     tenant,
                     branch,
                     entity,
+                    source_provider,
                     source_row,
                     &field_indexes,
                     line,
@@ -2530,7 +3152,8 @@ pub(crate) async fn prepare_table_with_version_and_state(
             | MigrationEntity::Commissions
             | MigrationEntity::ClientNotes
             | MigrationEntity::Files
-            | MigrationEntity::StockMovements => {
+            | MigrationEntity::StockMovements
+            | MigrationEntity::OpeningPayables => {
                 let prepared = prepare_extended_row(
                     db,
                     tenant,
@@ -2542,6 +3165,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
                     &external_id,
                     duplicate_decisions,
                     &mut seen,
+                    projection_job_id,
                     financial_state,
                     &mut row_errors,
                 )
@@ -2551,6 +3175,76 @@ pub(crate) async fn prepare_table_with_version_and_state(
                 duplicate_decision = prepared.duplicate_decision;
             }
         }
+
+        if entity != MigrationEntity::PurchaseBills
+            && duplicate_target_id.is_none()
+            && row_errors.is_empty()
+        {
+            duplicate_target_id = migration_repository::find_imported_external_duplicate(
+                db,
+                tenant,
+                branch,
+                entity,
+                &external_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to analyze provider ID duplicates"))?;
+            if duplicate_target_id.is_some() {
+                duplicate_decision = decision_for(
+                    duplicate_decisions,
+                    entity,
+                    line,
+                    &external_id,
+                    &external_id,
+                );
+            }
+        }
+        let duplicate_signals = duplicate_signals(entity, &payload, &external_id);
+        let allowed_duplicate_decisions = if duplicate_target_id.is_some() {
+            allowed_duplicate_decisions(entity)
+        } else {
+            Vec::new()
+        };
+        if duplicate_target_id.is_some() && duplicate_decision.is_none() {
+            push_issue(
+                &mut row_warnings,
+                "DUPLICATE_DECISION_REQUIRED",
+                "choose an allowed duplicate action",
+            );
+        }
+        if let Some(decision) = duplicate_decision {
+            if decision == MigrationDuplicateDecision::Reject {
+                push_issue(
+                    &mut row_errors,
+                    "DUPLICATE_REJECTED",
+                    "duplicate row was rejected and will be quarantined",
+                );
+            } else if !allowed_duplicate_decisions.contains(&decision) {
+                push_issue(
+                    &mut row_errors,
+                    "DUPLICATE_ACTION_NOT_ALLOWED",
+                    "this duplicate action is unsafe for the selected CRM entity",
+                );
+            }
+        }
+        let duplicate_preview = if let Some(target_id) = duplicate_target_id.as_deref() {
+            migration_repository::duplicate_resolution_context(
+                db, tenant, branch, entity, target_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to build duplicate merge preview"))?
+            .map(|(existing, dependencies)| {
+                build_duplicate_preview(
+                    entity,
+                    duplicate_decision,
+                    existing,
+                    &payload,
+                    dependencies,
+                )
+            })
+        } else {
+            None
+        };
 
         dedupe_issues(&mut row_errors);
         dedupe_issues(&mut row_warnings);
@@ -2563,8 +3257,14 @@ pub(crate) async fn prepare_table_with_version_and_state(
                 "engineVersion": transformation_version,
                 "safetyRuleVersion": MIGRATION_SAFETY_RULE_VERSION,
                 "crossFieldRuleVersion": MIGRATION_CROSS_FIELD_RULE_VERSION,
+                "dependencyRuleVersion": MIGRATION_DEPENDENCY_RULE_VERSION,
                 "sourceValues": source_values,
                 "fields": transformation_fields,
+                "duplicateResolution": {
+                    "signals": &duplicate_signals,
+                    "allowedDecisions": &allowed_duplicate_decisions,
+                    "preview": &duplicate_preview,
+                },
             }),
         );
         payload.insert("source_row_number".into(), json!(line));
@@ -2579,7 +3279,13 @@ pub(crate) async fn prepare_table_with_version_and_state(
         );
 
         let unresolved_duplicate = duplicate_target_id.is_some() && duplicate_decision.is_none();
-        let status = if !row_errors.is_empty() {
+        let dependency_pending = !row_errors.is_empty()
+            && row_errors
+                .iter()
+                .all(|issue| is_dependency_issue(&issue.code));
+        let status = if dependency_pending {
+            MigrationRowStatus::DependencyPending
+        } else if !row_errors.is_empty() {
             MigrationRowStatus::Error
         } else if duplicate_target_id.is_some() {
             MigrationRowStatus::Duplicate
@@ -2588,7 +3294,9 @@ pub(crate) async fn prepare_table_with_version_and_state(
         } else {
             MigrationRowStatus::Validated
         };
-        if !row_errors.is_empty() {
+        if dependency_pending {
+            summary.dependency_pending_rows += 1;
+        } else if !row_errors.is_empty() {
             summary.error_rows += 1;
         } else {
             summary.valid_rows += 1;
@@ -2603,7 +3311,7 @@ pub(crate) async fn prepare_table_with_version_and_state(
             summary.ready_rows += 1;
             rows.push(Value::Object(payload.clone()));
         }
-        if !row_errors.is_empty() || unresolved_duplicate {
+        if (!row_errors.is_empty() || unresolved_duplicate) && !dependency_pending {
             let issue = row_errors
                 .first()
                 .or_else(|| row_warnings.first())
@@ -2652,6 +3360,9 @@ pub(crate) async fn prepare_table_with_version_and_state(
             warnings: row_warnings,
             duplicate_target_id,
             duplicate_decision,
+            duplicate_signals,
+            allowed_duplicate_decisions,
+            duplicate_preview,
         });
     }
 
@@ -2693,13 +3404,16 @@ async fn prepare_extended_row(
     external_id: &str,
     duplicate_decisions: &BTreeMap<String, MigrationDuplicateDecision>,
     seen: &mut HashSet<String>,
+    projection_job_id: Option<&str>,
     financial_state: &mut HashMap<String, i64>,
     errors: &mut Vec<MigrationRowIssue>,
 ) -> Result<PreparedTransactionRow, AppError> {
     let cell = |field| mapped_cell(source_row, indexes, field);
     if external_id.is_empty() {
         push_issue(errors, "REQUIRED_FIELD", "oldExternalId is required");
-    } else if !seen.insert(format!("external:{}", external_id.to_ascii_lowercase())) {
+    } else if entity != MigrationEntity::PurchaseBills
+        && !seen.insert(format!("external:{}", external_id.to_ascii_lowercase()))
+    {
         push_issue(
             errors,
             "DUPLICATE_SOURCE_KEY",
@@ -2752,6 +3466,15 @@ async fn prepare_extended_row(
             let occurred_at = occurred_at("occurredAt", errors);
             if let Some(sale_id) = sale_id.as_deref().filter(|_| valid_method && amount > 0) {
                 let key = format!("refund:{sale_id}:{}", method.to_ascii_lowercase());
+                hydrate_projection_state(
+                    db,
+                    tenant,
+                    branch,
+                    projection_job_id,
+                    &key,
+                    financial_state,
+                )
+                .await?;
                 let available = match financial_state.get(&key).copied() {
                     Some(value) => Some(value),
                     None => migration_repository::refundable_payment_balance(
@@ -3052,6 +3775,15 @@ async fn prepare_extended_row(
             }
             if let Some((sale_line_id, _, _)) = sale_line.as_ref() {
                 let key = format!("commission:{sale_line_id}");
+                hydrate_projection_state(
+                    db,
+                    tenant,
+                    branch,
+                    projection_job_id,
+                    &key,
+                    financial_state,
+                )
+                .await?;
                 let existing = match financial_state.get(&key).copied() {
                     Some(remaining) => 10_000 - remaining,
                     None => migration_repository::commission_split_total(
@@ -3233,6 +3965,135 @@ async fn prepare_extended_row(
             ]);
             external_id.to_ascii_lowercase()
         }
+        MigrationEntity::OpeningPayables => {
+            let supplier = resolve(MigrationEntity::Suppliers, cell("supplier")).await?;
+            if supplier.is_none() {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_SUPPLIER_NOT_FOUND",
+                    "supplier must exist in this tenant and branch",
+                );
+            }
+            let amount = parse_i64_field(
+                &cell("outstandingAmountPaise"),
+                "outstandingAmountPaise",
+                1,
+                errors,
+            );
+            let source_total = parse_i64_field(
+                &cell("sourceOutstandingTotalPaise"),
+                "sourceOutstandingTotalPaise",
+                i64::MIN,
+                errors,
+            );
+            let gst = parse_i64_field_default(&cell("gstPaise"), "gstPaise", 0, 0, errors);
+            if gst != 0 {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_GST_MUST_BE_ZERO",
+                    "historical GST cannot be reclaimed through opening payables",
+                );
+            }
+            let side = cell("balanceSide").trim().to_ascii_lowercase();
+            if !matches!(side.as_str(), "debit" | "credit") {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_BALANCE_SIDE_INVALID",
+                    "balanceSide must be debit or credit",
+                );
+            }
+            let currency = cell("currency").trim().to_ascii_uppercase();
+            if currency != "INR" {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_CURRENCY_UNSUPPORTED",
+                    "currency is required and must be INR until foreign-currency journals are configured",
+                );
+            }
+            let account = cell("openingBalanceAccount").trim().to_ascii_uppercase();
+            if !matches!(account.as_str(), "OWNER_EQUITY" | "RETAINED_EARNINGS") {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_ACCOUNT_INVALID",
+                    "openingBalanceAccount must be OWNER_EQUITY or RETAINED_EARNINGS",
+                );
+            }
+            let allocations = if cell("historicalBillAllocationsJson").trim().is_empty() {
+                Value::Array(Vec::new())
+            } else {
+                serde_json::from_str::<Value>(cell("historicalBillAllocationsJson").trim())
+                    .unwrap_or_else(|_| {
+                        push_issue(
+                            errors,
+                            "OPENING_PAYABLE_ALLOCATIONS_INVALID",
+                            "historicalBillAllocationsJson must be a JSON array",
+                        );
+                        Value::Array(Vec::new())
+                    })
+            };
+            let mut allocation_ids = HashSet::new();
+            let allocation_total = allocations.as_array().map(|items| {
+                items.iter().fold(0_i64, |total, item| {
+                    let bill = item.get("historicalBillId").and_then(Value::as_str).unwrap_or("").trim();
+                    let value = item.get("amountPaise").and_then(Value::as_i64).unwrap_or(0);
+                    if bill.is_empty() || value <= 0 {
+                        push_issue(errors, "OPENING_PAYABLE_ALLOCATION_INVALID", "each allocation requires historicalBillId and positive amountPaise");
+                    }
+                    if !bill.is_empty() && !allocation_ids.insert(bill.to_string()) {
+                        push_issue(errors, "OPENING_PAYABLE_ALLOCATION_DUPLICATE", "a historical bill can appear only once in a supplier balance row");
+                    }
+                    total.checked_add(value).unwrap_or_else(|| {
+                        push_issue(errors, "OPENING_PAYABLE_ALLOCATION_INVALID", "historical bill allocation total is too large");
+                        i64::MAX
+                    })
+                })
+            }).unwrap_or_else(|| {
+                push_issue(errors, "OPENING_PAYABLE_ALLOCATIONS_INVALID", "historicalBillAllocationsJson must be a JSON array");
+                0
+            });
+            if allocation_total > amount {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_ALLOCATION_EXCEEDS_BALANCE",
+                    "historical bill allocations cannot exceed outstandingAmountPaise",
+                );
+            }
+            let unallocated = amount.saturating_sub(allocation_total);
+            let unallocated_approved = parse_boolean_default(
+                &cell("unallocatedApproved"),
+                false,
+                "unallocatedApproved",
+                errors,
+            );
+            if unallocated > 0 && !unallocated_approved {
+                push_issue(
+                    errors,
+                    "OPENING_PAYABLE_UNALLOCATED_APPROVAL_REQUIRED",
+                    "an unallocated supplier balance requires explicit approval",
+                );
+            }
+            let source_row_checksum =
+                format!("{:x}", Sha256::digest(source_row.join("\u{1f}").as_bytes()));
+            payload.extend([
+                ("supplier_id".into(), json!(supplier)),
+                ("amount_paise".into(), json!(amount)),
+                ("balance_side".into(), json!(side)),
+                ("currency".into(), json!(currency)),
+                (
+                    "due_date".into(),
+                    json!(parse_optional_date(&cell("dueDate"), errors, "dueDate")
+                        .map(|date| date.to_string())),
+                ),
+                ("source_outstanding_total_paise".into(), json!(source_total)),
+                ("opening_balance_account".into(), json!(account)),
+                ("allocations".into(), allocations),
+                ("unallocated_paise".into(), json!(unallocated)),
+                ("unallocated_approved".into(), json!(unallocated_approved)),
+                ("gst_paise".into(), json!(gst)),
+                ("source_row_checksum".into(), json!(source_row_checksum)),
+            ]);
+            external_id.to_ascii_lowercase()
+        }
         MigrationEntity::StockMovements => {
             let item = resolve(MigrationEntity::Products, cell("product")).await?;
             if item.is_none() {
@@ -3260,6 +4121,15 @@ async fn prepare_extended_row(
                 parse_i64_field_default(&cell("unitCostPaise"), "unitCostPaise", 0, 0, errors);
             if let Some(item_id) = item.as_deref() {
                 let key = format!("stock:{item_id}");
+                hydrate_projection_state(
+                    db,
+                    tenant,
+                    branch,
+                    projection_job_id,
+                    &key,
+                    financial_state,
+                )
+                .await?;
                 let current = match financial_state.get(&key).copied() {
                     Some(value) => Some(value),
                     None => {
@@ -3303,7 +4173,7 @@ async fn prepare_extended_row(
         _ => {
             return Err(AppError::validation(
                 "unsupported extended migration entity",
-            ))
+            ));
         }
     };
     payload.insert(
@@ -3317,7 +4187,7 @@ async fn prepare_extended_row(
     if duplicate_target_id.is_some() {
         rollback_financial_projection(entity, &mut payload, financial_state);
     }
-    let duplicate_decision = duplicate_target_id.as_ref().map(|_| {
+    let duplicate_decision = duplicate_target_id.as_ref().and_then(|_| {
         decision_for(
             duplicate_decisions,
             entity,
@@ -3325,7 +4195,6 @@ async fn prepare_extended_row(
             external_id,
             &business_key,
         )
-        .unwrap_or(MigrationDuplicateDecision::Link)
     });
     Ok(PreparedTransactionRow {
         payload,
@@ -3396,6 +4265,7 @@ async fn prepare_transaction_row(
     tenant: &str,
     branch: &str,
     entity: MigrationEntity,
+    source_provider: MigrationProvider,
     source_row: &[String],
     indexes: &HashMap<&'static str, usize>,
     line: i32,
@@ -3408,7 +4278,9 @@ async fn prepare_transaction_row(
     let cell = |field| mapped_cell(source_row, indexes, field);
     if external_id.is_empty() {
         push_issue(errors, "REQUIRED_FIELD", "oldExternalId is required");
-    } else if !seen.insert(format!("external:{}", external_id.to_ascii_lowercase())) {
+    } else if entity != MigrationEntity::PurchaseBills
+        && !seen.insert(format!("external:{}", external_id.to_ascii_lowercase()))
+    {
         push_issue(
             errors,
             "DUPLICATE_SOURCE_KEY",
@@ -3693,22 +4565,96 @@ async fn prepare_transaction_row(
             external_id.to_string()
         }
         MigrationEntity::PurchaseBills => {
-            let product_ref = cell("product");
-            let item_id = resolve(MigrationEntity::Products, product_ref).await?;
-            if item_id.is_none() {
+            let product_refs = [
+                cell("product"),
+                cell("sourceProductId"),
+                cell("sku"),
+                cell("barcode"),
+                cell("productName"),
+            ];
+            if product_refs.iter().all(|value| value.trim().is_empty()) {
                 push_issue(
                     errors,
-                    "DEPENDENCY_NOT_FOUND",
-                    "product must exist before purchase bills",
+                    "REQUIRED_FIELD",
+                    "product, productName, SKU, barcode or sourceProductId is required",
                 );
             }
-            let quantity = parse_i64_field(&cell("quantity"), "quantity", 1, errors);
+            let mut item_id = None;
+            for reference in product_refs.iter().filter(|value| !value.trim().is_empty()) {
+                item_id = resolve(MigrationEntity::Products, reference.clone()).await?;
+                if item_id.is_some() {
+                    break;
+                }
+            }
+            if item_id.is_none() {
+                push_issue(
+                    warnings,
+                    "UNMAPPED_ARCHIVE_PRODUCT",
+                    "source product will remain in the historical archive without a CRM product mapping",
+                );
+            }
+            let original_product_name = product_refs
+                .iter()
+                .find(|value| !value.trim().is_empty())
+                .cloned()
+                .unwrap_or_default();
+            let document_type = default_text(&cell("documentType"), "invoice")
+                .to_ascii_lowercase()
+                .replace([' ', '-'], "_");
+            if !matches!(
+                document_type.as_str(),
+                "invoice" | "canceled" | "cancelled" | "return" | "credit_note"
+            ) {
+                push_issue(
+                    errors,
+                    "INVALID_PURCHASE_DOCUMENT_TYPE",
+                    "documentType must be invoice, canceled, return or credit_note",
+                );
+            }
+            let signed_document = matches!(document_type.as_str(), "return" | "credit_note");
+            let signed_min = if signed_document { i64::MIN } else { 0 };
+            let quantity = parse_i64_field(&cell("quantity"), "quantity", signed_min, errors);
+            if quantity == 0 {
+                push_issue(errors, "INVALID_NUMBER", "quantity cannot be zero");
+            }
+            let accepted_quantity = parse_i64_field_default(
+                &cell("acceptedQuantity"),
+                "acceptedQuantity",
+                0,
+                if signed_document { 0 } else { quantity },
+                errors,
+            );
+            let damaged_quantity =
+                parse_i64_field_default(&cell("damagedQuantity"), "damagedQuantity", 0, 0, errors);
+            let rejected_quantity = parse_i64_field_default(
+                &cell("rejectedQuantity"),
+                "rejectedQuantity",
+                0,
+                0,
+                errors,
+            );
+            if !signed_document
+                && accepted_quantity
+                    .checked_add(damaged_quantity)
+                    .and_then(|value| value.checked_add(rejected_quantity))
+                    .is_none_or(|value| value > quantity)
+            {
+                push_issue(
+                    errors,
+                    "PURCHASE_QUANTITY_MISMATCH",
+                    "accepted, damaged and rejected quantity cannot exceed purchased quantity",
+                );
+            }
             let unit_cost = parse_i64_field(&cell("unitCostPaise"), "unitCostPaise", 0, errors);
-            let taxable = parse_i64_field(&cell("taxablePaise"), "taxablePaise", 0, errors);
-            let cgst = parse_i64_field_default(&cell("cgstPaise"), "cgstPaise", 0, 0, errors);
-            let sgst = parse_i64_field_default(&cell("sgstPaise"), "sgstPaise", 0, 0, errors);
-            let igst = parse_i64_field_default(&cell("igstPaise"), "igstPaise", 0, 0, errors);
-            let total = parse_i64_field(&cell("totalPaise"), "totalPaise", 0, errors);
+            let taxable =
+                parse_i64_field(&cell("taxablePaise"), "taxablePaise", signed_min, errors);
+            let cgst =
+                parse_i64_field_default(&cell("cgstPaise"), "cgstPaise", signed_min, 0, errors);
+            let sgst =
+                parse_i64_field_default(&cell("sgstPaise"), "sgstPaise", signed_min, 0, errors);
+            let igst =
+                parse_i64_field_default(&cell("igstPaise"), "igstPaise", signed_min, 0, errors);
+            let total = parse_i64_field(&cell("totalPaise"), "totalPaise", signed_min, errors);
             if taxable + cgst + sgst + igst != total {
                 push_issue(
                     errors,
@@ -3725,23 +4671,161 @@ async fn prepare_transaction_row(
             }
             let invoice_number = cell("invoiceNumber");
             let gstin = cell("supplierGstin").to_ascii_uppercase();
-            let received_date = parse_required_date(&cell("receivedDate"), "receivedDate", errors);
+            if invoice_number.trim().is_empty() {
+                push_issue(errors, "REQUIRED_FIELD", "invoiceNumber is required");
+            }
+            if cell("supplierName").trim().is_empty()
+                && gstin.is_empty()
+                && cell("supplierExternalId").trim().is_empty()
+            {
+                push_issue(
+                    errors,
+                    "PURCHASE_SUPPLIER_IDENTITY_REQUIRED",
+                    "supplier name, GSTIN or provider supplier ID is required",
+                );
+            }
+            let line_identity = format!(
+                "purchase-line:{}:{}:{}",
+                external_id.to_ascii_lowercase(),
+                if cell("sourceLineId").is_empty() {
+                    line.to_string()
+                } else {
+                    cell("sourceLineId").to_ascii_lowercase()
+                },
+                cell("batchNumber").to_ascii_lowercase()
+            );
+            if !seen.insert(line_identity) {
+                push_issue(
+                    errors,
+                    "DUPLICATE_PURCHASE_BILL_LINE",
+                    "the same provider bill line and batch appears more than once",
+                );
+            }
+            for (field, value) in [
+                ("supplierName", cell("supplierName")),
+                ("supplierCode", cell("supplierCode")),
+                ("supplierPhone", cell("supplierPhone")),
+                ("supplierEmail", cell("supplierEmail")),
+                ("invoiceNumber", invoice_number.clone()),
+                ("productName", original_product_name.clone()),
+                ("sku", cell("sku")),
+                ("barcode", cell("barcode")),
+                ("brand", cell("brand")),
+                ("size", cell("size")),
+                ("shade", cell("shade")),
+                ("color", cell("color")),
+                ("vendorCatalogCode", cell("vendorCatalogCode")),
+                ("batchNumber", cell("batchNumber")),
+                ("billFileName", cell("billFileName")),
+            ] {
+                if is_spreadsheet_formula(&value) {
+                    push_issue(
+                        errors,
+                        "CSV_FORMULA_INJECTION",
+                        &format!("{field} contains an unsafe spreadsheet formula"),
+                    );
+                }
+            }
+            let invoice_date = parse_required_date(&cell("invoiceDate"), "invoiceDate", errors);
+            let received_date = if cell("receivedDate").trim().is_empty() {
+                invoice_date.clone()
+            } else {
+                parse_required_date(&cell("receivedDate"), "receivedDate", errors)
+            };
+            let expiry_date = parse_optional_date(&cell("expiryDate"), errors, "expiryDate")
+                .map(|value| value.to_string());
+            if invoice_date
+                .as_deref()
+                .zip(expiry_date.as_deref())
+                .is_some_and(|(invoice, expiry)| expiry < invoice)
+            {
+                push_issue(
+                    errors,
+                    "INVALID_BATCH_EXPIRY",
+                    "expiryDate cannot be before invoiceDate",
+                );
+            }
+            let currency = default_text(&cell("currency"), "INR").to_ascii_uppercase();
+            if currency != "INR" {
+                push_issue(
+                    errors,
+                    "UNSUPPORTED_CURRENCY",
+                    "historical purchase archive currently supports INR only",
+                );
+            }
+            if cell("billTotalPaise").trim().is_empty() {
+                push_issue(
+                    warnings,
+                    "BILL_TOTAL_UNAVAILABLE",
+                    "bill total is missing; line-to-bill reconciliation requires approval",
+                );
+            }
             payload.extend([
                 ("supplier_name".into(), json!(cell("supplierName"))),
                 ("supplier_gstin".into(), json!(gstin)),
+                (
+                    "supplier_external_id".into(),
+                    json!(cell("supplierExternalId")),
+                ),
+                ("supplier_code".into(), json!(cell("supplierCode"))),
+                ("supplier_phone".into(), json!(cell("supplierPhone"))),
+                ("supplier_email".into(), json!(cell("supplierEmail"))),
                 ("invoice_number".into(), json!(invoice_number)),
+                ("invoice_date".into(), json!(invoice_date)),
                 ("received_date".into(), json!(received_date)),
+                ("currency".into(), json!(currency)),
+                ("document_type".into(), json!(document_type)),
+                ("source_status".into(), json!(cell("sourceStatus"))),
+                ("payment_status".into(), json!(cell("paymentStatus"))),
+                ("original_product_name".into(), json!(original_product_name)),
+                ("sku".into(), json!(cell("sku"))),
+                ("barcode".into(), json!(cell("barcode"))),
+                ("source_product_id".into(), json!(cell("sourceProductId"))),
+                ("brand".into(), json!(cell("brand"))),
+                ("size".into(), json!(cell("size"))),
+                ("shade".into(), json!(cell("shade"))),
+                ("color".into(), json!(cell("color"))),
+                (
+                    "vendor_catalog_code".into(),
+                    json!(cell("vendorCatalogCode")),
+                ),
+                ("source_line_id".into(), json!(cell("sourceLineId"))),
                 (
                     "inventory_item_id".into(),
                     json!(item_id.unwrap_or_default()),
                 ),
+                ("package_unit".into(), json!(cell("packageUnit"))),
+                ("stock_unit".into(), json!(cell("stockUnit"))),
+                (
+                    "units_per_package".into(),
+                    json!(parse_i64_field_default(
+                        &cell("unitsPerPackage"),
+                        "unitsPerPackage",
+                        1,
+                        1,
+                        errors
+                    )),
+                ),
                 ("quantity".into(), json!(quantity)),
+                ("accepted_quantity".into(), json!(accepted_quantity)),
+                ("damaged_quantity".into(), json!(damaged_quantity)),
+                ("rejected_quantity".into(), json!(rejected_quantity)),
                 ("unit_cost_paise".into(), json!(unit_cost)),
                 ("taxable_paise".into(), json!(taxable)),
                 ("cgst_paise".into(), json!(cgst)),
                 ("sgst_paise".into(), json!(sgst)),
                 ("igst_paise".into(), json!(igst)),
                 ("total_paise".into(), json!(total)),
+                (
+                    "bill_total_paise".into(),
+                    json!(parse_i64_field_default(
+                        &cell("billTotalPaise"),
+                        "billTotalPaise",
+                        signed_min,
+                        0,
+                        errors
+                    )),
+                ),
                 (
                     "gst_percent".into(),
                     json!(parse_i32_field_default(
@@ -3752,16 +4836,63 @@ async fn prepare_transaction_row(
                         errors
                     )),
                 ),
+                (
+                    "discount_paise".into(),
+                    json!(parse_i64_field_default(
+                        &cell("discountPaise"),
+                        "discountPaise",
+                        0,
+                        0,
+                        errors
+                    )),
+                ),
+                (
+                    "shipping_paise".into(),
+                    json!(parse_i64_field_default(
+                        &cell("shippingPaise"),
+                        "shippingPaise",
+                        0,
+                        0,
+                        errors
+                    )),
+                ),
+                (
+                    "handling_paise".into(),
+                    json!(parse_i64_field_default(
+                        &cell("handlingPaise"),
+                        "handlingPaise",
+                        0,
+                        0,
+                        errors
+                    )),
+                ),
+                ("batch_number".into(), json!(cell("batchNumber"))),
+                ("expiry_date".into(), json!(expiry_date)),
+                ("bill_file_name".into(), json!(cell("billFileName"))),
             ]);
-            format!(
-                "{}:{}",
-                cell("supplierGstin").to_ascii_uppercase(),
-                cell("invoiceNumber")
-            )
+            if errors.is_empty()
+                && migration_repository::find_historical_purchase_bill_duplicate(
+                    db,
+                    tenant,
+                    branch,
+                    source_provider,
+                    &payload,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to check historical bill duplicates"))?
+                .is_some()
+            {
+                push_issue(
+                    errors,
+                    "DUPLICATE_HISTORICAL_PURCHASE_BILL",
+                    "historical bill already exists for this provider and supplier invoice identity",
+                );
+            }
+            external_id.to_string()
         }
         _ => return Err(AppError::internal("unsupported transactional entity")),
     };
-    let duplicate_target_id = if errors.is_empty() {
+    let duplicate_target_id = if errors.is_empty() && entity != MigrationEntity::PurchaseBills {
         migration_repository::find_transaction_duplicate(
             db,
             tenant,
@@ -3819,6 +4950,16 @@ fn parse_required_date(
             None
         }
     }
+}
+
+fn is_spreadsheet_formula(value: &str) -> bool {
+    matches!(
+        value.trim_start().as_bytes().first(),
+        Some(b'=') | Some(b'+') | Some(b'@')
+    ) || value
+        .trim_start()
+        .strip_prefix('-')
+        .is_some_and(|rest| rest.parse::<f64>().is_err())
 }
 
 fn payroll_total_matches(gross: i64, deductions: i64, net: i64) -> bool {
@@ -3880,6 +5021,7 @@ fn contracts(entity: MigrationEntity) -> &'static [ColumnContract] {
         MigrationEntity::ClientNotes => CLIENT_NOTE_COLUMNS,
         MigrationEntity::Files => FILE_COLUMNS,
         MigrationEntity::StockMovements => STOCK_MOVEMENT_COLUMNS,
+        MigrationEntity::OpeningPayables => OPENING_PAYABLE_COLUMNS,
     }
 }
 
@@ -5087,6 +6229,199 @@ fn decision_for(
     .find_map(|key| decisions.get(key).copied())
 }
 
+async fn hydrate_projection_state(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    job_id: Option<&str>,
+    key: &str,
+    state: &mut HashMap<String, i64>,
+) -> Result<(), AppError> {
+    let Some(job_id) = job_id.filter(|_| !state.contains_key(key)) else {
+        return Ok(());
+    };
+    if let Some(balance) =
+        migration_large_import_repository::projection_balance(db, tenant, branch, job_id, key)
+            .await
+            .map_err(|_| AppError::internal("failed to load migration financial projection"))?
+    {
+        state.insert(key.to_string(), balance);
+    }
+    Ok(())
+}
+
+fn allowed_duplicate_decisions(entity: MigrationEntity) -> Vec<MigrationDuplicateDecision> {
+    if entity == MigrationEntity::OpeningPayables {
+        return vec![MigrationDuplicateDecision::Reject];
+    }
+    let mut decisions = vec![
+        MigrationDuplicateDecision::Link,
+        MigrationDuplicateDecision::Reject,
+    ];
+    if matches!(
+        entity,
+        MigrationEntity::Clients
+            | MigrationEntity::Staff
+            | MigrationEntity::Services
+            | MigrationEntity::Products
+            | MigrationEntity::Suppliers
+            | MigrationEntity::Memberships
+            | MigrationEntity::Packages
+    ) {
+        decisions.insert(0, MigrationDuplicateDecision::Merge);
+    }
+    if entity == MigrationEntity::Clients {
+        decisions.insert(1, MigrationDuplicateDecision::Keep);
+    }
+    decisions
+}
+
+fn duplicate_signals(
+    entity: MigrationEntity,
+    payload: &Map<String, Value>,
+    external_id: &str,
+) -> Vec<MigrationDuplicateSignal> {
+    let fields: &[(&str, &str)] = match entity {
+        MigrationEntity::Clients => &[("normalized_phone", "normalized_phone"), ("email", "email")],
+        MigrationEntity::Staff => &[("employee_code", "employee_code"), ("email", "email")],
+        MigrationEntity::Products => &[("sku", "sku"), ("barcode", "barcode")],
+        MigrationEntity::Invoices | MigrationEntity::Sales => {
+            &[("invoice_number", "invoice_number")]
+        }
+        MigrationEntity::GiftCards => &[("gift_card_code", "code"), ("code", "code")],
+        MigrationEntity::ClientMemberships => &[],
+        MigrationEntity::Payroll => &[("period_start", "payroll_period"), ("staff_id", "staff_id")],
+        MigrationEntity::PurchaseBills => &[
+            ("supplier_gstin", "supplier_gstin"),
+            ("invoice_number", "invoice_number"),
+        ],
+        _ => &[],
+    };
+    let mut signals = fields
+        .iter()
+        .filter_map(|(field, kind)| {
+            let value = payload.get(*field)?.as_str()?.trim();
+            (!value.is_empty()).then(|| MigrationDuplicateSignal {
+                kind: (*kind).to_string(),
+                normalized_value: value.to_ascii_lowercase(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let composite_fields: &[&str] = match entity {
+        MigrationEntity::ClientMemberships => &["client_id", "membership_id", "assigned_at"],
+        MigrationEntity::Appointments => &["client_id", "staff_id", "start_at"],
+        MigrationEntity::Payments => &["sale_id", "payment_method", "method_reference"],
+        MigrationEntity::Refunds => &["sale_id", "payment_method"],
+        MigrationEntity::Loyalty => &["client_id", "source_sale_id", "transaction_type"],
+        MigrationEntity::Payroll => &["period_start", "staff_id"],
+        MigrationEntity::Commissions => &["sale_line_id", "staff_id"],
+        MigrationEntity::PurchaseBills => &["supplier_gstin", "invoice_number"],
+        MigrationEntity::StockMovements => &["inventory_item_id", "occurred_at"],
+        MigrationEntity::OpeningPayables => &["supplier_id", "balance_side"],
+        _ => &[],
+    };
+    let composite = composite_fields
+        .iter()
+        .filter_map(|field| {
+            payload
+                .get(*field)?
+                .as_str()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .map(|value| value.trim().to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    if composite.len() >= 2 {
+        signals.push(MigrationDuplicateSignal {
+            kind: "composite_business_key".into(),
+            normalized_value: composite.join(":"),
+        });
+    }
+    if !external_id.trim().is_empty() {
+        signals.push(MigrationDuplicateSignal {
+            kind: if entity == MigrationEntity::ClientMemberships {
+                "membership_number"
+            } else {
+                "external_provider_id"
+            }
+            .into(),
+            normalized_value: external_id.trim().to_ascii_lowercase(),
+        });
+    }
+    signals
+}
+
+fn build_duplicate_preview(
+    entity: MigrationEntity,
+    decision: Option<MigrationDuplicateDecision>,
+    existing: Value,
+    incoming: &Map<String, Value>,
+    dependent_records: Value,
+) -> MigrationDuplicatePreview {
+    let incoming_value = Value::Object(
+        incoming
+            .iter()
+            .filter(|(key, _)| {
+                !key.starts_with("__")
+                    && !matches!(
+                        key.as_str(),
+                        "source_row_number"
+                            | "source_external_id"
+                            | "duplicate_target_id"
+                            | "duplicate_decision"
+                    )
+            })
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    );
+    let mut final_value = existing.clone();
+    let mut changed = Vec::new();
+    if decision == Some(MigrationDuplicateDecision::Keep) {
+        final_value = incoming_value.clone();
+        changed = incoming_value
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key.clone())
+            .collect();
+    } else if decision == Some(MigrationDuplicateDecision::Merge) {
+        let final_object = final_value.as_object_mut();
+        if let Some(final_object) = final_object {
+            for (key, value) in incoming_value.as_object().into_iter().flatten() {
+                let client_fillable = matches!(
+                    key.as_str(),
+                    "code"
+                        | "first_name"
+                        | "last_name"
+                        | "email"
+                        | "membership_label"
+                        | "categories_json"
+                        | "birthday"
+                        | "anniversary"
+                        | "notes"
+                );
+                let should_change = entity != MigrationEntity::Clients
+                    || (client_fillable
+                        && final_object.get(key).is_none_or(|existing_value| {
+                            existing_value.is_null()
+                                || existing_value.as_str().is_some_and(str::is_empty)
+                                || existing_value.as_array().is_some_and(Vec::is_empty)
+                        }));
+                if should_change && final_object.get(key) != Some(value) {
+                    final_object.insert(key.clone(), value.clone());
+                    changed.push(key.clone());
+                }
+            }
+        }
+    }
+    MigrationDuplicatePreview {
+        existing_value: existing,
+        incoming_value,
+        final_value,
+        fields_that_will_change: changed,
+        dependent_records,
+    }
+}
+
 fn source_value_evidence(headers: &[String], row: &[String]) -> Value {
     Value::Object(
         headers
@@ -5854,6 +7189,197 @@ fn parse_i64_field_default(
     }
 }
 
+fn parse_fixed_stock_quantity(
+    value: &str,
+    multiplier: i32,
+    field: &str,
+    required: bool,
+    errors: &mut Vec<MigrationRowIssue>,
+) -> i32 {
+    let value = value.trim();
+    if value.is_empty() {
+        if required {
+            push_issue(errors, "REQUIRED_FIELD", &format!("{field} is required"));
+        }
+        return 0;
+    }
+    let (negative, unsigned) = value
+        .strip_prefix('-')
+        .map_or((false, value), |value| (true, value));
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+        || fraction.len() > 9
+    {
+        push_issue(
+            errors,
+            "INVALID_FIXED_QUANTITY",
+            &format!("{field} must be a plain decimal quantity"),
+        );
+        return 0;
+    }
+    let scale = 10_i64.pow(fraction.len() as u32);
+    let whole = whole.parse::<i64>().ok();
+    let fraction = if fraction.is_empty() {
+        Some(0)
+    } else {
+        fraction.parse::<i64>().ok()
+    };
+    let converted = whole
+        .zip(fraction)
+        .and_then(|(whole, fraction)| whole.checked_mul(scale)?.checked_add(fraction))
+        .and_then(|quantity| quantity.checked_mul(i64::from(multiplier)));
+    let Some(converted) = converted.filter(|quantity| quantity % scale == 0) else {
+        push_issue(
+            errors,
+            "NON_CONVERTIBLE_FRACTIONAL_QUANTITY",
+            &format!("{field} cannot be converted to an exact base-stock integer"),
+        );
+        return 0;
+    };
+    let signed = if negative {
+        converted.checked_neg()
+    } else {
+        Some(converted)
+    };
+    match signed.and_then(|quantity| i32::try_from(quantity / scale).ok()) {
+        Some(quantity) => quantity,
+        None => {
+            push_issue(
+                errors,
+                "STOCK_QUANTITY_OVERFLOW",
+                &format!("{field} is outside the supported stock range"),
+            );
+            0
+        }
+    }
+}
+
+fn opening_valuation_paise(quantity: i32, approved_unit_cost_paise: i64) -> Option<i64> {
+    i64::from(quantity).checked_mul(approved_unit_cost_paise)
+}
+
+fn available_classification_total(classifications: &serde_json::Map<String, Value>) -> Option<i64> {
+    classifications
+        .get("sellable")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .checked_add(
+            classifications
+                .get("backbar")
+                .and_then(Value::as_i64)
+                .unwrap_or(0),
+        )
+}
+
+fn rounded_unit_cost_from_valuation(valuation_paise: i64, quantity: i32) -> Option<i64> {
+    let quantity = i64::from(quantity);
+    if quantity == 0 {
+        return None;
+    }
+    let quotient = valuation_paise.checked_div(quantity)?;
+    let remainder = valuation_paise.checked_rem(quantity)?;
+    let rounds_away = remainder.abs().checked_mul(2)? >= quantity.abs();
+    if rounds_away {
+        quotient.checked_add(if valuation_paise.signum() == quantity.signum() {
+            1
+        } else {
+            -1
+        })
+    } else {
+        Some(quotient)
+    }
+}
+
+fn parse_snapshot_batches(
+    value: &str,
+    multiplier: i32,
+    errors: &mut Vec<MigrationRowIssue>,
+) -> (Value, i32) {
+    if value.trim().is_empty() {
+        return (json!([]), 0);
+    }
+    let Ok(rows) = serde_json::from_str::<Value>(value) else {
+        push_issue(
+            errors,
+            "INVALID_BATCH_JSON",
+            "batchesJson must be a JSON array",
+        );
+        return (json!([]), 0);
+    };
+    let Some(rows) = rows.as_array() else {
+        push_issue(
+            errors,
+            "INVALID_BATCH_JSON",
+            "batchesJson must be a JSON array",
+        );
+        return (json!([]), 0);
+    };
+    let mut seen = HashSet::new();
+    let mut total = 0_i32;
+    let mut normalized = Vec::with_capacity(rows.len());
+    for row in rows {
+        let batch_number = row
+            .get("batchNumber")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        if batch_number.is_empty() || !seen.insert(batch_number.to_ascii_lowercase()) {
+            push_issue(
+                errors,
+                "INVALID_OR_DUPLICATE_BATCH",
+                "each batch requires a unique batchNumber",
+            );
+            continue;
+        }
+        let quantity_value = row
+            .get("quantity")
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| value.to_string())
+            })
+            .unwrap_or_default();
+        let quantity =
+            parse_fixed_stock_quantity(&quantity_value, multiplier, "batch quantity", true, errors);
+        if quantity < 0 {
+            push_issue(
+                errors,
+                "NEGATIVE_BATCH_QUANTITY",
+                "batch quantity cannot be negative",
+            );
+        }
+        let expiry_date = row
+            .get("expiryDate")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        if !expiry_date.is_empty() && NaiveDate::parse_from_str(expiry_date, "%Y-%m-%d").is_err() {
+            push_issue(
+                errors,
+                "INVALID_BATCH_EXPIRY",
+                "batch expiryDate must use YYYY-MM-DD",
+            );
+        }
+        total = total.checked_add(quantity).unwrap_or_else(|| {
+            push_issue(
+                errors,
+                "STOCK_QUANTITY_OVERFLOW",
+                "batch quantity total is outside the supported stock range",
+            );
+            0
+        });
+        normalized.push(json!({
+            "batchNumber": batch_number,
+            "quantity": quantity,
+            "expiryDate": expiry_date
+        }));
+    }
+    (Value::Array(normalized), total)
+}
+
 fn default_text(value: &str, default: &str) -> String {
     if value.trim().is_empty() {
         default.to_string()
@@ -5945,6 +7471,65 @@ fn parse_csv(input: &str) -> Result<Vec<Vec<String>>, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_snapshot_quantity_conversion_is_exact() {
+        let mut errors = Vec::new();
+        assert_eq!(
+            parse_fixed_stock_quantity("0.5", 10, "quantity", true, &mut errors),
+            5
+        );
+        assert!(errors.is_empty());
+
+        assert_eq!(
+            parse_fixed_stock_quantity("0.5", 1, "quantity", true, &mut errors),
+            0
+        );
+        assert_eq!(
+            errors.last().map(|issue| issue.code.as_str()),
+            Some("NON_CONVERTIBLE_FRACTIONAL_QUANTITY")
+        );
+        assert!(contracts(MigrationEntity::Inventory)
+            .iter()
+            .any(|column| column.field == "countedBy" && column.required));
+        assert_eq!(
+            available_classification_total(&serde_json::Map::from_iter([
+                ("sellable".into(), json!(7)),
+                ("backbar".into(), json!(3)),
+                ("damaged".into(), json!(50)),
+            ])),
+            Some(10)
+        );
+    }
+
+    #[test]
+    fn historical_purchase_text_blocks_spreadsheet_formulas() {
+        assert!(is_spreadsheet_formula("=HYPERLINK(\"bad\")"));
+        assert!(is_spreadsheet_formula("@SUM(A1:A2)"));
+        assert!(is_spreadsheet_formula("-cmd"));
+        assert!(!is_spreadsheet_formula("-1250.50"));
+        assert!(!is_spreadsheet_formula("BATCH-01"));
+    }
+
+    #[test]
+    fn duplicate_actions_block_unsafe_financial_mutation() {
+        assert_eq!(
+            allowed_duplicate_decisions(MigrationEntity::Payments),
+            vec![
+                MigrationDuplicateDecision::Link,
+                MigrationDuplicateDecision::Reject
+            ]
+        );
+        assert_eq!(
+            allowed_duplicate_decisions(MigrationEntity::Clients),
+            vec![
+                MigrationDuplicateDecision::Merge,
+                MigrationDuplicateDecision::Keep,
+                MigrationDuplicateDecision::Link,
+                MigrationDuplicateDecision::Reject
+            ]
+        );
+    }
     use sqlx::PgPool;
 
     #[test]
@@ -6399,6 +7984,7 @@ mod tests {
                 MigrationEntity::ClientNotes,
                 MigrationEntity::Files,
                 MigrationEntity::StockMovements,
+                MigrationEntity::OpeningPayables,
             ]
         );
         assert!(contracts(MigrationEntity::Inventory)
@@ -6659,5 +8245,34 @@ mod tests {
         assert_eq!(state["refund:sale-1:card"], 100);
         assert_eq!(state["commission:line-1"], 10_000);
         assert_eq!(state["stock:item-1"], 10);
+    }
+
+    #[test]
+    fn phase_eight_only_missing_references_are_dependency_pending() {
+        for code in [
+            "DEPENDENCY_NOT_FOUND",
+            "APPOINTMENT_CLIENT_NOT_FOUND",
+            "PAYMENT_INVOICE_NOT_FOUND",
+            "REFUND_PAYMENT_NOT_FOUND",
+            "COMMISSION_SALE_LINE_NOT_FOUND",
+            "STOCK_PRODUCT_NOT_FOUND",
+            "FILE_OWNER_NOT_FOUND",
+        ] {
+            assert!(is_dependency_issue(code), "{code}");
+        }
+        assert!(!is_dependency_issue("REQUIRED_FIELD"));
+        assert!(!is_dependency_issue("INVOICE_TOTAL_MISMATCH"));
+        assert!(!is_dependency_issue("NEGATIVE_STOCK_NOT_ALLOWED"));
+    }
+
+    #[test]
+    fn phase_ten_opening_valuation_uses_exact_quantity_and_integer_paise() {
+        assert_eq!(opening_valuation_paise(18, 12_550), Some(225_900));
+        assert_eq!(opening_valuation_paise(-4, 12_550), Some(-50_200));
+        assert_eq!(opening_valuation_paise(i32::MAX, i64::MAX), None);
+        assert_eq!(rounded_unit_cost_from_valuation(100, 3), Some(33));
+        assert_eq!(rounded_unit_cost_from_valuation(101, 3), Some(34));
+        assert_eq!(rounded_unit_cost_from_valuation(-101, -3), Some(34));
+        assert_eq!(rounded_unit_cost_from_valuation(100, 0), None);
     }
 }

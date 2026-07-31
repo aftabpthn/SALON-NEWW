@@ -201,7 +201,7 @@
     @if (filteredReorderRows.length) {
       <table><thead><tr><th scope="col">{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.2ee762355b' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.1e19570fd7' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.e5f508a828' | translate }}</th><th scope="col">{{ 'inventory.ui.886cbff9d9' | translate }}</th><th scope="col">{{ 'inventory.ui.f219cc0614' | translate }}</th><th scope="col">{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
       <tbody>@for (row of filteredReorderRows; track row) {
-        <tr><td><strong>{{ row.productName }}</strong><small>{{ row.sku || 'â€”' }}</small></td><td class="numeric">{{ row.currentStock }}</td><td class="numeric">{{ row.reorderLevel }}</td><td class="numeric">{{ row.suggestedQuantity }}</td><td><span class="status" [class.muted]="row.priority === 'medium'">{{ row.priority }}</span></td><td>{{ row.reason }}</td><td><button type="button" (click)="createOrderFromSuggestion(row)">{{ 'inventory.ui.f0312e44ab' | translate }}</button></td></tr>
+        <tr><td><strong>{{ row.productName }}</strong><small>{{ row.sku || 'â€”' }}</small></td><td class="numeric">{{ row.currentStock }}</td><td class="numeric">{{ row.reorderLevel }}</td><td class="numeric">{{ row.suggestedQuantity }}</td><td><span class="status" [class.muted]="row.priority === 'medium'">{{ row.priority }}</span></td><td>{{ row.reason }}</td><td><button type="button" [disabled]="saving" (click)="approveReorder(row)">{{ row.id ? 'Approve & create PO' : ('inventory.ui.f0312e44ab' | translate) }}</button></td></tr>
       }</tbody>
     </table>
   } @else {
@@ -611,6 +611,7 @@
       <label>Delivery reference<input maxlength="120" [(ngModel)]="grnDraft.deliveryReference" name="deliveryReference" /></label>
       <label>Shipping charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.shippingRupees" name="grnShipping" /></label>
       <label>Handling charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.handlingRupees" name="grnHandling" /></label>
+      @if (canApproveBackdatedGrn) {<label class="span-2"><input type="checkbox" [(ngModel)]="grnDraft.backdatedOperationalApproval" name="backdatedOperationalApproval" /> Owner approval: post a pre-cutover invoice as operational GRN after reconciliation</label>}
       <div class="receiving-scan span-2"><label>Scan product barcode<input maxlength="160" autocomplete="off" [(ngModel)]="grnScanCode" name="grnScanCode" (keyup.enter)="$event.preventDefault(); scanGrnBarcode()" /></label><button type="button" [disabled]="grnScanBusy || !grnScanCode.trim()" (click)="scanGrnBarcode()">{{ grnScanBusy ? 'Matching' : 'Receive scan' }}</button></div>
       <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: grnDraft.lines, kind: 'grn' }"></ng-container>
     </form>

@@ -89,12 +89,23 @@
 ### Content
 | UI call | Backend route | Notes |
 | --- | --- | --- |
+| `GET /staff/rules` | `staff_enterprise::list_staff_rules_center` | Version history, read/acknowledgement counts, and violations; governance read permission |
+| `POST /staff/rules` | `staff_enterprise::create_staff_rule_document` | Creates a validated draft version for service, hygiene, attendance, behavior, or safety |
+| `POST /staff/rules/:id/publish` / `unpublish` | `staff_enterprise` publish workflow | Optimistic version check; publication notifies linked active Staff App users |
+| `POST /staff/rules/violations` / `:id/resolve` | `staff_enterprise` violation workflow | Tenant/branch/staff scoped and audit logged |
 | `GET /staff/tasks` | `staff_advanced::list_tasks` | Loads current task records in the Content tab |
 | `POST /staff/tasks` | `staff_advanced::create_task` | Creates a staff-visible task |
 | `GET /marketing/offers` | `marketing_leads::list_marketing_offers` | Loads current offer records in the Content tab |
 | `POST /marketing/offers` | `marketing_leads::create_marketing_offer` | Creates a CRM offer that staff app reads from `pos_coupons` |
 | `GET /staff/payroll-adjustment-rules` | `staff_advanced::list_adjustment_rules` | Loads current fine / allowance / deduction rules in the Content tab |
 | `POST /staff/payroll-adjustment-rules` | `staff_advanced::create_adjustment_rule` | Creates fine / allowance / deduction rules staff can see through payroll and attendance |
+
+### Staff App Rules/SOP
+| UI call | Backend route | Notes |
+| --- | --- | --- |
+| `GET /staff-self/rules` | `staff_enterprise::list_self_staff_rules` | Current effective published versions only; correct quiz answers are excluded |
+| `POST /staff-self/rules/:id/read` | `staff_enterprise::mark_staff_rule_read` | Idempotent first/last-read tracking for the linked employee |
+| `POST /staff-self/rules/:id/acknowledge` | `staff_enterprise::acknowledge_staff_rule` | Server-scored quiz; acknowledgement is recorded only after the configured pass score |
 
 ## Fixed Payload Mismatch
 - UI sent `notes` for approval decision while backend expected `comments` (`DecisionRequest::comments`) in staff enterprise service.

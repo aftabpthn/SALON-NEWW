@@ -1,10 +1,10 @@
 import { DatePipe } from "@angular/common";
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffEarlyDepartureRequest, StaffToday } from "../../core/staff-app.service";
+import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffAttendanceToday, StaffEarlyDepartureRequest } from "../../core/staff-app.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
-type AttendanceAction = "clock-in" | "face-clock-in" | "clock-out" | "start-break" | "end-break";
+type AttendanceAction = "clock-in" | "biometric-clock-in" | "clock-out" | "start-break" | "end-break";
 
 @Component({
   standalone: true,
@@ -21,27 +21,26 @@ type AttendanceAction = "clock-in" | "face-clock-in" | "clock-out" | "start-brea
         </section>
       }
       @if (loadError()) { <section staffPageState class="notice attendance-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" (click)="load()">Retry</button></section> }
+      @if (historyLoadError() && today()) { <section class="optional-warning" role="status"><span aria-hidden="true">!</span><div><p>Attendance history could not refresh.</p><small>Today’s attendance remains available.</small></div><button type="button" class="text-control" (click)="loadHistory()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !localError() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
       @if (today(); as data) {
         <section class="grid four"><article class="kpi"><span>Status</span><strong>{{ attendanceStatus() }}</strong></article><article class="kpi"><span>Clock in</span><strong>{{ activeOrLatestAttendance()?.clockInAt ? (activeOrLatestAttendance()?.clockInAt | date:'shortTime') : '-' }}</strong></article><article class="kpi"><span>Worked</span><strong>{{ workedLabel() }}</strong></article><article class="kpi"><span>Overtime</span><strong>{{ formatMinutes(activeOrLatestAttendance()?.overtimeMinutes) }}</strong></article></section>
         <section class="panel"><div class="panel-title"><h2>Shift schedule</h2><span>{{ loading() ? 'Refreshing...' : (data.schedules.length ? data.schedules[0].status : 'not assigned') }}</span></div><div class="list">@for (shift of data.schedules; track shift.id) { <div class="row"><strong>{{ shift.scheduleDate | date:'dd/MM/yyyy' }}</strong><span>{{ shift.startTime || '-' }} - {{ shift.endTime || '-' }} · {{ shift.shiftType || 'shift' }}</span></div> } @empty { <div class="attendance-empty"><p>No shift assigned today.</p><small>You can still clock in if your role allows it.</small></div> }</div></section>
-        <section class="panel"><div class="panel-title"><h2>Actions</h2><span>{{ pendingAction() ? 'Saving...' : data.date }}</span></div><div class="row-actions attendance-action-row">@if (canUseAttendance()) { @if (!activeAttendance()) { <button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'face-clock-in'" (click)="startFaceScan()">{{ pendingAction() === 'face-clock-in' ? 'Scanning...' : 'Face scan' }}</button><button class="link-button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'clock-in'" (click)="clockIn()">{{ pendingAction() === 'clock-in' ? 'Clocking in...' : 'Clock in' }}</button> } @else if (isOnBreak()) { <button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'end-break'" (click)="endBreak()">{{ pendingAction() === 'end-break' ? 'Ending break...' : 'End break' }}</button> } @else { <button class="link-button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'start-break'" (click)="startBreak()">{{ pendingAction() === 'start-break' ? 'Starting break...' : 'Start break' }}</button><button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'clock-out'" (click)="clockOut()">{{ pendingAction() === 'clock-out' ? 'Clocking out...' : 'Clock out' }}</button> } } @else { <p class="attendance-readonly">Clock controls are disabled for this role.</p> }</div></section>
+        <section class="panel"><div class="panel-title"><h2>Actions</h2><span>{{ pendingAction() ? 'Saving...' : data.date }}</span></div><div class="row-actions attendance-action-row">@if (canUseAttendance()) { @if (!activeAttendance()) { <button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'biometric-clock-in'" (click)="biometricClockIn()">{{ pendingAction() === 'biometric-clock-in' ? 'Verifying...' : 'Biometric clock-in' }}</button><button class="link-button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'clock-in'" (click)="clockIn()">{{ pendingAction() === 'clock-in' ? 'Clocking in...' : 'Clock in' }}</button> } @else if (isOnBreak()) { <button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'end-break'" (click)="endBreak()">{{ pendingAction() === 'end-break' ? 'Ending break...' : 'End break' }}</button> } @else { <button class="link-button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'start-break'" (click)="startBreak()">{{ pendingAction() === 'start-break' ? 'Starting break...' : 'Start break' }}</button><button class="button" type="button" [disabled]="!!pendingAction()" [attr.aria-busy]="pendingAction() === 'clock-out'" (click)="clockOut()">{{ pendingAction() === 'clock-out' ? 'Clocking out...' : 'Clock out' }}</button> } } @else { <p class="attendance-readonly">Clock controls are disabled for this role.</p> }</div></section>
         <section class="panel early-panel">
-          <div class="panel-title"><h2>Request early departure</h2><span>{{ data.schedules.length ? data.schedules[0].endTime : 'No shift' }}</span></div>
-          @if (data.schedules.length) {
+          <div class="panel-title"><h2>Early departure requests</h2><span>{{ data.schedules.length ? data.schedules[0].endTime : 'No shift' }}</span></div>
+          @if (canUseAttendance() && data.schedules.length) {
             <form class="early-form" (ngSubmit)="submitEarlyDeparture()">
               <label>Departure time<input type="time" name="earlyDepartureTime" required [(ngModel)]="earlyDepartureTime" [disabled]="earlySubmitting()" /></label>
               <label>Reason<input type="text" name="earlyDepartureReason" maxlength="500" required placeholder="Reason" [(ngModel)]="earlyDepartureReason" [disabled]="earlySubmitting()" /></label>
               <button class="button" type="submit" [disabled]="earlySubmitting() || !earlyDepartureTime || !earlyDepartureReason.trim()">{{ earlySubmitting() ? 'Sending...' : 'Send request' }}</button>
             </form>
             @if (earlyMinutes() > 0) { <small class="early-summary">Requested {{ earlyMinutes() }} minutes before the scheduled end.</small> }
-          } @else { <div class="attendance-empty"><p>No working shift assigned today.</p></div> }
+          } @else if (canUseAttendance() && !data.schedules.length) { <div class="attendance-empty"><p>No working shift assigned today.</p></div> }
           <div class="list early-history">@for (request of earlyDepartures(); track request.id) { <div class="row"><div class="row-main"><strong>{{ displayDate(request.payloadJson.businessDate) }} · {{ request.payloadJson.requestedDepartureTime || '-' }}</strong><small>Scheduled end {{ request.payloadJson.scheduledEndTime || '-' }} · {{ request.payloadJson.earlyMinutes || 0 }} minutes early</small><small>{{ request.payloadJson.reason || '-' }}</small></div><span class="badge">{{ request.status }}</span></div> } @empty { @if (!earlyLoading()) { <div class="attendance-empty"><p>No early departure requests yet.</p></div> } }</div>
         </section>
-        @if (faceScanning()) { <section class="panel face-scan-panel"><div class="panel-title"><h2>Face scan</h2><span>{{ cameraReady() ? facePrompt() : 'Opening camera...' }}</span></div><video #faceVideo playsinline muted></video><div class="row-actions attendance-action-row"><button class="button" type="button" [disabled]="!cameraReady() || !!pendingAction()" (click)="faceClockIn()">{{ pendingAction() === 'face-clock-in' ? 'Saving...' : 'Use scan to clock in' }}</button><button class="link-button" type="button" [disabled]="!!pendingAction()" (click)="stopFaceScan()">Cancel</button></div></section> }
-        <section class="panel"><div class="panel-title"><h2>Last 30 days attendance</h2><span>{{ attendance().length }}</span></div><div class="list attendance-history-list">@for (row of attendance(); track row.id) { <div class="row attendance-history-row"><div class="row-main"><strong>{{ row.businessDate }}</strong><small>Clock in {{ row.clockInAt ? (row.clockInAt | date:'shortTime') : '-' }} · Clock out {{ row.clockOutAt ? (row.clockOutAt | date:'shortTime') : '-' }}</small><small>Worked {{ formatMinutes(row.totalWorkedMinutes) }} · Break {{ formatMinutes(row.totalBreakMinutes) }} · Scheduled {{ row.scheduledShiftMinutes === null ? 'Not captured (legacy)' : formatMinutes(row.scheduledShiftMinutes) }} · OT {{ formatMinutes(row.overtimeMinutes) }}</small><small>{{ row.source || 'staff-app' }} · {{ row.overtimeCalculationStatus }}</small></div><span class="badge">{{ row.status }}</span></div> } @empty { <div class="attendance-empty"><p>No attendance records in the last 30 days.</p><small>Clock-in records will appear here after CRM sync.</small></div> }</div></section>
+        <section class="panel"><div class="panel-title"><h2>Last 30 days attendance</h2><span>{{ attendance().length }}</span></div><div class="list attendance-history-list">@for (row of attendance(); track row.id) { <div class="row attendance-history-row"><div class="row-main"><strong>{{ displayDate(row.businessDate) }}</strong><small>Clock in {{ row.clockInAt ? (row.clockInAt | date:'shortTime') : '-' }} · Clock out {{ row.clockOutAt ? (row.clockOutAt | date:'shortTime') : '-' }}</small><small>Worked {{ formatMinutes(row.totalWorkedMinutes) }} · Break {{ formatMinutes(row.totalBreakMinutes) }} · Scheduled {{ row.scheduledShiftMinutes === null ? 'Not captured (legacy)' : formatMinutes(row.scheduledShiftMinutes) }} · OT {{ formatMinutes(row.overtimeMinutes) }}</small><small>{{ row.source || 'staff-app' }} · {{ row.overtimeCalculationStatus }}</small></div><span class="badge">{{ row.status }}</span></div> } @empty { <div class="attendance-empty"><p>No attendance records in the last 30 days.</p><small>Clock-in records will appear here after CRM sync.</small></div> }</div></section>
       }
     </section>
   `,
@@ -56,7 +55,6 @@ type AttendanceAction = "clock-in" | "face-clock-in" | "clock-out" | "start-brea
     .attendance-empty small { font-weight: 600; }
     .attendance-readonly { width: 100%; color: var(--staff-text-secondary); font-weight: 650; }
     .attendance-action-row .button, .attendance-action-row .link-button { min-width: 132px; }
-    .face-scan-panel video { width: 100%; max-height: 340px; border: 1px solid var(--staff-border); border-radius: 8px; background: #0f172a; object-fit: cover; }
     .early-form { display: grid; grid-template-columns: minmax(150px, .55fr) minmax(220px, 1fr) auto; gap: 10px; align-items: end; }
     .early-form label { display: grid; gap: 6px; color: var(--staff-text-secondary); font-weight: 650; }
     .early-form input { min-height: 42px; padding: 0 12px; border: 1px solid var(--staff-border); border-radius: 8px; color: var(--staff-text-primary, #0f172a); font: inherit; }
@@ -72,23 +70,19 @@ type AttendanceAction = "clock-in" | "face-clock-in" | "clock-out" | "start-brea
   `]
 })
 export class StaffAttendancePage implements OnInit, OnDestroy {
-  readonly today = signal<StaffToday | null>(null);
+  readonly today = signal<StaffAttendanceToday | null>(null);
   readonly attendance = signal<StaffAttendance[]>([]);
   readonly loading = signal(false);
   readonly message = signal("");
   readonly localError = signal("");
   readonly loadError = signal("");
+  readonly historyLoadError = signal("");
   readonly pendingAction = signal<AttendanceAction | null>(null);
-  readonly faceScanning = signal(false);
-  readonly cameraReady = signal(false);
-  readonly facePrompt = signal("");
   readonly earlyDepartures = signal<StaffEarlyDepartureRequest[]>([]);
   readonly earlyLoading = signal(false);
   readonly earlySubmitting = signal(false);
   earlyDepartureTime = "";
   earlyDepartureReason = "";
-  @ViewChild("faceVideo") private faceVideo?: ElementRef<HTMLVideoElement>;
-  private faceStream: MediaStream | null = null;
   readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   private readonly attendanceUpdated = (event: Event) => {
@@ -97,18 +91,26 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   };
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); void this.load(); }
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); this.stopFaceScan(); }
+  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
   async load() {
     this.loading.set(true);
     this.loadError.set("");
+    this.historyLoadError.set("");
     try {
-      const [today, attendance] = await Promise.all([this.staff.today(), this.staff.attendanceHistory()]);
-      this.today.set(today);
-      this.attendance.set(attendance);
-      void this.loadEarlyDepartures();
+      this.today.set(await this.staff.attendanceToday());
     } catch {
       this.loadError.set(this.staff.error() || "Unable to load attendance.");
-    } finally { this.loading.set(false); }
+      this.loading.set(false);
+      return;
+    }
+    this.loading.set(false);
+    void this.loadHistory();
+    void this.loadEarlyDepartures();
+  }
+  async loadHistory() {
+    this.historyLoadError.set("");
+    try { this.attendance.set(await this.staff.attendanceHistory()); }
+    catch { this.historyLoadError.set("Unable to load attendance history."); }
   }
   canUseAttendance(): boolean { return this.staff.hasPermission("staff.app.attendance.manage"); }
   attendanceStatus(): string { return this.activeOrLatestAttendance()?.status?.replace(/_/g, " ") || "not clocked in"; }
@@ -141,43 +143,10 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
     finally { this.earlySubmitting.set(false); }
   }
   async clockIn() { await this.runAction("clock-in", () => this.staff.clockIn(), "Clock-in saved."); }
-  async startFaceScan() {
-    if (this.pendingAction()) return;
-    this.localError.set("");
-    this.message.set("");
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) { this.localError.set("Camera is not available on this device."); return; }
-    try {
-      this.stopFaceScan();
-      this.faceStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
-      this.facePrompt.set(this.newFacePrompt());
-      this.faceScanning.set(true);
-      await new Promise((resolve) => setTimeout(resolve));
-      const video = this.faceVideo?.nativeElement;
-      if (!video) throw new Error("camera view unavailable");
-      video.srcObject = this.faceStream;
-      await video.play();
-      this.cameraReady.set(true);
-    } catch {
-      this.stopFaceScan();
-      this.localError.set("Unable to open camera for face scan.");
-    }
-  }
-  async faceClockIn() {
-    if (!this.cameraReady()) { this.localError.set("Camera scan is not ready."); return; }
-    await this.runAction("face-clock-in", () => this.staff.faceClockIn(this.facePrompt()), "Face clock-in saved.");
-    if (!this.localError()) this.stopFaceScan();
-  }
+  async biometricClockIn() { await this.runAction("biometric-clock-in", () => this.staff.biometricClockIn(), "Biometric clock-in saved."); }
   async clockOut() { await this.runAction("clock-out", () => this.staff.clockOut(this.activeAttendance()?.id), "Clock-out saved."); }
   async startBreak() { await this.runAction("start-break", () => this.staff.startBreak(), "Break started."); }
   async endBreak() { await this.runAction("end-break", () => this.staff.endBreak(), "Break ended."); }
-  stopFaceScan() {
-    this.faceStream?.getTracks().forEach((track) => track.stop());
-    this.faceStream = null;
-    this.cameraReady.set(false);
-    this.faceScanning.set(false);
-    this.facePrompt.set("");
-  }
-  private newFacePrompt(): string { return `turn-head-${Math.floor(1000 + Math.random() * 9000)}`; }
   private async runAction(action: AttendanceAction, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
     if (this.pendingAction()) return;
     this.pendingAction.set(action);

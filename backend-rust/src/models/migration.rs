@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, fmt};
@@ -53,6 +53,7 @@ string_enum!(MigrationEntity {
     Payments => "payments",
     Expenses => "expenses",
     PurchaseBills => "purchase-bills",
+    OpeningPayables => "opening-payables",
     Refunds => "refunds",
     GiftCards => "gift-cards",
     Loyalty => "loyalty",
@@ -67,6 +68,123 @@ string_enum!(MigrationMode {
     DryRun => "dry-run",
     Commit => "commit",
 });
+
+string_enum!(HistoricalPurchaseMappingKind {
+    Product => "product",
+    Vendor => "vendor",
+});
+
+string_enum!(HistoricalPurchaseMappingDecision {
+    Link => "link",
+    Create => "create",
+    KeepHistoricalOnly => "keep_historical_only",
+    Reject => "reject",
+});
+
+string_enum!(PurchaseBillPostingMode {
+    HistoryOnly => "history_only",
+    OpeningSnapshot => "opening_snapshot",
+    OpeningPayable => "opening_payable",
+    LiveReceipt => "live_receipt",
+});
+
+string_enum!(MigrationCutoverStatus {
+    Draft => "draft",
+    HistoryImporting => "history_importing",
+    InventoryFrozen => "inventory_frozen",
+    SnapshotApproved => "snapshot_approved",
+    SnapshotApplied => "snapshot_applied",
+    Reconciled => "reconciled",
+    Live => "live",
+});
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CreateMigrationCutoverRequest {
+    pub id: String,
+    pub business_timezone: String,
+    pub cutover_date: NaiveDate,
+    pub cutover_at: DateTime<Utc>,
+    pub historical_period_end: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TransitionMigrationCutoverRequest {
+    pub target_status: MigrationCutoverStatus,
+    pub snapshot_checksum: Option<String>,
+    pub observation_period_hours: Option<u16>,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationCutoverTransition {
+    pub id: i64,
+    pub from_status: Option<String>,
+    pub to_status: String,
+    pub actor_id: String,
+    pub actor_role: String,
+    pub note: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationCutover {
+    pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub business_timezone: String,
+    pub cutover_date: NaiveDate,
+    pub cutover_at: DateTime<Utc>,
+    pub historical_period_end: DateTime<Utc>,
+    pub inventory_freeze_start: Option<DateTime<Utc>>,
+    pub inventory_freeze_end: Option<DateTime<Utc>>,
+    pub snapshot_checksum: String,
+    pub status: MigrationCutoverStatus,
+    pub approved_users: Vec<String>,
+    pub owner_approved_by: Option<String>,
+    pub owner_approved_at: Option<DateTime<Utc>>,
+    pub go_live_at: Option<DateTime<Utc>>,
+    pub go_live_approved_role: String,
+    pub go_live_approval_note: String,
+    pub go_live_reconciliation_version: String,
+    pub go_live_reconciliation_checksum: String,
+    pub go_live_reconciliation: Value,
+    pub rollback_policy: Value,
+    pub rollback_state: String,
+    pub configured_by: String,
+    pub contract_version: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub transitions: Vec<MigrationCutoverTransition>,
+    pub reconciliation: Value,
+}
+
+pub const THREE_LAYER_POSTING_CONTRACT_VERSION: &str = "2026-07-phase1-v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThreeLayerPostingContract {
+    pub contract_version: String,
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub provider: MigrationProvider,
+    pub source_file: String,
+    pub source_file_id: Option<String>,
+    pub source_checksum: String,
+    pub entity: MigrationEntity,
+    pub import_mode: MigrationMode,
+    pub posting_mode: PurchaseBillPostingMode,
+    pub cutover_id: String,
+    pub cutover_date: NaiveDate,
+    pub mapping_version: i32,
+    pub transformer_version: String,
+    pub imported_at: Option<DateTime<Utc>>,
+    pub approved_by: Option<String>,
+}
 
 string_enum!(MigrationProvider {
     Auto => "auto",
@@ -90,6 +208,7 @@ impl Default for MigrationProvider {
 
 string_enum!(MigrationJobStatus {
     Staging => "staging",
+    DependencyPending => "dependency_pending",
     Validated => "validated",
     Queued => "queued",
     Processing => "processing",
@@ -102,6 +221,7 @@ string_enum!(MigrationJobStatus {
 
 string_enum!(MigrationRowStatus {
     Validated => "validated",
+    DependencyPending => "dependency_pending",
     Warning => "warning",
     Duplicate => "duplicate",
     Error => "error",
@@ -117,6 +237,7 @@ string_enum!(MigrationDuplicateDecision {
     Merge => "merge",
     Keep => "keep",
     Link => "link",
+    Reject => "reject",
 });
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +246,9 @@ pub struct CreateImportJobRequest {
     pub entity: MigrationEntity,
     pub file_name: String,
     pub mode: MigrationMode,
+    pub posting_mode: Option<PurchaseBillPostingMode>,
+    pub cutover_id: Option<String>,
+    pub cutover_date: Option<NaiveDate>,
     pub csv: String,
     #[serde(default)]
     pub mapping: BTreeMap<String, String>,
@@ -146,6 +270,9 @@ pub struct CreateLargeImportJobRequest {
     pub source_file_id: String,
     pub entity: MigrationEntity,
     pub mode: MigrationMode,
+    pub posting_mode: Option<PurchaseBillPostingMode>,
+    pub cutover_id: Option<String>,
+    pub cutover_date: Option<NaiveDate>,
     #[serde(default)]
     pub mapping: BTreeMap<String, String>,
     #[serde(default)]
@@ -160,6 +287,58 @@ pub struct CreateLargeImportJobRequest {
     pub source_provider: MigrationProvider,
     #[serde(default)]
     pub source_sheet: String,
+    #[serde(default)]
+    pub header_source_sheet: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HistoricalPurchaseMappingCreateRequest {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub sku: String,
+    #[serde(default)]
+    pub barcode: String,
+    #[serde(default)]
+    pub brand: String,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub unit: String,
+    #[serde(default)]
+    pub package_unit: String,
+    pub units_per_package: Option<i32>,
+    #[serde(default)]
+    pub gstin: String,
+    #[serde(default)]
+    pub phone: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub address: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HistoricalPurchaseMappingDecisionRequest {
+    pub decision: HistoricalPurchaseMappingDecision,
+    #[serde(default)]
+    pub target_id: String,
+    pub expected_version: i32,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub approve_unit_conversion: bool,
+    #[serde(default)]
+    pub approve_variant_mismatch: bool,
+    #[serde(default)]
+    pub approve_source_drift: bool,
+    #[serde(default)]
+    pub bulk_approval: bool,
+    pub create: Option<HistoricalPurchaseMappingCreateRequest>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,6 +357,10 @@ pub struct ImportJob {
     pub duplicate_row_count: i32,
     pub errors_json: Value,
     pub mapping_json: Value,
+    pub mapping_id: Option<String>,
+    pub mapping_version: Option<i32>,
+    pub mapping_header_fingerprint: String,
+    pub transformer_versions: Value,
     pub analysis_json: Value,
     pub recovery_json: Value,
     pub total_rows: i32,
@@ -211,6 +394,33 @@ pub struct MigrationApprovalRequest {
     pub approved: bool,
     #[serde(default)]
     pub note: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpeningPayableControlsApprovalRequest {
+    pub opening_balance_account: String,
+    pub payable_account: String,
+    pub supplier_advance_account: String,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MigrationSelectiveRetryRequest {
+    pub rows: Vec<MigrationRetryCorrection>,
+    #[serde(default)]
+    pub approve_partial: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MigrationRetryCorrection {
+    pub source_sheet: String,
+    pub source_row_number: i32,
+    #[serde(default)]
+    pub corrections: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -368,6 +578,8 @@ pub struct SaveMigrationMappingRequest {
     pub mapping: BTreeMap<String, String>,
     #[serde(default)]
     pub source_columns: Vec<String>,
+    pub evaluation: MigrationMappingSuggestionRequest,
+    pub fingerprint: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -378,8 +590,37 @@ pub struct MigrationMapping {
     pub entity: MigrationEntity,
     pub mapping: BTreeMap<String, String>,
     pub source_columns: Vec<String>,
+    pub source_provider: MigrationProvider,
+    pub source_sheet: String,
+    pub normalized_headers: Vec<String>,
+    pub header_fingerprint: String,
+    pub column_count: i32,
+    pub mapping_version: i32,
+    pub transformer_versions: Value,
+    pub approved_by: String,
+    pub approved_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationMappingVersion {
+    pub mapping_id: String,
+    pub version: i32,
+    pub entity: MigrationEntity,
+    pub source_provider: MigrationProvider,
+    pub source_sheet: String,
+    pub source_columns: Vec<String>,
+    pub normalized_headers: Vec<String>,
+    pub header_fingerprint: String,
+    pub column_count: i32,
+    pub mapping: BTreeMap<String, String>,
+    pub transformer_versions: Value,
+    pub approved_by: String,
+    pub approved_at: DateTime<Utc>,
+    pub change_kind: String,
+    pub rolled_back_from_version: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -409,6 +650,8 @@ pub struct MigrationMappingSuggestionRequest {
     pub source_provider: MigrationProvider,
     #[serde(default)]
     pub source_sheet: String,
+    #[serde(default)]
+    pub header_source_sheet: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -445,6 +688,27 @@ pub struct MigrationAnalysisRow {
     pub warnings: Vec<MigrationRowIssue>,
     pub duplicate_target_id: Option<String>,
     pub duplicate_decision: Option<MigrationDuplicateDecision>,
+    pub duplicate_signals: Vec<MigrationDuplicateSignal>,
+    pub allowed_duplicate_decisions: Vec<MigrationDuplicateDecision>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duplicate_preview: Option<MigrationDuplicatePreview>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationDuplicateSignal {
+    pub kind: String,
+    pub normalized_value: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationDuplicatePreview {
+    pub existing_value: Value,
+    pub incoming_value: Value,
+    pub final_value: Value,
+    pub fields_that_will_change: Vec<String>,
+    pub dependent_records: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -453,6 +717,8 @@ pub struct MigrationAnalysisSummary {
     pub source_rows: i32,
     pub valid_rows: i32,
     pub error_rows: i32,
+    #[serde(default)]
+    pub dependency_pending_rows: i32,
     pub warning_rows: i32,
     pub duplicate_rows: i32,
     pub ready_rows: i32,
@@ -479,6 +745,10 @@ pub struct MigrationRecoveryReport {
     pub kept_rows: i64,
     pub rolled_back_rows: i64,
     pub status: String,
+    #[serde(default)]
+    pub audit: Value,
+    #[serde(default)]
+    pub verification: Value,
 }
 
 #[cfg(test)]

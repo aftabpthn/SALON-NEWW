@@ -195,6 +195,7 @@ pub struct Settings {
     pub cors_allowed_origins: Vec<String>,
     pub crm_app_base_url: String,
     pub customer_app_base_url: String,
+    pub google_maps_api_key: Option<String>,
     pub enable_dev_session: bool,
     pub dev_session_secret: Option<String>,
     pub ai_service_url: Option<String>,
@@ -405,6 +406,7 @@ impl Settings {
             cors_allowed_origins,
             crm_app_base_url,
             customer_app_base_url,
+            google_maps_api_key: optional_secure_secret("GOOGLE_MAPS_API_KEY")?,
             enable_dev_session,
             dev_session_secret,
             ai_service_url: std::env::var("AI_SERVICE_URL")

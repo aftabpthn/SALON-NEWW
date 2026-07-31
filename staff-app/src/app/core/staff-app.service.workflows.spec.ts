@@ -82,6 +82,23 @@ describe("StaffAppService staff workflows", () => {
     expect(write?.body).toEqual({ leaveType: "annual", startDate: "2026-08-01", endDate: "2026-08-02", reason: "Family", staffId: "staff-1" });
   });
 
+  it("queues leave requests offline and flushes them after reconnecting", async () => {
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "POST" && url.endsWith("/staff-leave/requests")) return of({ id: "leave-1" });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: false, credentials: undefined } });
+
+    await expect(service.requestLeave({ leaveType: "annual", startDate: "2026-08-01", endDate: "2026-08-02", reason: "Family" }))
+      .resolves.toMatchObject({ state: "queued" });
+    expect(http.calls.some((call) => call.url.endsWith("/staff-leave/requests"))).toBe(false);
+
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true, credentials: undefined } });
+    await expect(service.flushOfflineActions()).resolves.toBe(1);
+    expect(http.calls.find((call) => call.url.endsWith("/staff-leave/requests"))?.body).toMatchObject({ staffId: "staff-1" });
+  });
+
   it("maps payroll paise and payslip data from the self dashboard", async () => {
     const { service } = createService(({ method, url }) => {
       if (method === "GET" && url.endsWith("/staff/self/dashboard")) {
@@ -168,6 +185,59 @@ describe("StaffAppService staff workflows", () => {
     expect(actions.map((call) => call.url.split("/staff-attendance/")[1])).toEqual(["clock-in", "break-start", "break-end", "clock-out"]);
     expect(actions.every((call) => (call.body as Record<string, unknown>)["staffId"] === "staff-1")).toBe(true);
     expect(actions[3]?.body).toMatchObject({ attendanceId: "attendance-1" });
+  });
+
+  it("uses a server challenge and browser biometric credential for biometric clock-in", async () => {
+    class MockAssertionResponse {
+      readonly clientDataJSON = new Uint8Array([1]).buffer;
+      readonly authenticatorData = new Uint8Array([2]).buffer;
+      readonly signature = new Uint8Array([3]).buffer;
+      readonly userHandle = null;
+    }
+    class MockCredential {
+      readonly id = "credential-1";
+      readonly rawId = new Uint8Array([4]).buffer;
+      readonly type = "public-key";
+      readonly response = new MockAssertionResponse();
+    }
+    const credential = new MockCredential();
+    Object.defineProperty(globalThis, "window", { configurable: true, value: { dispatchEvent: vi.fn() } });
+    Object.defineProperty(globalThis, "AuthenticatorAssertionResponse", { configurable: true, value: MockAssertionResponse });
+    Object.defineProperty(globalThis, "PublicKeyCredential", { configurable: true, value: MockCredential });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        onLine: true,
+        credentials: { get: vi.fn().mockResolvedValue(credential) },
+        geolocation: {
+          getCurrentPosition: (resolve: PositionCallback) => resolve({ coords: { latitude: 28.61, longitude: 77.21, accuracy: 12 } } as GeolocationPosition)
+        }
+      }
+    });
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "POST" && url.endsWith("/staff-attendance/biometric/begin")) {
+        return of({ challengeId: "challenge-1", options: { challenge: "AQ", userVerification: "required" } });
+      }
+      if (method === "POST" && url.endsWith("/staff-attendance/clock-in")) return of({ id: "attendance-1" });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+
+    await service.biometricClockIn();
+
+    const calls = http.calls.filter((call) => call.url.includes("/staff-attendance/"));
+    expect(calls.map((call) => call.url.split("/staff-attendance/")[1])).toEqual(["biometric/begin", "clock-in"]);
+    expect(calls[1]?.body).toMatchObject({
+      staffId: "staff-1",
+      source: "staff-app-biometric",
+      faceScan: {
+        challengeId: "challenge-1",
+        deviceUid: expect.stringMatching(/^staff_face_/),
+        credential: { id: "BA", clientDataJSON: "AQ", authenticatorData: "Ag", signature: "Aw" }
+      }
+    });
+    expect(calls[1]?.body).not.toHaveProperty("faceScan.livenessResponse");
+    expect(calls[1]?.body).not.toHaveProperty("faceScan.providerEventId");
   });
 
   it("uses self-scoped real appointment mutation endpoints", async () => {

@@ -8,6 +8,10 @@ export const routes: Routes = [
     loadComponent: () => import("./features/onboarding/onboarding.page").then((m) => m.OnboardingPage)
   },
   {
+    path: "track/:token",
+    loadComponent: () => import("./features/tracking/field-job-tracking.page").then((m) => m.FieldJobTrackingPage)
+  },
+  {
     path: "login",
     loadComponent: () => import("./features/auth/login.page").then((m) => m.LoginPage)
   },

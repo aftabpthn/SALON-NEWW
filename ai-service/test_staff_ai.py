@@ -3,21 +3,29 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-os.environ["AI_SERVICE_TOKEN"] = "staff-ai-test-token"
-
 from main import app  # noqa: E402
+
+TOKEN = "staff-ai-test-token"
 
 
 class StaffAiApiTests(unittest.TestCase):
     def setUp(self):
+        self._previous_token = os.environ.get("AI_SERVICE_TOKEN")
+        os.environ["AI_SERVICE_TOKEN"] = TOKEN
         self.client = TestClient(app)
-        self.headers = {"Authorization": "Bearer staff-ai-test-token"}
+        self.headers = {"Authorization": f"Bearer {TOKEN}"}
         self.scope = {
             "tenant_id": "tenant-1",
             "branch_id": "branch-1",
             "period_start": "2026-07-01",
             "period_end": "2026-07-30",
         }
+
+    def tearDown(self):
+        if self._previous_token is None:
+            os.environ.pop("AI_SERVICE_TOKEN", None)
+        else:
+            os.environ["AI_SERVICE_TOKEN"] = self._previous_token
 
     def post(self, path, body):
         response = self.client.post(path, headers=self.headers, json={**self.scope, **body})

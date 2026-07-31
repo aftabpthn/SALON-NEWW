@@ -9,7 +9,7 @@ const route = read('../../backend-rust/src/routes/language_settings.rs');
 const repository = read('../../backend-rust/src/repositories/language_settings_repository.rs');
 const migration = read('../../backend-rust/migrations/0214_language_region_settings.sql');
 
-assert.match(header, /English \+ हिन्दी/);
+assert.match(header, /header\.languages' \| translate/);
 assert.match(settings, /Language &amp; Region/);
 assert.match(settings, /allowUserOverride/);
 assert.match(service, /\/settings\/language\/me/);

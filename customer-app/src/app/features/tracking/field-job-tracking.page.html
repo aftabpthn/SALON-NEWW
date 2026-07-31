@@ -1,0 +1,11 @@
+<ion-header class="ion-no-border"><ion-toolbar><div class="brand">AuraShine</div></ion-toolbar></ion-header>
+<ion-content><main class="tracking-page">
+  @if (tracking(); as job) {
+    <section class="tracking-card"><p class="eyebrow">Live service tracking</p><h1>{{ job.status === 'completed' ? 'Service completed' : job.staffName + ' is handling your visit' }}</h1>
+      <div class="progress" role="progressbar" [attr.aria-valuenow]="progress(job.status)" aria-valuemin="0" aria-valuemax="100"><span [style.width.%]="progress(job.status)"></span></div>
+      <div class="details"><div><span>Status</span><strong>{{ job.status.replace('_', ' ') }}</strong></div><div><span>Scheduled</span><strong>{{ job.scheduledStartAt ? (job.scheduledStartAt | date:'dd/MM/yyyy, HH:mm') : 'Pending' }}</strong></div><div><span>ETA</span><strong>{{ etaMinutes(job.remainingEtaSeconds) ? etaMinutes(job.remainingEtaSeconds) + ' min' : job.travelMinutes + ' min' }}</strong></div><div><span>Last update</span><strong>{{ job.lastLocationAt ? (job.lastLocationAt | date:'HH:mm') : 'Waiting for location' }}</strong></div></div>
+      @if (job.appointmentId && job.status !== 'completed' && job.status !== 'cancelled') { <ion-button expand="block" fill="outline" [routerLink]="['/bookings', job.appointmentId]">Reschedule booking</ion-button> }
+    </section>
+  } @else if (error()) { <section class="tracking-card error" role="alert"><h1>Tracking unavailable</h1><p>{{ error() }}</p></section> }
+  @else { <section class="tracking-card loading"><ion-spinner name="crescent"></ion-spinner><p>Loading live status…</p></section> }
+</main></ion-content>

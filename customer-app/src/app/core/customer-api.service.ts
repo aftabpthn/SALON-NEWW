@@ -19,6 +19,7 @@ import {
   CustomerBookingContactlessPayload,
   CustomerBookingSelfPayPayload,
   CustomerFavorite,
+  FieldJobTracking,
   CustomerCommerceCheckout,
   CustomerDeviceInfo,
   CustomerDeviceSession,
@@ -76,6 +77,12 @@ export class CustomerApiService {
   listPublicBusinesses(params: SearchBusinessesParams = {}): Observable<Business[]> {
     return this.http.get<ApiResponse<Business[] | ApiList<Business>>>(`${this.baseUrl}/marketplace/businesses`, { params: this.toParams(params) }).pipe(
       map((response) => this.unwrapList<Business>(response))
+    );
+  }
+
+  getFieldJobTracking(token: string): Observable<FieldJobTracking> {
+    return this.http.get<ApiResponse<FieldJobTracking>>(`${this.baseUrl}/operations/tracking/${encodeURIComponent(token)}`).pipe(
+      map((response) => this.unwrap<FieldJobTracking>(response))
     );
   }
 

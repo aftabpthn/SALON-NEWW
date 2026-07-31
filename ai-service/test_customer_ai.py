@@ -5,16 +5,24 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi.testclient import TestClient
 
-os.environ["AI_SERVICE_TOKEN"] = "customer-ai-test-token"
-
 from main import app  # noqa: E402
+
+TOKEN = "customer-ai-test-token"
 
 
 class CustomerAiApiTests(unittest.TestCase):
     def setUp(self):
         os.environ["AI_PROVIDER"] = "local"
+        self._previous_token = os.environ.get("AI_SERVICE_TOKEN")
+        os.environ["AI_SERVICE_TOKEN"] = TOKEN
         self.client = TestClient(app)
-        self.headers = {"Authorization": "Bearer customer-ai-test-token"}
+        self.headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    def tearDown(self):
+        if self._previous_token is None:
+            os.environ.pop("AI_SERVICE_TOKEN", None)
+        else:
+            os.environ["AI_SERVICE_TOKEN"] = self._previous_token
 
     def test_customer_ai_uses_feedback_and_returns_full_contract(self):
         response = self.client.post(

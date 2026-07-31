@@ -28,7 +28,6 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
       @if (loadError()) { <section staffPageState class="notice settings-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
-      @if (staff.error() && !loadError() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadSettings() && dashboard(); as data) {
         <section class="grid two settings-layout">
@@ -57,7 +56,7 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
                   [attr.aria-checked]="staff.biometricEnabled()"
                   [attr.aria-busy]="savingBiometric()"
                   aria-label="Biometric unlock"
-                  [disabled]="savingBiometric() || !staff.biometricSupported() || !staff.hasSavedSession()"
+                  [disabled]="savingBiometric() || !canManageSettings() || !staff.biometricSupported() || !staff.hasSavedSession()"
                   (click)="toggleBiometric()"
                 ><span aria-hidden="true"></span></button>
               </div>
@@ -74,27 +73,28 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
         @if (preferences(); as prefs) {
           <section class="panel preferences-panel">
             <div class="panel-title"><h2>Workspace preferences</h2><span>{{ savingPreferences() ? 'Saving...' : prefs.localization.timezone }}</span></div>
+            @if (!canManageSettings()) { <p class="muted">Your role can view these CRM preferences but cannot change them.</p> }
             <form class="preferences-grid" (ngSubmit)="savePreferences()">
               <label>
                 <span>Workspace</span>
-                <input name="workspaceName" [(ngModel)]="preferenceForm.workspaceName" maxlength="80" [disabled]="savingPreferences()" [attr.aria-invalid]="!workspaceNameValid()" />
+                <input name="workspaceName" [(ngModel)]="preferenceForm.workspaceName" maxlength="80" [disabled]="savingPreferences() || !canManageSettings()" [attr.aria-invalid]="!workspaceNameValid()" />
               </label>
               <label>
                 <span>Timezone</span>
-                <select name="timezone" [(ngModel)]="preferenceForm.timezone" [disabled]="savingPreferences()">
+                <select name="timezone" [(ngModel)]="preferenceForm.timezone" [disabled]="savingPreferences() || !canManageSettings()">
                   @for (timezone of timezones; track timezone) { <option [value]="timezone">{{ timezone }}</option> }
                 </select>
               </label>
               <label>
                 <span>Locale</span>
-                <select name="locale" [(ngModel)]="preferenceForm.locale" [disabled]="savingPreferences()">
+                <select name="locale" [(ngModel)]="preferenceForm.locale" [disabled]="savingPreferences() || !canManageSettings()">
                   <option value="en-IN">English India</option>
                   <option value="en-US">English US</option>
                 </select>
               </label>
               <label>
                 <span>Date format</span>
-                <select name="dateFormat" [(ngModel)]="preferenceForm.dateFormat" [disabled]="savingPreferences()">
+                <select name="dateFormat" [(ngModel)]="preferenceForm.dateFormat" [disabled]="savingPreferences() || !canManageSettings()">
                   <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                   <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                   <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -102,17 +102,17 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
               </label>
               <label>
                 <span>Time format</span>
-                <select name="timeFormat" [(ngModel)]="preferenceForm.timeFormat" [disabled]="savingPreferences()">
+                <select name="timeFormat" [(ngModel)]="preferenceForm.timeFormat" [disabled]="savingPreferences() || !canManageSettings()">
                   <option value="HH:mm">24 hour</option>
                   <option value="hh:mm a">12 hour</option>
                 </select>
               </label>
               <label class="check-row">
-                <input type="checkbox" name="compactMode" [(ngModel)]="preferenceForm.compactMode" [disabled]="savingPreferences()" />
+                <input type="checkbox" name="compactMode" [(ngModel)]="preferenceForm.compactMode" [disabled]="savingPreferences() || !canManageSettings()" />
                 <span>Compact mode</span>
               </label>
               <label class="check-row">
-                <input type="checkbox" name="staffHints" [(ngModel)]="preferenceForm.staffHints" [disabled]="savingPreferences()" />
+                <input type="checkbox" name="staffHints" [(ngModel)]="preferenceForm.staffHints" [disabled]="savingPreferences() || !canManageSettings()" />
                 <span>Staff hints</span>
               </label>
               <div class="row-actions preference-actions">
@@ -219,12 +219,16 @@ export class StaffSettingsPage implements OnInit {
     return this.staff.hasPermission("staff.app.settings.read");
   }
 
+  canManageSettings(): boolean {
+    return this.staff.hasPermission("staff.app.settings.manage");
+  }
+
   workspaceNameValid(): boolean {
     return (this.preferenceForm.workspaceName || "").trim().length <= 80;
   }
 
   canSavePreferences(): boolean {
-    return this.workspaceNameValid() && !this.savingPreferences();
+    return this.canManageSettings() && this.workspaceNameValid() && !this.savingPreferences();
   }
 
   visiblePermissions(): string[] {
@@ -235,6 +239,10 @@ export class StaffSettingsPage implements OnInit {
     if (this.savingBiometric()) return;
     this.message.set("");
     this.localError.set("");
+    if (!this.canManageSettings()) {
+      this.localError.set("You do not have permission to change staff settings.");
+      return;
+    }
     this.savingBiometric.set(true);
     try {
       const enabled = !this.staff.biometricEnabled();
@@ -257,6 +265,10 @@ export class StaffSettingsPage implements OnInit {
   async savePreferences() {
     this.message.set("");
     this.localError.set("");
+    if (!this.canManageSettings()) {
+      this.localError.set("You do not have permission to change staff settings.");
+      return;
+    }
     if (!this.canSavePreferences()) {
       this.localError.set("Workspace name must be 80 characters or less.");
       return;

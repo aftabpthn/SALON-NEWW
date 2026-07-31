@@ -174,8 +174,8 @@ export class BackbarConsumptionPageComponent implements OnInit {
   }
 
   exportCsv() {
-    const rows = this.visibleUsage.map((row) => [this.date(row.createdAt), this.appointmentReference(row.appointmentId), row.itemName, row.source, row.serviceName, row.staffName, row.clientName, row.expectedQuantity, row.actualQuantity, row.varianceQuantity, row.unit, row.status]);
-    const csv = [['Date', 'Appointment', 'Product', 'Invoice / Source', 'Service', 'Staff', 'Client', 'Expected', 'Actual', 'Variance', 'Unit', 'Status'].map((value) => this.language.textValue(value)), ...rows]
+    const rows = this.visibleUsage.map((row) => [this.date(row.createdAt), this.appointmentReference(row.appointmentId), row.itemName, row.itemBrand, row.source, row.serviceName, row.staffName, row.clientName, row.expectedQuantity, row.actualQuantity, row.varianceQuantity, row.unit, row.status]);
+    const csv = [['Date', 'Appointment', 'Product', 'Brand', 'Invoice / Source', 'Service', 'Staff', 'Client', 'Expected', 'Actual', 'Variance', 'Unit', 'Status'].map((value) => this.language.textValue(value)), ...rows]
       .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `backbar-usage-${this.filterDate || 'all'}.csv`; link.click(); URL.revokeObjectURL(url);

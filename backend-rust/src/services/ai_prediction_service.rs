@@ -30,8 +30,9 @@ use crate::{
     config::Settings,
     models::common::AppError,
     repositories::{
-        ai_copilot_repository as copilot_repository, ai_prediction_repository as prediction_repository,
-        analytics_repository, clients_repository, membership_lifecycle_repository,
+        ai_copilot_repository as copilot_repository,
+        ai_prediction_repository as prediction_repository, analytics_repository,
+        clients_repository, membership_lifecycle_repository,
     },
     services::{
         ai_scope_service::{self, ScopeRequest},
@@ -134,6 +135,30 @@ impl PredictionKind {
         }
     }
 
+    /// Roles allowed to ask. Money forecasts stay with finance-capable roles.
+    fn allowed_roles(self) -> &'static [&'static str] {
+        match self {
+            Self::RevenueForecast => &["owner", "admin", "manager", "accountant", "analyst"],
+            Self::StaffUtilization => &["owner", "admin", "manager", "analyst"],
+            Self::InventoryReorderRisk => {
+                &["owner", "admin", "manager", "analyst", "inventorymanager"]
+            }
+            _ => &[
+                "owner",
+                "admin",
+                "manager",
+                "staff",
+                "frontdesk",
+                "receptionist",
+                "analyst",
+            ],
+        }
+    }
+
+    pub fn permitted_for(self, role: &str) -> bool {
+        self.allowed_roles()
+            .contains(&role.to_ascii_lowercase().as_str())
+    }
 }
 
 /// One subject's deterministic features.
@@ -503,10 +528,16 @@ pub async fn build_features(
         | PredictionKind::NoShowRisk => client_features(db, tenant_id, branch_id).await?,
         PredictionKind::ServiceDemand => service_features(db, tenant_id, branch_id).await?,
         PredictionKind::StaffUtilization => staff_features(db, tenant_id, branch_id).await?,
-        PredictionKind::AppointmentLoad => appointment_load_features(db, tenant_id, branch_id).await?,
+        PredictionKind::AppointmentLoad => {
+            appointment_load_features(db, tenant_id, branch_id).await?
+        }
         PredictionKind::RevenueForecast => revenue_features(db, tenant_id, branch_id).await?,
-        PredictionKind::InventoryReorderRisk => inventory_features(db, tenant_id, branch_id).await?,
-        PredictionKind::MembershipRenewalRisk => membership_features(db, tenant_id, branch_id).await?,
+        PredictionKind::InventoryReorderRisk => {
+            inventory_features(db, tenant_id, branch_id).await?
+        }
+        PredictionKind::MembershipRenewalRisk => {
+            membership_features(db, tenant_id, branch_id).await?
+        }
     };
     Ok(FeatureSet {
         kind: kind.name().into(),
@@ -673,9 +704,15 @@ async fn appointment_load_features(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<SubjectFeatures>, AppError> {
-    let rows = copilot_repository::weekday_demand(db, tenant_id, &copilot_repository::one_branch(branch_id),  HISTORY_DAYS, "")
-        .await
-        .map_err(|_| AppError::internal("failed to load appointment load features"))?;
+    let rows = copilot_repository::weekday_demand(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        HISTORY_DAYS,
+        "",
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load appointment load features"))?;
 
     let mut features = BTreeMap::new();
     let mut observations = 0_i64;
@@ -731,10 +768,15 @@ async fn inventory_features(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Vec<SubjectFeatures>, AppError> {
-    let rows =
-        copilot_repository::inventory_risk(db, tenant_id, &copilot_repository::one_branch(branch_id),  HISTORY_DAYS, SUBJECT_LIMIT)
-            .await
-            .map_err(|_| AppError::internal("failed to load inventory prediction features"))?;
+    let rows = copilot_repository::inventory_risk(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        HISTORY_DAYS,
+        SUBJECT_LIMIT,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load inventory prediction features"))?;
 
     Ok(rows
         .iter()
@@ -844,7 +886,10 @@ async fn call_provider(
     let data = envelope.data.filter(|_| envelope.success)?;
     if data.model_version.trim().is_empty() {
         // An unversioned prediction cannot be audited, so it is not accepted.
-        tracing::warn!(kind = kind.name(), "prediction provider omitted its model version");
+        tracing::warn!(
+            kind = kind.name(),
+            "prediction provider omitted its model version"
+        );
         return None;
     }
 
@@ -960,7 +1005,9 @@ fn fallback_predictions(kind: PredictionKind, scorable: &[&SubjectFeatures]) -> 
                     (
                         (utilization - 10.0).max(0.0),
                         (utilization + 10.0).min(100.0),
-                        vec![format!("Booked {booked:.0} of {scheduled:.0} rostered minutes.")],
+                        vec![format!(
+                            "Booked {booked:.0} of {scheduled:.0} rostered minutes."
+                        )],
                     )
                 }
                 PredictionKind::AppointmentLoad => {
@@ -974,7 +1021,9 @@ fn fallback_predictions(kind: PredictionKind, scorable: &[&SubjectFeatures]) -> 
                     (
                         (daily * 0.75).floor(),
                         (daily * 1.25).ceil(),
-                        vec![format!("{total:.0} completed appointments over the window.")],
+                        vec![format!(
+                            "{total:.0} completed appointments over the window."
+                        )],
                     )
                 }
                 PredictionKind::RevenueForecast => {
@@ -984,8 +1033,11 @@ fn fallback_predictions(kind: PredictionKind, scorable: &[&SubjectFeatures]) -> 
                         .filter(|(key, _)| key.starts_with("revenue_"))
                         .map(|(_, value)| *value)
                         .collect();
-                    let trading: Vec<f64> =
-                        values.iter().copied().filter(|value| *value > 0.0).collect();
+                    let trading: Vec<f64> = values
+                        .iter()
+                        .copied()
+                        .filter(|value| *value > 0.0)
+                        .collect();
                     let mean = if trading.is_empty() {
                         0.0
                     } else {
@@ -1114,8 +1166,16 @@ mod phase3_prediction_tests {
             history_start: NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
             history_end: NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
             subjects: vec![
-                subject("c1", 12, &[("visit_frequency_days", 30.0), ("recency_days", 10.0)]),
-                subject("c2", 4, &[("recency_days", 55.0), ("visit_frequency_days", 21.0)]),
+                subject(
+                    "c1",
+                    12,
+                    &[("visit_frequency_days", 30.0), ("recency_days", 10.0)],
+                ),
+                subject(
+                    "c2",
+                    4,
+                    &[("recency_days", 55.0), ("visit_frequency_days", 21.0)],
+                ),
             ],
         };
         assert_eq!(build().digest(), build().digest());
@@ -1124,8 +1184,16 @@ mod phase3_prediction_tests {
         // ordered precisely so that a reshuffle is not a different run.
         let reordered = FeatureSet {
             subjects: vec![
-                subject("c1", 12, &[("recency_days", 10.0), ("visit_frequency_days", 30.0)]),
-                subject("c2", 4, &[("visit_frequency_days", 21.0), ("recency_days", 55.0)]),
+                subject(
+                    "c1",
+                    12,
+                    &[("recency_days", 10.0), ("visit_frequency_days", 30.0)],
+                ),
+                subject(
+                    "c2",
+                    4,
+                    &[("visit_frequency_days", 21.0), ("recency_days", 55.0)],
+                ),
             ],
             ..build()
         };
@@ -1134,8 +1202,16 @@ mod phase3_prediction_tests {
         // A real change in the history must change the digest.
         let changed = FeatureSet {
             subjects: vec![
-                subject("c1", 12, &[("visit_frequency_days", 31.0), ("recency_days", 10.0)]),
-                subject("c2", 4, &[("recency_days", 55.0), ("visit_frequency_days", 21.0)]),
+                subject(
+                    "c1",
+                    12,
+                    &[("visit_frequency_days", 31.0), ("recency_days", 10.0)],
+                ),
+                subject(
+                    "c2",
+                    4,
+                    &[("recency_days", 55.0), ("visit_frequency_days", 21.0)],
+                ),
             ],
             ..build()
         };
@@ -1174,7 +1250,8 @@ mod phase3_prediction_tests {
                 kind.name()
             );
             assert_ne!(
-                prediction.confidence, "high",
+                prediction.confidence,
+                "high",
                 "{} must not claim high confidence from a heuristic",
                 kind.name()
             );
@@ -1188,11 +1265,20 @@ mod phase3_prediction_tests {
     #[test]
     fn scores_never_leave_their_range() {
         for (kind, features) in [
-            (PredictionKind::ClientChurnRisk, vec![("churn_risk_score", 100.0)]),
-            (PredictionKind::NoShowRisk, vec![("no_show_rate_bps", 10000.0)]),
+            (
+                PredictionKind::ClientChurnRisk,
+                vec![("churn_risk_score", 100.0)],
+            ),
+            (
+                PredictionKind::NoShowRisk,
+                vec![("no_show_rate_bps", 10000.0)],
+            ),
             (
                 PredictionKind::StaffUtilization,
-                vec![("current_booked_minutes", 9000.0), ("current_scheduled_minutes", 9000.0)],
+                vec![
+                    ("current_booked_minutes", 9000.0),
+                    ("current_scheduled_minutes", 9000.0),
+                ],
             ),
         ] {
             let rich = subject("s1", 100, &features);
@@ -1206,6 +1292,24 @@ mod phase3_prediction_tests {
                 prediction.upper_value
             );
         }
+    }
+
+    /// Money and workforce forecasts are closed to roles that may not see them.
+    #[test]
+    fn forecasts_are_role_gated() {
+        for role in ["staff", "frontdesk", "receptionist", "inventorymanager"] {
+            assert!(
+                !PredictionKind::RevenueForecast.permitted_for(role),
+                "revenue forecast must be closed to {role}"
+            );
+        }
+        for role in ["owner", "admin", "manager", "accountant", "analyst"] {
+            assert!(PredictionKind::RevenueForecast.permitted_for(role));
+        }
+        assert!(!PredictionKind::StaffUtilization.permitted_for("staff"));
+        assert!(PredictionKind::InventoryReorderRisk.permitted_for("inventorymanager"));
+        // Client-level predictions stay available to the people who act on them.
+        assert!(PredictionKind::ClientReturnWindow.permitted_for("receptionist"));
     }
 
     async fn connect() -> Option<PgPool> {
@@ -1570,15 +1674,14 @@ mod governed_prediction_tests {
         .await
         .expect("a run completes");
 
-        let (level, label, branches, role): (String, String, Vec<String>, String) =
-            sqlx::query_as(
-                r#"SELECT scope_level,scope_label,scope_branch_ids,requested_role
+        let (level, label, branches, role): (String, String, Vec<String>, String) = sqlx::query_as(
+            r#"SELECT scope_level,scope_label,scope_branch_ids,requested_role
                      FROM ai_prediction_runs WHERE id=$1"#,
-            )
-            .bind(&run.run_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        )
+        .bind(&run.run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         // The seeded tenant has exactly one branch and the caller is an owner,
         // so the honest scope is the whole tenant, not a single branch.
         assert_eq!(level, "tenant");

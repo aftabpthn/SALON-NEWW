@@ -1,5 +1,5 @@
 import { Component, OnInit, signal } from "@angular/core";
-import { StaffAppService, StaffEnterpriseOs, StaffToday } from "../../core/staff-app.service";
+import { StaffAppService, StaffRosterItem } from "../../core/staff-app.service";
 import { addBusinessDays, businessDate } from "../../core/business-date";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
@@ -23,24 +23,24 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       </header>
 
       @if (!canReadRoster()) { <section staffPageState class="notice">You do not have permission to read roster data.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading roster...</section> }
+      @if (loading() && !roster()) { <section staffPageState class="state" [loading]="true">Loading roster...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
-      @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+      @if (loadError()) { <section staffPageState class="notice"><span>{{ loadError() }}</span><button class="link-button" type="button" (click)="load()">Retry</button></section> }
 
-      @if (canReadRoster() && today(); as data) {
+      @if (canReadRoster() && roster()) {
         <section class="grid two">
           <article class="panel">
-            <div class="panel-title"><h2>Today shift</h2><span>{{ data.schedules.length }}</span></div>
+            <div class="panel-title"><h2>Selected day</h2><span>{{ selectedSchedules().length }}</span></div>
             <div class="list">
-              @for (shift of data.schedules; track shift.id) {
+              @for (shift of selectedSchedules(); track shift.id) {
                 <div class="row">
                   <div class="row-main">
                     <strong>{{ shift.startTime || '-' }} - {{ shift.endTime || '-' }}</strong>
-                    <small>{{ shift.scheduleDate }}</small>
+                    <small>{{ displayDate(shift.date) }}</small>
                   </div>
-                  <span class="badge">{{ shift.shiftType || shift.status }}</span>
+                  <span class="badge">{{ shift.type || shift.status }}</span>
                 </div>
-              } @empty { <p class="empty">No rostered shift found today.</p> }
+              } @empty { <p class="empty">No rostered shift found for this date.</p> }
             </div>
           </article>
           <article class="panel">
@@ -49,7 +49,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               @for (item of upcomingSchedules(); track item.id) {
                 <div class="row">
                   <div class="row-main">
-                    <strong>{{ item.date }}</strong>
+                    <strong>{{ displayDate(item.date) }}</strong>
                     <small>{{ item.startTime || '-' }} - {{ item.endTime || '-' }}</small>
                     <small class="muted">{{ item.type || 'roster' }}</small>
                     @if (hasConflict(item)) { <small class="badge red">Overlap warning</small> }
@@ -59,7 +59,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                     @if (canUpdateRoster()) {
                       @if (editingId() !== item.id) {
                         <button class="link-button" type="button" (click)="startMove(item)">Move</button>
-                        <button class="link-button" type="button" (click)="changeStatus(item, item.status === 'cancelled' ? 'scheduled' : 'cancelled')">{{ item.status === 'cancelled' ? 'Reinstate' : 'Cancel' }}</button>
+                        @if (item.status === 'working' || item.status === 'weekly_off' || item.status === 'not_set') {
+                          <button class="link-button" type="button" (click)="changeStatus(item, item.status === 'weekly_off' ? 'working' : 'weekly_off')">{{ item.status === 'weekly_off' ? 'Reinstate' : 'Mark off' }}</button>
+                        }
                       }
                     }
                   </div>
@@ -85,10 +87,10 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   styleUrls: ["./staff-app.styles.css"]
 })
 export class StaffRosterPage implements OnInit {
-  readonly today = signal<StaffToday | null>(null);
-  readonly os = signal<StaffEnterpriseOs | null>(null);
+  readonly roster = signal<StaffRosterItem[] | null>(null);
   readonly loading = signal(false);
   readonly message = signal("");
+  readonly loadError = signal("");
   readonly windowStart = signal(businessDate());
   readonly windowDays = signal(14);
   readonly editingId = signal<string | null>(null);
@@ -103,15 +105,13 @@ export class StaffRosterPage implements OnInit {
   async load() {
     this.loading.set(true);
     this.message.set("");
+    this.loadError.set("");
     try {
       const from = this.windowStart();
       const to = this.windowEnd();
-      const [today, os] = await Promise.all([
-        this.staff.today(this.windowStart()),
-        this.staff.enterpriseOs({ from, to })
-      ]);
-      this.today.set(today);
-      this.os.set(os);
+      this.roster.set(await this.staff.roster(from, to));
+    } catch {
+      this.loadError.set(this.staff.error() || "Unable to load roster.");
     } finally {
       this.loading.set(false);
     }
@@ -128,9 +128,13 @@ export class StaffRosterPage implements OnInit {
   upcomingSchedules() {
     const from = this.windowStart();
     const to = this.windowEnd();
-    return (this.os()?.calendar || [])
+    return (this.roster() || [])
       .filter((item) => item.date >= from && item.date <= to)
       .sort((left, right) => `${left.date} ${left.startTime || "00:00"}`.localeCompare(`${right.date} ${right.startTime || "00:00"}`));
+  }
+
+  selectedSchedules() {
+    return (this.roster() || []).filter((item) => item.date === this.windowStart());
   }
 
   windowEnd(): string {
@@ -204,6 +208,11 @@ export class StaffRosterPage implements OnInit {
       if (item.startTime < other.endTime && item.endTime > other.startTime) return true;
     }
     return false;
+  }
+
+  displayDate(value: string): string {
+    const [year, month, day] = value.split("-");
+    return year && month && day ? `${day}/${month}/${year}` : value || "-";
   }
 
   private addDays(value: string, days = 0): string {

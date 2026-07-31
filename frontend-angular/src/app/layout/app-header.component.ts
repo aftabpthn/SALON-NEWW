@@ -1,16 +1,31 @@
 
-import { Component, ElementRef, EventEmitter, HostListener, Input, OnInit, Output, ViewChild, inject } from '@angular/core';
+import { Component, DOCUMENT, ElementRef, EventEmitter, HostListener, Input, OnDestroy, OnInit, Output, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AuthBranchAccess, AuthService } from '../core/services/auth.service';
 import { Router } from '@angular/router';
 import { AiConciergeError, AiConciergeFailure, AiConciergeService, AiCopilotAnswer, AiCopilotEntity, AiCopilotProposal, AiMessage, AiSession, AiSuggestedQuestion } from '../core/services/ai-concierge.service';
-import { LANGUAGE_OPTIONS, LanguageService, UserLanguagePreference } from '../core/i18n/language.service';
+import { LanguageCode, LANGUAGE_OPTIONS, LanguageService } from '../core/i18n/language.service';
 import { LoadingTickerService } from '../core/services/loading-ticker.service';
 import { TranslatePipe } from '../shared/pipes/translate.pipe';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../shared/services/api.service';
 
-type HeaderNotification = { id: string; title: string; body: string; isRead: boolean; createdAt: string; metadata?: { deepLink?: string } };
+type HeaderNotification = {
+  id: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  notificationType?: string;
+  resourceType?: string;
+  resourceId?: string;
+  metadata?: {
+    deepLink?: string;
+    clientId?: string;
+    appointmentId?: string;
+    sections?: Array<{ openReportLink?: string }>;
+  };
+};
 type HeaderNotificationSummary = { unread: number; data: HeaderNotification[] };
 
 @Component({
@@ -30,6 +45,8 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   readonly loadingTicker = inject(LoadingTickerService);
   readonly language = inject(LanguageService);
+  private readonly document = inject(DOCUMENT);
+  readonly primaryLanguage: LanguageCode = 'en-IN';
 
   readonly appName = localStorage.getItem('aurashine_tenant_name')
     ?? localStorage.getItem('tenantName')
@@ -40,9 +57,17 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   branchMenuOpen = false;
   switchingBranchId = '';
   branchError = '';
-  languageMenuOpen = false;
+  languagePickerOpen = false;
+  languageSearch = '';
+  languageDraftSecondary: LanguageCode | '' = '';
   languageSaving = false;
   languageError = '';
+  notificationOpen = false;
+  notificationLoading = false;
+  notificationError = '';
+  notificationUnread = 0;
+  notificationItems: HeaderNotification[] = [];
+  private notificationTimer?: number;
   readonly languageOptions = LANGUAGE_OPTIONS;
   assistantOpen = false;
   assistantBusy = false;
@@ -121,8 +146,28 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
     return `${primary} + ${this.languageName(preferences.secondary)}`;
   }
 
+  get languageSearchResults() {
+    const term = this.languageSearch.trim().toLowerCase();
+    if (!term) return this.languageOptions;
+    return this.languageOptions.filter((option) => option.label.toLowerCase().includes(term) || option.code.toLowerCase().includes(term));
+  }
+
+  get canManageLanguage(): boolean {
+    return this.language.settings()?.tenantDefault?.allowUserOverride !== false;
+  }
+
   languageName(code: string): string {
     return this.languageOptions.find((option) => option.code === code)?.label ?? code;
+  }
+
+  get isLanguageDraftBilingual(): boolean {
+    return Boolean(this.languageDraftSecondary);
+  }
+
+  get selectedLanguageList() {
+    const selected = [{ code: this.primaryLanguage, label: this.languageName(this.primaryLanguage), removable: false }];
+    if (this.languageDraftSecondary) selected.push({ code: this.languageDraftSecondary, label: this.languageName(this.languageDraftSecondary), removable: true });
+    return selected;
   }
 
   get filteredBranches(): AuthBranchAccess[] {
@@ -158,7 +203,7 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   async toggleNotifications(): Promise<void> {
     this.notificationOpen = !this.notificationOpen;
     this.branchMenuOpen = false;
-    this.languageMenuOpen = false;
+    this.languagePickerOpen = false;
     if (this.notificationOpen) await this.refreshNotifications();
   }
 
@@ -171,8 +216,44 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
       }
     } catch { /* Navigation remains available if marking read fails. */ }
     this.notificationOpen = false;
-    const deepLink = notification.metadata?.deepLink;
-    if (deepLink) await this.router.navigateByUrl(deepLink);
+    await this.router.navigateByUrl(this.notificationLink(notification));
+  }
+
+  private notificationLink(notification: HeaderNotification): string {
+    const direct = this.safeNotificationLink(notification.metadata?.deepLink);
+    if (direct) return direct;
+
+    const briefingLink = notification.metadata?.sections
+      ?.map((section) => this.safeNotificationLink(section.openReportLink))
+      .find(Boolean);
+    if (briefingLink) return briefingLink;
+
+    const kind = `${notification.notificationType || ''} ${notification.resourceType || ''}`.toLowerCase();
+    const resourceId = encodeURIComponent(notification.resourceId || notification.metadata?.clientId || '');
+    if (kind.includes('staff_approval')) return '/staff/control-center?tab=governance';
+    if (kind.includes('staff_leave')) return '/staff/leave-management';
+    if (kind.includes('staff_rule')) return '/staff/control-center?tab=content';
+    if (kind.includes('appointment')) return '/appointments';
+    if (kind.includes('client')) return resourceId ? `/clients/${resourceId}` : '/clients';
+    if (kind.includes('inventory') || kind.includes('stock')) return '/inventory';
+    if (kind.includes('invoice') || kind.includes('payment')) return '/pos/invoices';
+    if (kind.includes('marketing') || kind.includes('campaign')) return '/marketing';
+    if (kind.includes('sms') || kind.includes('message')) return '/sms-center';
+    if (kind.includes('staff')) return '/staff';
+    return '/command-center';
+  }
+
+  private safeNotificationLink(value?: string): string {
+    const link = value?.trim() || '';
+    if (!link.startsWith('/') || link.startsWith('//')) return '';
+    const aliases: Record<string, string> = {
+      '/reports/profit': '/reports/profit-intelligence',
+      '/staff/attendance': '/staff/attendance-summary',
+      '/staff/dashboard': '/staff',
+      '/staff/leaves': '/staff/leave-management',
+      '/staff/rules': '/staff/control-center?tab=content',
+    };
+    return aliases[link] || link;
   }
 
   private async refreshNotifications(): Promise<void> {
@@ -190,23 +271,56 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
     }
   }
 
-  toggleLanguageMenu(): void {
-    if (this.languageSaving) return;
-    this.languageMenuOpen = !this.languageMenuOpen;
+  openLanguagePicker(): void {
+    if (this.languageSaving || !this.canManageLanguage) return;
+    this.branchMenuOpen = false;
+    this.notificationOpen = false;
+    const current = this.language.preferences();
+    this.languageDraftSecondary = current.mode === 'bilingual' && current.secondary && current.secondary !== this.primaryLanguage ? current.secondary : '';
+    this.languageSearch = '';
+    this.languagePickerOpen = true;
+    this.setBodyScrollLocked(true);
   }
 
-  async selectLanguage(preference: UserLanguagePreference): Promise<void> {
-    if (this.languageSaving || this.language.settings()?.tenantDefault.allowUserOverride === false) return;
+  closeLanguagePicker(): void {
+    if (!this.languagePickerOpen) return;
+    this.languagePickerOpen = false;
+    this.languageSearch = '';
+    this.languageDraftSecondary = '';
+    this.setBodyScrollLocked(false);
+  }
+
+  selectLanguageCode(code: LanguageCode): void {
+    if (!this.canManageLanguage || this.languageSaving) return;
+    if (code === this.primaryLanguage) {
+      this.languageDraftSecondary = '';
+      return;
+    }
+    this.languageDraftSecondary = this.languageDraftSecondary === code ? '' : code;
+  }
+
+  async saveLanguagePicker(): Promise<void> {
+    if (this.languageSaving || !this.canManageLanguage) return;
     this.languageSaving = true;
     this.languageError = '';
     try {
-      await this.language.saveUserPreference(preference);
-      this.languageMenuOpen = false;
+      await this.language.saveUserPreference({
+        primaryLanguage: this.primaryLanguage,
+        secondaryLanguage: this.languageDraftSecondary || undefined,
+        displayMode: this.languageDraftSecondary ? 'bilingual' : 'single',
+      });
+      this.closeLanguagePicker();
+      this.languageSearch = '';
     } catch (error) {
       this.languageError = this.message(error, 'error.unableToSave');
     } finally {
       this.languageSaving = false;
     }
+  }
+
+  private setBodyScrollLocked(locked: boolean): void {
+    if (!this.document.body) return;
+    this.document.body.style.overflow = locked ? 'hidden' : '';
   }
 
   toggleBranchMenu(): void {
@@ -504,21 +618,26 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   }
 
   @HostListener('document:click', ['$event'])
-  closeBranchMenu(event: MouseEvent): void {
-    if (this.branchMenuOpen && !this.element.nativeElement.contains(event.target as Node)) {
+  closeOverlays(event: MouseEvent): void {
+    if (this.element.nativeElement.contains(event.target as Node)) return;
+    if (this.branchMenuOpen) {
       this.branchMenuOpen = false;
       this.branchSearch = '';
     }
-    if (this.languageMenuOpen && !this.element.nativeElement.contains(event.target as Node)) this.languageMenuOpen = false;
-    if (this.notificationOpen && !this.element.nativeElement.contains(event.target as Node)) this.notificationOpen = false;
+    if (this.notificationOpen) {
+      this.notificationOpen = false;
+      this.notificationError = '';
+    }
+    this.closeLanguagePicker();
   }
 
   @HostListener('document:keydown.escape')
-  closeBranchMenuWithKeyboard(): void {
+  closeOverlaysWithKeyboard(): void {
     this.branchMenuOpen = false;
-    this.languageMenuOpen = false;
-    this.notificationOpen = false;
     this.branchSearch = '';
+    this.closeLanguagePicker();
+    this.notificationOpen = false;
+    this.notificationError = '';
     this.assistantOpen = false;
   }
 

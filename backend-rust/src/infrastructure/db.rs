@@ -15,7 +15,8 @@ pub async fn create_pool(database_url: &str) -> Result<PgPool> {
         .connect(database_url)
         .await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    // SQLx embeds migration checksums here, so every migration release requires a rebuilt binary.
+    sqlx::migrate!().run(&pool).await?;
 
     Ok(pool)
 }

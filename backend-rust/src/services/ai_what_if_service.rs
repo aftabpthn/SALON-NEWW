@@ -23,10 +23,7 @@ use crate::{
         ai_copilot_repository as copilot_repository, ai_scope_repository as scope_repository,
         membership_lifecycle_repository,
     },
-    services::{
-        ai_scope_service::{self, AiDomain, ScopeRequest}, ai_tool_dispatcher,
-        auth_service::AuthClaims, profit_governance_service,
-    },
+    services::profit_governance_service,
 };
 
 /// Window every simulation reads its baseline from.
@@ -238,21 +235,20 @@ fn spread(value: i64) -> (i64, i64) {
 }
 
 /// Runs a simulation. Reads only.
-pub async fn simulate_authorized(
+pub async fn simulate(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    claims: &AuthClaims,
+    role: &str,
     scenario: WhatIf,
 ) -> Result<WhatIfResult, AppError> {
     // Every scenario projects money or capacity, so it is management
     // information. The check happens before any figure is read.
-    ai_scope_service::require_domain(claims, AiDomain::Finance)?;
-    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, &ScopeRequest {
-        branch_id: Some(branch_id.to_string()),
-        ..Default::default()
-    }).await?;
-    scope.require_branch(branch_id)?;
+    if !can_simulate(role) {
+        return Err(AppError::forbidden(
+            "what-if simulation is not available for your role",
+        ));
+    }
     match scenario {
         WhatIf::ServiceDiscount {
             service_id,
@@ -285,8 +281,14 @@ pub async fn simulate_authorized(
             discount_percent,
             expected_uptake_percent,
         } => {
-            client_retention_offer(db, tenant_id, branch_id, discount_percent, expected_uptake_percent)
-                .await
+            client_retention_offer(
+                db,
+                tenant_id,
+                branch_id,
+                discount_percent,
+                expected_uptake_percent,
+            )
+            .await
         }
         WhatIf::BranchImprovementPlan {
             target_gap_closed_percent,
@@ -337,8 +339,7 @@ async fn service_price_change(
     // A one percent price rise loses roughly half a percent of volume. A crude
     // rule, stated as an assumption so nobody mistakes it for measurement.
     let volume_change_percent = -(change_percent / 2);
-    let projected_bookings =
-        (row.current_bookings * (100 + volume_change_percent) / 100).max(0);
+    let projected_bookings = (row.current_bookings * (100 + volume_change_percent) / 100).max(0);
     let unit_price = row.current_revenue_paise / row.current_bookings.max(1);
     let projected_unit_price = unit_price * (100 + change_percent) / 100;
     let projected_revenue = projected_bookings * projected_unit_price;
@@ -575,10 +576,7 @@ async fn inventory_reorder_quantity(
     )
     .await
     .map_err(|_| AppError::internal("failed to load inventory baseline"))?;
-    let Some(row) = rows
-        .iter()
-        .find(|row| row.item_id == inventory_item_id)
-    else {
+    let Some(row) = rows.iter().find(|row| row.item_id == inventory_item_id) else {
         return Ok(WhatIfResult::unavailable(
             "inventory_reorder_quantity",
             "that product has no recorded movement in the baseline window",
@@ -906,27 +904,11 @@ async fn branch_improvement_plan(
     Ok(result)
 }
 
-#[cfg(test)]
 fn can_simulate(role: &str) -> bool {
     matches!(
         role.to_ascii_lowercase().as_str(),
         "owner" | "admin" | "manager" | "accountant" | "analyst"
     )
-}
-
-#[cfg(test)]
-async fn simulate(
-    db: &PgPool,
-    tenant_id: &str,
-    branch_id: &str,
-    role: &str,
-    scenario: WhatIf,
-) -> Result<WhatIfResult, AppError> {
-    let permissions = if can_simulate(role) { &["finance.read"][..] } else { &[][..] };
-    let mut claims = crate::services::ai_tool_dispatcher::tests_support::claims(role, permissions, &[]);
-    claims.tenant_id = tenant_id.to_string();
-    claims.branch_id = Some(branch_id.to_string());
-    simulate_authorized(db, tenant_id, branch_id, &claims, scenario).await
 }
 
 /// "What would a discount do to profit?"
@@ -958,7 +940,9 @@ async fn service_discount(
     let selected: Vec<_> = if service_id.is_empty() {
         rows.iter().collect()
     } else {
-        rows.iter().filter(|row| row.service_id == service_id).collect()
+        rows.iter()
+            .filter(|row| row.service_id == service_id)
+            .collect()
     };
     if selected.is_empty() {
         return Ok(WhatIfResult::unavailable(
@@ -1013,8 +997,9 @@ async fn service_discount(
         warnings.push("This discount removes more than half of the current profit.".into());
     }
     if rules.is_empty() {
-        warnings
-            .push("No profit governance rule is configured, so no policy limit was applied.".into());
+        warnings.push(
+            "No profit governance rule is configured, so no policy limit was applied.".into(),
+        );
     }
 
     let mut result = WhatIfResult::new(
@@ -1026,7 +1011,10 @@ async fn service_discount(
         ),
     );
     result.facts = vec![
-        format!("Recorded revenue {} over the last 30 days.", rupees(revenue)),
+        format!(
+            "Recorded revenue {} over the last 30 days.",
+            rupees(revenue)
+        ),
         format!("Recorded product cost {}.", rupees(product_cost)),
         format!("Recorded profit {}.", rupees(baseline_profit)),
         format!("{bookings} bookings in the window."),
@@ -1056,7 +1044,11 @@ async fn service_discount(
     };
     result.warnings = warnings;
     result.governance_decision = outcome.decision.into();
-    result.governance_reasons = outcome.reasons.iter().map(|value| (*value).to_string()).collect();
+    result.governance_reasons = outcome
+        .reasons
+        .iter()
+        .map(|value| (*value).to_string())
+        .collect();
     result.confidence = if bookings >= 20 { "medium" } else { "low" }.into();
     result.data_sufficient = bookings > 0;
     result.assumptions.push(
@@ -1083,9 +1075,15 @@ async fn add_slots(
         return Err(AppError::validation("addedSlots must be between 1 and 50"));
     }
     let slot_minutes = if slot_minutes > 0 { slot_minutes } else { 60 };
-    let rows = copilot_repository::weekday_demand(db, tenant_id, &copilot_repository::one_branch(branch_id),  BASELINE_DAYS, "")
-        .await
-        .map_err(|_| AppError::internal("failed to load demand baseline"))?;
+    let rows = copilot_repository::weekday_demand(
+        db,
+        tenant_id,
+        &copilot_repository::one_branch(branch_id),
+        BASELINE_DAYS,
+        "",
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load demand baseline"))?;
 
     let selected: Vec<_> = if weekday == 0 {
         rows.iter().collect()
@@ -1179,8 +1177,8 @@ async fn membership_price(
     // intent by roughly 5%. It is a stated assumption, not a fitted model, and
     // the answer says so rather than implying precision it does not have.
     let sensitivity = change_percent.saturating_mul(5) / 10;
-    let expected_renewals = ((due - already_failing).saturating_mul(100 - sensitivity) / 100)
-        .clamp(0, due);
+    let expected_renewals =
+        ((due - already_failing).saturating_mul(100 - sensitivity) / 100).clamp(0, due);
     let (lower, upper) = spread(expected_renewals);
 
     let mut result = WhatIfResult::new(
@@ -1215,9 +1213,9 @@ async fn membership_price(
     // Never better than low: the elasticity is assumed rather than measured.
     result.confidence = "low".into();
     result.data_sufficient = true;
-    result
-        .assumptions
-        .push("Renewal rate moves against price at an assumed elasticity, not a measured one.".into());
+    result.assumptions.push(
+        "Renewal rate moves against price at an assumed elasticity, not a measured one.".into(),
+    );
     result
         .assumptions
         .push("Member benefits and usage stay as they are today.".into());
@@ -1308,7 +1306,10 @@ mod phase4_what_if_tests {
             let result = simulate(&db, &tenant, branch, "owner", scenario)
                 .await
                 .expect("a simulation answers even on an empty branch");
-            assert!(result.read_only, "every result must declare itself read-only");
+            assert!(
+                result.read_only,
+                "every result must declare itself read-only"
+            );
         }
         let after = counted(db.clone(), tenant.clone()).await;
         assert_eq!(
@@ -1551,13 +1552,12 @@ mod simulation_contract_tests {
             "ai_action_drafts",
             "ai_prediction_runs",
         ] {
-            let count: i64 = sqlx::query_scalar(&format!(
-                "SELECT COUNT(*) FROM {table} WHERE tenant_id=$1"
-            ))
-            .bind(tenant_id)
-            .fetch_one(db)
-            .await
-            .unwrap_or(0);
+            let count: i64 =
+                sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE tenant_id=$1"))
+                    .bind(tenant_id)
+                    .fetch_one(db)
+                    .await
+                    .unwrap_or(0);
             counts.push((table.to_string(), count));
         }
         counts

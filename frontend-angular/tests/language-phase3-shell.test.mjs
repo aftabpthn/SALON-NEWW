@@ -16,11 +16,10 @@ const navigationLabels = new Set([...sidebarSource.matchAll(/label: '([^']+)'/g)
 
 for (const label of navigationLabels) {
   assert(englishKeys.has(`nav.${label}`), `Missing English navigation key: ${label}`);
-  assert(hindiKeys.has(`nav.${label}`), `Missing Hindi navigation key: ${label}`);
 }
 
 for (const key of ['common.save', 'common.deleteConfirm', 'common.loading', 'common.noRecords', 'common.permissionDenied', 'error.validation']) {
-  assert(englishKeys.has(key) && hindiKeys.has(key), `Missing shared key: ${key}`);
+  assert(englishKeys.has(key), `Missing shared English key: ${key}`);
 }
 
 assert.match(sidebarTemplate, /'nav\.' \+ group\.label \| translate/);

@@ -5,6 +5,60 @@ use sqlx::{FromRow, PgPool};
 
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct StaffRuleDocumentRecord {
+    pub id: String,
+    pub document_key: String,
+    pub document_type: String,
+    pub category: String,
+    pub title: String,
+    pub content: String,
+    pub document_version: i32,
+    pub status: String,
+    pub effective_date: NaiveDate,
+    pub expires_on: Option<NaiveDate>,
+    pub mandatory_acknowledgement: bool,
+    pub training_attachment_url: String,
+    pub quiz_json: Value,
+    pub quiz_pass_score: i32,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleStatusRecord {
+    pub id: String,
+    pub document_id: String,
+    pub staff_id: String,
+    pub first_read_at: Option<DateTime<Utc>>,
+    pub last_read_at: Option<DateTime<Utc>>,
+    pub acknowledged_at: Option<DateTime<Utc>>,
+    pub quiz_score: Option<i32>,
+    pub quiz_passed: Option<bool>,
+    pub version: i32,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffRuleViolationRecord {
+    pub id: String,
+    pub document_id: String,
+    pub staff_id: String,
+    pub details: String,
+    pub occurred_at: DateTime<Utc>,
+    pub status: String,
+    pub recorded_by: String,
+    pub resolved_by: Option<String>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub resolution_note: String,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ApprovalPolicyRecord {
     pub id: String,
     pub policy_key: String,
@@ -224,6 +278,47 @@ pub struct ManpowerSourceRecord {
     pub attendance_staff_days: i64,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct ManpowerPlanningRecord {
+    pub slot_date: NaiveDate,
+    pub hour_start: NaiveTime,
+    pub department: String,
+    pub appointment_count: i64,
+    pub demand_minutes: i64,
+    pub scheduled_staff_count: i64,
+    pub leave_staff_count: i64,
+    pub resource_count: i64,
+    pub qualified_staff_count: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct EquipmentDepartmentRecord {
+    pub department: String,
+    pub appointment_count: i64,
+    pub unassigned_appointments: i64,
+    pub booked_minutes: i64,
+    pub average_value_paise: i64,
+    pub peak_hourly_demand: i64,
+    pub demand_slots: i64,
+    pub active_resources: i64,
+    pub inactive_resources: i64,
+    pub resource_kinds: Vec<String>,
+    pub constraint_resource_kinds: Vec<String>,
+    pub equipment_lost_bookings: i64,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct EquipmentResourceRecord {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub department: String,
+    pub active: bool,
+    pub appointment_count: i64,
+    pub booked_minutes: i64,
+    pub demand_slots: i64,
+}
+
 #[derive(Debug, Clone, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ManpowerForecastRecord {
@@ -305,6 +400,7 @@ pub struct StaffSalesSummaryRecord {
     pub staff_id: String,
     pub staff_name: String,
     pub invoice_count: i64,
+    pub product_invoice_count: i64,
     pub client_count: i64,
     pub line_count: i64,
     pub service_revenue_paise: i64,
@@ -461,6 +557,7 @@ pub struct CoachingGoalRecord {
     pub metric_unit: String,
     pub target_value: i64,
     pub current_value: Option<i64>,
+    pub projected_impact_paise: Option<i64>,
     pub due_date: NaiveDate,
     pub status: String,
     pub created_by: String,
@@ -720,7 +817,7 @@ pub async fn self_dashboard(
       (SELECT to_jsonb(sc)-'tenant_id'-'branch_id'-'staff_id' FROM staff_schedules sc WHERE sc.tenant_id=s.tenant_id AND sc.branch_id=s.branch_id AND sc.staff_id=s.id AND sc.schedule_date=$4) schedule,
       (SELECT to_jsonb(a)-'tenant_id'-'branch_id'-'staff_id' FROM staff_attendance_records a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.staff_id=s.id AND a.business_date=$4) attendance,
       COALESCE((SELECT jsonb_agg(to_jsonb(t)-'tenant_id'-'branch_id' ORDER BY t.due_at NULLS LAST,t.updated_at DESC,t.created_at DESC) FROM staff_tasks t WHERE t.tenant_id=s.tenant_id AND t.branch_id=s.branch_id AND t.staff_id=s.id AND (t.status IN ('open','in_progress','blocked') OR (t.status='completed' AND COALESCE(t.completed_at,t.updated_at,t.created_at)::DATE=$4))),'[]'::jsonb) tasks,
-      COALESCE((SELECT jsonb_agg(to_jsonb(ap)-'tenant_id'-'branch_id') FROM appointments ap WHERE ap.tenant_id=s.tenant_id AND ap.branch_id=s.branch_id AND ap.staff_id=s.id AND ap.start_at::DATE=$4),'[]'::jsonb) appointments,
+      COALESCE((SELECT jsonb_agg(to_jsonb(ap)-'tenant_id'-'branch_id') FROM appointments ap WHERE ap.tenant_id=s.tenant_id AND ap.branch_id=s.branch_id AND ap.staff_id=s.id AND (ap.start_at AT TIME ZONE 'Asia/Kolkata')::DATE=$4),'[]'::jsonb) appointments,
       COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'id',sale.id,'totalPaise',COALESCE(attribution.base_paise,sale.total_paise),
         'commissionPaise',COALESCE(attribution.commission_paise,0),
@@ -734,7 +831,7 @@ pub async fn self_dashboard(
           GROUP BY sale_id
         ) attribution ON attribution.sale_id=sale.id
         WHERE sale.tenant_id=s.tenant_id AND sale.branch_id=s.branch_id
-          AND COALESCE(sale.business_date,sale.created_at::DATE)=$4
+          AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE)=$4
           AND LOWER(sale.status) NOT IN ('draft','cancelled','canceled','voided')
           AND (sale.staff_id=s.id OR attribution.sale_id IS NOT NULL)
       ),'[]'::jsonb) sales,
@@ -1142,6 +1239,171 @@ pub async fn manpower_source(
     .bind(tenant).bind(branch).bind(history_from).bind(history_to).bind(future_from).bind(future_to).fetch_one(db).await
 }
 
+pub async fn manpower_planning_rows(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<ManpowerPlanningRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"WITH slots AS (
+          SELECT value::DATE slot_date,value::TIME hour_start,value slot_start,value+INTERVAL '1 hour' slot_end
+          FROM GENERATE_SERIES($3::DATE::TIMESTAMP,($4::DATE+1)::TIMESTAMP-INTERVAL '1 hour',INTERVAL '1 hour') value
+        ), staff_departments AS (
+          SELECT staff.id,COALESCE(NULLIF(TRIM(profile.department),''),(
+            SELECT MIN(TRIM(service.category)) FROM services service
+            WHERE service.tenant_id=$1 AND service.branch_id=$2 AND service.active=TRUE AND TRIM(service.category)<>''
+              AND (EXISTS(SELECT 1 FROM staff_service_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.service_id=service.id)
+                OR EXISTS(SELECT 1 FROM staff_catalog_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.item_type='service' AND assignment.item_id=service.id))
+          ),'Unassigned') department
+          FROM staff LEFT JOIN staff_profiles profile ON profile.tenant_id=staff.tenant_id AND profile.branch_id=staff.branch_id AND profile.staff_id=staff.id
+          WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+        ), appointment_demand AS (
+          SELECT slot.slot_date,slot.hour_start,COALESCE(NULLIF(TRIM(service.category),''),'Unassigned') department,
+            COUNT(DISTINCT appointment.id)::BIGINT appointment_count,
+            COALESCE(SUM(GREATEST(0,EXTRACT(EPOCH FROM (LEAST(appointment.end_at AT TIME ZONE 'Asia/Kolkata',slot.slot_end)-GREATEST(appointment.start_at AT TIME ZONE 'Asia/Kolkata',slot.slot_start)))/60)),0)::BIGINT demand_minutes
+          FROM slots slot JOIN appointments appointment
+            ON appointment.tenant_id=$1 AND appointment.branch_id=$2
+            AND LOWER(appointment.status) NOT IN ('cancelled','canceled','void','no_show')
+            AND appointment.start_at AT TIME ZONE 'Asia/Kolkata'<slot.slot_end
+            AND appointment.end_at AT TIME ZONE 'Asia/Kolkata'>slot.slot_start
+          LEFT JOIN LATERAL (
+            SELECT candidate.category FROM JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB) WITH ORDINALITY item(id,position)
+            JOIN services candidate ON candidate.tenant_id=$1 AND candidate.branch_id=$2 AND candidate.id=item.id
+            ORDER BY item.position LIMIT 1
+          ) service ON TRUE
+          GROUP BY slot.slot_date,slot.hour_start,COALESCE(NULLIF(TRIM(service.category),''),'Unassigned')
+        ), schedule_capacity AS (
+          SELECT slot.slot_date,slot.hour_start,department.department,
+            COUNT(DISTINCT department.id) FILTER (WHERE NOT EXISTS(SELECT 1 FROM staff_leave_requests leave_request WHERE leave_request.tenant_id=$1 AND leave_request.branch_id=$2 AND leave_request.staff_id=department.id AND leave_request.status='approved' AND slot.slot_date BETWEEN leave_request.start_date AND leave_request.end_date))::BIGINT scheduled_staff_count,
+            COUNT(DISTINCT department.id) FILTER (WHERE EXISTS(SELECT 1 FROM staff_leave_requests leave_request WHERE leave_request.tenant_id=$1 AND leave_request.branch_id=$2 AND leave_request.staff_id=department.id AND leave_request.status='approved' AND slot.slot_date BETWEEN leave_request.start_date AND leave_request.end_date))::BIGINT leave_staff_count
+          FROM slots slot JOIN staff_schedules schedule
+            ON schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.schedule_date=slot.slot_date AND schedule.status='working'
+            AND (((schedule.schedule_date+schedule.shift1_start)<slot.slot_end AND (schedule.schedule_date+schedule.shift1_end)>slot.slot_start)
+              OR ((schedule.schedule_date+schedule.shift2_start)<slot.slot_end AND (schedule.schedule_date+schedule.shift2_end)>slot.slot_start))
+          JOIN staff_departments department ON department.id=schedule.staff_id
+          GROUP BY slot.slot_date,slot.hour_start,department.department
+        ), resource_capacity AS (
+          SELECT COALESCE(NULLIF(TRIM(department),''),'Unassigned') department,COUNT(*)::BIGINT resource_count
+          FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE GROUP BY 1
+        ), qualified_capacity AS (
+          SELECT department,COUNT(*)::BIGINT qualified_staff_count FROM staff_departments GROUP BY department
+        ), keys AS (
+          SELECT slot_date,hour_start,department FROM appointment_demand
+          UNION SELECT slot_date,hour_start,department FROM schedule_capacity
+        )
+        SELECT keys.slot_date,keys.hour_start,keys.department,
+          COALESCE(demand.appointment_count,0)::BIGINT appointment_count,COALESCE(demand.demand_minutes,0)::BIGINT demand_minutes,
+          COALESCE(schedule.scheduled_staff_count,0)::BIGINT scheduled_staff_count,COALESCE(schedule.leave_staff_count,0)::BIGINT leave_staff_count,
+          COALESCE(resource.resource_count,0)::BIGINT resource_count,COALESCE(qualified.qualified_staff_count,0)::BIGINT qualified_staff_count
+        FROM keys
+        LEFT JOIN appointment_demand demand USING(slot_date,hour_start,department)
+        LEFT JOIN schedule_capacity schedule USING(slot_date,hour_start,department)
+        LEFT JOIN resource_capacity resource USING(department)
+        LEFT JOIN qualified_capacity qualified USING(department)
+        ORDER BY keys.slot_date,keys.hour_start,keys.department"#,
+    )
+    .bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db).await
+}
+
+pub async fn equipment_department_rows(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    staff_id: &str,
+) -> Result<Vec<EquipmentDepartmentRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"WITH scoped_appointments AS (
+          SELECT appointment.id,appointment.chair_room_id,appointment.start_at,appointment.end_at,
+            COALESCE(NULLIF(TRIM(service.category),''),'Unassigned') department,
+            COALESCE((SELECT SUM(candidate.price_paise) FROM services candidate WHERE candidate.tenant_id=$1 AND candidate.branch_id=$2
+              AND candidate.id IN (SELECT JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB))),0)::BIGINT appointment_value_paise
+          FROM appointments appointment
+          LEFT JOIN LATERAL (
+            SELECT candidate.category FROM JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB) WITH ORDINALITY item(id,position)
+            JOIN services candidate ON candidate.tenant_id=$1 AND candidate.branch_id=$2 AND candidate.id=item.id
+            ORDER BY item.position LIMIT 1
+          ) service ON TRUE
+          WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2
+            AND ($5='' OR COALESCE(NULLIF(TRIM(service.category),''),'Unassigned')=COALESCE(NULLIF((SELECT TRIM(profile.department) FROM staff_profiles profile WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.staff_id=$5),''),'Unassigned'))
+            AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+            AND LOWER(appointment.status) NOT IN ('cancelled','canceled','void','voided','no_show','no-show')
+        ), demand AS (
+          SELECT department,COUNT(*)::BIGINT appointment_count,
+            COUNT(*) FILTER(WHERE chair_room_id IS NULL)::BIGINT unassigned_appointments,
+            COALESCE(SUM(GREATEST(0,EXTRACT(EPOCH FROM(end_at-start_at))/60)),0)::BIGINT booked_minutes,
+            COALESCE(AVG(appointment_value_paise),0)::BIGINT average_value_paise
+          FROM scoped_appointments GROUP BY department
+        ), hourly AS (
+          SELECT department,(start_at AT TIME ZONE 'Asia/Kolkata')::DATE business_date,
+            DATE_TRUNC('hour',start_at AT TIME ZONE 'Asia/Kolkata') hour_start,COUNT(*)::BIGINT appointments
+          FROM scoped_appointments GROUP BY department,business_date,hour_start
+        ), peaks AS (
+          SELECT department,MAX(appointments)::BIGINT peak_hourly_demand,COUNT(*)::BIGINT demand_slots FROM hourly GROUP BY department
+        ), resources AS (
+          SELECT COALESCE(NULLIF(TRIM(department),''),'Unassigned') department,
+            COUNT(*) FILTER(WHERE active)::BIGINT active_resources,COUNT(*) FILTER(WHERE NOT active)::BIGINT inactive_resources,
+            COALESCE(ARRAY_AGG(DISTINCT kind) FILTER(WHERE TRIM(kind)<>''),'{}'::TEXT[]) resource_kinds
+          FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 GROUP BY 1
+        ), losses AS (
+          SELECT COALESCE(NULLIF(TRIM(service.category),''),'Unassigned') department,
+            COUNT(DISTINCT waitlist.id)::BIGINT equipment_lost_bookings,
+            COALESCE(ARRAY_AGG(DISTINCT waitlist.constraint_resource_kind) FILTER(WHERE TRIM(waitlist.constraint_resource_kind)<>''),'{}'::TEXT[]) constraint_resource_kinds
+          FROM appointment_waitlist waitlist
+          LEFT JOIN LATERAL (
+            SELECT candidate.category FROM JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(waitlist.service_ids_json,''),'[]')::JSONB) WITH ORDINALITY item(id,position)
+            JOIN services candidate ON candidate.tenant_id=$1 AND candidate.branch_id=$2 AND candidate.id=item.id
+            ORDER BY item.position LIMIT 1
+          ) service ON TRUE
+          WHERE waitlist.tenant_id=$1 AND waitlist.branch_id=$2 AND waitlist.status IN ('expired','declined')
+            AND (waitlist.preferred_slot_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+            AND waitlist.constraint_type IN ('resource_unavailable','capacity_full','equipment_maintenance')
+          GROUP BY 1
+        ), keys AS (
+          SELECT department FROM demand UNION SELECT department FROM resources UNION SELECT department FROM losses
+        )
+        SELECT keys.department,COALESCE(demand.appointment_count,0)::BIGINT appointment_count,
+          COALESCE(demand.unassigned_appointments,0)::BIGINT unassigned_appointments,
+          COALESCE(demand.booked_minutes,0)::BIGINT booked_minutes,COALESCE(demand.average_value_paise,0)::BIGINT average_value_paise,
+          COALESCE(peaks.peak_hourly_demand,0)::BIGINT peak_hourly_demand,COALESCE(peaks.demand_slots,0)::BIGINT demand_slots,
+          COALESCE(resources.active_resources,0)::BIGINT active_resources,COALESCE(resources.inactive_resources,0)::BIGINT inactive_resources,
+          COALESCE(resources.resource_kinds,'{}'::TEXT[]) resource_kinds,
+          COALESCE(losses.constraint_resource_kinds,'{}'::TEXT[]) constraint_resource_kinds,
+          COALESCE(losses.equipment_lost_bookings,0)::BIGINT equipment_lost_bookings
+        FROM keys LEFT JOIN demand USING(department) LEFT JOIN peaks USING(department) LEFT JOIN resources USING(department) LEFT JOIN losses USING(department)
+        WHERE $5='' OR keys.department=COALESCE(NULLIF((SELECT TRIM(profile.department) FROM staff_profiles profile WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.staff_id=$5),''),'Unassigned')
+        ORDER BY keys.department"#,
+    )
+    .bind(tenant).bind(branch).bind(from).bind(to).bind(staff_id).fetch_all(db).await
+}
+
+pub async fn equipment_resource_rows(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    staff_id: &str,
+) -> Result<Vec<EquipmentResourceRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT resource.id,resource.name,resource.kind,COALESCE(NULLIF(TRIM(resource.department),''),'Unassigned') department,resource.active,
+          COUNT(appointment.id)::BIGINT appointment_count,
+          COALESCE(SUM(GREATEST(0,EXTRACT(EPOCH FROM(appointment.end_at-appointment.start_at))/60)),0)::BIGINT booked_minutes,
+          COUNT(DISTINCT DATE_TRUNC('hour',appointment.start_at AT TIME ZONE 'Asia/Kolkata'))::BIGINT demand_slots
+        FROM appointment_resources resource LEFT JOIN appointments appointment
+          ON appointment.tenant_id=resource.tenant_id AND appointment.branch_id=resource.branch_id AND appointment.chair_room_id=resource.id
+          AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4
+          AND LOWER(appointment.status) NOT IN ('cancelled','canceled','void','voided','no_show','no-show')
+        WHERE resource.tenant_id=$1 AND resource.branch_id=$2
+          AND ($5='' OR COALESCE(NULLIF(TRIM(resource.department),''),'Unassigned')=COALESCE(NULLIF((SELECT TRIM(profile.department) FROM staff_profiles profile WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.staff_id=$5),''),'Unassigned'))
+        GROUP BY resource.id,resource.name,resource.kind,resource.department,resource.active ORDER BY resource.department,resource.name"#,
+    )
+    .bind(tenant).bind(branch).bind(from).bind(to).bind(staff_id).fetch_all(db).await
+}
+
 pub async fn create_manpower_forecast(
     db: &PgPool,
     tenant: &str,
@@ -1292,7 +1554,9 @@ pub async fn staff_sales_summary(
         )
         SELECT v.attributed_staff_id staff_id,
                COALESCE(NULLIF(s.appointment_display_name,''),NULLIF(TRIM(CONCAT_WS(' ',s.first_name,s.last_name)),''),v.attributed_staff_id) staff_name,
-               COUNT(DISTINCT v.sale_id)::BIGINT invoice_count,COUNT(DISTINCT v.client_id)::BIGINT client_count,
+               COUNT(DISTINCT v.sale_id)::BIGINT invoice_count,
+               COUNT(DISTINCT v.sale_id) FILTER(WHERE v.line_type='product')::BIGINT product_invoice_count,
+               COUNT(DISTINCT v.client_id)::BIGINT client_count,
                COUNT(*)::BIGINT line_count,
                COALESCE(SUM(v.revenue_paise) FILTER(WHERE v.line_type='service'),0)::BIGINT service_revenue_paise,
                COALESCE(SUM(v.revenue_paise) FILTER(WHERE v.line_type='product'),0)::BIGINT product_revenue_paise,
@@ -1676,7 +1940,7 @@ pub async fn list_coaching_goals(
     sqlx::query_as(
         r#"SELECT g.id,g.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name)),g.staff_id) staff_name,
-          g.goal_type,g.metric_unit,g.target_value,g.current_value,g.due_date,g.status,g.created_by,
+          g.goal_type,g.metric_unit,g.target_value,g.current_value,g.projected_impact_paise,g.due_date,g.status,g.created_by,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('id',t.id,'title',t.title,'status',t.status,'priority',t.priority,'dueAt',t.due_at,'completedAt',t.completed_at,'version',t.version) ORDER BY t.created_at)
             FROM staff_tasks t WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.coaching_goal_id=g.id),'[]'::JSONB) actions,
           g.version,g.created_at,g.updated_at
@@ -1697,14 +1961,15 @@ pub async fn create_coaching_goal(
     metric_unit: &str,
     target_value: i64,
     current_value: Option<i64>,
+    projected_impact_paise: Option<i64>,
     due_date: NaiveDate,
     action_title: &str,
     action_description: &str,
     priority: &str,
 ) -> Result<Option<CoachingGoalRecord>, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let goal_id: Option<String> = sqlx::query_scalar("INSERT INTO staff_coaching_goals(tenant_id,branch_id,staff_id,goal_type,metric_unit,target_value,current_value,due_date,created_by) SELECT $1,$2,s.id,$4,$5,$6,$7,$8,$9 FROM staff s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE RETURNING id")
-        .bind(tenant).bind(branch).bind(staff_id).bind(goal_type).bind(metric_unit).bind(target_value).bind(current_value).bind(due_date).bind(actor).fetch_optional(&mut *tx).await?;
+    let goal_id: Option<String> = sqlx::query_scalar("INSERT INTO staff_coaching_goals(tenant_id,branch_id,staff_id,goal_type,metric_unit,target_value,current_value,projected_impact_paise,due_date,created_by) SELECT $1,$2,s.id,$4,$5,$6,$7,$8,$9,$10 FROM staff s WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE RETURNING id")
+        .bind(tenant).bind(branch).bind(staff_id).bind(goal_type).bind(metric_unit).bind(target_value).bind(current_value).bind(projected_impact_paise).bind(due_date).bind(actor).fetch_optional(&mut *tx).await?;
     let Some(goal_id) = goal_id else {
         tx.rollback().await?;
         return Ok(None);
@@ -1725,7 +1990,7 @@ async fn coaching_goal_in(
     sqlx::query_as(
         r#"SELECT g.id,g.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name)),g.staff_id) staff_name,
-          g.goal_type,g.metric_unit,g.target_value,g.current_value,g.due_date,g.status,g.created_by,
+          g.goal_type,g.metric_unit,g.target_value,g.current_value,g.projected_impact_paise,g.due_date,g.status,g.created_by,
           COALESCE((SELECT jsonb_agg(jsonb_build_object('id',t.id,'title',t.title,'status',t.status,'priority',t.priority,'dueAt',t.due_at,'completedAt',t.completed_at,'version',t.version) ORDER BY t.created_at)
             FROM staff_tasks t WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.coaching_goal_id=g.id),'[]'::JSONB) actions,
           g.version,g.created_at,g.updated_at
@@ -1762,26 +2027,316 @@ pub async fn management_recommendations(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Value, sqlx::Error> {
-    let (products, brands, resources, unassigned) = tokio::try_join!(
+    let (products, brands, demand) = tokio::try_join!(
         sqlx::query_as::<_, (String, String, String, i32, i32)>(
             "SELECT id,name,brand,stock_quantity,reorder_point FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND stock_quantity<=reorder_point ORDER BY (reorder_point-stock_quantity) DESC,name LIMIT 8",
         ).bind(tenant).bind(branch).fetch_all(db),
         sqlx::query_as::<_, (String, i64, i64, i64)>(
             "SELECT item.brand,SUM(line.quantity)::BIGINT,SUM(line.line_total_paise)::BIGINT,COUNT(DISTINCT item.id)::BIGINT FROM inventory_items item JOIN pos_sale_lines line ON line.tenant_id=item.tenant_id AND line.branch_id=item.branch_id AND line.item_id=item.id AND line.line_type='product' JOIN pos_sales sale ON sale.tenant_id=line.tenant_id AND sale.branch_id=line.branch_id AND sale.id=line.sale_id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.brand<>'' AND sale.business_date BETWEEN $3 AND $4 AND sale.status NOT IN ('draft','open','voided','cancelled','refunded') GROUP BY item.brand ORDER BY SUM(line.line_total_paise) DESC LIMIT 5",
         ).bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db),
-        sqlx::query_as::<_, (String, String, i64, i64)>(
-            "SELECT resource.name,resource.kind,COUNT(appointment.id)::BIGINT,COALESCE(SUM(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))/60),0)::BIGINT FROM appointment_resources resource LEFT JOIN appointments appointment ON appointment.tenant_id=resource.tenant_id AND appointment.branch_id=resource.branch_id AND appointment.chair_room_id=resource.id AND appointment.start_at >= $3::DATE AND appointment.start_at < ($4::DATE + 1) AND appointment.status NOT IN ('cancelled','canceled','void','voided','no_show','no-show') WHERE resource.tenant_id=$1 AND resource.branch_id=$2 AND resource.active=TRUE GROUP BY resource.id,resource.name,resource.kind HAVING COUNT(appointment.id)>0 ORDER BY COUNT(appointment.id) DESC LIMIT 5",
+        sqlx::query_as::<_, (String, String, String, String, String, i64, i32)>(
+            "SELECT item.id,item.name,item.brand,service.id,service.name,COUNT(DISTINCT appointment.id)::BIGINT,item.stock_quantity FROM appointments appointment JOIN LATERAL JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB) selected(service_id) ON TRUE JOIN services service ON service.tenant_id=appointment.tenant_id AND service.branch_id=appointment.branch_id AND service.id=selected.service_id JOIN LATERAL JSONB_ARRAY_ELEMENTS(COALESCE(service.product_consumption_json,'[]'::JSONB)) recipe(line) ON TRUE JOIN inventory_items item ON item.tenant_id=service.tenant_id AND item.branch_id=service.branch_id AND item.id=COALESCE(recipe.line->>'productId',recipe.line->>'itemId',recipe.line->>'inventoryItemId') WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND (appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE BETWEEN $3 AND $4 AND LOWER(appointment.status) NOT IN ('cancelled','canceled','void','voided','no_show','no-show') AND item.active=TRUE GROUP BY item.id,item.name,item.brand,service.id,service.name,item.stock_quantity ORDER BY COUNT(DISTINCT appointment.id) DESC,item.name LIMIT 8",
         ).bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db),
-        sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*)::BIGINT FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND chair_room_id IS NULL AND start_at >= $3::DATE AND start_at < ($4::DATE + 1) AND status NOT IN ('cancelled','canceled','void','voided','no_show','no-show')",
-        ).bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db),
     )?;
     let mut rows = Vec::new();
-    rows.extend(products.into_iter().map(|(id, name, brand, stock, reorder)| json!({"type":"product","title":format!("Reorder {name}"),"reason":if stock == 0 { "Out of stock" } else { "Stock reached reorder point" },"priority":if stock == 0 { "critical" } else { "high" },"evidence":{"inventoryItemId":id,"brand":brand,"stock":stock,"reorderPoint":reorder},"route":"/inventory"})));
+    rows.extend(products.into_iter().map(|(id, name, brand, stock, reorder)| json!({"type":"product","title":format!("Reorder {name}"),"reason":if stock == 0 { "Out of stock" } else { "Stock reached reorder point" },"priority":if stock == 0 { "critical" } else { "high" },"evidence":{"inventoryItemId":id,"brand":brand,"stock":stock,"reorderPoint":reorder},"route":"/inventory/reorder"})));
     rows.extend(brands.into_iter().map(|(brand, quantity, revenue, products)| json!({"type":"brand","title":format!("Prioritize {brand}"),"reason":"Highest product demand in the selected period","priority":"medium","evidence":{"quantitySold":quantity,"revenuePaise":revenue,"products":products},"route":"/inventory"})));
-    if unassigned > 0 {
-        rows.push(json!({"type":"equipment","title":"Assign chairs or rooms","reason":"Appointments are not linked to a resource","priority":"high","evidence":{"unassignedAppointments":unassigned},"route":"/appointments"}));
-    }
-    rows.extend(resources.into_iter().map(|(name, kind, appointments, minutes)| json!({"type":"equipment","title":format!("Review {name} capacity"),"reason":"Most-used active resource in the selected period","priority":"medium","evidence":{"kind":kind,"appointments":appointments,"bookedMinutes":minutes},"route":"/appointments"})));
+    rows.extend(demand.into_iter().map(|(id, name, brand, service_id, service, appointments, stock)| json!({"type":"service_product","title":format!("Plan {name} for {service}"),"reason":"Configured recipe product for selected-period service demand","priority":"medium","evidence":{"inventoryItemId":id,"brand":brand,"serviceId":service_id,"appointments":appointments,"stock":stock},"route":"/inventory/backbar"})));
     Ok(Value::Array(rows))
+}
+
+pub async fn create_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    document_key: &str,
+    document_type: &str,
+    category: &str,
+    title: &str,
+    content: &str,
+    effective_date: NaiveDate,
+    expires_on: Option<NaiveDate>,
+    mandatory_acknowledgement: bool,
+    training_attachment_url: &str,
+    quiz_json: &Value,
+    quiz_pass_score: i32,
+) -> Result<StaffRuleDocumentRecord, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
+        .bind(format!("{tenant}:{branch}:{document_key}"))
+        .execute(&mut *tx)
+        .await?;
+    let document_version: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(document_version),0)+1 FROM staff_rule_documents WHERE tenant_id=$1 AND branch_id=$2 AND document_key=$3",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(document_key)
+    .fetch_one(&mut *tx)
+    .await?;
+    let row = sqlx::query_as(
+        r#"INSERT INTO staff_rule_documents(
+             tenant_id,branch_id,document_key,document_type,category,title,content,document_version,
+             effective_date,expires_on,mandatory_acknowledgement,training_attachment_url,quiz_json,quiz_pass_score,created_by)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           RETURNING id,document_key,document_type,category,title,content,document_version,status,effective_date,
+             expires_on,mandatory_acknowledgement,training_attachment_url,quiz_json,quiz_pass_score,version,created_at,updated_at"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(document_key)
+    .bind(document_type)
+    .bind(category)
+    .bind(title)
+    .bind(content)
+    .bind(document_version)
+    .bind(effective_date)
+    .bind(expires_on)
+    .bind(mandatory_acknowledgement)
+    .bind(training_attachment_url)
+    .bind(quiz_json)
+    .bind(quiz_pass_score)
+    .bind(actor)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+pub async fn list_staff_rules_center(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT JSONB_BUILD_OBJECT(
+          'documents',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id',document.id,'documentKey',document.document_key,'documentType',document.document_type,
+            'category',document.category,'title',document.title,'content',document.content,
+            'documentVersion',document.document_version,'status',document.status,'effectiveDate',document.effective_date,
+            'expiresOn',document.expires_on,'mandatoryAcknowledgement',document.mandatory_acknowledgement,
+            'trainingAttachmentUrl',document.training_attachment_url,'quiz',document.quiz_json,
+            'quizPassScore',document.quiz_pass_score,'version',document.version,'createdAt',document.created_at,
+            'activeStaff',staff_count.total,'readCount',status_count.read_count,
+            'acknowledgedCount',status_count.acknowledged_count,
+            'outstandingCount',GREATEST(staff_count.total-status_count.acknowledged_count,0)
+          ) ORDER BY document.created_at DESC)
+          FROM staff_rule_documents document
+          CROSS JOIN LATERAL (SELECT COUNT(*)::INTEGER total FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE) staff_count
+          CROSS JOIN LATERAL (SELECT COUNT(*) FILTER(WHERE first_read_at IS NOT NULL)::INTEGER read_count,
+            COUNT(*) FILTER(WHERE acknowledged_at IS NOT NULL)::INTEGER acknowledged_count
+            FROM staff_rule_staff_status WHERE tenant_id=document.tenant_id AND branch_id=document.branch_id AND document_id=document.id) status_count
+          WHERE document.tenant_id=$1 AND document.branch_id=$2),'[]'::JSONB),
+          'violations',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id',violation.id,'documentId',violation.document_id,'documentTitle',document.title,
+            'staffId',violation.staff_id,'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name))),
+            'details',violation.details,'occurredAt',violation.occurred_at,'status',violation.status,
+            'resolutionNote',violation.resolution_note,'version',violation.version,'createdAt',violation.created_at
+          ) ORDER BY violation.occurred_at DESC)
+          FROM staff_rule_violations violation
+          JOIN staff_rule_documents document ON document.tenant_id=violation.tenant_id AND document.branch_id=violation.branch_id AND document.id=violation.document_id
+          JOIN staff ON staff.tenant_id=violation.tenant_id AND staff.branch_id=violation.branch_id AND staff.id=violation.staff_id
+          WHERE violation.tenant_id=$1 AND violation.branch_id=$2),'[]'::JSONB)
+        )"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn publish_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    actor: &str,
+) -> Result<Option<StaffRuleDocumentRecord>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let document_key: Option<String> = sqlx::query_scalar(
+        "SELECT document_key FROM staff_rule_documents WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='draft' FOR UPDATE",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .bind(version)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(document_key) = document_key else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    sqlx::query("UPDATE staff_rule_documents SET status='unpublished',unpublished_by=$4,unpublished_at=NOW(),version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND document_key=$3 AND status='published'")
+        .bind(tenant).bind(branch).bind(&document_key).bind(actor).execute(&mut *tx).await?;
+    let row: StaffRuleDocumentRecord = sqlx::query_as(
+        r#"UPDATE staff_rule_documents SET status='published',published_by=$5,published_at=NOW(),version=version+1,updated_at=NOW()
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='draft'
+           RETURNING id,document_key,document_type,category,title,content,document_version,status,effective_date,
+             expires_on,mandatory_acknowledgement,training_attachment_url,quiz_json,quiz_pass_score,version,created_at,updated_at"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .bind(version)
+    .bind(actor)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json)
+           SELECT $1,$2,staff.user_id,$3,'staff_rule_published',$4,$5,'staff_rule_document',$6,$7
+           FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND COALESCE(user_id,'')<>''"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(actor)
+    .bind(&row.title)
+    .bind(format!("A new {} is available to read.", row.document_type))
+    .bind(&row.id)
+    .bind(json!({"deepLink":"/staff/rules","category":row.category,"documentVersion":row.document_version}))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(Some(row))
+}
+
+pub async fn unpublish_staff_rule_document(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    actor: &str,
+) -> Result<Option<StaffRuleDocumentRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE staff_rule_documents SET status='unpublished',unpublished_by=$5,unpublished_at=NOW(),version=version+1,updated_at=NOW()
+           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='published'
+           RETURNING id,document_key,document_type,category,title,content,document_version,status,effective_date,
+             expires_on,mandatory_acknowledgement,training_attachment_url,quiz_json,quiz_pass_score,version,created_at,updated_at"#,
+    )
+    .bind(tenant).bind(branch).bind(id).bind(version).bind(actor).fetch_optional(db).await
+}
+
+pub async fn list_self_staff_rules(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+          'id',document.id,'documentKey',document.document_key,'documentType',document.document_type,
+          'category',document.category,'title',document.title,'content',document.content,
+          'documentVersion',document.document_version,'effectiveDate',document.effective_date,'expiresOn',document.expires_on,
+          'mandatoryAcknowledgement',document.mandatory_acknowledgement,'trainingAttachmentUrl',document.training_attachment_url,
+          'quiz',COALESCE((SELECT JSONB_AGG(question - 'correctIndex' ORDER BY ordinal)
+            FROM JSONB_ARRAY_ELEMENTS(document.quiz_json) WITH ORDINALITY quiz(question,ordinal)),'[]'::JSONB),
+          'quizPassScore',document.quiz_pass_score,'readAt',status.first_read_at,
+          'acknowledgedAt',status.acknowledged_at,'quizScore',status.quiz_score,'quizPassed',status.quiz_passed
+        ) ORDER BY document.category,document.title),'[]'::JSONB)
+        FROM staff_rule_documents document
+        LEFT JOIN staff_rule_staff_status status ON status.tenant_id=document.tenant_id AND status.branch_id=document.branch_id
+          AND status.document_id=document.id AND status.staff_id=$3
+        WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.status='published'
+          AND document.effective_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE
+          AND (document.expires_on IS NULL OR document.expires_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE)"#,
+    )
+    .bind(tenant).bind(branch).bind(staff_id).fetch_one(db).await
+}
+
+pub async fn staff_rule_document_for_acknowledgement(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<Option<StaffRuleDocumentRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT id,document_key,document_type,category,title,content,document_version,status,effective_date,
+          expires_on,mandatory_acknowledgement,training_attachment_url,quiz_json,quiz_pass_score,version,created_at,updated_at
+          FROM staff_rule_documents WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='published'
+            AND effective_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE
+            AND (expires_on IS NULL OR expires_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE)"#,
+    )
+    .bind(tenant).bind(branch).bind(id).fetch_optional(db).await
+}
+
+pub async fn mark_staff_rule_read(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    staff_id: &str,
+) -> Result<Option<StaffRuleStatusRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"INSERT INTO staff_rule_staff_status(tenant_id,branch_id,document_id,staff_id,first_read_at,last_read_at)
+          SELECT $1,$2,id,$4,NOW(),NOW() FROM staff_rule_documents
+          WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='published'
+            AND effective_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE
+            AND (expires_on IS NULL OR expires_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE)
+          ON CONFLICT(tenant_id,branch_id,document_id,staff_id) DO UPDATE
+            SET last_read_at=NOW(),version=staff_rule_staff_status.version+1,updated_at=NOW()
+          RETURNING id,document_id,staff_id,first_read_at,last_read_at,acknowledged_at,quiz_score,quiz_passed,version"#,
+    )
+    .bind(tenant).bind(branch).bind(document_id).bind(staff_id).fetch_optional(db).await
+}
+
+pub async fn acknowledge_staff_rule(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    staff_id: &str,
+    answers: &Value,
+    score: i32,
+    passed: bool,
+) -> Result<StaffRuleStatusRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"INSERT INTO staff_rule_staff_status(tenant_id,branch_id,document_id,staff_id,first_read_at,last_read_at,acknowledged_at,quiz_answers_json,quiz_score,quiz_passed)
+          VALUES($1,$2,$3,$4,NOW(),NOW(),CASE WHEN $7 THEN NOW() END,$5,$6,$7)
+          ON CONFLICT(tenant_id,branch_id,document_id,staff_id) DO UPDATE SET
+            last_read_at=NOW(),acknowledged_at=CASE WHEN $7 THEN COALESCE(staff_rule_staff_status.acknowledged_at,NOW()) ELSE staff_rule_staff_status.acknowledged_at END,
+            quiz_answers_json=$5,quiz_score=$6,quiz_passed=$7,version=staff_rule_staff_status.version+1,updated_at=NOW()
+          RETURNING id,document_id,staff_id,first_read_at,last_read_at,acknowledged_at,quiz_score,quiz_passed,version"#,
+    )
+    .bind(tenant).bind(branch).bind(document_id).bind(staff_id).bind(answers).bind(score).bind(passed)
+    .fetch_one(db).await
+}
+
+pub async fn create_staff_rule_violation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    staff_id: &str,
+    details: &str,
+    occurred_at: DateTime<Utc>,
+    actor: &str,
+) -> Result<Option<StaffRuleViolationRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"INSERT INTO staff_rule_violations(tenant_id,branch_id,document_id,staff_id,details,occurred_at,recorded_by)
+          SELECT $1,$2,document.id,staff.id,$5,$6,$7 FROM staff_rule_documents document
+          JOIN staff ON staff.tenant_id=document.tenant_id AND staff.branch_id=document.branch_id AND staff.id=$4
+          WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.id=$3
+          RETURNING id,document_id,staff_id,details,occurred_at,status,recorded_by,resolved_by,resolved_at,resolution_note,version,created_at,updated_at"#,
+    )
+    .bind(tenant).bind(branch).bind(document_id).bind(staff_id).bind(details).bind(occurred_at).bind(actor)
+    .fetch_optional(db).await
+}
+
+pub async fn resolve_staff_rule_violation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    resolution_note: &str,
+    actor: &str,
+) -> Result<Option<StaffRuleViolationRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE staff_rule_violations SET status='resolved',resolved_by=$6,resolved_at=NOW(),resolution_note=$5,version=version+1,updated_at=NOW()
+          WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4 AND status='open'
+          RETURNING id,document_id,staff_id,details,occurred_at,status,recorded_by,resolved_by,resolved_at,resolution_note,version,created_at,updated_at"#,
+    )
+    .bind(tenant).bind(branch).bind(id).bind(version).bind(resolution_note).bind(actor).fetch_optional(db).await
 }

@@ -996,6 +996,95 @@ pub async fn transition_action(
     Ok(ActionTransitionOutcome::Updated(action))
 }
 
+pub async fn rollback_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_id: &str,
+    actor_user_id: &str,
+    note: &str,
+) -> Result<ActionTransitionOutcome, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let locked = sqlx::query_as::<_, (String, String, Option<String>, Option<String>)>(
+        r#"SELECT action.id, action.status, action.governance_decision_id, approval.id
+             FROM profit_action_queue action
+             LEFT JOIN profit_governance_approvals approval
+               ON approval.tenant_id=action.tenant_id
+              AND approval.branch_id=action.branch_id
+              AND approval.decision_id=action.governance_decision_id
+            WHERE action.tenant_id=$1 AND action.branch_id=$2 AND action.id=$3
+            FOR UPDATE OF action"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(action_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((id, previous_status, decision_id, approval_id)) = locked else {
+        tx.rollback().await?;
+        return Ok(ActionTransitionOutcome::NotFound);
+    };
+    if !matches!(
+        previous_status.as_str(),
+        "approved" | "completed" | "dismissed"
+    ) {
+        tx.rollback().await?;
+        return Ok(ActionTransitionOutcome::InvalidStatus);
+    }
+    sqlx::query(
+        r#"UPDATE profit_action_queue
+              SET status='pending', reviewed_by_user_id=NULL, completed_by_user_id=NULL,
+                  approved_at=NULL, completed_at=NULL, dismissed_at=NULL,
+                  realized_impact_paise=0,
+                  notes=CASE WHEN notes='' THEN $4 ELSE notes || E'\n' || $4 END,
+                  updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&id)
+    .bind(note)
+    .execute(&mut *tx)
+    .await?;
+    if let Some(approval_id) = approval_id {
+        sqlx::query(
+            "UPDATE profit_governance_approvals SET status='pending', reviewed_by_user_id=NULL, review_note='', reviewed_at=NULL WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(approval_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(decision_id) = decision_id {
+        sqlx::query(
+            "UPDATE profit_governance_decisions SET status='pending', updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(decision_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    insert_audit(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        None,
+        None,
+        "action_rolled_back",
+        actor_user_id,
+        json!({ "actionId": id, "previousStatus": previous_status, "note": note }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(ActionTransitionOutcome::Updated(
+        action_by_id(db, tenant_id, branch_id, action_id)
+            .await?
+            .expect("action exists after scoped rollback"),
+    ))
+}
+
 async fn approval_by_decision(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tenant_id: &str,

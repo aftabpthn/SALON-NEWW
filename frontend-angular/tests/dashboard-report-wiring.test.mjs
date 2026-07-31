@@ -7,7 +7,7 @@ const reports = readFileSync('../backend-rust/src/routes/reports.rs', 'utf8');
 
 test('dashboard uses report responses as its live-data signal and full daily trend', () => {
   assert.doesNotMatch(dashboard, /this\.api\.health\(\)/);
-  assert.match(dashboard, /this\.status = 'ok'/);
+  assert.match(dashboard, /this\.status = this\.sectionErrors\.size \? 'degraded' : 'ok'/);
   assert.match(dashboard, /this\.revenueForecast\?\.history/);
   assert.doesNotMatch(dashboard, /groupSalesByDate/);
 });

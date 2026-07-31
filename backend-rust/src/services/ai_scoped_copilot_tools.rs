@@ -18,9 +18,9 @@ use crate::{
     routes::context::current_business_date,
     services::{
         ai_scope_service::{
-            self as scope_service, AiDomain, AnalysisPeriod, AnswerEnvelope, ComparisonPoint,
-            ConfidenceReport, LanguageDetection, MetricPoint, RecommendedAction, ResolvedScope,
-            ScopeRequest, format_money_paise, safe_percent,
+            self as scope_service, format_money_paise, safe_percent, AiDomain, AnalysisPeriod,
+            AnswerEnvelope, ComparisonPoint, ConfidenceReport, LanguageDetection, MetricPoint,
+            RecommendedAction, ResolvedScope, ScopeRequest,
         },
         auth_service::AuthClaims,
     },
@@ -211,14 +211,9 @@ pub async fn execute(
         request.end_date,
         current_business_date(),
     )?;
-    let scope = scope_service::resolve_scope(
-        db,
-        tenant_id,
-        claims,
-        &request.scope,
-        language.language,
-    )
-    .await?;
+    let scope =
+        scope_service::resolve_scope(db, tenant_id, claims, &request.scope, language.language)
+            .await?;
 
     if let Err(error) = scope_service::require_domain(claims, domain) {
         record_audit(
@@ -315,7 +310,9 @@ pub async fn execute(
         "client_feedback_overview" => {
             client_feedback_overview(db, tenant_id, &scope, &period, &language).await
         }
-        _ => Err(AppError::validation("requested AI tool is not allow-listed")),
+        _ => Err(AppError::validation(
+            "requested AI tool is not allow-listed",
+        )),
     };
 
     let outcome = match &answer {
@@ -466,11 +463,19 @@ async fn branch_performance(
     let utilization = safe_percent(booked, scheduled);
     let metrics = vec![
         MetricPoint::money("revenue", "Scope revenue", revenue),
-        MetricPoint::count("completed_appointments", "Completed appointments", completed),
+        MetricPoint::count(
+            "completed_appointments",
+            "Completed appointments",
+            completed,
+        ),
         MetricPoint::count("cancelled_appointments", "Cancellations", cancelled),
         MetricPoint::count("no_show_appointments", "No-shows", no_shows),
         MetricPoint::percent("utilization", "Utilization of rostered hours", utilization),
-        MetricPoint::money("branch_average_revenue", "Average revenue per branch", branch_average),
+        MetricPoint::money(
+            "branch_average_revenue",
+            "Average revenue per branch",
+            branch_average,
+        ),
     ];
     let comparison = vec![
         ComparisonPoint::new(
@@ -760,7 +765,11 @@ async fn staff_performance(
     };
 
     let metrics = vec![
-        MetricPoint::count("completed_appointments", "Completed appointments", completed),
+        MetricPoint::count(
+            "completed_appointments",
+            "Completed appointments",
+            completed,
+        ),
         MetricPoint::percent(
             "utilization",
             "Utilization of rostered hours",
@@ -768,7 +777,11 @@ async fn staff_performance(
         ),
         MetricPoint::money("service_and_product_revenue", "Billed value", total_revenue),
         MetricPoint::money("average_bill_value", "Average bill value", average_bill),
-        MetricPoint::percent("rebooking_rate", "Rebooking rate", safe_percent(rebooked, unique)),
+        MetricPoint::percent(
+            "rebooking_rate",
+            "Rebooking rate",
+            safe_percent(rebooked, unique),
+        ),
         MetricPoint::percent(
             "client_retention",
             "Returning client share",
@@ -777,7 +790,10 @@ async fn staff_performance(
         MetricPoint::percent(
             "cancellation_no_show_rate",
             "Cancellation and no-show rate",
-            safe_percent(cancellations + no_shows, completed + cancellations + no_shows),
+            safe_percent(
+                cancellations + no_shows,
+                completed + cancellations + no_shows,
+            ),
         ),
         MetricPoint::count("late_days", "Late arrivals", late_days),
         MetricPoint::money(
@@ -845,7 +861,8 @@ async fn staff_performance(
     let actions = vec![RecommendedAction {
         action_type: "coaching_task_draft".into(),
         label: "Draft a staff coaching task".into(),
-        description: "Create a coaching task for the lowest-utilization staff in this scope.".into(),
+        description: "Create a coaching task for the lowest-utilization staff in this scope."
+            .into(),
         requires_approval: false,
         crm_link: "/staff/control-center".into(),
     }];
@@ -1183,8 +1200,11 @@ async fn service_demand_trend(
             let before = *previous_lookup
                 .get(&(row.branch_id.clone(), row.service_id.clone()))
                 .unwrap_or(&0);
-            (before > row.completed_count)
-                .then_some((row.service_name.as_str(), row.completed_count, before))
+            (before > row.completed_count).then_some((
+                row.service_name.as_str(),
+                row.completed_count,
+                before,
+            ))
         })
         .collect();
     declining.sort_by_key(|(_, now, before)| now - before);
@@ -1212,10 +1232,18 @@ async fn service_demand_trend(
     };
 
     let metrics = vec![
-        MetricPoint::count("services_tracked", "Services with activity", current.len() as i64),
+        MetricPoint::count(
+            "services_tracked",
+            "Services with activity",
+            current.len() as i64,
+        ),
         MetricPoint::count("completed_services", "Completed services", completed),
         MetricPoint::money("service_revenue", "Service revenue", revenue),
-        MetricPoint::count("declining_services", "Declining services", declining.len() as i64),
+        MetricPoint::count(
+            "declining_services",
+            "Declining services",
+            declining.len() as i64,
+        ),
     ];
     let comparison = vec![
         ComparisonPoint::new(
@@ -1500,7 +1528,11 @@ async fn package_utilization(
         MetricPoint::count("sold_credits", "Credits sold", sold),
         MetricPoint::count("redeemed_credits", "Credits redeemed in period", redeemed),
         MetricPoint::count("remaining_credits", "Credits still unused", remaining),
-        MetricPoint::count("expiring_credits", "Unused credits already past expiry", expiring),
+        MetricPoint::count(
+            "expiring_credits",
+            "Unused credits already past expiry",
+            expiring,
+        ),
         MetricPoint::percent(
             "utilization_rate",
             "Credit utilization",
@@ -1594,7 +1626,11 @@ async fn offer_performance(
         MetricPoint::count("offer_clicks", "Offer clicks", clicks),
         MetricPoint::count("offer_redemptions", "Redemptions", used),
         MetricPoint::money("discount_given", "Discount given", discount),
-        MetricPoint::percent("click_through", "Click-through rate", safe_percent(clicks, views)),
+        MetricPoint::percent(
+            "click_through",
+            "Click-through rate",
+            safe_percent(clicks, views),
+        ),
     ];
     let comparison = vec![
         ComparisonPoint::new(
@@ -1672,7 +1708,8 @@ async fn finance_summary(
     .await
     .map_err(|_| AppError::internal("failed to load comparison finance summary"))?;
 
-    let sum = |rows: &[repository::FinanceSummaryRow], extract: fn(&repository::FinanceSummaryRow) -> i64| {
+    let sum = |rows: &[repository::FinanceSummaryRow],
+               extract: fn(&repository::FinanceSummaryRow) -> i64| {
         rows.iter().map(extract).sum::<i64>()
     };
     let revenue = sum(&current, |row| row.revenue_paise);
@@ -1707,7 +1744,11 @@ async fn finance_summary(
         MetricPoint::money("discount", "Discount given", discount),
         MetricPoint::money("product_cost", "Product cost of sales", product_cost),
         MetricPoint::money("expenses", "Recorded expenses", expenses),
-        MetricPoint::money("contribution", "Contribution after direct cost", contribution),
+        MetricPoint::money(
+            "contribution",
+            "Contribution after direct cost",
+            contribution,
+        ),
     ];
     let comparison = vec![
         ComparisonPoint::new(
@@ -1817,7 +1858,10 @@ async fn client_feedback_overview(
                 row.staff_name,
                 row.feedback_rating_sum as f64 / row.feedback_count as f64
             ),
-            None => format!("{count} reviews across {} averaged {average:.2} of 5.", scope.label),
+            None => format!(
+                "{count} reviews across {} averaged {average:.2} of 5.",
+                scope.label
+            ),
         }
     };
 
@@ -1896,7 +1940,8 @@ pub fn available_tools(claims: &AuthClaims) -> serde_json::Value {
     let tools: Vec<_> = TOOL_REGISTRY
         .iter()
         .filter(|tool| {
-            domain_for(tool.name).is_some_and(|domain| scope_service::domain_allowed(claims, domain))
+            domain_for(tool.name)
+                .is_some_and(|domain| scope_service::domain_allowed(claims, domain))
         })
         .map(|tool| {
             json!({

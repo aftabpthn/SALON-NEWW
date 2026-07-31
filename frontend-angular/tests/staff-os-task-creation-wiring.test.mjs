@@ -25,7 +25,7 @@ test('staff task page creates invoice-linked service targets and keeps manual ta
   assert.match(template, /Target quantity/);
   assert.match(backend, /route\("\/staff\/tasks", get\(list_tasks\)\.post\(create_task\)\)/);
   assert.match(backend, /route\(\s*"\/staff\/service-targets"/);
-  assert.match(backend, /route\("\/staff\/self\/service-targets", get\(list_self_service_targets\)\)/);
+  assert.match(backend, /route\(\s*"\/staff\/self\/service-targets",\s*get\(list_self_service_targets\),?\s*\)/);
   assert.match(backend, /async fn create_task[\s\S]+?ensure_manager_access\(&claims\)\?/);
   assert.match(repository, /FROM pos_sale_lines line/);
   assert.match(repository, /sale\.status NOT IN \('draft','cancelled','voided','refunded'\)/);

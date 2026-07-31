@@ -52,7 +52,7 @@
                   >
                   <span>
                     <strong>{{ branch.branchName }}</strong>
-                    <small>{{ branch.regionName || 'Unassigned' }}@if (branch.zoneName) {
+                  <small>{{ branch.regionName || ('header.unassigned' | translate) }}@if (branch.zoneName) {
                       · {{ branch.zoneName }}
                       }@if (branch.clusterName) {
                       · {{ branch.clusterName }}
@@ -77,23 +77,72 @@
           class="language-trigger"
           type="button"
           [attr.aria-label]="'header.language' | translate"
-          aria-haspopup="menu"
-          [attr.aria-expanded]="languageMenuOpen"
-          [disabled]="languageSaving || language.settings()?.tenantDefault?.allowUserOverride === false"
-          (click)="toggleLanguageMenu()"
+          aria-haspopup="dialog"
+          [attr.aria-expanded]="languagePickerOpen"
+          [disabled]="languageSaving || !canManageLanguage"
+          (click)="openLanguagePicker()"
           >
           <span aria-hidden="true">🌐</span><span>{{ languageSaving ? ('common.loading' | translate) : languageLabel }}</span><span aria-hidden="true">⌄</span>
         </button>
-        @if (languageMenuOpen) {
-          <div class="language-menu" role="menu">
-            @for (option of languageOptions; track option) {
-              <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: option.code, displayMode: 'single' })">{{ option.label }}</button>
-            }
-            <button type="button" role="menuitem" (click)="selectLanguage({ primaryLanguage: 'en-IN', secondaryLanguage: 'hi-IN', displayMode: 'bilingual' })">English + हिन्दी</button>
-          </div>
-        }
-        @if (languageError) {
-          <small class="language-error" role="alert">{{ languageError }}</small>
+        @if (languagePickerOpen) {
+          <div class="language-backdrop" (click)="closeLanguagePicker()"></div>
+          <section class="language-picker" role="dialog" [attr.aria-label]="'header.languages' | translate" (click)="$event.stopPropagation()">
+            <header>
+              <h2>{{ 'header.languages' | translate }}</h2>
+              <button type="button" [attr.aria-label]="'common.close' | translate" (click)="closeLanguagePicker()">×</button>
+            </header>
+            <label class="language-search-wrap">
+              <span>{{ 'common.search' | translate }}</span>
+              <input
+                id="language-search"
+                type="search"
+                autocomplete="off"
+                [attr.placeholder]="'common.search' | translate"
+                [(ngModel)]="languageSearch"
+              />
+            </label>
+            <div class="language-picker-layout">
+              <div class="language-card-list">
+                @for (option of languageSearchResults; track option.code) {
+                  <button
+                    type="button"
+                    role="option"
+                    [attr.aria-selected]="option.code === languageDraftSecondary"
+                    [class.selected]="option.code === languageDraftSecondary || option.code === primaryLanguage"
+                    [disabled]="option.code === primaryLanguage"
+                    (click)="selectLanguageCode(option.code)"
+                  >
+                    <strong>{{ option.label }}</strong>
+                    <small>{{ option.code }}</small>
+                  </button>
+                }
+              </div>
+              <aside class="language-selected-panel">
+                <h3>{{ 'header.selectedLanguages' | translate }}</h3>
+                @for (selected of selectedLanguageList; track selected.code) {
+                  <div class="language-selected-item">
+                    <span>{{ selected.label }}</span>
+                    @if (selected.removable) {
+                      <button type="button" [attr.aria-label]="'header.removeLanguage' | translate" (click)="selectLanguageCode(selected.code)">{{ 'common.remove' | translate }}</button>
+                    }
+                  </div>
+                }
+              </aside>
+            </div>
+            <footer>
+              <div class="language-actions">
+                <button type="button" class="language-close" [disabled]="languageSaving" (click)="closeLanguagePicker()">
+                  {{ 'common.close' | translate }}
+                </button>
+                <button type="button" class="language-save" [disabled]="languageSaving || !canManageLanguage" (click)="saveLanguagePicker()">
+                  {{ languageSaving ? ('common.loading' | translate) : ('common.save' | translate) }}
+                </button>
+              </div>
+              @if (languageError) {
+                <small class="language-error" role="alert">{{ languageError }}</small>
+              }
+            </footer>
+          </section>
         }
       </div>
 
@@ -101,8 +150,8 @@
         class="loading-timer-toggle"
         type="button"
         [class.loading-timer-toggle--active]="loadingTicker.enabled()"
-        [attr.aria-label]="loadingTicker.enabled() ? 'Hide loading timer' : 'Show loading timer'"
-        [title]="loadingTicker.enabled() ? 'Hide loading timer' : 'Show loading timer'"
+         [attr.aria-label]="loadingTicker.enabled() ? ('header.loadingTimerHide' | translate) : ('header.loadingTimerShow' | translate)"
+         [title]="loadingTicker.enabled() ? ('header.loadingTimerHide' | translate) : ('header.loadingTimerShow' | translate)"
         (click)="loadingTicker.toggleEnabled()"
       >
         <i class="bi bi-hourglass-split" aria-hidden="true"></i>
@@ -119,14 +168,14 @@
           @if (notificationUnread > 0) { <span class="notification-badge">{{ notificationUnread > 99 ? '99+' : notificationUnread }}</span> }
         </button>
         @if (notificationOpen) {
-          <section class="notification-menu" aria-label="Notifications">
-            <header><strong>Notifications</strong><span>{{ notificationUnread }} unread</span></header>
+           <section class="notification-menu" [attr.aria-label]="'header.notifications' | translate">
+            <header><strong>{{ 'header.notifications' | translate }}</strong><span>{{ notificationUnread }} {{ 'header.unread' | translate }}</span></header>
             @if (notificationError) { <p class="notification-error" role="alert">{{ notificationError }}</p> }
             <div class="notification-list">
               @for (notification of notificationItems; track notification.id) {
                 <button type="button" [class.unread]="!notification.isRead" (click)="openNotification(notification)"><span><strong>{{ notification.title }}</strong><small>{{ notification.body }}</small></span><time>{{ formatTime(notification.createdAt) }}</time></button>
-              } @empty { @if (!notificationLoading) { <p class="notification-empty">No notifications yet.</p> } }
-              @if (notificationLoading && notificationItems.length === 0) { <p class="notification-empty">Loading...</p> }
+               } @empty { @if (!notificationLoading) { <p class="notification-empty">{{ 'header.noNotifications' | translate }}</p> } }
+               @if (notificationLoading && notificationItems.length === 0) { <p class="notification-empty">{{ 'common.loading' | translate }}</p> }
             </div>
           </section>
         }

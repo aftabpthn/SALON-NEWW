@@ -375,7 +375,7 @@
           </div>
           <div class="form-grid supplier-payment-form">
             @if (supplierPaymentMode === 'payable') {
-              <label class="full"><span>Purchase bill</span><select [(ngModel)]="supplierPaymentDraft.receiptId" (ngModelChange)="supplierPayableChanged()" [disabled]="supplierPaymentLoading() || busy()"><option value="">Select unpaid bill</option>@for (row of supplierPayables(); track row.purchaseReceiptId) {@if (row.balancePaise > 0) {<option [value]="row.purchaseReceiptId">{{ row.supplierInvoiceNumber }} · {{ money(row.balancePaise) }} unpaid</option>}}</select></label>
+              <label class="full"><span>Payable</span><select [(ngModel)]="supplierPaymentDraft.receiptId" (ngModelChange)="supplierPayableChanged()" [disabled]="supplierPaymentLoading() || busy()"><option value="">Select unpaid balance</option>@for (row of supplierPayables(); track row.purchaseReceiptId) {@if (row.balancePaise > 0) {<option [value]="row.purchaseReceiptId">{{ row.sourceType === 'opening_migration' ? 'Opening migration · ' : '' }}{{ row.supplierInvoiceNumber }} · {{ money(row.balancePaise) }} unpaid</option>}}</select></label>
             }
             <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="supplierPaymentDraft.amount" [disabled]="supplierPaymentLoading() || busy()" /></label>
             <label><span>Payment method</span><select [(ngModel)]="supplierPaymentDraft.method" [disabled]="supplierPaymentLoading() || busy()"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select></label>
@@ -386,7 +386,7 @@
           <h3>Purchase bills</h3>
           @if (supplierPaymentLoading()) { <div class="loading-state"><span></span><span></span><span></span></div> }
           @if (!supplierPaymentLoading() && supplierPayables().length) {
-            <div class="table-wrap"><table><thead><tr><th>Bill</th><th>Paid</th><th>Unpaid</th></tr></thead><tbody>@for (row of supplierPayables(); track row.purchaseReceiptId) {<tr><td><strong>{{ row.supplierInvoiceNumber }}</strong><small>{{ displayDate(row.receivedDate) }}</small></td><td class="number">{{ money(row.paidPaise) }}</td><td class="number"><strong>{{ money(row.balancePaise) }}</strong></td></tr>}</tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>Payable</th><th>Paid</th><th>Unpaid</th></tr></thead><tbody>@for (row of supplierPayables(); track row.purchaseReceiptId) {<tr><td><strong>{{ row.supplierInvoiceNumber }}</strong><small>{{ row.sourceType === 'opening_migration' ? 'Opening migration' : 'Live purchase' }} · {{ displayDate(row.receivedDate) }}</small></td><td class="number">{{ money(row.paidPaise) }}</td><td class="number"><strong>{{ money(row.balancePaise) }}</strong></td></tr>}</tbody></table></div>
           }
           @if (!supplierPaymentLoading() && !supplierPayables().length) { <div class="compact-empty">No purchase bills yet</div> }
         </section>

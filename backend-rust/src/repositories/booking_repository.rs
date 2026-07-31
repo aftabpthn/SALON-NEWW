@@ -57,8 +57,8 @@ pub async fn branch_deposit_percent(
         "SELECT b.booking_deposit_percent
          FROM branches b
          JOIN tenants t ON t.id=b.tenant_id
-         WHERE COALESCE(NULLIF(t.scope_id,''),t.id::text)=$1
-           AND COALESCE(NULLIF(b.scope_id,''),b.id::text)=$2
+         WHERE (t.id::text=$1 OR NULLIF(t.scope_id,'')=$1)
+           AND (b.id::text=$2 OR NULLIF(b.scope_id,'')=$2)
            AND b.active=TRUE",
     )
     .bind(tenant_id)

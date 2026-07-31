@@ -145,7 +145,9 @@ async fn main() -> Result<()> {
         // skip a day; the per-signal cooldown is what stops it repeating.
         let worker_state = state.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
+            let mut interval = tokio::time::interval(Duration::from_secs(
+                services::ai_briefing_service::BRIEFING_WORKER_INTERVAL_SECONDS,
+            ));
             loop {
                 interval.tick().await;
                 if services::ai_briefing_service::run_daily_briefing_worker(&worker_state.db)
@@ -319,6 +321,29 @@ async fn main() -> Result<()> {
                     .is_err()
                 {
                     tracing::warn!("data import worker cycle failed");
+                }
+                if services::purchase_bill_drafts_service::process_due_historical_bulk(
+                    &worker_state,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("historical purchase bulk worker cycle failed");
+                }
+            }
+        });
+    }
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if services::operations_service::run_escalation_worker(&worker_state.db).await.is_err() {
+                    tracing::warn!("field job SLA escalation cycle failed");
+                }
+                if services::operations_service::process_marketplace_retries(&worker_state).await.is_err() {
+                    tracing::warn!("marketplace webhook retry cycle failed");
                 }
             }
         });

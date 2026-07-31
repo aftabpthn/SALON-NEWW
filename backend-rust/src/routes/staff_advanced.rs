@@ -32,7 +32,7 @@ use crate::{
             PayrollAdjustmentRuleRequest, PayrollStructureRequest, SelfPushSubscriptionRequest,
             StaffPerformanceResponse, StaffServiceTargetRequest, StaffTaskRequest,
         },
-        staff_enterprise_service,
+        staff_app_service, staff_enterprise_service,
     },
     state::AppState,
 };
@@ -70,6 +70,9 @@ pub fn router() -> Router<AppState> {
             get(list_self_service_targets),
         )
         .route("/staff/tasks/:id", axum::routing::patch(update_task))
+        .route("/staff/self/tasks", get(list_self_tasks))
+        .route("/staff/self/roster", get(list_self_roster))
+        .route("/staff/self/calendar", get(list_self_calendar))
         .route("/staff/self/targets", get(get_self_targets))
         .route("/staff/self/mobile/push-config", get(get_self_push_config))
         .route(
@@ -932,6 +935,31 @@ async fn list_tasks(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
+#[derive(Debug, Deserialize)]
+struct SelfScheduleRangeQuery {
+    from: NaiveDate,
+    to: NaiveDate,
+}
+
+async fn list_self_tasks(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<StaffTaskRecord>> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.tasks.read",
+        &["staff.self_manage", "staff_self.write", "read:staff"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let rows = staff_advanced_service::list_tasks(&state.db, &tenant_id, &branch_id, &staff_id, "")
+        .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
 async fn create_task(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -1175,8 +1203,14 @@ async fn update_self_schedule(
 ) -> ApiResult<serde_json::Value> {
     ensure_staff_app_access(
         &claims,
-        "staff.app.calendar.manage",
-        &["staff.self_manage", "staff_self.write"],
+        "staff.app.roster.manage",
+        &[
+            "staff.app.calendar.manage",
+            "staff.self_manage",
+            "staff_self.write",
+            "write:staff",
+            "update:staff",
+        ],
     )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
@@ -1248,6 +1282,54 @@ async fn update_self_schedule(
     .map_err(|_| AppError::internal("failed to update staff schedule"))?
     .ok_or_else(|| AppError::conflict("schedule changed; reload and try again"))?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_self_roster(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<SelfScheduleRangeQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.roster.read",
+        &["staff.schedule.read", "staff.self_manage", "read:staff"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_app_service::self_roster(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        query.from,
+        query.to,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn list_self_calendar(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<SelfScheduleRangeQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.calendar.read",
+        &["staff.schedule.read", "staff.self_manage", "read:staff"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = staff_app_service::self_roster(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        query.from,
+        query.to,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 fn parse_self_schedule_time(

@@ -28,6 +28,7 @@ type PartyOption = { id: string; name: string };
 type CashTill = { id: string; tillCode: string; tillName: string; status: string };
 type SupplierPayable = {
   purchaseReceiptId: string;
+  sourceType: 'live_receipt' | 'opening_migration';
   supplierId: string;
   supplierName: string;
   supplierInvoiceNumber: string;

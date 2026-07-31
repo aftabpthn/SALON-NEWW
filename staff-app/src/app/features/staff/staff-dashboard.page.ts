@@ -1,7 +1,7 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { isQueuedMutation, MutationResult, StaffAppService, StaffAttendance, StaffDashboard, StaffEnterpriseOs, StaffLeaveBalance, StaffOvertimeSummary, StaffToday, StaffWorkspacePreferences } from "../../core/staff-app.service";
-import { DashboardAction, buildStaffDashboardViewModel, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
+import { DashboardAction, buildStaffDashboardViewModel, isOpenAttendance, shouldShowDashboardRecommendation } from "./staff-dashboard.model";
 import { StaffDashboardSectionsComponent } from "./staff-dashboard-sections.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
@@ -215,7 +215,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   }
 
   private openAttendance(): StaffAttendance | null {
-    return this.today()?.attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || ""))) || null;
+    return this.today()?.attendance.find(isOpenAttendance) || null;
   }
 
   private isStaffRecordError(message: string): boolean { return /staff (record|profile)|not linked/i.test(message); }

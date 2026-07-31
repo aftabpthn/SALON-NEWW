@@ -28,7 +28,6 @@ type OfflineQueueEntry = {
   idempotencyKey: string;
   userId: string;
   tenantId: string;
-  sessionId: string;
   method: "POST" | "PATCH";
   path: string;
   body: Record<string, unknown>;
@@ -48,6 +47,24 @@ function staffBusinessDate(value = new Date()): string {
   return `${parts["year"]}-${parts["month"]}-${parts["day"]}`;
 }
 
+export function scheduledShiftMinutes(start1: string, end1: string, start2 = "", end2 = ""): number | null {
+  let total = 0;
+  let captured = false;
+  for (const [start, end] of [[start1, end1], [start2, end2]]) {
+    const from = /^(\d{1,2}):(\d{2})/.exec(start);
+    const to = /^(\d{1,2}):(\d{2})/.exec(end);
+    if (!from || !to) continue;
+    const [fromHour, fromMinute, toHour, toMinute] = [Number(from[1]), Number(from[2]), Number(to[1]), Number(to[2])];
+    if (fromHour > 23 || toHour > 23 || fromMinute > 59 || toMinute > 59) continue;
+    const fromMinutes = fromHour * 60 + fromMinute;
+    const toMinutes = toHour * 60 + toMinute;
+    if (toMinutes <= fromMinutes) continue;
+    total += toMinutes - fromMinutes;
+    captured = true;
+  }
+  return captured ? total : null;
+}
+
 function stableQueryKey(params: Record<string, string> = {}): string {
   return JSON.stringify(
     Object.entries(params)
@@ -65,6 +82,7 @@ const STAFF_APP_PERMISSION_FALLBACKS: Record<string, string[]> = {
   "staff.app.queue.read": ["appointments.read", "read:appointments"],
   "staff.app.tasks.read": ["staff.self_manage", "staff_self.write", "read:staff"],
   "staff.app.tasks.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.rules.read": ["staff.self_manage", "staff_self.write", "read:staff"],
   "staff.app.attendance.read": ["staff.app.attendance.manage", "staff.attendance.read", "staff.self_manage", "allow:staff-checkin-checkout", "read:staff"],
   "staff.app.attendance.manage": ["staff.self_manage", "staff_self.write", "allow:staff-checkin-checkout", "write:staff"],
   "staff.app.roster.read": ["staff.schedule.read", "staff.self_manage", "read:staff"],
@@ -74,7 +92,7 @@ const STAFF_APP_PERMISSION_FALLBACKS: Record<string, string[]> = {
   "staff.app.performance.read": ["staff.analytics.read", "staff.self_manage", "read:staff"],
   "staff.app.leaderboard.read": ["staff.analytics.read", "staff.self_manage", "read:staff"],
   "staff.app.notifications.read": ["notifications.read", "staff.self_manage", "read:staff"],
-  "staff.app.notifications.manage": ["staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
+  "staff.app.notifications.manage": ["notifications.manage", "staff.self_manage", "staff_self.write", "write:staff", "update:staff"],
   "staff.app.reports.read": ["reports.read", "staff.self_manage", "read:staff"],
   "staff.app.chat.read": ["staff.self_manage", "staff_self.write", "read:staff"],
   "staff.app.chat.manage": ["staff.self_manage", "staff_self.write", "write:staff"],
@@ -107,6 +125,7 @@ export type StaffAppointment = {
   id: string;
   staffId: string;
   branchId: string;
+  clientId?: string;
   serviceIds: string[];
   serviceNames: string[];
   durationMinutes: number;
@@ -169,9 +188,9 @@ export type StaffEnterpriseOs = {
   };
   timeline: Array<{ id: string; serviceNames: string[]; startAt: string; endAt: string; status: string; state: string; minutesToStart: number; durationMinutes: number; chair: string; clientName: string; preferredClient: boolean; rescheduleCount: number; rescheduleTimeline: StaffAppointment["rescheduleTimeline"]; serviceDepartments: string[]; lastServiceAt: string; lastServiceNames: string[]; lastServiceDepartments: string[] }>;
   serviceTimers: Array<{ appointmentId: string; status: string; elapsedMinutes: number; totalMinutes: number; remainingMinutes: number; progress: number }>;
-  performance: { revenue: number | null; completedServices: number; avgUtilization: number | null; avgRating: number | null; productivityScore: number | null; strengths: string[]; opportunities: string[] };
+  performance: { revenue: number | null; completedServices: number; avgUtilization: number | null; avgRating: number | null; productivityScore: number | null; strengths: string[]; opportunities: string[]; appointmentsCount?: number; completionPercent?: number | null; targetRevenuePaise?: number | null; revenueTargetPercent?: number | null; uniqueClients?: number; repeatClients?: number; repeatClientPercent?: number | null; presentDays?: number; absentDays?: number; workedMinutes?: number; overtimeMinutes?: number; lateMinutes?: number; earlyLeaveMinutes?: number; operationTaskCompleted?: number; operationTaskMissed?: number; revenueOpportunities?: Array<{ key: string; title: string; reason: string; suggestedAction: string; ownerStaffId: string; ownerStaffName: string; metricUnit: string; currentValue: number; targetValue: number; projectedImpactPaise: number | null; deadline: string; priority: string; status: string; goalId?: string | null; actionId?: string | null; actionStatus?: string | null; baselineValue?: number | null; actualValue: number; actualImpactPaise?: number | null }>; equipmentIntelligence?: { summary: { activeResources: number; unassignedAppointments: number; shortageDepartments: number; equipmentLostBookings: number; estimatedAdditionalAppointments: number; estimatedRevenuePaise: number | null }; departments: Array<{ department: string; appointments: number; unassignedAppointments: number; bookedMinutes: number; peakHourlyDemand: number; activeResources: number; inactiveResources: number; capacityShortage: number; equipmentLostBookings: number; estimatedAdditionalAppointments: number; estimatedRevenuePaise: number | null }>; resources: Array<{ id: string; name: string; kind: string; department: string; active: boolean; appointments: number; bookedMinutes: number; demandWindowUtilizationPercent: number | null }>; recommendations: Array<{ key: string; title: string; reason: string; actionType: string; estimatedAdditionalAppointments: number; estimatedRevenuePaise: number | null }> } };
   leaderboard: Array<{ rank: number; staffId: string; staffName: string; revenue: number | null; score: number; rating: number | null; points: number; days: number; isMe: boolean }>;
-  gamification: { points: number; level: number; stars: number; activeDays?: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }> };
+  gamification: { points: number; level: number; stars: number; activeDays?: number; dailyStreak: number; monthlyStreak: number; badges: Array<{ label: string; description: string; earned: boolean }>; sourceStatus?: { appointments: boolean; attendance: boolean; schedule: boolean; clients: boolean; revenueTarget: boolean; sharedReview: boolean } };
   notifications: Array<{ id: string; title: string; body: string; status: string; createdAt: string }>;
   tasks: Array<{ id: string; title: string; priority: string; status: string; dueAt: string; assignedBy: string; checklist: unknown[] }>;
   calendar: Array<{ id: string; date: string; startTime: string; endTime: string; type: string; status: string; version?: number }>;
@@ -244,6 +263,8 @@ export type StaffBusinessPerformance = {
   revenuePerWorkedHourPaise: number | null;
   serviceRevenuePaise: number | null;
   productRevenuePaise: number | null;
+  productInvoiceCount: number | null;
+  retailConversionPercent: number | null;
   membershipRevenuePaise: number | null;
   packageRevenuePaise: number | null;
   giftCardRevenuePaise: number | null;
@@ -271,6 +292,45 @@ export type StaffBusinessTarget = {
   targetValue: number;
   achievedValue: number;
   progressPercent: number;
+};
+
+export type StaffRosterItem = StaffEnterpriseOs["calendar"][number];
+
+export type StaffBusinessRecipeLine = {
+  productId?: string;
+  itemId?: string;
+  inventoryItemId?: string;
+  standardQty?: number;
+  quantity?: number;
+  qty?: number;
+  maxQty?: number;
+};
+
+export type StaffBusinessProduct = {
+  id: string;
+  name: string;
+  brand: string;
+  unit: string;
+  stockQuantity: number;
+  reorderPoint: number;
+  dualUseStock: boolean;
+};
+
+export type StaffProductUsage = {
+  id: string;
+  inventoryItemId: string;
+  itemName: string;
+  itemBrand: string;
+  appointmentId?: string;
+  serviceId?: string;
+  serviceName: string;
+  expectedQuantity: number;
+  actualQuantity: number;
+  varianceQuantity: number;
+  unit: string;
+  status: string;
+  notes: string;
+  createdAt: string;
 };
 
 export type StaffBusinessQuery = {
@@ -383,7 +443,9 @@ export type StaffBusiness = {
   performance: StaffBusinessPerformance;
   earnings: StaffBusinessEarnings | null;
   targets: StaffBusinessTarget[];
-  services: Array<{ id: string; name: string; category: string }>;
+  services: Array<{ id: string; name: string; category: string; productConsumption: StaffBusinessRecipeLine[] }>;
+  products: StaffBusinessProduct[];
+  productUsageHistory: StaffProductUsage[];
   dailyBreakdown: Array<{ date: string; performance: StaffBusinessPerformance } & StaffBusinessSummary>;
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number; hasMore: boolean; appointmentTotal: number; appointmentPages: number; appointmentHasMore: boolean; serviceTotal: number };
   appointments: StaffBusinessAppointment[];
@@ -448,13 +510,41 @@ export type StaffOvertimeSummary = {
   lifetimeMinutes: number;
 };
 
+export type StaffTask = {
+  id: string;
+  title: string;
+  description: string;
+  taskType: string;
+  status: string;
+  priority: string;
+  dueAt: string;
+  version: number;
+};
+
+export type StaffFieldJob = {
+  id: string;
+  address: string;
+  status: string;
+  scheduledStartAt?: string;
+  travelMinutes: number;
+  routeDistanceMeters?: number;
+  remainingEtaSeconds?: number;
+  priority: number;
+  slaDueAt?: string;
+  proofSubmittedAt?: string;
+  clientName: string;
+  serviceNames: string;
+};
+
 export type StaffToday = {
   date: string;
   schedules: Array<{ id: string; scheduleDate: string; startTime: string; endTime: string; shiftType: string; status: string }>;
   attendance: StaffAttendance[];
   activeBreak: { id: string; status: string; startedAt?: string } | null;
-  tasks: Array<{ id: string; title: string; description: string; taskType: string; status: string; priority: string; dueAt: string; version: number }>;
+  tasks: StaffTask[];
 };
+
+export type StaffAttendanceToday = Omit<StaffToday, "tasks">;
 
 export type StaffPayrollItem = {
   id: string;
@@ -562,6 +652,38 @@ export type StaffOffer = {
   approvalStatus: string;
   personalOffer: boolean;
   hasCreative: boolean;
+};
+
+export type StaffRuleDocument = {
+  id: string;
+  documentKey: string;
+  documentType: "rule" | "sop";
+  category: "service" | "hygiene" | "attendance" | "behavior" | "safety";
+  title: string;
+  content: string;
+  documentVersion: number;
+  effectiveDate: string;
+  expiresOn: string | null;
+  mandatoryAcknowledgement: boolean;
+  trainingAttachmentUrl: string;
+  quiz: Array<{ id: string; question: string; options: string[] }>;
+  quizPassScore: number;
+  readAt: string | null;
+  acknowledgedAt: string | null;
+  quizScore: number | null;
+  quizPassed: boolean | null;
+};
+
+export type StaffRuleStatus = {
+  id: string;
+  documentId: string;
+  staffId: string;
+  firstReadAt: string | null;
+  lastReadAt: string | null;
+  acknowledgedAt: string | null;
+  quizScore: number | null;
+  quizPassed: boolean | null;
+  version: number;
 };
 
 export type StaffFeedback = {
@@ -724,7 +846,6 @@ export class StaffAppService {
   private readonly baseUrl = environment.apiBaseUrl.replace(/\/$/, "");
   private accessTokenValue = "";
   private tenantIdValue = "";
-  private sessionIdValue = "";
   private refreshPromise: Promise<void> | null = null;
   private flushPromise: Promise<number> | null = null;
   private readonly getCache = new Map<string, ReadCacheEntry<unknown>>();
@@ -878,6 +999,14 @@ export class StaffAppService {
     return this.cachedRead(`enterprise-os:${stableQueryKey(query)}`, 10_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query, reportError));
   }
 
+  async roster(from: string, to: string): Promise<StaffRosterItem[]> {
+    return this.get<StaffRosterItem[]>("/staff/self/roster", { from, to });
+  }
+
+  async calendar(from: string, to: string): Promise<StaffRosterItem[]> {
+    return this.get<StaffRosterItem[]>("/staff/self/calendar", { from, to });
+  }
+
   async workspacePreferences(): Promise<StaffWorkspacePreferences> {
     return this.cachedRead("workspace-preferences", 60_000, () => this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences"));
   }
@@ -896,6 +1025,18 @@ export class StaffAppService {
 
   async businessInvoice(invoiceId: string): Promise<StaffBusinessInvoiceDetail> {
     return this.get<StaffBusinessInvoiceDetail>(`/staff-self/business/invoices/${encodeURIComponent(invoiceId)}`);
+  }
+
+  async recordProductUsage(payload: {
+    inventoryItemId: string;
+    serviceId: string;
+    clientId: string;
+    appointmentId: string;
+    actualQuantity: number;
+    notes: string;
+    idempotencyKey: string;
+  }): Promise<StaffProductUsage> {
+    return this.post<StaffProductUsage>("/staff-self/business/product-usage", payload);
   }
 
   async updateNotification(id: string, status: "read" | "unread" | "archived" = "read"): Promise<unknown> {
@@ -948,7 +1089,9 @@ export class StaffAppService {
       this.attendanceForMonth(date)
     ]);
     const schedule = objectValue(dashboard.schedule);
-    const matchingAttendance = attendance.find((row) => stringValue(row, "businessDate", "business_date") === date);
+    const matchingAttendance = attendance.find((row) =>
+      Boolean(stringValue(row, "id")) && stringValue(row, "businessDate", "business_date") === date
+    );
     const breaks = arrayValue(matchingAttendance?.["breaks"]).map(objectValue);
     const activeBreak = breaks.find((row) => !stringValue(row, "endedAt", "ended_at"));
     return {
@@ -1013,6 +1156,26 @@ export class StaffAppService {
 
   async serviceTargets(): Promise<StaffServiceTarget[]> {
     return this.get<StaffServiceTarget[]>("/staff/self/service-targets");
+  }
+
+  async tasks(): Promise<StaffTask[]> {
+    return this.get<StaffTask[]>("/staff/self/tasks");
+  }
+
+  async fieldJobs(): Promise<StaffFieldJob[]> {
+    return (await this.get<{ jobs: StaffFieldJob[] }>("/staff/self/field-jobs")).jobs ?? [];
+  }
+
+  async updateFieldJobStatus(id: string, status: string): Promise<MutationResult<unknown>> {
+    return this.onlineMutation(() => this.patch(`/staff/self/field-jobs/${encodeURIComponent(id)}/status`, { status }));
+  }
+
+  async updateFieldJobLocation(id: string, latitude: number, longitude: number, accuracyMeters?: number): Promise<MutationResult<unknown>> {
+    return this.onlineMutation(() => this.post(`/staff/self/field-jobs/${encodeURIComponent(id)}/location`, { latitude, longitude, accuracyMeters }));
+  }
+
+  async submitFieldJobProof(id: string, customerName: string, completionNote: string): Promise<MutationResult<unknown>> {
+    return this.onlineMutation(() => this.post(`/staff/self/field-jobs/${encodeURIComponent(id)}/proof`, { customerName, customerConfirmed: true, completionNote }));
   }
 
   async attendanceHistory(days = 30): Promise<StaffAttendance[]> {
@@ -1112,6 +1275,35 @@ export class StaffAppService {
     return this.get<StaffOffer[]>("/staff-self/offers");
   }
 
+  async attendanceToday(date = staffBusinessDate()): Promise<StaffAttendanceToday> {
+    const rows = await this.attendanceForMonth(date);
+    const row = rows.find((item) => stringValue(item, "businessDate", "business_date") === date);
+    const detail = row || {};
+    const startTime = stringValue(detail, "scheduledShift1Start", "scheduled_shift1_start");
+    const endTime = stringValue(detail, "scheduledShift2End", "scheduled_shift2_end", "scheduledShift1End", "scheduled_shift1_end");
+    const scheduleStatus = stringValue(detail, "scheduledStatus", "scheduled_status");
+    const breaks = arrayValue(detail["breaks"]).map(objectValue);
+    const activeBreak = breaks.find((item) => !stringValue(item, "endedAt", "ended_at"));
+    return {
+      date,
+      schedules: scheduleStatus || startTime || endTime ? [{ id: date, scheduleDate: date, startTime, endTime, shiftType: "shift", status: scheduleStatus }] : [],
+      attendance: row && stringValue(row, "id") ? [this.normalizeAttendance(row)] : [],
+      activeBreak: activeBreak ? { id: stringValue(activeBreak, "id"), status: "active", startedAt: stringValue(activeBreak, "startedAt", "started_at") } : null
+    };
+  }
+
+  async rules(): Promise<StaffRuleDocument[]> {
+    return this.get<StaffRuleDocument[]>("/staff-self/rules");
+  }
+
+  async markRuleRead(id: string): Promise<StaffRuleStatus> {
+    return this.post<StaffRuleStatus>(`/staff-self/rules/${encodeURIComponent(id)}/read`, {});
+  }
+
+  async acknowledgeRule(id: string, answers: number[]): Promise<StaffRuleStatus> {
+    return this.post<StaffRuleStatus>(`/staff-self/rules/${encodeURIComponent(id)}/acknowledge`, { answers });
+  }
+
   async offerCreative(id: string): Promise<Blob> {
     return this.withRefreshRetry(() => firstValueFrom(this.http.get(
       `${this.baseUrl}/staff-self/offers/${encodeURIComponent(id)}/creative`,
@@ -1196,15 +1388,22 @@ export class StaffAppService {
     });
   }
 
-  async faceClockIn(livenessResponse: string): Promise<MutationResult<StaffAttendance>> {
-    const position = await this.currentPosition();
-    return this.onlineMutation(() => this.post<StaffAttendance>("/staff-attendance/clock-in", {
-      staffId: this.staffId(), businessDate: staffBusinessDate(), source: "staff-app-face",
-      faceScan: {
-        deviceUid: this.faceDeviceId(), latitude: position.coords.latitude, longitude: position.coords.longitude,
-        accuracyMeters: position.coords.accuracy, livenessPrompt: "camera-opened", livenessResponse
-      }
-    }));
+  async biometricClockIn(): Promise<MutationResult<StaffAttendance>> {
+    return this.onlineMutation(async () => {
+      if (!this.biometricSupported()) throw new Error("Biometric verification is not supported on this device.");
+      const position = await this.currentPosition();
+      const begin = await this.authPost<WebAuthnBegin>("/staff-attendance/biometric/begin", {}, true);
+      const credential = await navigator.credentials.get({ publicKey: this.decodeRequestOptions(begin.options as PublicKeyCredentialRequestOptions) });
+      if (!(credential instanceof PublicKeyCredential)) throw new Error("Biometric verification was cancelled.");
+      return this.post<StaffAttendance>("/staff-attendance/clock-in", {
+        staffId: this.staffId(), businessDate: staffBusinessDate(), source: "staff-app-biometric",
+        faceScan: {
+          deviceUid: this.faceDeviceId(), latitude: position.coords.latitude, longitude: position.coords.longitude,
+          accuracyMeters: position.coords.accuracy, challengeId: begin.challengeId,
+          credential: this.authenticationResponse(credential)
+        }
+      });
+    });
   }
 
   async clockOut(attendanceId?: string): Promise<MutationResult<StaffAttendance>> {
@@ -1225,8 +1424,8 @@ export class StaffAppService {
     });
   }
 
-  async requestLeave(payload: { leaveType: string; startDate: string; endDate: string; reason: string }): Promise<unknown> {
-    return this.post("/staff-leave/requests", { ...payload, staffId: this.staffId() });
+  async requestLeave(payload: { leaveType: string; startDate: string; endDate: string; reason: string }): Promise<MutationResult<unknown>> {
+    return this.queueableMutation("POST", "/staff-leave/requests", { ...payload, staffId: this.staffId() });
   }
 
   async withdrawLeave(requestId: string, version: number): Promise<StaffLeave> {
@@ -1352,7 +1551,7 @@ export class StaffAppService {
     for (const item of queue.filter((entry) => entry.state === "pending" || entry.state === "syncing")) {
       if (!this.isQueueOwner(item)) {
         item.state = "permanent-failure";
-        item.lastError = "Queued action belongs to a different authenticated session.";
+        item.lastError = "Queued action belongs to a different authenticated user or tenant.";
         continue;
       }
       try {
@@ -1401,12 +1600,18 @@ export class StaffAppService {
     const worked = numberValue(row, "workedMinutes", "worked_minutes");
     const breaks = numberValue(row, "breakMinutes", "break_minutes");
     const elapsed = clockInAt && clockOutAt ? Math.max(0, Math.floor((new Date(clockOutAt).getTime() - new Date(clockInAt).getTime()) / 60000)) : worked + breaks;
+    const scheduled = scheduledShiftMinutes(
+      stringValue(row, "scheduledShift1Start", "scheduled_shift1_start"),
+      stringValue(row, "scheduledShift1End", "scheduled_shift1_end"),
+      stringValue(row, "scheduledShift2Start", "scheduled_shift2_start"),
+      stringValue(row, "scheduledShift2End", "scheduled_shift2_end")
+    );
     return {
       id: stringValue(row, "id") || stringValue(row, "businessDate", "business_date"),
       businessDate: stringValue(row, "businessDate", "business_date"), clockInAt, clockOutAt,
       status: stringValue(row, "attendanceStatus", "attendance_status", "manualStatus", "manual_status", "scheduledStatus", "scheduled_status"),
       source: stringValue(row, "source"), overtimeMinutes: numberValue(row, "overtimeMinutes", "overtime_minutes"),
-      grossMinutes: elapsed, totalBreakMinutes: breaks, totalWorkedMinutes: worked, scheduledShiftMinutes: null,
+      grossMinutes: elapsed, totalBreakMinutes: breaks, totalWorkedMinutes: worked, scheduledShiftMinutes: scheduled,
       overtimeCalculationStatus: "calculated", overtimeReviewReason: "", overtimePolicyVersion: ""
     };
   }
@@ -1425,7 +1630,7 @@ export class StaffAppService {
       serviceIds: arrayValue(row["serviceIds"] ?? row["service_ids"]).map(String), serviceNames,
       durationMinutes: duration, value: numberValue(row, "value", "amountPaise", "amount_paise", "totalPaise", "total_paise"),
       startAt, endAt, status: stringValue(row, "status"), chair: stringValue(row, "chair"), source: stringValue(row, "source"),
-      clientName: stringValue(row, "clientName", "client_name"), preferredClient: Boolean(row["preferredClient"] ?? row["preferred_client"]),
+      clientId: stringValue(row, "clientId", "client_id"), clientName: stringValue(row, "clientName", "client_name"), preferredClient: Boolean(row["preferredClient"] ?? row["preferred_client"]),
       rescheduleCount: numberValue(row, "rescheduleCount", "reschedule_count"),
       rescheduleTimeline: arrayValue(row["rescheduleTimeline"] ?? row["reschedule_timeline"]).map((entry) => {
         const event = objectValue(entry);
@@ -1610,7 +1815,6 @@ export class StaffAppService {
     this.clearGetCache();
     this.accessTokenValue = session.accessToken || session.access_token || "";
     this.tenantIdValue = tenantId;
-    this.sessionIdValue = crypto.randomUUID();
     this.profile.set(null);
     this.user.set(session.user || null);
   }
@@ -1668,7 +1872,6 @@ export class StaffAppService {
           if (this.user()?.id && this.user()?.id !== session.user.id) this.clearOfflineState();
           this.profile.set(null);
           this.user.set(session.user);
-          this.sessionIdValue ||= crypto.randomUUID();
         } else {
           const hint = this.readBiometricHint();
           await this.loadUserContext(this.user()?.loginId || this.user()?.email || hint?.loginId || "staff");
@@ -1783,7 +1986,7 @@ export class StaffAppService {
     const idempotencyKey = crypto.randomUUID();
     const entry: OfflineQueueEntry = {
       queueId, idempotencyKey, userId: this.user()?.id || "", tenantId: this.tenantIdValue,
-      sessionId: this.sessionIdValue, method, path, body, state: "pending", queuedAt: new Date().toISOString()
+      method, path, body, state: "pending", queuedAt: new Date().toISOString()
     };
     if (!this.isQueueOwner(entry)) throw new Error("An authenticated session is required to queue this action.");
     this.writeOfflineQueue([...this.readOfflineQueue(), entry].slice(-30));
@@ -1793,6 +1996,7 @@ export class StaffAppService {
   private isAllowedOfflineMutation(method: "POST" | "PATCH", path: string, body: Record<string, unknown>): boolean {
     if (method === "PATCH" && /^\/staff-self\/notifications\/[^/]+$/.test(path)) return Object.keys(body).length === 1 && ["read", "unread", "archived"].includes(String(body["status"]));
     if (method === "PATCH" && /^\/staff\/self\/tasks\/[^/]+\/status$/.test(path)) return Object.keys(body).every((key) => ["status", "version"].includes(key)) && typeof body["version"] === "number";
+    if (method === "POST" && path === "/staff-leave/requests") return Object.keys(body).every((key) => ["staffId", "leaveType", "startDate", "endDate", "reason"].includes(key));
     if (method === "POST" && ["/staff-attendance/clock-in", "/staff-attendance/clock-out", "/staff-attendance/break-start", "/staff-attendance/break-end"].includes(path)) {
       return Object.keys(body).every((key) => ["staffId", "businessDate", "source", "attendanceId", "breakType"].includes(key));
     }
@@ -1809,7 +2013,7 @@ export class StaffAppService {
   }
 
   private currentPosition(): Promise<GeolocationPosition> {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.reject(new Error("GPS location is required for face attendance."));
+    if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.reject(new Error("GPS location is required for biometric attendance."));
     return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }));
   }
   private async onlineMutation<T>(mutation: () => Promise<T>): Promise<MutationResult<T>> {
@@ -1821,7 +2025,7 @@ export class StaffAppService {
     if (!value || typeof value !== "object") return false;
     const item = value as Record<string, unknown>;
     return typeof item["queueId"] === "string" && typeof item["idempotencyKey"] === "string" &&
-      typeof item["userId"] === "string" && typeof item["tenantId"] === "string" && typeof item["sessionId"] === "string" &&
+      typeof item["userId"] === "string" && typeof item["tenantId"] === "string" &&
       (item["method"] === "POST" || item["method"] === "PATCH") && typeof item["path"] === "string" &&
       !!item["body"] && typeof item["body"] === "object" && ["pending", "syncing", "permanent-failure", "conflict"].includes(String(item["state"]));
   }
@@ -1829,7 +2033,7 @@ export class StaffAppService {
   private writeOfflineQueue(queue: OfflineQueueEntry[]): void { localStorage.setItem(STAFF_OFFLINE_QUEUE_KEY, JSON.stringify(queue)); }
   private clearOfflineState(): void { localStorage.removeItem(STAFF_OFFLINE_QUEUE_KEY); localStorage.removeItem(STAFF_OFFLINE_LEASE_KEY); }
   private isQueueOwner(item: OfflineQueueEntry): boolean {
-    return !!this.user()?.id && item.userId === this.user()?.id && item.tenantId === this.tenantIdValue && item.sessionId === this.sessionIdValue;
+    return !!this.user()?.id && item.userId === this.user()?.id && item.tenantId === this.tenantIdValue;
   }
 
   private acquireQueueLease(): boolean {
@@ -1866,7 +2070,6 @@ export class StaffAppService {
     resetCsrfState();
     this.accessTokenValue = "";
     this.tenantIdValue = "";
-    this.sessionIdValue = "";
     this.profile.set(null);
     this.user.set(null);
     this.clearGetCache();
@@ -1915,12 +2118,13 @@ export class StaffAppService {
 
   private registrationResponse(credential: PublicKeyCredential): Record<string, unknown> {
     if (!(credential.response instanceof AuthenticatorAttestationResponse)) throw new Error("Invalid passkey registration response.");
-    return { id: credential.id, rawId: this.arrayBufferToBase64Url(credential.rawId), type: credential.type, response: { clientDataJSON: this.arrayBufferToBase64Url(credential.response.clientDataJSON), attestationObject: this.arrayBufferToBase64Url(credential.response.attestationObject) } };
+    const response = credential.response as AuthenticatorAttestationResponse & { getTransports?: () => string[] };
+    return { id: this.arrayBufferToBase64Url(credential.rawId), transports: response.getTransports?.() ?? [], clientDataJSON: this.arrayBufferToBase64Url(response.clientDataJSON), attestationObject: this.arrayBufferToBase64Url(response.attestationObject) };
   }
 
   private authenticationResponse(credential: PublicKeyCredential): Record<string, unknown> {
     if (!(credential.response instanceof AuthenticatorAssertionResponse)) throw new Error("Invalid passkey authentication response.");
-    return { id: credential.id, rawId: this.arrayBufferToBase64Url(credential.rawId), type: credential.type, response: { clientDataJSON: this.arrayBufferToBase64Url(credential.response.clientDataJSON), authenticatorData: this.arrayBufferToBase64Url(credential.response.authenticatorData), signature: this.arrayBufferToBase64Url(credential.response.signature), userHandle: credential.response.userHandle ? this.arrayBufferToBase64Url(credential.response.userHandle) : null } };
+    return { id: this.arrayBufferToBase64Url(credential.rawId), clientDataJSON: this.arrayBufferToBase64Url(credential.response.clientDataJSON), authenticatorData: this.arrayBufferToBase64Url(credential.response.authenticatorData), signature: this.arrayBufferToBase64Url(credential.response.signature), userHandle: credential.response.userHandle ? this.arrayBufferToBase64Url(credential.response.userHandle) : null };
   }
 
   private arrayBufferToBase64Url(value: ArrayBuffer): string {

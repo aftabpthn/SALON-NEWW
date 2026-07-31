@@ -215,7 +215,7 @@ type PreviousService = {
   staffId: string;
 };
 
-type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; notes: string };
+type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; notes: string; constraintType: string; constraintResourceKind: string };
 type BlackoutEntry = { id: string; staffId: string; blackoutGroupId: string; blackoutDate: string; blockedFrom: string; blockedUntil: string; reason: string };
 type BookingIntelligence = {
   plan: Array<{ lineId: string; serviceName: string; startAt: string; activeEndsAt: string; busyUntil: string; processingMinutes: number; cleanupMinutes: number; bufferMinutes: number; consultation: { required: boolean; patchTestRequired: boolean; formDefinitionId: string; current: boolean }; staff: Array<{ staffId: string; name: string; gender: string; verifiedSkills: number; bookedMinutes: number }> }>;
@@ -355,7 +355,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   commandStartTime = '08:00';
   commandDurationMinutes = 30;
   commandReason = '';
-  slotAction: { columnIndex: number; time: string; left: number; top: number } | null = null;
+  commandConstraintType = 'none';
+  commandConstraintResourceKind = '';
   kpiHistory: { label: string; statuses: string[]; waitlist: boolean } | null = null;
 
   private lineSeed = 0;
@@ -655,6 +656,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
             startAt: this.localDateTimeToIso(this.appointmentDate, line.startTime),
             parallel: index > 0 && line.startTime === lines[0].startTime,
           })),
+        }).catch((error) => {
+          if (request === this.bookingIntelligenceRequest) {
+            this.bookingIntelligenceError = this.errorMessage(error, 'Unable to load booking plan');
+          }
+          return null;
         }),
         Promise.all(lines.map(async (line) => {
           try {
@@ -673,7 +679,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         })),
       ]);
       if (request === this.bookingIntelligenceRequest) {
-        this.bookingIntelligence = (result?.data ?? result) as BookingIntelligence;
+        this.bookingIntelligence = result ? (result?.data ?? result) as BookingIntelligence : null;
         const byLine = new Map(recommendations.map((item) => [item.lineId, item]));
         this.bookingLines = this.bookingLines.map((line) => {
           const recommendation = byLine.get(line.id);
@@ -892,37 +898,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.openBookingWithSlot(person?.id || '', time);
   }
 
-  openColumnSlot(columnIndex: number, time: string, event: MouseEvent) {
+  openColumnSlot(columnIndex: number, time: string) {
     const column = this.calendarColumnsData[columnIndex];
     if (column?.date) this.appointmentDate = column.date;
-    this.slotAction = {
-      columnIndex,
-      time,
-      left: event.clientX + 12,
-      top: event.clientY + 12,
-    };
-  }
-
-  openSlotAction(action: 'booking' | 'block' | 'waitlist') {
-    const slot = this.slotAction;
-    if (!slot) return;
-
-    const column = this.calendarColumnsData[slot.columnIndex];
-    const staffId = column?.staffId || this.scheduledStaff[0]?.id || '';
-    if (column?.date) this.appointmentDate = column.date;
-    this.slotAction = null;
-
-    if (action === 'booking') {
-      this.openBookingWithSlot(staffId, slot.time);
-      return;
-    }
-
-    this.commandStartTime = this.timeToInput(slot.time);
-    if (action === 'block') {
-      this.commandStaffId = staffId;
-      this.commandStaffIds = staffId ? [staffId] : [];
-    }
-    this.openCommand(action);
+    this.openBookingWithSlot(column?.staffId || this.scheduledStaff[0]?.id || '', time);
   }
 
   closeNewBooking() {
@@ -959,6 +938,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   closeCommand() {
     this.activeCommand = null;
     this.commandError = '';
+    this.commandConstraintType = 'none';
+    this.commandConstraintResourceKind = '';
   }
 
   async saveCommand() {
@@ -991,6 +972,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           service_ids: this.commandServiceId ? [this.commandServiceId] : [],
           preferred_slot_at: this.localDateTimeToIso(this.appointmentDate, this.commandStartTime),
           notes: this.commandReason.trim(),
+          constraint_type: this.commandConstraintType,
+          constraint_resource_kind: this.commandConstraintType === 'none' ? '' : this.commandConstraintResourceKind,
         });
       }
 
@@ -1920,6 +1903,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         serviceIds: Array.isArray(item.serviceIds) ? item.serviceIds : Array.isArray(item.service_ids) ? item.service_ids : [],
         preferredSlotAt: String(item.preferredSlotAt || item.preferred_slot_at || ''),
         notes: String(item.notes || ''),
+        constraintType: String(item.constraintType || item.constraint_type || 'none'),
+        constraintResourceKind: String(item.constraintResourceKind || item.constraint_resource_kind || ''),
       })).filter((item) => item.id);
     } catch {
       this.waitlistEntries = [];
@@ -1964,6 +1949,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   waitlistLabel(entry: WaitlistEntry) {
     const service = entry.serviceIds.map((id) => this.serviceName(id)).filter(Boolean).join(', ');
     return `${this.clientName(entry.customerId)} · ${service || 'Service'} · ${this.shortDate(entry.preferredSlotAt)} ${this.timeText(entry.preferredSlotAt)}`;
+  }
+
+  waitlistConstraintLabel(entry: WaitlistEntry) {
+    if (entry.constraintType === 'none') return '';
+    return [entry.constraintType.replaceAll('_', ' '), entry.constraintResourceKind].filter(Boolean).join(' · ');
   }
 
   blackoutLabel(entry: BlackoutEntry) {

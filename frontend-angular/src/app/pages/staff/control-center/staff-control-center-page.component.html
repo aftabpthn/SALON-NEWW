@@ -61,7 +61,8 @@
   }
   @if (activeTab === 'content') {
     <section class="command-strip" aria-label="Content actions">
-      @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createStaffGuidance('training')">Assign SOP</button><button type="button" (click)="createStaffGuidance('compliance')">Assign rule</button><button type="button" (click)="createContentTask()">Add task</button> }
+      @if (canManage('staff.governance.manage', 'staff.manage')) { <button type="button" (click)="openRuleEditor()">New rule/SOP</button> }
+      @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createContentTask()">Add task</button> }
       @if (canManage('marketing.offers.manage', 'marketing.manage')) { <button type="button" (click)="createContentOffer()">Add offer</button> }
       @if (canManage('staff.payroll.manage', 'payroll.manage')) { <button type="button" (click)="createPenaltyRule()">Add penalty/payroll rule</button> }
     </section>
@@ -95,12 +96,24 @@
 }
 </section>
 </div>
-<section class="data-card"><header><div><h2>Product, brand and equipment recommendations</h2><span>{{ arrayValue(command?.['recommendations']).length }} live signals</span></div></header>
+<section class="data-card"><header><div><h2>Product and brand recommendations</h2><span>{{ arrayValue(command?.['recommendations']).length }} live signals</span></div></header>
 @for (row of arrayValue(command?.['recommendations']); track trackById($index, row)) {
   <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ label(row['type']) }} · {{ row['reason'] }}</small><small>{{ recommendationEvidence(row) }}</small></div><span class="status" [ngClass]="statusClass(row['priority'])">{{ row['priority'] }}</span><div class="row-actions"><button type="button" (click)="openRecommendation(row)">Review</button></div></article>
 }@if (arrayValue(command?.['recommendations']).length === 0) {
   <div class="empty">No recommendation signals for this period</div>
 }
+</section>
+<section class="data-card"><header><div><h2>Equipment & client-generation intelligence</h2><span>{{ arrayValue(command?.['equipmentIntelligence']?.['recommendations']).length }} evidence-based actions</span></div></header>
+<div class="key-list">@for (item of objectEntries(command?.['equipmentIntelligence']?.['summary']); track item.key) { <div><span>{{ item.key }}</span><strong>{{ item.key.includes('Revenue') ? money(item.value) : text(item.value) }}</strong></div> }</div>
+@for (row of arrayValue(command?.['equipmentIntelligence']?.['departments']); track row['department']) {
+  <article class="record"><div><strong>{{ row['department'] }}</strong><small>{{ row['appointments'] }} appointments · {{ row['unassignedAppointments'] }} without resource · {{ row['activeResources'] }} active</small><small>Peak {{ row['peakHourlyDemand'] }} · shortage {{ row['capacityShortage'] }} · confirmed equipment losses {{ row['equipmentLostBookings'] }}</small></div></article>
+}
+@for (row of arrayValue(command?.['equipmentIntelligence']?.['resources']); track row['id']) {
+  <article class="record"><div><strong>{{ row['name'] }} · {{ row['kind'] }}</strong><small>{{ row['department'] }} · {{ row['appointments'] }} appointments · {{ row['bookedMinutes'] }} booked minutes</small><small>Observed demand-window utilization: {{ row['demandWindowUtilizationPercent'] === null ? 'No evidence' : row['demandWindowUtilizationPercent'] + '%' }}</small></div><span class="status" [ngClass]="statusClass(row['active'] ? 'approved' : 'offline')">{{ row['active'] ? 'active' : 'inactive' }}</span></article>
+}
+@for (row of arrayValue(command?.['equipmentIntelligence']?.['recommendations']); track row['key']) {
+  <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ row['reason'] }}</small><small>{{ recommendationEvidence(row) }}</small><small>Estimated: {{ row['estimatedAdditionalAppointments'] }} appointments · {{ money(row['estimatedRevenuePaise']) }}</small></div><span class="status" [ngClass]="statusClass(row['approvalStatus'] || row['priority'])">{{ row['approvalStatus'] || row['priority'] }}</span><div class="row-actions"><button type="button" [disabled]="row['approvalStatus'] === 'pending' || row['approvalStatus'] === 'approved'" (click)="requestEquipmentApproval(row)">{{ row['approvalRequired'] ? (row['approvalStatus'] || 'Request approval') : 'Review resources' }}</button></div></article>
+} @empty { <div class="empty">No equipment action is justified by current evidence</div> }
 </section>
 <section class="data-card"><header><div><h2>{{ 'staff.ui.edcd62dd59' | translate }}</h2><span>{{ formatDate(periodEnd) }}</span></div></header>
 <div class="table-wrap"><table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.0a8adac9d6' | translate }}</th><th scope="col">{{ 'staff.ui.469d5b183f' | translate }}</th><th scope="col">{{ 'staff.ui.b689313fc1' | translate }}</th><th scope="col">{{ 'staff.ui.4310ed540c' | translate }}</th><th scope="col">{{ 'staff.ui.b758d32ce6' | translate }}</th><th scope="col">{{ 'staff.ui.1f3f4957c5' | translate }}</th></tr></thead><tbody>
@@ -147,11 +160,23 @@
 }</div>@if (objectEntries(coverage).length === 0 && !rosterDraft) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
-<section class="data-card"><header><div><h2>{{ 'staff.ui.0bb4ab80f5' | translate }}</h2></div></header><div class="key-list">@for (item of objectEntries(manpower); track item.key) {
-<div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div>
-}</div>@if (objectEntries(manpower).length === 0) {
+<section class="data-card"><header><div><h2>{{ 'staff.ui.0bb4ab80f5' | translate }}</h2></div></header><div class="key-list">
+<div><span>Required staff</span><strong>{{ text(manpower?.['requiredStaffCount']) }}</strong></div>
+<div><span>Shortage alerts</span><strong>{{ manpower?.['shortageAlertCount'] || 0 }}</strong></div>
+<div><span>Overstaffing alerts</span><strong>{{ manpower?.['overstaffingAlertCount'] || 0 }}</strong></div>
+<div><span>Leave impact alerts</span><strong>{{ manpower?.['leaveImpactAlertCount'] || 0 }}</strong></div>
+<div><span>Skills shortage alerts</span><strong>{{ manpower?.['skillsShortageAlertCount'] || 0 }}</strong></div>
+</div>@if (!manpower) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section></div>
+<section class="data-card"><header><div><h2>Area & department manpower plan</h2><span>Hourly required vs scheduled staff</span></div></header>
+<div class="table-wrap"><table class="manpower-table"><thead><tr><th>Date</th><th>Shift / time</th><th>Department</th><th>Demand</th><th>Required</th><th>Scheduled</th><th>Leave impact</th><th>Resources</th><th>Qualified</th><th>Alert</th><th>Recommendation</th></tr></thead><tbody>
+@for (row of arrayValue(manpower?.['rows']); track $index) {
+  <tr><td>{{ formatDate(row['date']) }}</td><td><strong>{{ row['shift'] }}</strong><small>{{ row['hourStart'] }}–{{ row['hourEnd'] }}</small></td><td><strong>{{ row['department'] }}</strong></td><td>{{ row['appointmentCount'] }} appt · {{ row['demandMinutes'] }} min</td><td>{{ row['requiredStaffCount'] }}</td><td>{{ row['scheduledStaffCount'] }}</td><td>{{ row['leaveImpactCount'] }} ({{ row['leaveStaffCount'] }} leave)</td><td>{{ row['resourceCount'] }}<small>@if (row['resourceShortageCount']) { {{ row['resourceShortageCount'] }} short }</small></td><td>{{ row['qualifiedStaffCount'] }}<small>@if (row['skillsShortageCount']) { {{ row['skillsShortageCount'] }} short }</small></td><td><span class="status" [class.good]="row['alert'] === 'balanced'" [class.bad]="row['alert'] === 'shortage'">{{ row['alert'] }}</span></td><td>{{ row['recommendation'] }}</td></tr>
+}
+</tbody></table></div>@if (arrayValue(manpower?.['rows']).length === 0) {
+<div class="empty">No appointment demand or scheduled shifts in this period</div>
+}</section>
 <section class="data-card"><header><div><h2>Staff AI</h2><span>{{ staffAi?.['humanReviewOnly'] ? 'Human review only' : 'No analysis' }}</span></div></header>
 <div class="table-wrap"><table><thead><tr><th scope="col">Analysis</th><th scope="col">Signals</th><th scope="col">Highest priority</th></tr></thead><tbody>
 @for (section of staffAiSections(); track section['key']) {
@@ -305,8 +330,34 @@
 }
 
 @if (activeTab === 'content') {
-  <section class="summary-strip"><div><span>Tasks</span><strong>{{ contentTasks.length }}</strong></div><div><span>Offers</span><strong>{{ contentOffers.length }}</strong></div><div><span>Penalty rules</span><strong>{{ penaltyRules.length }}</strong></div></section>
+  <section class="summary-strip"><div><span>Published rules/SOP</span><strong>{{ publishedRuleCount() }}</strong></div><div><span>Acknowledgements due</span><strong>{{ outstandingRuleCount() }}</strong></div><div><span>Open violations</span><strong>{{ openRuleViolationCount() }}</strong></div><div><span>Tasks</span><strong>{{ contentTasks.length }}</strong></div><div><span>Offers</span><strong>{{ contentOffers.length }}</strong></div></section>
+  @if (ruleEditorOpen) {
+    <section class="data-card rule-editor">
+      <header><div><h2>{{ ruleDraft['documentKey'] ? 'New version' : 'New rule/SOP' }}</h2><span>Saved as draft until published</span></div><button type="button" (click)="closeRuleEditor()">Close</button></header>
+      <div class="rule-form">
+        <label>Type<select [(ngModel)]="ruleDraft['documentType']"><option value="sop">SOP</option><option value="rule">Rule</option></select></label>
+        <label>Category<select [(ngModel)]="ruleDraft['category']"><option value="service">Service</option><option value="hygiene">Hygiene</option><option value="attendance">Attendance</option><option value="behavior">Behavior</option><option value="safety">Safety</option></select></label>
+        <label>Effective date<as-date-picker ariaLabel="Rule effective date" [(value)]="ruleDraft['effectiveDate']"></as-date-picker></label>
+        <label>Expiry<as-date-picker ariaLabel="Rule expiry date" [(value)]="ruleDraft['expiresOn']"></as-date-picker></label>
+        <label class="wide">Title<input [(ngModel)]="ruleDraft['title']" /></label>
+        <label class="wide">Content<textarea rows="7" [(ngModel)]="ruleDraft['content']"></textarea></label>
+        <label class="wide">Training attachment URL<input [(ngModel)]="ruleDraft['trainingAttachmentUrl']" placeholder="https:// or /files/..." /></label>
+        <label class="inline-check"><input type="checkbox" [(ngModel)]="ruleDraft['mandatoryAcknowledgement']" />Mandatory acknowledgement</label>
+        @if (ruleQuiz.length) { <label>Quiz pass score<input type="number" min="1" max="100" [(ngModel)]="ruleDraft['quizPassScore']" /></label> }
+      </div>
+      <div class="quiz-builder"><div><strong>Quiz/training check</strong><button type="button" (click)="addRuleQuizQuestion()">Add question</button></div>
+        @for (question of ruleQuiz; track question['id']; let index = $index) { <article><span>{{ index + 1 }}. {{ question['question'] }} · Answer {{ correctAnswerNumber(question) }}</span><button type="button" (click)="removeRuleQuizQuestion(index)">Remove</button></article> }
+      </div>
+      <div class="rule-editor-actions"><button type="button" (click)="closeRuleEditor()">Cancel</button><button class="primary" type="button" [disabled]="loading" (click)="saveRuleDocument()">Save draft</button></div>
+    </section>
+  }
   <section class="content-grid">
+    <article class="data-card content-card rules-card">
+      <header><div><h2>Rules & SOP</h2><span>{{ arrayValue(rulesCenter['documents']).length }} versions</span></div><button type="button" (click)="openRuleEditor()">New</button></header>
+      @for (row of arrayValue(rulesCenter['documents']); track trackById($index, row)) {
+        <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ label(row['documentType']) }} · {{ label(row['category']) }} · v{{ row['documentVersion'] }} · {{ row['acknowledgedCount'] || 0 }}/{{ row['activeStaff'] || 0 }} acknowledged</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="row-actions">@if (row['status'] === 'draft') { <button class="primary" type="button" (click)="publishRule(row)">Publish</button> }@if (row['status'] === 'published') { <button type="button" (click)="unpublishRule(row)">Unpublish</button> }<button type="button" (click)="openRuleEditor(row)">New version</button><button type="button" (click)="recordRuleViolation(row)">Violation</button></div></article>
+      }@if (arrayValue(rulesCenter['documents']).length === 0) { <div class="empty">No rules or SOPs yet</div> }
+    </article>
     <article class="data-card content-card">
       <header><div><h2>Task</h2><span>{{ contentTasks.length }} records</span></div></header>
       <div class="content-body"><button class="primary" type="button" (click)="createContentTask()">Add task</button></div>
@@ -334,6 +385,9 @@
         <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
       }
     </article>
+  </section>
+  <section class="data-card"><header><div><h2>Rule violations</h2><span>{{ arrayValue(rulesCenter['violations']).length }} records</span></div></header>
+    @for (row of arrayValue(rulesCenter['violations']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['staffName'] }} · {{ row['documentTitle'] }}</strong><small>{{ row['details'] }} · {{ formatDateTime(row['occurredAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span>@if (row['status'] === 'open') { <div class="row-actions"><button class="primary" type="button" (click)="resolveRuleViolation(row)">Resolve</button></div> }</article> }@if (arrayValue(rulesCenter['violations']).length === 0) { <div class="empty">No rule violations</div> }
   </section>
 }
 </section>

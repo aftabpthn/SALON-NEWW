@@ -27,12 +27,14 @@ test('training page exposes connected assignment and coaching actions', () => {
   assert.match(workspace, /private async ensureStaffOptions\(\)/);
   assert.doesNotMatch(workspace, /window\.prompt/);
   assert.match(template, /actionDrawerOpen && activeAction/);
-  assert.match(template, /\(ngModelChange\)="actionValues\[field\.key\] = String\(\$event \?\? ''\)"/);
+  assert.match(template, /\(ngModelChange\)="actionValues\[field\.key\] = (?:String\(\$event \?\? ''\)|\$event\?\.toString\(\) \?\? '')"/);
   assert.match(template, /@for \(staff of staffOptions; track staff\.id\)[\s\S]+staffOptionLabel\(staff\)/);
 
   assert.match(models, /options: \['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom'\]/);
   assert.match(models, /options: \['count', 'percent', 'minutes', 'paise'\]/);
-  assert.match(service, /&\[\s*"revenue",\s*"appointments",\s*"rebooking",\s*"attendance",\s*"training",\s*"utilization",\s*"custom",?\s*\]/);
+  for (const goalType of ['revenue', 'appointments', 'rebooking', 'attendance', 'training', 'utilization', 'custom']) {
+    assert.ok(service.includes(`"${goalType}"`), `missing backend goal type ${goalType}`);
+  }
   assert.match(service, /&\["count", "percent", "minutes", "paise"\]/);
 
   assert.match(routes, /route\("\/staff-enterprise\/training", get\(training_assignments\)\)/);

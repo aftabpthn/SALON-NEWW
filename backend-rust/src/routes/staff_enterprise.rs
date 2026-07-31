@@ -2,7 +2,7 @@ use axum::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, HeaderMap, Response},
-    routing::{get, patch, post, put},
+    routing::{get, patch, post},
     Extension, Json, Router,
 };
 use chrono::{FixedOffset, NaiveDate, Utc};
@@ -13,12 +13,13 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::{
         auth_repository::{self, AuthAuditInput},
+        inventory_repository,
         staff_enterprise_repository::*,
     },
     routes::context::tenant_branch,
     services::{
         auth_service::{self, AuthClaims},
-        staff_ai_service, staff_app_service,
+        inventory_adjustment_service, staff_ai_service, staff_app_service,
         staff_enterprise_service::{
             self, ApprovalDetail, ApprovalPolicyRequest, ApprovalRequestInput, BestStaffRequest,
             CoachingGoalRequest, ComplianceExport, DecisionRequest, IntelligenceRiskRow,
@@ -26,8 +27,10 @@ use crate::{
             NotificationTemplateRequest, QueueNotificationRequest, RankedStaffCandidate,
             ReplacementRecommendationResponse, ReplacementRequest, RosterCoverageResponse,
             RosterOptimizeRequest, SalaryRevisionRequest, StaffEnterpriseCommandCenter,
-            StaffSalesReport, StatutoryCalculationRequest, StatutoryRuleRequest, StatutorySummary,
-            TipPayoutRequest, TrainingAssignmentRequest, VersionRequest,
+            StaffRuleAcknowledgementRequest, StaffRuleDocumentRequest, StaffRuleViolationRequest,
+            StaffRuleViolationResolutionRequest, StaffSalesReport, StatutoryCalculationRequest,
+            StatutoryRuleRequest, StatutorySummary, TipPayoutRequest, TrainingAssignmentRequest,
+            VersionRequest,
         },
         staff_payroll_service,
     },
@@ -49,18 +52,45 @@ pub fn router() -> Router<AppState> {
         .route("/staff/audit", get(list_audit))
         .route("/staff/feedback", get(list_staff_feedback))
         .route("/staff/feedback/:id", patch(resolve_staff_feedback))
+        .route(
+            "/staff/rules",
+            get(list_staff_rules_center).post(create_staff_rule_document),
+        )
+        .route(
+            "/staff/rules/:id/publish",
+            post(publish_staff_rule_document),
+        )
+        .route(
+            "/staff/rules/:id/unpublish",
+            post(unpublish_staff_rule_document),
+        )
+        .route("/staff/rules/violations", post(create_staff_rule_violation))
+        .route(
+            "/staff/rules/violations/:id/resolve",
+            post(resolve_staff_rule_violation),
+        )
         .route("/staff/self/dashboard", get(self_dashboard))
         .route(
             "/staff-self/feedback",
             get(list_self_feedback).post(create_self_feedback),
         )
         .route("/staff-self/offers", get(list_self_offers))
+        .route("/staff-self/rules", get(list_self_staff_rules))
+        .route("/staff-self/rules/:id/read", post(mark_staff_rule_read))
+        .route(
+            "/staff-self/rules/:id/acknowledge",
+            post(acknowledge_staff_rule),
+        )
         .route(
             "/staff-self/offers/:id/creative",
             get(get_self_offer_creative),
         )
         .route("/staff-self/enterprise-os", get(staff_app_enterprise_os))
         .route("/staff-self/business", get(staff_app_business))
+        .route(
+            "/staff-self/business/product-usage",
+            post(record_staff_product_usage),
+        )
         .route(
             "/staff-self/appointments/:id/recommendations",
             get(self_appointment_recommendations),
@@ -232,6 +262,17 @@ struct StaffAppBusinessQuery {
     service_id: Option<String>,
     service: Option<String>,
     department: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StaffProductUsageRequest {
+    inventory_item_id: String,
+    service_id: String,
+    client_id: String,
+    appointment_id: String,
+    actual_quantity: i32,
+    notes: Option<String>,
+    idempotency_key: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -457,6 +498,208 @@ async fn resolve_staff_feedback(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn list_staff_rules_center(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<serde_json::Value> {
+    governance(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::list_staff_rules_center(&state.db, &tenant_id, &branch_id)
+            .await?,
+    )))
+}
+
+async fn create_staff_rule_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<StaffRuleDocumentRequest>,
+) -> ApiResult<StaffRuleDocumentRecord> {
+    governance(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::create_staff_rule_document(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(&state, &claims, &branch_id, "staff.rule.created", &row.id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn publish_staff_rule_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<VersionRequest>,
+) -> ApiResult<StaffRuleDocumentRecord> {
+    governance(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::publish_staff_rule_document(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        request.version,
+        &claims.sub,
+    )
+    .await?;
+    audit(&state, &claims, &branch_id, "staff.rule.published", &row.id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn unpublish_staff_rule_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<VersionRequest>,
+) -> ApiResult<StaffRuleDocumentRecord> {
+    governance(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::unpublish_staff_rule_document(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        request.version,
+        &claims.sub,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.rule.unpublished",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_self_staff_rules(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<serde_json::Value> {
+    require_app(&claims, "staff.app.rules.read", RULES_LEGACY_PERMISSIONS)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::list_self_staff_rules(
+            &state.db, &tenant_id, &branch_id, &staff_id,
+        )
+        .await?,
+    )))
+}
+
+async fn mark_staff_rule_read(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<StaffRuleStatusRecord> {
+    require_app(&claims, "staff.app.rules.read", RULES_LEGACY_PERMISSIONS)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_enterprise_service::mark_staff_rule_read(
+        &state.db, &tenant_id, &branch_id, &id, &staff_id,
+    )
+    .await?;
+    audit(&state, &claims, &branch_id, "staff.rule.read", &id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn acknowledge_staff_rule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<StaffRuleAcknowledgementRequest>,
+) -> ApiResult<StaffRuleStatusRecord> {
+    require_app(&claims, "staff.app.rules.read", RULES_LEGACY_PERMISSIONS)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_enterprise_service::acknowledge_staff_rule(
+        &state.db, &tenant_id, &branch_id, &id, &staff_id, request,
+    )
+    .await?;
+    let event = if row.acknowledged_at.is_some() {
+        "staff.rule.acknowledged"
+    } else {
+        "staff.rule.quiz_failed"
+    };
+    audit(&state, &claims, &branch_id, event, &id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn create_staff_rule_violation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<StaffRuleViolationRequest>,
+) -> ApiResult<StaffRuleViolationRecord> {
+    governance(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::create_staff_rule_violation(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.rule.violation_recorded",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn resolve_staff_rule_violation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<StaffRuleViolationResolutionRequest>,
+) -> ApiResult<StaffRuleViolationRecord> {
+    governance(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::resolve_staff_rule_violation(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.rule.violation_resolved",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn list_self_offers(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -488,6 +731,7 @@ async fn list_self_offers(
         ) ORDER BY COALESCE(ends_at,starts_at,created_at) ASC),'[]'::JSONB)
         FROM pos_coupons
         WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND approval_status='approved' AND show_in_staff_app=TRUE
+          AND (usage_limit IS NULL OR used_count<usage_limit)
           AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>=NOW())"#,
     )
     .bind(&tenant_id)
@@ -502,9 +746,11 @@ async fn list_self_offers(
         .filter_map(|offer| offer.get("id").and_then(serde_json::Value::as_str))
         .collect::<Vec<_>>();
     if !offer_ids.is_empty() {
-        sqlx::query("INSERT INTO marketing_offer_events(tenant_id,branch_id,offer_id,event_type,channel) SELECT $1,$2,id,'view','staff_app' FROM pos_coupons WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3)")
+        if let Err(error) = sqlx::query("INSERT INTO marketing_offer_events(tenant_id,branch_id,offer_id,event_type,channel) SELECT $1,$2,id,'view','staff_app' FROM pos_coupons WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3)")
             .bind(&tenant_id).bind(&branch_id).bind(&offer_ids).execute(&state.db).await
-            .map_err(|_| AppError::internal("failed to track staff offer views"))?;
+        {
+            tracing::warn!(%error, "failed to track staff offer views");
+        }
     }
     Ok(Json(ApiResponse::ok(rows)))
 }
@@ -527,6 +773,7 @@ async fn get_self_offer_creative(
            JOIN pos_coupons offer ON offer.id=creative.offer_id AND offer.tenant_id=creative.tenant_id AND offer.branch_id=creative.branch_id
           WHERE creative.tenant_id=$1 AND creative.branch_id=$2 AND creative.offer_id=$3
             AND offer.active=TRUE AND offer.approval_status='approved' AND offer.show_in_staff_app=TRUE
+            AND (offer.usage_limit IS NULL OR offer.used_count<offer.usage_limit)
             AND (offer.starts_at IS NULL OR offer.starts_at<=NOW()) AND (offer.ends_at IS NULL OR offer.ends_at>=NOW())"#,
     )
     .bind(&tenant_id)
@@ -629,6 +876,15 @@ async fn staff_app_workspace_preferences(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<serde_json::Value> {
+    require_app(
+        &claims,
+        "staff.app.settings.read",
+        &[
+            "staff.app.settings.manage",
+            "staff.self_manage",
+            "staff_self.write",
+        ],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         staff_app_service::workspace_preferences(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -642,6 +898,11 @@ async fn save_staff_app_workspace_preferences(
     headers: HeaderMap,
     Json(payload): Json<staff_app_service::WorkspacePreferenceRequest>,
 ) -> ApiResult<serde_json::Value> {
+    require_app(
+        &claims,
+        "staff.app.settings.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         staff_app_service::save_workspace_preferences(
@@ -661,11 +922,50 @@ async fn staff_app_enterprise_os(
     headers: HeaderMap,
     Query(query): Query<StaffAppRangeQuery>,
 ) -> ApiResult<serde_json::Value> {
-    require_app(
+    let allowed = app_allowed(
+        &claims,
+        "staff.app.dashboard.read",
+        &["staff.self_manage", "staff_self.write"],
+    ) || app_allowed(
         &claims,
         "staff.app.appointments.read",
         &["appointments.read", "staff.self_manage"],
-    )?;
+    ) || app_allowed(
+        &claims,
+        "staff.app.business.read",
+        &["appointments.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.tasks.read",
+        &["staff.self_manage", "staff_self.write"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.calendar.read",
+        &["staff.schedule.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.roster.read",
+        &["staff.schedule.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.notifications.read",
+        &["notifications.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.performance.read",
+        &["staff.analytics.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.leaderboard.read",
+        &["staff.analytics.read", "staff.self_manage"],
+    ) || app_allowed(
+        &claims,
+        "staff.app.reports.read",
+        &["reports.read", "staff.self_manage"],
+    );
+    if !allowed {
+        return Err(AppError::forbidden("Staff App permission is required"));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let today = Utc::now()
         .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
@@ -685,11 +985,19 @@ async fn staff_app_business(
     headers: HeaderMap,
     Query(query): Query<StaffAppBusinessQuery>,
 ) -> ApiResult<serde_json::Value> {
-    require_app(
+    if !app_allowed(
         &claims,
         "staff.app.business.read",
         &["appointments.read", "staff.self_manage"],
-    )?;
+    ) && !app_allowed(
+        &claims,
+        "staff.app.reports.read",
+        &["reports.read", "staff.self_manage"],
+    ) {
+        return Err(AppError::forbidden(
+            "Staff App business or reports permission is required",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let today = Utc::now()
         .with_timezone(&FixedOffset::east_opt(19_800).expect("India offset is valid"))
@@ -737,6 +1045,45 @@ async fn staff_app_business(
     )))
 }
 
+async fn record_staff_product_usage(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffProductUsageRequest>,
+) -> ApiResult<inventory_repository::BackbarUsageRecord> {
+    require_app(&claims, "staff.self_manage", &["staff_self.write"])?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = inventory_adjustment_service::record_backbar_usage(
+        &state,
+        inventory_adjustment_service::BackbarUsageInput {
+            tenant_id: &tenant_id,
+            branch_id: &branch_id,
+            inventory_item_id: payload.inventory_item_id.trim(),
+            service_id: Some(payload.service_id.trim()),
+            staff_id: Some(&staff_id),
+            client_id: Some(payload.client_id.trim()),
+            appointment_id: Some(payload.appointment_id.trim()),
+            actual_quantity: payload.actual_quantity,
+            notes: payload.notes.as_deref().unwrap_or_default(),
+            actor_user_id: &claims.sub,
+            idempotency_key: payload.idempotency_key.trim(),
+        },
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.product_usage.created",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn staff_app_business_invoice(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -778,11 +1125,25 @@ async fn self_dashboard(
     h: HeaderMap,
     Query(q): Query<SelfQuery>,
 ) -> ApiResult<SelfDashboardRecord> {
-    require_app(
+    let allowed = app_allowed(
         &c,
         "staff.app.dashboard.read",
         &["staff.self_manage", "staff_self.write"],
-    )?;
+    ) || app_allowed(
+        &c,
+        "staff.app.appointments.read",
+        &["appointments.read", "staff.self_manage"],
+    ) || app_allowed(&c, "staff.app.profile.read", &["staff.self_manage"])
+        || app_allowed(&c, "staff.app.settings.read", &["staff.self_manage"])
+        || auth_service::staff_app_permission_allowed(
+            &c,
+            "staff.app.payroll.read",
+            STAFF_APP_PAYROLL_ROLES,
+            &["staff.payroll.read", "staff.payroll.manage", "finance.read"],
+        );
+    if !allowed {
+        return Err(AppError::forbidden("Staff App permission is required"));
+    }
     let (t, b) = tenant_branch(&h)?;
     let mut dashboard =
         staff_enterprise_service::self_dashboard(&s.db, &t, &b, &c.sub, q.date).await?;
@@ -792,9 +1153,20 @@ async fn self_dashboard(
 
 const STAFF_APP_ROLES: &[&str] = &["owner", "admin", "manager", "staff"];
 const STAFF_APP_PAYROLL_ROLES: &[&str] = &["owner", "admin", "accountant"];
+const RULES_LEGACY_PERMISSIONS: &[&str] = &["staff.self_manage", "staff_self.write", "read:staff"];
 
 fn app_allowed(c: &AuthClaims, permission: &str, legacy: &[&str]) -> bool {
     auth_service::staff_app_permission_allowed(c, permission, STAFF_APP_ROLES, legacy)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RULES_LEGACY_PERMISSIONS;
+
+    #[test]
+    fn rules_legacy_permissions_do_not_include_granular_task_access() {
+        assert!(!RULES_LEGACY_PERMISSIONS.contains(&"staff.app.tasks.read"));
+    }
 }
 
 fn require_app(c: &AuthClaims, permission: &str, legacy: &[&str]) -> Result<(), AppError> {
@@ -871,6 +1243,30 @@ fn filter_staff_app_os(os: &mut serde_json::Value, c: &AuthClaims) {
     ) {
         if os["performance"].is_object() {
             os["performance"]["revenue"] = json!(null);
+            os["performance"]["targetRevenuePaise"] = json!(null);
+            os["performance"]["revenueTargetPercent"] = json!(null);
+            if let Some(opportunities) = os["performance"]["revenueOpportunities"].as_array_mut() {
+                for opportunity in opportunities {
+                    opportunity["projectedImpactPaise"] = json!(null);
+                    opportunity["actualImpactPaise"] = json!(null);
+                }
+            }
+            os["performance"]["equipmentIntelligence"]["summary"]["estimatedRevenuePaise"] =
+                json!(null);
+            if let Some(departments) =
+                os["performance"]["equipmentIntelligence"]["departments"].as_array_mut()
+            {
+                for department in departments {
+                    department["estimatedRevenuePaise"] = json!(null);
+                }
+            }
+            if let Some(recommendations) =
+                os["performance"]["equipmentIntelligence"]["recommendations"].as_array_mut()
+            {
+                for recommendation in recommendations {
+                    recommendation["estimatedRevenuePaise"] = json!(null);
+                }
+            }
         }
         if let Some(reports) = os["reports"].as_object_mut() {
             for report in reports.values_mut() {
@@ -1811,6 +2207,37 @@ fn read(c: &AuthClaims) -> Result<(), AppError> {
 }
 fn manager(c: &AuthClaims) -> Result<(), AppError> {
     role(c, &["owner", "admin", "manager"])
+}
+fn governance(c: &AuthClaims, manage: bool) -> Result<(), AppError> {
+    let permissions = if manage {
+        &["staff.governance.manage", "staff.manage"][..]
+    } else {
+        &[
+            "staff.governance.read",
+            "staff.governance.manage",
+            "staff.read",
+            "staff.manage",
+        ][..]
+    };
+    let denied = c.denied_permissions.iter().any(|denied| {
+        permissions
+            .iter()
+            .any(|permission| denied.as_str() == *permission)
+    });
+    if !denied
+        && (["owner", "admin", "manager"]
+            .iter()
+            .any(|role| role.eq_ignore_ascii_case(&c.role))
+            || c.permissions.iter().any(|allowed| {
+                permissions
+                    .iter()
+                    .any(|permission| allowed.as_str() == *permission)
+            }))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden("staff governance access is restricted"))
+    }
 }
 fn payroll(c: &AuthClaims) -> Result<(), AppError> {
     payroll_permission(c, &["staff.payroll.manage"])

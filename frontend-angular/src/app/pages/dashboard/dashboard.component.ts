@@ -3,6 +3,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, forkJoin, of } from 'rxjs';
 import { ApiService } from '@app/shared/services/api.service';
+import { LanguageService } from '@app/core/i18n/language.service';
+import { TranslatePipe } from '@app/shared/pipes/translate.pipe';
 
 type ApiEnvelope<T> = { data?: T };
 type InsightSection = 'appointments' | 'sales' | 'forecast' | 'activity' | 'dues' | 'payments';
@@ -100,15 +102,46 @@ const EMPTY_SALES: SalesReport = {
   outstandingSalesPaise: 0,
   topInvoices: [],
 };
+const DASHBOARD_STATUS_LABELS: Readonly<Record<string, string>> = {
+  completed: 'dashboard.status.completed',
+  scheduled: 'dashboard.status.scheduled',
+  cancelled: 'dashboard.status.cancelled',
+  canceled: 'dashboard.status.cancelled',
+  noshow: 'dashboard.status.noShow',
+  no_show: 'dashboard.status.noShow',
+  no_showed: 'dashboard.status.noShow',
+  checked_in: 'dashboard.status.checkedIn',
+  checkedin: 'dashboard.status.checkedIn',
+  in_progress: 'dashboard.status.inProgress',
+  rescheduled: 'dashboard.status.rescheduled',
+  confirmed: 'dashboard.status.confirmed',
+  pending: 'dashboard.status.pending',
+  open: 'dashboard.status.open',
+  draft: 'dashboard.status.draft',
+};
+const DASHBOARD_PAYMENT_MODE_LABELS: Readonly<Record<string, string>> = {
+  cash: 'dashboard.paymentMode.cash',
+  card: 'dashboard.paymentMode.card',
+  upi: 'dashboard.paymentMode.upi',
+  visa: 'dashboard.paymentMode.card',
+  mastercard: 'dashboard.paymentMode.card',
+  'bank transfer': 'dashboard.paymentMode.bankTransfer',
+  bank_transfer: 'dashboard.paymentMode.bankTransfer',
+  wallet: 'dashboard.paymentMode.wallet',
+  online: 'dashboard.paymentMode.online',
+  cheque: 'dashboard.paymentMode.cheque',
+  credit: 'dashboard.paymentMode.credit',
+};
 
 @Component({
     selector: 'page-dashboard',
-    imports: [CommonModule, RouterLink],
+    imports: [CommonModule, RouterLink, TranslatePipe],
     templateUrl: './dashboard.component.html',
     styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly language = inject(LanguageService);
 
   snapshot = EMPTY_SNAPSHOT;
   sales = EMPTY_SALES;
@@ -136,7 +169,7 @@ export class DashboardComponent implements OnInit {
     this.loading = !this.loadedAt;
     this.error = '';
     this.sectionErrors.clear();
-    this.api.get<ApiEnvelope<DashboardSnapshot> | DashboardSnapshot>('/api/v1/reports/dashboard')
+      this.api.get<ApiEnvelope<DashboardSnapshot> | DashboardSnapshot>('/api/v1/reports/dashboard')
       .pipe(finalize(() => (this.loading = false)))
       .subscribe({
         next: (snapshot) => {
@@ -146,7 +179,7 @@ export class DashboardComponent implements OnInit {
         },
         error: (error) => {
           this.status = 'unavailable';
-          this.error = error?.error?.message ?? 'Dashboard data could not be loaded.';
+          this.error = this.language.text('dashboard.loadError');
         },
       });
     this.loadInsights();
@@ -218,8 +251,18 @@ export class DashboardComponent implements OnInit {
         }).format(date);
   }
 
-  label(value?: string): string {
-    return String(value || '-').replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  labelStatus(value: string | undefined): string {
+    const status = String(value || '').trim().toLowerCase();
+    if (!status) return '-';
+    const labelKey = DASHBOARD_STATUS_LABELS[status];
+    return this.language.text(labelKey || 'dashboard.status.unknown');
+  }
+
+  labelPaymentMode(value: string | undefined): string {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return '-';
+    const key = DASHBOARD_PAYMENT_MODE_LABELS[normalized] ?? DASHBOARD_PAYMENT_MODE_LABELS[normalized.replace(/[^a-z0-9_]/g, '_')];
+    return this.language.text(key || 'dashboard.paymentMode.unknown');
   }
 
   bookingReference(id?: string): string {

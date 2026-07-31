@@ -15,8 +15,9 @@ use sqlx::PgPool;
 use crate::{
     models::common::AppError,
     repositories::{
-        ai_concierge_repository as concierge_repository, ai_copilot_repository as copilot_repository,
-        analytics_repository, clients_repository, membership_lifecycle_repository,
+        ai_concierge_repository as concierge_repository,
+        ai_copilot_repository as copilot_repository, analytics_repository, clients_repository,
+        membership_lifecycle_repository,
     },
 };
 
@@ -36,9 +37,6 @@ pub struct ToolScope {
     /// Whether money lines may be shown. Decided from permissions by the
     /// dispatcher, so a denied `finance.read` strips them even for an owner.
     pub financials_visible: bool,
-    /// Domains this login may read. Composite tools use this instead of
-    /// re-deciding access from a role name.
-    pub allowed_domains: Vec<crate::services::ai_scope_service::AiDomain>,
     /// The scope statement stamped onto every answer.
     pub disclosure: crate::services::ai_scope_service::ScopeDisclosure,
 }
@@ -54,10 +52,6 @@ impl ToolScope {
         self.branch_ids.len() > 1
     }
 
-    pub fn allows(&self, domain: crate::services::ai_scope_service::AiDomain) -> bool {
-        self.allowed_domains.contains(&domain)
-    }
-
     /// A one-branch scope, matching what the dispatcher builds for a login that
     /// holds exactly one branch.
     #[cfg(test)]
@@ -67,7 +61,6 @@ impl ToolScope {
             primary_branch_id: branch_id.to_string(),
             label: branch_id.to_string(),
             financials_visible,
-            allowed_domains: crate::services::ai_scope_service::AiDomain::ALL.to_vec(),
             disclosure: crate::services::ai_scope_service::ScopeDisclosure {
                 label: branch_id.to_string(),
                 branch_count: 1,
@@ -231,13 +224,7 @@ impl CopilotTool {
                 &["owner", "admin", "manager", "accountant", "analyst"]
             }
             // Stock risk is operational, so the people who order stock can ask.
-            Self::InventoryRisk => &[
-                "owner",
-                "admin",
-                "manager",
-                "analyst",
-                "inventorymanager",
-            ],
+            Self::InventoryRisk => &["owner", "admin", "manager", "analyst", "inventorymanager"],
             // Client lists the floor works from every day.
             Self::RegularClients | Self::MembershipRenewals => &[
                 "owner",
@@ -756,7 +743,11 @@ impl CopilotAnswer {
         self
     }
 
-    pub(crate) fn action(mut self, action: impl Into<String>, deep_link: impl Into<String>) -> Self {
+    pub(crate) fn action(
+        mut self,
+        action: impl Into<String>,
+        deep_link: impl Into<String>,
+    ) -> Self {
         self.recommended_action = action.into();
         self.deep_link = deep_link.into();
         self
@@ -1003,25 +994,62 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
     // the user actually asked about.
     let about_revenue = has_any(
         text,
-        &["revenue", "sales", "income", "turnover", "kamai", "बिक्री", "राजस्व"],
+        &[
+            "revenue",
+            "sales",
+            "income",
+            "turnover",
+            "kamai",
+            "बिक्री",
+            "राजस्व",
+        ],
     );
     let about_margin = has_any(
         text,
-        &["margin", "contribution", "profit", "munafa", "मार्जिन", "मुनाफ"],
+        &[
+            "margin",
+            "contribution",
+            "profit",
+            "munafa",
+            "मार्जिन",
+            "मुनाफ",
+        ],
     );
     let about_branch = has_any(text, &["branch", "store", "outlet", "ब्रांच", "शाखा"]);
     let about_staff = has_any(
         text,
-        &["staff", "stylist", "therapist", "employee", "team member", "स्टाफ"],
+        &[
+            "staff",
+            "stylist",
+            "therapist",
+            "employee",
+            "team member",
+            "स्टाफ",
+        ],
     );
     let about_membership = has_any(text, &["membership", "member", "मेंबरशिप", "सदस्यता"]);
     let about_lapse = has_any(
         text,
-        &["lapse", "lapsing", "churn", "stopped coming", "not visited", "chhod", "छोड़"],
+        &[
+            "lapse",
+            "lapsing",
+            "churn",
+            "stopped coming",
+            "not visited",
+            "chhod",
+            "छोड़",
+        ],
     );
     let about_bookings = has_any(
         text,
-        &["booking", "appointment", "footfall", "demand", "बुकिंग", "अपॉइंटमेंट"],
+        &[
+            "booking",
+            "appointment",
+            "footfall",
+            "demand",
+            "बुकिंग",
+            "अपॉइंटमेंट",
+        ],
     );
 
     if about_service && declining && about_revenue {
@@ -1033,7 +1061,10 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
     if about_staff
         && declining
         && (about_bookings
-            || has_any(text, &["why", "cause", "reason", "kyon", "kyun", "क्यों", "वजह"]))
+            || has_any(
+                text,
+                &["why", "cause", "reason", "kyon", "kyun", "क्यों", "वजह"],
+            ))
     {
         return Some(CopilotTool::StaffDeclineCause);
     }
@@ -1112,8 +1143,17 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
     if has_any(
         text,
         &[
-            "profit", "margin", "munafa", "munaafa", "faida", "profitab", "revenue",
-            "turnover", "kamai", "मुनाफ", "मार्जिन",
+            "profit",
+            "margin",
+            "munafa",
+            "munaafa",
+            "faida",
+            "profitab",
+            "revenue",
+            "turnover",
+            "kamai",
+            "मुनाफ",
+            "मार्जिन",
         ],
     ) {
         return Some(CopilotTool::ProfitIntelligence);
@@ -1213,23 +1253,22 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
     // The client-scoped favourite-service tool keys on "regular kaunsi", which
     // none of these phrases contain, so the two stay apart.
     if has_any(
-            text,
-            &[
-                "regular hain",
-                "are regular",
-                "regular clients",
-                "regular customers",
-                "loyal client",
-                "loyal customer",
-                "best client",
-                "repeat client",
-                "repeat customer",
-                "frequent client",
-                "who comes back",
-                "रेगुलर",
-            ],
-        )
-    {
+        text,
+        &[
+            "regular hain",
+            "are regular",
+            "regular clients",
+            "regular customers",
+            "loyal client",
+            "loyal customer",
+            "best client",
+            "repeat client",
+            "repeat customer",
+            "frequent client",
+            "who comes back",
+            "रेगुलर",
+        ],
+    ) {
         return Some(CopilotTool::RegularClients);
     }
     if has_any(
@@ -1649,9 +1688,7 @@ pub async fn run(
         CopilotTool::BusinessOverview => {
             business_overview(db, tenant_id, scope, scope.financials_visible).await
         }
-        CopilotTool::BusinessDiagnostic => {
-            business_diagnostic(db, tenant_id, scope).await
-        }
+        CopilotTool::BusinessDiagnostic => business_diagnostic(db, tenant_id, scope, actor).await,
         CopilotTool::RegularClients => {
             regular_clients(db, tenant_id, scope, scope.financials_visible).await
         }
@@ -1692,15 +1729,7 @@ pub async fn run(
             .await
         }
         CopilotTool::ClientReturnForecast => {
-            client_scoped(
-                db,
-                tenant_id,
-                scope,
-                subject,
-                matched.tool,
-                return_forecast,
-            )
-            .await
+            client_scoped(db, tenant_id, scope, subject, matched.tool, return_forecast).await
         }
         CopilotTool::ClientFavouriteService => {
             client_scoped(
@@ -1714,15 +1743,7 @@ pub async fn run(
             .await
         }
         CopilotTool::ClientOffer => {
-            client_scoped(
-                db,
-                tenant_id,
-                scope,
-                subject,
-                matched.tool,
-                client_offer,
-            )
-            .await
+            client_scoped(db, tenant_id, scope, subject, matched.tool, client_offer).await
         }
     };
     // A tool that cannot read its data must not fall through to an invented answer.
@@ -2018,7 +2039,11 @@ async fn service_decline(
     scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let rows = copilot_repository::service_performance_trend(
-        db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT,
+        db,
+        tenant_id,
+        &scope.branch_ids,
+        TREND_DAYS,
+        ROW_LIMIT,
     )
     .await
     .map_err(|_| AppError::internal("failed to load service performance trend"))?;
@@ -2049,10 +2074,15 @@ async fn service_decline(
     let worst = declining[0];
     // Ask when in the week this service is weakest, so the answer explains where
     // the demand went instead of only reporting that it fell.
-    let weekday_rows =
-        copilot_repository::weekday_demand(db, tenant_id, &scope.branch_ids, TREND_DAYS, &worst.service_id)
-            .await
-            .map_err(|_| AppError::internal("failed to load weekday demand"))?;
+    let weekday_rows = copilot_repository::weekday_demand(
+        db,
+        tenant_id,
+        &scope.branch_ids,
+        TREND_DAYS,
+        &worst.service_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load weekday demand"))?;
     let weak_window = weakest_window(&weekday_rows);
 
     let mut answer = CopilotAnswer::new(
@@ -2186,7 +2216,11 @@ async fn service_offer(
     scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
     let rows = copilot_repository::service_performance_trend(
-        db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT,
+        db,
+        tenant_id,
+        &scope.branch_ids,
+        TREND_DAYS,
+        ROW_LIMIT,
     )
     .await
     .map_err(|_| AppError::internal("failed to load service performance trend"))?;
@@ -2252,10 +2286,15 @@ async fn service_offer(
 
     // Find when this service is weakest, so the offer can be aimed at idle
     // capacity instead of discounting slots that were already selling.
-    let weekday_rows =
-        copilot_repository::weekday_demand(db, tenant_id, &scope.branch_ids, TREND_DAYS, &best.service_id)
-            .await
-            .map_err(|_| AppError::internal("failed to load weekday demand"))?;
+    let weekday_rows = copilot_repository::weekday_demand(
+        db,
+        tenant_id,
+        &scope.branch_ids,
+        TREND_DAYS,
+        &best.service_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load weekday demand"))?;
     let weak_window = weakest_window(&weekday_rows);
 
     let reason = match &weak_window {
@@ -2736,7 +2775,12 @@ async fn profit_intelligence(
         revenue,
         rupees,
     ))
-    .metric(CopilotMetric::new("Margin", previous_margin, margin, rupees))
+    .metric(CopilotMetric::new(
+        "Margin",
+        previous_margin,
+        margin,
+        rupees,
+    ))
     .metric(CopilotMetric::new(
         "Discount given",
         previous_discount,
@@ -2823,10 +2867,15 @@ async fn offer_performance(
     tenant_id: &str,
     scope: &ToolScope,
 ) -> Result<CopilotAnswer, AppError> {
-    let rows =
-        copilot_repository::offer_performance(db, tenant_id, &scope.branch_ids, TREND_DAYS, ROW_LIMIT)
-            .await
-            .map_err(|_| AppError::internal("failed to load offer performance"))?;
+    let rows = copilot_repository::offer_performance(
+        db,
+        tenant_id,
+        &scope.branch_ids,
+        TREND_DAYS,
+        ROW_LIMIT,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load offer performance"))?;
 
     if rows.is_empty() {
         return Ok(CopilotAnswer::new(
@@ -2834,7 +2883,10 @@ async fn offer_performance(
             "No offers exist for this branch yet.",
         )
         .single_period("Last 30 days", i64::from(TREND_DAYS))
-        .action("Create an offer to start measuring it.", "/marketing/offers")
+        .action(
+            "Create an offer to start measuring it.",
+            "/marketing/offers",
+        )
         .confidence("high")
         .data(json!({ "offers": [] })));
     }
@@ -2853,9 +2905,7 @@ async fn offer_performance(
         ),
     )
     .single_period("Last 30 days", i64::from(TREND_DAYS))
-    .evidence(format!(
-        "{views} offer views across the branch's channels."
-    ))
+    .evidence(format!("{views} offer views across the branch's channels."))
     .evidence(format!(
         "Redeemed sales brought in {} against {} of discount.",
         rupees(revenue),
@@ -2919,7 +2969,10 @@ async fn inventory_risk(
             CopilotTool::InventoryRisk,
             "No active stock item is at or below its reorder point.",
         )
-        .single_period("Stock now, with 30 days of consumption", i64::from(TREND_DAYS))
+        .single_period(
+            "Stock now, with 30 days of consumption",
+            i64::from(TREND_DAYS),
+        )
         .action("No reordering is needed right now.", "/inventory")
         .confidence("high")
         .data(json!({ "items": [] })));
@@ -2935,7 +2988,10 @@ async fn inventory_risk(
             if rows.len() == 1 { " is" } else { "s are" }
         ),
     )
-    .single_period("Stock now, with 30 days of consumption", i64::from(TREND_DAYS))
+    .single_period(
+        "Stock now, with 30 days of consumption",
+        i64::from(TREND_DAYS),
+    )
     .evidence(format!(
         "{moving} of them were actually consumed in the last 30 days."
     ));
@@ -3070,7 +3126,10 @@ async fn regular_clients(
 
     if !top_name.is_empty() {
         answer = answer
-            .evidence(format!("Most frequent: {top_name} with {} visits.", visits(&top)))
+            .evidence(format!(
+                "Most frequent: {top_name} with {} visits.",
+                visits(&top)
+            ))
             .entity(
                 "client",
                 top.get("clientId")
@@ -3080,7 +3139,9 @@ async fn regular_clients(
                 top_name,
                 format!(
                     "/clients/{}",
-                    top.get("clientId").and_then(Value::as_str).unwrap_or_default()
+                    top.get("clientId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
                 ),
             );
     }
@@ -3115,10 +3176,7 @@ async fn membership_renewals(
     }
 
     let failing = rows.iter().filter(|row| row.failure_count > 0).count();
-    let this_week = rows
-        .iter()
-        .filter(|row| row.days_until_expiry <= 7)
-        .count();
+    let this_week = rows.iter().filter(|row| row.days_until_expiry <= 7).count();
     let soonest = rows.first();
 
     let mut answer = CopilotAnswer::new(
@@ -3143,7 +3201,12 @@ async fn membership_renewals(
                 row.membership_name,
                 row.days_until_expiry.max(0)
             ))
-            .entity("membership", row.id.clone(), row.membership_name.clone(), "/memberships");
+            .entity(
+                "membership",
+                row.id.clone(),
+                row.membership_name.clone(),
+                "/memberships",
+            );
     }
 
     Ok(answer
@@ -3152,7 +3215,10 @@ async fn membership_renewals(
         } else {
             "These renewals are on track but still need confirming."
         })
-        .action("Open memberships to work the renewal queue.", "/memberships")
+        .action(
+            "Open memberships to work the renewal queue.",
+            "/memberships",
+        )
         .confidence("high")
         .data(json!({
             "renewals": rows,
@@ -3174,6 +3240,7 @@ async fn business_diagnostic(
     db: &PgPool,
     tenant_id: &str,
     scope: &ToolScope,
+    actor: &ToolActor,
 ) -> Result<CopilotAnswer, AppError> {
     const PARTS: &[CopilotTool] = &[
         CopilotTool::ProfitIntelligence,
@@ -3196,7 +3263,7 @@ async fn business_diagnostic(
     for part in PARTS {
         // Only run what this caller is entitled to. A skipped part is counted,
         // never described, so the answer does not leak what it withheld.
-        if !scope.allows(crate::services::ai_tool_dispatcher::tool_domain(*part)) {
+        if !part.permitted_for(&actor.role) {
             skipped += 1;
             continue;
         }
@@ -3310,9 +3377,10 @@ where
     let mut resolved = Vec::new();
     let mut used_term = String::new();
     for candidate in subject_candidates {
-        let matches = copilot_repository::find_clients(db, tenant_id, &scope.branch_ids, candidate, 5)
-            .await
-            .map_err(|_| AppError::internal("failed to resolve client"))?;
+        let matches =
+            copilot_repository::find_clients(db, tenant_id, &scope.branch_ids, candidate, 5)
+                .await
+                .map_err(|_| AppError::internal("failed to resolve client"))?;
         if !matches.is_empty() {
             resolved = matches;
             used_term = candidate.clone();
@@ -3377,10 +3445,14 @@ async fn membership_status(
     )
     .await
     .map_err(|_| AppError::internal("failed to load membership history"))?;
-    let credits =
-        membership_lifecycle_repository::client_wallet(db, tenant_id, scope.primary(), &client.client_id)
-            .await
-            .map_err(|_| AppError::internal("failed to load membership credits"))?;
+    let credits = membership_lifecycle_repository::client_wallet(
+        db,
+        tenant_id,
+        scope.primary(),
+        &client.client_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load membership credits"))?;
 
     let active = memberships
         .iter()
@@ -3681,9 +3753,10 @@ async fn favourite_service(
     let summary = clients_repository::summary(db, tenant_id, scope.primary(), &client.client_id)
         .await
         .map_err(|_| AppError::internal("failed to load client summary"))?;
-    let history = clients_repository::service_history(db, tenant_id, scope.primary(), &client.client_id)
-        .await
-        .map_err(|_| AppError::internal("failed to load client service history"))?;
+    let history =
+        clients_repository::service_history(db, tenant_id, scope.primary(), &client.client_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load client service history"))?;
 
     if summary.favourite_services.is_empty() && history.is_empty() {
         return Ok(CopilotAnswer::new(
@@ -4079,7 +4152,6 @@ fn margin_bps(revenue_paise: i64, cost_paise: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn detects_each_documented_question() {
@@ -4857,7 +4929,11 @@ mod reply_shape_tests {
         // A receptionist must not receive the same revenue comparison.
         assert!(
             !crate::services::ai_scope_service::domain_allowed(
-                &crate::services::ai_tool_dispatcher::tests_support::claims("receptionist", &[], &[]),
+                &crate::services::ai_tool_dispatcher::tests_support::claims(
+                    "receptionist",
+                    &[],
+                    &[]
+                ),
                 crate::services::ai_tool_dispatcher::tool_domain(CopilotTool::ProfitIntelligence),
             ),
             "service revenue stays closed to non-finance roles"
@@ -5254,7 +5330,10 @@ mod phase1_tool_foundation_tests {
     /// stays open to the people who order stock.
     #[test]
     fn financial_tools_are_role_gated_and_operational_ones_are_not() {
-        for tool in [CopilotTool::ProfitIntelligence, CopilotTool::OfferPerformance] {
+        for tool in [
+            CopilotTool::ProfitIntelligence,
+            CopilotTool::OfferPerformance,
+        ] {
             for role in ["staff", "frontdesk", "receptionist", "inventorymanager"] {
                 assert!(
                     !tool.permitted_for(role),
@@ -5276,14 +5355,6 @@ mod phase1_tool_foundation_tests {
         assert!(CopilotTool::BusinessOverview.permitted_for("frontdesk"));
     }
 
-    #[test]
-    fn composite_scope_carries_domain_denials() {
-        let mut scope = ToolScope::for_test("branch-1", false);
-        scope.allowed_domains = vec![crate::services::ai_scope_service::AiDomain::Clients];
-        assert!(scope.allows(crate::services::ai_scope_service::AiDomain::Clients));
-        assert!(!scope.allows(crate::services::ai_scope_service::AiDomain::Finance));
-    }
-
     /// A chip is never offered to a role that would be refused if they tapped it.
     #[test]
     fn suggested_chips_never_offer_a_refusal_for_the_new_tools() {
@@ -5292,7 +5363,11 @@ mod phase1_tool_foundation_tests {
             for chip in suggested_questions(&actor, "en-IN") {
                 let matched = detect(&chip.question)
                     .unwrap_or_else(|| panic!("chip {:?} matches no tool", chip.question));
-                assert_eq!(matched.tool.name(), chip.tool, "chip routes to another tool");
+                assert_eq!(
+                    matched.tool.name(),
+                    chip.tool,
+                    "chip routes to another tool"
+                );
                 let self_scoped = matched.tool == CopilotTool::StaffPerformanceDecline
                     && actor.restricted_to_self();
                 assert!(
@@ -5332,19 +5407,31 @@ mod phase1_tool_foundation_tests {
                 tool,
                 subject_candidates: Vec::new(),
             };
-            let answer = run(&db, &tenant, &ToolScope::for_test(branch, true), &actor, &matched)
-                .await
-                .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
+            let answer = run(
+                &db,
+                &tenant,
+                &ToolScope::for_test(branch, true),
+                &actor,
+                &matched,
+            )
+            .await
+            .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
 
             assert_eq!(answer.tool, tool.name());
             assert_eq!(answer.tenant_id, tenant, "answer must state its tenant");
             assert_eq!(answer.branch_id, branch, "answer must state its branch");
-            assert!(!answer.source.is_empty(), "answer must name its source module");
+            assert!(
+                !answer.source.is_empty(),
+                "answer must name its source module"
+            );
             assert!(
                 !answer.generated_at.is_empty(),
                 "answer must carry a read timestamp"
             );
-            assert!(!answer.period.start.is_empty(), "answer must state a period");
+            assert!(
+                !answer.period.start.is_empty(),
+                "answer must state a period"
+            );
             assert!(!answer.period.end.is_empty());
             assert!(
                 !answer.confidence.is_empty(),
@@ -5459,18 +5546,18 @@ mod phase1_tool_foundation_tests {
         let Some(db) = connect().await else { return };
         let tenant = format!("phase1_deny_{}", Uuid::new_v4().simple());
 
-        for tool in [CopilotTool::ProfitIntelligence, CopilotTool::OfferPerformance] {
+        for tool in [
+            CopilotTool::ProfitIntelligence,
+            CopilotTool::OfferPerformance,
+        ] {
             let matched = ToolMatch {
                 tool,
                 subject_candidates: Vec::new(),
             };
             // The refusal is now made by the dispatcher from the permission
             // codes, before a branch scope is built or a query is issued.
-            let front_desk = crate::services::ai_tool_dispatcher::tests_support::claims(
-                "frontdesk",
-                &[],
-                &[],
-            );
+            let front_desk =
+                crate::services::ai_tool_dispatcher::tests_support::claims("frontdesk", &[], &[]);
             let domain = crate::services::ai_tool_dispatcher::tool_domain(tool);
             assert!(
                 !crate::services::ai_scope_service::domain_allowed(&front_desk, domain),
@@ -5596,8 +5683,8 @@ mod phase2_analytical_tests {
     #[test]
     fn every_supported_question_reaches_its_tool() {
         for (question, expected) in SUPPORTED {
-            let matched = detect(question)
-                .unwrap_or_else(|| panic!("{question:?} matched no tool"));
+            let matched =
+                detect(question).unwrap_or_else(|| panic!("{question:?} matched no tool"));
             assert_eq!(matched.tool, *expected, "{question:?} routed wrongly");
         }
     }
@@ -5693,14 +5780,21 @@ mod phase2_analytical_tests {
         // produced it, and every source is a real tool's declared source.
         for finding in &findings {
             let tool = finding["tool"].as_str().expect("finding names its tool");
-            let source = finding["source"].as_str().expect("finding names its source");
+            let source = finding["source"]
+                .as_str()
+                .expect("finding names its source");
             assert!(!tool.is_empty() && !source.is_empty());
             assert!(
-                finding["period"]["start"].as_str().is_some_and(|s| !s.is_empty()),
+                finding["period"]["start"]
+                    .as_str()
+                    .is_some_and(|s| !s.is_empty()),
                 "{tool} must state the period its numbers cover"
             );
             assert!(
-                !finding["confidence"].as_str().unwrap_or_default().is_empty(),
+                !finding["confidence"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .is_empty(),
                 "{tool} must state its confidence"
             );
         }
@@ -5884,25 +5978,73 @@ mod phase8_evaluation_tests {
 
     /// The twelve question-shaped cases, and the tool each must reach.
     const EVALUATION_SET: &[(&str, &str, CopilotTool)] = &[
-        ("staff decline", "Which staff performance is dropping?", CopilotTool::StaffPerformanceDecline),
-        ("service decline", "Which service is declining?", CopilotTool::ServiceDecline),
-        ("client inactivity", "Which clients have not returned?", CopilotTool::LapsedClients),
-        ("expected return window", "Priya kitne din baad aa sakti hai?", CopilotTool::ClientReturnForecast),
-        ("regular client services", "Priya regular kaunsi service leti hai?", CopilotTool::ClientFavouriteService),
-        ("membership renewal", "Membership renewal opportunities kya hain?", CopilotTool::MembershipRenewals),
-        ("margin-safe offer", "Which service should get an offer?", CopilotTool::ServiceOffer),
-        ("billing workflow", "How do I create a bill?", CopilotTool::BillingHowTo),
-        ("regular clients", "Which clients are regular?", CopilotTool::RegularClients),
-        ("multi-branch signal", "What problem is the business having?", CopilotTool::BusinessDiagnostic),
-        ("margin movement", "Why is profit declining?", CopilotTool::ProfitIntelligence),
-        ("stock risk", "Which stock is running out?", CopilotTool::InventoryRisk),
+        (
+            "staff decline",
+            "Which staff performance is dropping?",
+            CopilotTool::StaffPerformanceDecline,
+        ),
+        (
+            "service decline",
+            "Which service is declining?",
+            CopilotTool::ServiceDecline,
+        ),
+        (
+            "client inactivity",
+            "Which clients have not returned?",
+            CopilotTool::LapsedClients,
+        ),
+        (
+            "expected return window",
+            "Priya kitne din baad aa sakti hai?",
+            CopilotTool::ClientReturnForecast,
+        ),
+        (
+            "regular client services",
+            "Priya regular kaunsi service leti hai?",
+            CopilotTool::ClientFavouriteService,
+        ),
+        (
+            "membership renewal",
+            "Membership renewal opportunities kya hain?",
+            CopilotTool::MembershipRenewals,
+        ),
+        (
+            "margin-safe offer",
+            "Which service should get an offer?",
+            CopilotTool::ServiceOffer,
+        ),
+        (
+            "billing workflow",
+            "How do I create a bill?",
+            CopilotTool::BillingHowTo,
+        ),
+        (
+            "regular clients",
+            "Which clients are regular?",
+            CopilotTool::RegularClients,
+        ),
+        (
+            "multi-branch signal",
+            "What problem is the business having?",
+            CopilotTool::BusinessDiagnostic,
+        ),
+        (
+            "margin movement",
+            "Why is profit declining?",
+            CopilotTool::ProfitIntelligence,
+        ),
+        (
+            "stock risk",
+            "Which stock is running out?",
+            CopilotTool::InventoryRisk,
+        ),
     ];
 
     #[test]
     fn every_evaluation_question_reaches_its_tool() {
         for (label, question, expected) in EVALUATION_SET {
-            let matched = detect(question)
-                .unwrap_or_else(|| panic!("{label}: {question:?} matched no tool"));
+            let matched =
+                detect(question).unwrap_or_else(|| panic!("{label}: {question:?} matched no tool"));
             assert_eq!(matched.tool, *expected, "{label} routed wrongly");
         }
     }
@@ -5947,8 +6089,7 @@ mod phase8_evaluation_tests {
             if let Some(matched) = detect(attempt) {
                 // The match is still gated by the caller's real role.
                 assert!(
-                    !matched.tool.permitted_for("frontdesk")
-                        || !matched.tool.needs_financials(),
+                    !matched.tool.permitted_for("frontdesk") || !matched.tool.needs_financials(),
                     "{attempt:?} must not hand a finance tool to the front desk"
                 );
                 // And it carries nothing that could redirect the query.
@@ -5964,7 +6105,10 @@ mod phase8_evaluation_tests {
     /// Unauthorized finance requests are refused, not answered emptily.
     #[test]
     fn an_unauthorized_finance_request_is_refused() {
-        for tool in [CopilotTool::ProfitIntelligence, CopilotTool::OfferPerformance] {
+        for tool in [
+            CopilotTool::ProfitIntelligence,
+            CopilotTool::OfferPerformance,
+        ] {
             for role in ["staff", "frontdesk", "receptionist"] {
                 assert!(
                     !tool.permitted_for(role),
@@ -5978,7 +6122,11 @@ mod phase8_evaluation_tests {
     async fn connect() -> Option<PgPool> {
         dotenvy::dotenv().ok();
         let url = std::env::var("DATABASE_URL").ok()?;
-        PgPoolOptions::new().max_connections(2).connect(&url).await.ok()
+        PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+            .ok()
     }
 
     /// Insufficient data must produce a stated absence, never a confident
@@ -5997,14 +6145,27 @@ mod phase8_evaluation_tests {
             CopilotTool::MembershipRenewals,
             CopilotTool::BusinessOverview,
         ] {
-            let matched = ToolMatch { tool, subject_candidates: Vec::new() };
-            let answer = run(&db, &tenant, &ToolScope::for_test("branch1", true), &actor, &matched)
-                .await
-                .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
+            let matched = ToolMatch {
+                tool,
+                subject_candidates: Vec::new(),
+            };
+            let answer = run(
+                &db,
+                &tenant,
+                &ToolScope::for_test("branch1", true),
+                &actor,
+                &matched,
+            )
+            .await
+            .unwrap_or_else(|_| panic!("{} must answer on an empty branch", tool.name()));
 
             // Source-backed: every answer names the module it read and the
             // tenant/branch it read for.
-            assert!(!answer.source.is_empty(), "{} must name its source", tool.name());
+            assert!(
+                !answer.source.is_empty(),
+                "{} must name its source",
+                tool.name()
+            );
             assert_eq!(answer.tenant_id, tenant);
             assert_eq!(answer.branch_id, "branch1");
             assert!(!answer.generated_at.is_empty());
@@ -6044,8 +6205,19 @@ mod phase8_evaluation_tests {
 
         let actor = ToolActor::new("user1", "owner");
         for tool in [CopilotTool::LapsedClients, CopilotTool::RegularClients] {
-            let matched = ToolMatch { tool, subject_candidates: Vec::new() };
-            let Ok(answer) = run(&db, &tenant, &ToolScope::for_test(branch, true), &actor, &matched).await else {
+            let matched = ToolMatch {
+                tool,
+                subject_candidates: Vec::new(),
+            };
+            let Ok(answer) = run(
+                &db,
+                &tenant,
+                &ToolScope::for_test(branch, true),
+                &actor,
+                &matched,
+            )
+            .await
+            else {
                 continue;
             };
             let rendered = serde_json::to_string(&answer).unwrap_or_default();

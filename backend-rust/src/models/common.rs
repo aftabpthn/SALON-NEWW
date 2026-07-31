@@ -112,6 +112,10 @@ impl AppError {
         Self::new(StatusCode::BAD_REQUEST, "VALIDATION_FAILED", message)
     }
 
+    pub fn validation_code(code: &'static str, message: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, code, message)
+    }
+
     pub fn unauthenticated(message: impl Into<String>) -> Self {
         Self::new(StatusCode::UNAUTHORIZED, "UNAUTHENTICATED", message)
     }
@@ -152,6 +156,10 @@ impl AppError {
 
     pub fn status_code(&self) -> StatusCode {
         self.status
+    }
+
+    pub fn code(&self) -> &'static str {
+        self.code
     }
 
     pub fn message(&self) -> &str {

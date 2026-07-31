@@ -51,6 +51,18 @@ describe("staff dashboard permission-first view model", () => {
     expect(allowed.hero.actions).toMatchObject([{ id: "attendance", label: "Clock In", primary: true }, { id: "schedule", label: "Today’s Schedule" }]);
   });
 
+  it("does not treat a schedule-only attendance detail as clocked in", () => {
+    const scheduleOnly = {
+      id: today.date, businessDate: today.date, clockInAt: "", clockOutAt: "", status: "working", source: "",
+      overtimeMinutes: 0, grossMinutes: 0, totalBreakMinutes: 0, totalWorkedMinutes: 0, scheduledShiftMinutes: 540,
+      overtimeCalculationStatus: "pending", overtimeReviewReason: "", overtimePolicyVersion: "1"
+    };
+    const vm = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"], { today: { ...today, attendance: [scheduleOnly] } }));
+
+    expect(vm.hero).toMatchObject({ title: "Ready to start your shift? 👋", detail: "Not clocked in" });
+    expect(vm.hero.actions[0]).toMatchObject({ kind: "clock", label: "Clock In" });
+  });
+
   it("models the two permission-safe no-shift states", () => {
     const clockAllowed = buildStaffDashboardViewModel(input(["read:appointments", "allow:staff-checkin-checkout"], { today: { ...today, schedules: [] } }));
     const clockRestricted = buildStaffDashboardViewModel(input(["read:appointments"], { today: { ...today, schedules: [] } }));

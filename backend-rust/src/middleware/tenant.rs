@@ -86,6 +86,7 @@ const INVENTORY_WRITE_ROLES: &[&str] = &[
 const FINANCE_WRITE_ROLES: &[&str] = &["owner", "admin", "manager", "accountant"];
 const PAYROLL_ROLES: &[&str] = &["owner", "admin", "accountant"];
 const STAFF_SELF_WRITE_ROLES: &[&str] = &["owner", "admin", "manager", "staff"];
+const STAFF_SELF_DASHBOARD_ROLES: &[&str] = &["owner", "admin", "manager", "staff", "accountant"];
 const REPORT_READ_ROLES: &[&str] = &["owner", "admin", "manager", "analyst", "accountant"];
 
 const PLATFORM_ROLES: &[&str] = &["superadmin", "superAdmin", "super-admin"];
@@ -400,12 +401,60 @@ fn route_feature_key(path: &str, permissions: &[&str]) -> Option<&'static str> {
 }
 
 fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
-    if path == "/staff/self/dashboard" || path == "/staff-self/enterprise-os" {
+    if path_starts_with(path, "/operations") {
+        return Some(access(MANAGEMENT_ROLES, &["management.write"]));
+    }
+    if path == "/staff/self/roster" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.roster.read",
+                "staff.schedule.read",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path == "/staff/self/calendar" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.calendar.read",
+                "staff.schedule.read",
+                "staff.self_manage",
+            ],
+        ));
+    }
+    if path == "/staff/self/dashboard" {
+        return Some(access(
+            STAFF_SELF_DASHBOARD_ROLES,
+            &[
+                "staff.app.dashboard.read",
+                "staff.app.appointments.read",
+                "staff.app.payroll.read",
+                "staff.app.profile.read",
+                "staff.app.settings.read",
+                "staff.payroll.read",
+                "staff.payroll.manage",
+                "finance.read",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
+    if path == "/staff-self/enterprise-os" {
         return Some(access(
             STAFF_SELF_WRITE_ROLES,
             &[
                 "staff.app.dashboard.read",
                 "staff.app.appointments.read",
+                "staff.app.business.read",
+                "staff.app.tasks.read",
+                "staff.app.calendar.read",
+                "staff.app.roster.read",
+                "staff.app.notifications.read",
+                "staff.app.performance.read",
+                "staff.app.leaderboard.read",
+                "staff.app.reports.read",
                 "staff.self_manage",
                 "staff_self.write",
             ],
@@ -414,10 +463,18 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     if path_starts_with(path, "/staff-self/appointments") {
         return Some(access(
             STAFF_SELF_WRITE_ROLES,
+            &["staff.app.appointments.manage", "appointments.manage"],
+        ));
+    }
+    if path == "/staff-self/business" && method == Method::GET {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
             &[
-                "staff.app.appointments.manage",
-                "appointments.manage",
-                "write:appointments",
+                "staff.app.business.read",
+                "staff.app.reports.read",
+                "appointments.read",
+                "reports.read",
+                "staff.self_manage",
             ],
         ));
     }
@@ -441,6 +498,16 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             ],
         ));
     }
+    if path_starts_with(path, "/staff-self/rules") {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.rules.read",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
     if path == "/staff-self/feedback" {
         return Some(if is_read_method(method) {
             access(
@@ -459,14 +526,25 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         });
     }
     if path == "/staff-self/workspace-preferences" {
-        return Some(access(
-            STAFF_SELF_WRITE_ROLES,
-            &[
-                "staff.app.settings.read",
-                "staff.app.settings.manage",
-                "staff.self_manage",
-            ],
-        ));
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.settings.read",
+                    "staff.app.settings.manage",
+                    "staff.self_manage",
+                ],
+            )
+        } else {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.settings.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        });
     }
     if path_starts_with(path, "/staff/self/payslips") {
         return Some(access(
@@ -485,19 +563,31 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         ));
     }
     if path_starts_with(path, "/staff/self/tasks") {
-        return Some(access(
-            STAFF_SELF_WRITE_ROLES,
-            &[
-                "staff.app.tasks.manage",
-                "staff.self_manage",
-                "staff_self.write",
-            ],
-        ));
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.tasks.read",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        } else {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.tasks.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        });
     }
     if path_starts_with(path, "/staff-self/calendar") {
         return Some(access(
             STAFF_SELF_WRITE_ROLES,
             &[
+                "staff.app.roster.manage",
                 "staff.app.calendar.manage",
                 "staff.self_manage",
                 "staff_self.write",
@@ -625,6 +715,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         let self_action = matches!(
             path,
             "/staff-attendance/clock-in"
+                | "/staff-attendance/biometric/begin"
                 | "/staff-attendance/clock-out"
                 | "/staff-attendance/break-start"
                 | "/staff-attendance/break-end"
@@ -701,6 +792,28 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             access(
                 MANAGEMENT_ROLES,
                 &["staff.schedule.manage", "management.write"],
+            )
+        });
+    }
+    if path_starts_with(path, "/staff/rules") {
+        return Some(if is_read_method(method) {
+            access(
+                MANAGEMENT_ROLES,
+                &[
+                    "staff.governance.read",
+                    "staff.governance.manage",
+                    "staff.read",
+                    "staff.manage",
+                ],
+            )
+        } else {
+            access(
+                MANAGEMENT_ROLES,
+                &[
+                    "staff.governance.manage",
+                    "staff.manage",
+                    "management.write",
+                ],
             )
         });
     }
@@ -1459,6 +1572,66 @@ mod tests {
         assert!(access.roles.contains(&"admin"));
         assert!(!access.roles.contains(&"manager"));
         assert!(access.permissions.is_empty());
+    }
+
+    #[test]
+    fn operations_routes_require_management_access() {
+        for (path, method) in [
+            ("/api/v1/operations/outcall", Method::GET),
+            ("/api/v1/operations/outcall/jobs", Method::POST),
+            (
+                "/api/v1/operations/marketplace/listing/1/approval",
+                Method::PATCH,
+            ),
+        ] {
+            let access = route_access(normalize_route_path(path), &method)
+                .unwrap_or_else(|| panic!("{path} is not permission mapped"));
+            assert!(access.roles.contains(&"owner"));
+            assert!(access.roles.contains(&"admin"));
+            assert!(access.roles.contains(&"manager"));
+            assert!(access.permissions.contains(&"management.write"));
+        }
+    }
+
+    #[test]
+    fn staff_reports_can_read_business_data_without_product_usage_access() {
+        let report = route_access("/staff-self/business", &Method::GET)
+            .expect("staff report data route is mapped");
+        assert!(report.permissions.contains(&"staff.app.reports.read"));
+
+        let product_usage = route_access("/staff-self/business/product-usage", &Method::POST)
+            .expect("staff product usage route is mapped");
+        assert!(!product_usage
+            .permissions
+            .contains(&"staff.app.reports.read"));
+    }
+
+    #[test]
+    fn staff_shared_dashboard_and_settings_keep_page_permissions_separate() {
+        let dashboard = route_access("/staff/self/dashboard", &Method::GET)
+            .expect("staff dashboard route is mapped");
+        for permission in [
+            "staff.app.payroll.read",
+            "staff.app.profile.read",
+            "staff.app.settings.read",
+        ] {
+            assert!(dashboard.permissions.contains(&permission));
+        }
+        assert!(dashboard.roles.contains(&"accountant"));
+
+        let settings_read = route_access("/staff-self/workspace-preferences", &Method::GET)
+            .expect("settings read route is mapped");
+        let settings_write = route_access("/staff-self/workspace-preferences", &Method::PUT)
+            .expect("settings write route is mapped");
+        assert!(settings_read
+            .permissions
+            .contains(&"staff.app.settings.read"));
+        assert!(!settings_write
+            .permissions
+            .contains(&"staff.app.settings.read"));
+        assert!(settings_write
+            .permissions
+            .contains(&"staff.app.settings.manage"));
     }
 
     #[test]

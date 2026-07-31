@@ -9,8 +9,9 @@ import {
   StaffBusinessQuery,
   StaffBusinessServiceInvoice,
 } from "../../core/staff-app.service";
-import { businessDate } from "../../core/business-date";
+import { businessDate, displayBusinessDate, parseDisplayBusinessDate } from "../../core/business-date";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
+import { StaffDatePickerComponent } from "../../shared/staff-date-picker.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
 type BusinessPreset = "today" | "1m" | "3m" | "6m" | "1y" | "custom";
@@ -18,7 +19,7 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
 
 @Component({
   standalone: true,
-  imports: [DatePipe, FormsModule, StaffPageStateComponent],
+  imports: [DatePipe, FormsModule, StaffDatePickerComponent, StaffPageStateComponent],
   template: `
     <section class="page">
       <header class="page-head">
@@ -52,8 +53,8 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
               </select>
             </label>
             @if (preset() === 'custom') {
-              <label>From<input type="date" [ngModel]="fromDate()" (ngModelChange)="fromDate.set($event)" /></label>
-              <label>To<input type="date" [ngModel]="toDate()" (ngModelChange)="toDate.set($event)" /></label>
+              <label>From<aura-staff-date-picker [value]="displayDate(fromDate())" ariaLabel="Business report from date" (valueChange)="fromDate.set(parseDate($event))" /></label>
+              <label>To<aura-staff-date-picker [value]="displayDate(toDate())" ariaLabel="Business report to date" (valueChange)="toDate.set(parseDate($event))" /></label>
             }
             <div class="search-field">
               <label for="business-search">Search</label>
@@ -197,6 +198,44 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
             </details>
           }
         }
+
+        <section class="panel product-usage-panel">
+          <div class="panel-title"><h2>Service product usage</h2><span>{{ (data.productUsageHistory || []).length }} recorded</span></div>
+          <div class="usage-insights"><span>Product sales<strong>{{ formatMoney(data.performance.productRevenuePaise) }}</strong></span><span>Retail conversion<strong>{{ formatPercent(data.performance.retailConversionPercent) }}</strong></span><span>Product invoices<strong>{{ data.performance.productInvoiceCount ?? '—' }}</strong></span><span>Usage variance<strong>{{ usageVarianceTotal(data) }}</strong></span></div>
+          @if (canRecordProductUsage()) {
+            @if (productNotice()) { <section staffPageState class="notice">{{ productNotice() }}</section> }
+            @if (productError()) { <section staffPageState class="notice business-error">{{ productError() }}</section> }
+            <div class="form-grid usage-form">
+              <label>Appointment
+                <select [(ngModel)]="usageDraft.appointmentId" (ngModelChange)="usageAppointmentChanged()">
+                  <option value="">Select appointment</option>
+                  @for (item of usageAppointments(data); track item.id) { <option [value]="item.id">{{ usageAppointmentLabel(item) }}</option> }
+                </select>
+              </label>
+              <label>Service
+                <select [(ngModel)]="usageDraft.serviceId" (ngModelChange)="usageServiceChanged()">
+                  <option value="">Select service</option>
+                  @for (service of usageServices(data); track service.id) { <option [value]="service.id">{{ service.name }}</option> }
+                </select>
+              </label>
+              <label>Product / brand
+                <select [(ngModel)]="usageDraft.inventoryItemId">
+                  <option value="">Select recipe product</option>
+                  @for (product of usageProducts(data); track product.id) { <option [value]="product.id">{{ product.name }}{{ product.brand ? ' · ' + product.brand : '' }}</option> }
+                </select>
+              </label>
+              <label>Expected<input [value]="expectedUsage(data)" readonly /></label>
+              <label>Actual quantity<input type="number" min="1" step="1" [(ngModel)]="usageDraft.actualQuantity" /></label>
+              <label>Variance / wastage reason<textarea maxlength="500" [(ngModel)]="usageDraft.notes"></textarea></label>
+            </div>
+            <div class="row-actions"><button class="button primary" type="button" [disabled]="productSaving()" (click)="submitProductUsage(data)">{{ productSaving() ? 'Submitting...' : 'Submit usage' }}</button></div>
+          }
+          <div class="list usage-history">
+            @for (row of (data.productUsageHistory || []).slice(0, 10); track row.id) {
+              <div class="row"><div class="row-main"><strong>{{ row.itemName }}{{ row.itemBrand ? ' · ' + row.itemBrand : '' }}</strong><small>{{ row.serviceName || 'Service' }} · Expected {{ row.expectedQuantity }} {{ row.unit }} · Actual {{ row.actualQuantity }} {{ row.unit }} · Variance {{ row.varianceQuantity }} {{ row.unit }}</small><small>{{ row.createdAt | date:'dd/MM/yyyy, h:mm a':'+0530' }}{{ row.notes ? ' · ' + row.notes : '' }}</small></div><span class="badge">{{ row.status }}</span></div>
+            } @empty { <div class="business-empty"><p>No product usage recorded.</p></div> }
+          </div>
+        </section>
 
         <section class="panel">
           <div class="panel-title"><h2>My service invoices</h2><span>{{ loading() ? 'Refreshing...' : ((data.serviceInvoices || []).length + ' shown') }}</span></div>
@@ -379,6 +418,12 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
     .business-empty p { margin: 0; }
     .business-empty small { font-weight: 600; line-height: 1.4; }
     .service-invoice-row .link-button { min-width: 112px; }
+    .product-usage-panel, .usage-history { gap: 12px; }
+    .usage-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .usage-form textarea { min-height: 46px; resize: vertical; }
+    .usage-insights { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .usage-insights span { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--staff-border); border-radius: 14px; color: var(--staff-text-secondary); font-size: .72rem; font-weight: 700; }
+    .usage-insights strong { color: var(--staff-text); font-size: 1rem; }
     @media (max-width: 700px) {
       .grid.four.business-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .business-kpi-grid .kpi { min-height: 68px; padding: 9px 10px; }
@@ -387,6 +432,9 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
       .business-error, .service-invoice-row, .service-invoice-row .row-actions { align-items: stretch; flex-direction: column; }
       .business-error button, .service-invoice-row .link-button, .permission-actions .button { width: 100%; }
       .permission-actions { align-items: stretch; }
+      .usage-form { grid-template-columns: 1fr; }
+      .usage-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .product-usage-panel .row-actions .button { width: 100%; }
     }
   `]
 })
@@ -411,6 +459,10 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   readonly invoiceLoading = signal(false);
   readonly invoiceError = signal("");
   readonly lastInvoiceLine = signal<StaffBusinessServiceInvoice | null>(null);
+  readonly productSaving = signal(false);
+  readonly productNotice = signal("");
+  readonly productError = signal("");
+  usageDraft = { appointmentId: "", serviceId: "", inventoryItemId: "", actualQuantity: null as number | null, notes: "" };
   readonly activeFilterCount = computed(() =>
     Number(Boolean(this.search().trim())) + Number(this.status() !== "all") + Number(this.sort() !== "desc")
   );
@@ -521,6 +573,46 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   }
 
   canReadBusiness(): boolean { return this.staff.hasPermission("staff.app.business.read"); }
+  canRecordProductUsage(): boolean { return this.staff.hasAnyPermission(["staff.self_manage", "staff_self.write"]); }
+  usageAppointments(data: StaffBusiness) { return data.appointments.filter((item) => item.clientId && !/cancel|no.?show|void/i.test(item.status)); }
+  usageServices(data: StaffBusiness) {
+    const appointment = data.appointments.find((item) => item.id === this.usageDraft.appointmentId);
+    return appointment ? data.services.filter((service) => appointment.serviceIds.includes(service.id) && (service.productConsumption || []).length > 0) : [];
+  }
+  usageProducts(data: StaffBusiness) {
+    const service = data.services.find((item) => item.id === this.usageDraft.serviceId);
+    const ids = new Set((service?.productConsumption || []).map((line) => String(line.productId ?? line.itemId ?? line.inventoryItemId ?? "")));
+    return (data.products || []).filter((product) => ids.has(product.id) && !product.dualUseStock);
+  }
+  expectedUsage(data: StaffBusiness): string {
+    const line = data.services.find((item) => item.id === this.usageDraft.serviceId)?.productConsumption.find((item) => String(item.productId ?? item.itemId ?? item.inventoryItemId ?? "") === this.usageDraft.inventoryItemId);
+    const product = (data.products || []).find((item) => item.id === this.usageDraft.inventoryItemId);
+    const quantity = Number(line?.standardQty ?? line?.quantity ?? line?.qty ?? 0);
+    return quantity > 0 ? `${quantity} ${product?.unit || ""}`.trim() : "—";
+  }
+  usageVarianceTotal(data: StaffBusiness): number { return (data.productUsageHistory || []).reduce((sum, row) => sum + Number(row.varianceQuantity || 0), 0); }
+  usageAppointmentLabel(item: StaffBusinessAppointment): string { return `${this.dateLabel(item.businessDate)} · ${item.serviceNames.join(", ") || "Service"}`; }
+  usageAppointmentChanged() {
+    this.usageDraft.serviceId = ""; this.usageDraft.inventoryItemId = "";
+    const services = this.business() ? this.usageServices(this.business()!) : [];
+    if (services.length === 1) { this.usageDraft.serviceId = services[0].id; this.usageServiceChanged(); }
+  }
+  usageServiceChanged() { this.usageDraft.inventoryItemId = ""; }
+  async submitProductUsage(data: StaffBusiness) {
+    if (!this.canRecordProductUsage()) return;
+    const appointment = data.appointments.find((item) => item.id === this.usageDraft.appointmentId);
+    const actual = Number(this.usageDraft.actualQuantity);
+    this.productNotice.set(""); this.productError.set("");
+    if (!appointment?.clientId || !this.usageDraft.serviceId || !this.usageDraft.inventoryItemId || !Number.isInteger(actual) || actual <= 0) { this.productError.set("Select an appointment, service, recipe product and valid actual quantity."); return; }
+    this.productSaving.set(true);
+    try {
+      const saved = await this.staff.recordProductUsage({ ...this.usageDraft, clientId: appointment.clientId, actualQuantity: actual, notes: this.usageDraft.notes.trim(), idempotencyKey: crypto.randomUUID() });
+      this.usageDraft = { appointmentId: "", serviceId: "", inventoryItemId: "", actualQuantity: null, notes: "" };
+      await this.load(true);
+      this.productNotice.set(saved.status === "pending_approval" ? "Usage sent for manager approval." : "Product usage recorded and stock updated.");
+    } catch { this.productError.set(this.staff.error() || "Unable to submit product usage."); }
+    finally { this.productSaving.set(false); }
+  }
   formatMinutes(minutes: number): string { const safe = Math.max(0, Number(minutes || 0)); return `${Math.floor(safe / 60)}h ${safe % 60}m`; }
   formatMoney(paise: number | null): string { return formatPaiseInr(paise); }
   formatPercent(value: number | null): string { return value === null ? "—" : `${value}%`; }
@@ -564,6 +656,8 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     return rows.map((row) => ({ ...row, percent: this.capProgress((row.value / maximum) * 100) }));
   }
   dateLabel(date: string): string { return new Date(`${date}T00:00:00+05:30`).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }); }
+  displayDate(date: string): string { return displayBusinessDate(date); }
+  parseDate(date: string): string { return parseDisplayBusinessDate(date); }
   rangeLabel(): string { return `${this.dateLabel(this.fromDate())} – ${this.dateLabel(this.toDate())}`; }
 
   liveElapsed(item: StaffBusinessAppointment): number {

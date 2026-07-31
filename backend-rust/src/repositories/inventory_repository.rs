@@ -174,6 +174,7 @@ pub struct BackbarUsageRecord {
     pub id: String,
     pub inventory_item_id: String,
     pub item_name: String,
+    pub item_brand: String,
     pub client_id: Option<String>,
     pub appointment_id: Option<String>,
     pub client_name: String,
@@ -992,7 +993,7 @@ pub async fn list_backbar_usage(
     sqlx::query_as(
         r#"
         WITH usage AS (
-          SELECT usage.id, usage.inventory_item_id, item.name AS item_name,
+          SELECT usage.id, usage.inventory_item_id, item.name AS item_name, item.brand AS item_brand,
                  usage.client_id, usage.appointment_id,
                  COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                  usage.service_id, COALESCE(service.name, '') AS service_name,
@@ -1016,7 +1017,7 @@ pub async fn list_backbar_usage(
             AND staff.tenant_id=usage.tenant_id AND staff.branch_id=usage.branch_id
           WHERE usage.tenant_id=$1 AND usage.branch_id=$2
           UNION ALL
-          SELECT ledger.id, ledger.inventory_item_id, item.name,
+          SELECT ledger.id, ledger.inventory_item_id, item.name, item.brand,
                  NULLIF(sale.client_id, '') AS client_id, NULL::TEXT AS appointment_id,
                  COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                  NULLIF(line.item_id, ''), line.item_name,
@@ -1040,7 +1041,7 @@ pub async fn list_backbar_usage(
             AND staff.tenant_id=ledger.tenant_id AND staff.branch_id=ledger.branch_id
           WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2 AND ledger.movement_type='sale'
         )
-        SELECT id, inventory_item_id, item_name, client_id, appointment_id, client_name, service_id, service_name, staff_id, staff_name,
+        SELECT id, inventory_item_id, item_name, item_brand, client_id, appointment_id, client_name, service_id, service_name, staff_id, staff_name,
                source, expected_quantity, actual_quantity, variance_quantity, max_quantity,
                wastage_percent, approval_threshold_percent, unit, status, notes, review_note,
                reviewed_at, created_at
@@ -1072,7 +1073,7 @@ pub async fn backbar_usage_by_key(
 ) -> Result<Option<BackbarUsageRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
-        SELECT usage.id, usage.inventory_item_id, item.name AS item_name,
+        SELECT usage.id, usage.inventory_item_id, item.name AS item_name, item.brand AS item_brand,
                usage.client_id, usage.appointment_id,
                COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', client.first_name, client.last_name)), ''), '') AS client_name,
                usage.service_id, COALESCE(service.name, '') AS service_name,
@@ -1127,14 +1128,16 @@ pub async fn client_attribution_exists(
     client_id: &str,
     appointment_id: Option<&str>,
     service_id: Option<&str>,
+    staff_id: Option<&str>,
 ) -> Result<bool, sqlx::Error> {
     if let Some(appointment_id) = appointment_id {
-        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND client_id=$4 AND ($5='' OR COALESCE(NULLIF(service_ids_json,''),'[]')::JSONB ? $5))")
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND client_id=$4 AND ($5='' OR COALESCE(NULLIF(service_ids_json,''),'[]')::JSONB ? $5) AND ($6='' OR staff_id=$6))")
             .bind(tenant_id)
             .bind(branch_id)
             .bind(appointment_id)
             .bind(client_id)
             .bind(service_id.unwrap_or_default())
+            .bind(staff_id.unwrap_or_default())
             .fetch_one(&mut **tx)
             .await
     } else {
@@ -1209,7 +1212,7 @@ pub async fn backbar_usage_by_id(
     id: &str,
 ) -> Result<Option<BackbarUsageRecord>, sqlx::Error> {
     sqlx::query_as(
-        r#"SELECT usage.id,usage.inventory_item_id,item.name AS item_name,usage.client_id,usage.appointment_id,
+        r#"SELECT usage.id,usage.inventory_item_id,item.name AS item_name,item.brand AS item_brand,usage.client_id,usage.appointment_id,
                   COALESCE(NULLIF(BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),'') AS client_name,usage.service_id,
                   COALESCE(service.name,'') AS service_name,usage.staff_id,
                   COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),'') AS staff_name,

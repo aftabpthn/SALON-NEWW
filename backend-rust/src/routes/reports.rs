@@ -19,14 +19,15 @@ use crate::{
             ActionEvaluationRequest, ApprovalReviewRequest, DiscountEvaluationRequest,
             GovernanceApproval, GovernanceAuditEvent, GovernanceEvaluationResponse,
             GovernanceListQuery, GovernanceRule, GovernanceRuleSaveRequest, GovernanceSummary,
-            ProfitAction, ProfitActionCreateRequest, ProfitActionTransitionRequest,
+            ProfitAction, ProfitActionCreateRequest, ProfitActionRollbackRequest,
+            ProfitActionTransitionRequest,
         },
     },
     repositories::{auth_repository, cash_drawer_repository},
     routes::context::{current_business_date, tenant_branch},
     services::{
         analytics_service, auth_service::AuthClaims, branch_service, profit_governance_service,
-        report_export_service, staff_app_service,
+        report_export_service, security_service, staff_app_service,
     },
     state::AppState,
 };
@@ -164,6 +165,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/profit-intelligence/actions/:id/dismiss",
             axum::routing::post(dismiss_profit_action),
+        )
+        .route(
+            "/profit-intelligence/actions/:id/rollback",
+            axum::routing::post(rollback_profit_action),
         )
         .route(
             "/balance-sheet/dimensional-pnl",
@@ -1583,19 +1588,50 @@ async fn draft_growth_campaign_plan(
 async fn draft_growth_staff_goal(
     headers: HeaderMap,
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     Path(staff_id): Path<String>,
+    Json(request): Json<GrowthStaffGoalRequest>,
 ) -> ApiResult<crate::repositories::staff_enterprise_repository::CoachingGoalRecord> {
+    require_growth_manage(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let actor = headers
-        .get("x-user-id")
-        .and_then(|value| value.to_str().ok())
-        .filter(|value| !value.is_empty())
-        .unwrap_or("system");
     let row = crate::services::growth_intelligence_service::draft_staff_goal(
-        &state.db, &tenant_id, &branch_id, actor, &staff_id,
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &staff_id,
+        request.opportunity_key.as_deref().unwrap_or(""),
+    )
+    .await?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "staff.revenue_opportunity.activated",
+        serde_json::json!({"staffId":staff_id,"goalId":row.id,"opportunityKey":row.goal_type}),
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GrowthStaffGoalRequest {
+    opportunity_key: Option<String>,
+}
+
+fn require_growth_manage(claims: &AuthClaims) -> Result<(), AppError> {
+    if matches!(
+        claims.role.to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager" | "super-admin" | "superadmin"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "revenue opportunity management permission is required",
+        ))
+    }
 }
 async fn report_advanced_summary(
     State(state): State<AppState>,
@@ -2223,6 +2259,28 @@ async fn dismiss_profit_action(
     Json(payload): Json<ProfitActionTransitionRequest>,
 ) -> ApiResult<ProfitAction> {
     transition_profit_action(state, claims, headers, id, payload, "dismissed").await
+}
+
+async fn rollback_profit_action(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ProfitActionRollbackRequest>,
+) -> ApiResult<ProfitAction> {
+    ensure_profit_governance_approver(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        profit_governance_service::rollback_action(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &id,
+            &claims.sub,
+            payload.note,
+        )
+        .await?,
+    )))
 }
 
 async fn transition_profit_action(

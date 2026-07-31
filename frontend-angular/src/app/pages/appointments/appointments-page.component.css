@@ -1708,59 +1708,6 @@ button.active {
   overflow-x: hidden;
 }
 
-.slot-action-popover {
-  position: fixed;
-  z-index: 70;
-  display: grid;
-  width: 178px;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid var(--as-line);
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 16px 34px rgba(22, 44, 78, 0.2);
-}
-
-.slot-action-popover strong {
-  color: var(--as-ink);
-  font-size: 12px;
-}
-
-.slot-action-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.slot-action-popover button {
-  min-height: 34px;
-  justify-content: flex-start;
-  padding: 7px 9px;
-  background: #fff;
-  border-color: #b9cbe4;
-  color: var(--as-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.slot-action-popover .slot-action-close {
-  width: 24px;
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--as-ink);
-  font-size: 22px;
-  line-height: 1;
-}
-
-.slot-action-popover .slot-action-close:hover,
-.slot-action-popover .slot-action-close:focus-visible {
-  background: #edf5ff;
-}
-
 .report-link {
   display: inline-flex;
   min-height: 40px;
@@ -1777,12 +1724,6 @@ button.active {
 
 .report-link:hover,
 .report-link:focus-visible {
-  border-color: var(--as-blue);
-  background: #edf5ff;
-}
-
-.slot-action-popover button:hover,
-.slot-action-popover button:focus-visible {
   border-color: var(--as-blue);
   background: #edf5ff;
 }
@@ -2378,8 +2319,7 @@ button.active {
   .view-switch button,
   .drawer-actions button,
   .booking-flyout button,
-  .command-flyout button,
-  .slot-action-popover button {
+  .command-flyout button {
     min-height: 44px;
   }
 

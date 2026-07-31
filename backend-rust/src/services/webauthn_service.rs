@@ -129,6 +129,16 @@ pub async fn begin_authentication(
     tenant_id: &str,
     user_id: &str,
 ) -> Result<AuthenticationStart, AppError> {
+    begin_authentication_for_purpose(db, settings, tenant_id, user_id, "authentication").await
+}
+
+pub async fn begin_authentication_for_purpose(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    user_id: &str,
+    purpose: &str,
+) -> Result<AuthenticationStart, AppError> {
     let webauthn = configured_webauthn(settings)?;
     let records = security_repository::list_webauthn_credentials(db, tenant_id, user_id)
         .await
@@ -143,12 +153,7 @@ pub async fn begin_authentication(
     let state_json = serde_json::to_value(state)
         .map_err(|_| AppError::internal("failed to store passkey challenge"))?;
     let challenge_id = security_repository::save_webauthn_challenge(
-        db,
-        tenant_id,
-        user_id,
-        "authentication",
-        state_json,
-        None,
+        db, tenant_id, user_id, purpose, state_json, None,
     )
     .await
     .map_err(|_| AppError::internal("failed to store passkey challenge"))?;
@@ -165,13 +170,34 @@ pub async fn finish_authentication(
     challenge_id: &str,
     response: AuthenticationResponse,
 ) -> Result<(String, String), AppError> {
+    finish_authentication_for_purpose(
+        db,
+        settings,
+        expected_tenant_id,
+        None,
+        "authentication",
+        challenge_id,
+        &response,
+    )
+    .await
+}
+
+pub async fn finish_authentication_for_purpose(
+    db: &PgPool,
+    settings: &Settings,
+    expected_tenant_id: &str,
+    expected_user_id: Option<&str>,
+    purpose: &str,
+    challenge_id: &str,
+    response: &AuthenticationResponse,
+) -> Result<(String, String), AppError> {
     let webauthn = configured_webauthn(settings)?;
     let challenge = security_repository::take_webauthn_challenge(
         db,
         challenge_id,
-        "authentication",
+        purpose,
         Some(expected_tenant_id),
-        None,
+        expected_user_id,
     )
     .await
     .map_err(|_| AppError::internal("failed to load passkey challenge"))?
@@ -192,7 +218,7 @@ pub async fn finish_authentication(
     let mut passkey: PasskeyCredential = serde_json::from_value(record.passkey_json)
         .map_err(|_| AppError::internal("stored passkey is invalid"))?;
     let result = webauthn
-        .finish_authentication(&state, &response, &passkey)
+        .finish_authentication(&state, response, &passkey)
         .map_err(|_| AppError::unauthenticated("passkey sign-in could not be verified"))?;
     passkey.counter = result.new_counter;
     let passkey_json = serde_json::to_value(passkey)

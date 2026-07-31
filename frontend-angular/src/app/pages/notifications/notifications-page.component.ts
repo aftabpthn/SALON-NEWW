@@ -27,6 +27,24 @@ type TeamChatMessage = {
   createdAt: string;
 };
 
+type StaffChatConversation = {
+  id: string;
+  type: 'team' | 'private-owner';
+  title: string;
+  messageCount: number;
+  lastMessageAt?: string;
+};
+
+type StaffConversationMessage = {
+  id: string;
+  conversationId: string;
+  type: 'team' | 'private-owner';
+  senderUserId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+};
+
 type SmsCenterCampaign = {
   id: string;
   title: string;
@@ -62,10 +80,13 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   messages: InboxMessage[] = [];
   teamMessages: TeamChatMessage[] = [];
+  privateConversations: StaffChatConversation[] = [];
+  privateMessages: StaffConversationMessage[] = [];
   controlCampaigns: SmsCenterCampaign[] = [];
   providerStatus: Record<string, boolean> = {};
-  mode: 'center' | 'client' | 'team' = 'center';
+  mode: 'center' | 'client' | 'team' | 'private' = 'center';
   selectedClientId = '';
+  selectedPrivateConversationId = '';
   channel = 'whatsapp';
   reply = '';
   controlChannel = 'sms';
@@ -154,11 +175,22 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
       if (!this.threads.some((thread) => thread.clientId === this.selectedClientId)) {
         this.selectedClientId = this.threads[0]?.clientId || '';
       }
+      if (this.canUsePrivateStaffChat) await this.reloadPrivateConversations();
     } catch (error) { this.error = this.message(error, 'Message inbox could not be loaded'); }
     finally { this.loading = false; }
   }
 
-  setMode(mode: 'center' | 'client' | 'team') { this.mode = mode; this.error = ''; }
+  setMode(mode: 'center' | 'client' | 'team' | 'private') {
+    this.mode = mode;
+    this.error = '';
+    if (mode === 'private' && this.selectedPrivateConversationId) void this.loadPrivateConversation(this.selectedPrivateConversationId);
+  }
+
+  get canUsePrivateStaffChat() { return this.auth.hasRole('owner', 'super-admin'); }
+
+  get selectedPrivateConversation() {
+    return this.privateConversations.find((conversation) => conversation.id === this.selectedPrivateConversationId);
+  }
 
   get canManagePayroll() {
     return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission('staff.payroll.manage', 'staff.manage', 'management.write');
@@ -249,6 +281,29 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     finally { this.busy = false; }
   }
 
+  async loadPrivateConversation(conversationId: string) {
+    if (!conversationId) return;
+    this.selectedPrivateConversationId = conversationId;
+    this.error = '';
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<StaffConversationMessage[]>>(`/team-chat/conversations/${encodeURIComponent(conversationId)}/messages`));
+      this.privateMessages = Array.isArray(response.data) ? response.data : [];
+    } catch (error) { this.error = this.message(error, 'Private staff conversation could not be loaded'); }
+  }
+
+  async sendPrivateMessage() {
+    const body = this.reply.trim();
+    if (!this.selectedPrivateConversationId || !body || this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.api.post(`/team-chat/conversations/${encodeURIComponent(this.selectedPrivateConversationId)}/messages`, { body }));
+      this.reply = '';
+      await Promise.all([this.loadPrivateConversation(this.selectedPrivateConversationId), this.reloadPrivateConversations()]);
+    } catch (error) { this.error = this.message(error, 'Private staff message could not be sent'); }
+    finally { this.busy = false; }
+  }
+
   isOwnMessage(message: TeamChatMessage) { return message.senderUserId === this.auth.userId; }
 
   providerReady(channel: string) {
@@ -267,12 +322,27 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     this.teamMessages = Array.isArray(response.data) ? response.data : [];
   }
 
+  private async reloadPrivateConversations() {
+    const response = await firstValueFrom(this.api.get<ApiEnvelope<StaffChatConversation[]>>('/team-chat/conversations'));
+    this.privateConversations = (Array.isArray(response.data) ? response.data : []).filter((conversation) => conversation.type === 'private-owner');
+    if (!this.privateConversations.some((conversation) => conversation.id === this.selectedPrivateConversationId)) {
+      this.selectedPrivateConversationId = this.privateConversations[0]?.id || '';
+      this.privateMessages = [];
+    }
+  }
+
   private connectTeamChat() {
     const token = this.auth.accessToken || '';
     if (!token || typeof WebSocket === 'undefined') return;
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     this.teamSocket = new WebSocket(`${scheme}://${location.host}/api/v1/realtime/team-chat`, ['aurashine-v1', token]);
-    this.teamSocket.onmessage = () => { void this.reloadTeamChat(); };
+    this.teamSocket.onmessage = () => {
+      void this.reloadTeamChat();
+      if (this.canUsePrivateStaffChat) {
+        void this.reloadPrivateConversations();
+        if (this.selectedPrivateConversationId) void this.loadPrivateConversation(this.selectedPrivateConversationId);
+      }
+    };
     this.teamSocket.onclose = () => {
       this.teamSocket = null;
       this.reconnectTimer = setTimeout(() => this.connectTeamChat(), 3000);

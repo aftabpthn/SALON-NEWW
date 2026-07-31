@@ -589,6 +589,42 @@ def customer_ai_recommendations(payload: CustomerAiRequest):
             + (5 if metrics.open_appointments > 0 else 0),
         ),
     )
+    churn_reasons = []
+    if metrics.inactive_days >= 90:
+        churn_reasons.append(f"No completed visit for {metrics.inactive_days} days")
+    if metrics.no_show_rate_bps >= 2_000:
+        churn_reasons.append("No-show rate is elevated")
+    if metrics.cancellation_rate_bps >= 2_000:
+        churn_reasons.append("Cancellation rate is elevated")
+    if metrics.review_sentiment.lower() == "negative":
+        churn_reasons.append("Recent review sentiment is negative")
+    if not churn_reasons:
+        churn_reasons.append("No major churn driver is currently detected")
+
+    return envelope(
+        {
+            "tenantId": payload.tenant_id,
+            "branchId": payload.branch_id,
+            "customerId": payload.customer_id,
+            "source": "python_deterministic",
+            "model": "local-customer-policy-v1",
+            "healthScore": health_score,
+            "healthExplanation": health_explanation(health_score, metrics),
+            "churnRisk": {
+                "score": metrics.churn_risk_score,
+                "explanation": churn_reasons,
+            },
+            "nextBestActions": next_best_actions(payload, context),
+            "rebookingRecommendations": rebooking_recommendations(payload),
+            "upsellRecommendations": upsell_recommendations(payload, context),
+            "learningContext": {
+                "acceptedCount": len(context["accepted"]),
+                "rejectedCount": len(context["rejected"]),
+                "feedbackApplied": bool(payload.feedback),
+            },
+            "context": context["public"],
+        }
+    )
 
 
 @app.post("/api/v1/marketing-advisor/recommendation")
@@ -647,42 +683,6 @@ def marketing_advisor_recommendation(payload: MarketingAdvisorRequest):
         "evidence": evidence,
         "requiresApproval": True,
     })
-    churn_reasons = []
-    if metrics.inactive_days >= 90:
-        churn_reasons.append(f"No completed visit for {metrics.inactive_days} days")
-    if metrics.no_show_rate_bps >= 2_000:
-        churn_reasons.append("No-show rate is elevated")
-    if metrics.cancellation_rate_bps >= 2_000:
-        churn_reasons.append("Cancellation rate is elevated")
-    if metrics.review_sentiment.lower() == "negative":
-        churn_reasons.append("Recent review sentiment is negative")
-    if not churn_reasons:
-        churn_reasons.append("No major churn driver is currently detected")
-
-    return envelope(
-        {
-            "tenantId": payload.tenant_id,
-            "branchId": payload.branch_id,
-            "customerId": payload.customer_id,
-            "source": "python_deterministic",
-            "model": "local-customer-policy-v1",
-            "healthScore": health_score,
-            "healthExplanation": health_explanation(health_score, metrics),
-            "churnRisk": {
-                "score": metrics.churn_risk_score,
-                "explanation": churn_reasons,
-            },
-            "nextBestActions": next_best_actions(payload, context),
-            "rebookingRecommendations": rebooking_recommendations(payload),
-            "upsellRecommendations": upsell_recommendations(payload, context),
-            "learningContext": {
-                "acceptedCount": len(context["accepted"]),
-                "rejectedCount": len(context["rejected"]),
-                "feedbackApplied": bool(payload.feedback),
-            },
-            "context": context["public"],
-        }
-    )
 
 
 @app.post("/api/v1/profit-copilot/recommendations")

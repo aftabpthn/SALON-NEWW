@@ -463,7 +463,7 @@ h3 {
 
 .resource-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px auto;
+  grid-template-columns: minmax(0, 1fr) 140px 170px auto;
   gap: 10px;
   align-items: end;
 }

@@ -420,7 +420,13 @@ mod tests {
     async fn a_staff_member_without_a_branch_grant_stays_anonymous(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
 
@@ -437,7 +443,13 @@ mod tests {
     async fn a_known_staff_number_carries_its_real_permissions(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["appointments.read", "staff.read"], &[]).await;
@@ -447,7 +459,9 @@ mod tests {
             .await
             .expect("resolution completes");
         assert_eq!(caller.identity, ChannelIdentity::StaffLogin);
-        let claims = caller.claims.expect("a recognised staff login carries claims");
+        let claims = caller
+            .claims
+            .expect("a recognised staff login carries claims");
         assert_eq!(claims.sub, user_id);
         assert_eq!(claims.tenant_id, tenant_id);
         assert_eq!(claims.branch_id.as_deref(), Some(branch_id.as_str()));
@@ -465,7 +479,13 @@ mod tests {
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
         for name in ["Asha", "Nikita"] {
             let user_id = seed_staff_with_login(
-                &pool, &tenant_id, &branch_id, name, "+91 98765 43210", true, true,
+                &pool,
+                &tenant_id,
+                &branch_id,
+                name,
+                "+91 98765 43210",
+                true,
+                true,
             )
             .await;
             grant(&pool, &tenant_id, &user_id, &branch_id, &role_id).await;
@@ -487,7 +507,13 @@ mod tests {
     async fn an_inactive_staff_record_stops_answering(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", false, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            false,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
@@ -506,7 +532,13 @@ mod tests {
     async fn a_disabled_login_stops_answering(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, false,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            false,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
@@ -531,12 +563,24 @@ mod tests {
         let (tenant_id, home_branch) = seed(&pool).await;
         let covered_branch = seed_branch(&pool, &tenant_id, "Jubilee Hills").await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &home_branch, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &home_branch,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
         grant_deputation(
-            &pool, &tenant_id, &user_id, &covered_branch, &role_id, -3, 10,
+            &pool,
+            &tenant_id,
+            &user_id,
+            &covered_branch,
+            &role_id,
+            -3,
+            10,
         )
         .await;
 
@@ -570,13 +614,25 @@ mod tests {
         let (tenant_id, home_branch) = seed(&pool).await;
         let covered_branch = seed_branch(&pool, &tenant_id, "Jubilee Hills").await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &home_branch, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &home_branch,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
         // Ended yesterday. Same real flow as the live case, one day later.
         grant_deputation(
-            &pool, &tenant_id, &user_id, &covered_branch, &role_id, -30, -1,
+            &pool,
+            &tenant_id,
+            &user_id,
+            &covered_branch,
+            &role_id,
+            -30,
+            -1,
         )
         .await;
 
@@ -606,7 +662,13 @@ mod tests {
     async fn an_explicit_denial_overrides_the_role_grant(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         // The role grants finance and is then explicitly denied it.
@@ -648,7 +710,13 @@ mod tests {
         let (tenant_id, home_branch) = seed(&pool).await;
         let other_branch = seed_branch(&pool, &tenant_id, "Gachibowli").await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &home_branch, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &home_branch,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
@@ -676,7 +744,13 @@ mod tests {
     async fn a_revoked_permission_applies_to_the_next_message(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read", "finance.read"], &[]).await;
@@ -690,11 +764,13 @@ mod tests {
         assert!(ai_scope_service::domain_allowed(&before, AiDomain::Finance));
 
         // The administrator revokes finance between the two messages.
-        sqlx::query("UPDATE roles SET permissions_json=TO_JSONB(ARRAY['staff.read']::TEXT[]) WHERE id=$1")
-            .bind(&role_id)
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE roles SET permissions_json=TO_JSONB(ARRAY['staff.read']::TEXT[]) WHERE id=$1",
+        )
+        .bind(&role_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let after = resolve_caller(&pool, &tenant_id, &branch_id, "+91 98765 43210")
             .await
@@ -702,7 +778,10 @@ mod tests {
             .claims
             .expect("the staff login still resolves");
         assert!(
-            !after.permissions.iter().any(|value| value == "finance.read"),
+            !after
+                .permissions
+                .iter()
+                .any(|value| value == "finance.read"),
             "the revoked permission must be gone from the very next message"
         );
         assert!(!ai_scope_service::domain_allowed(&after, AiDomain::Finance));
@@ -715,7 +794,13 @@ mod tests {
     async fn an_international_number_cannot_impersonate_a_staff_number(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;
@@ -767,7 +852,13 @@ mod tests {
     async fn a_staff_sender_who_is_not_a_client_still_resolves(pool: PgPool) {
         let (tenant_id, branch_id) = seed(&pool).await;
         let user_id = seed_staff_with_login(
-            &pool, &tenant_id, &branch_id, "Asha", "+91 98765 43210", true, true,
+            &pool,
+            &tenant_id,
+            &branch_id,
+            "Asha",
+            "+91 98765 43210",
+            true,
+            true,
         )
         .await;
         let role_id = seed_role(&pool, &tenant_id, &["staff.read"], &[]).await;

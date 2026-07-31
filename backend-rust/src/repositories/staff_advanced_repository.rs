@@ -1838,7 +1838,8 @@ pub async fn update_self_task_status(
     version: i32,
     status: &str,
 ) -> Result<Option<StaffTaskRecord>, sqlx::Error> {
-    sqlx::query_as(
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as(
         r#"
         UPDATE staff_tasks SET
           status=$6,
@@ -1856,8 +1857,20 @@ pub async fn update_self_task_status(
     .bind(id)
     .bind(version)
     .bind(status)
-    .fetch_optional(db)
-    .await
+    .fetch_optional(&mut *tx)
+    .await?;
+    if status == "completed" {
+        sqlx::query(
+            "UPDATE staff_coaching_goals goal SET status='completed',version=version+1,updated_at=NOW() WHERE goal.tenant_id=$1 AND goal.branch_id=$2 AND goal.status='active' AND EXISTS(SELECT 1 FROM staff_tasks task WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.id=$3 AND task.coaching_goal_id=goal.id) AND NOT EXISTS(SELECT 1 FROM staff_tasks open_task WHERE open_task.tenant_id=$1 AND open_task.branch_id=$2 AND open_task.coaching_goal_id=goal.id AND open_task.status NOT IN ('completed','cancelled'))",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn begin_mobile_sync(

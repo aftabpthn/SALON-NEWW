@@ -3,7 +3,7 @@ import { Component, computed, HostListener, OnInit, signal } from "@angular/core
 import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { StaffAppService, StaffAppointment, StaffBusiness, StaffDashboard, StaffRecommendation } from "../../core/staff-app.service";
-import { businessDate, businessDateOffset, parseDisplayBusinessDate } from "../../core/business-date";
+import { businessDate, businessDateOffset, displayBusinessDate, parseDisplayBusinessDate } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 import { StaffDatePickerComponent } from "../../shared/staff-date-picker.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -11,9 +11,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 type AppointmentView = "today" | "upcoming" | "live" | "completed" | "cancelled" | "shifted" | "all";
 
 const LIVE_STATUSES = new Set(["booked", "confirmed", "checked-in", "arrived", "in-service", "started"]);
-const TERMINAL_STATUSES = new Set(["completed", "checked-out", "cancelled", "no-show"]);
-const COMPLETED_STATUSES = new Set(["completed", "checked-out"]);
-const CANCELLED_STATUSES = new Set(["cancelled", "no-show"]);
+const COMPLETED_STATUSES = new Set(["completed", "checked-out", "paid", "closed", "billed"]);
+const CANCELLED_STATUSES = new Set(["cancelled", "canceled", "no-show", "void", "voided"]);
+const TERMINAL_STATUSES = new Set([...COMPLETED_STATUSES, ...CANCELLED_STATUSES]);
 const IST_DATE_FORMATTER = new Intl.DateTimeFormat("en", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
 const IST_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -64,7 +64,7 @@ function istDateTimeInput(value: string): { date: string; time: string } {
           <button class="link-button" [class.active-toggle]="activeView() === 'upcoming'" type="button" [attr.aria-pressed]="activeView() === 'upcoming'" (click)="setView('upcoming')">Upcoming</button>
           <button class="link-button" [class.active-toggle]="activeView() === 'completed'" type="button" [attr.aria-pressed]="activeView() === 'completed'" (click)="setView('completed')">Completed</button>
           <button class="link-button" [class.active-toggle]="activeView() === 'shifted'" type="button" [attr.aria-pressed]="activeView() === 'shifted'" (click)="setView('shifted')">Shifted</button>
-          <button class="link-button" [class.active-toggle]="activeView() === 'all'" type="button" [attr.aria-pressed]="activeView() === 'all'" (click)="setView('all')">All History</button>
+          @if (canViewAllHistory()) { <button class="link-button" [class.active-toggle]="activeView() === 'all'" type="button" [attr.aria-pressed]="activeView() === 'all'" (click)="setView('all')">All History</button> }
         </nav>
 
         @if (activeView() === 'all') {
@@ -139,7 +139,7 @@ function istDateTimeInput(value: string): { date: string; time: string } {
               @for (recommendation of recommendations().slice(0, 3); track recommendation.staffId; let rank = $index) {
                 <article [class.current-staff]="recommendation.staffId === item.staffId">
                   <strong>{{ rank + 1 }}. {{ recommendation.staffName }}@if (recommendation.staffId === item.staffId) { · Assigned }</strong>
-                  <span>{{ recommendation.recommendationReason }}</span>
+                  <span><b>Why this staff?</b> {{ recommendation.recommendationReason }}</span>
                   @if (recommendationMeta(recommendation)) { <small>{{ recommendationMeta(recommendation) }}</small> }
                 </article>
               } @empty { <small>No suitable staff available for this slot.</small> }
@@ -153,7 +153,7 @@ function istDateTimeInput(value: string): { date: string; time: string } {
             <section class="action-form">
               <div class="panel-title"><h2>{{ actionMode() === 'reschedule' ? 'Reschedule appointment' : 'Cancel appointment' }}</h2></div>
               @if (actionMode() === 'reschedule') {
-                <div class="action-fields"><label>Date<input type="date" [value]="actionDate()" (input)="actionDate.set($any($event.target).value)" /></label><label>Time<input type="time" [value]="actionTime()" (input)="actionTime.set($any($event.target).value)" /></label></div>
+                <div class="action-fields"><label>Date<aura-staff-date-picker [value]="actionDate()" [min]="minimumActionDate" ariaLabel="Reschedule date" (valueChange)="actionDate.set($event)" /></label><label>Time<input type="time" [value]="actionTime()" (input)="actionTime.set($any($event.target).value)" /></label></div>
               }
               <label>Reason<textarea rows="3" maxlength="500" [value]="actionReason()" (input)="actionReason.set($any($event.target).value)"></textarea></label>
               @if (actionError()) { <p class="action-error">{{ actionError() }}</p> }
@@ -228,7 +228,7 @@ export class StaffAppointmentsPage implements OnInit {
     return {
       today: rows.filter((item) => istDateKey(item.startAt) === today).length,
       live: rows.filter((item) => istDateKey(item.startAt) === today && LIVE_STATUSES.has(this.statusOf(item))).length,
-      completed: rows.filter((item) => this.isCompleted(item, today)).length,
+      completed: rows.filter((item) => this.isCompleted(item)).length,
       cancelled: rows.filter((item) => CANCELLED_STATUSES.has(this.statusOf(item))).length
     };
   });
@@ -243,7 +243,7 @@ export class StaffAppointmentsPage implements OnInit {
         case "today": return date === today;
         case "upcoming": return date > today && !TERMINAL_STATUSES.has(status);
         case "live": return date === today && LIVE_STATUSES.has(status);
-        case "completed": return this.isCompleted(item, today);
+        case "completed": return this.isCompleted(item);
         case "cancelled": return CANCELLED_STATUSES.has(status);
         case "shifted": return item.rescheduleCount > 0;
       }
@@ -274,6 +274,7 @@ export class StaffAppointmentsPage implements OnInit {
   readonly recommendationError = signal("");
   readonly loadError = signal("");
   readonly savingAction = signal(false);
+  readonly minimumActionDate = businessDate();
   private loadGeneration = 0;
 
   constructor(readonly staff: StaffAppService) {}
@@ -283,7 +284,7 @@ export class StaffAppointmentsPage implements OnInit {
   @HostListener("window:aura:appointments-updated")
   onAppointmentsUpdated() { void this.load(); }
 
-  setView(view: AppointmentView) { this.activeView.set(view); this.actionMessage.set(""); if (view === "all" && !this.history()) void this.loadHistory(true); }
+  setView(view: AppointmentView) { if (view === "all" && !this.canViewAllHistory()) return; this.activeView.set(view); this.actionMessage.set(""); if (view === "all" && !this.history()) void this.loadHistory(true); }
 
   viewTitle(): string {
     return ({ today: "Today's Queue", upcoming: "Upcoming appointments", live: "Live appointments", completed: "Completed appointments", cancelled: "Cancelled appointments", shifted: "Shifted appointments", all: "Complete appointment history" } as const)[this.activeView()];
@@ -301,22 +302,24 @@ export class StaffAppointmentsPage implements OnInit {
     this.loadError.set("");
     try {
       const today = businessDate();
-      const [dashboard, os] = await Promise.all([
-        this.staff.dashboard({ date: today }),
-        this.staff.enterpriseOs({ from: businessDateOffset(-30, today), to: businessDateOffset(32, today) })
-      ]);
+      const osRequest = this.staff.enterpriseOs({ from: businessDateOffset(-30, today), to: businessDateOffset(32, today) }, false).catch(() => null);
+      const dashboard = await this.staff.dashboard({ date: today });
+      if (generation !== this.loadGeneration) return;
+      this.dashboard.set(dashboard);
+      const os = await osRequest;
+      if (!os || generation !== this.loadGeneration) return;
       const current = new Map(dashboard.appointments.map((item) => [item.id, item]));
       const appointments = os.timeline.map((item) => ({
         ...(current.get(item.id) || {}), id: item.id, staffId: current.get(item.id)?.staffId || this.staff.user()?.staffId || "",
         branchId: current.get(item.id)?.branchId || this.staff.user()?.branchId || "", serviceIds: current.get(item.id)?.serviceIds || [],
         serviceNames: item.serviceNames || [], durationMinutes: item.durationMinutes || 0, value: current.get(item.id)?.value || 0,
         startAt: item.startAt, endAt: item.endAt, status: item.status, chair: item.chair || current.get(item.id)?.chair || "", source: current.get(item.id)?.source || "",
-        clientName: item.clientName || current.get(item.id)?.clientName || "", preferredClient: item.preferredClient || current.get(item.id)?.preferredClient || false,
+        clientId: current.get(item.id)?.clientId || "", clientName: item.clientName || current.get(item.id)?.clientName || "", preferredClient: item.preferredClient || current.get(item.id)?.preferredClient || false,
         rescheduleCount: item.rescheduleCount || current.get(item.id)?.rescheduleCount || 0,
         rescheduleTimeline: item.rescheduleTimeline || current.get(item.id)?.rescheduleTimeline || [], serviceDepartments: item.serviceDepartments || current.get(item.id)?.serviceDepartments || [], lastServiceAt: item.lastServiceAt || current.get(item.id)?.lastServiceAt || "",
         lastServiceNames: item.lastServiceNames || current.get(item.id)?.lastServiceNames || [], lastServiceDepartments: item.lastServiceDepartments || current.get(item.id)?.lastServiceDepartments || []
       } satisfies StaffAppointment));
-      if (generation === this.loadGeneration) this.dashboard.set({ ...dashboard, appointments });
+      this.dashboard.set({ ...dashboard, appointments });
     } catch {
       if (generation === this.loadGeneration) this.loadError.set(this.staff.error() || "Unable to load appointments.");
     } finally { if (generation === this.loadGeneration) this.loading.set(false); }
@@ -349,6 +352,7 @@ export class StaffAppointmentsPage implements OnInit {
   }
 
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["staff.app.business.service_amount.read", "read:finance", "read:sales", "read:payments", "read:invoices"]); }
+  canViewAllHistory(): boolean { return this.staff.hasPermission("staff.app.business.read"); }
   canManageAppointment(item: StaffAppointment): boolean { return this.staff.hasPermission("staff.app.appointments.manage") && !TERMINAL_STATUSES.has(this.statusOf(item)); }
   openAppointment(item: StaffAppointment) {
     this.actionMode.set(null); this.actionMessage.set(""); this.selectedAppointment.set(item);
@@ -369,7 +373,7 @@ export class StaffAppointmentsPage implements OnInit {
   }
   beginReschedule(item: StaffAppointment) {
     const value = istDateTimeInput(item.startAt);
-    this.actionDate.set(value.date); this.actionTime.set(value.time); this.actionReason.set(""); this.actionError.set(""); this.actionMode.set("reschedule");
+    this.actionDate.set(displayBusinessDate(value.date)); this.actionTime.set(value.time); this.actionReason.set(""); this.actionError.set(""); this.actionMode.set("reschedule");
   }
   beginCancel() { this.actionReason.set(""); this.actionError.set(""); this.actionMode.set("cancel"); }
 
@@ -380,7 +384,7 @@ export class StaffAppointmentsPage implements OnInit {
     try {
       if (this.actionMode() === "cancel") await this.staff.cancelAppointment(item.id, reason);
       else {
-        const start = new Date(`${this.actionDate()}T${this.actionTime()}:00+05:30`);
+        const start = new Date(`${parseDisplayBusinessDate(this.actionDate())}T${this.actionTime()}:00+05:30`);
         if (Number.isNaN(start.getTime()) || start <= new Date()) { this.actionError.set("Choose a future date and time."); return; }
         await this.staff.rescheduleAppointment(item.id, { startAt: start.toISOString(), reason });
       }
@@ -392,12 +396,8 @@ export class StaffAppointmentsPage implements OnInit {
     finally { this.savingAction.set(false); }
   }
 
-  private statusOf(item: StaffAppointment): string { return String(item.status || "").toLowerCase(); }
-  private isCompleted(item: StaffAppointment, today: string): boolean {
-    const status = this.statusOf(item);
-    const date = istDateKey(item.startAt);
-    return !CANCELLED_STATUSES.has(status) && (COMPLETED_STATUSES.has(status) || !date || date < today);
-  }
+  private statusOf(item: StaffAppointment): string { return String(item.status || "").trim().toLowerCase().replace(/[_\s]+/g, "-"); }
+  private isCompleted(item: StaffAppointment): boolean { return COMPLETED_STATUSES.has(this.statusOf(item)); }
   private compareStartTimes(left: StaffAppointment, right: StaffAppointment, ascending: boolean): number {
     const leftTime = new Date(left.startAt).getTime();
     const rightTime = new Date(right.startAt).getTime();

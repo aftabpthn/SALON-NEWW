@@ -663,17 +663,26 @@
           </div>
         </section>
         <section class="setting-block resource-settings">
-          <h3>Chair / room</h3>
+          <h3>Area resources</h3>
           <div class="resource-form">
             <label>
               Name
-              <input [(ngModel)]="chairRoomName" placeholder="Chair or room name" />
+              <input [(ngModel)]="chairRoomName" placeholder="Resource name" />
             </label>
             <label>
               Type
               <select [(ngModel)]="chairRoomKind">
                 <option value="chair">Chair</option>
                 <option value="room">Room</option>
+                <option value="workstation">Workstation</option>
+              </select>
+            </label>
+            <label>
+              Area / department
+              <select [(ngModel)]="chairRoomDepartment">
+                @for (department of resourceDepartments; track department) {
+                  <option [value]="department">{{ department }}</option>
+                }
               </select>
             </label>
             <button class="primary" type="button" [disabled]="chairRoomSaving || !chairRoomName.trim()" (click)="addChairRoom()">Add</button>
@@ -686,12 +695,12 @@
               @for (resource of chairRooms; track trackByChairRoom($index, resource)) {
                 <article>
                   <b>{{ resource.name }}</b>
-                  <small>{{ resource.kind }}</small>
+                  <small>{{ resource.department }} · {{ resource.kind }}</small>
                 </article>
               }
             </div>
           } @else {
-            <span class="resource-empty">No chair / room yet</span>
+            <span class="resource-empty">No area resources yet</span>
           }
         </section>
         <section class="setting-block">

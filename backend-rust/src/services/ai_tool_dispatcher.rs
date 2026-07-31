@@ -14,7 +14,9 @@ use sqlx::PgPool;
 use crate::{
     models::common::AppError,
     services::{
-        ai_copilot_tools::{CopilotAnswer, CopilotTool, ToolActor, ToolMatch, ToolRefusal, ToolScope},
+        ai_copilot_tools::{
+            CopilotAnswer, CopilotTool, ToolActor, ToolMatch, ToolRefusal, ToolScope,
+        },
         ai_scope_service::{self, AiDomain, ResolvedScope, ScopeRequest},
         auth_service::AuthClaims,
     },
@@ -46,9 +48,7 @@ pub fn tool_domain(tool: CopilotTool) -> AiDomain {
         // A branch snapshot and the composite read across domains; each part
         // inside them is gated separately, so the entry check is the read
         // permission every signed-in CRM user needs.
-        CopilotTool::BusinessOverview | CopilotTool::BusinessDiagnostic => {
-            AiDomain::GeoComparison
-        }
+        CopilotTool::BusinessOverview | CopilotTool::BusinessDiagnostic => AiDomain::GeoComparison,
         // Workflow help reads no CRM data at all.
         CopilotTool::BillingHowTo => AiDomain::Appointments,
     }
@@ -111,10 +111,6 @@ pub fn tool_scope(scope: &ResolvedScope, claims: &AuthClaims) -> ToolScope {
         primary_branch_id: scope.primary_branch_id().unwrap_or_default().to_string(),
         label: scope.label.clone(),
         financials_visible: ai_scope_service::domain_allowed(claims, AiDomain::Finance),
-        allowed_domains: AiDomain::ALL
-            .into_iter()
-            .filter(|domain| ai_scope_service::domain_allowed(claims, *domain))
-            .collect(),
         disclosure: scope.disclosure(),
     }
 }
@@ -245,8 +241,8 @@ mod tests {
 
 #[cfg(test)]
 mod scope_enforcement_tests {
-    use super::*;
     use super::tests_support::claims;
+    use super::*;
     use crate::services::ai_copilot_tools::{CopilotTool, ToolActor, ToolMatch};
     use sqlx::PgPool;
 
@@ -407,12 +403,20 @@ mod scope_enforcement_tests {
             level: Some("tenant".into()),
             ..ScopeRequest::default()
         };
-        let scope = resolve(&pool, &fixture.tenant_id, &manager_claims(&fixture), &request)
-            .await
-            .expect("scope resolves");
+        let scope = resolve(
+            &pool,
+            &fixture.tenant_id,
+            &manager_claims(&fixture),
+            &request,
+        )
+        .await
+        .expect("scope resolves");
 
         assert_eq!(scope.branch_ids().len(), 1);
-        assert!(scope.narrowed, "a tenant-wide ask on a one-branch grant is narrowed");
+        assert!(
+            scope.narrowed,
+            "a tenant-wide ask on a one-branch grant is narrowed"
+        );
         let disclosure = scope.disclosure();
         assert!(disclosure.narrowed);
         assert!(
@@ -510,14 +514,9 @@ mod scope_enforcement_tests {
         ));
 
         // Money lines are stripped for that same login everywhere else too.
-        let scope = resolve(
-            &pool,
-            &fixture.tenant_id,
-            &denied,
-            &ScopeRequest::default(),
-        )
-        .await
-        .expect("scope resolves");
+        let scope = resolve(&pool, &fixture.tenant_id, &denied, &ScopeRequest::default())
+            .await
+            .expect("scope resolves");
         assert!(!tool_scope(&scope, &denied).financials_visible);
 
         // The identical role without the denial does reach the tool.
@@ -525,13 +524,20 @@ mod scope_enforcement_tests {
         allowed.sub = fixture.user_id.clone();
         allowed.tenant_id = fixture.tenant_id.clone();
         allowed.branch_id = Some(fixture.granted_branch_id.clone());
-        assert!(tool_scope(
-            &resolve(&pool, &fixture.tenant_id, &allowed, &ScopeRequest::default())
+        assert!(
+            tool_scope(
+                &resolve(
+                    &pool,
+                    &fixture.tenant_id,
+                    &allowed,
+                    &ScopeRequest::default()
+                )
                 .await
                 .expect("scope resolves"),
-            &allowed
-        )
-        .financials_visible);
+                &allowed
+            )
+            .financials_visible
+        );
     }
 
     #[sqlx::test]

@@ -2,6 +2,17 @@
 
 All endpoints are served below both `/api/v1` and `/api`. Protected requests require the normal bearer token plus `X-Tenant-Id` and `X-Branch-Id`. Durable records are always tenant and branch scoped. Money uses integer paise; dates use ISO `YYYY-MM-DD`; timestamps use ISO-8601 UTC.
 
+## Enterprise migration cutover
+
+- `GET /settings/integrations/migration-cutovers/active` returns the current branch cutover and immutable transition audit.
+- `POST /settings/integrations/migration-cutovers` creates or reconfigures a draft cutover; manager-level migration permission is required.
+- `POST /settings/integrations/migration-cutovers/{id}/transition` advances exactly one lifecycle state. Inventory freeze and go-live require Owner approval.
+- While status is `inventory_frozen`, `snapshot_approved`, `snapshot_applied`, or `reconciled`, database guards reject stock quantity and stock-ledger writes for that tenant/branch. The exact snapshot transaction is the only scoped bypass while `snapshot_approved`.
+- One non-live cutover is allowed per tenant/branch. Snapshot apply/reconciliation cannot advance without a completed, error-free `opening_snapshot` import for the same cutover.
+- Phase 1 historical evidence uses `GET /settings/integrations/historical-purchase-evidence?cutoverId=...`, `POST /historical-purchase-evidence/group-decisions` and `POST /historical-purchase-evidence/cutover-approval`. Uploads reuse the encrypted import-upload API with `evidenceKind`, `supplierBatch` and `cutoverId`. Cutover approval is Owner-only; grouping mutations require migration-manage permission; reads remain tenant/branch scoped.
+- Phase 1 evidence writes only immutable source, evidence-index, grouping-decision, cutover-approval and audit rows. Historical stock, accounting, GST and supplier payable effects are always zero. Physical inventory and supplier outstanding evidence are collected separately for later phases.
+- Phase 2 uses `POST /settings/integrations/historical-purchase-pilot` for an Owner-approved 20–50 document sample and `GET /settings/integrations/historical-purchase-pilot?cutoverId=...` for extraction, mapping, reconciliation, correction and accuracy results. Reviews reuse `/purchases/bill-drafts/{id}` plus `/pilot-review`; historical drafts reference encrypted Phase 1 evidence, require correction reasons, and are blocked in both service and database layers from GRN, stock, accounting, GST or payable posting.
+
 ## Inventory policy
 
 - `GET /inventory/policy` returns the effective branch policy. A branch without a persisted row receives safe defaults and null transfer-cost inputs.
@@ -42,6 +53,7 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 
 - Purchase order lines accept `discountBps`; headers accept non-negative `shippingPaise` and `handlingPaise`. Product tax and inventory value use the discounted unit cost, while order totals include both charges.
 - GRNs accept `supplierInvoiceDate`, `challanNumber`, `deliveryReference`, the same commercial charges, line discount, `damagedQuantity`, `rejectedQuantity`, and `varianceReason`. The server generates the branch-unique `grrNumber`.
+- After a migration cutover is live, an invoice dated on or before the cutover date defaults to the historical archive. Posting it through `POST /purchases/grn` requires `backdatedOperationalApproval=true`, an Owner/superadmin actor, and matched cutover reconciliation; the approval user/time are persisted. A matching historical invoice is returned as a cross-register warning, while the existing unique invoice/idempotency constraints block duplicate live posting. Historical archive rows expose no stock-posting action.
 - GRN `quantity` is delivered quantity. Accepted stock is delivered minus damaged and rejected; only accepted quantity updates available stock and PO progress. Damaged units create a durable quarantine row, while rejected units remain outside inventory. Ordered, delivered, accepted, short, excess, damaged, and rejected quantities remain on the immutable receipt line.
 - Shipping and handling are allocated across accepted lines in proportion to discounted taxable value using integer-paise largest-remainder allocation. The exact line allocation and landed unit cost are persisted; stock ledger, batches, weighted-average value, and later return valuation use the landed unit cost.
 
@@ -49,8 +61,10 @@ All endpoints are served below both `/api/v1` and `/api`. Protected requests req
 
 - `GET /inventory/{id}/360` returns the current product plus same-SKU all-branch stock/value, active expiry timeline, client retail usage, margin evidence and the latest 200 immutable entity-ledger rows.
 - `GET /inventory/service-recipes/{serviceId}/versions` returns persisted recipe versions captured whenever `services.product_consumption_json` changes.
-- Manual backbar usage accepts optional `clientId` and `appointmentId`; appointment formula attribution requires its client, booked service and stylist, and is rejected unless the appointment belongs to that client and service in the same tenant/branch.
+- Manual backbar usage accepts optional `clientId` and `appointmentId`; appointment formula attribution requires its client, booked service and stylist, and is rejected unless the appointment belongs to that client, service, and stylist in the same tenant/branch.
 - `GET /inventory/backbar-usage` accepts optional `clientId` and `appointmentId` filters for formula history. The saved recipe expectation is compared with the stylist's actual mixed quantity; positive variance above the saved `ownerApprovalPercent` remains pending until a different owner or `inventory.approve` user reviews it.
+- `POST /staff-self/business/product-usage` forces the JWT-linked staff identity and reuses the same backbar transaction, recipe variance, idempotency, approval, FEFO, and immutable stock-ledger rules. Staff Business returns active recipe products with real inventory brand/stock and the latest 50 self-scoped usage records.
+- Staff Control Center recommendations combine low-stock evidence, real product/brand sales, configured service-recipe demand, and attributed staff retail conversion. Reorder approval continues through `POST /inventory/reorder-recommendations/{id}/approve`, which creates only a PO draft.
 - POS product and service consumption plus product-return restocking use the shared inventory adjustment service. When Service Settings enables `recipeInventory.requireRecipeForService`, checkout/finalization is blocked before stock or accounting writes if a service recipe is missing. Sale deductions and returns remain idempotent and preserve FEFO batch evidence.
 
 ## Stock audit and scanner

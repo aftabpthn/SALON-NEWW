@@ -20,7 +20,6 @@ type PerformanceReportRow = { key: string; value: { days: number; revenue: numbe
         </section>
       }
       @if (loadError()) { <section staffPageState class="notice performance-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" [attr.aria-busy]="loading()" (click)="load()">Retry</button></section> }
-      @if (staff.error() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
       @if (canReadPerformance()) {
         <nav class="performance-periods" aria-label="Performance period">
@@ -55,6 +54,33 @@ type PerformanceReportRow = { key: string; value: { days: number; revenue: numbe
         <section class="grid two performance-insights">
           <article class="panel"><div class="panel-title"><h2>Strengths</h2><span>{{ data.performance.strengths.length }}</span></div>@for (item of data.performance.strengths; track item) { <p class="insight">{{ item }}</p> } @empty { <div class="performance-empty compact"><p>No strengths recorded.</p><small>CRM review or productivity signals are required.</small></div> }</article>
           <article class="panel"><div class="panel-title"><h2>Opportunities</h2><span>{{ data.performance.opportunities.length }}</span></div>@for (item of data.performance.opportunities; track item) { <p class="insight">{{ item }}</p> } @empty { <div class="performance-empty compact"><p>No opportunities recorded.</p><small>Manager reviews or system signals will appear here.</small></div> }</article>
+        </section>
+        @if (sourceGaps(data).length) {
+          <section class="panel"><div class="panel-title"><h2>CRM data readiness</h2><span>{{ sourceGaps(data).length }} pending</span></div><div class="list">@for (gap of sourceGaps(data); track gap) { <div class="row"><strong>{{ gap }}</strong><span class="badge">Pending in CRM</span></div> }</div></section>
+        }
+        <section class="grid two performance-insights">
+          <article class="panel"><div class="panel-title"><h2>Client activity</h2><span>{{ data.performance.appointmentsCount || 0 }} bookings</span></div><p class="insight">{{ data.performance.completedServices || 0 }} completed · {{ data.performance.completionPercent ?? 0 }}% completion</p><p class="insight">{{ data.performance.uniqueClients || 0 }} clients · {{ data.performance.repeatClients || 0 }} repeat</p></article>
+          <article class="panel"><div class="panel-title"><h2>Attendance contribution</h2><span>{{ formatMinutes(data.performance.workedMinutes) }}</span></div><p class="insight">{{ data.performance.presentDays || 0 }} present · {{ data.performance.absentDays || 0 }} absent</p><p class="insight">OT {{ formatMinutes(data.performance.overtimeMinutes) }} · Late {{ formatMinutes(data.performance.lateMinutes) }} · Early {{ formatMinutes(data.performance.earlyLeaveMinutes) }}</p></article>
+        </section>
+        @if (canSeeRevenue()) {
+          <section class="panel"><div class="panel-title"><h2>CRM revenue target</h2><span>{{ data.performance.revenueTargetPercent === null || data.performance.revenueTargetPercent === undefined ? 'Not configured' : data.performance.revenueTargetPercent + '%' }}</span></div><p class="insight">Target {{ data.performance.targetRevenuePaise | paiseInr }} · Actual {{ data.performance.revenue | paiseInr }}</p></section>
+        }
+        <section class="panel"><div class="panel-title"><h2>Revenue actions</h2><span>{{ data.performance.revenueOpportunities?.length || 0 }}</span></div>
+          <div class="trend-grid performance-trend-grid">
+            @for (item of data.performance.revenueOpportunities || []; track item.key) {
+              <article><span>{{ item.title }}</span><strong>{{ item.currentValue }} → {{ item.targetValue }} {{ item.metricUnit }}</strong><small>{{ item.reason }}</small><small>Owner: {{ item.ownerStaffName }} · Due {{ item.deadline }}</small><small>Action: {{ item.suggestedAction }} · {{ item.actionStatus || item.status }}</small>@if (canSeeRevenue() && item.projectedImpactPaise !== null) { <small>Projected {{ item.projectedImpactPaise | paiseInr }} · Actual {{ (item.actualImpactPaise || 0) | paiseInr }}</small> }</article>
+            } @empty { <div class="performance-empty compact"><p>No revenue action currently needs attention.</p></div> }
+          </div>
+        </section>
+        <section class="panel"><div class="panel-title"><h2>Equipment capacity</h2><span>{{ data.performance.equipmentIntelligence?.summary?.activeResources || 0 }} active</span></div>
+          <div class="trend-grid performance-trend-grid">
+            @for (item of data.performance.equipmentIntelligence?.departments || []; track item.department) {
+              <article><span>{{ item.department }}</span><strong>{{ item.peakHourlyDemand }} demand · {{ item.activeResources }} resources</strong><small>{{ item.appointments }} appointments · {{ item.unassignedAppointments }} without resource</small><small>{{ item.capacityShortage }} peak shortage · {{ item.equipmentLostBookings }} confirmed equipment losses</small></article>
+            }
+            @for (item of data.performance.equipmentIntelligence?.resources || []; track item.id) {
+              <article><span>{{ item.name }} · {{ item.kind }}</span><strong>{{ item.demandWindowUtilizationPercent === null ? 'No utilization evidence' : item.demandWindowUtilizationPercent + '%' }}</strong><small>{{ item.appointments }} appointments · {{ item.bookedMinutes }} booked minutes</small></article>
+            } @empty { @if (!(data.performance.equipmentIntelligence?.departments || []).length) { <div class="performance-empty compact"><p>No department resource signals for this period.</p></div> } }
+          </div>
         </section>
         @if (canSeeRevenue()) {
           <section class="panel revenue-impact"><div class="panel-title"><h2>Revenue impact</h2><span>{{ data.performance.revenue === null || data.performance.revenue === undefined ? 'No records' : 'Connected' }}</span></div><h2>{{ data.performance.revenue | paiseInr }}</h2></section>
@@ -138,6 +164,16 @@ export class StaffPerformancePage implements OnInit {
     const performance = data.performance || {} as StaffEnterpriseOs["performance"];
     return !!(performance.completedServices || performance.revenue || performance.productivityScore !== null && performance.productivityScore !== undefined || performance.avgUtilization !== null && performance.avgUtilization !== undefined || performance.avgRating !== null && performance.avgRating !== undefined || performance.strengths?.length || performance.opportunities?.length);
   }
+  sourceGaps(data: StaffEnterpriseOs): string[] {
+    const performance = data.performance;
+    const gaps: string[] = [];
+    if (performance.targetRevenuePaise === null || performance.targetRevenuePaise === undefined) gaps.push("Revenue target — Staff profile");
+    if (performance.avgRating === null || performance.avgRating === undefined) gaps.push("Shared performance review — Staff Control Center");
+    if (performance.avgUtilization === null || performance.avgUtilization === undefined) gaps.push("Published schedule and attendance — Availability / Attendance");
+    if (!performance.appointmentsCount) gaps.push("Completed appointment activity — Appointments / POS");
+    return gaps;
+  }
+  formatMinutes(value: number | null | undefined): string { const minutes = Math.max(0, Number(value || 0)); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; }
   scoreLabel(value: number | null): string { return value === null || value === undefined ? "No records" : `${value}/100`; }
   scoreHint(value: number | null): string { return value === null || value === undefined ? "Waiting for CRM data" : "Connected score"; }
   percentLabel(value: number | null): string { return value === null || value === undefined ? "No records" : `${value}%`; }

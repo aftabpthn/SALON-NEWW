@@ -7,6 +7,7 @@ use axum::{
     Extension, Json, Router,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -14,7 +15,8 @@ use crate::{
     services::{
         auth_service::AuthClaims,
         purchase_bill_drafts_service::{
-            self as drafts, DraftDetails, HeaderInput, LineInput, UploadInput,
+            self as drafts, DraftDetails, HeaderInput, LineInput, ProductInput, SupplierInput,
+            UploadInput,
         },
     },
     state::AppState,
@@ -29,19 +31,33 @@ pub fn router() -> Router<AppState> {
         )
         .route("/purchases/bill-drafts/:id", get(detail).patch(save_header))
         .route("/purchases/bill-drafts/:id/source", get(source))
+        .route("/purchases/bill-drafts/:id/supplier", post(create_supplier))
         .route("/purchases/bill-drafts/:id/match", post(run_match))
+        .route(
+            "/purchases/bill-drafts/:id/retry-extraction",
+            post(retry_extraction),
+        )
         .route("/purchases/bill-drafts/:id/confirm", post(confirm))
+        .route(
+            "/purchases/bill-drafts/:id/pilot-review",
+            post(review_pilot),
+        )
         .route("/purchases/bill-drafts/:id/cancel", post(cancel))
         .route("/purchases/bill-drafts/:id/lines", post(add_line))
         .route(
             "/purchases/bill-drafts/:id/lines/:line_id",
             axum::routing::patch(save_line).delete(remove_line),
         )
+        .route(
+            "/purchases/bill-drafts/:id/lines/:line_id/product",
+            post(create_product),
+        )
 }
 
 #[derive(Default, Deserialize)]
 struct ListQuery {
     status: Option<String>,
+    workflow_mode: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +72,14 @@ struct HeaderRequest {
     purchase_order_id: Option<String>,
     supplier_name: String,
     supplier_gstin: String,
+    #[serde(default)]
+    supplier_phone: String,
+    #[serde(default)]
+    supplier_email: String,
+    #[serde(default)]
+    supplier_address: String,
+    #[serde(default = "empty_object")]
+    bill_contract: Value,
     bill_number: String,
     bill_date: Option<String>,
     subtotal_paise: i64,
@@ -64,6 +88,22 @@ struct HeaderRequest {
     sgst_paise: i64,
     igst_paise: i64,
     total_paise: i64,
+    #[serde(default)]
+    correction_reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SupplierRequest {
+    name: String,
+    #[serde(default)]
+    gstin: String,
+    #[serde(default)]
+    phone: String,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    address: String,
 }
 
 #[derive(Deserialize)]
@@ -88,6 +128,41 @@ struct LineRequest {
     total_paise: i64,
     batch_number: String,
     expiry_date: Option<String>,
+    #[serde(default = "empty_object")]
+    product_contract: Value,
+    #[serde(default)]
+    correction_reason: String,
+}
+fn empty_object() -> Value {
+    serde_json::json!({})
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ProductRequest {
+    sku: String,
+    name: String,
+    category: String,
+    #[serde(default)]
+    brand: String,
+    unit: String,
+    package_unit: String,
+    units_per_package: i32,
+    unit_cost_paise: i64,
+    #[serde(default)]
+    hsn_code: String,
+    gst_percent: i32,
+    #[serde(default)]
+    barcode: String,
+    #[serde(default)]
+    batch_tracked: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PilotReviewRequest {
+    decision: String,
+    reason: String,
 }
 
 async fn list(
@@ -97,7 +172,14 @@ async fn list(
 ) -> ApiResult<Vec<crate::repositories::purchase_bill_draft_repository::DraftRecord>> {
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        drafts::list(&state, &t, &b, query.status.as_deref().unwrap_or_default()).await?,
+        drafts::list(
+            &state,
+            &t,
+            &b,
+            query.status.as_deref().unwrap_or_default(),
+            query.workflow_mode.as_deref().unwrap_or_default(),
+        )
+        .await?,
     )))
 }
 async fn detail(
@@ -112,11 +194,12 @@ async fn detail(
 }
 async fn source(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Response, AppError> {
     let (t, b) = tenant_branch(&headers)?;
-    let source = drafts::source(&state, &t, &b, &id).await?;
+    let source = drafts::source(&state, &t, &b, &claims.sub, &id).await?;
     let content_type = HeaderValue::from_str(&source.content_type)
         .map_err(|_| AppError::internal("purchase bill content type is invalid"))?;
     let mut response = Response::new(Body::from(source.bytes));
@@ -188,6 +271,10 @@ async fn save_header(
                 purchase_order_id: p.purchase_order_id,
                 supplier_name: p.supplier_name,
                 supplier_gstin: p.supplier_gstin,
+                supplier_phone: p.supplier_phone,
+                supplier_email: p.supplier_email,
+                supplier_address: p.supplier_address,
+                bill_contract: p.bill_contract,
                 bill_number: p.bill_number,
                 bill_date: p.bill_date,
                 subtotal_paise: p.subtotal_paise,
@@ -196,6 +283,33 @@ async fn save_header(
                 sgst_paise: p.sgst_paise,
                 igst_paise: p.igst_paise,
                 total_paise: p.total_paise,
+                correction_reason: p.correction_reason,
+            },
+        )
+        .await?,
+    )))
+}
+async fn create_supplier(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<SupplierRequest>,
+) -> ApiResult<DraftDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        drafts::create_supplier(
+            &state,
+            &t,
+            &b,
+            &claims.sub,
+            &id,
+            SupplierInput {
+                name: p.name,
+                gstin: p.gstin,
+                phone: p.phone,
+                email: p.email,
+                address: p.address,
             },
         )
         .await?,
@@ -212,6 +326,17 @@ async fn run_match(
         drafts::match_draft(&state, &t, &b, &claims.sub, &id).await?,
     )))
 }
+async fn retry_extraction(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<DraftDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        drafts::retry_extraction(&state, &t, &b, &claims.sub, &id).await?,
+    )))
+}
 async fn confirm(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -220,7 +345,28 @@ async fn confirm(
 ) -> ApiResult<DraftDetails> {
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        drafts::confirm(&state, &t, &b, &claims.sub, &id).await?,
+        drafts::confirm(&state, &t, &b, &claims.sub, &claims.role, &id).await?,
+    )))
+}
+async fn review_pilot(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<PilotReviewRequest>,
+) -> ApiResult<DraftDetails> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        drafts::review_historical_pilot(
+            &state,
+            &tenant,
+            &branch,
+            &claims.sub,
+            &id,
+            &request.decision,
+            &request.reason,
+        )
+        .await?,
     )))
 }
 async fn cancel(
@@ -255,6 +401,8 @@ fn line(p: LineRequest) -> LineInput {
         total_paise: p.total_paise,
         batch_number: p.batch_number,
         expiry_date: p.expiry_date,
+        product_contract: p.product_contract,
+        correction_reason: p.correction_reason,
     }
 }
 async fn add_line(
@@ -279,6 +427,40 @@ async fn save_line(
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         drafts::save_line(&state, &t, &b, &claims.sub, &id, &line_id, line(p)).await?,
+    )))
+}
+async fn create_product(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((id, line_id)): Path<(String, String)>,
+    Json(p): Json<ProductRequest>,
+) -> ApiResult<DraftDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        drafts::create_and_link_product(
+            &state,
+            &t,
+            &b,
+            &claims.sub,
+            &id,
+            &line_id,
+            ProductInput {
+                sku: p.sku,
+                name: p.name,
+                category: p.category,
+                brand: p.brand,
+                unit: p.unit,
+                package_unit: p.package_unit,
+                units_per_package: p.units_per_package,
+                unit_cost_paise: p.unit_cost_paise,
+                hsn_code: p.hsn_code,
+                gst_percent: p.gst_percent,
+                barcode: p.barcode,
+                batch_tracked: p.batch_tracked,
+            },
+        )
+        .await?,
     )))
 }
 async fn remove_line(

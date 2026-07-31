@@ -19,11 +19,9 @@ use crate::{
     repositories::ai_scope_repository::{AiCopilotAlertRecord, AiCopilotApprovalRecord},
     routes::context::tenant_branch,
     services::{
-        ai_copilot_governance::{
-            self, AlertScanResult, DecideActionRequest, ProposeActionRequest,
-        },
-        ai_scoped_copilot_tools::{self, ToolRequest},
+        ai_copilot_governance::{self, AlertScanResult, DecideActionRequest, ProposeActionRequest},
         ai_scope_service::{self, AnswerEnvelope, ScopeRequest},
+        ai_scoped_copilot_tools::{self, ToolRequest},
         auth_service::AuthClaims,
     },
     state::AppState,
@@ -94,9 +92,9 @@ async fn get_scope(
 
 /// The allow-listed tools this login is permitted to run.
 async fn get_tools(Extension(claims): Extension<AuthClaims>) -> ApiResult<Value> {
-    Ok(Json(ApiResponse::ok(ai_scoped_copilot_tools::available_tools(
-        &claims,
-    ))))
+    Ok(Json(ApiResponse::ok(
+        ai_scoped_copilot_tools::available_tools(&claims),
+    )))
 }
 
 /// Run one allow-listed tool and return the full answer envelope.
@@ -242,13 +240,7 @@ async fn decide_action(
 ) -> ApiResult<AiCopilotApprovalRecord> {
     let (tenant_id, _) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        ai_copilot_governance::decide_action(
-            &state.db,
-            &tenant_id,
-            &claims,
-            &action_id,
-            &payload,
-        )
-        .await?,
+        ai_copilot_governance::decide_action(&state.db, &tenant_id, &claims, &action_id, &payload)
+            .await?,
     )))
 }

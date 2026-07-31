@@ -18,7 +18,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       }
       @if (loadError()) { <section staffPageState class="notice offers-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" (click)="load()">Retry</button></section> }
       @if (staff.error() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
-      @if (canReadOffers()) {
+      @if (canReadOffers() && ((!loading() && !loadError()) || offers().length)) {
         <section class="grid three">
           <article class="kpi"><span>Running</span><strong>{{ offers().length }}</strong><small>{{ loading() ? 'Refreshing...' : 'Staff visible' }}</small></article>
           <article class="kpi"><span>Expiring</span><strong>{{ expiringCount() }}</strong></article>
@@ -83,7 +83,7 @@ export class StaffOffersPage implements OnInit, OnDestroy {
   private loadGeneration = 0;
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadOffers()) void this.load(); }
-  ngOnDestroy() { this.revokeCreatives(); }
+  ngOnDestroy() { ++this.loadGeneration; this.revokeCreatives(); }
   @HostListener("window:aura:offers-updated") onOffersUpdated() { if (this.canReadOffers()) void this.load(); }
   async load() {
     const generation = ++this.loadGeneration;

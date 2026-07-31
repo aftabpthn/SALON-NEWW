@@ -14,7 +14,7 @@ assert.match(component, /existingPeriodRun/);
 assert.match(component, /existingPeriodItems/);
 assert.match(component, /fetchRunDetail\(existing\.id\)/);
 assert.match(component, /\['calculated', 'reviewed'\]\.includes\(this\.existingPeriodRun!\.status\)/);
-assert.match(component, /\['finalized', 'paid'\]\.includes\(this\.existingPeriodRun\.status\)/);
+assert.match(component, /\['finalized', 'partially_paid', 'paid'\]\.includes\(this\.existingPeriodRun\.status\)/);
 assert.match(component, /this\.regenerateBefore = this\.existingPeriodItems\.find/);
 assert.match(template, /\{\{ primaryActionLabel \}\}/);
 assert.match(template, /class="detail-drawer regeneration-drawer"/);

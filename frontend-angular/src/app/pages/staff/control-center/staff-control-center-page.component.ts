@@ -74,6 +74,10 @@ export class StaffControlCenterPageComponent implements OnInit {
   contentTasks: Row[] = [];
   contentOffers: Row[] = [];
   penaltyRules: Row[] = [];
+  rulesCenter: Row = { documents: [], violations: [] };
+  ruleEditorOpen = false;
+  ruleDraft: Row = this.emptyRuleDraft();
+  ruleQuiz: Row[] = [];
 
   async ngOnInit() {
     const tab = this.route.snapshot.queryParamMap.get('tab');
@@ -128,6 +132,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       })),
     ];
     if (tab === 'content') return [
+      this.section('rules and SOP', this.loadOne('/staff/rules', (value) => this.rulesCenter = value)),
       this.section('tasks', this.loadList('/staff/tasks', (value) => this.contentTasks = value)),
       this.section('offers', this.loadList('/marketing/offers', (value) => this.contentOffers = value)),
       this.section('payroll rules', this.loadList('/staff/payroll-adjustment-rules', (value) => this.penaltyRules = value)),
@@ -486,6 +491,61 @@ export class StaffControlCenterPageComponent implements OnInit {
     });
   }
 
+  openRuleEditor(row?: Row) {
+    this.ruleDraft = row ? {
+      documentKey: row['documentKey'], documentType: row['documentType'], category: row['category'],
+      title: row['title'], content: row['content'], effectiveDate: this.periodEnd,
+      expiresOn: '', mandatoryAcknowledgement: row['mandatoryAcknowledgement'] !== false,
+      trainingAttachmentUrl: row['trainingAttachmentUrl'] || '', quizPassScore: row['quizPassScore'] || 80,
+    } : this.emptyRuleDraft();
+    this.ruleQuiz = row ? this.arrayValue(row['quiz']).map((question) => ({ ...question, options: [...(question['options'] || [])] })) : [];
+    this.ruleEditorOpen = true;
+  }
+
+  closeRuleEditor() { this.ruleEditorOpen = false; this.ruleQuiz = []; }
+
+  addRuleQuizQuestion() {
+    const question = this.ask('Question');
+    const options = (this.ask('Options, comma separated') || '').split(',').map((value) => value.trim()).filter(Boolean);
+    const correct = Number(this.ask('Correct option number', '1')) - 1;
+    if (!question || options.length < 2 || !Number.isInteger(correct) || correct < 0 || correct >= options.length) return;
+    this.ruleQuiz.push({ id: crypto.randomUUID(), question, options, correctIndex: correct });
+  }
+
+  removeRuleQuizQuestion(index: number) { this.ruleQuiz.splice(index, 1); }
+
+  async saveRuleDocument() {
+    if (!String(this.ruleDraft['title'] || '').trim() || !String(this.ruleDraft['content'] || '').trim() || !this.ruleDraft['effectiveDate']) {
+      this.error = 'Title, content and effective date are required'; return;
+    }
+    const saved = await this.action('/staff/rules', {
+      documentKey: this.ruleDraft['documentKey'] || undefined,
+      documentType: this.ruleDraft['documentType'], category: this.ruleDraft['category'],
+      title: String(this.ruleDraft['title']).trim(), content: String(this.ruleDraft['content']).trim(),
+      effectiveDate: this.ruleDraft['effectiveDate'], expiresOn: this.ruleDraft['expiresOn'] || undefined,
+      mandatoryAcknowledgement: this.ruleDraft['mandatoryAcknowledgement'] !== false,
+      trainingAttachmentUrl: String(this.ruleDraft['trainingAttachmentUrl'] || '').trim(),
+      quiz: this.ruleQuiz, quizPassScore: this.ruleQuiz.length ? Number(this.ruleDraft['quizPassScore'] || 80) : 0,
+    });
+    if (saved) this.closeRuleEditor();
+  }
+
+  async publishRule(row: Row) { await this.action(`/staff/rules/${row['id']}/publish`, { version: row['version'] }); }
+  async unpublishRule(row: Row) { await this.action(`/staff/rules/${row['id']}/unpublish`, { version: row['version'] }); }
+
+  async recordRuleViolation(row: Row) {
+    const staffId = this.ask('Staff ID');
+    const details = this.ask('Violation details');
+    if (!staffId || !details) return;
+    await this.action('/staff/rules/violations', { documentId: row['id'], staffId, details });
+  }
+
+  async resolveRuleViolation(row: Row) {
+    const resolutionNote = this.ask('Resolution note');
+    if (!resolutionNote) return;
+    await this.action(`/staff/rules/violations/${row['id']}/resolve`, { version: row['version'], resolutionNote });
+  }
+
   async createContentOffer() {
     const code = this.ask('Offer code');
     const benefitType = this.askChoice('Benefit type', [
@@ -611,6 +671,18 @@ export class StaffControlCenterPageComponent implements OnInit {
   openAttendance() { void this.router.navigate(['/staff/attendance-summary']); }
   openLeave() { void this.router.navigate(['/staff/leave-management']); }
   openRecommendation(row: Row) { if (String(row['route'] || '').startsWith('/')) void this.router.navigateByUrl(row['route']); }
+  async requestEquipmentApproval(row: Row) {
+    if (!row['approvalRequired']) return this.openRecommendation(row);
+    if (['pending', 'approved'].includes(String(row['approvalStatus'] || '').toLowerCase())) return;
+    if (this.askChoice(`Submit ${this.label(row['actionType'])} approval?`, ['yes', 'no']) !== 'yes') return;
+    await this.action('/staff/approvals', {
+      requestType: `equipment_${row['actionType']}`,
+      entityType: 'equipment_recommendation',
+      entityId: row['key'],
+      amountPaise: 0,
+      payload: { title: row['title'], department: row['department'], equipmentKind: row['equipmentKind'], evidence: row['evidence'] },
+    });
+  }
   recommendationEvidence(row: Row) { return this.objectEntries(row['evidence']).map((item) => `${item.key}: ${this.text(item.value)}`).join(' · '); }
 
   objectEntries(value: unknown): Array<{ key: string; value: unknown }> {
@@ -619,6 +691,10 @@ export class StaffControlCenterPageComponent implements OnInit {
   }
 
   arrayValue(value: unknown): Row[] { return Array.isArray(value) ? value : []; }
+  publishedRuleCount() { return this.arrayValue(this.rulesCenter['documents']).filter((row) => row['status'] === 'published').length; }
+  outstandingRuleCount() { return this.arrayValue(this.rulesCenter['documents']).reduce((total, row) => total + (row['status'] === 'published' ? Number(row['outstandingCount'] || 0) : 0), 0); }
+  openRuleViolationCount() { return this.arrayValue(this.rulesCenter['violations']).filter((row) => row['status'] === 'open').length; }
+  correctAnswerNumber(question: Row) { return Number(question['correctIndex'] || 0) + 1; }
   staffAiSections(): Row[] {
     if (!this.staffAi) return [];
     return [
@@ -723,6 +799,10 @@ export class StaffControlCenterPageComponent implements OnInit {
     if (!value) return undefined;
     const amount = Number(value);
     return Number.isInteger(amount) && amount > 0 ? amount : undefined;
+  }
+
+  private emptyRuleDraft(): Row {
+    return { documentKey: '', documentType: 'sop', category: 'service', title: '', content: '', effectiveDate: this.periodEnd, expiresOn: '', mandatoryAcknowledgement: true, trainingAttachmentUrl: '', quizPassScore: 80 };
   }
 
   private isoDate(value: Date) { return value.toISOString().slice(0, 10); }

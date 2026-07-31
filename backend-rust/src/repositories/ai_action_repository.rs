@@ -23,7 +23,8 @@ pub struct ActionDraftRecord {
     pub created_at: DateTime<Utc>,
 }
 
-const COLUMNS: &str = "id,action_type,status,summary,requires_confirmation,payload,refresh_targets,result,created_at";
+const COLUMNS: &str =
+    "id,action_type,status,summary,requires_confirmation,payload,refresh_targets,result,created_at";
 
 #[allow(clippy::too_many_arguments)]
 pub async fn create_draft(
