@@ -7,7 +7,7 @@ import { forbidden } from "../utils/app-error.js";
 
 export const customerSalonChatRouter = Router();
 
-customerSalonChatRouter.use(authenticateJwt());
+customerSalonChatRouter.use(["/customer", "/salon-chat"], authenticateJwt());
 
 function customerOnly(req, _res, next) {
   if (req.access?.role !== "customer") return next(forbidden("Customer access required"));
