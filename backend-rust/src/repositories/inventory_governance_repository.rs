@@ -606,6 +606,30 @@ pub async fn record_automatic_stock_out(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub async fn record_automatic_transfer_out(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+    item: &str,
+    preferred_bucket: &str,
+    quantity: i32,
+    unit_cost_paise: i64,
+    actor: &str,
+    shipment_line_id: &str,
+    key: &str,
+    warning: bool,
+) -> Result<(), sqlx::Error> {
+    let preferred=operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?.max(0).min(i64::from(quantity)) as i32;
+    if preferred>0 {
+        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout",preferred_bucket,"in_transit",preferred,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:floor"),warning,&serde_json::json!({"automatic":true})).await?;
+    }
+    if quantity>preferred {
+        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout","store_unopened","in_transit",quantity-preferred,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub async fn auto_open_service_container(
     tx: &mut Transaction<'_, Postgres>,
     tenant: &str,
@@ -717,18 +741,25 @@ pub async fn reverse_operational_movement(
     let mut tx=db.begin().await?;
     let row=sqlx::query_as::<_,(String,String,String,i32,i64,Option<String>,String)>("SELECT inventory_item_id,source_bucket,destination_bucket,quantity,unit_cost_paise,employee_id,action FROM inventory_operational_movements WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant).bind(branch).bind(id).fetch_one(&mut *tx).await?;
-    if row.6=="reversal" { return Err(sqlx::Error::Protocol("a reversal cannot be reversed".into())); }
+    if !matches!(row.6.as_str(),"manual_checkout"|"conversion") {
+        return Err(sqlx::Error::Protocol("physical movements must be corrected through their source return or override workflow".into()));
+    }
+    let available=operational_bucket_balance(&mut tx,tenant,branch,&row.0,&row.2).await?;
+    let rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
+        .bind(tenant).bind(branch).fetch_one(&mut *tx).await?;
+    let warning=available<i64::from(row.3);
+    if warning && rule!="allow_with_warning" { return Err(sqlx::Error::Protocol("insufficient source bucket to reverse movement".into())); }
     let inserted=sqlx::query_scalar::<_,Value>(r#"INSERT INTO inventory_operational_movements(
         tenant_id,branch_id,inventory_item_id,action,source_bucket,destination_bucket,quantity,
         unit_cost_paise,stock_value_paise,employee_id,actor_user_id,comment,reference_type,reference_id,
-        idempotency_key,reversal_of_id,metadata
-      ) VALUES($1,$2,$3,'reversal',$4,$5,$6,$7,$6::BIGINT*$7,$8,$9,$10,'operational_movement',$11,$12,$11,jsonb_build_object('originalAction',$13))
+        idempotency_key,reversal_of_id,warning,metadata
+      ) VALUES($1,$2,$3,'reversal',$4,$5,$6,$7,$6::BIGINT*$7,$8,$9,$10,'operational_movement',$11,$12,$11,$13,jsonb_build_object('originalAction',$14,'availableBefore',$15,'negativeStockRule',$16))
       RETURNING jsonb_build_object('id',id,'inventoryItemId',inventory_item_id,'action',action,'sourceBucket',source_bucket,
         'destinationBucket',destination_bucket,'quantity',quantity,'unitCostPaise',unit_cost_paise,'stockValuePaise',stock_value_paise,
         'employeeId',employee_id,'actorUserId',actor_user_id,'comment',comment,'referenceType',reference_type,'referenceId',reference_id,
         'warning',warning,'metadata',metadata,'createdAt',created_at)"#)
         .bind(tenant).bind(branch).bind(&row.0).bind(&row.2).bind(&row.1).bind(row.3).bind(row.4)
-        .bind(row.5.as_deref()).bind(actor).bind(comment).bind(id).bind(key).bind(&row.6)
+        .bind(row.5.as_deref()).bind(actor).bind(comment).bind(id).bind(key).bind(warning).bind(&row.6).bind(available).bind(&rule)
         .fetch_one(&mut *tx).await?;
     tx.commit().await?;
     Ok(inserted)

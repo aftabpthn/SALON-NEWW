@@ -694,7 +694,11 @@ pub async fn dispatch_shipment(
         .await
         .map_err(|_| AppError::internal("failed to lock shipment stock"))?
         .ok_or_else(|| AppError::validation("source inventory item is unavailable"))?;
-        if source.stock_quantity < quantity {
+        let negative_rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
+            .bind(tenant_id).bind(current_branch_id).fetch_one(&mut *tx).await
+            .map_err(|_|AppError::internal("failed to load transfer stock policy"))?;
+        let warning=source.stock_quantity<quantity;
+        if warning && negative_rule!="allow_with_warning" {
             return Err(AppError::conflict(
                 "source inventory is insufficient for shipment",
             ));
@@ -742,6 +746,18 @@ pub async fn dispatch_shipment(
         )
         .await
         .map_err(|_| AppError::internal("failed to write shipment stock ledger"))?;
+        if requested.retail_quantity>0 {
+            inventory_governance_repository::record_automatic_transfer_out(
+                &mut tx,tenant_id,current_branch_id,&source.id,"retail_available",requested.retail_quantity,
+                source.unit_cost_paise,actor,&shipment_line.id,&format!("transfer-out-op:{}:retail",shipment_line.id),warning,
+            ).await.map_err(|_|AppError::internal("failed to write retail transfer checkout history"))?;
+        }
+        if requested.consumable_quantity>0 {
+            inventory_governance_repository::record_automatic_transfer_out(
+                &mut tx,tenant_id,current_branch_id,&source.id,"consumable_available",requested.consumable_quantity,
+                source.unit_cost_paise,actor,&shipment_line.id,&format!("transfer-out-op:{}:consumable",shipment_line.id),warning,
+            ).await.map_err(|_|AppError::internal("failed to write consumable transfer checkout history"))?;
+        }
         inventory_adjustment_service::allocate_fefo_quantity(
             &mut tx,
             tenant_id,

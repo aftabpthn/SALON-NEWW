@@ -210,7 +210,16 @@ async fn record_backbar_usage_in_tx(
             "open tube has insufficient remaining quantity",
         ));
     }
-    if open_container.is_none() && item.stock_quantity < input.actual_quantity {
+    let checkout_policy=sqlx::query_as::<_,(String,bool)>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block'),COALESCE((SELECT auto_checkout_service_consumption FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE)")
+        .bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut **tx).await
+        .map_err(|_|AppError::internal("failed to load service checkout policy"))?;
+    let stock_warning=open_container.is_none() && item.stock_quantity<input.actual_quantity;
+    if input.service_id.is_some() && open_container.is_none() && !checkout_policy.1
+        && inventory_governance_repository::operational_bucket_balance(tx,input.tenant_id,input.branch_id,input.inventory_item_id,"consumable_available").await
+            .map_err(|_|AppError::internal("failed to load consumable floor balance"))?<i64::from(input.actual_quantity) {
+        return Err(AppError::validation("checkout consumable stock to the floor before recording service usage"));
+    }
+    if stock_warning && checkout_policy.0!="allow_with_warning" {
         return Err(AppError::validation(
             "insufficient inventory for backbar usage",
         ));
@@ -379,7 +388,7 @@ async fn record_backbar_usage_in_tx(
                 tx,input.tenant_id,input.branch_id,input.inventory_item_id,
                 if input.service_id.is_some(){"auto_service_checkout"}else{"manual_consumption"},
                 "consumable_available",input.actual_quantity,item.unit_cost_paise,input.staff_id,
-                input.actor_user_id,"backbar_usage",&usage_id,&format!("usage-op:{}",input.idempotency_key),false,
+                input.actor_user_id,"backbar_usage",&usage_id,&format!("usage-op:{}",input.idempotency_key),stock_warning,
             ).await.map_err(|_|AppError::internal("failed to write floor consumption history"))?;
             allocate_fefo_batches(
                 tx,
@@ -617,7 +626,11 @@ pub async fn review_backbar_usage(
                     "open tube is required for approved backbar usage",
                 ));
             }
-            if item.stock_quantity < usage.actual_quantity {
+            let negative_rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
+                .bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut *tx).await
+                .map_err(|_|AppError::internal("failed to load approved usage stock policy"))?;
+            let warning=item.stock_quantity<usage.actual_quantity;
+            if warning && negative_rule!="allow_with_warning" {
                 return Err(AppError::validation(
                     "insufficient inventory for approved backbar usage",
                 ));
@@ -647,7 +660,7 @@ pub async fn review_backbar_usage(
             inventory_governance_repository::record_automatic_stock_out(
                 &mut tx,input.tenant_id,input.branch_id,&usage.inventory_item_id,"auto_service_checkout",
                 "consumable_available",usage.actual_quantity,item.unit_cost_paise,None,input.actor_user_id,
-                "backbar_usage",&usage.id,&format!("review-op:{}",usage.id),false,
+                "backbar_usage",&usage.id,&format!("review-op:{}",usage.id),warning,
             ).await.map_err(|_|AppError::internal("failed to write approved floor consumption history"))?;
             allocate_fefo_batches(
                 &mut tx,
