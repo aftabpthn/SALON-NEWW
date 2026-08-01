@@ -146,6 +146,7 @@ export type StaffAppointment = {
 };
 
 export type StaffDashboard = {
+  lifecycle: Record<string, unknown>;
   staff: {
     id: string;
     fullName: string;
@@ -292,6 +293,26 @@ export type StaffBusinessTarget = {
   targetValue: number;
   achievedValue: number;
   progressPercent: number;
+};
+
+export type StaffAppraisal = {
+  id: string;
+  cycleId: string;
+  cycleName: string;
+  periodStart: string;
+  periodEnd: string;
+  templateName: string;
+  keyResults: Array<{ id: string; title: string; metricUnit: string; targetValue: number; weightBasisPoints: number; currentValue: number | null; evidence: string }>;
+  selfScore: number | null;
+  selfComments: string;
+  managerScore: number | null;
+  managerComments: string;
+  finalScore: number | null;
+  finalRating: string;
+  status: string;
+  version: number;
+  approvedAt: string | null;
+  acknowledgedAt: string | null;
 };
 
 export type StaffRosterItem = StaffEnterpriseOs["calendar"][number];
@@ -672,6 +693,14 @@ export type StaffRuleDocument = {
   acknowledgedAt: string | null;
   quizScore: number | null;
   quizPassed: boolean | null;
+  isCourse: boolean;
+  skillName: string;
+  skillLevel: number;
+  expectedMinutes: number;
+  certificationValidDays: number;
+  enrolmentStatus: string | null;
+  enrolmentDueAt: string | null;
+  trainingCompletedAt: string | null;
 };
 
 export type StaffRuleStatus = {
@@ -808,6 +837,7 @@ type WebAuthnLoginResponse = StaffLoginResponse;
 type ApiEnvelope<T> = { success?: boolean; data?: T; error?: { message?: string } | string; message?: string };
 type RustStaffSelfDashboard = {
   staff?: Record<string, unknown>;
+  lifecycle?: Record<string, unknown>;
   schedule?: Record<string, unknown> | null;
   attendance?: Record<string, unknown> | null;
   tasks?: unknown[];
@@ -997,6 +1027,22 @@ export class StaffAppService {
 
   async enterpriseOs(query: Record<string, string> = {}, reportError = true): Promise<StaffEnterpriseOs> {
     return this.cachedRead(`enterprise-os:${stableQueryKey(query)}`, 10_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query, reportError));
+  }
+
+  async appraisals(): Promise<StaffAppraisal[]> {
+    return this.get<StaffAppraisal[]>("/staff-self/appraisals");
+  }
+
+  async submitSelfReview(id: string, keyResults: Array<{ id: string; currentValue: number; evidence?: string }>, comments: string, version: number): Promise<StaffAppraisal> {
+    const saved = await this.patch<StaffAppraisal>(`/staff-self/appraisals/${encodeURIComponent(id)}/self-review`, { keyResults, comments, version });
+    this.clearGetCache();
+    return saved;
+  }
+
+  async acknowledgeAppraisal(id: string, version: number): Promise<StaffAppraisal> {
+    const saved = await this.patch<StaffAppraisal>(`/staff-self/appraisals/${encodeURIComponent(id)}/acknowledge`, { version });
+    this.clearGetCache();
+    return saved;
   }
 
   async roster(from: string, to: string): Promise<StaffRosterItem[]> {
@@ -1383,8 +1429,11 @@ export class StaffAppService {
   }
 
   async clockIn(source = "staff-app"): Promise<MutationResult<StaffAttendance>> {
-    return this.queueableMutation<StaffAttendance>("POST", "/staff-attendance/clock-in", {
-      staffId: this.staffId(), businessDate: staffBusinessDate(), source
+    return this.onlineMutation(async () => {
+      const position = await this.currentPosition();
+      return this.post<StaffAttendance>("/staff-attendance/clock-in", {
+        staffId: this.staffId(), businessDate: staffBusinessDate(), source, presence: this.attendancePresence(position)
+      });
     });
   }
 
@@ -1397,6 +1446,7 @@ export class StaffAppService {
       if (!(credential instanceof PublicKeyCredential)) throw new Error("Biometric verification was cancelled.");
       return this.post<StaffAttendance>("/staff-attendance/clock-in", {
         staffId: this.staffId(), businessDate: staffBusinessDate(), source: "staff-app-biometric",
+        presence: this.attendancePresence(position),
         faceScan: {
           deviceUid: this.faceDeviceId(), latitude: position.coords.latitude, longitude: position.coords.longitude,
           accuracyMeters: position.coords.accuracy, challengeId: begin.challengeId,
@@ -1407,8 +1457,11 @@ export class StaffAppService {
   }
 
   async clockOut(attendanceId?: string): Promise<MutationResult<StaffAttendance>> {
-    return this.queueableMutation<StaffAttendance>("POST", "/staff-attendance/clock-out", {
-      staffId: this.staffId(), businessDate: staffBusinessDate(), attendanceId
+    return this.onlineMutation(async () => {
+      const position = await this.currentPosition();
+      return this.post<StaffAttendance>("/staff-attendance/clock-out", {
+        staffId: this.staffId(), businessDate: staffBusinessDate(), attendanceId, source: "staff-app", presence: this.attendancePresence(position)
+      });
     });
   }
 
@@ -1661,6 +1714,7 @@ export class StaffAppService {
     const name = stringValue(staff, "fullName", "displayName", "display_name") || this.user()?.name || "";
     const names = name.trim().split(/\s+/).filter(Boolean);
     return {
+      lifecycle: objectValue(source.lifecycle),
       staff: {
         id: stringValue(staff, "id") || this.staffId(), fullName: name, firstName: names[0] || "", lastName: names.slice(1).join(" "),
         mobile: stringValue(staff, "mobile"), email: stringValue(staff, "email") || this.user()?.email || "",
@@ -1980,7 +2034,14 @@ export class StaffAppService {
   }
 
   private async queueableMutation<T = unknown>(method: "POST" | "PATCH", path: string, body: Record<string, unknown>): Promise<MutationResult<T>> {
-    if (this.isOnline()) return { state: "completed", data: method === "POST" ? await this.post<T>(path, body) : await this.patch<T>(path, body) };
+    if (this.isOnline()) {
+      try {
+        return { state: "completed", data: method === "POST" ? await this.post<T>(path, body) : await this.patch<T>(path, body) };
+      } catch (error) {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 0) throw error;
+        this.error.set("");
+      }
+    }
     if (!this.isAllowedOfflineMutation(method, path, body)) throw new Error("This action cannot be stored offline.");
     const queueId = crypto.randomUUID();
     const idempotencyKey = crypto.randomUUID();
@@ -1997,7 +2058,7 @@ export class StaffAppService {
     if (method === "PATCH" && /^\/staff-self\/notifications\/[^/]+$/.test(path)) return Object.keys(body).length === 1 && ["read", "unread", "archived"].includes(String(body["status"]));
     if (method === "PATCH" && /^\/staff\/self\/tasks\/[^/]+\/status$/.test(path)) return Object.keys(body).every((key) => ["status", "version"].includes(key)) && typeof body["version"] === "number";
     if (method === "POST" && path === "/staff-leave/requests") return Object.keys(body).every((key) => ["staffId", "leaveType", "startDate", "endDate", "reason"].includes(key));
-    if (method === "POST" && ["/staff-attendance/clock-in", "/staff-attendance/clock-out", "/staff-attendance/break-start", "/staff-attendance/break-end"].includes(path)) {
+    if (method === "POST" && ["/staff-attendance/break-start", "/staff-attendance/break-end"].includes(path)) {
       return Object.keys(body).every((key) => ["staffId", "businessDate", "source", "attendanceId", "breakType"].includes(key));
     }
     return false;
@@ -2013,8 +2074,11 @@ export class StaffAppService {
   }
 
   private currentPosition(): Promise<GeolocationPosition> {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.reject(new Error("GPS location is required for biometric attendance."));
+    if (typeof navigator === "undefined" || !navigator.geolocation) return Promise.reject(new Error("GPS location is required for attendance."));
     return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }));
+  }
+  private attendancePresence(position: GeolocationPosition) {
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy };
   }
   private async onlineMutation<T>(mutation: () => Promise<T>): Promise<MutationResult<T>> {
     if (!this.isOnline()) throw new Error("This action requires an internet connection and cannot be stored offline.");

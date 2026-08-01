@@ -213,6 +213,7 @@ pub struct AuditRecord {
 #[serde(rename_all = "camelCase")]
 pub struct SelfDashboardRecord {
     pub staff: Value,
+    pub lifecycle: Value,
     pub schedule: Option<Value>,
     pub attendance: Option<Value>,
     pub tasks: Value,
@@ -814,6 +815,15 @@ pub async fn self_dashboard(
         'designation',COALESCE(NULLIF(profile.designation,''),s.job_title),
         'status',CASE WHEN s.active THEN 'active' ELSE 'inactive' END
       ) staff,
+      jsonb_build_object(
+        'employmentStatus',CASE WHEN s.active THEN COALESCE(profile.employment_status,'confirmed') ELSE 'terminated' END,
+        'probationEndDate',profile.probation_end_date,'confirmationDate',profile.confirmation_date,
+        'noticePeriodStartDate',profile.notice_period_start_date,'lastWorkingDate',profile.last_working_date,
+        'reportingManagerId',profile.reporting_manager_id,
+        'reportingManagerName',(SELECT TRIM(CONCAT_WS(' ',manager.first_name,NULLIF(manager.last_name,''))) FROM staff manager WHERE manager.tenant_id=s.tenant_id AND manager.branch_id=s.branch_id AND manager.id=profile.reporting_manager_id),
+        'activeCase',COALESCE((SELECT jsonb_build_object('id',lifecycle.id,'caseType',lifecycle.case_type,'effectiveDate',lifecycle.effective_date,'status',lifecycle.status,'settlementStatus',lifecycle.settlement_status,'finalSettlementReference',lifecycle.final_settlement_reference,'finalSettlementPayrollRunId',lifecycle.final_settlement_payroll_run_id) FROM staff_lifecycle_cases lifecycle WHERE lifecycle.tenant_id=s.tenant_id AND lifecycle.branch_id=s.branch_id AND lifecycle.staff_id=s.id ORDER BY lifecycle.created_at DESC LIMIT 1),'{}'::jsonb),
+        'documents',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',document.id,'documentType',document.document_type,'documentName',document.document_name,'expiryDate',document.expiry_date,'state',CASE WHEN document.expiry_date<CURRENT_DATE THEN 'expired' WHEN document.expiry_date<=CURRENT_DATE+30 THEN 'expiring' ELSE 'valid' END) ORDER BY document.expiry_date NULLS LAST) FROM staff_documents document WHERE document.tenant_id=s.tenant_id AND document.branch_id=s.branch_id AND document.staff_id=s.id),'[]'::jsonb)
+      ) lifecycle,
       (SELECT to_jsonb(sc)-'tenant_id'-'branch_id'-'staff_id' FROM staff_schedules sc WHERE sc.tenant_id=s.tenant_id AND sc.branch_id=s.branch_id AND sc.staff_id=s.id AND sc.schedule_date=$4) schedule,
       (SELECT to_jsonb(a)-'tenant_id'-'branch_id'-'staff_id' FROM staff_attendance_records a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.staff_id=s.id AND a.business_date=$4) attendance,
       COALESCE((SELECT jsonb_agg(to_jsonb(t)-'tenant_id'-'branch_id' ORDER BY t.due_at NULLS LAST,t.updated_at DESC,t.created_at DESC) FROM staff_tasks t WHERE t.tenant_id=s.tenant_id AND t.branch_id=s.branch_id AND t.staff_id=s.id AND (t.status IN ('open','in_progress','blocked') OR (t.status='completed' AND COALESCE(t.completed_at,t.updated_at,t.created_at)::DATE=$4))),'[]'::jsonb) tasks,
@@ -1207,7 +1217,7 @@ pub async fn publish_roster_draft(
         return Ok(None);
     }
     for entry in entries {
-        let saved = sqlx::query("INSERT INTO staff_schedules(tenant_id,branch_id,staff_id,schedule_date,shift1_start,shift1_end,shift2_start,shift2_end,status,notes) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 WHERE EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE) ON CONFLICT(tenant_id,branch_id,staff_id,schedule_date) DO UPDATE SET shift1_start=EXCLUDED.shift1_start,shift1_end=EXCLUDED.shift1_end,shift2_start=EXCLUDED.shift2_start,shift2_end=EXCLUDED.shift2_end,status=EXCLUDED.status,notes=EXCLUDED.notes,updated_at=NOW()")
+        let saved = sqlx::query("INSERT INTO staff_schedules(tenant_id,branch_id,staff_id,schedule_date,shift1_start,shift1_end,shift2_start,shift2_end,status,notes) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 WHERE EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE) AND ($9<>'working' OR NOT EXISTS(SELECT 1 FROM staff_leave_requests leave_request WHERE leave_request.tenant_id=$1 AND leave_request.branch_id=$2 AND leave_request.staff_id=$3 AND leave_request.status='approved' AND $4 BETWEEN leave_request.start_date AND leave_request.end_date)) ON CONFLICT(tenant_id,branch_id,staff_id,schedule_date) DO UPDATE SET shift1_start=EXCLUDED.shift1_start,shift1_end=EXCLUDED.shift1_end,shift2_start=EXCLUDED.shift2_start,shift2_end=EXCLUDED.shift2_end,status=EXCLUDED.status,notes=EXCLUDED.notes,updated_at=NOW()")
             .bind(tenant).bind(branch).bind(entry.staff_id).bind(entry.schedule_date).bind(entry.shift1_start).bind(entry.shift1_end).bind(entry.shift2_start).bind(entry.shift2_end).bind(entry.status).bind(entry.notes).execute(&mut *tx).await?;
         if saved.rows_affected() != 1 {
             tx.rollback().await?;
@@ -2045,6 +2055,253 @@ pub async fn management_recommendations(
     Ok(Value::Array(rows))
 }
 
+pub async fn lms_dashboard(db: &PgPool, tenant: &str, branch: &str) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH assigned_requirements AS (
+          SELECT DISTINCT staff.id staff_id,
+            COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),staff.id) staff_name,
+            requirement.id requirement_id,requirement.scope_type,requirement.scope_id,requirement.skill_name,
+            requirement.required_level,requirement.certification_required,requirement.version
+          FROM staff
+          JOIN staff_skill_requirements requirement ON requirement.tenant_id=staff.tenant_id
+            AND requirement.branch_id=staff.branch_id AND requirement.active=TRUE
+          WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE AND (
+            (requirement.scope_type='role' AND EXISTS(
+              SELECT 1 FROM staff_role_assignments assignment
+              WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2
+                AND assignment.staff_id=staff.id AND assignment.role_id=requirement.scope_id
+            )) OR
+            (requirement.scope_type='service' AND (
+              EXISTS(SELECT 1 FROM staff_catalog_assignments assignment
+                WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id
+                  AND assignment.item_type='service' AND assignment.item_id=requirement.scope_id)
+              OR EXISTS(SELECT 1 FROM staff_service_assignments assignment
+                WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id
+                  AND assignment.service_id=requirement.scope_id)
+            ))
+          )
+        ), certified AS (
+          SELECT staff_id,LOWER(skill_name) skill_key,MAX(skill_level)::INTEGER available_level
+          FROM staff_skill_licenses
+          WHERE tenant_id=$1 AND branch_id=$2 AND verification_status='verified'
+            AND (expires_on IS NULL OR expires_on>=CURRENT_DATE)
+          GROUP BY staff_id,LOWER(skill_name)
+        ), trained AS (
+          SELECT task.staff_id,LOWER(profile.skill_name) skill_key,MAX(profile.skill_level)::INTEGER available_level
+          FROM staff_tasks task
+          JOIN staff_course_profiles profile ON profile.tenant_id=task.tenant_id AND profile.branch_id=task.branch_id
+            AND profile.document_id=task.course_document_id
+          WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.status='completed' AND profile.skill_name<>''
+          GROUP BY task.staff_id,LOWER(profile.skill_name)
+        ), requirement_status AS (
+          SELECT requirement.*,
+            CASE WHEN requirement.certification_required THEN COALESCE(certified.available_level,0)
+                 ELSE GREATEST(COALESCE(certified.available_level,0),COALESCE(trained.available_level,0)) END available_level
+          FROM assigned_requirements requirement
+          LEFT JOIN certified ON certified.staff_id=requirement.staff_id AND certified.skill_key=LOWER(requirement.skill_name)
+          LEFT JOIN trained ON trained.staff_id=requirement.staff_id AND trained.skill_key=LOWER(requirement.skill_name)
+        )
+        SELECT JSONB_BUILD_OBJECT(
+          'courses',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id',document.id,'documentKey',document.document_key,'title',document.title,'category',document.category,
+            'documentVersion',document.document_version,'effectiveDate',document.effective_date,'expiresOn',document.expires_on,
+            'trainingAttachmentUrl',document.training_attachment_url,'quizQuestionCount',JSONB_ARRAY_LENGTH(document.quiz_json),
+            'quizPassScore',document.quiz_pass_score,'skillName',COALESCE(profile.skill_name,''),'skillLevel',COALESCE(profile.skill_level,1),
+            'expectedMinutes',COALESCE(profile.expected_minutes,0),'certificationValidDays',COALESCE(profile.certification_valid_days,0),
+            'profileVersion',profile.version,'assignedCount',(SELECT COUNT(*) FROM staff_tasks task WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.course_document_id=document.id),
+            'completedCount',(SELECT COUNT(*) FROM staff_tasks task WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.course_document_id=document.id AND task.status='completed')
+          ) ORDER BY document.category,document.title,document.document_version DESC)
+          FROM staff_rule_documents document LEFT JOIN staff_course_profiles profile ON profile.document_id=document.id
+          WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.document_type='sop' AND document.status='published'
+            AND (document.training_attachment_url<>'' OR JSONB_ARRAY_LENGTH(document.quiz_json)>0 OR profile.document_id IS NOT NULL)),'[]'::JSONB),
+          'enrolments',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id',task.id,'staffId',task.staff_id,'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),task.staff_id),
+            'courseId',document.id,'courseTitle',document.title,'documentVersion',document.document_version,'status',task.status,
+            'priority',task.priority,'dueAt',task.due_at,'completedAt',task.completed_at,'readAt',evidence.first_read_at,
+            'acknowledgedAt',evidence.acknowledged_at,'quizScore',evidence.quiz_score,'quizPassed',evidence.quiz_passed,'version',task.version
+          ) ORDER BY (task.status='completed'),task.due_at NULLS LAST,task.created_at DESC)
+          FROM staff_tasks task JOIN staff_rule_documents document ON document.id=task.course_document_id
+          LEFT JOIN staff ON staff.tenant_id=task.tenant_id AND staff.branch_id=task.branch_id AND staff.id=task.staff_id
+          LEFT JOIN staff_rule_staff_status evidence ON evidence.tenant_id=task.tenant_id AND evidence.branch_id=task.branch_id
+            AND evidence.document_id=task.course_document_id AND evidence.staff_id=task.staff_id
+          WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.course_document_id IS NOT NULL),'[]'::JSONB),
+          'requirements',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id',requirement.id,'scopeType',requirement.scope_type,'scopeId',requirement.scope_id,
+            'scopeName',CASE WHEN requirement.scope_type='role' THEN role.name ELSE service.name END,
+            'skillName',requirement.skill_name,'requiredLevel',requirement.required_level,
+            'certificationRequired',requirement.certification_required,'active',requirement.active,'version',requirement.version
+          ) ORDER BY requirement.scope_type,
+            CASE WHEN requirement.scope_type='role' THEN role.name ELSE service.name END,
+            requirement.skill_name)
+          FROM staff_skill_requirements requirement
+          LEFT JOIN roles role ON requirement.scope_type='role' AND role.tenant_id=requirement.tenant_id AND role.id=requirement.scope_id
+          LEFT JOIN services service ON requirement.scope_type='service' AND service.tenant_id=requirement.tenant_id AND service.branch_id=requirement.branch_id AND service.id=requirement.scope_id
+          WHERE requirement.tenant_id=$1 AND requirement.branch_id=$2),'[]'::JSONB),
+          'skillMatrix',COALESCE((SELECT JSONB_AGG(row.item ORDER BY row.staff_name) FROM (
+            SELECT staff.id,COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),staff.id) staff_name,
+              JSONB_BUILD_OBJECT('staffId',staff.id,'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),staff.id),
+                'requiredCount',COUNT(status.requirement_id),'metCount',COUNT(status.requirement_id) FILTER(WHERE status.available_level>=status.required_level),
+                'gapCount',COUNT(status.requirement_id) FILTER(WHERE status.available_level<status.required_level),
+                'gaps',COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('requirementId',status.requirement_id,'skillName',status.skill_name,
+                  'requiredLevel',status.required_level,'availableLevel',status.available_level,'certificationRequired',status.certification_required))
+                  FILTER(WHERE status.available_level<status.required_level),'[]'::JSONB)) item
+            FROM staff LEFT JOIN requirement_status status ON status.staff_id=staff.id
+            WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+            GROUP BY staff.id,staff.appointment_display_name,staff.first_name,staff.last_name
+          ) row),'[]'::JSONB),
+          'recommendations',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'staffId',status.staff_id,'staffName',status.staff_name,'requirementId',status.requirement_id,
+            'skillName',status.skill_name,'requiredLevel',status.required_level,'availableLevel',status.available_level,
+            'courseId',course.id,'courseTitle',course.title,'courseVersion',course.document_version,
+            'reason',CASE WHEN course.id IS NULL THEN 'No published matching course' ELSE 'Skill requirement not met' END
+          ) ORDER BY status.staff_name,status.skill_name)
+          FROM requirement_status status
+          LEFT JOIN LATERAL (
+            SELECT document.id,document.title,document.document_version FROM staff_course_profiles profile
+            JOIN staff_rule_documents document ON document.id=profile.document_id
+            WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND LOWER(profile.skill_name)=LOWER(status.skill_name)
+              AND profile.skill_level>=status.required_level AND document.status='published'
+            ORDER BY document.document_version DESC LIMIT 1
+          ) course ON TRUE WHERE status.available_level<status.required_level),'[]'::JSONB)
+        )"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .fetch_one(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_course_profile(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    skill_name: &str,
+    skill_level: i16,
+    expected_minutes: i32,
+    certification_valid_days: i32,
+    actor: &str,
+    version: Option<i32>,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO staff_course_profiles(document_id,tenant_id,branch_id,skill_name,skill_level,expected_minutes,certification_valid_days,created_by)
+          SELECT document.id,$1,$2,$4,$5,$6,$7,$8 FROM staff_rule_documents document
+          WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.id=$3 AND document.document_type='sop'
+          ON CONFLICT(document_id) DO UPDATE SET skill_name=EXCLUDED.skill_name,skill_level=EXCLUDED.skill_level,
+            expected_minutes=EXCLUDED.expected_minutes,certification_valid_days=EXCLUDED.certification_valid_days,
+            version=staff_course_profiles.version+1,updated_at=NOW()
+          WHERE $9::INTEGER IS NOT NULL AND staff_course_profiles.version=$9
+          RETURNING JSONB_BUILD_OBJECT('documentId',document_id,'skillName',skill_name,'skillLevel',skill_level,
+            'expectedMinutes',expected_minutes,'certificationValidDays',certification_valid_days,'version',version)"#,
+    )
+    .bind(tenant).bind(branch).bind(document_id).bind(skill_name).bind(skill_level)
+    .bind(expected_minutes).bind(certification_valid_days).bind(actor).bind(version)
+    .fetch_optional(db).await
+}
+
+pub async fn assign_course(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff_id: &str,
+    document_id: &str,
+    priority: &str,
+    due_at: Option<DateTime<Utc>>,
+    actor: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH inserted AS (
+          INSERT INTO staff_tasks(tenant_id,branch_id,staff_id,title,description,task_type,priority,due_at,status,assigned_by,course_document_id)
+          SELECT $1,$2,staff.id,document.title,LEFT(document.content,4000),'training',$5,$6,'open',$7,document.id
+          FROM staff JOIN staff_rule_documents document ON document.tenant_id=staff.tenant_id AND document.branch_id=staff.branch_id
+          WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.id=$3 AND staff.active=TRUE
+            AND document.id=$4 AND document.document_type='sop' AND document.status='published'
+            AND document.effective_date<=CURRENT_DATE AND (document.expires_on IS NULL OR document.expires_on>=CURRENT_DATE)
+          ON CONFLICT DO NOTHING RETURNING *
+        ) SELECT JSONB_BUILD_OBJECT('id',task.id,'staffId',task.staff_id,'courseId',task.course_document_id,
+          'title',task.title,'status',task.status,'priority',task.priority,'dueAt',task.due_at,'version',task.version)
+          FROM inserted task"#,
+    )
+    .bind(tenant).bind(branch).bind(staff_id).bind(document_id).bind(priority).bind(due_at).bind(actor)
+    .fetch_optional(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_skill_requirement(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    scope_type: &str,
+    scope_id: &str,
+    skill_name: &str,
+    required_level: i16,
+    certification_required: bool,
+    active: bool,
+    actor: &str,
+    version: Option<i32>,
+) -> Result<Option<Value>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let updated = if let Some(version) = version {
+        sqlx::query_scalar(
+            r#"UPDATE staff_skill_requirements SET required_level=$7,certification_required=$8,active=$9,
+              version=version+1,updated_at=NOW()
+              WHERE tenant_id=$1 AND branch_id=$2 AND scope_type=$3 AND scope_id=$4 AND LOWER(skill_name)=LOWER($5) AND version=$6
+              RETURNING JSONB_BUILD_OBJECT('id',id,'scopeType',scope_type,'scopeId',scope_id,'skillName',skill_name,
+                'requiredLevel',required_level,'certificationRequired',certification_required,'active',active,'version',version)"#,
+        ).bind(tenant).bind(branch).bind(scope_type).bind(scope_id).bind(skill_name).bind(version)
+          .bind(required_level).bind(certification_required).bind(active).fetch_optional(&mut *tx).await?
+    } else {
+        None
+    };
+    if updated.is_some() {
+        tx.commit().await?;
+        return Ok(updated);
+    }
+    if version.is_some() {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    let inserted = sqlx::query_scalar(
+        r#"INSERT INTO staff_skill_requirements(tenant_id,branch_id,scope_type,scope_id,skill_name,required_level,certification_required,active,created_by)
+          SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9 WHERE
+            ($3='role' AND EXISTS(SELECT 1 FROM roles WHERE tenant_id=$1 AND id=$4)) OR
+            ($3='service' AND EXISTS(SELECT 1 FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$4))
+          ON CONFLICT DO NOTHING
+          RETURNING JSONB_BUILD_OBJECT('id',id,'scopeType',scope_type,'scopeId',scope_id,'skillName',skill_name,
+            'requiredLevel',required_level,'certificationRequired',certification_required,'active',active,'version',version)"#,
+    ).bind(tenant).bind(branch).bind(scope_type).bind(scope_id).bind(skill_name).bind(required_level)
+      .bind(certification_required).bind(active).bind(actor).fetch_optional(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(inserted)
+}
+
+pub async fn renew_certification(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    version: i32,
+    expires_on: NaiveDate,
+    document_url: &str,
+    actor: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH source AS (
+          SELECT * FROM staff_skill_licenses WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4
+        ), inserted AS (
+          INSERT INTO staff_skill_licenses(tenant_id,branch_id,staff_id,skill_name,skill_level,issuer,license_number,
+            issued_on,expires_on,verification_status,document_url,notes,renewed_from_license_id,created_by)
+          SELECT tenant_id,branch_id,staff_id,skill_name,skill_level,issuer,'',CURRENT_DATE,$5,'pending',
+            COALESCE(NULLIF($6,''),document_url),CONCAT('Renewal of certification ',id),id,$7 FROM source RETURNING *
+        ) SELECT JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'skillName',skill_name,'skillLevel',skill_level,
+          'issuedOn',issued_on,'expiresOn',expires_on,'verificationStatus',verification_status,
+          'documentUrl',document_url,'renewedFromLicenseId',renewed_from_license_id,'version',version) FROM inserted"#,
+    )
+    .bind(tenant).bind(branch).bind(id).bind(version).bind(expires_on).bind(document_url).bind(actor)
+    .fetch_optional(db).await
+}
+
 pub async fn create_staff_rule_document(
     db: &PgPool,
     tenant: &str,
@@ -2233,11 +2490,19 @@ pub async fn list_self_staff_rules(
           'quiz',COALESCE((SELECT JSONB_AGG(question - 'correctIndex' ORDER BY ordinal)
             FROM JSONB_ARRAY_ELEMENTS(document.quiz_json) WITH ORDINALITY quiz(question,ordinal)),'[]'::JSONB),
           'quizPassScore',document.quiz_pass_score,'readAt',status.first_read_at,
-          'acknowledgedAt',status.acknowledged_at,'quizScore',status.quiz_score,'quizPassed',status.quiz_passed
+          'acknowledgedAt',status.acknowledged_at,'quizScore',status.quiz_score,'quizPassed',status.quiz_passed,
+          'isCourse',(profile.document_id IS NOT NULL OR document.training_attachment_url<>'' OR JSONB_ARRAY_LENGTH(document.quiz_json)>0),
+          'skillName',COALESCE(profile.skill_name,''),'skillLevel',COALESCE(profile.skill_level,1),
+          'expectedMinutes',COALESCE(profile.expected_minutes,0),'certificationValidDays',COALESCE(profile.certification_valid_days,0),
+          'enrolmentStatus',assignment.status,'enrolmentDueAt',assignment.due_at,'trainingCompletedAt',assignment.completed_at
         ) ORDER BY document.category,document.title),'[]'::JSONB)
         FROM staff_rule_documents document
         LEFT JOIN staff_rule_staff_status status ON status.tenant_id=document.tenant_id AND status.branch_id=document.branch_id
           AND status.document_id=document.id AND status.staff_id=$3
+        LEFT JOIN staff_course_profiles profile ON profile.tenant_id=document.tenant_id AND profile.branch_id=document.branch_id AND profile.document_id=document.id
+        LEFT JOIN LATERAL (SELECT task.status,task.due_at,task.completed_at FROM staff_tasks task
+          WHERE task.tenant_id=document.tenant_id AND task.branch_id=document.branch_id AND task.staff_id=$3
+            AND task.course_document_id=document.id ORDER BY task.created_at DESC LIMIT 1) assignment ON TRUE
         WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.status='published'
           AND document.effective_date<=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE
           AND (document.expires_on IS NULL OR document.expires_on>=(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::DATE)"#,
@@ -2290,8 +2555,10 @@ pub async fn acknowledge_staff_rule(
     answers: &Value,
     score: i32,
     passed: bool,
+    actor: &str,
 ) -> Result<StaffRuleStatusRecord, sqlx::Error> {
-    sqlx::query_as(
+    let mut tx = db.begin().await?;
+    let status = sqlx::query_as(
         r#"INSERT INTO staff_rule_staff_status(tenant_id,branch_id,document_id,staff_id,first_read_at,last_read_at,acknowledged_at,quiz_answers_json,quiz_score,quiz_passed)
           VALUES($1,$2,$3,$4,NOW(),NOW(),CASE WHEN $7 THEN NOW() END,$5,$6,$7)
           ON CONFLICT(tenant_id,branch_id,document_id,staff_id) DO UPDATE SET
@@ -2300,7 +2567,26 @@ pub async fn acknowledge_staff_rule(
           RETURNING id,document_id,staff_id,first_read_at,last_read_at,acknowledged_at,quiz_score,quiz_passed,version"#,
     )
     .bind(tenant).bind(branch).bind(document_id).bind(staff_id).bind(answers).bind(score).bind(passed)
-    .fetch_one(db).await
+    .fetch_one(&mut *tx).await?;
+    if passed {
+        sqlx::query(
+            r#"UPDATE staff_tasks SET status='completed',completed_at=COALESCE(completed_at,NOW()),version=version+1,updated_at=NOW()
+              WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND course_document_id=$4
+                AND status IN ('open','in_progress','blocked')"#,
+        ).bind(tenant).bind(branch).bind(staff_id).bind(document_id).execute(&mut *tx).await?;
+        sqlx::query(
+            r#"INSERT INTO staff_skill_licenses(tenant_id,branch_id,staff_id,skill_name,skill_level,issuer,issued_on,expires_on,
+                verification_status,notes,source_course_document_id,created_by)
+              SELECT profile.tenant_id,profile.branch_id,$3,profile.skill_name,profile.skill_level,'AuraShine LMS',CURRENT_DATE,
+                CURRENT_DATE+profile.certification_valid_days,'pending',CONCAT('Issued after course completion: ',document.title),document.id,$5
+              FROM staff_course_profiles profile JOIN staff_rule_documents document ON document.id=profile.document_id
+              WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND profile.document_id=$4
+                AND profile.skill_name<>'' AND profile.certification_valid_days>0
+              ON CONFLICT DO NOTHING"#,
+        ).bind(tenant).bind(branch).bind(staff_id).bind(document_id).bind(actor).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(status)
 }
 
 pub async fn create_staff_rule_violation(

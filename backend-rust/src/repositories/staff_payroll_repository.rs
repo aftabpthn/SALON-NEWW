@@ -13,6 +13,8 @@ pub struct StaffSourceRecord {
     pub pay_rate_type: Option<String>,
     pub pay_rate_paise: Option<i64>,
     pub joining_date: Option<NaiveDate>,
+    pub mandatory_break_minutes: i32,
+    pub max_work_hours: i32,
 }
 
 #[derive(Debug, FromRow)]
@@ -308,7 +310,9 @@ pub async fn staff_sources(
                s.employee_code,
                pay.rate_type AS pay_rate_type,
                pay.amount_paise AS pay_rate_paise,
-               profile.joining_date
+               profile.joining_date,
+               COALESCE(profile.mandatory_break_minutes,0) mandatory_break_minutes,
+               COALESCE(profile.max_work_hours,0) max_work_hours
         FROM staff s
         LEFT JOIN staff_profiles profile ON profile.tenant_id=s.tenant_id AND profile.branch_id=s.branch_id AND profile.staff_id=s.id
         LEFT JOIN LATERAL (

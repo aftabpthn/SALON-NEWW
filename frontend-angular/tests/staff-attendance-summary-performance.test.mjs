@@ -18,6 +18,15 @@ test('attendance summary actions stay wired', () => {
   for (const path of ['/staff-attendance/summary', '/details', '/correction']) assert.match(source, new RegExp(path));
 });
 
+test('manager can save physical attendance with every supported status', () => {
+  assert.match(template, /Physical attendance/);
+  for (const status of ['present', 'absent', 'late', 'half_day', 'leave', 'weekly_off', 'holiday']) {
+    assert.match(template, new RegExp(`value="${status}"`));
+  }
+  for (const path of ['/clock-in', '/clock-out', '/correction']) assert.match(source, new RegExp(path));
+  assert.match(source, /await this\.loadSummary\(\)/);
+});
+
 test('attendance details show saved shifts, metrics and calculation source', () => {
   for (const field of ['scheduledShift1Start', 'scheduledShift1End', 'scheduledShift2Start', 'scheduledShift2End']) assert.match(source, new RegExp(field));
   for (const label of ['Clock in', 'Clock out', 'Worked', 'Break', 'Scheduled', 'Late', 'Early leave', 'Overtime']) assert.match(template, new RegExp(label));

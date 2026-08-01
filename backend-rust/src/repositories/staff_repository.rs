@@ -1061,6 +1061,17 @@ pub async fn get_profile(
     .await
 }
 
+pub async fn reporting_manager_would_cycle(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff_id: &str,
+    manager_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(r#"WITH RECURSIVE managers AS (SELECT reporting_manager_id FROM staff_profiles WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$4 UNION SELECT profile.reporting_manager_id FROM staff_profiles profile JOIN managers ON profile.staff_id=managers.reporting_manager_id WHERE profile.tenant_id=$1 AND profile.branch_id=$2 AND managers.reporting_manager_id IS NOT NULL) SELECT EXISTS(SELECT 1 FROM managers WHERE reporting_manager_id=$3)"#)
+        .bind(tenant).bind(branch).bind(staff_id).bind(manager_id).fetch_one(db).await
+}
+
 #[cfg(test)]
 mod security_tests {
     use super::{replace_branch_access, BranchRoleAssignmentInput};

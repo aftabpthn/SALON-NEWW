@@ -43,6 +43,17 @@
       @if (canManage('staff.development.manage', 'staff.app.tasks.manage')) { <button type="button" (click)="createCoachingGoal()">Add coaching goal</button> }
     </section>
   }
+  @if (activeTab === 'hrms') {
+    <section class="command-strip" aria-label="HRMS actions">
+      @if (canManage('staff.manage')) { <button type="button" (click)="createJobOpening()">Add opening</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createApplication()">Add candidate</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createLifecycleCase('onboarding')">Start onboarding</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createLifecycleCase('offboarding')">Start offboarding</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createAppraisalCycle()">Add appraisal cycle</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createGoalTemplate()">Add OKR template</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="createSuccessionPlan()">Add succession plan</button> }
+    </section>
+  }
   @if (activeTab === 'systems') {
     <section class="command-strip" aria-label="Systems actions">
       @if (canManage('staff.systems.manage', 'staff.app.attendance.manage')) { <button type="button" (click)="createDevice()">Add biometric device</button> }
@@ -66,6 +77,56 @@
       @if (canManage('marketing.offers.manage', 'marketing.manage')) { <button type="button" (click)="createContentOffer()">Add offer</button> }
       @if (canManage('staff.payroll.manage', 'payroll.manage')) { <button type="button" (click)="createPenaltyRule()">Add penalty/payroll rule</button> }
     </section>
+  }
+
+  @if (activeTab === 'hrms') {
+    <section class="summary-strip"><div><span>Openings</span><strong>{{ arrayValue(hrms['jobOpenings']).length }}</strong></div><div><span>Candidates</span><strong>{{ arrayValue(hrms['applications']).length }}</strong></div><div><span>Lifecycle cases</span><strong>{{ arrayValue(hrms['lifecycleCases']).length }}</strong></div><div><span>Appraisal cycles</span><strong>{{ arrayValue(hrms['appraisalCycles']).length }}</strong></div><div><span>Appraisal reviews</span><strong>{{ arrayValue(hrms['appraisalReviews']).length }}</strong></div><div><span>Succession plans</span><strong>{{ arrayValue(hrms['successionPlans']).length }}</strong></div></section>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Recruitment openings</h2><span>{{ arrayValue(hrms['jobOpenings']).length }} records</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createJobOpening()">Add</button> }</header>
+        @for (row of arrayValue(hrms['jobOpenings']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ row['department'] || 'No department' }} · {{ label(row['employmentType']) }} · {{ row['applicationCount'] }} candidates</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span>@if (canManage('staff.manage') && row['status'] !== 'closed') { <div class="row-actions"><button type="button" (click)="createApplication(row)">Candidate</button><button type="button" (click)="updateJobOpening(row)">Status</button></div> }</article> }
+        @if (arrayValue(hrms['jobOpenings']).length === 0) { <div class="empty">No job openings</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Applicant tracking</h2><span>{{ arrayValue(hrms['applications']).length }} records</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createApplication()">Add</button> }</header>
+        @for (row of arrayValue(hrms['applications']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['firstName'] }} {{ row['lastName'] }}</strong><small>{{ row['jobTitle'] }} · {{ row['email'] || row['phone'] }}</small></div><span class="status" [ngClass]="statusClass(row['stage'])">{{ row['stage'] }}</span>@if (canManage('staff.manage') && !['hired', 'rejected', 'withdrawn'].includes(row['stage'])) { <div class="row-actions"><button type="button" (click)="updateApplication(row)">Move stage</button></div> }</article> }
+        @if (arrayValue(hrms['applications']).length === 0) { <div class="empty">No candidates</div> }
+      </section>
+    </div>
+    <section class="data-card"><header><div><h2>Onboarding and offboarding</h2><span>{{ arrayValue(hrms['lifecycleCases']).length }} cases</span></div></header>
+      @for (row of arrayValue(hrms['lifecycleCases']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['staffName'] || row['candidateName'] || row['staffId'] }}</strong><small>{{ label(row['caseType']) }} · Effective {{ formatDate(row['effectiveDate']) }} · Settlement {{ label(row['settlementStatus']) }}</small>@for (task of arrayValue(row['tasks']); track task['id']) { <button type="button" [disabled]="!canManage('staff.manage') || row['status'] === 'completed'" (click)="updateLifecycleTask(row, task)">{{ task['completed'] ? '✓' : '○' }} {{ task['title'] }}</button> }@if (canManage('staff.manage') && row['settlementStatus'] === 'ready') { <button type="button" (click)="completeSettlement(row)">Complete settlement</button> }</div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span></article> }
+      @if (arrayValue(hrms['lifecycleCases']).length === 0) { <div class="empty">No lifecycle cases</div> }
+    </section>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Organization chart</h2><span>Reporting lines</span></div></header>
+        @for (row of arrayValue(hrms['orgChart']); track row['staffId']) { <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['jobTitle'] || 'No job title' }} · Reports to {{ row['reportingManagerName'] || 'No manager' }} · {{ label(row['employmentStatus']) }}</small></div><span class="status" [ngClass]="statusClass(row['active'] ? 'approved' : 'offline')">{{ row['active'] ? 'active' : 'inactive' }}</span>@if (canManage('staff.manage') && row['active'] && row['employmentStatus'] !== 'notice_period') { <div class="row-actions"><button type="button" (click)="updateEmployment(row)">Lifecycle</button></div> }</article> }
+        @if (arrayValue(hrms['orgChart']).length === 0) { <div class="empty">No staff records</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Document expiry</h2><span>{{ arrayValue(hrms['documentAlerts']).length }} alerts</span></div></header>
+        @for (row of arrayValue(hrms['documentAlerts']); track row['id']) { <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['documentName'] || row['documentType'] }} · {{ formatDate(row['expiryDate']) }}</small></div><span class="status" [ngClass]="statusClass(row['state'])">{{ row['state'] }}</span></article> }
+        @if (arrayValue(hrms['documentAlerts']).length === 0) { <div class="empty">No document expiry alerts</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Appraisal cycles</h2><span>Existing performance reviews</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createAppraisalCycle()">Add</button> }</header>
+        @for (row of arrayValue(hrms['appraisalCycles']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['name'] }}</strong><small>{{ formatDate(row['periodStart']) }} – {{ formatDate(row['periodEnd']) }} · {{ row['acknowledgedCount'] }}/{{ row['reviewCount'] }} acknowledged</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span>@if (canManage('staff.manage') && row['status'] !== 'closed') { <div class="row-actions">@if (row['status'] === 'draft') { <button type="button" (click)="populateAppraisalCycle(row)">Assign employees</button> }<button type="button" (click)="updateAppraisalCycle(row)">Advance</button></div> }</article> }
+        @if (arrayValue(hrms['appraisalCycles']).length === 0) { <div class="empty">No appraisal cycles</div> }
+      </section>
+    </div>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Goal and OKR templates</h2><span>{{ arrayValue(hrms['goalTemplates']).length }} templates</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createGoalTemplate()">Add</button> }</header>
+        @for (row of arrayValue(hrms['goalTemplates']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['name'] }}</strong><small>{{ arrayValue(row['keyResults']).length }} measurable results · Version {{ row['version'] }}</small>@for (result of arrayValue(row['keyResults']); track result['id']) { <small>{{ result['title'] }} · {{ result['targetValue'] }} {{ result['metricUnit'] }} · {{ result['weightBasisPoints'] / 100 }}%</small> }</div><span class="status" [ngClass]="statusClass(row['active'] ? 'approved' : 'offline')">{{ row['active'] ? 'active' : 'inactive' }}</span></article> }
+        @if (arrayValue(hrms['goalTemplates']).length === 0) { <div class="empty">No OKR templates</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Appraisal workflow</h2><span>{{ arrayValue(hrms['appraisalReviews']).length }} employees</span></div></header>
+        @for (row of arrayValue(hrms['appraisalReviews']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['staffName'] }} · {{ row['cycleName'] }}</strong><small>Self {{ row['selfScore'] ?? 'pending' }} · Manager {{ row['managerScore'] ?? 'pending' }} · Final {{ row['finalScore'] ?? 'pending' }} {{ row['finalRating'] || '' }}</small><small>Profit evidence {{ money(row['contributionProfitPaise']) }} · Incentive {{ money(row['incentiveAmountPaise']) }} · History {{ arrayValue(row['history']).length }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ label(row['status']) }}</span>@if (canManage('staff.manage')) { <div class="row-actions">@if (row['status'] === 'manager_review_pending') { <button type="button" (click)="submitManagerAppraisal(row)">Manager review</button> }@if (row['status'] === 'calibration') { <button type="button" (click)="calibrateAppraisal(row)">Calibrate</button> }@if (row['status'] === 'approval_pending') { <button type="button" (click)="approveAppraisal(row)">Approve rating</button> }</div> }</article> }
+        @if (arrayValue(hrms['appraisalReviews']).length === 0) { <div class="empty">No appraisal reviews</div> }
+      </section>
+    </div>
+    <section class="data-card"><header><div><h2>Learning and certification</h2><span>Existing tasks, SOP courses and skill licenses</span></div><button type="button" (click)="selectTab('development')">Open development</button></header><div class="key-list">@for (item of objectEntries(hrms['learning']); track item.key) { <div><span>{{ item.key }}</span><strong>{{ text(item.value) }}</strong></div> }</div></section>
+    <section class="data-card"><header><div><h2>Succession readiness</h2><span>{{ arrayValue(hrms['successionPlans']).length }} plans</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createSuccessionPlan()">Add</button> }</header>
+      @for (plan of arrayValue(hrms['successionPlans']); track trackById($index, plan)) { <article class="record"><div><strong>{{ plan['roleTitle'] }}</strong><small>Incumbent {{ plan['incumbentStaffName'] || 'not assigned' }} · Target {{ formatDate(plan['targetDate']) }}</small>@for (candidate of arrayValue(plan['candidates']); track candidate['id']) { @if (candidate['status'] === 'proposed') { <button type="button" [disabled]="!canManage('staff.manage')" (click)="updateSuccessionCandidate(candidate)">{{ candidate['staffName'] }} · {{ label(candidate['readiness']) }} · {{ candidate['readinessScore'] }}%</button> } @else { <small>{{ candidate['staffName'] }} · {{ label(candidate['status']) }} · {{ candidate['readinessScore'] }}%</small> } }</div><span class="status" [ngClass]="statusClass(plan['status'])">{{ plan['status'] }}</span>@if (canManage('staff.manage') && plan['status'] === 'active') { <div class="row-actions"><button type="button" (click)="addSuccessionCandidate(plan)">Nominate</button><button type="button" (click)="closeSuccessionPlan(plan)">Close</button></div> }</article> }
+      @if (arrayValue(hrms['successionPlans']).length === 0) { <div class="empty">No succession plans</div> }
+    </section>
+    <section class="data-card"><header><div><h2>Promotion-readiness report</h2><span>Human approval required</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">Role / candidate</th><th scope="col">Skills</th><th scope="col">Appraisal</th><th scope="col">Attendance</th><th scope="col">Training</th><th scope="col">Readiness</th><th scope="col">Decision</th></tr></thead><tbody>@for (row of arrayValue(hrms['promotionReadiness']?.['items']); track row['candidateId']) {
+      <tr><td><strong>{{ row['roleTitle'] }}</strong><small>{{ row['staffName'] }} · {{ row['evidenceCoveragePercent'] }}% evidence</small></td><td>{{ text(row['signals']?.['skills']?.['score']) }}</td><td>{{ text(row['signals']?.['appraisal']?.['score']) }}</td><td>{{ text(row['signals']?.['attendance']?.['score']) }}</td><td>{{ text(row['signals']?.['training']?.['score']) }}</td><td><strong>{{ row['readinessScore'] }}%</strong><small>{{ label(row['readiness']) }}</small></td><td><span class="status" [ngClass]="statusClass(row['nominationStatus'])">{{ label(row['nominationStatus']) }}</span>@if (canManage('staff.manage') && row['nominationStatus'] === 'proposed') { <div class="row-actions"><button type="button" (click)="decideSuccessionCandidate(row, 'rejected')">Reject</button><button class="primary" type="button" (click)="decideSuccessionCandidate(row, 'approved')">Approve readiness</button></div> }</td></tr>
+    }</tbody></table></div>@if (arrayValue(hrms['promotionReadiness']?.['items']).length === 0) { <div class="empty">No promotion-readiness records</div> }</section>
   }
 
   @if (activeTab === 'command') {
@@ -189,13 +250,22 @@
 
 @if (activeTab === 'development') {
   <section class="summary-strip"><div><span>{{ 'staff.ui.9fc3434f6a' | translate }}</span><strong>{{ skillMatrix.length }}</strong></div><div><span>{{ 'staff.ui.613aec30d2' | translate }}</span><strong>{{ licenses.length }}</strong></div><div><span>{{ 'staff.ui.b83c4cdafe' | translate }}</span><strong>{{ reviews.length }}</strong></div><div><span>{{ 'staff.ui.46a67467c8' | translate }}</span><strong>{{ coachingGoals.length }}</strong></div><div><span>{{ 'staff.ui.8407ece508' | translate }}</span><strong>{{ training.length }}</strong></div></section>
+  <div class="two-column"><section class="data-card"><header><div><h2>Course catalogue</h2><span>Published SOP versions and learning evidence</span></div><button type="button" (click)="assignCourse()">Assign course</button></header>@for (row of arrayValue(lms['courses']); track row['id']) {
+    <article class="record"><div><strong>{{ row['title'] }}</strong><small>v{{ row['documentVersion'] }} · {{ row['skillName'] || 'General SOP' }} · {{ row['quizQuestionCount'] }} questions · {{ row['completedCount'] }}/{{ row['assignedCount'] }} complete</small></div><div class="row-actions"><button type="button" (click)="configureCourse(row)">Configure</button><button class="primary" type="button" (click)="assignCourse(row)">Assign</button></div></article>
+  }@if (arrayValue(lms['courses']).length === 0) { <div class="empty">No published SOP courses</div> }</section>
+  <section class="data-card"><header><div><h2>Skill requirements</h2><span>Role and service requirements</span></div><button type="button" (click)="saveSkillRequirement()">Add requirement</button></header>@for (row of arrayValue(lms['requirements']); track row['id']) {
+    <article class="record"><div><strong>{{ row['skillName'] }} · Level {{ row['requiredLevel'] }}</strong><small>{{ row['scopeType'] }} · {{ row['scopeName'] || row['scopeId'] }} · {{ row['certificationRequired'] ? 'Certification required' : 'Training evidence accepted' }}</small></div><div class="row-actions"><button type="button" (click)="saveSkillRequirement(row)">Edit</button></div></article>
+  }@if (arrayValue(lms['requirements']).length === 0) { <div class="empty">No skill requirements</div> }</section></div>
+  <section class="data-card"><header><div><h2>Course enrolments and evidence</h2><span>Quiz, acknowledgement and completion status</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">Staff</th><th scope="col">Course</th><th scope="col">Due</th><th scope="col">Quiz</th><th scope="col">Status</th></tr></thead><tbody>@for (row of arrayValue(lms['enrolments']); track row['id']) {
+    <tr><td><strong>{{ staffName(row) }}</strong></td><td>{{ row['courseTitle'] }} · v{{ row['documentVersion'] }}</td><td>{{ formatDateTime(row['dueAt']) }}</td><td>{{ row['quizPassed'] === true ? (row['quizScore'] + '% passed') : row['quizPassed'] === false ? (row['quizScore'] + '% retry') : 'Pending' }}</td><td><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span></td></tr>
+  }</tbody></table></div>@if (arrayValue(lms['enrolments']).length === 0) { <div class="empty">No course enrolments</div> }</section>
   <section class="data-card"><header><div><h2>{{ 'staff.ui.9fc3434f6a' | translate }}</h2><span>{{ 'staff.ui.625af94397' | translate }}</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">{{ 'staff.ui.079711ea16' | translate }}</th><th scope="col">{{ 'staff.ui.30c8cb83b9' | translate }}</th><th scope="col">{{ 'staff.ui.47dcc27d6e' | translate }}</th><th scope="col">{{ 'staff.ui.5cbd584046' | translate }}</th></tr></thead><tbody>@for (row of skillMatrix; track trackById($index, row)) {
-  <tr><td><strong>{{ staffName(row) }}</strong></td><td>{{ row['jobTitle'] || '—' }}</td><td>{{ row['roles']?.length || 0 }}</td><td>{{ row['services']?.length || 0 }}</td></tr>
+  <tr><td><strong>{{ staffName(row) }}</strong></td><td>{{ row['requiredCount'] || 0 }} required</td><td>{{ row['metCount'] || 0 }} met</td><td>{{ row['gapCount'] || 0 }} gaps</td></tr>
 }</tbody></table></div>@if (skillMatrix.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
 <div class="two-column"><section class="data-card"><header><div><h2>{{ 'staff.ui.5aab27f2fc' | translate }}</h2><span>{{ 'staff.ui.09ff45b1c2' | translate }}</span></div><button type="button" (click)="createLicense()">{{ 'staff.ui.6e157c5da4' | translate }}</button></header>@for (row of licenses; track trackById($index, row)) {
-<article class="record"><div><strong>{{ row['skillName'] }}</strong><small>{{ staffName(row) }} · Expires {{ formatDate(row['expiresOn']) }}</small></div><span class="status" [ngClass]="statusClass(row['verificationStatus'])">{{ row['verificationStatus'] }}</span><div class="row-actions"><button type="button" (click)="createLicense(row, 'rejected')">{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" (click)="createLicense(row, 'verified')">{{ 'staff.ui.dda6ac27b9' | translate }}</button></div></article>
+<article class="record"><div><strong>{{ row['skillName'] }} · Level {{ row['skillLevel'] || 1 }}</strong><small>{{ staffName(row) }} · Expires {{ formatDate(row['expiresOn']) }}</small></div><span class="status" [ngClass]="statusClass(row['verificationStatus'])">{{ row['verificationStatus'] }}</span><div class="row-actions"><button type="button" (click)="renewCertification(row)">Renew</button><button type="button" (click)="createLicense(row, 'rejected')">{{ 'staff.ui.2b03b59293' | translate }}</button><button class="primary" type="button" (click)="createLicense(row, 'verified')">{{ 'staff.ui.dda6ac27b9' | translate }}</button></div></article>
 }@if (licenses.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
@@ -220,6 +290,9 @@
 }@if (training.length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section></div>
+<section class="data-card"><header><div><h2>Recommended training plans</h2><span>Calculated from active role and service gaps</span></div></header>@for (row of arrayValue(lms['recommendations']); track row['staffId'] + '-' + row['requirementId']) {
+<article class="record"><div><strong>{{ staffName(row) }} · {{ row['skillName'] }}</strong><small>Level {{ row['availableLevel'] }} of {{ row['requiredLevel'] }} · {{ row['courseTitle'] || row['reason'] }}</small></div>@if (row['courseId']) { <div class="row-actions"><button class="primary" type="button" (click)="assignCourse({ id: row['courseId'] })">Assign recommended course</button></div> }</article>
+}@if (arrayValue(lms['recommendations']).length === 0) { <div class="empty">No active skill gaps</div> }</section>
 <section class="data-card"><header><div><h2>{{ 'staff.ui.16afd0a33b' | translate }}</h2></div></header>@for (goal of coachingGoals; track trackById($index, goal)) {
 <article class="record"><div><strong>{{ staffName(goal) }}</strong><small>{{ goal['goalType'] }} · {{ formatDate(goal['dueDate']) }}</small></div><span class="status">{{ goal['status'] }}</span>@for (action of arrayValue(goal['actions']); track action) {
 <div class="row-actions">@if (action['status'] !== 'completed') {

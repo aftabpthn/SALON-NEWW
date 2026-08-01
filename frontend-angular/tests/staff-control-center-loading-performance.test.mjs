@@ -4,8 +4,9 @@ import test from 'node:test';
 
 const source = readFileSync('src/app/pages/staff/control-center/staff-control-center-page.component.ts', 'utf8');
 const template = readFileSync('src/app/pages/staff/control-center/staff-control-center-page.component.html', 'utf8');
+const styles = readFileSync('src/app/pages/staff/control-center/staff-control-center-page.component.css', 'utf8');
 const routes = readFileSync('src/app/app.routes.ts', 'utf8');
-const backend = ['staff_advanced.rs', 'staff_attendance.rs', 'staff_enterprise.rs', 'staff_operations.rs', 'marketing_leads.rs']
+const backend = ['staff_advanced.rs', 'staff_attendance.rs', 'staff_enterprise.rs', 'staff_hrms.rs', 'staff_operations.rs', 'marketing_leads.rs']
   .map((file) => readFileSync(`../backend-rust/src/routes/${file}`, 'utf8'))
   .join('\n');
 const block = (start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -39,4 +40,16 @@ test('staff control center actions, pages and API paths stay connected', () => {
     .map((match) => match[2].split('?')[0].replace(/\$\{[^}]+\}/g, ':'));
   const backendPaths = [...backend.matchAll(/"(\/[^"?]+)"/g)].map((match) => match[1].replace(/:[^/]+/g, ':'));
   for (const path of new Set(apiPaths)) assert.ok(backendPaths.includes(path), `missing backend route ${path}`);
+});
+
+test('staff control center shares one responsive layout across every workspace tab', () => {
+  for (const tab of ['command', 'workforce', 'development', 'systems', 'governance', 'content']) {
+    assert.match(template, new RegExp(`activeTab === '${tab}'`), `missing ${tab} workspace`);
+  }
+  assert.match(styles, /\.control-page\s*\{[\s\S]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+  assert.match(styles, /\.table-wrap\s*\{[\s\S]*overflow:\s*auto/);
+  assert.match(styles, /\.summary-strip\s*\{[\s\S]*minmax\(145px, 1fr\)/);
+  assert.match(styles, /\.summary-strip div\s*\{[\s\S]*min-height:\s*58px/);
+  assert.match(styles, /@media \(max-width:\s*1100px\)[\s\S]*\.two-column\s*\{\s*grid-template-columns:\s*1fr/);
+  assert.match(styles, /@media \(max-width:\s*760px\)[\s\S]*\.content-grid, \.rule-form\s*\{\s*grid-template-columns:\s*1fr/);
 });

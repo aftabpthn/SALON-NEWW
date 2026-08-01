@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -17,6 +17,27 @@ fn today_ist() -> NaiveDate {
     Utc::now()
         .with_timezone(&FixedOffset::east_opt(19_800).expect("IST offset is valid"))
         .date_naive()
+}
+
+fn validate_business_timestamp(
+    business_date: NaiveDate,
+    timestamp: DateTime<Utc>,
+    allow_next_day: bool,
+) -> Result<(), AppError> {
+    if business_date > today_ist() || timestamp > Utc::now() + Duration::minutes(5) {
+        return Err(AppError::validation("future attendance is not allowed"));
+    }
+    let timestamp_date = timestamp
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("IST offset is valid"))
+        .date_naive();
+    if timestamp_date != business_date
+        && !(allow_next_day && timestamp_date == business_date.succ_opt().unwrap_or(business_date))
+    {
+        return Err(AppError::validation(
+            "attendance timestamp does not match the IST business date",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -140,6 +161,9 @@ pub async fn clock_in(
     if comments.len() > 500 || source.len() > 50 {
         return Err(AppError::validation("invalid attendance entry"));
     }
+    let clock_in_at = clock_in_at.unwrap_or_else(Utc::now);
+    validate_business_timestamp(business_date, clock_in_at, false)?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     if staff_attendance_repository::get_for_day(db, tenant_id, branch_id, staff_id, business_date)
         .await
         .map_err(|_| AppError::internal("failed to validate attendance"))?
@@ -155,7 +179,7 @@ pub async fn clock_in(
         branch_id,
         staff_id,
         business_date,
-        clock_in_at.unwrap_or_else(Utc::now),
+        clock_in_at,
         source,
         comments,
     )
@@ -177,13 +201,16 @@ pub async fn clock_out(
     if penalty_paise < 0 || comments.len() > 500 {
         return Err(AppError::validation("invalid attendance clock out"));
     }
+    let clock_out_at = clock_out_at.unwrap_or_else(Utc::now);
+    validate_business_timestamp(business_date, clock_out_at, true)?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     staff_attendance_repository::clock_out(
         db,
         tenant_id,
         branch_id,
         staff_id,
         business_date,
-        clock_out_at.unwrap_or_else(Utc::now),
+        clock_out_at,
         penalty_paise,
         comments,
     )
@@ -201,6 +228,8 @@ pub async fn start_break(
     actor_user_id: &str,
 ) -> Result<staff_attendance_repository::AttendanceBreakRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    validate_business_timestamp(business_date, Utc::now(), true)?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     staff_attendance_repository::start_break(
         db,
         tenant_id,
@@ -223,6 +252,8 @@ pub async fn end_break(
     business_date: NaiveDate,
 ) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    validate_business_timestamp(business_date, Utc::now(), true)?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     staff_attendance_repository::end_break(
         db,
         tenant_id,
@@ -245,7 +276,7 @@ pub async fn correct_attendance(
     input: AttendanceCorrectionInput,
 ) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
-    validate_correction(&input)?;
+    validate_correction(business_date, &input)?;
     ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
     staff_attendance_repository::save_correction(
         db,
@@ -302,7 +333,10 @@ async fn ensure_attendance_editable(
     Ok(())
 }
 
-fn validate_correction(input: &AttendanceCorrectionInput) -> Result<(), AppError> {
+fn validate_correction(
+    business_date: NaiveDate,
+    input: &AttendanceCorrectionInput,
+) -> Result<(), AppError> {
     if input.correction_reason.trim().is_empty()
         || input.correction_reason.chars().count() > 300
         || input.comments.chars().count() > 500
@@ -311,15 +345,29 @@ fn validate_correction(input: &AttendanceCorrectionInput) -> Result<(), AppError
         || input.manual_status.as_deref().is_some_and(|status| {
             !matches!(
                 status,
-                "present" | "absent" | "half_day" | "leave" | "special_leave" | "weekly_off"
+                "present"
+                    | "absent"
+                    | "late"
+                    | "half_day"
+                    | "leave"
+                    | "special_leave"
+                    | "weekly_off"
+                    | "holiday"
             )
         })
+        || input.clock_out_at.is_some() && input.clock_in_at.is_none()
         || input
             .clock_in_at
             .zip(input.clock_out_at)
             .is_some_and(|(start, end)| end < start)
     {
         return Err(AppError::validation("invalid attendance correction"));
+    }
+    if let Some(clock_in) = input.clock_in_at {
+        validate_business_timestamp(business_date, clock_in, false)?;
+    }
+    if let Some(clock_out) = input.clock_out_at {
+        validate_business_timestamp(business_date, clock_out, true)?;
     }
     let mut windows = input
         .breaks
@@ -334,6 +382,8 @@ fn validate_correction(input: &AttendanceCorrectionInput) -> Result<(), AppError
         .collect::<Vec<_>>();
     windows.sort_by_key(|window| window.0);
     for (index, (start, end, comment_length)) in windows.iter().enumerate() {
+        validate_business_timestamp(business_date, *start, true)?;
+        validate_business_timestamp(business_date, *end, true)?;
         if end < start
             || *comment_length > 200
             || input.clock_in_at.is_some_and(|clock_in| *start < clock_in)
@@ -509,7 +559,7 @@ mod tests {
     use crate::repositories::staff_attendance_repository::{
         AttendanceBreakInput, AttendanceCorrectionInput, AttendanceSummaryBaseRecord,
     };
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, NaiveDate, Utc};
 
     #[test]
     fn monthly_summary_uses_saved_balances_and_adjustments() {
@@ -568,6 +618,50 @@ mod tests {
                 },
             ],
         };
-        assert!(validate_correction(&input).is_err());
+        assert!(
+            validate_correction(NaiveDate::from_ymd_opt(2026, 7, 13).unwrap(), &input).is_err()
+        );
+    }
+
+    #[test]
+    fn correction_accepts_complete_statuses_and_rejects_cross_date_clock_in() {
+        let at = |value: &str| {
+            DateTime::parse_from_rfc3339(value)
+                .unwrap()
+                .with_timezone(&Utc)
+        };
+        let date = NaiveDate::from_ymd_opt(2026, 7, 13).unwrap();
+        for status in [
+            "present",
+            "absent",
+            "late",
+            "half_day",
+            "leave",
+            "weekly_off",
+            "holiday",
+        ] {
+            let input = AttendanceCorrectionInput {
+                clock_in_at: None,
+                clock_out_at: None,
+                manual_status: Some(status.into()),
+                penalty_paise: 0,
+                comments: String::new(),
+                correction_reason: "Manager correction".into(),
+                corrected_by: "user".into(),
+                breaks: vec![],
+            };
+            assert!(validate_correction(date, &input).is_ok(), "{status}");
+        }
+        let invalid = AttendanceCorrectionInput {
+            clock_in_at: Some(at("2026-07-14T09:00:00+05:30")),
+            clock_out_at: None,
+            manual_status: None,
+            penalty_paise: 0,
+            comments: String::new(),
+            correction_reason: "Manager correction".into(),
+            corrected_by: "user".into(),
+            breaks: vec![],
+        };
+        assert!(validate_correction(date, &invalid).is_err());
     }
 }

@@ -9,7 +9,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   imports: [DatePipe, FormsModule, StaffPageStateComponent],
   template: `
     <section class="page">
-      <header class="page-head"><div><p class="eyebrow">Compliance</p><h1>Rules & SOP</h1></div></header>
+      <header class="page-head"><div><p class="eyebrow">Learning</p><h1>Courses, Rules & SOP</h1></div></header>
       @if (loading() && !rules().length) { <section staffPageState class="notice">Loading current rules...</section> }
       @if (error()) { <section staffPageState class="notice"><span>{{ error() }}</span><button type="button" class="link-button" (click)="load()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
@@ -26,14 +26,14 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               <button type="button" class="rule-row" [class.selected]="selected()?.id === rule.id" (click)="open(rule)">
                 <span class="rule-state" [class.read]="!!rule.readAt"></span>
                 <span><strong>{{ rule.title }}</strong><small>{{ label(rule.documentType) }} · {{ label(rule.category) }} · v{{ rule.documentVersion }}</small></span>
-                <em [class.done]="!!rule.acknowledgedAt">{{ rule.acknowledgedAt ? 'Acknowledged' : rule.mandatoryAcknowledgement ? 'Required' : 'Read' }}</em>
+                <em [class.done]="!!rule.acknowledgedAt">{{ rule.trainingCompletedAt ? 'Completed' : rule.enrolmentStatus ? label(rule.enrolmentStatus) : rule.acknowledgedAt ? 'Acknowledged' : rule.mandatoryAcknowledgement ? 'Required' : 'Read' }}</em>
               </button>
             } @empty { <div class="empty">No current rules or SOPs.</div> }
           </article>
           <article class="panel rule-detail">
             @if (selected(); as rule) {
               <div class="panel-title"><div><h2>{{ rule.title }}</h2><small>{{ label(rule.category) }} · Version {{ rule.documentVersion }}</small></div><span>{{ rule.acknowledgedAt ? 'Acknowledged' : rule.readAt ? 'Read' : 'Unread' }}</span></div>
-              <div class="rule-meta"><span>Effective <b>{{ rule.effectiveDate | date:'dd/MM/yyyy' }}</b></span>@if (rule.expiresOn) { <span>Expires <b>{{ rule.expiresOn | date:'dd/MM/yyyy' }}</b></span> }</div>
+              <div class="rule-meta"><span>Effective <b>{{ rule.effectiveDate | date:'dd/MM/yyyy' }}</b></span>@if (rule.expiresOn) { <span>Expires <b>{{ rule.expiresOn | date:'dd/MM/yyyy' }}</b></span> }@if (rule.isCourse) { <span>{{ rule.expectedMinutes || 0 }} min</span> }@if (rule.skillName) { <span>{{ rule.skillName }} · Level {{ rule.skillLevel }}</span> }@if (rule.enrolmentDueAt) { <span>Due <b>{{ rule.enrolmentDueAt | date:'dd/MM/yyyy' }}</b></span> }</div>
               <div class="rule-content">{{ rule.content }}</div>
               @if (rule.trainingAttachmentUrl) { <a class="attachment" [href]="rule.trainingAttachmentUrl" target="_blank" rel="noopener">Open training attachment</a> }
               @if (rule.quiz.length) {
@@ -51,7 +51,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                 <label class="confirm"><input type="checkbox" [(ngModel)]="confirmed" />I have read and understood this {{ rule.documentType }}.</label>
                 <button type="button" class="button acknowledge" [disabled]="saving() || !confirmed" (click)="acknowledge(rule)">{{ saving() ? 'Saving...' : 'Acknowledge' }}</button>
               } @else if (rule.acknowledgedAt) {
-                <p class="acknowledged">Acknowledged {{ rule.acknowledgedAt | date:'dd/MM/yyyy, h:mm a' }}@if (rule.quizScore !== null) { · Score {{ rule.quizScore }}% }</p>
+                <p class="acknowledged">{{ rule.trainingCompletedAt ? 'Training completed' : 'Acknowledged' }} {{ (rule.trainingCompletedAt || rule.acknowledgedAt) | date:'dd/MM/yyyy, h:mm a' }}@if (rule.quizScore !== null) { · Score {{ rule.quizScore }}% }@if (rule.certificationValidDays > 0) { · Certification submitted for verification }</p>
               } @else if (rule.readAt) {
                 <p class="acknowledged">Read {{ rule.readAt | date:'dd/MM/yyyy, h:mm a' }}</p>
               }
@@ -127,7 +127,7 @@ export class StaffRulesPage implements OnInit {
     this.saving.set(true); this.error.set(""); this.message.set("");
     try {
       const status = await this.staff.acknowledgeRule(rule.id, rule.quiz.map((question) => this.answers[question.id]));
-      this.message.set(status.acknowledgedAt ? "Acknowledgement recorded." : `Quiz score ${status.quizScore || 0}%. ${rule.quizPassScore}% is required; please retry.`);
+      this.message.set(status.acknowledgedAt ? (rule.isCourse ? "Training completion recorded." : "Acknowledgement recorded.") : `Quiz score ${status.quizScore || 0}%. ${rule.quizPassScore}% is required; please retry.`);
       await this.load();
     } catch { this.error.set(this.staff.error() || "Unable to acknowledge this document."); }
     finally { this.saving.set(false); }

@@ -402,6 +402,45 @@ pub struct TrainingAssignmentRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CourseProfileRequest {
+    pub skill_name: Option<String>,
+    pub skill_level: Option<i16>,
+    pub expected_minutes: Option<i32>,
+    pub certification_valid_days: Option<i32>,
+    pub version: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CourseAssignmentRequest {
+    pub staff_id: String,
+    pub course_id: String,
+    pub priority: Option<String>,
+    pub due_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRequirementRequest {
+    pub scope_type: String,
+    pub scope_id: String,
+    pub skill_name: String,
+    pub required_level: Option<i16>,
+    pub certification_required: Option<bool>,
+    pub active: Option<bool>,
+    pub version: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CertificationRenewalRequest {
+    pub version: i32,
+    pub expires_on: NaiveDate,
+    pub document_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CoachingGoalRequest {
     pub staff_id: String,
     pub goal_type: String,
@@ -2094,6 +2133,158 @@ pub async fn assign_training(
     .await
 }
 
+pub async fn lms_dashboard(db: &PgPool, tenant: &str, branch: &str) -> Result<Value, AppError> {
+    repository::lms_dashboard(db, tenant, branch)
+        .await
+        .map_err(internal("load learning and skills dashboard"))
+}
+
+pub async fn save_course_profile(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    document_id: &str,
+    actor: &str,
+    request: CourseProfileRequest,
+) -> Result<Value, AppError> {
+    let skill_name = clean(
+        request.skill_name.as_deref().unwrap_or(""),
+        200,
+        "skill name",
+    )?;
+    let skill_level = request.skill_level.unwrap_or(1);
+    let expected_minutes = request.expected_minutes.unwrap_or(0);
+    let certification_valid_days = request.certification_valid_days.unwrap_or(0);
+    if !(1..=5).contains(&skill_level) {
+        return Err(AppError::validation("skill level must be between 1 and 5"));
+    }
+    if !(0..=10_080).contains(&expected_minutes) {
+        return Err(AppError::validation(
+            "expected minutes must be between 0 and 10080",
+        ));
+    }
+    if !(0..=3_650).contains(&certification_valid_days)
+        || (certification_valid_days > 0 && skill_name.is_empty())
+    {
+        return Err(AppError::validation(
+            "certification validity requires a skill and must be between 0 and 3650 days",
+        ));
+    }
+    repository::save_course_profile(
+        db,
+        tenant,
+        branch,
+        document_id.trim(),
+        &skill_name,
+        skill_level,
+        expected_minutes,
+        certification_valid_days,
+        actor,
+        request.version,
+    )
+    .await
+    .map_err(internal("save course profile"))?
+    .ok_or_else(stale)
+}
+
+pub async fn assign_course(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: CourseAssignmentRequest,
+) -> Result<Value, AppError> {
+    let staff_id = required(&request.staff_id, 120, "staff")?;
+    let course_id = required(&request.course_id, 120, "course")?;
+    let priority = required_enum(
+        request.priority.as_deref().unwrap_or("medium"),
+        &["low", "medium", "high", "urgent"],
+        "priority",
+    )?;
+    repository::assign_course(
+        db,
+        tenant,
+        branch,
+        &staff_id,
+        &course_id,
+        &priority,
+        request.due_at,
+        actor,
+    )
+    .await
+    .map_err(internal("assign course"))?
+    .ok_or_else(|| AppError::conflict("course is invalid or already actively assigned"))
+}
+
+pub async fn save_skill_requirement(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: SkillRequirementRequest,
+) -> Result<Value, AppError> {
+    let scope_type = required_enum(
+        &request.scope_type,
+        &["role", "service"],
+        "requirement scope",
+    )?;
+    let scope_id = required(&request.scope_id, 120, "scope")?;
+    let skill_name = required(&request.skill_name, 200, "skill name")?;
+    let required_level = request.required_level.unwrap_or(1);
+    if !(1..=5).contains(&required_level) {
+        return Err(AppError::validation(
+            "required level must be between 1 and 5",
+        ));
+    }
+    repository::save_skill_requirement(
+        db,
+        tenant,
+        branch,
+        &scope_type,
+        &scope_id,
+        &skill_name,
+        required_level,
+        request.certification_required.unwrap_or(true),
+        request.active.unwrap_or(true),
+        actor,
+        request.version,
+    )
+    .await
+    .map_err(internal("save skill requirement"))?
+    .ok_or_else(|| AppError::conflict("requirement scope is invalid, duplicated or stale"))
+}
+
+pub async fn renew_certification(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    actor: &str,
+    request: CertificationRenewalRequest,
+) -> Result<Value, AppError> {
+    if request.expires_on <= Utc::now().date_naive() {
+        return Err(AppError::validation("renewal expiry must be in the future"));
+    }
+    let document_url = clean(
+        request.document_url.as_deref().unwrap_or(""),
+        2000,
+        "document URL",
+    )?;
+    repository::renew_certification(
+        db,
+        tenant,
+        branch,
+        id.trim(),
+        request.version,
+        request.expires_on,
+        &document_url,
+        actor,
+    )
+    .await
+    .map_err(internal("renew certification"))?
+    .ok_or_else(stale)
+}
+
 pub async fn create_staff_rule_document(
     db: &PgPool,
     tenant: &str,
@@ -2264,6 +2455,7 @@ pub async fn acknowledge_staff_rule(
     branch: &str,
     document_id: &str,
     staff_id: &str,
+    actor: &str,
     request: StaffRuleAcknowledgementRequest,
 ) -> Result<StaffRuleStatusRecord, AppError> {
     let document =
@@ -2282,6 +2474,7 @@ pub async fn acknowledge_staff_rule(
         &json!(answers),
         score,
         passed,
+        actor,
     )
     .await
     .map_err(internal("acknowledge staff rule"))

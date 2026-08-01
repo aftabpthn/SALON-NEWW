@@ -62,6 +62,7 @@ pub mod staff_advance;
 pub mod staff_advanced;
 pub mod staff_attendance;
 pub mod staff_enterprise;
+pub mod staff_hrms;
 pub mod staff_leave;
 pub mod staff_operations;
 pub mod staff_payroll;
@@ -110,6 +111,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(staff_enterprise::router())
         .merge(staff_attendance::router())
         .merge(staff_leave::router())
+        .merge(staff_hrms::router())
         .merge(staff_operations::router())
         .merge(staff_payroll::router())
         .merge(staff_schedule::router())
