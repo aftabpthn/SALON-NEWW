@@ -60,6 +60,7 @@ EC2 is allowed only when ECS/Fargate cost or operational constraints require it.
 ## 4. Files
 
 Use S3 for uploaded files, exports, invoices, reports, and future media assets.
+Migration source evidence uses the encrypted, access-point-scoped EFS volume because the current migration engine requires shared filesystem semantics across ECS replicas and task replacement.
 
 Required production rules:
 

@@ -339,10 +339,16 @@ async fn main() -> Result<()> {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
-                if services::operations_service::run_escalation_worker(&worker_state.db).await.is_err() {
+                if services::operations_service::run_escalation_worker(&worker_state.db)
+                    .await
+                    .is_err()
+                {
                     tracing::warn!("field job SLA escalation cycle failed");
                 }
-                if services::operations_service::process_marketplace_retries(&worker_state).await.is_err() {
+                if services::operations_service::process_marketplace_retries(&worker_state)
+                    .await
+                    .is_err()
+                {
                     tracing::warn!("marketplace webhook retry cycle failed");
                 }
             }

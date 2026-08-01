@@ -28,6 +28,11 @@ resource "random_password" "security_encryption" {
   special = false
 }
 
+resource "random_password" "migration_proof_signing" {
+  length  = 64
+  special = false
+}
+
 resource "random_password" "support_email_webhook" {
   length  = 64
   special = false
@@ -173,14 +178,15 @@ locals {
       random_password.redis.result,
       aws_elasticache_replication_group.redis.primary_endpoint_address,
     )
-    JWT_ACCESS_SECRET       = random_password.jwt_access.result
-    JWT_REFRESH_SECRET      = random_password.jwt_refresh.result
-    AI_SERVICE_TOKEN       = random_password.ai_service.result
-    SECURITY_ENCRYPTION_KEY = random_password.security_encryption.result
+    JWT_ACCESS_SECRET            = random_password.jwt_access.result
+    JWT_REFRESH_SECRET           = random_password.jwt_refresh.result
+    AI_SERVICE_TOKEN             = random_password.ai_service.result
+    SECURITY_ENCRYPTION_KEY      = random_password.security_encryption.result
+    MIGRATION_PROOF_SIGNING_KEY  = random_password.migration_proof_signing.result
     SUPPORT_EMAIL_WEBHOOK_SECRET = random_password.support_email_webhook.result
-    OPENAI_API_KEY         = var.openai_api_key
-    AWS_REGION             = var.aws_region
-    AWS_S3_BUCKET          = aws_cloudformation_stack.data_protection.outputs["FileBucketName"]
+    OPENAI_API_KEY               = var.openai_api_key
+    AWS_REGION                   = var.aws_region
+    AWS_S3_BUCKET                = aws_cloudformation_stack.data_protection.outputs["FileBucketName"]
     CORS_ALLOWED_ORIGINS = join(",", concat(
       ["https://${aws_cloudfront_distribution.app.domain_name}"],
       var.extra_cors_allowed_origins,

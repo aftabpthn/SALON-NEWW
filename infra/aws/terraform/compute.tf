@@ -17,6 +17,11 @@ resource "aws_cloudwatch_log_group" "ai" {
   retention_in_days = var.log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "clamav" {
+  name              = "/aurashine/${var.environment}/clamav"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_iam_role" "task_execution" {
   name = "${local.name}-task-execution"
 
@@ -102,6 +107,19 @@ resource "aws_iam_role_policy" "task_files" {
         ]
         Resource = [aws_cloudformation_stack.data_protection.outputs["EncryptionKeyArn"]]
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+        ]
+        Resource = [aws_efs_file_system.migration.arn]
+        Condition = {
+          StringEquals = {
+            "elasticfilesystem:AccessPointArn" = aws_efs_access_point.migration.arn
+          }
+        }
+      },
     ]
   })
 }
@@ -114,6 +132,7 @@ locals {
     "JWT_REFRESH_SECRET",
     "AI_SERVICE_TOKEN",
     "SECURITY_ENCRYPTION_KEY",
+    "MIGRATION_PROOF_SIGNING_KEY",
     "SUPPORT_EMAIL_WEBHOOK_SECRET",
     "AWS_REGION",
     "AWS_S3_BUCKET",
@@ -129,8 +148,8 @@ resource "aws_ecs_task_definition" "app" {
   family                   = "${local.name}-app"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = "2048"
+  memory                   = "8192"
   execution_role_arn       = aws_iam_role.task_execution.arn
   task_role_arn            = aws_iam_role.task.arn
 
@@ -139,12 +158,26 @@ resource "aws_ecs_task_definition" "app" {
     cpu_architecture        = "X86_64"
   }
 
+  volume {
+    name = "migration-files"
+
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.migration.id
+      transit_encryption = "ENABLED"
+
+      authorization_config {
+        access_point_id = aws_efs_access_point.migration.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
   container_definitions = jsonencode([
     {
       name         = "backend"
       image        = var.backend_image
       essential    = true
-      cpu          = 384
+      cpu          = 1024
       user         = "10001"
       portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
       environment = [
@@ -152,12 +185,22 @@ resource "aws_ecs_task_definition" "app" {
         { name = "APP_HOST", value = "0.0.0.0" },
         { name = "APP_PORT", value = "8080" },
         { name = "AI_SERVICE_URL", value = "http://127.0.0.1:8081" },
+        { name = "MIGRATION_CLAMD_ADDRESS", value = "127.0.0.1:3310" },
+        { name = "MIGRATION_FILE_STORAGE_ROOT", value = "/var/lib/aurashine/migration-files" },
         { name = "RUST_LOG", value = "info" },
       ]
       secrets = local.backend_secrets
+      mountPoints = [{
+        sourceVolume  = "migration-files"
+        containerPath = "/var/lib/aurashine/migration-files"
+        readOnly      = false
+      }]
       dependsOn = [{
         containerName = "ai"
         condition     = "START"
+        }, {
+        containerName = "clamav"
+        condition     = "HEALTHY"
       }]
       linuxParameters = { initProcessEnabled = true }
       logConfiguration = {
@@ -173,7 +216,7 @@ resource "aws_ecs_task_definition" "app" {
       name      = "ai"
       image     = var.ai_image
       essential = true
-      cpu       = 128
+      cpu       = 256
       user      = "10001"
       portMappings = [{
         containerPort = 8081
@@ -194,6 +237,34 @@ resource "aws_ecs_task_definition" "app" {
           awslogs-group         = aws_cloudwatch_log_group.ai.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ai"
+        }
+      }
+    },
+    {
+      name              = "clamav"
+      image             = var.clamav_image
+      essential         = true
+      cpu               = 768
+      memoryReservation = 4096
+      portMappings = [{
+        containerPort = 3310
+        hostPort      = 3310
+        protocol      = "tcp"
+      }]
+      healthCheck = {
+        command     = ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+        interval    = 30
+        timeout     = 10
+        retries     = 10
+        startPeriod = 180
+      }
+      linuxParameters = { initProcessEnabled = true }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.clamav.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "clamav"
         }
       }
     },
@@ -259,7 +330,7 @@ resource "aws_ecs_service" "app" {
   launch_type     = "FARGATE"
 
   health_check_grace_period_seconds = 120
-  enable_execute_command             = false
+  enable_execute_command            = false
 
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200

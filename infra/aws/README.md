@@ -8,6 +8,8 @@ This directory contains the repeatable AWS deployment for isolated `dev`, `stagi
 - AWS WAF managed rules and an API per-IP rate limit.
 - A public ALB origin restricted to CloudFront origin addresses and a generated origin header.
 - ECS/Fargate rolling service with the Rust API and a private AI sidecar.
+- Private ClamAV sidecar plus encrypted EFS storage for durable migration evidence across task replacement and replicas.
+- Generated Secrets Manager HMAC key for tamper-detectable migration proof packs.
 - A separate ECS migration task that must succeed before each service update.
 - Private RDS PostgreSQL and encrypted Redis OSS replication group.
 - Secrets Manager runtime configuration and least-privilege ECS task roles.
