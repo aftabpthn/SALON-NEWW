@@ -91,9 +91,10 @@ describe("staff presentation contracts", () => {
   });
 
   it("loads roster through its self-scoped contract", async () => {
-    const roster = [{ id: "schedule-1", date: "2026-07-31", startTime: "11:00", endTime: "21:00", type: "shift", status: "working", version: 1 }];
-    const service = { roster: vi.fn().mockResolvedValue(roster), error: () => "" };
+    const service = { roster: vi.fn(), error: () => "" };
     const page = new StaffRosterPage(service as never);
+    const roster = [{ id: "schedule-1", date: page.windowStart(), startTime: "11:00", endTime: "21:00", type: "shift", status: "working", version: 1 }];
+    service.roster.mockResolvedValue(roster);
 
     await page.load();
 
@@ -103,13 +104,15 @@ describe("staff presentation contracts", () => {
   });
 
   it("keeps self-scoped calendar available when optional appointments fail", async () => {
-    const calendar = [{ id: "schedule-1", date: "2026-07-31", startTime: "11:00", endTime: "21:00", type: "shift", status: "working", version: 1 }];
-    const page = new StaffCalendarPage({
-      calendar: vi.fn().mockResolvedValue(calendar),
+    const service = {
+      calendar: vi.fn(),
       enterpriseOs: vi.fn().mockRejectedValue(new Error("appointments unavailable")),
       hasPermission: vi.fn().mockReturnValue(true),
       error: () => ""
-    } as never);
+    };
+    const page = new StaffCalendarPage(service as never);
+    const calendar = [{ id: "schedule-1", date: page.selectedDate(), startTime: "11:00", endTime: "21:00", type: "shift", status: "working", version: 1 }];
+    service.calendar.mockResolvedValue(calendar);
 
     await page.load();
     await page.loadTimeline();
