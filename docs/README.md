@@ -20,6 +20,7 @@
 - [SECURITY_HARDENING_ROADMAP.md](./SECURITY_HARDENING_ROADMAP.md) — Rust-specific security gap tracker.
 - [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — compact UI tokens referenced by UI/UX guidelines.
 - [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) — current Rust inventory, audit, supplier, backbar, laundry and forecast contracts.
+- [INVENTORY_ZENOTI_PARITY_REGISTER.md](./INVENTORY_ZENOTI_PARITY_REGISTER.md) — permanent Zenoti-to-AuraShine inventory workflow and verification register.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
 - [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.
 

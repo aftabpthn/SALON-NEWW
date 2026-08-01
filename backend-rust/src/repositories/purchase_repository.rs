@@ -17,6 +17,7 @@ pub struct PurchaseReceipt {
     pub delivery_reference: String,
     pub shipping_paise: i64,
     pub handling_paise: i64,
+    pub round_off_paise: i64,
     pub taxable_paise: i64,
     pub cgst_paise: i64,
     pub sgst_paise: i64,
@@ -35,6 +36,8 @@ pub struct PurchaseReceiptLine {
     pub units_per_package: i32,
     pub stock_quantity: i32,
     pub quantity: i32,
+    pub retail_quantity: i32,
+    pub consumable_quantity: i32,
     pub free_quantity: i32,
     pub delivered_quantity: i32,
     pub ordered_quantity: Option<i32>,
@@ -71,6 +74,17 @@ pub struct LockedInventoryItem {
     pub package_unit: String,
     pub stock_unit: String,
     pub units_per_package: i32,
+    pub product_usage: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct InventoryReceiptPolicy {
+    pub partial_delivery_policy: String,
+    pub excess_receiving_policy: String,
+    pub price_difference_prompt: bool,
+    pub price_difference_threshold_bps: i32,
+    pub financial_lock_date: Option<NaiveDate>,
+    pub edit_lock_days: i32,
 }
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
@@ -125,6 +139,10 @@ pub struct PurchaseOrderLineRecord {
     pub units_per_package: i32,
     pub quantity: i32,
     pub received_quantity: i32,
+    pub retail_quantity: i32,
+    pub consumable_quantity: i32,
+    pub retail_received_quantity: i32,
+    pub consumable_received_quantity: i32,
     pub unit_cost_paise: i64,
     pub discount_bps: i32,
     pub discount_paise: i64,
@@ -196,9 +214,59 @@ pub struct ReceiptLineForReturn {
 pub struct LockedOrderLine {
     pub quantity: i32,
     pub received_quantity: i32,
+    pub retail_quantity: i32,
+    pub consumable_quantity: i32,
+    pub retail_received_quantity: i32,
+    pub consumable_received_quantity: i32,
+    pub unit_cost_paise: i64,
     pub package_unit: String,
     pub stock_unit: String,
     pub units_per_package: i32,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchasePriceUpdateRequest {
+    pub id: String,
+    pub purchase_receipt_id: String,
+    pub grr_number: String,
+    pub supplier_name: String,
+    pub inventory_item_id: String,
+    pub product_name: String,
+    pub current_unit_cost_paise: Option<i64>,
+    pub requested_unit_cost_paise: i64,
+    pub requested_discount_bps: i32,
+    pub requested_gst_percent: i32,
+    pub status: String,
+    pub requested_by: String,
+    pub requested_at: DateTime<Utc>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub review_note: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct PurchaseImportProduct {
+    pub supplier_id: String,
+    pub inventory_item_id: String,
+    pub product_usage: String,
+    pub unit_cost_paise: Option<i64>,
+    pub discount_bps: Option<i32>,
+    pub gst_percent: i32,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseBarcodeLabel {
+    pub product_name: String,
+    pub sku: String,
+    pub product_usage: String,
+    pub barcode: String,
+    pub batch_number: String,
+    pub expiry_date: Option<NaiveDate>,
+    pub retail_quantity: i32,
+    pub consumable_quantity: i32,
+    pub free_quantity: i32,
 }
 
 pub async fn list(
@@ -209,7 +277,7 @@ pub async fn list(
     offset: Option<i64>,
 ) -> Result<Vec<PurchaseReceipt>, sqlx::Error> {
     let query = apply_purchase_list_pagination(
-        "SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND rolled_back_at IS NULL ORDER BY received_date DESC, created_at DESC"
+        "SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,round_off_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND rolled_back_at IS NULL ORDER BY received_date DESC, created_at DESC"
             .to_string(),
         limit,
         offset,
@@ -227,7 +295,7 @@ pub async fn get(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<PurchaseReceipt>, sqlx::Error> {
-    sqlx::query_as("SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND rolled_back_at IS NULL")
+    sqlx::query_as("SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,round_off_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND rolled_back_at IS NULL")
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
 }
 
@@ -263,7 +331,7 @@ pub async fn lines(
     branch_id: &str,
     receipt_id: &str,
 ) -> Result<Vec<PurchaseReceiptLine>, sqlx::Error> {
-    sqlx::query_as("SELECT line.id,line.inventory_item_id,line.package_unit,line.stock_unit,line.units_per_package,line.stock_quantity,line.quantity,line.free_quantity,line.delivered_quantity,line.ordered_quantity,line.short_quantity,line.excess_quantity,line.damaged_quantity,line.rejected_quantity,COALESCE(quarantine.status,'') AS quarantine_status,line.variance_reason,line.gross_unit_cost_paise,line.unit_cost_paise,line.landed_cost_paise,line.landed_unit_cost_paise,line.stock_unit_cost_paise,line.discount_bps,line.discount_paise,line.gst_percent,line.taxable_paise,line.cgst_paise,line.sgst_paise,line.igst_paise,line.total_paise,line.batch_number,line.batch_barcode,line.expiry_date FROM purchase_receipt_lines line JOIN purchase_receipts receipt ON receipt.id=line.purchase_receipt_id AND receipt.tenant_id=line.tenant_id AND receipt.branch_id=line.branch_id LEFT JOIN inventory_receiving_quarantine quarantine ON quarantine.tenant_id=line.tenant_id AND quarantine.branch_id=line.branch_id AND quarantine.purchase_receipt_line_id=line.id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.purchase_receipt_id=$3 AND receipt.rolled_back_at IS NULL ORDER BY line.created_at, line.id")
+    sqlx::query_as("SELECT line.id,line.inventory_item_id,line.package_unit,line.stock_unit,line.units_per_package,line.stock_quantity,line.quantity,line.retail_quantity,line.consumable_quantity,line.free_quantity,line.delivered_quantity,line.ordered_quantity,line.short_quantity,line.excess_quantity,line.damaged_quantity,line.rejected_quantity,COALESCE(quarantine.status,'') AS quarantine_status,line.variance_reason,line.gross_unit_cost_paise,line.unit_cost_paise,line.landed_cost_paise,line.landed_unit_cost_paise,line.stock_unit_cost_paise,line.discount_bps,line.discount_paise,line.gst_percent,line.taxable_paise,line.cgst_paise,line.sgst_paise,line.igst_paise,line.total_paise,line.batch_number,line.batch_barcode,line.expiry_date FROM purchase_receipt_lines line JOIN purchase_receipts receipt ON receipt.id=line.purchase_receipt_id AND receipt.tenant_id=line.tenant_id AND receipt.branch_id=line.branch_id LEFT JOIN inventory_receiving_quarantine quarantine ON quarantine.tenant_id=line.tenant_id AND quarantine.branch_id=line.branch_id AND quarantine.purchase_receipt_line_id=line.id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.purchase_receipt_id=$3 AND receipt.rolled_back_at IS NULL ORDER BY line.created_at, line.id")
         .bind(tenant_id).bind(branch_id).bind(receipt_id).fetch_all(db).await
 }
 
@@ -273,7 +341,7 @@ pub async fn by_idempotency(
     branch_id: &str,
     key: &str,
 ) -> Result<Option<PurchaseReceipt>, sqlx::Error> {
-    sqlx::query_as("SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3 AND rolled_back_at IS NULL")
+    sqlx::query_as("SELECT id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,round_off_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at FROM purchase_receipts WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3 AND rolled_back_at IS NULL")
         .bind(tenant_id).bind(branch_id).bind(key).fetch_optional(&mut **tx).await
 }
 
@@ -283,8 +351,157 @@ pub async fn lock_inventory_item(
     branch_id: &str,
     item_id: &str,
 ) -> Result<Option<LockedInventoryItem>, sqlx::Error> {
-    sqlx::query_as("SELECT stock_quantity,unit_cost_paise,gst_percent,batch_tracked,package_unit,unit AS stock_unit,units_per_package FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
+    sqlx::query_as("SELECT stock_quantity,unit_cost_paise,gst_percent,batch_tracked,package_unit,unit AS stock_unit,units_per_package,product_usage FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE AND center_available=TRUE FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(item_id).fetch_optional(&mut **tx).await
+}
+
+pub async fn inventory_receipt_policy(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<InventoryReceiptPolicy, sqlx::Error> {
+    sqlx::query_as("SELECT COALESCE((SELECT partial_delivery_policy FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'allow') AS partial_delivery_policy,COALESCE((SELECT excess_receiving_policy FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'permission_required') AS excess_receiving_policy,COALESCE((SELECT price_difference_prompt FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE) AS price_difference_prompt,COALESCE((SELECT price_difference_threshold_bps FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),0) AS price_difference_threshold_bps,(SELECT financial_lock_date FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2) AS financial_lock_date,COALESCE((SELECT edit_lock_days FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),90) AS edit_lock_days")
+        .bind(tenant_id).bind(branch_id).fetch_one(&mut **tx).await
+}
+
+pub async fn supplier_item_available(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    supplier_id: &str,
+    item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM supplier_inventory_terms WHERE tenant_id=$1 AND branch_id=$2 AND supplier_id=$3 AND inventory_item_id=$4 AND active=TRUE AND center_available=TRUE)")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(item_id).fetch_one(&mut **tx).await
+}
+
+pub async fn active_supplier_price(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    supplier_id: &str,
+    item_id: &str,
+    on_date: NaiveDate,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar("SELECT unit_cost_paise FROM supplier_price_lists WHERE tenant_id=$1 AND branch_id=$2 AND supplier_id=$3 AND inventory_item_id=$4 AND effective_from<=$5 AND (effective_to IS NULL OR effective_to>=$5) ORDER BY effective_from DESC,created_at DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(item_id).bind(on_date)
+        .fetch_optional(&mut **tx).await
+}
+
+pub async fn create_price_update_request(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    receipt_id: &str,
+    receipt_line_id: &str,
+    supplier_id: &str,
+    item_id: &str,
+    current_cost: Option<i64>,
+    requested_cost: i64,
+    discount_bps: i32,
+    gst_percent: i32,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO purchase_price_update_requests(tenant_id,branch_id,purchase_receipt_id,purchase_receipt_line_id,supplier_id,inventory_item_id,current_unit_cost_paise,requested_unit_cost_paise,requested_discount_bps,requested_gst_percent,requested_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(receipt_line_id).bind(supplier_id)
+        .bind(item_id).bind(current_cost).bind(requested_cost).bind(discount_bps).bind(gst_percent).bind(actor)
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn mark_excess_approved(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    receipt_id: &str,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE purchase_receipts SET excess_approved_by=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(actor).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn list_price_update_requests(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    status: Option<&str>,
+) -> Result<Vec<PurchasePriceUpdateRequest>, sqlx::Error> {
+    sqlx::query_as("SELECT request.id,request.purchase_receipt_id,receipt.grr_number,supplier.name AS supplier_name,request.inventory_item_id,item.name AS product_name,request.current_unit_cost_paise,request.requested_unit_cost_paise,request.requested_discount_bps,request.requested_gst_percent,request.status,request.requested_by,request.requested_at,request.reviewed_by,request.reviewed_at,request.review_note FROM purchase_price_update_requests request JOIN purchase_receipts receipt ON receipt.id=request.purchase_receipt_id AND receipt.tenant_id=request.tenant_id AND receipt.branch_id=request.branch_id JOIN suppliers supplier ON supplier.id=request.supplier_id JOIN inventory_items item ON item.id=request.inventory_item_id WHERE request.tenant_id=$1 AND request.branch_id=$2 AND ($3::TEXT IS NULL OR request.status=$3) ORDER BY request.requested_at DESC LIMIT 500")
+        .bind(tenant_id).bind(branch_id).bind(status).fetch_all(db).await
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct LockedPriceUpdateRequest {
+    pub supplier_id: String,
+    pub inventory_item_id: String,
+    pub requested_unit_cost_paise: i64,
+    pub requested_discount_bps: i32,
+    pub requested_gst_percent: i32,
+    pub requested_by: String,
+}
+
+pub async fn lock_price_update_request(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<LockedPriceUpdateRequest>, sqlx::Error> {
+    sqlx::query_as("SELECT supplier_id,inventory_item_id,requested_unit_cost_paise,requested_discount_bps,requested_gst_percent,requested_by FROM purchase_price_update_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending' FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
+}
+
+pub async fn apply_approved_supplier_price(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    supplier_id: &str,
+    item_id: &str,
+    cost: i64,
+    discount_bps: i32,
+    gst_percent: i32,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE supplier_price_lists SET effective_to=CURRENT_DATE-1 WHERE tenant_id=$1 AND branch_id=$2 AND supplier_id=$3 AND inventory_item_id=$4 AND effective_from<CURRENT_DATE AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(item_id).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO supplier_price_lists(tenant_id,branch_id,supplier_id,inventory_item_id,unit_cost_paise,discount_bps,gst_percent,effective_from,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE,$8) ON CONFLICT(tenant_id,branch_id,supplier_id,inventory_item_id,effective_from) DO UPDATE SET unit_cost_paise=EXCLUDED.unit_cost_paise,discount_bps=EXCLUDED.discount_bps,gst_percent=EXCLUDED.gst_percent,effective_to=NULL,created_by=EXCLUDED.created_by")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(item_id).bind(cost).bind(discount_bps).bind(gst_percent).bind(actor).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn finish_price_update_request(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    status: &str,
+    actor: &str,
+    note: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE purchase_price_update_requests SET status=$4,reviewed_by=$5,reviewed_at=NOW(),review_note=$6 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending'")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(status).bind(actor).bind(note)
+        .execute(&mut **tx).await?.rows_affected()==1)
+}
+
+pub async fn import_product(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    supplier_code: &str,
+    product_code: &str,
+) -> Result<Option<PurchaseImportProduct>, sqlx::Error> {
+    sqlx::query_as("SELECT supplier.id AS supplier_id,item.id AS inventory_item_id,item.product_usage,price.unit_cost_paise,price.discount_bps,COALESCE(price.gst_percent,item.gst_percent) AS gst_percent FROM suppliers supplier JOIN inventory_items item ON item.tenant_id=supplier.tenant_id AND item.branch_id=supplier.branch_id AND item.active=TRUE AND item.center_available=TRUE JOIN supplier_inventory_terms terms ON terms.tenant_id=item.tenant_id AND terms.branch_id=item.branch_id AND terms.supplier_id=supplier.id AND terms.inventory_item_id=item.id AND terms.active=TRUE AND terms.center_available=TRUE LEFT JOIN LATERAL (SELECT unit_cost_paise,discount_bps,gst_percent FROM supplier_price_lists price WHERE price.tenant_id=item.tenant_id AND price.branch_id=item.branch_id AND price.supplier_id=supplier.id AND price.inventory_item_id=item.id AND price.effective_from<=CURRENT_DATE AND (price.effective_to IS NULL OR price.effective_to>=CURRENT_DATE) ORDER BY price.effective_from DESC LIMIT 1) price ON TRUE WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2 AND supplier.active=TRUE AND UPPER(supplier.code)=UPPER($3) AND (UPPER(item.sku)=UPPER($4) OR EXISTS(SELECT 1 FROM inventory_item_barcodes barcode WHERE barcode.tenant_id=item.tenant_id AND barcode.branch_id=item.branch_id AND barcode.inventory_item_id=item.id AND barcode.active=TRUE AND UPPER(barcode.barcode)=UPPER($4))) LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(supplier_code).bind(product_code).fetch_optional(db).await
+}
+
+pub async fn barcode_labels(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    receipt_id: &str,
+) -> Result<Vec<PurchaseBarcodeLabel>, sqlx::Error> {
+    sqlx::query_as("SELECT item.name AS product_name,item.sku,item.product_usage,COALESCE(NULLIF(line.batch_barcode,''),NULLIF(primary_barcode.barcode,''),NULLIF(item.barcode,''),'') AS barcode,line.batch_number,line.expiry_date,line.retail_quantity,line.consumable_quantity,line.free_quantity FROM purchase_receipt_lines line JOIN purchase_receipts receipt ON receipt.id=line.purchase_receipt_id AND receipt.tenant_id=line.tenant_id AND receipt.branch_id=line.branch_id JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id LEFT JOIN LATERAL (SELECT barcode FROM inventory_item_barcodes WHERE tenant_id=item.tenant_id AND branch_id=item.branch_id AND inventory_item_id=item.id AND active=TRUE ORDER BY is_primary DESC,created_at LIMIT 1) primary_barcode ON TRUE WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.purchase_receipt_id=$3 AND receipt.rolled_back_at IS NULL ORDER BY item.name,line.id")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).fetch_all(db).await
 }
 
 pub async fn buyer_gstin(
@@ -337,11 +554,12 @@ pub async fn create_receipt(
     igst_paise: i64,
     shipping_paise: i64,
     handling_paise: i64,
+    round_off_paise: i64,
     actor_user_id: &str,
     idempotency_key: &str,
 ) -> Result<PurchaseReceipt, sqlx::Error> {
-    sqlx::query_as("INSERT INTO purchase_receipts (tenant_id,branch_id,grr_number,supplier_name,supplier_gstin,supplier_state_code,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,supplier_id,purchase_order_id,due_date,taxable_paise,cgst_paise,sgst_paise,igst_paise,shipping_paise,handling_paise,total_paise,actor_user_id,idempotency_key) VALUES ($1,$2,'GRR-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$14+$15+$16+$17+$18+$19,$20,$21) RETURNING id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at")
-        .bind(tenant_id).bind(branch_id).bind(supplier_name).bind(supplier_gstin).bind(supplier_state_code).bind(supplier_invoice_number).bind(supplier_invoice_date).bind(received_date).bind(challan_number).bind(delivery_reference).bind(supplier_id).bind(purchase_order_id).bind(due_date).bind(taxable_paise).bind(cgst_paise).bind(sgst_paise).bind(igst_paise).bind(shipping_paise).bind(handling_paise).bind(actor_user_id).bind(idempotency_key).fetch_one(&mut **tx).await
+    sqlx::query_as("INSERT INTO purchase_receipts (tenant_id,branch_id,grr_number,supplier_name,supplier_gstin,supplier_state_code,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,supplier_id,purchase_order_id,due_date,taxable_paise,cgst_paise,sgst_paise,igst_paise,shipping_paise,handling_paise,round_off_paise,total_paise,actor_user_id,idempotency_key) VALUES ($1,$2,'GRR-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$14+$15+$16+$17+$18+$19+$20,$21,$22) RETURNING id,grr_number,supplier_name,supplier_gstin,supplier_invoice_number,supplier_invoice_date,received_date,challan_number,delivery_reference,shipping_paise,handling_paise,round_off_paise,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,created_at")
+        .bind(tenant_id).bind(branch_id).bind(supplier_name).bind(supplier_gstin).bind(supplier_state_code).bind(supplier_invoice_number).bind(supplier_invoice_date).bind(received_date).bind(challan_number).bind(delivery_reference).bind(supplier_id).bind(purchase_order_id).bind(due_date).bind(taxable_paise).bind(cgst_paise).bind(sgst_paise).bind(igst_paise).bind(shipping_paise).bind(handling_paise).bind(round_off_paise).bind(actor_user_id).bind(idempotency_key).fetch_one(&mut **tx).await
 }
 
 pub async fn record_backdated_operational_approval(
@@ -376,6 +594,8 @@ pub async fn create_line(
     stock_quantity: i32,
     stock_unit_cost_paise: i64,
     quantity: i32,
+    retail_quantity: i32,
+    consumable_quantity: i32,
     delivered_quantity: i32,
     ordered_quantity: Option<i32>,
     short_quantity: i32,
@@ -399,8 +619,8 @@ pub async fn create_line(
     expiry_date: Option<NaiveDate>,
     free_quantity: i32,
 ) -> Result<PurchaseReceiptLine, sqlx::Error> {
-    sqlx::query_as("INSERT INTO purchase_receipt_lines (tenant_id,branch_id,purchase_receipt_id,inventory_item_id,quantity,delivered_quantity,ordered_quantity,short_quantity,excess_quantity,damaged_quantity,rejected_quantity,variance_reason,gross_unit_cost_paise,unit_cost_paise,landed_cost_paise,landed_unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,batch_number,batch_barcode,expiry_date,package_unit,stock_unit,units_per_package,stock_quantity,stock_unit_cost_paise,free_quantity) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$20+$21+$22+$23,$24,$25,$26,$27,$28,$29,$30,$31,$32) RETURNING id,inventory_item_id,package_unit,stock_unit,units_per_package,stock_quantity,quantity,free_quantity,delivered_quantity,ordered_quantity,short_quantity,excess_quantity,damaged_quantity,rejected_quantity,'' AS quarantine_status,variance_reason,gross_unit_cost_paise,unit_cost_paise,landed_cost_paise,landed_unit_cost_paise,stock_unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,batch_number,batch_barcode,expiry_date")
-        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(item_id).bind(quantity).bind(delivered_quantity).bind(ordered_quantity).bind(short_quantity).bind(excess_quantity).bind(damaged_quantity).bind(rejected_quantity).bind(variance_reason).bind(gross_unit_cost_paise).bind(unit_cost_paise).bind(landed_cost_paise).bind(landed_unit_cost_paise).bind(discount_bps).bind(discount_paise).bind(gst_percent).bind(taxable_paise).bind(cgst_paise).bind(sgst_paise).bind(igst_paise).bind(batch_number).bind(batch_barcode).bind(expiry_date).bind(package_unit).bind(stock_unit).bind(units_per_package).bind(stock_quantity).bind(stock_unit_cost_paise).bind(free_quantity).fetch_one(&mut **tx).await
+    sqlx::query_as("INSERT INTO purchase_receipt_lines (tenant_id,branch_id,purchase_receipt_id,inventory_item_id,quantity,retail_quantity,consumable_quantity,delivered_quantity,ordered_quantity,short_quantity,excess_quantity,damaged_quantity,rejected_quantity,variance_reason,gross_unit_cost_paise,unit_cost_paise,landed_cost_paise,landed_unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,batch_number,batch_barcode,expiry_date,package_unit,stock_unit,units_per_package,stock_quantity,stock_unit_cost_paise,free_quantity) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$22+$23+$24+$25,$26,$27,$28,$29,$30,$31,$32,$33,$34) RETURNING id,inventory_item_id,package_unit,stock_unit,units_per_package,stock_quantity,quantity,retail_quantity,consumable_quantity,free_quantity,delivered_quantity,ordered_quantity,short_quantity,excess_quantity,damaged_quantity,rejected_quantity,'' AS quarantine_status,variance_reason,gross_unit_cost_paise,unit_cost_paise,landed_cost_paise,landed_unit_cost_paise,stock_unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,cgst_paise,sgst_paise,igst_paise,total_paise,batch_number,batch_barcode,expiry_date")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(item_id).bind(quantity).bind(retail_quantity).bind(consumable_quantity).bind(delivered_quantity).bind(ordered_quantity).bind(short_quantity).bind(excess_quantity).bind(damaged_quantity).bind(rejected_quantity).bind(variance_reason).bind(gross_unit_cost_paise).bind(unit_cost_paise).bind(landed_cost_paise).bind(landed_unit_cost_paise).bind(discount_bps).bind(discount_paise).bind(gst_percent).bind(taxable_paise).bind(cgst_paise).bind(sgst_paise).bind(igst_paise).bind(batch_number).bind(batch_barcode).bind(expiry_date).bind(package_unit).bind(stock_unit).bind(units_per_package).bind(stock_quantity).bind(stock_unit_cost_paise).bind(free_quantity).fetch_one(&mut **tx).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -559,6 +779,8 @@ pub struct SupplierPaymentMetricRecord {
     pub paid_paise: i64,
     pub unpaid_paise: i64,
     pub extra_paid_paise: i64,
+    pub pending_bill_count: i64,
+    pub pending_bills_paise: i64,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -567,7 +789,51 @@ pub struct SupplierPaymentSummary {
     pub paid_paise: i64,
     pub unpaid_paise: i64,
     pub extra_paid_paise: i64,
+    pub pending_bills_paise: i64,
     pub suppliers: Vec<SupplierPaymentMetricRecord>,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupplierLedgerEntryRecord {
+    pub id: String,
+    pub entry_type: String,
+    pub entry_date: NaiveDate,
+    pub particulars: String,
+    pub reference: String,
+    pub debit_paise: i64,
+    pub credit_paise: i64,
+    pub balance_paise: i64,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingSupplierBillRecord {
+    pub id: String,
+    pub bill_number: String,
+    pub bill_date: Option<NaiveDate>,
+    pub total_paise: i64,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupplierLedgerSummary {
+    pub bills_paise: i64,
+    pub paid_paise: i64,
+    pub outstanding_paise: i64,
+    pub advance_paise: i64,
+    pub pending_bills_paise: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SupplierLedgerResponse {
+    pub supplier: SupplierRecord,
+    pub summary: SupplierLedgerSummary,
+    pub payables: Vec<PayableRecord>,
+    pub pending_bills: Vec<PendingSupplierBillRecord>,
+    pub entries: Vec<SupplierLedgerEntryRecord>,
 }
 
 pub async fn get_supplier(
@@ -616,7 +882,7 @@ pub async fn order_lines(
     branch_id: &str,
     order_id: &str,
 ) -> Result<Vec<PurchaseOrderLineRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,line.package_unit,line.stock_unit,line.units_per_package,line.quantity,line.received_quantity,line.unit_cost_paise,line.discount_bps,line.discount_paise,line.gst_percent,line.taxable_paise,line.tax_paise,line.total_paise FROM purchase_order_lines line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.purchase_order_id=$3 ORDER BY line.id")
+    sqlx::query_as("SELECT line.id,line.inventory_item_id,item.name AS item_name,line.package_unit,line.stock_unit,line.units_per_package,line.quantity,line.received_quantity,line.retail_quantity,line.consumable_quantity,line.retail_received_quantity,line.consumable_received_quantity,line.unit_cost_paise,line.discount_bps,line.discount_paise,line.gst_percent,line.taxable_paise,line.tax_paise,line.total_paise FROM purchase_order_lines line JOIN inventory_items item ON item.id=line.inventory_item_id AND item.tenant_id=line.tenant_id AND item.branch_id=line.branch_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.purchase_order_id=$3 ORDER BY line.id")
         .bind(tenant_id).bind(branch_id).bind(order_id).fetch_all(db).await
 }
 
@@ -644,8 +910,11 @@ pub async fn create_order_line(
     tenant_id: &str,
     branch_id: &str,
     order_id: &str,
+    supplier_id: &str,
     item_id: &str,
     quantity: i32,
+    retail_quantity: i32,
+    consumable_quantity: i32,
     unit_cost_paise: i64,
     discount_bps: i32,
     discount_paise: i64,
@@ -653,8 +922,8 @@ pub async fn create_order_line(
     taxable_paise: i64,
     tax_paise: i64,
 ) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query("INSERT INTO purchase_order_lines(tenant_id,branch_id,purchase_order_id,inventory_item_id,quantity,unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,tax_paise,total_paise,package_unit,stock_unit,units_per_package) SELECT $1,$2,$3,item.id,$5,$6,$7,$8,$9,$10,$11,$10+$11,item.package_unit,item.unit,item.units_per_package FROM inventory_items item WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$4 AND item.active=TRUE")
-        .bind(tenant_id).bind(branch_id).bind(order_id).bind(item_id).bind(quantity).bind(unit_cost_paise).bind(discount_bps).bind(discount_paise).bind(gst_percent).bind(taxable_paise).bind(tax_paise).execute(&mut **tx).await?.rows_affected() == 1)
+    Ok(sqlx::query("INSERT INTO purchase_order_lines(tenant_id,branch_id,purchase_order_id,inventory_item_id,quantity,retail_quantity,consumable_quantity,unit_cost_paise,discount_bps,discount_paise,gst_percent,taxable_paise,tax_paise,total_paise,package_unit,stock_unit,units_per_package) SELECT $1,$2,$3,item.id,$6,CASE WHEN $7+$8=0 THEN CASE WHEN item.product_usage='consumable' THEN 0 ELSE $6 END ELSE $7 END,CASE WHEN $7+$8=0 THEN CASE WHEN item.product_usage='consumable' THEN $6 ELSE 0 END ELSE $8 END,$9,$10,$11,$12,$13,$14,$13+$14,item.package_unit,item.unit,item.units_per_package FROM inventory_items item JOIN supplier_inventory_terms terms ON terms.tenant_id=item.tenant_id AND terms.branch_id=item.branch_id AND terms.inventory_item_id=item.id AND terms.supplier_id=$4 AND terms.active=TRUE AND terms.center_available=TRUE WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$5 AND item.active=TRUE AND item.center_available=TRUE AND ($7+$8=0 OR $7+$8=$6) AND ($7=0 OR item.product_usage IN ('retail','dual_use')) AND ($8=0 OR item.product_usage IN ('consumable','dual_use'))")
+        .bind(tenant_id).bind(branch_id).bind(order_id).bind(supplier_id).bind(item_id).bind(quantity).bind(retail_quantity).bind(consumable_quantity).bind(unit_cost_paise).bind(discount_bps).bind(discount_paise).bind(gst_percent).bind(taxable_paise).bind(tax_paise).execute(&mut **tx).await?.rows_affected() == 1)
 }
 
 pub async fn transition_order(
@@ -687,10 +956,11 @@ pub async fn apply_order_receipt(
     branch_id: &str,
     order_id: &str,
     item_id: &str,
-    quantity: i32,
+    retail_quantity: i32,
+    consumable_quantity: i32,
 ) -> Result<bool, sqlx::Error> {
-    let updated = sqlx::query("UPDATE purchase_order_lines SET received_quantity=received_quantity+$5 WHERE tenant_id=$1 AND branch_id=$2 AND purchase_order_id=$3 AND inventory_item_id=$4 AND received_quantity+$5<=quantity")
-        .bind(tenant_id).bind(branch_id).bind(order_id).bind(item_id).bind(quantity).execute(&mut **tx).await?.rows_affected()==1;
+    let updated = sqlx::query("UPDATE purchase_order_lines SET retail_received_quantity=retail_received_quantity+$5,consumable_received_quantity=consumable_received_quantity+$6,received_quantity=received_quantity+$5+$6 WHERE tenant_id=$1 AND branch_id=$2 AND purchase_order_id=$3 AND inventory_item_id=$4 AND retail_received_quantity+$5<=retail_quantity AND consumable_received_quantity+$6<=consumable_quantity")
+        .bind(tenant_id).bind(branch_id).bind(order_id).bind(item_id).bind(retail_quantity).bind(consumable_quantity).execute(&mut **tx).await?.rows_affected()==1;
     Ok(updated)
 }
 
@@ -701,7 +971,7 @@ pub async fn lock_order_line_for_receipt(
     order_id: &str,
     item_id: &str,
 ) -> Result<Option<LockedOrderLine>, sqlx::Error> {
-    sqlx::query_as("SELECT quantity,received_quantity,package_unit,stock_unit,units_per_package FROM purchase_order_lines WHERE tenant_id=$1 AND branch_id=$2 AND purchase_order_id=$3 AND inventory_item_id=$4 FOR UPDATE")
+    sqlx::query_as("SELECT quantity,received_quantity,retail_quantity,consumable_quantity,retail_received_quantity,consumable_received_quantity,unit_cost_paise,package_unit,stock_unit,units_per_package FROM purchase_order_lines WHERE tenant_id=$1 AND branch_id=$2 AND purchase_order_id=$3 AND inventory_item_id=$4 FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(order_id).bind(item_id).fetch_optional(&mut **tx).await
 }
 
@@ -887,15 +1157,25 @@ pub async fn supplier_payment_summary(
               WHERE line.tenant_id=$1 AND line.branch_id=$2
                 AND opening.applied_at IS NOT NULL AND opening.rolled_back_at IS NULL
               GROUP BY line.supplier_id
+           ), pending_totals AS (
+             SELECT supplier_id,COUNT(*)::BIGINT AS pending_bill_count,
+                    COALESCE(SUM(total_paise),0)::BIGINT AS pending_bills_paise
+               FROM purchase_bill_drafts
+              WHERE tenant_id=$1 AND branch_id=$2 AND supplier_id IS NOT NULL
+                AND purchase_receipt_id IS NULL AND status NOT IN ('confirmed','cancelled')
+              GROUP BY supplier_id
            )
            SELECT supplier.id AS supplier_id,
                   (COALESCE(receipt.paid_paise,0)+COALESCE(opening.paid_paise,0))::BIGINT AS paid_paise,
                   (COALESCE(receipt.unpaid_paise,0)+COALESCE(opening.unpaid_paise,0))::BIGINT AS unpaid_paise,
-                  (COALESCE(advance.extra_paid_paise,0)+COALESCE(opening.extra_paid_paise,0))::BIGINT AS extra_paid_paise
+                  (COALESCE(advance.extra_paid_paise,0)+COALESCE(opening.extra_paid_paise,0))::BIGINT AS extra_paid_paise,
+                  COALESCE(pending.pending_bill_count,0)::BIGINT AS pending_bill_count,
+                  COALESCE(pending.pending_bills_paise,0)::BIGINT AS pending_bills_paise
            FROM suppliers supplier
            LEFT JOIN receipt_totals receipt ON receipt.supplier_id=supplier.id
            LEFT JOIN advance_totals advance ON advance.supplier_id=supplier.id
            LEFT JOIN opening_totals opening ON opening.supplier_id=supplier.id
+           LEFT JOIN pending_totals pending ON pending.supplier_id=supplier.id
            WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2"#,
     )
     .bind(tenant_id)
@@ -906,8 +1186,129 @@ pub async fn supplier_payment_summary(
         paid_paise: suppliers.iter().map(|row| row.paid_paise).sum(),
         unpaid_paise: suppliers.iter().map(|row| row.unpaid_paise).sum(),
         extra_paid_paise: suppliers.iter().map(|row| row.extra_paid_paise).sum(),
+        pending_bills_paise: suppliers.iter().map(|row| row.pending_bills_paise).sum(),
         suppliers,
     })
+}
+
+pub async fn supplier_ledger(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    supplier_id: &str,
+) -> Result<Option<SupplierLedgerResponse>, sqlx::Error> {
+    let Some(supplier) = get_supplier(db, tenant_id, branch_id, supplier_id).await? else {
+        return Ok(None);
+    };
+    let payables = list_payables(db, tenant_id, branch_id, Some(supplier_id), None, None).await?;
+    let bills_paise = payables
+        .iter()
+        .map(|row| (row.total_paise - row.returned_paise).max(0))
+        .sum();
+    let metric = supplier_payment_summary(db, tenant_id, branch_id)
+        .await?
+        .suppliers
+        .into_iter()
+        .find(|row| row.supplier_id == supplier_id)
+        .unwrap_or(SupplierPaymentMetricRecord {
+            supplier_id: supplier_id.to_string(),
+            paid_paise: 0,
+            unpaid_paise: 0,
+            extra_paid_paise: 0,
+            pending_bill_count: 0,
+            pending_bills_paise: 0,
+        });
+    let entries = sqlx::query_as(
+        r#"WITH ledger_entries AS (
+             SELECT 'bill:'||receipt.id AS id,'purchase_bill'::TEXT AS entry_type,
+                    receipt.supplier_invoice_date AS entry_date,
+                    receipt.supplier_invoice_date::TIMESTAMP AT TIME ZONE 'UTC' AS posted_at,
+                    10 AS sort_order,'Purchase bill'::TEXT AS particulars,
+                    COALESCE(NULLIF(receipt.supplier_invoice_number,''),receipt.grr_number) AS reference,
+                    0::BIGINT AS debit_paise,receipt.total_paise::BIGINT AS credit_paise
+               FROM purchase_receipts receipt
+              WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.supplier_id=$3
+                AND receipt.rolled_back_at IS NULL
+             UNION ALL
+             SELECT 'return:'||return_row.id,'purchase_return',return_row.created_at::DATE,
+                    return_row.created_at,20,'Purchase return',
+                    COALESCE(NULLIF(receipt.supplier_invoice_number,''),return_row.id),
+                    return_row.total_paise::BIGINT,0::BIGINT
+               FROM purchase_returns return_row
+               JOIN purchase_receipts receipt ON receipt.id=return_row.purchase_receipt_id
+                AND receipt.tenant_id=return_row.tenant_id AND receipt.branch_id=return_row.branch_id
+              WHERE return_row.tenant_id=$1 AND return_row.branch_id=$2 AND receipt.supplier_id=$3
+                AND receipt.rolled_back_at IS NULL
+             UNION ALL
+             SELECT 'payment:'||payment.id,'supplier_payment',payment.paid_at::DATE,
+                    payment.paid_at,30,'Supplier payment',
+                    COALESCE(NULLIF(payment.reference,''),NULLIF(receipt.supplier_invoice_number,''),
+                             NULLIF(opening.external_id,''),'Payment'),
+                    payment.amount_paise::BIGINT,0::BIGINT
+               FROM supplier_payments payment
+               LEFT JOIN purchase_receipts receipt ON receipt.id=payment.purchase_receipt_id
+                AND receipt.tenant_id=payment.tenant_id AND receipt.branch_id=payment.branch_id
+               LEFT JOIN supplier_opening_payables opening ON opening.id=payment.opening_payable_id
+                AND opening.tenant_id=payment.tenant_id AND opening.branch_id=payment.branch_id
+              WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND payment.supplier_id=$3
+             UNION ALL
+             SELECT 'advance:'||advance.id,'supplier_advance',advance.paid_at::DATE,
+                    advance.paid_at,40,'Supplier advance',
+                    COALESCE(NULLIF(advance.reference,''),'Advance payment'),
+                    advance.amount_paise::BIGINT,0::BIGINT
+               FROM supplier_advances advance
+              WHERE advance.tenant_id=$1 AND advance.branch_id=$2 AND advance.supplier_id=$3
+             UNION ALL
+             SELECT 'opening:'||line.id,
+                    CASE WHEN line.balance_side='credit' THEN 'opening_payable' ELSE 'opening_advance' END,
+                    line.created_at::DATE,line.created_at,0,
+                    CASE WHEN line.balance_side='credit' THEN 'Opening payable' ELSE 'Opening advance' END,
+                    COALESCE(NULLIF(line.external_id,''),'Opening balance'),
+                    CASE WHEN line.balance_side='debit' THEN line.amount_paise ELSE 0 END::BIGINT,
+                    CASE WHEN line.balance_side='credit' THEN line.amount_paise ELSE 0 END::BIGINT
+               FROM supplier_opening_payables line
+               JOIN supplier_opening_payable_imports opening_import ON opening_import.id=line.opening_import_id
+              WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.supplier_id=$3
+                AND opening_import.applied_at IS NOT NULL AND opening_import.rolled_back_at IS NULL
+           ), balanced AS (
+             SELECT *,SUM(credit_paise-debit_paise) OVER (
+                      ORDER BY posted_at,sort_order,id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    )::BIGINT AS balance_paise
+               FROM ledger_entries
+           )
+           SELECT id,entry_type,entry_date,particulars,reference,debit_paise,credit_paise,balance_paise
+             FROM balanced ORDER BY posted_at DESC,sort_order DESC,id DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(supplier_id)
+    .fetch_all(db)
+    .await?;
+    let pending_bills = sqlx::query_as(
+        r#"SELECT id,bill_number,bill_date,total_paise,status
+             FROM purchase_bill_drafts
+            WHERE tenant_id=$1 AND branch_id=$2 AND supplier_id=$3
+              AND purchase_receipt_id IS NULL AND status NOT IN ('confirmed','cancelled')
+            ORDER BY created_at DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(supplier_id)
+    .fetch_all(db)
+    .await?;
+    Ok(Some(SupplierLedgerResponse {
+        supplier,
+        summary: SupplierLedgerSummary {
+            bills_paise,
+            paid_paise: metric.paid_paise,
+            outstanding_paise: metric.unpaid_paise,
+            advance_paise: metric.extra_paid_paise,
+            pending_bills_paise: metric.pending_bills_paise,
+        },
+        payables,
+        pending_bills,
+        entries,
+    }))
 }
 
 pub async fn payable_balance_for_update(

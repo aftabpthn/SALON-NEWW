@@ -123,7 +123,7 @@ pub async fn summary_rows(
         r#"
         WITH attendance AS (
           SELECT staff_id,
-                 COUNT(DISTINCT business_date) FILTER (WHERE status IN ('clocked_in','clocked_out','present','half_day')) AS working_days,
+                 COUNT(DISTINCT business_date) FILTER (WHERE status IN ('clocked_in','clocked_out','present','late','half_day')) AS working_days,
                  COALESCE(SUM(penalty_paise),0)::BIGINT AS penalty_paise
           FROM staff_attendance_records
           WHERE tenant_id=$1 AND branch_id=$2 AND business_date BETWEEN $3 AND $4
@@ -358,7 +358,8 @@ const RECALCULATE_ATTENDANCE_SQL: &str = r#"
         WHEN a.clock_out_at IS NULL THEN CASE WHEN a.clock_in_at IS NULL THEN a.status ELSE 'clocked_in' END
         WHEN metrics.absent_after_minutes>0 AND metrics.late>=metrics.absent_after_minutes THEN 'absent'
         WHEN metrics.half_day_after_minutes>0 AND metrics.late>=metrics.half_day_after_minutes THEN 'half_day'
-        ELSE 'clocked_out' END),updated_at=NOW()
+        WHEN metrics.late>0 THEN 'late'
+        ELSE 'present' END),updated_at=NOW()
     FROM metrics WHERE a.id=metrics.id
     RETURNING a.id,a.staff_id,a.business_date,a.clock_in_at,a.clock_out_at,a.status,a.manual_status,a.source,
               a.worked_minutes,a.late_minutes,a.early_leave_minutes,a.overtime_minutes,a.break_minutes,

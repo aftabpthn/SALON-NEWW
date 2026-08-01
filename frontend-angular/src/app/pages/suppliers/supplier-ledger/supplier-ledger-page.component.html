@@ -1,0 +1,64 @@
+<section class="ledger-page" [class.drawer-open]="paymentOpen">
+  <header class="page-header">
+    <div class="identity">
+      <button type="button" class="back-link" (click)="back()"><i class="bi bi-arrow-left" aria-hidden="true"></i> Suppliers</button>
+      <h1>Supplier Ledger</h1>
+      <p>{{ ledger?.supplier?.name || 'Supplier' }} @if (ledger?.supplier?.code) { · {{ ledger?.supplier?.code }} }</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="secondary-button" (click)="exportLedger()" [disabled]="loading || !ledger"><i class="bi bi-download" aria-hidden="true"></i> Export ledger</button>
+      <button type="button" class="primary-button" (click)="openPayment()" [disabled]="loading || !openPayables.length"><i class="bi bi-credit-card" aria-hidden="true"></i> Record payment</button>
+    </div>
+  </header>
+
+  @if (error) { <div class="message error">{{ error }}</div> }
+  @if (notice) { <div class="message success">{{ notice }}</div> }
+
+  <section class="summary-grid" aria-label="Supplier ledger summary">
+    <article class="bills"><i class="bi bi-receipt" aria-hidden="true"></i><div><span>Bills</span><strong>{{ loading ? '—' : money(ledger?.summary?.billsPaise || 0) }}</strong></div></article>
+    <article class="paid"><i class="bi bi-check-circle" aria-hidden="true"></i><div><span>Paid</span><strong>{{ loading ? '—' : money(ledger?.summary?.paidPaise || 0) }}</strong></div></article>
+    <article class="outstanding"><i class="bi bi-clock" aria-hidden="true"></i><div><span>Outstanding</span><strong>{{ loading ? '—' : money(ledger?.summary?.outstandingPaise || 0) }}</strong></div></article>
+    <article class="advance"><i class="bi bi-wallet2" aria-hidden="true"></i><div><span>Advance</span><strong>{{ loading ? '—' : money(ledger?.summary?.advancePaise || 0) }}</strong></div></article>
+  </section>
+
+  @if (!loading && ledger?.pendingBills?.length) {
+    <section class="card pending-card">
+      <header><div><h2>Pending bills</h2><span>Not posted to payable ledger</span></div><strong>{{ money(ledger?.summary?.pendingBillsPaise || 0) }}</strong></header>
+      <div class="table-scroll"><table><thead><tr><th>Bill number</th><th>Bill date</th><th class="numeric">Amount</th><th>Status</th><th></th></tr></thead><tbody>
+        @for (bill of ledger?.pendingBills || []; track bill.id) {
+          <tr><td><strong>{{ bill.billNumber || 'Unnumbered bill' }}</strong></td><td>{{ displayDate(bill.billDate) }}</td><td class="numeric">{{ money(bill.totalPaise) }}</td><td><span class="status pending">{{ status(bill.status) }}</span></td><td class="action-cell"><button type="button" class="table-action" (click)="reviewBill(bill.id)">Review bill <i class="bi bi-arrow-right" aria-hidden="true"></i></button></td></tr>
+        }
+      </tbody></table></div>
+    </section>
+  }
+
+  <section class="card ledger-card">
+    <header><h2>Ledger</h2><span>{{ ledger?.entries?.length || 0 }} entries</span></header>
+    @if (loading) { <div class="loading-state"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Loading ledger</span></div> }
+    @if (!loading && ledger?.entries?.length) {
+      <div class="table-scroll"><table><thead><tr><th>Date</th><th>Particulars</th><th>Reference</th><th class="numeric">Debit</th><th class="numeric">Credit</th><th class="numeric">Balance</th></tr></thead><tbody>
+        @for (entry of ledger?.entries || []; track entry.id) {
+          <tr><td>{{ displayDate(entry.entryDate) }}</td><td><strong>{{ entry.particulars }}</strong></td><td>{{ entry.reference }}</td><td class="numeric debit">{{ entry.debitPaise ? money(entry.debitPaise) : '—' }}</td><td class="numeric credit">{{ entry.creditPaise ? money(entry.creditPaise) : '—' }}</td><td class="numeric"><strong>{{ balance(entry.balancePaise) }}</strong></td></tr>
+        }
+      </tbody></table></div>
+    }
+    @if (!loading && !ledger?.entries?.length) { <div class="empty-state"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><strong>No posted ledger entries yet</strong></div> }
+  </section>
+
+  @if (paymentOpen) {
+    <button type="button" class="drawer-backdrop" aria-label="Close payment drawer" (click)="closePayment()"></button>
+    <aside class="payment-drawer">
+      <header><div><span>Vendor payment</span><h2>{{ ledger?.supplier?.name }}</h2></div><button type="button" class="icon-button" aria-label="Close payment drawer" (click)="closePayment()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+      <div class="drawer-body">
+        @if (error) { <div class="message error">{{ error }}</div> }
+        @if (notice) { <div class="message success">{{ notice }}</div> }
+        <label><span>Select bill</span><select [ngModel]="paymentDraft.receiptId" (ngModelChange)="selectPaymentBill($event)" [disabled]="saving"><option value="">Select an unpaid bill</option>@for (row of openPayables; track row.purchaseReceiptId) { <option [value]="row.purchaseReceiptId">{{ row.supplierInvoiceNumber }} · {{ money(row.balancePaise) }} unpaid</option> }</select></label>
+        <label><span>Amount</span><div class="money-input"><b>₹</b><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="paymentDraft.amount" [disabled]="saving" /></div><small>Any excess will be saved as supplier advance</small></label>
+        <label><span>Payment method</span><select [(ngModel)]="paymentDraft.method" [disabled]="saving"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select></label>
+        <label><span>Reference</span><input type="text" maxlength="160" [(ngModel)]="paymentDraft.reference" [disabled]="saving" placeholder="UTR, cheque or transaction ID" /></label>
+        @if (selectedPayable()) { <div class="selected-balance"><span>Selected bill outstanding</span><strong>{{ money(selectedPayable()?.balancePaise || 0) }}</strong></div> }
+      </div>
+      <footer><button type="button" class="secondary-button" (click)="closePayment()" [disabled]="saving">Close</button><button type="button" class="primary-button" (click)="savePayment()" [disabled]="saving || !selectedPayable()">{{ saving ? 'Saving…' : 'Record payment' }}</button></footer>
+    </aside>
+  }
+</section>

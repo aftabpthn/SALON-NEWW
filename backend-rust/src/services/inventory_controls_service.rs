@@ -1270,6 +1270,7 @@ async fn execute_approved_action(
                 tenant_id,
                 branch_id,
                 actor,
+                &action.requested_by,
                 &action.payload_json,
                 action.action_type == "expiry_rescue",
             )
@@ -1331,6 +1332,7 @@ async fn execute_approved_transfer(
     tenant_id: &str,
     action_branch_id: &str,
     actor: &str,
+    requested_by: &str,
     payload: &serde_json::Value,
     source_scoped: bool,
 ) -> Result<inventory_transfer_service::TransferDetails, AppError> {
@@ -1391,21 +1393,46 @@ async fn execute_approved_transfer(
             "transfer draft is stale; live stock, demand, safety, or cost no longer supports it"
         }));
     }
-    inventory_transfer_service::dispatch(
+    let transfer = inventory_transfer_service::create(
         state,
         tenant_id,
         &source_branch,
-        actor,
+        requested_by,
         inventory_transfer_service::TransferInput {
-            destination_branch_id: destination_branch,
+            mode: "push".into(),
+            source_branch_id: Some(source_branch.clone()),
+            destination_branch_id: Some(destination_branch),
+            parent_transfer_id: None,
+            return_reason: String::new(),
             idempotency_key: json_text(payload, "idempotencyKey")?,
             notes: json_text(payload, "notes")?,
             lines: vec![inventory_transfer_service::TransferLineInput {
                 source_inventory_item_id: source_item,
-                destination_inventory_item_id: destination_item,
-                quantity,
+                destination_inventory_item_id: Some(destination_item),
+                quantity: Some(quantity),
+                retail_quantity: 0,
+                consumable_quantity: 0,
+                transfer_unit_price_paise: None,
+                discount_bps: 0,
+                gst_percent: Some(0),
             }],
         },
+    )
+    .await?;
+    inventory_transfer_service::raise(
+        state,
+        tenant_id,
+        &source_branch,
+        requested_by,
+        &transfer.transfer.id,
+    )
+    .await?;
+    inventory_transfer_service::approve(
+        state,
+        tenant_id,
+        &source_branch,
+        actor,
+        &transfer.transfer.id,
     )
     .await
 }

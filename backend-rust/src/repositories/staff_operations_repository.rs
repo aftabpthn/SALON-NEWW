@@ -57,6 +57,7 @@ pub struct SkillLicenseRecord {
     pub staff_id: String,
     pub staff_name: String,
     pub skill_name: String,
+    pub skill_level: i16,
     pub issuer: String,
     pub license_number: String,
     pub issued_on: Option<NaiveDate>,
@@ -64,6 +65,10 @@ pub struct SkillLicenseRecord {
     pub verification_status: String,
     pub document_url: String,
     pub notes: String,
+    pub source_course_document_id: Option<String>,
+    pub renewed_from_license_id: Option<String>,
+    pub verified_by: Option<String>,
+    pub verified_at: Option<DateTime<Utc>>,
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -587,9 +592,10 @@ pub async fn list_skill_licenses(
     sqlx::query_as(
         r#"SELECT license.id,license.staff_id,
            TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) AS staff_name,
-           license.skill_name,license.issuer,license.license_number,license.issued_on,license.expires_on,
+           license.skill_name,license.skill_level,license.issuer,license.license_number,license.issued_on,license.expires_on,
            CASE WHEN license.expires_on<CURRENT_DATE THEN 'expired' ELSE license.verification_status END AS verification_status,
-           license.document_url,license.notes,license.version,license.created_at,license.updated_at
+           license.document_url,license.notes,license.source_course_document_id,license.renewed_from_license_id,
+           license.verified_by,license.verified_at,license.version,license.created_at,license.updated_at
            FROM staff_skill_licenses license JOIN staff ON staff.id=license.staff_id
            WHERE license.tenant_id=$1 AND license.branch_id=$2 AND ($3='' OR license.staff_id=$3)
            ORDER BY license.expires_on NULLS LAST,license.skill_name"#,
@@ -609,6 +615,7 @@ pub async fn save_skill_license(
     id: Option<&str>,
     staff_id: &str,
     skill_name: &str,
+    skill_level: i16,
     issuer: &str,
     license_number: &str,
     issued_on: Option<NaiveDate>,
@@ -621,22 +628,26 @@ pub async fn save_skill_license(
 ) -> Result<Option<SkillLicenseRecord>, sqlx::Error> {
     let saved_id = if let Some(id) = id.filter(|value| !value.is_empty()) {
         sqlx::query_scalar::<_, String>(
-            r#"UPDATE staff_skill_licenses SET skill_name=$4,issuer=$5,license_number=$6,issued_on=$7,
-               expires_on=$8,verification_status=$9,document_url=$10,notes=$11,version=version+1,updated_at=NOW()
-               WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$12 RETURNING id"#,
+            r#"UPDATE staff_skill_licenses SET skill_name=$4,skill_level=$5,issuer=$6,license_number=$7,issued_on=$8,
+               expires_on=$9,verification_status=$10,document_url=$11,notes=$12,
+               verified_by=CASE WHEN $10='verified' THEN $13 ELSE NULL END,
+               verified_at=CASE WHEN $10='verified' THEN NOW() ELSE NULL END,
+               version=version+1,updated_at=NOW()
+               WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$14 RETURNING id"#,
         )
-        .bind(tenant_id).bind(branch_id).bind(id).bind(skill_name).bind(issuer).bind(license_number)
-        .bind(issued_on).bind(expires_on).bind(verification_status).bind(document_url).bind(notes)
+        .bind(tenant_id).bind(branch_id).bind(id).bind(skill_name).bind(skill_level).bind(issuer).bind(license_number)
+        .bind(issued_on).bind(expires_on).bind(verification_status).bind(document_url).bind(notes).bind(actor_user_id)
         .bind(version.unwrap_or_default()).fetch_optional(db).await?
     } else {
         sqlx::query_scalar::<_, String>(
             r#"INSERT INTO staff_skill_licenses(
-               tenant_id,branch_id,staff_id,skill_name,issuer,license_number,issued_on,expires_on,
-               verification_status,document_url,notes,created_by)
-               SELECT $1,$2,staff.id,$4,$5,$6,$7,$8,$9,$10,$11,$12 FROM staff
+               tenant_id,branch_id,staff_id,skill_name,skill_level,issuer,license_number,issued_on,expires_on,
+               verification_status,document_url,notes,verified_by,verified_at,created_by)
+               SELECT $1,$2,staff.id,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+                 CASE WHEN $10='verified' THEN $13 ELSE NULL END,CASE WHEN $10='verified' THEN NOW() ELSE NULL END,$13 FROM staff
                WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.id=$3 AND staff.active=TRUE RETURNING id"#,
         )
-        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(skill_name).bind(issuer).bind(license_number)
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(skill_name).bind(skill_level).bind(issuer).bind(license_number)
         .bind(issued_on).bind(expires_on).bind(verification_status).bind(document_url).bind(notes)
         .bind(actor_user_id).fetch_optional(db).await?
     };
@@ -645,8 +656,9 @@ pub async fn save_skill_license(
     };
     sqlx::query_as(
         r#"SELECT license.id,license.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) AS staff_name,
-           license.skill_name,license.issuer,license.license_number,license.issued_on,license.expires_on,
-           license.verification_status,license.document_url,license.notes,license.version,license.created_at,license.updated_at
+           license.skill_name,license.skill_level,license.issuer,license.license_number,license.issued_on,license.expires_on,
+           license.verification_status,license.document_url,license.notes,license.source_course_document_id,license.renewed_from_license_id,
+           license.verified_by,license.verified_at,license.version,license.created_at,license.updated_at
            FROM staff_skill_licenses license JOIN staff ON staff.id=license.staff_id
            WHERE license.tenant_id=$1 AND license.branch_id=$2 AND license.id=$3"#,
     )
@@ -665,7 +677,7 @@ pub async fn list_reviews(
            review.improvement_areas,review.goals,review.employee_comments,review.status,review.version,
            review.created_at,review.updated_at,review.shared_at,review.acknowledged_at
            FROM staff_performance_reviews review JOIN staff ON staff.id=review.staff_id
-           WHERE review.tenant_id=$1 AND review.branch_id=$2 AND ($3='' OR review.staff_id=$3)
+           WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.appraisal_cycle_id IS NULL AND ($3='' OR review.staff_id=$3)
            ORDER BY review.period_end DESC,review.created_at DESC"#,
     )
     .bind(tenant_id).bind(branch_id).bind(staff_id).fetch_all(db).await
@@ -696,7 +708,7 @@ pub async fn save_review(
                shared_at=CASE WHEN $11='shared' AND shared_at IS NULL THEN NOW() ELSE shared_at END,
                acknowledged_at=CASE WHEN $11='acknowledged' AND acknowledged_at IS NULL THEN NOW() ELSE acknowledged_at END,
                version=version+1,updated_at=NOW()
-               WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$12 RETURNING id"#,
+               WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND appraisal_cycle_id IS NULL AND version=$12 RETURNING id"#,
         )
         .bind(tenant_id).bind(branch_id).bind(id).bind(period_start).bind(period_end).bind(score)
         .bind(strengths).bind(improvement_areas).bind(goals).bind(employee_comments).bind(status)
@@ -723,7 +735,7 @@ pub async fn save_review(
            review.improvement_areas,review.goals,review.employee_comments,review.status,review.version,
            review.created_at,review.updated_at,review.shared_at,review.acknowledged_at
            FROM staff_performance_reviews review JOIN staff ON staff.id=review.staff_id
-           WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3"#,
+           WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3 AND review.appraisal_cycle_id IS NULL"#,
     )
     .bind(tenant_id).bind(branch_id).bind(saved_id).fetch_optional(db).await
 }

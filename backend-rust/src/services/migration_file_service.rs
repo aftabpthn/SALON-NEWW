@@ -33,10 +33,10 @@ use crate::{
         migration::{MigrationEntity, MigrationProvider},
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
-            CreateMigrationUploadRequest, HistoricalEvidenceGroupDecisionRequest,
-            MigrationSourceArtifact, MigrationSourceColumnProfile, MigrationSourceFile,
-            MigrationSourceProfile, MigrationSourceSheet, MigrationUploadPartReceipt,
-            MigrationUploadSession,
+            CreateMigrationUploadRequest, HistoricalEvidenceCorrectionRequest,
+            HistoricalEvidenceGroupDecisionRequest, MigrationSourceArtifact,
+            MigrationSourceColumnProfile, MigrationSourceFile, MigrationSourceProfile,
+            MigrationSourceSheet, MigrationUploadPartReceipt, MigrationUploadSession,
         },
     },
     repositories::{
@@ -570,6 +570,7 @@ pub async fn historical_evidence_report(
     struct Group {
         pages: i32,
         files: HashSet<String>,
+        documents: HashSet<String>,
         signals: HashSet<&'static str>,
         confidence: i32,
     }
@@ -577,10 +578,18 @@ pub async fn historical_evidence_report(
     let mut files = Vec::new();
     let mut total_pages = 0_i32;
     let mut historical_files = 0_usize;
+    let mut active_files = 0_usize;
+    let mut excluded_files = 0_usize;
     let mut physical_inventory_ready = false;
     let mut supplier_outstanding_ready = false;
     let mut unidentified = HashSet::new();
     for source in sources {
+        files.push(json!({"id":source.id.clone(),"sourceFileId":source.source_file_id.clone(),"kind":source.evidence_kind.clone(),"supplierBatch":source.supplier_batch.clone(),"originalSupplierBatch":source.original_supplier_batch.clone(),"evidenceState":source.evidence_state.clone(),"correctionReason":source.correction_reason.clone(),"correctedBy":source.corrected_by.clone(),"correctedAt":source.corrected_at.clone(),"downstreamUsed":source.downstream_used,"originalFileName":source.original_file_name.clone(),"format":source.file_format.clone(),"sizeBytes":source.size_bytes,"sha256":source.sha256.clone(),"pageCount":source.page_count,"uploadedBy":source.uploaded_by.clone(),"createdAt":source.created_at.clone(),"artifacts":source.artifacts_json.clone()}));
+        if source.evidence_state == "excluded" {
+            excluded_files += 1;
+            continue;
+        }
+        active_files += 1;
         total_pages += source.page_count;
         match source.evidence_kind.as_str() {
             "historical_bill" => {
@@ -604,6 +613,7 @@ pub async fn historical_evidence_report(
                         .or_default();
                     group.pages += source.page_count;
                     group.files.insert(source.source_file_id.clone());
+                    group.documents.insert(source.source_file_id.clone());
                     group.confidence = group.confidence.max(confidence);
                     group.signals.insert(signal);
                 } else {
@@ -624,6 +634,11 @@ pub async fn historical_evidence_report(
                             .or_default();
                         group.pages += pages;
                         group.files.insert(source.source_file_id.clone());
+                        if let Some(artifact_id) = artifact.get("id").and_then(Value::as_str) {
+                            group
+                                .documents
+                                .insert(format!("{}:{}", source.source_file_id, artifact_id));
+                        }
                         group.confidence = group.confidence.max(confidence);
                         group.signals.insert(signal);
                     }
@@ -633,11 +648,10 @@ pub async fn historical_evidence_report(
             "supplier_outstanding" => supplier_outstanding_ready = true,
             _ => {}
         }
-        files.push(json!({"id":source.id,"sourceFileId":source.source_file_id,"kind":source.evidence_kind,"supplierBatch":source.supplier_batch,"originalFileName":source.original_file_name,"format":source.file_format,"sizeBytes":source.size_bytes,"sha256":source.sha256,"pageCount":source.page_count,"uploadedBy":source.uploaded_by,"createdAt":source.created_at,"artifacts":source.artifacts_json}));
     }
     let group_rows = groups.into_iter().map(|((supplier_batch, group_key), group)| {
         let decision = decision_map.get(&(supplier_batch.clone(), group_key.clone()));
-        json!({"supplierBatch":supplier_batch,"groupKey":group_key,"detectedPageCount":group.pages,"approvedPageCount":decision.map(|item| item.approved_page_count),"status":decision.map(|item| item.decision.as_str()).unwrap_or("suggested"),"confidencePercentage":group.confidence / 100,"signals":group.signals.into_iter().collect::<Vec<_>>(),"sourceFileCount":group.files.len(),"decidedBy":decision.map(|item| item.actor_user_id.as_str()),"decidedAt":decision.map(|item| item.created_at)})
+        json!({"supplierBatch":supplier_batch,"groupKey":group_key,"detectedPageCount":group.pages,"approvedPageCount":decision.map(|item| item.approved_page_count),"status":decision.map(|item| item.decision.as_str()).unwrap_or("suggested"),"confidencePercentage":group.confidence / 100,"signals":group.signals.into_iter().collect::<Vec<_>>(),"sourceFileCount":group.files.len(),"documentKeys":group.documents.into_iter().collect::<Vec<_>>(),"decidedBy":decision.map(|item| item.actor_user_id.as_str()),"decidedAt":decision.map(|item| item.created_at)})
     }).collect::<Vec<_>>();
     let grouping_approved = group_rows
         .iter()
@@ -659,15 +673,95 @@ pub async fn historical_evidence_report(
         && cutover_approved
         && physical_inventory_ready
         && supplier_outstanding_ready;
-    let total_files = files.len();
+    let total_files = active_files;
+    let audit_file_count = files.len();
     Ok(json!({
         "cutover": cutover,
         "cutoverApproval": cutover_approval.map(|item| json!({"approvedBy":item.actor_user_id,"approvedRole":item.actor_role,"approvedAt":item.created_at})),
         "files": files,
         "failures": failure_rows,
         "groups": group_rows,
-        "summary": {"totalFiles":total_files,"totalPages":total_pages,"historicalBillFiles":historical_files,"unidentifiedSupplierBatches":unidentified.into_iter().collect::<Vec<_>>(),"physicalInventoryReady":physical_inventory_ready,"supplierOutstandingReady":supplier_outstanding_ready,"groupingApproved":grouping_approved,"cutoverApproved":cutover_approved,"checksumVerified":unresolved_failures==0,"historicalStockEffect":0,"historicalAccountingEffect":0,"historicalGstEffect":0,"liveCrmWrites":0,"complete":complete}
+        "summary": {"totalFiles":total_files,"auditFileCount":audit_file_count,"excludedFiles":excluded_files,"totalPages":total_pages,"historicalBillFiles":historical_files,"unidentifiedSupplierBatches":unidentified.into_iter().collect::<Vec<_>>(),"physicalInventoryReady":physical_inventory_ready,"supplierOutstandingReady":supplier_outstanding_ready,"groupingApproved":grouping_approved,"cutoverApproved":cutover_approved,"checksumVerified":unresolved_failures==0,"historicalStockEffect":0,"historicalAccountingEffect":0,"historicalGstEffect":0,"liveCrmWrites":0,"complete":complete}
     }))
+}
+
+pub async fn correct_historical_evidence(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    source_file_id: &str,
+    request: HistoricalEvidenceCorrectionRequest,
+) -> Result<Value, AppError> {
+    let source_file_id = source_file_id.trim();
+    let cutover_id = request.cutover_id.trim();
+    let action = request.action.trim().to_ascii_lowercase();
+    let supplier_batch = request.supplier_batch.trim();
+    let reason = request.reason.trim();
+    if source_file_id.is_empty()
+        || cutover_id.is_empty()
+        || !matches!(action.as_str(), "correct_supplier" | "exclude" | "restore")
+        || !(5..=500).contains(&reason.chars().count())
+        || (action == "correct_supplier"
+            && (supplier_batch.is_empty() || supplier_batch.chars().count() > 120))
+        || (action != "correct_supplier" && !supplier_batch.is_empty())
+    {
+        return Err(AppError::validation(
+            "valid evidence action, reason and supplier batch are required",
+        ));
+    }
+    let report = historical_evidence_report(db, tenant_id, branch_id, cutover_id).await?;
+    let source = report["files"]
+        .as_array()
+        .and_then(|files| {
+            files
+                .iter()
+                .find(|file| file["sourceFileId"] == source_file_id)
+        })
+        .ok_or_else(|| AppError::not_found("historical bill evidence was not found"))?;
+    if source["kind"] != "historical_bill" {
+        return Err(AppError::conflict(
+            "only historical bill evidence can be corrected here",
+        ));
+    }
+    if source["downstreamUsed"] == true {
+        return Err(AppError::conflict(
+            "evidence already used by a pilot or archive cannot be changed",
+        ));
+    }
+    let excluded = source["evidenceState"] == "excluded";
+    if (action == "exclude" && excluded)
+        || (action == "restore" && !excluded)
+        || (action == "correct_supplier" && excluded)
+    {
+        return Err(AppError::conflict(
+            "evidence action is not valid for its current state",
+        ));
+    }
+    migration_file_repository::append_historical_evidence_correction(
+        db,
+        tenant_id,
+        branch_id,
+        actor,
+        cutover_id,
+        source_file_id,
+        &action,
+        supplier_batch,
+        reason,
+    )
+    .await
+    .map_err(|error| {
+        let message = error
+            .as_database_error()
+            .map(|database| database.message())
+            .unwrap_or_default();
+        if message.contains("ALREADY_IN_USE") || message.contains("CORRECTION_NOT_ALLOWED") {
+            AppError::conflict("evidence correction is no longer allowed")
+        } else {
+            AppError::internal("failed to save evidence correction")
+        }
+    })?;
+    historical_evidence_report(db, tenant_id, branch_id, cutover_id).await
 }
 
 pub async fn decide_historical_evidence_group(
@@ -3221,9 +3315,9 @@ async fn remove_session_parts(tenant_id: &str, branch_id: &str, id: &str) {
 mod tests {
     use super::{
         assert_safe_ratio, decrypt_evidence_file, encrypt_evidence_file, extract_zip,
-        has_binary_magic, normalize_sha256, parse_clamd_verdict, sha256_hex, source_columns_blocking,
-        source_profile_blocking, suggested_group, validate_csv, validate_file_name, validate_pdf,
-        validate_xlsx, WorkerSource,
+        has_binary_magic, normalize_sha256, parse_clamd_verdict, sha256_hex,
+        source_columns_blocking, source_profile_blocking, suggested_group, validate_csv,
+        validate_file_name, validate_pdf, validate_xlsx, WorkerSource,
     };
     use crate::models::migration::{MigrationEntity, MigrationProvider};
     use std::{fs, io::Write, path::PathBuf};

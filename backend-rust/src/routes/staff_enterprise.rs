@@ -22,12 +22,14 @@ use crate::{
         inventory_adjustment_service, staff_ai_service, staff_app_service,
         staff_enterprise_service::{
             self, ApprovalDetail, ApprovalPolicyRequest, ApprovalRequestInput, BestStaffRequest,
-            CoachingGoalRequest, ComplianceExport, DecisionRequest, IntelligenceRiskRow,
+            CertificationRenewalRequest, CoachingGoalRequest, ComplianceExport,
+            CourseAssignmentRequest, CourseProfileRequest, DecisionRequest, IntelligenceRiskRow,
             ManpowerForecastResult, NotificationDeliveryRequest, NotificationPreferenceRequest,
             NotificationTemplateRequest, QueueNotificationRequest, RankedStaffCandidate,
             ReplacementRecommendationResponse, ReplacementRequest, RosterCoverageResponse,
-            RosterOptimizeRequest, SalaryRevisionRequest, StaffEnterpriseCommandCenter,
-            StaffRuleAcknowledgementRequest, StaffRuleDocumentRequest, StaffRuleViolationRequest,
+            RosterOptimizeRequest, SalaryRevisionRequest, SkillRequirementRequest,
+            StaffEnterpriseCommandCenter, StaffRuleAcknowledgementRequest,
+            StaffRuleDocumentRequest, StaffRuleViolationRequest,
             StaffRuleViolationResolutionRequest, StaffSalesReport, StatutoryCalculationRequest,
             StatutoryRuleRequest, StatutorySummary, TipPayoutRequest, TrainingAssignmentRequest,
             VersionRequest,
@@ -190,6 +192,20 @@ pub fn router() -> Router<AppState> {
         .route("/staff-enterprise/floor-control", get(floor_control))
         .route("/staff-enterprise/training", get(training_assignments))
         .route("/staff-enterprise/training/assign", post(assign_training))
+        .route("/staff-enterprise/lms", get(lms_dashboard))
+        .route(
+            "/staff-enterprise/lms/courses/:id/profile",
+            post(save_course_profile),
+        )
+        .route("/staff-enterprise/lms/enrolments", post(assign_course))
+        .route(
+            "/staff-enterprise/lms/skill-requirements",
+            post(save_skill_requirement),
+        )
+        .route(
+            "/staff-enterprise/lms/certifications/:id/renew",
+            post(renew_certification),
+        )
         .route("/staff/coach/insights", get(coaching_insights))
         .route(
             "/staff/coach/goals",
@@ -632,7 +648,13 @@ async fn acknowledge_staff_rule(
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
             .await?;
     let row = staff_enterprise_service::acknowledge_staff_rule(
-        &state.db, &tenant_id, &branch_id, &id, &staff_id, request,
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &staff_id,
+        &claims.sub,
+        request,
     )
     .await?;
     let event = if row.acknowledged_at.is_some() {
@@ -1067,6 +1089,7 @@ async fn record_staff_product_usage(
             client_id: Some(payload.client_id.trim()),
             appointment_id: Some(payload.appointment_id.trim()),
             actual_quantity: payload.actual_quantity,
+            waste_reason: "",
             notes: payload.notes.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
             idempotency_key: payload.idempotency_key.trim(),
@@ -1297,6 +1320,13 @@ fn filter_staff_app_os(os: &mut serde_json::Value, c: &AuthClaims) {
 }
 
 fn filter_self_dashboard(dashboard: &mut SelfDashboardRecord, c: &AuthClaims) {
+    if !app_allowed(
+        c,
+        "staff.app.profile.read",
+        &["staff.read", "staff.self_manage"],
+    ) {
+        dashboard.lifecycle = json!({});
+    }
     let calendar = app_allowed(
         c,
         "staff.app.calendar.read",
@@ -2128,6 +2158,125 @@ async fn assign_training(
     let (t, b) = tenant_branch(&h)?;
     let row = staff_enterprise_service::assign_training(&s.db, &t, &b, &c.sub, request).await?;
     audit(&s, &c, &b, "staff.training.assigned", &row.id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn lms_dashboard(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<serde_json::Value> {
+    read(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_enterprise_service::lms_dashboard(&state.db, &tenant, &branch).await?,
+    )))
+}
+
+async fn save_course_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<CourseProfileRequest>,
+) -> ApiResult<serde_json::Value> {
+    manager(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::save_course_profile(
+        &state.db,
+        &tenant,
+        &branch,
+        &id,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch,
+        "staff.lms.course_profile_saved",
+        &id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn assign_course(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<CourseAssignmentRequest>,
+) -> ApiResult<serde_json::Value> {
+    manager(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let row =
+        staff_enterprise_service::assign_course(&state.db, &tenant, &branch, &claims.sub, request)
+            .await?;
+    audit(
+        &state,
+        &claims,
+        &branch,
+        "staff.lms.course_assigned",
+        row["id"].as_str().unwrap_or(""),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_skill_requirement(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<SkillRequirementRequest>,
+) -> ApiResult<serde_json::Value> {
+    manager(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::save_skill_requirement(
+        &state.db,
+        &tenant,
+        &branch,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch,
+        "staff.lms.skill_requirement_saved",
+        row["id"].as_str().unwrap_or(""),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn renew_certification(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<CertificationRenewalRequest>,
+) -> ApiResult<serde_json::Value> {
+    manager(&claims)?;
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let row = staff_enterprise_service::renew_certification(
+        &state.db,
+        &tenant,
+        &branch,
+        &id,
+        &claims.sub,
+        request,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch,
+        "staff.lms.certification_renewed",
+        row["id"].as_str().unwrap_or(""),
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 

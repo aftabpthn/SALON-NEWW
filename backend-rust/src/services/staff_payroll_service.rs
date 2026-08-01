@@ -815,6 +815,11 @@ pub async fn preview(
                     "{pending_overtime_minutes} overtime minute(s) are pending approval and excluded from pay"
                 ));
             }
+            validation_errors.extend(attendance_policy_errors(
+                staff_row.mandatory_break_minutes,
+                staff_row.max_work_hours,
+                attendance_rows,
+            ));
 
             let rate = staff_row.pay_rate_paise.unwrap_or(0);
             let paid_weekly_off_x2 = if staff_row.pay_rate_type.as_deref() == Some("monthly") {
@@ -3058,6 +3063,29 @@ fn rule_occurrences(metric: i64, trigger_count: i32, application_mode: &str) -> 
     }
 }
 
+fn attendance_policy_errors(
+    mandatory_break_minutes: i32,
+    max_work_hours: i32,
+    rows: &[repository::AttendanceSourceRecord],
+) -> Vec<String> {
+    let mut errors = Vec::new();
+    if mandatory_break_minutes > 0
+        && rows
+            .iter()
+            .any(|row| row.worked_minutes >= 360 && row.break_minutes < mandatory_break_minutes)
+    {
+        errors.push("Mandatory break policy is not satisfied".to_string());
+    }
+    if max_work_hours > 0
+        && rows.iter().any(|row| {
+            (row.worked_minutes - max_work_hours * 60).max(0) > row.approved_overtime_minutes
+        })
+    {
+        errors.push("Maximum work-hours policy requires approved overtime".to_string());
+    }
+    errors
+}
+
 fn period(year: i32, month: u32) -> Result<(NaiveDate, NaiveDate), AppError> {
     if !(2000..=2100).contains(&year) || !(1..=12).contains(&month) {
         return Err(AppError::validation("payroll year or month is invalid"));
@@ -3784,8 +3812,8 @@ async fn queue_posted_correction_notification(
 #[cfg(test)]
 mod tests {
     use super::{
-        auto_adjustments, best_statutory_rules, compute_advance_recovery, compute_statutory,
-        compute_weekend_sandwich, encrypt_identifier, history_payment_method,
+        attendance_policy_errors, auto_adjustments, best_statutory_rules, compute_advance_recovery,
+        compute_statutory, compute_weekend_sandwich, encrypt_identifier, history_payment_method,
         is_payroll_amount_variable, is_statutory_named, line_attributions, mask_sensitive_id,
         multiply_divide, normalized_staff_ids, paid_holiday_days_x2, payout_staff_key,
         payslip_deduction_breakdown, period, resolve_statutory_rule, settled_provider_reference,
@@ -4055,6 +4083,16 @@ mod tests {
             ot_approval_status: "pending".to_string(),
             approved_overtime_minutes: 0,
         }
+    }
+
+    #[test]
+    fn attendance_policy_blocks_missing_break_and_unapproved_excess_hours() {
+        let mut row = attendance("2026-07-14", "present");
+        row.worked_minutes = 600;
+        row.break_minutes = 15;
+        row.approved_overtime_minutes = 30;
+        let errors = attendance_policy_errors(30, 8, &[row]);
+        assert_eq!(errors.len(), 2);
     }
 
     fn schedule(date: &str, status: &str) -> ScheduleSourceRecord {

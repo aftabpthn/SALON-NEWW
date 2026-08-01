@@ -109,6 +109,12 @@ pub struct HistoricalEvidenceSourceRow {
     pub source_file_id: String,
     pub evidence_kind: String,
     pub supplier_batch: String,
+    pub original_supplier_batch: String,
+    pub evidence_state: String,
+    pub correction_reason: String,
+    pub corrected_by: Option<String>,
+    pub corrected_at: Option<DateTime<Utc>>,
+    pub downstream_used: bool,
     pub original_file_name: String,
     pub file_format: String,
     pub size_bytes: i64,
@@ -390,8 +396,28 @@ pub async fn list_historical_evidence_sources(
     branch_id: &str,
     cutover_id: &str,
 ) -> Result<Vec<HistoricalEvidenceSourceRow>, sqlx::Error> {
-    sqlx::query_as("SELECT item.id,item.source_file_id,item.evidence_kind,item.supplier_batch,source.original_file_name,source.file_format,source.size_bytes,source.sha256,item.page_count,source.created_by uploaded_by,source.created_at,COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',artifact.id,'entryName',artifact.entry_name,'format',artifact.file_format,'sha256',artifact.sha256,'pageCount',artifact.page_count) ORDER BY artifact.entry_name) FILTER(WHERE artifact.id IS NOT NULL),'[]'::JSONB) artifacts_json FROM historical_purchase_evidence_items item JOIN integration_import_source_files source ON source.tenant_id=item.tenant_id AND source.branch_id=item.branch_id AND source.id=item.source_file_id LEFT JOIN integration_import_source_artifacts artifact ON artifact.tenant_id=source.tenant_id AND artifact.branch_id=source.branch_id AND artifact.source_file_id=source.id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.cutover_id=$3 GROUP BY item.id,item.source_file_id,item.evidence_kind,item.supplier_batch,source.original_file_name,source.file_format,source.size_bytes,source.sha256,item.page_count,source.created_by,source.created_at ORDER BY source.created_at")
+    sqlx::query_as("SELECT item.id,item.source_file_id,item.evidence_kind,COALESCE(batch.supplier_batch,item.supplier_batch) supplier_batch,item.supplier_batch original_supplier_batch,CASE WHEN disposition.action='exclude' THEN 'excluded' ELSE 'active' END evidence_state,COALESCE(disposition.reason,batch.reason,'') correction_reason,COALESCE(disposition.actor_user_id,batch.actor_user_id) corrected_by,COALESCE(disposition.created_at,batch.created_at) corrected_at,EXISTS(SELECT 1 FROM purchase_bill_drafts draft WHERE draft.tenant_id=item.tenant_id AND draft.branch_id=item.branch_id AND draft.migration_cutover_id=item.cutover_id AND draft.migration_source_file_id=item.source_file_id UNION ALL SELECT 1 FROM historical_purchase_archive_items archive WHERE archive.tenant_id=item.tenant_id AND archive.branch_id=item.branch_id AND archive.source_file_id=item.source_file_id) downstream_used,source.original_file_name,source.file_format,source.size_bytes,source.sha256,item.page_count,source.created_by uploaded_by,source.created_at,COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',artifact.id,'entryName',artifact.entry_name,'format',artifact.file_format,'sha256',artifact.sha256,'pageCount',artifact.page_count) ORDER BY artifact.entry_name) FILTER(WHERE artifact.id IS NOT NULL),'[]'::JSONB) artifacts_json FROM historical_purchase_evidence_items item JOIN integration_import_source_files source ON source.tenant_id=item.tenant_id AND source.branch_id=item.branch_id AND source.id=item.source_file_id LEFT JOIN LATERAL(SELECT correction.supplier_batch,correction.reason,correction.actor_user_id,correction.created_at FROM historical_purchase_evidence_corrections correction WHERE correction.tenant_id=item.tenant_id AND correction.branch_id=item.branch_id AND correction.cutover_id=item.cutover_id AND correction.source_file_id=item.source_file_id AND correction.action='correct_supplier' ORDER BY correction.created_at DESC,correction.id DESC LIMIT 1) batch ON TRUE LEFT JOIN LATERAL(SELECT correction.action,correction.reason,correction.actor_user_id,correction.created_at FROM historical_purchase_evidence_corrections correction WHERE correction.tenant_id=item.tenant_id AND correction.branch_id=item.branch_id AND correction.cutover_id=item.cutover_id AND correction.source_file_id=item.source_file_id AND correction.action IN('exclude','restore') ORDER BY correction.created_at DESC,correction.id DESC LIMIT 1) disposition ON TRUE LEFT JOIN integration_import_source_artifacts artifact ON artifact.tenant_id=source.tenant_id AND artifact.branch_id=source.branch_id AND artifact.source_file_id=source.id WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.cutover_id=$3 GROUP BY item.id,item.source_file_id,item.evidence_kind,item.supplier_batch,batch.supplier_batch,batch.reason,batch.actor_user_id,batch.created_at,disposition.action,disposition.reason,disposition.actor_user_id,disposition.created_at,source.original_file_name,source.file_format,source.size_bytes,source.sha256,item.page_count,source.created_by,source.created_at ORDER BY source.created_at")
         .bind(tenant_id).bind(branch_id).bind(cutover_id).fetch_all(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn append_historical_evidence_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    cutover_id: &str,
+    source_file_id: &str,
+    action: &str,
+    supplier_batch: &str,
+    reason: &str,
+) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("INSERT INTO historical_purchase_evidence_corrections(tenant_id,branch_id,cutover_id,source_file_id,action,supplier_batch,reason,actor_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
+        .bind(tenant_id).bind(branch_id).bind(cutover_id).bind(source_file_id).bind(action).bind(supplier_batch).bind(reason).bind(actor).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO integration_import_audit_events(tenant_id,branch_id,event_type,outcome,actor_user_id,details_json) VALUES($1,$2,'migration.historical_evidence.corrected','success',$3,$4)")
+        .bind(tenant_id).bind(branch_id).bind(actor).bind(serde_json::json!({"cutoverId":cutover_id,"sourceFileId":source_file_id,"action":action,"supplierBatch":supplier_batch,"reason":reason})).execute(&mut *tx).await?;
+    tx.commit().await
 }
 
 pub async fn list_historical_evidence_failures(

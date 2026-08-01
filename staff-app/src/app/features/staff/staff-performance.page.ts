@@ -1,5 +1,5 @@
 import { Component, HostListener, OnInit, signal } from "@angular/core";
-import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
+import { StaffAppraisal, StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
 import { businessDate, businessDateOffset } from "../../core/business-date";
 import { PaiseInrPipe } from "../../core/paise-inr.pipe";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -30,6 +30,15 @@ type PerformanceReportRow = { key: string; value: { days: number; revenue: numbe
       }
 
       @if (canReadPerformance() && os(); as data) {
+        <section class="panel">
+          <div class="panel-title"><h2>Appraisals</h2><span>{{ appraisals().length }}</span></div>
+          @if (appraisalError()) { <section staffPageState class="notice performance-error">{{ appraisalError() }}</section> }
+          <div class="list">
+            @for (review of appraisals(); track review.id) {
+              <article class="row appraisal-row"><div><strong>{{ review.cycleName }}</strong><small>{{ review.periodStart }} – {{ review.periodEnd }} · {{ review.status.replaceAll('_', ' ') }}</small>@for (result of review.keyResults; track result.id) { <small>{{ result.title }} · {{ result.currentValue ?? 'pending' }}/{{ result.targetValue }} {{ result.metricUnit }}</small> }@if (review.finalScore !== null) { <small>Final {{ review.finalScore }}/100 · {{ review.finalRating.replaceAll('_', ' ') }}</small> }</div><div class="row-actions">@if (review.status === 'self_review_pending') { <button type="button" [disabled]="appraisalSaving()" (click)="submitSelfReview(review)">Submit self review</button> }@if (review.status === 'approved') { <button type="button" [disabled]="appraisalSaving()" (click)="acknowledgeAppraisal(review)">Acknowledge</button> }</div></article>
+            } @empty { <div class="performance-empty compact"><p>No appraisal assigned.</p></div> }
+          </div>
+        </section>
         <section class="grid four performance-kpis">
           <article class="kpi"><span>Score</span><strong>{{ scoreLabel(data.performance.productivityScore) }}</strong><small>{{ refreshing() ? 'Refreshing...' : scoreHint(data.performance.productivityScore) }}</small></article>
           <article class="kpi"><span>Services</span><strong>{{ data.performance.completedServices || 0 }}</strong><small>Completed services</small></article>
@@ -120,6 +129,9 @@ export class StaffPerformancePage implements OnInit {
   readonly refreshing = signal(false);
   readonly loadError = signal("");
   readonly periodDays = signal(30);
+  readonly appraisals = signal<StaffAppraisal[]>([]);
+  readonly appraisalError = signal("");
+  readonly appraisalSaving = signal(false);
 
   constructor(readonly staff: StaffAppService) {}
 
@@ -135,6 +147,7 @@ export class StaffPerformancePage implements OnInit {
     try {
       const to = businessDate();
       this.os.set(await this.staff.enterpriseOs({ from: businessDateOffset(1 - this.periodDays(), to), to }));
+      void this.loadAppraisals();
     } catch {
       this.loadError.set(this.staff.error() || "Unable to load performance.");
     } finally {
@@ -163,6 +176,47 @@ export class StaffPerformancePage implements OnInit {
   hasPerformanceEvidence(data: StaffEnterpriseOs): boolean {
     const performance = data.performance || {} as StaffEnterpriseOs["performance"];
     return !!(performance.completedServices || performance.revenue || performance.productivityScore !== null && performance.productivityScore !== undefined || performance.avgUtilization !== null && performance.avgUtilization !== undefined || performance.avgRating !== null && performance.avgRating !== undefined || performance.strengths?.length || performance.opportunities?.length);
+  }
+
+  async loadAppraisals() {
+    try {
+      this.appraisalError.set("");
+      this.appraisals.set(await this.staff.appraisals());
+    } catch {
+      this.appraisalError.set(this.staff.error() || "Unable to load appraisals.");
+    }
+  }
+
+  async submitSelfReview(review: StaffAppraisal) {
+    const keyResults: Array<{ id: string; currentValue: number; evidence?: string }> = [];
+    for (const result of review.keyResults) {
+      const value = window.prompt(`${result.title}: current ${result.metricUnit}`, String(result.currentValue ?? ""));
+      if (value === null || !Number.isFinite(Number(value)) || Number(value) < 0) return;
+      keyResults.push({ id: result.id, currentValue: Number(value), evidence: window.prompt(`${result.title}: evidence (optional)`, result.evidence || "")?.trim() || "" });
+    }
+    const comments = window.prompt("Self-review comments", review.selfComments || "")?.trim() || "";
+    this.appraisalSaving.set(true);
+    try {
+      await this.staff.submitSelfReview(review.id, keyResults, comments, review.version);
+      await this.loadAppraisals();
+    } catch {
+      this.appraisalError.set(this.staff.error() || "Unable to submit self review.");
+    } finally {
+      this.appraisalSaving.set(false);
+    }
+  }
+
+  async acknowledgeAppraisal(review: StaffAppraisal) {
+    if (!window.confirm(`Acknowledge ${review.cycleName} final rating?`)) return;
+    this.appraisalSaving.set(true);
+    try {
+      await this.staff.acknowledgeAppraisal(review.id, review.version);
+      await this.loadAppraisals();
+    } catch {
+      this.appraisalError.set(this.staff.error() || "Unable to acknowledge appraisal.");
+    } finally {
+      this.appraisalSaving.set(false);
+    }
   }
   sourceGaps(data: StaffEnterpriseOs): string[] {
     const performance = data.performance;

@@ -855,6 +855,16 @@ async fn update_staff_profile(
             .map_err(|_| AppError::internal("failed to validate reporting manager"))?
             .filter(|manager| manager.active)
             .ok_or_else(|| AppError::validation("invalid reportingManagerId"))?;
+        if staff_repository::reporting_manager_would_cycle(
+            &state.db, &tenant_id, &branch_id, &id, manager_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate reporting hierarchy"))?
+        {
+            return Err(AppError::validation(
+                "reporting hierarchy cannot contain a cycle",
+            ));
+        }
     }
     staff_service::validate_master_assignment(
         &state.db,

@@ -22,6 +22,8 @@ struct SupplierQuery {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/inventory/policy", get(get_policy).put(save_policy))
+        .route("/inventory/master-data", get(master_data))
+        .route("/inventory/master-data/values", post(save_master_value))
         .route("/inventory/supplier-governance", get(supplier_governance))
         .route("/inventory/supplier-governance/prices", post(save_price))
         .route("/inventory/operations-health", get(operations_health))
@@ -65,6 +67,23 @@ pub fn router() -> Router<AppState> {
             "/inventory/backbar-overrides/:id/review",
             post(review_override),
         )
+        .route("/inventory/floor-control", get(floor_control))
+        .route("/inventory/checkouts", post(checkout))
+        .route("/inventory/conversions", post(convert))
+        .route(
+            "/inventory/operational-movements/:id/reverse",
+            post(reverse_movement),
+        )
+        .route("/inventory/floor-locations", post(save_floor_location))
+        .route(
+            "/inventory/backbar-containers/:id/custody",
+            post(transfer_container_custody),
+        )
+        .route("/inventory/floor-closings", post(create_floor_closing))
+        .route(
+            "/inventory/floor-closings/:id/review",
+            post(review_floor_closing),
+        )
 }
 fn manager(c: &AuthClaims) -> Result<(), AppError> {
     if matches!(
@@ -75,7 +94,12 @@ fn manager(c: &AuthClaims) -> Result<(), AppError> {
             | "inventory manager"
             | "inventory_manager"
             | "inventoryManager"
-    ) {
+    ) || c.permissions.iter().any(|permission| {
+        matches!(
+            permission.as_str(),
+            "inventory.manage" | "inventory.write" | "inventory.approve"
+        )
+    }) {
         Ok(())
     } else {
         Err(AppError::forbidden("inventory management role is required"))
@@ -228,10 +252,116 @@ async fn review_override(
     Path(id): Path<String>,
     Json(p): Json<svc::OverrideReview>,
 ) -> ApiResult<Value> {
-    owner(&c)?;
+    manager(&c)?;
     let (t, b) = tenant_branch(&h)?;
     Ok(Json(ApiResponse::ok(
         svc::review_override(&s.db, &t, &b, &c.sub, &id, p).await?,
+    )))
+}
+async fn master_data(State(s): State<AppState>, h: HeaderMap) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::master_data(&s.db, &t, &b).await?,
+    )))
+}
+async fn save_master_value(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<svc::MasterValueWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::save_master_value(&s.db, &t, &b, &c.sub, p).await?,
+    )))
+}
+
+async fn floor_control(State(s): State<AppState>, h: HeaderMap) -> ApiResult<Value> {
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::floor_control(&s.db, &t, &b).await?,
+    )))
+}
+async fn checkout(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<svc::CheckoutWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t,b)=tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(svc::checkout(&s.db,&t,&b,&c.sub,p).await?)))
+}
+async fn convert(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<svc::ConversionWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t,b)=tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(svc::convert(&s.db,&t,&b,&c.sub,p).await?)))
+}
+async fn reverse_movement(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<svc::MovementReversalWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t,b)=tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(svc::reverse_movement(&s.db,&t,&b,&c.sub,&id,p).await?)))
+}
+async fn save_floor_location(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<svc::FloorLocationWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::save_floor_location(&s.db, &t, &b, &c.sub, p).await?,
+    )))
+}
+async fn transfer_container_custody(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<svc::ContainerCustodyWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::transfer_container_custody(&s.db, &t, &b, &c.sub, &id, p).await?,
+    )))
+}
+async fn create_floor_closing(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<svc::FloorClosingWrite>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::create_floor_closing(&s.db, &t, &b, &c.sub, p).await?,
+    )))
+}
+async fn review_floor_closing(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<svc::FloorClosingReview>,
+) -> ApiResult<Value> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::review_floor_closing(&s.db, &t, &b, &c.sub, &id, p).await?,
     )))
 }
 

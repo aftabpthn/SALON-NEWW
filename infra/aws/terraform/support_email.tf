@@ -1,5 +1,5 @@
 locals {
-  support_email_enabled = length(var.support_email_recipient_map) > 0
+  support_email_enabled     = length(var.support_email_recipient_map) > 0
   support_email_webhook_url = trimspace(var.support_email_webhook_url) != "" ? trimspace(var.support_email_webhook_url) : "https://${aws_cloudfront_distribution.app.domain_name}/api/webhooks/support/email"
   support_email_recipient_map = {
     for recipient, scope in var.support_email_recipient_map : lower(trimspace(recipient)) => {
@@ -75,9 +75,9 @@ resource "aws_s3_bucket_policy" "support_email" {
 resource "aws_sqs_queue" "support_email_dlq" {
   count = local.support_email_enabled ? 1 : 0
 
-  name                       = "${local.name}-support-email-dlq"
-  message_retention_seconds  = 1209600
-  sqs_managed_sse_enabled    = true
+  name                      = "${local.name}-support-email-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
 }
 
 resource "aws_cloudwatch_log_group" "support_email" {

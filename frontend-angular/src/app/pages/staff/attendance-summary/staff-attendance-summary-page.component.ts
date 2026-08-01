@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
 type AttendanceColumn =
   | 'name' | 'code' | 'salary' | 'workingDays' | 'leaveBalance' | 'specialLeaveBalance'
@@ -72,10 +73,15 @@ type CorrectionForm = {
   comments: string; correctionReason: string;
   breaks: Array<{ startedAt: string; endedAt: string; comments: string }>;
 };
+type PhysicalAttendanceMode = 'clock-in' | 'clock-out' | 'full-day';
+type PhysicalAttendanceForm = {
+  staffId: string; businessDate: string; mode: PhysicalAttendanceMode; clockInAt: string; clockOutAt: string;
+  manualStatus: string; comments: string; correctionReason: string;
+};
 
 @Component({
     selector: 'app-staff-attendance-summary-page',
-    imports: [FormsModule, TranslatePipe],
+    imports: [FormsModule, TranslatePipe, DatePickerComponent],
     templateUrl: './staff-attendance-summary-page.component.html',
     styleUrls: ['./staff-attendance-summary-page.component.css']
 })
@@ -124,6 +130,9 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   correctionDetail: AttendanceDetail | null = null;
   correctionForm: CorrectionForm | null = null;
   correctionSaving = false;
+  physicalOpen = false;
+  physicalSaving = false;
+  physicalForm: PhysicalAttendanceForm = this.emptyPhysicalForm();
 
   ngOnInit() { void this.loadSummary(); }
 
@@ -225,6 +234,50 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   }
 
   closeDetails() { this.selectedRow = null; this.details = []; this.correctionDetail = null; this.correctionForm = null; }
+
+  openPhysicalAttendance() {
+    this.closeDetails();
+    this.physicalForm = this.emptyPhysicalForm();
+    this.physicalForm.staffId = this.staffId || this.staffOptions[0]?.id || '';
+    this.physicalOpen = true;
+  }
+
+  closePhysicalAttendance() { if (!this.physicalSaving) this.physicalOpen = false; }
+
+  async savePhysicalAttendance() {
+    const form = this.physicalForm;
+    if (!form.staffId || !form.businessDate) { this.error = 'Select staff and attendance date.'; return; }
+    if (form.mode === 'clock-in' && !form.clockInAt) { this.error = 'Clock-in time is required.'; return; }
+    if (form.mode === 'clock-out' && !form.clockOutAt) { this.error = 'Clock-out time is required.'; return; }
+    if (form.mode === 'full-day' && (!form.manualStatus || !form.correctionReason.trim())) {
+      this.error = 'Status and correction reason are required for a full-day entry.';
+      return;
+    }
+    this.physicalSaving = true;
+    this.error = '';
+    try {
+      const staffId = encodeURIComponent(form.staffId);
+      const comments = form.comments.trim();
+      const request = form.mode === 'clock-in'
+        ? this.api.post<ApiEnvelope<unknown>>('/staff-attendance/clock-in', {
+            staffId: form.staffId, businessDate: form.businessDate, clockInAt: this.toIso(form.clockInAt), source: 'physical', comments,
+          })
+        : form.mode === 'clock-out'
+          ? this.api.post<ApiEnvelope<unknown>>('/staff-attendance/clock-out', {
+              staffId: form.staffId, businessDate: form.businessDate, clockOutAt: this.toIso(form.clockOutAt), comments,
+            })
+          : this.api.patch<ApiEnvelope<unknown>>(`/staff-attendance/${staffId}/${form.businessDate}/correction`, {
+              clockInAt: this.toIso(form.clockInAt), clockOutAt: this.toIso(form.clockOutAt), manualStatus: form.manualStatus,
+              penaltyPaise: 0, comments, correctionReason: form.correctionReason.trim(), breaks: [],
+            });
+      const result = await firstValueFrom(request);
+      if (!result.success) throw new Error(result.error?.message || 'Physical attendance could not be saved.');
+      this.physicalOpen = false;
+      await this.loadSummary();
+    } catch (error) {
+      this.error = this.message(error, 'Physical attendance could not be saved.');
+    } finally { this.physicalSaving = false; }
+  }
 
   editAttendance(detail: AttendanceDetail) {
     this.correctionDetail = detail;
@@ -369,6 +422,11 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   }
 
   private toIso(value: string) { return value ? new Date(value).toISOString() : null; }
+
+  private emptyPhysicalForm(): PhysicalAttendanceForm {
+    const businessDate = `${this.today.getFullYear()}-${String(this.today.getMonth() + 1).padStart(2, '0')}-${String(this.today.getDate()).padStart(2, '0')}`;
+    return { staffId: '', businessDate, mode: 'full-day', clockInAt: '', clockOutAt: '', manualStatus: 'present', comments: '', correctionReason: '' };
+  }
 
   private shiftLabel(start: string | null, end: string | null) {
     return start && end ? `${start.slice(0, 5)}–${end.slice(0, 5)}` : '';

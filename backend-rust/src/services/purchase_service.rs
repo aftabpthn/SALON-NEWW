@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use chrono::{Duration, NaiveDate, Utc};
 
@@ -28,14 +28,27 @@ pub struct ReceiptInput {
     pub delivery_reference: String,
     pub shipping_paise: i64,
     pub handling_paise: i64,
+    pub round_off_paise: i64,
+    pub tax_totals: Option<ReceiptTaxTotals>,
     pub idempotency_key: String,
     pub backdated_operational_approval: bool,
+    pub accept_excess: bool,
+    pub request_master_price_updates: HashSet<String>,
     pub lines: Vec<ReceiptLineInput>,
+}
+
+#[derive(Clone, Copy)]
+pub struct ReceiptTaxTotals {
+    pub cgst_paise: i64,
+    pub sgst_paise: i64,
+    pub igst_paise: i64,
 }
 
 pub struct ReceiptLineInput {
     pub inventory_item_id: String,
     pub quantity: i32,
+    pub retail_quantity: Option<i32>,
+    pub consumable_quantity: Option<i32>,
     pub free_quantity: i32,
     pub unit_cost_paise: i64,
     pub discount_bps: i32,
@@ -60,6 +73,8 @@ pub struct OrderInput {
 pub struct OrderLineInput {
     pub inventory_item_id: String,
     pub quantity: i32,
+    pub retail_quantity: i32,
+    pub consumable_quantity: i32,
     pub unit_cost_paise: i64,
     pub discount_bps: i32,
     pub gst_percent: i32,
@@ -111,6 +126,25 @@ pub struct ReceiptDetails {
     pub receipt: PurchaseReceipt,
     pub lines: Vec<PurchaseReceiptLine>,
     pub warnings: Vec<String>,
+    pub price_warnings: Vec<PriceDifferenceWarning>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PriceDifferenceWarning {
+    pub inventory_item_id: String,
+    pub current_unit_cost_paise: Option<i64>,
+    pub received_unit_cost_paise: i64,
+    pub difference_bps: Option<i32>,
+    pub update_requested: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseOrderImportResult {
+    pub file_name: String,
+    pub rows_imported: usize,
+    pub order: OrderDetails,
 }
 
 struct CalculatedLine {
@@ -120,6 +154,8 @@ struct CalculatedLine {
     units_per_package: i32,
     stock_quantity: i32,
     quantity: i32,
+    retail_quantity: i32,
+    consumable_quantity: i32,
     free_quantity: i32,
     delivered_quantity: i32,
     ordered_quantity: Option<i32>,
@@ -127,7 +163,8 @@ struct CalculatedLine {
     excess_quantity: i32,
     damaged_quantity: i32,
     rejected_quantity: i32,
-    applied_order_quantity: i32,
+    applied_retail_quantity: i32,
+    applied_consumable_quantity: i32,
     variance_reason: String,
     gross_unit_cost_paise: i64,
     unit_cost_paise: i64,
@@ -145,6 +182,8 @@ struct CalculatedLine {
     next_cost: i64,
     current_stock: i32,
     current_cost: i64,
+    master_cost: Option<i64>,
+    request_master_price_update: bool,
     batch_tracked: bool,
     batch_number: String,
     batch_barcode: String,
@@ -157,6 +196,7 @@ pub async fn receive(
     branch_id: &str,
     actor_user_id: &str,
     actor_role: &str,
+    can_receive_excess: bool,
     input: ReceiptInput,
 ) -> Result<ReceiptDetails, AppError> {
     let supplier = if let Some(id) = input
@@ -301,7 +341,29 @@ pub async fn receive(
                 })
                 .into_iter()
                 .collect(),
+            price_warnings: Vec::new(),
         });
+    }
+    let receipt_policy =
+        purchase_repository::inventory_receipt_policy(&mut tx, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load inventory receipt policy"))?;
+    if receipt_policy
+        .financial_lock_date
+        .is_some_and(|lock| supplier_invoice_date <= lock || received_date <= lock)
+    {
+        return Err(AppError::conflict(
+            "GRN date is inside the inventory financial lock period",
+        ));
+    }
+    if receipt_policy.edit_lock_days > 0 {
+        let cutoff = chrono::Utc::now().date_naive()
+            - Duration::days(i64::from(receipt_policy.edit_lock_days));
+        if supplier_invoice_date < cutoff || received_date < cutoff {
+            return Err(AppError::conflict(
+                "GRN date is older than the inventory edit-lock window",
+            ));
+        }
     }
     let purchase_order_id = input
         .purchase_order_id
@@ -333,6 +395,8 @@ pub async fn receive(
     let supplier_state = gst_state(&supplier_gstin);
     let mut calculated = Vec::with_capacity(input.lines.len());
     let mut item_ids = HashSet::new();
+    let accept_excess = input.accept_excess;
+    let requested_price_updates = input.request_master_price_updates;
     for line in input.lines {
         if line.quantity <= 0
             || line.free_quantity < 0
@@ -352,6 +416,23 @@ pub async fn receive(
                 "each inventory item can appear only once in a GRN",
             ));
         }
+        if let Some(supplier_id) = supplier_id {
+            if !purchase_repository::supplier_item_available(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                supplier_id,
+                line.inventory_item_id.trim(),
+            )
+            .await
+            .map_err(|_| {
+                AppError::internal("failed to validate vendor-product-center association")
+            })? {
+                return Err(AppError::conflict(
+                    "vendor-product-center association is inactive or unavailable",
+                ));
+            }
+        }
         let item = purchase_repository::lock_inventory_item(
             &mut tx,
             tenant_id,
@@ -363,47 +444,103 @@ pub async fn receive(
         .ok_or_else(|| AppError::not_found("GRN inventory item was not found"))?;
         let gst_percent = line.gst_percent.unwrap_or(item.gst_percent).clamp(0, 100);
         let expiry_date = parse_optional_date(line.expiry_date.as_deref(), "expiryDate")?;
-        let (ordered_quantity, package_unit, stock_unit, units_per_package) =
-            if let Some(order_id) = purchase_order_id {
-                let order_line = purchase_repository::lock_order_line_for_receipt(
-                    &mut tx,
-                    tenant_id,
-                    branch_id,
-                    order_id,
-                    line.inventory_item_id.trim(),
-                )
-                .await
-                .map_err(|_| AppError::internal("failed to lock purchase order line"))?
-                .ok_or_else(|| AppError::conflict("GRN item is not on the purchase order"))?;
-                if order_line.stock_unit != item.stock_unit {
-                    return Err(AppError::conflict(
-                        "product stock unit changed after the purchase order was created",
-                    ));
-                }
-                (
-                    Some(
-                        order_line
-                            .quantity
-                            .saturating_sub(order_line.received_quantity),
-                    ),
-                    order_line.package_unit,
-                    order_line.stock_unit,
-                    order_line.units_per_package,
-                )
-            } else {
-                (
-                    None,
-                    item.package_unit.clone(),
-                    item.stock_unit.clone(),
-                    item.units_per_package,
-                )
-            };
+        let (
+            ordered_quantity,
+            ordered_retail,
+            ordered_consumable,
+            order_price,
+            package_unit,
+            stock_unit,
+            units_per_package,
+        ) = if let Some(order_id) = purchase_order_id {
+            let order_line = purchase_repository::lock_order_line_for_receipt(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                order_id,
+                line.inventory_item_id.trim(),
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to lock purchase order line"))?
+            .ok_or_else(|| AppError::conflict("GRN item is not on the purchase order"))?;
+            if order_line.stock_unit != item.stock_unit {
+                return Err(AppError::conflict(
+                    "product stock unit changed after the purchase order was created",
+                ));
+            }
+            (
+                Some(
+                    order_line
+                        .quantity
+                        .saturating_sub(order_line.received_quantity),
+                ),
+                Some(
+                    order_line
+                        .retail_quantity
+                        .saturating_sub(order_line.retail_received_quantity),
+                ),
+                Some(
+                    order_line
+                        .consumable_quantity
+                        .saturating_sub(order_line.consumable_received_quantity),
+                ),
+                Some(order_line.unit_cost_paise),
+                order_line.package_unit,
+                order_line.stock_unit,
+                order_line.units_per_package,
+            )
+        } else {
+            (
+                None,
+                None,
+                None,
+                None,
+                item.package_unit.clone(),
+                item.stock_unit.clone(),
+                item.units_per_package,
+            )
+        };
         let (accepted, short, excess, applied) = receiving_variance(
             ordered_quantity,
             line.quantity,
             line.damaged_quantity,
             line.rejected_quantity,
         );
+        let (retail_quantity, consumable_quantity) = receiving_split(
+            accepted,
+            line.retail_quantity,
+            line.consumable_quantity,
+            &item.product_usage,
+            ordered_retail,
+            ordered_consumable,
+        )?;
+        let applied_retail = ordered_retail.map_or(0, |ordered| retail_quantity.min(ordered));
+        let applied_consumable =
+            ordered_consumable.map_or(0, |ordered| consumable_quantity.min(ordered));
+        let applied = if ordered_quantity.is_some() {
+            applied_retail.saturating_add(applied_consumable)
+        } else {
+            applied
+        };
+        let short = ordered_quantity.map_or(short, |ordered| ordered.saturating_sub(applied));
+        let excess = ordered_quantity.map_or(excess, |_| accepted.saturating_sub(applied));
+        if short > 0 && receipt_policy.partial_delivery_policy == "block" {
+            return Err(AppError::conflict(
+                "partial delivery is blocked by inventory policy",
+            ));
+        }
+        if excess > 0 {
+            if receipt_policy.excess_receiving_policy == "block" {
+                return Err(AppError::conflict(
+                    "excess receiving is blocked by inventory policy",
+                ));
+            }
+            if !accept_excess || !can_receive_excess {
+                return Err(AppError::forbidden(
+                    "excess receiving permission and explicit acceptance are required",
+                ));
+            }
+        }
         let stock_quantity = base_quantity(
             accepted
                 .checked_add(line.free_quantity)
@@ -428,10 +565,24 @@ pub async fn receive(
                 "registered business and supplier GSTIN are required for input GST",
             ));
         }
-        let (net_unit_cost, discount_paise) =
+        let (net_unit_cost, discount_paise, taxable) =
             discounted_cost(line.unit_cost_paise, line.discount_bps, accepted);
-        let taxable = i64::from(accepted).saturating_mul(net_unit_cost);
-        let tax = taxable.saturating_mul(i64::from(gst_percent)) / 100;
+        let master_cost = if let Some(supplier_id) = supplier_id {
+            purchase_repository::active_supplier_price(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                supplier_id,
+                line.inventory_item_id.trim(),
+                received_date,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to load supplier master price"))?
+            .or(order_price)
+        } else {
+            order_price
+        };
+        let tax = div_round(taxable.saturating_mul(i64::from(gst_percent)), 100);
         let (cgst, sgst, igst) = if gst_percent == 0 {
             (0, 0, 0)
         } else if buyer_state == supplier_state {
@@ -453,6 +604,8 @@ pub async fn receive(
             units_per_package,
             stock_quantity,
             quantity: accepted,
+            retail_quantity,
+            consumable_quantity,
             free_quantity: line.free_quantity,
             delivered_quantity: line.quantity.saturating_add(line.free_quantity),
             ordered_quantity,
@@ -460,7 +613,8 @@ pub async fn receive(
             excess_quantity: excess,
             damaged_quantity: line.damaged_quantity,
             rejected_quantity: line.rejected_quantity,
-            applied_order_quantity: applied,
+            applied_retail_quantity: applied_retail,
+            applied_consumable_quantity: applied_consumable,
             variance_reason,
             gross_unit_cost_paise: line.unit_cost_paise,
             unit_cost_paise: net_unit_cost,
@@ -478,11 +632,27 @@ pub async fn receive(
             next_cost: 0,
             current_stock: item.stock_quantity,
             current_cost: item.unit_cost_paise,
+            master_cost,
+            request_master_price_update: requested_price_updates
+                .contains(line.inventory_item_id.trim()),
             batch_tracked: item.batch_tracked,
             batch_number: line.batch_number.unwrap_or_default().trim().to_string(),
             batch_barcode: line.batch_barcode.unwrap_or_default().trim().to_string(),
             expiry_date,
         });
+    }
+    if !requested_price_updates.is_subset(&item_ids) {
+        return Err(AppError::validation(
+            "master price update items must belong to this GRN",
+        ));
+    }
+    if !requested_price_updates.is_empty() && supplier_id.is_none() {
+        return Err(AppError::validation(
+            "a saved supplier is required for master price updates",
+        ));
+    }
+    if let Some(targets) = input.tax_totals {
+        reconcile_tax_totals(&mut calculated, targets)?;
     }
     let taxable = calculated.iter().map(|line| line.taxable_paise).sum();
     let cgst = calculated.iter().map(|line| line.cgst_paise).sum();
@@ -517,6 +687,27 @@ pub async fn receive(
             line.stock_unit_cost_paise,
         );
     }
+    let price_warnings = calculated
+        .iter()
+        .filter_map(|line| {
+            let difference_bps = line
+                .master_cost
+                .map(|current| price_difference_bps(current, line.gross_unit_cost_paise));
+            let differs = line.master_cost != Some(line.gross_unit_cost_paise);
+            (receipt_policy.price_difference_prompt
+                && differs
+                && difference_bps.map_or(true, |value| {
+                    value >= receipt_policy.price_difference_threshold_bps
+                }))
+            .then(|| PriceDifferenceWarning {
+                inventory_item_id: line.item_id.clone(),
+                current_unit_cost_paise: line.master_cost,
+                received_unit_cost_paise: line.gross_unit_cost_paise,
+                difference_bps,
+                update_requested: line.request_master_price_update,
+            })
+        })
+        .collect::<Vec<_>>();
     let receipt = purchase_repository::create_receipt(
         &mut tx,
         tenant_id,
@@ -538,11 +729,23 @@ pub async fn receive(
         igst,
         input.shipping_paise,
         input.handling_paise,
+        input.round_off_paise,
         actor_user_id,
         &key,
     )
     .await
-    .map_err(|_| AppError::conflict("supplier invoice or idempotency key already exists"))?;
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .and_then(|database_error| database_error.code())
+            .as_deref()
+            == Some("23505")
+        {
+            AppError::conflict("supplier invoice or idempotency key already exists")
+        } else {
+            AppError::internal("failed to create purchase receipt")
+        }
+    })?;
     if backdated {
         purchase_repository::record_backdated_operational_approval(
             &mut tx,
@@ -554,6 +757,17 @@ pub async fn receive(
         .await
         .map_err(|_| AppError::internal("failed to record backdated GRN approval"))?;
     }
+    if calculated.iter().any(|line| line.excess_quantity > 0) {
+        purchase_repository::mark_excess_approved(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &receipt.id,
+            actor_user_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to record excess receiving approval"))?;
+    }
     let mut saved_lines = Vec::with_capacity(calculated.len());
     for line in calculated {
         if let Some(order_id) = purchase_order_id {
@@ -563,7 +777,8 @@ pub async fn receive(
                 branch_id,
                 order_id,
                 &line.item_id,
-                line.applied_order_quantity,
+                line.applied_retail_quantity,
+                line.applied_consumable_quantity,
             )
             .await
             .map_err(|_| AppError::internal("failed to update purchase order receipt"))?;
@@ -585,6 +800,8 @@ pub async fn receive(
             line.stock_quantity,
             line.stock_unit_cost_paise,
             line.quantity,
+            line.retail_quantity,
+            line.consumable_quantity,
             line.delivered_quantity,
             line.ordered_quantity,
             line.short_quantity,
@@ -610,6 +827,28 @@ pub async fn receive(
         )
         .await
         .map_err(|_| AppError::internal("failed to save GRN line"))?;
+        if line.request_master_price_update && line.master_cost != Some(line.gross_unit_cost_paise)
+        {
+            let price_supplier_id = supplier_id.ok_or_else(|| {
+                AppError::validation("a saved supplier is required for master price updates")
+            })?;
+            purchase_repository::create_price_update_request(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &receipt.id,
+                &saved.id,
+                price_supplier_id,
+                &line.item_id,
+                line.master_cost,
+                line.gross_unit_cost_paise,
+                line.discount_bps,
+                line.gst_percent,
+                actor_user_id,
+            )
+            .await
+            .map_err(|_| AppError::conflict("master price update request already exists"))?;
+        }
         if line.damaged_quantity > 0 {
             purchase_repository::create_receiving_quarantine(
                 &mut tx,
@@ -702,6 +941,7 @@ pub async fn receive(
             receipt.igst_paise,
             receipt.shipping_paise,
             receipt.handling_paise,
+            receipt.round_off_paise,
         )
         .await?;
     }
@@ -718,6 +958,7 @@ pub async fn receive(
             })
             .into_iter()
             .collect(),
+        price_warnings,
     })
 }
 
@@ -754,6 +995,7 @@ pub async fn details(
             })
             .into_iter()
             .collect(),
+        price_warnings: Vec::new(),
     })
 }
 
@@ -787,6 +1029,16 @@ pub async fn create_order(
         let item_id = line.inventory_item_id.trim().to_string();
         if item_id.is_empty()
             || line.quantity <= 0
+            || line.retail_quantity < 0
+            || line.consumable_quantity < 0
+            || (line
+                .retail_quantity
+                .saturating_add(line.consumable_quantity)
+                > 0
+                && line
+                    .retail_quantity
+                    .saturating_add(line.consumable_quantity)
+                    != line.quantity)
             || line.unit_cost_paise < 0
             || !(0..=10_000).contains(&line.discount_bps)
             || !(0..=100).contains(&line.gst_percent)
@@ -800,13 +1052,14 @@ pub async fn create_order(
                 "each inventory item can appear only once in a purchase order",
             ));
         }
-        let (net_unit_cost, discount_paise) =
+        let (_, discount_paise, taxable) =
             discounted_cost(line.unit_cost_paise, line.discount_bps, line.quantity);
-        let taxable = i64::from(line.quantity).saturating_mul(net_unit_cost);
-        let tax = taxable.saturating_mul(i64::from(line.gst_percent)) / 100;
+        let tax = div_round(taxable.saturating_mul(i64::from(line.gst_percent)), 100);
         calculated.push((
             item_id,
             line.quantity,
+            line.retail_quantity,
+            line.consumable_quantity,
             line.unit_cost_paise,
             line.discount_bps,
             discount_paise,
@@ -815,8 +1068,8 @@ pub async fn create_order(
             tax,
         ));
     }
-    let taxable = calculated.iter().map(|line| line.6).sum();
-    let tax = calculated.iter().map(|line| line.7).sum();
+    let taxable = calculated.iter().map(|line| line.8).sum();
+    let tax = calculated.iter().map(|line| line.9).sum();
     let mut tx = state
         .db
         .begin()
@@ -839,13 +1092,28 @@ pub async fn create_order(
     .map_err(|_| AppError::not_found("active supplier was not found"))?;
     for line in calculated {
         if !purchase_repository::create_order_line(
-            &mut tx, tenant_id, branch_id, &order_id, &line.0, line.1, line.2, line.3, line.4,
-            line.5, line.6, line.7,
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &order_id,
+            &supplier_id,
+            &line.0,
+            line.1,
+            line.2,
+            line.3,
+            line.4,
+            line.5,
+            line.6,
+            line.7,
+            line.8,
+            line.9,
         )
         .await
         .map_err(|_| AppError::internal("failed to save purchase order line"))?
         {
-            return Err(AppError::not_found("active inventory item was not found"));
+            return Err(AppError::not_found(
+                "active vendor-product-center association was not found",
+            ));
         }
     }
     purchase_order_event_repository::add(
@@ -999,6 +1267,250 @@ fn transition_target(current: &str, action: &str, has_receipts: bool) -> Option<
         ("closed", "reopen") => Some("approved"),
         _ => None,
     }
+}
+
+#[derive(serde::Serialize)]
+pub struct PriceUpdateReviewResult {
+    pub id: String,
+    pub status: String,
+}
+
+pub async fn review_price_update(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+    approve: bool,
+    note: &str,
+) -> Result<PriceUpdateReviewResult, AppError> {
+    if !approve && note.trim().is_empty() {
+        return Err(AppError::validation(
+            "review note is required when rejecting a price update",
+        ));
+    }
+    if note.chars().count() > 500 {
+        return Err(AppError::validation(
+            "review note must be 500 characters or fewer",
+        ));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start master price review"))?;
+    let request = purchase_repository::lock_price_update_request(&mut tx, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock master price request"))?
+        .ok_or_else(|| AppError::not_found("pending master price request was not found"))?;
+    if request.requested_by == actor {
+        return Err(AppError::conflict(
+            "price update requester cannot approve their own request",
+        ));
+    }
+    let status = if approve { "approved" } else { "rejected" };
+    if approve {
+        purchase_repository::apply_approved_supplier_price(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &request.supplier_id,
+            &request.inventory_item_id,
+            request.requested_unit_cost_paise,
+            request.requested_discount_bps,
+            request.requested_gst_percent,
+            actor,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to update supplier master price"))?;
+    }
+    if !purchase_repository::finish_price_update_request(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        id,
+        status,
+        actor,
+        note.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to finish master price review"))?
+    {
+        return Err(AppError::conflict(
+            "master price request changed; reload and try again",
+        ));
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit master price review"))?;
+    Ok(PriceUpdateReviewResult {
+        id: id.to_owned(),
+        status: status.to_owned(),
+    })
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct PurchaseOrderCsvRow {
+    vendor_code: String,
+    product_code: String,
+    #[serde(default)]
+    retail_qty: String,
+    #[serde(default)]
+    consumable_qty: String,
+}
+
+pub async fn import_order_csv(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    file_name: &str,
+    csv_text: &str,
+) -> Result<PurchaseOrderImportResult, AppError> {
+    let file_name = file_name.trim();
+    if file_name.is_empty()
+        || file_name.chars().count() > 255
+        || !file_name.to_ascii_lowercase().ends_with(".csv")
+    {
+        return Err(AppError::validation("fileName must be a CSV file name"));
+    }
+    if csv_text.is_empty() || csv_text.len() > 3 * 1024 * 1024 {
+        return Err(AppError::validation("CSV must be between 1 byte and 3 MB"));
+    }
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_reader(csv_text.as_bytes());
+    let mut supplier_code = String::new();
+    let mut supplier_id = String::new();
+    let mut rows = 0_usize;
+    let mut lines = BTreeMap::<String, OrderLineInput>::new();
+    for (index, result) in reader.deserialize::<PurchaseOrderCsvRow>().enumerate() {
+        if index >= 1_000 {
+            return Err(AppError::validation(
+                "CSV cannot contain more than 1000 product rows",
+            ));
+        }
+        let row = result.map_err(|error| {
+            AppError::validation(format!("CSV row {} is invalid: {error}", index + 2))
+        })?;
+        let vendor_code = row.vendor_code.trim();
+        let product_code = row.product_code.trim();
+        if vendor_code.is_empty() || product_code.is_empty() {
+            return Err(AppError::validation(format!(
+                "CSV row {} requires VendorCode and ProductCode",
+                index + 2
+            )));
+        }
+        if supplier_code.is_empty() {
+            supplier_code = vendor_code.to_owned();
+        }
+        if !supplier_code.eq_ignore_ascii_case(vendor_code) {
+            return Err(AppError::validation(
+                "one CSV import can contain only one VendorCode",
+            ));
+        }
+        let retail = csv_quantity(&row.retail_qty, index + 2, "RetailQty")?;
+        let consumable = csv_quantity(&row.consumable_qty, index + 2, "ConsumableQty")?;
+        if retail + consumable <= 0 {
+            return Err(AppError::validation(format!(
+                "CSV row {} requires a positive retail or consumable quantity",
+                index + 2
+            )));
+        }
+        let product = purchase_repository::import_product(
+            &state.db,
+            tenant_id,
+            branch_id,
+            vendor_code,
+            product_code,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate purchase import product"))?
+        .ok_or_else(|| {
+            AppError::validation(format!(
+                "CSV row {} vendor/product association is unavailable",
+                index + 2
+            ))
+        })?;
+        if (retail > 0 && !matches!(product.product_usage.as_str(), "retail" | "dual_use"))
+            || (consumable > 0
+                && !matches!(product.product_usage.as_str(), "consumable" | "dual_use"))
+        {
+            return Err(AppError::validation(format!(
+                "CSV row {} quantity does not match the product usage type",
+                index + 2
+            )));
+        }
+        let cost = product.unit_cost_paise.ok_or_else(|| {
+            AppError::validation(format!(
+                "CSV row {} has no active supplier price",
+                index + 2
+            ))
+        })?;
+        if supplier_id.is_empty() {
+            supplier_id = product.supplier_id.clone();
+        }
+        if supplier_id != product.supplier_id {
+            return Err(AppError::validation(
+                "one CSV import can resolve to only one supplier",
+            ));
+        }
+        let entry = lines
+            .entry(product.inventory_item_id.clone())
+            .or_insert(OrderLineInput {
+                inventory_item_id: product.inventory_item_id,
+                quantity: 0,
+                retail_quantity: 0,
+                consumable_quantity: 0,
+                unit_cost_paise: cost,
+                discount_bps: product.discount_bps.unwrap_or(0),
+                gst_percent: product.gst_percent,
+            });
+        if entry.unit_cost_paise != cost {
+            return Err(AppError::conflict(
+                "supplier price changed while validating the CSV; reload and retry",
+            ));
+        }
+        entry.retail_quantity = entry
+            .retail_quantity
+            .checked_add(retail)
+            .ok_or_else(|| AppError::validation("CSV retail quantity is too large"))?;
+        entry.consumable_quantity = entry
+            .consumable_quantity
+            .checked_add(consumable)
+            .ok_or_else(|| AppError::validation("CSV consumable quantity is too large"))?;
+        entry.quantity = entry
+            .retail_quantity
+            .checked_add(entry.consumable_quantity)
+            .ok_or_else(|| AppError::validation("CSV total quantity is too large"))?;
+        rows += 1;
+    }
+    if rows == 0 {
+        return Err(AppError::validation(
+            "CSV must contain at least one product row",
+        ));
+    }
+    let order = create_order(
+        state,
+        tenant_id,
+        branch_id,
+        actor,
+        OrderInput {
+            supplier_id,
+            expected_date: None,
+            notes: format!("Imported from CSV: {file_name}"),
+            shipping_paise: 0,
+            handling_paise: 0,
+            lines: lines.into_values().collect(),
+        },
+    )
+    .await?;
+    Ok(PurchaseOrderImportResult {
+        file_name: file_name.to_owned(),
+        rows_imported: rows,
+        order,
+    })
 }
 pub async fn create_return(
     state: &AppState,
@@ -1189,6 +1701,11 @@ pub async fn create_return(
     Ok(CreatedId { id: return_id })
 }
 
+fn split_supplier_payment(amount_paise: i64, balance_paise: i64) -> (i64, i64) {
+    let applied_paise = amount_paise.min(balance_paise.max(0));
+    (applied_paise, amount_paise - applied_paise)
+}
+
 pub async fn pay_supplier(
     state: &AppState,
     tenant_id: &str,
@@ -1226,17 +1743,16 @@ pub async fn pay_supplier(
             .await
             .map_err(|_| AppError::internal("failed to lock supplier payable"))?
             .ok_or_else(|| AppError::not_found("supplier payable was not found"))?;
-    if input.amount_paise > balance {
-        return Err(AppError::conflict(
-            "supplier payment exceeds outstanding balance",
-        ));
+    let (applied_paise, advance_paise) = split_supplier_payment(input.amount_paise, balance);
+    if applied_paise <= 0 {
+        return Err(AppError::conflict("supplier payable is already settled"));
     }
     let payment = purchase_repository::create_supplier_payment(
         &mut tx,
         tenant_id,
         branch_id,
         &receipt_id,
-        input.amount_paise,
+        applied_paise,
         &method,
         input.reference.trim(),
         &key,
@@ -1251,9 +1767,35 @@ pub async fn pay_supplier(
         branch_id,
         &payment.id,
         &method,
-        input.amount_paise,
+        applied_paise,
     )
     .await?;
+    if advance_paise > 0 {
+        let advance_key = format!("{key}:advance");
+        let advance = purchase_repository::create_supplier_advance(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &payment.supplier_id,
+            advance_paise,
+            &method,
+            input.reference.trim(),
+            &advance_key,
+            actor,
+        )
+        .await
+        .map_err(|_| AppError::conflict("supplier payment advance could not be recorded"))?
+        .ok_or_else(|| AppError::not_found("supplier was not found"))?;
+        accounting_service::post_supplier_advance(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &advance.id,
+            &method,
+            advance_paise,
+        )
+        .await?;
+    }
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit supplier payment"))?;
@@ -1338,11 +1880,18 @@ fn weighted_cost(
     }
 }
 
-fn discounted_cost(gross_unit_cost_paise: i64, discount_bps: i32, quantity: i32) -> (i64, i64) {
-    let unit_discount = gross_unit_cost_paise.saturating_mul(i64::from(discount_bps)) / 10_000;
+fn discounted_cost(
+    gross_unit_cost_paise: i64,
+    discount_bps: i32,
+    quantity: i32,
+) -> (i64, i64, i64) {
+    let gross_paise = gross_unit_cost_paise.saturating_mul(i64::from(quantity));
+    let discount_paise = div_round(gross_paise.saturating_mul(i64::from(discount_bps)), 10_000);
+    let taxable_paise = gross_paise.saturating_sub(discount_paise);
     (
-        gross_unit_cost_paise.saturating_sub(unit_discount),
-        unit_discount.saturating_mul(i64::from(quantity)),
+        div_round(taxable_paise, i64::from(quantity)),
+        discount_paise,
+        taxable_paise,
     )
 }
 
@@ -1366,6 +1915,60 @@ fn receiving_variance(
     }
 }
 
+fn receiving_split(
+    accepted: i32,
+    retail: Option<i32>,
+    consumable: Option<i32>,
+    product_usage: &str,
+    ordered_retail: Option<i32>,
+    _ordered_consumable: Option<i32>,
+) -> Result<(i32, i32), AppError> {
+    if retail.is_some() || consumable.is_some() {
+        let retail = retail.unwrap_or(0);
+        let consumable = consumable.unwrap_or(0);
+        if retail < 0
+            || consumable < 0
+            || retail.saturating_add(consumable) != accepted
+            || (retail > 0 && !matches!(product_usage, "retail" | "dual_use"))
+            || (consumable > 0 && !matches!(product_usage, "consumable" | "dual_use"))
+        {
+            return Err(AppError::validation("retailQuantity and consumableQuantity must equal accepted quantity and match product usage"));
+        }
+        return Ok((retail, consumable));
+    }
+    Ok(match product_usage {
+        "consumable" => (0, accepted),
+        "dual_use" if ordered_retail.is_some() => {
+            let retail = accepted.min(ordered_retail.unwrap_or(0));
+            (retail, accepted.saturating_sub(retail))
+        }
+        _ => (accepted, 0),
+    })
+}
+
+fn price_difference_bps(current: i64, received: i64) -> i32 {
+    if current <= 0 {
+        return if received == current { 0 } else { 10_000 };
+    }
+    (i128::from(received.abs_diff(current)) * 10_000 / i128::from(current)).min(10_000) as i32
+}
+
+fn csv_quantity(value: &str, row: usize, field: &str) -> Result<i32, AppError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(0);
+    }
+    value
+        .parse::<i32>()
+        .ok()
+        .filter(|quantity| *quantity >= 0)
+        .ok_or_else(|| {
+            AppError::validation(format!(
+                "CSV row {row} {field} must be a non-negative whole number"
+            ))
+        })
+}
+
 fn proportional_allocations(total: i64, bases: &[i64]) -> Vec<i64> {
     let denominator: i128 = bases.iter().map(|value| i128::from(*value)).sum();
     if total <= 0 || denominator <= 0 {
@@ -1384,6 +1987,43 @@ fn proportional_allocations(total: i64, bases: &[i64]) -> Vec<i64> {
         allocations[index] += 1;
     }
     allocations
+}
+
+fn reconcile_tax_totals(
+    lines: &mut [CalculatedLine],
+    targets: ReceiptTaxTotals,
+) -> Result<(), AppError> {
+    let cgst = reconcile_tax_component(
+        targets.cgst_paise,
+        &lines.iter().map(|line| line.cgst_paise).collect::<Vec<_>>(),
+    )?;
+    let sgst = reconcile_tax_component(
+        targets.sgst_paise,
+        &lines.iter().map(|line| line.sgst_paise).collect::<Vec<_>>(),
+    )?;
+    let igst = reconcile_tax_component(
+        targets.igst_paise,
+        &lines.iter().map(|line| line.igst_paise).collect::<Vec<_>>(),
+    )?;
+    for (index, line) in lines.iter_mut().enumerate() {
+        line.cgst_paise = cgst[index];
+        line.sgst_paise = sgst[index];
+        line.igst_paise = igst[index];
+    }
+    Ok(())
+}
+
+fn reconcile_tax_component(target: i64, calculated: &[i64]) -> Result<Vec<i64>, AppError> {
+    let calculated_total = calculated.iter().sum::<i64>();
+    if target < 0
+        || target.abs_diff(calculated_total) > calculated.len() as u64
+        || (target > 0 && calculated_total == 0)
+    {
+        return Err(AppError::validation(
+            "purchase bill header tax exceeds line rounding tolerance",
+        ));
+    }
+    Ok(proportional_allocations(target, calculated))
 }
 
 fn div_round(value: i64, divisor: i64) -> i64 {
@@ -1495,9 +2135,10 @@ fn is_backdated_live_grn(status: &str, invoice_date: NaiveDate, cutover_date: Na
 #[cfg(test)]
 mod tests {
     use super::{
-        base_quantity, discounted_cost, div_round, is_backdated_live_grn, proportional_allocations,
-        receiving_variance, remaining_weighted_cost, return_tax_breakdown, transition_target,
-        weighted_cost,
+        base_quantity, csv_quantity, discounted_cost, div_round, is_backdated_live_grn,
+        price_difference_bps, proportional_allocations, receiving_split, receiving_variance,
+        reconcile_tax_component, remaining_weighted_cost, return_tax_breakdown,
+        split_supplier_payment, transition_target, weighted_cost,
     };
     use chrono::NaiveDate;
     #[test]
@@ -1538,9 +2179,30 @@ mod tests {
 
     #[test]
     fn commercial_receiving_calculates_discount_and_variance() {
-        assert_eq!(discounted_cost(10_000, 500, 12), (9_500, 6_000));
+        assert_eq!(discounted_cost(10_000, 500, 12), (9_500, 6_000, 114_000));
+        assert_eq!(
+            discounted_cost(295_763, 3_000, 1),
+            (207_034, 88_729, 207_034)
+        );
+        assert_eq!(div_round(207_034 * 18, 100), 37_266);
+        assert_eq!(
+            reconcile_tax_component(12, &[1, 1, 1, 1, 1, 1, 1, 1, 1])
+                .unwrap()
+                .iter()
+                .sum::<i64>(),
+            12
+        );
         assert_eq!(receiving_variance(Some(10), 12, 1, 1), (10, 0, 0, 10));
         assert_eq!(receiving_variance(Some(10), 8, 1, 1), (6, 4, 0, 6));
+        assert_eq!(receiving_variance(Some(10), 12, 0, 0), (12, 0, 2, 10));
+        assert_eq!(
+            receiving_split(7, Some(3), Some(4), "dual_use", Some(5), Some(5)).unwrap(),
+            (3, 4)
+        );
+        assert!(receiving_split(7, Some(7), None, "consumable", None, None).is_err());
+        assert_eq!(price_difference_bps(10_000, 11_000), 1_000);
+        assert_eq!(csv_quantity("12", 2, "RetailQty").unwrap(), 12);
+        assert!(csv_quantity("1.5", 2, "RetailQty").is_err());
         assert_eq!(
             proportional_allocations(101, &[300, 200, 100]),
             vec![50, 34, 17]
@@ -1558,5 +2220,11 @@ mod tests {
             cutover
         ));
         assert!(!is_backdated_live_grn("reconciled", cutover, cutover));
+    }
+
+    #[test]
+    fn supplier_overpayment_is_split_into_settlement_and_advance() {
+        assert_eq!(split_supplier_payment(10_000, 10_000), (10_000, 0));
+        assert_eq!(split_supplier_payment(12_500, 10_000), (10_000, 2_500));
     }
 }

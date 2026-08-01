@@ -1,5 +1,5 @@
 import "@angular/compiler";
-import { HttpClient, HttpHeaders } from "@angular/common/http";
+import { HttpClient, HttpErrorResponse, HttpHeaders } from "@angular/common/http";
 import { Observable, of, throwError } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StaffAppService, StaffUser } from "./staff-app.service";
@@ -62,7 +62,16 @@ async function login(service: StaffAppService): Promise<void> {
 describe("StaffAppService staff workflows", () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: new MemoryStorage() });
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true, credentials: undefined } });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        onLine: true,
+        credentials: undefined,
+        geolocation: {
+          getCurrentPosition: (resolve: PositionCallback) => resolve({ coords: { latitude: 17.385044, longitude: 78.486671, accuracy: 6 } } as GeolocationPosition)
+        }
+      }
+    });
   });
 
   it("scopes leave reads and requests to the authenticated staff member", async () => {
@@ -97,6 +106,26 @@ describe("StaffAppService staff workflows", () => {
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true, credentials: undefined } });
     await expect(service.flushOfflineActions()).resolves.toBe(1);
     expect(http.calls.find((call) => call.url.endsWith("/staff-leave/requests"))?.body).toMatchObject({ staffId: "staff-1" });
+  });
+
+  it("queues leave when the transport drops while the browser still reports online", async () => {
+    let attempts = 0;
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "POST" && url.endsWith("/staff-leave/requests")) {
+        attempts += 1;
+        return attempts === 1
+          ? throwError(() => new HttpErrorResponse({ status: 0, statusText: "Unknown Error" }))
+          : of({ id: "leave-1" });
+      }
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+
+    await expect(service.requestLeave({ leaveType: "annual", startDate: "2026-08-01", endDate: "2026-08-02", reason: "Family" }))
+      .resolves.toMatchObject({ state: "queued" });
+    expect(service.error()).toBe("");
+    await expect(service.flushOfflineActions()).resolves.toBe(1);
+    expect(http.calls.filter((call) => call.url.endsWith("/staff-leave/requests"))).toHaveLength(2);
   });
 
   it("maps payroll paise and payslip data from the self dashboard", async () => {
@@ -184,7 +213,9 @@ describe("StaffAppService staff workflows", () => {
     const actions = http.calls.filter((call) => call.method === "POST" && call.url.includes("/staff-attendance/"));
     expect(actions.map((call) => call.url.split("/staff-attendance/")[1])).toEqual(["clock-in", "break-start", "break-end", "clock-out"]);
     expect(actions.every((call) => (call.body as Record<string, unknown>)["staffId"] === "staff-1")).toBe(true);
-    expect(actions[3]?.body).toMatchObject({ attendanceId: "attendance-1" });
+    expect(actions[0]?.body).toMatchObject({ presence: { latitude: 17.385044, longitude: 78.486671, accuracyMeters: 6 } });
+    expect(actions[3]?.body).toMatchObject({ attendanceId: "attendance-1", source: "staff-app" });
+    expect(actions[3]?.body).toMatchObject({ presence: { latitude: 17.385044, longitude: 78.486671, accuracyMeters: 6 } });
   });
 
   it("uses a server challenge and browser biometric credential for biometric clock-in", async () => {

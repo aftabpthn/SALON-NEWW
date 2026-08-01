@@ -110,7 +110,16 @@ struct ClockInRequest {
     clock_in_at: Option<DateTime<Utc>>,
     source: Option<String>,
     comments: Option<String>,
+    presence: Option<AttendancePresenceEvidence>,
     face_scan: Option<FaceScanEvidence>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AttendancePresenceEvidence {
+    latitude: f64,
+    longitude: f64,
+    accuracy_meters: f64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +134,13 @@ struct FaceScanEvidence {
 }
 
 const ATTENDANCE_WEBAUTHN_PURPOSE: &str = "staff-attendance";
+const STAFF_ATTENDANCE_RADIUS_METERS: f64 = 10.0;
+
+struct AttendancePresenceValidation {
+    source_ip: String,
+    distance_meters: f64,
+    accuracy_meters: f64,
+}
 
 #[derive(Debug, FromRow)]
 struct FaceAttendancePolicy {
@@ -217,6 +233,8 @@ struct ClockOutRequest {
     clock_out_at: Option<DateTime<Utc>>,
     penalty_paise: Option<i64>,
     comments: Option<String>,
+    source: Option<String>,
+    presence: Option<AttendancePresenceEvidence>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -577,6 +595,102 @@ async fn enforce_face_attendance_policy(
     Ok(())
 }
 
+async fn enforce_staff_attendance_presence(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    evidence: Option<&AttendancePresenceEvidence>,
+) -> Result<AttendancePresenceValidation, AppError> {
+    let source_ip = headers
+        .get("x-aurashine-source-ip")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .trim();
+    let Some(evidence) = evidence else {
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            "staff-app",
+            source_ip,
+            "attendance_presence_missing",
+            None,
+            None,
+            None,
+            None,
+            json!({}),
+        )
+        .await;
+        return Err(AppError::validation(
+            "GPS location is required for attendance",
+        ));
+    };
+    if !valid_geo(evidence.latitude, evidence.longitude)
+        || !evidence.accuracy_meters.is_finite()
+        || !(0.0..=100.0).contains(&evidence.accuracy_meters)
+    {
+        return Err(AppError::validation(
+            "a reliable GPS location is required for attendance",
+        ));
+    }
+    let policy = load_face_policy(state, tenant_id, branch_id).await?;
+    let (Some(branch_lat), Some(branch_lng)) = (policy.branch_latitude, policy.branch_longitude)
+    else {
+        return Err(AppError::validation("branch location is not configured"));
+    };
+    if ip_allowlist_empty(&policy.ip_allowlist_json) {
+        return Err(AppError::validation(
+            "branch attendance Wi-Fi IP is not configured",
+        ));
+    }
+    let distance = distance_meters(
+        branch_lat,
+        branch_lng,
+        evidence.latitude,
+        evidence.longitude,
+    );
+    if !attendance_presence_allowed(
+        &policy.ip_allowlist_json,
+        source_ip,
+        distance,
+        evidence.accuracy_meters,
+    ) {
+        let reason = if distance > STAFF_ATTENDANCE_RADIUS_METERS {
+            "outside_attendance_radius"
+        } else {
+            "attendance_network_not_allowed"
+        };
+        record_face_exception(
+            state,
+            tenant_id,
+            branch_id,
+            staff_id,
+            "staff-app",
+            source_ip,
+            reason,
+            Some(evidence.latitude),
+            Some(evidence.longitude),
+            Some(evidence.accuracy_meters),
+            Some(distance),
+            json!({"accuracyMeters": evidence.accuracy_meters}),
+        )
+        .await;
+        return Err(if distance > STAFF_ATTENDANCE_RADIUS_METERS {
+            AppError::validation("attendance is allowed only within 10 metres of the branch")
+        } else {
+            AppError::forbidden("connect to the approved branch Wi-Fi for attendance")
+        });
+    }
+    Ok(AttendancePresenceValidation {
+        source_ip: source_ip.to_string(),
+        distance_meters: distance,
+        accuracy_meters: evidence.accuracy_meters,
+    })
+}
+
 async fn load_face_policy(
     state: &AppState,
     tenant_id: &str,
@@ -660,6 +774,18 @@ fn ip_allowed(value: &Value, source_ip: &str) -> bool {
                 })
             })
             .unwrap_or(false)
+}
+fn attendance_presence_allowed(
+    ip_allowlist: &Value,
+    source_ip: &str,
+    distance: f64,
+    accuracy: f64,
+) -> bool {
+    distance.is_finite()
+        && distance <= STAFF_ATTENDANCE_RADIUS_METERS
+        && accuracy.is_finite()
+        && (0.0..=100.0).contains(&accuracy)
+        && ip_allowed(ip_allowlist, source_ip)
 }
 async fn get_face_policy(
     State(state): State<AppState>,
@@ -857,6 +983,21 @@ async fn clock_in(
     )
     .await?;
     let source = payload.source.as_deref().unwrap_or("manual").trim();
+    let presence = if attendance_presence_required(&claims, source) {
+        Some(
+            enforce_staff_attendance_presence(
+                &state,
+                &headers,
+                &tenant_id,
+                &branch_id,
+                &staff_id,
+                payload.presence.as_ref(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     if matches!(source, "staff-app-face" | "staff-app-biometric") {
         enforce_face_attendance_policy(
             &state,
@@ -884,6 +1025,22 @@ async fn clock_in(
         payload.comments.as_deref().unwrap_or("").trim(),
     )
     .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.attendance.clocked_in",
+            outcome: "success",
+            ip_address: presence.as_ref().map(|value| value.source_ip.as_str()),
+            user_agent: None,
+            details: serde_json::json!({ "staffId": staff_id, "businessDate": payload.business_date, "source": source, "distanceMeters": presence.as_ref().map(|value| value.distance_meters), "accuracyMeters": presence.as_ref().map(|value| value.accuracy_meters) }),
+        },
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -905,6 +1062,22 @@ async fn clock_out(
         payload.staff_id.trim(),
     )
     .await?;
+    let source = payload.source.as_deref().unwrap_or("manual").trim();
+    let presence = if self_service || attendance_presence_required(&claims, source) {
+        Some(
+            enforce_staff_attendance_presence(
+                &state,
+                &headers,
+                &tenant_id,
+                &branch_id,
+                &staff_id,
+                payload.presence.as_ref(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let row = staff_attendance_service::clock_out(
         &state.db,
         &tenant_id,
@@ -924,6 +1097,22 @@ async fn clock_out(
         payload.comments.as_deref().unwrap_or("").trim(),
     )
     .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.attendance.clocked_out",
+            outcome: "success",
+            ip_address: presence.as_ref().map(|value| value.source_ip.as_str()),
+            user_agent: None,
+            details: serde_json::json!({ "staffId": staff_id, "businessDate": payload.business_date, "source": source, "distanceMeters": presence.as_ref().map(|value| value.distance_meters), "accuracyMeters": presence.as_ref().map(|value| value.accuracy_meters) }),
+        },
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1002,6 +1191,10 @@ fn is_attendance_manager(claims: &AuthClaims) -> bool {
     ["owner", "admin", "manager"]
         .iter()
         .any(|role| role.eq_ignore_ascii_case(&claims.role))
+}
+
+fn attendance_presence_required(claims: &AuthClaims, source: &str) -> bool {
+    !is_attendance_manager(claims) || source.starts_with("staff-app")
 }
 
 const STAFF_APP_ROLES: &[&str] = &["owner", "admin", "manager", "staff"];
@@ -1236,8 +1429,12 @@ fn validate_cycle(cycle: Option<&str>) -> Result<(), AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_overtime_access, validate_cycle};
+    use super::{
+        attendance_presence_allowed, attendance_presence_required, ensure_overtime_access,
+        validate_cycle,
+    };
     use crate::services::auth_service::AuthClaims;
+    use serde_json::json;
 
     #[test]
     fn attendance_cycle_is_monthly() {
@@ -1256,6 +1453,38 @@ mod tests {
             .denied_permissions
             .push("staff.payroll.manage".into());
         assert!(ensure_overtime_access(&claims, &["staff.payroll.manage"]).is_err());
+    }
+
+    #[test]
+    fn staff_attendance_requires_ten_metres_and_exact_branch_ip() {
+        let allowed_ips = json!(["203.0.113.10"]);
+        assert!(attendance_presence_allowed(
+            &allowed_ips,
+            "203.0.113.10",
+            9.99,
+            8.0
+        ));
+        assert!(!attendance_presence_allowed(
+            &allowed_ips,
+            "203.0.113.10",
+            10.01,
+            8.0
+        ));
+        assert!(!attendance_presence_allowed(
+            &allowed_ips,
+            "203.0.113.11",
+            1.0,
+            8.0
+        ));
+        assert!(attendance_presence_required(
+            &claims("manager"),
+            "staff-app"
+        ));
+        assert!(!attendance_presence_required(
+            &claims("manager"),
+            "physical"
+        ));
+        assert!(attendance_presence_required(&claims("staff"), "manual"));
     }
 
     fn claims(role: &str) -> AuthClaims {

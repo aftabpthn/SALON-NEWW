@@ -331,6 +331,7 @@ pub async fn create_historical_pilot(
            AND source.evidence_status='verified'
            AND source.read_only=TRUE
            AND source.retention_until>NOW()
+           AND COALESCE((SELECT correction.action FROM historical_purchase_evidence_corrections correction WHERE correction.tenant_id=evidence.tenant_id AND correction.branch_id=evidence.branch_id AND correction.cutover_id=evidence.cutover_id AND correction.source_file_id=evidence.source_file_id AND correction.action IN ('exclude','restore') ORDER BY correction.created_at DESC,correction.id DESC LIMIT 1),'restore')<>'exclude'
            AND ($5='' OR artifact.id IS NOT NULL)
          RETURNING id",
     )
@@ -881,6 +882,7 @@ pub async fn bulk_evidence_documents(
              AND evidence.evidence_kind='historical_bill'
              AND source.evidence_status='verified' AND source.read_only
              AND source.retention_until>NOW()
+             AND COALESCE((SELECT correction.action FROM historical_purchase_evidence_corrections correction WHERE correction.tenant_id=evidence.tenant_id AND correction.branch_id=evidence.branch_id AND correction.cutover_id=evidence.cutover_id AND correction.source_file_id=evidence.source_file_id AND correction.action IN ('exclude','restore') ORDER BY correction.created_at DESC,correction.id DESC LIMIT 1),'restore')<>'exclude'
              AND ((source.file_format='zip' AND artifact.id IS NOT NULL)
                OR (source.file_format<>'zip' AND artifact.id IS NULL))
            ORDER BY COALESCE(artifact.entry_name,source.original_file_name)"#,

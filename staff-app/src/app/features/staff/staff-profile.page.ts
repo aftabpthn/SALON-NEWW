@@ -45,6 +45,17 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
         </section>
 
         <section class="panel">
+          <div class="panel-title"><h2>Employment lifecycle</h2><span>{{ data.lifecycle['employmentStatus'] || 'confirmed' }}</span></div>
+          <div class="list">
+            <div class="row"><strong>Reporting manager</strong><span>{{ data.lifecycle['reportingManagerName'] || '-' }}</span></div>
+            <div class="row"><strong>Probation end</strong><span>{{ data.lifecycle['probationEndDate'] || '-' }}</span></div>
+            <div class="row"><strong>Confirmation date</strong><span>{{ data.lifecycle['confirmationDate'] || '-' }}</span></div>
+            <div class="row"><strong>Last working date</strong><span>{{ data.lifecycle['lastWorkingDate'] || '-' }}</span></div>
+            @if (activeCase(data); as lifecycle) { <div class="row"><strong>{{ lifecycle['caseType'] }}</strong><span>{{ lifecycle['status'] }} · {{ lifecycle['settlementStatus'] }}</span></div>@if (lifecycle['finalSettlementPayrollRunId']) { <div class="row"><strong>Settlement payroll</strong><span>{{ lifecycle['finalSettlementPayrollRunId'] }}</span></div> } }
+          </div>
+        </section>
+
+        <section class="panel">
           <div class="panel-title"><h2>Connected permissions</h2><span>{{ visiblePermissions().length }}</span></div>
           <div staffPermissionBadges class="row-actions" [permissions]="visiblePermissions()"></div>
         </section>
@@ -85,6 +96,11 @@ export class StaffProfilePage implements OnInit {
   canReadProfile(): boolean { return this.staff.hasPermission("staff.app.profile.read"); }
 
   contactCount(data: StaffDashboard): number { return Number(!!data.staff.mobile) + Number(!!data.staff.email); }
+
+  activeCase(data: StaffDashboard): Record<string, unknown> | null {
+    const value = data.lifecycle['activeCase'];
+    return value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length ? value as Record<string, unknown> : null;
+  }
 
   sourceGaps(data: StaffDashboard): string[] {
     const gaps: string[] = [];

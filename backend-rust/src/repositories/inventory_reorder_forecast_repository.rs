@@ -248,7 +248,11 @@ pub async fn upsert_terms(
     moq: i32,
     pack: i32,
     safety: i32,
+    vendor_part_number: &str,
+    purchase_unit: &str,
+    conversion_quantity: i32,
+    center_available: bool,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO supplier_inventory_terms(tenant_id,branch_id,supplier_id,inventory_item_id,lead_time_days,minimum_order_quantity,pack_size,safety_stock_days) SELECT $1,$2,s.id,i.id,$5,$6,$7,$8 FROM suppliers s JOIN inventory_items i ON i.tenant_id=$1 AND i.branch_id=$2 AND i.id=$4 WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE AND i.active=TRUE ON CONFLICT(tenant_id,branch_id,supplier_id,inventory_item_id) DO UPDATE SET lead_time_days=EXCLUDED.lead_time_days,minimum_order_quantity=EXCLUDED.minimum_order_quantity,pack_size=EXCLUDED.pack_size,safety_stock_days=EXCLUDED.safety_stock_days,active=TRUE,updated_at=NOW()").bind(tenant).bind(branch).bind(supplier).bind(item).bind(lead).bind(moq).bind(pack).bind(safety).execute(db).await?;
+    sqlx::query("INSERT INTO supplier_inventory_terms(tenant_id,branch_id,supplier_id,inventory_item_id,lead_time_days,minimum_order_quantity,pack_size,safety_stock_days,vendor_part_number,purchase_unit,conversion_quantity,center_available) SELECT $1,$2,s.id,i.id,$5,$6,$7,$8,$9,$10,$11,$12 FROM suppliers s JOIN inventory_items i ON i.tenant_id=$1 AND i.branch_id=$2 AND i.id=$4 WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.id=$3 AND s.active=TRUE AND i.active=TRUE ON CONFLICT(tenant_id,branch_id,supplier_id,inventory_item_id) DO UPDATE SET lead_time_days=EXCLUDED.lead_time_days,minimum_order_quantity=EXCLUDED.minimum_order_quantity,pack_size=EXCLUDED.pack_size,safety_stock_days=EXCLUDED.safety_stock_days,vendor_part_number=EXCLUDED.vendor_part_number,purchase_unit=EXCLUDED.purchase_unit,conversion_quantity=EXCLUDED.conversion_quantity,center_available=EXCLUDED.center_available,active=TRUE,updated_at=NOW()").bind(tenant).bind(branch).bind(supplier).bind(item).bind(lead).bind(moq).bind(pack).bind(safety).bind(vendor_part_number).bind(purchase_unit).bind(conversion_quantity).bind(center_available).execute(db).await?;
     Ok(())
 }

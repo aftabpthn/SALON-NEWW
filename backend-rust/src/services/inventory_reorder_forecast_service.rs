@@ -139,6 +139,8 @@ pub async fn approve_to_po(
             lines: vec![OrderLineInput {
                 inventory_item_id: recommendation.inventory_item_id.clone(),
                 quantity: recommendation.suggested_quantity,
+                retail_quantity: 0,
+                consumable_quantity: 0,
                 unit_cost_paise: recommendation.unit_cost_paise,
                 discount_bps: 0,
                 gst_percent: gst,
@@ -166,12 +168,38 @@ pub async fn save_terms(
     moq: i32,
     pack: i32,
     safety: i32,
+    vendor_part_number: &str,
+    purchase_unit: &str,
+    conversion_quantity: i32,
+    center_available: bool,
 ) -> Result<(), AppError> {
-    if !(0..=365).contains(&lead) || moq <= 0 || pack <= 0 || !(0..=90).contains(&safety) {
+    if !(0..=365).contains(&lead)
+        || moq <= 0
+        || pack <= 0
+        || !(0..=90).contains(&safety)
+        || vendor_part_number.chars().count() > 120
+        || !matches!(
+            purchase_unit,
+            "box" | "jar" | "tube" | "pouch" | "pack" | "bottle" | "kit" | "pcs"
+        )
+        || conversion_quantity <= 0
+    {
         return Err(AppError::validation("invalid supplier reorder terms"));
     }
     repo::upsert_terms(
-        &state.db, tenant, branch, supplier, item, lead, moq, pack, safety,
+        &state.db,
+        tenant,
+        branch,
+        supplier,
+        item,
+        lead,
+        moq,
+        pack,
+        safety,
+        vendor_part_number.trim(),
+        purchase_unit,
+        conversion_quantity,
+        center_available,
     )
     .await
     .map_err(|_| AppError::not_found("active supplier or inventory item was not found"))
@@ -181,16 +209,32 @@ fn recommend(
     history_days: i32,
     coverage_days: i32,
 ) -> Option<repo::RecommendationDraft> {
-    if input.demand_history <= 0 || input.expiring_quantity > 0 || input.inactive_days >= 90 {
+    let has_demand = input.demand_history > 0;
+    if input.expiring_quantity > 0 || (has_demand && input.inactive_days >= 90) {
         return None;
     }
-    let daily = input.demand_history as f64 / f64::from(history_days);
+    let daily = if has_demand {
+        input.demand_history as f64 / f64::from(history_days)
+    } else {
+        0.0
+    };
     let recent = input.demand_7 as f64 / 7.0;
-    let seasonality = (recent / daily).clamp(0.5, 2.0);
-    let safety = (daily * input.safety_stock_days as f64 * 1.25).ceil() as i64;
-    let target = ((daily * (input.lead_time_days + coverage_days) as f64 * seasonality).ceil()
-        as i64)
-        + safety;
+    let seasonality = if has_demand {
+        (recent / daily).clamp(0.5, 2.0)
+    } else {
+        1.0
+    };
+    let safety = if has_demand {
+        (daily * input.safety_stock_days as f64 * 1.25).ceil() as i64
+    } else {
+        0
+    };
+    let target = if has_demand {
+        ((daily * (input.lead_time_days + coverage_days) as f64 * seasonality).ceil() as i64)
+            + safety
+    } else {
+        i64::from(input.reorder_point)
+    };
     let gap = target - i64::from(input.stock_quantity) - input.pending_quantity;
     if gap <= 0 {
         return None;
@@ -198,24 +242,28 @@ fn recommend(
     let base = gap.max(i64::from(input.minimum_order_quantity));
     let pack = i64::from(input.pack_size);
     let suggested = ((base + pack - 1) / pack * pack).min(i64::from(i32::MAX)) as i32;
-    let confidence = (5000
-        + (input.demand_history.min(i64::from(history_days) * 10) as i32 * 5)
-        + (input.consumption_history.min(200) as i32 * 5))
-        .min(9000);
+    let confidence = if has_demand {
+        (5000
+            + (input.demand_history.min(i64::from(history_days) * 10) as i32 * 5)
+            + (input.consumption_history.min(200) as i32 * 5))
+            .min(9000)
+    } else {
+        4000
+    };
     Some(repo::RecommendationDraft {
         inventory_item_id: input.inventory_item_id.clone(),
         supplier_id: input.supplier_id.clone(),
         suggested_quantity: suggested,
         unit_cost_paise: input.unit_cost_paise,
         confidence_bps: confidence,
-        explanation: json!({"modelVersion":"seasonal-demand-v3","historyDays":history_days,"coverageDays":coverage_days,"currentStock":input.stock_quantity,"reorderLevel":input.reorder_point,"dailyDemandHistory":daily,"dailyDemand7":recent,"seasonalityFactor":seasonality,"safetyStock":safety,"leadTimeDays":input.lead_time_days,"minimumOrderQuantity":input.minimum_order_quantity,"packSize":input.pack_size,"pendingPoQuantity":input.pending_quantity,"serviceAndBackbarConsumption":input.consumption_history,"gstPercent":input.gst_percent,"supplierScoreBps":input.supplier_score_bps,"onTimeRateBps":input.on_time_rate_bps,"fillRateBps":input.fill_rate_bps,"returnRateBps":input.return_rate_bps,"expiryRiskBps":input.expiry_risk_bps,"supplierSelection":"highest evidence-backed delivery, fill, return and expiry score; then lowest effective price and shortest lead time","formula":"ceil(max((daily demand * (lead + coverage) * seasonality + safety)-current stock-pending PO, MOQ)/pack size)*pack size"}),
+        explanation: json!({"modelVersion":"seasonal-demand-v3","forecastBasis":if has_demand { "demand_history" } else { "reorder_level" },"historyDays":history_days,"coverageDays":coverage_days,"currentStock":input.stock_quantity,"reorderLevel":input.reorder_point,"dailyDemandHistory":daily,"dailyDemand7":recent,"seasonalityFactor":seasonality,"safetyStock":safety,"leadTimeDays":input.lead_time_days,"minimumOrderQuantity":input.minimum_order_quantity,"packSize":input.pack_size,"pendingPoQuantity":input.pending_quantity,"serviceAndBackbarConsumption":input.consumption_history,"gstPercent":input.gst_percent,"supplierScoreBps":input.supplier_score_bps,"onTimeRateBps":input.on_time_rate_bps,"fillRateBps":input.fill_rate_bps,"returnRateBps":input.return_rate_bps,"expiryRiskBps":input.expiry_risk_bps,"supplierSelection":"highest evidence-backed delivery, fill, return and expiry score; then lowest effective price and shortest lead time","formula":if has_demand { "ceil(max((daily demand * (lead + coverage) * seasonality + safety)-current stock-pending PO, MOQ)/pack size)*pack size" } else { "ceil(max(reorder level-current stock-pending PO, MOQ)/pack size)*pack size" }}),
     })
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn no_demand_or_expiry_never_reorders() {
+    fn reorder_level_covers_missing_history_but_expiry_blocks() {
         let mut row = repo::DemandInput {
             inventory_item_id: "i".into(),
             product_name: "i".into(),
@@ -241,8 +289,13 @@ mod tests {
             expiring_quantity: 0,
             inactive_days: 0,
         };
-        assert!(recommend(&row, 60, 30).is_none());
-        row.demand_history = 60;
+        row.reorder_point = 3;
+        assert_eq!(
+            recommend(&row, 60, 30)
+                .expect("reorder-level fallback")
+                .suggested_quantity,
+            3
+        );
         row.expiring_quantity = 1;
         assert!(recommend(&row, 60, 30).is_none());
     }

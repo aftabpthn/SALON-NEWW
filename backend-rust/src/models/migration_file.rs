@@ -170,6 +170,16 @@ pub struct HistoricalEvidenceGroupDecisionRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HistoricalEvidenceCorrectionRequest {
+    pub cutover_id: String,
+    pub action: String,
+    #[serde(default)]
+    pub supplier_batch: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoricalEvidenceCutoverApprovalRequest {
     pub cutover_id: String,

@@ -140,6 +140,17 @@ jobs:
           cache-dependency-path: frontend-angular/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - run: npm run build:prod
+      - name: Start production PWA server
+        shell: bash
+        run: |
+          nohup python3 -m http.server 4200 --directory dist/aura-shine-frontend > /tmp/aurashine-pwa.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4200/ > /dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/aurashine-pwa.log
+          exit 1
       - run: npx playwright test --project=pwa-chromium
       - if: failure()
         uses: actions/upload-artifact@v4

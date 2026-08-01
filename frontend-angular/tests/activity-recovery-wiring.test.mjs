@@ -17,6 +17,8 @@ test('activity recovery is audit-backed, permission-scoped, and never hard delet
   assert.match(component, /visibleCount = 8/);
   assert.match(template, /@for \(event of visibleEvents/);
   assert.match(template, /Show more/);
+  assert.match(template, /events\.length \? 'No matching activity records' : 'No activity records yet'/);
+  assert.match(template, /recordName\(selected\) === '—' \? 'Audit record'/);
   for (const action of ['added', 'stopped', 'edited', 'saved', 'submitted', 'approved', 'deactivated', 'archived', 'cancelled', 'withdrawn', 'revoked', 'disconnected', 'drafted']) {
     assert.match(component, new RegExp(`'${action}'`));
   }

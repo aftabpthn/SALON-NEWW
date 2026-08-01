@@ -131,6 +131,7 @@ export const routes: Routes = [
   { path: 'inventory/reorder', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'reorder' }, canActivate: [authGuard] },
   { path: 'inventory/transfers', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'transfers' }, canActivate: [authGuard] },
   { path: 'inventory', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), canActivate: [authGuard] },
+  { path: 'suppliers/:supplierId/ledger', loadComponent: () => import('./pages/suppliers/supplier-ledger/supplier-ledger-page.component').then((m) => m.SupplierLedgerPageComponent), canActivate: [authGuard] },
   { path: 'suppliers', loadComponent: () => import('./pages/suppliers/suppliers-page.component').then((m) => m.SuppliersPageComponent), canActivate: [authGuard] },
   { path: 'purchase-orders', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'orders' }, canActivate: [authGuard] },
   { path: 'purchase-bill-entry', loadComponent: () => import('./pages/inventory/inventory-page.component').then((m) => m.InventoryPageComponent), data: { inventoryTab: 'grn', inventoryDrawer: 'grn', inventoryTitle: 'Purchase Bill Entry' }, canActivate: [authGuard] },

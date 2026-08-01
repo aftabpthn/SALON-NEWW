@@ -24,6 +24,12 @@ variable "ai_image" {
   type        = string
 }
 
+variable "clamav_image" {
+  description = "Official ClamAV feature-release image used by the private migration scanner sidecar."
+  type        = string
+  default     = "clamav/clamav:1.4"
+}
+
 variable "vpc_cidr" {
   type    = string
   default = "10.40.0.0/16"

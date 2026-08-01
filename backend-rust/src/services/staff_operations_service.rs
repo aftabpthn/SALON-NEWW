@@ -184,6 +184,7 @@ pub struct SkillLicenseRequest {
     pub id: Option<String>,
     pub staff_id: String,
     pub skill_name: String,
+    pub skill_level: Option<i16>,
     pub issuer: Option<String>,
     pub license_number: Option<String>,
     pub issued_on: Option<NaiveDate>,
@@ -414,6 +415,10 @@ pub async fn save_skill_license(
     }
     let staff_id = required(&request.staff_id, 160, "employee")?;
     let skill_name = required(&request.skill_name, 200, "skill name")?;
+    let skill_level = request.skill_level.unwrap_or(1);
+    if !(1..=5).contains(&skill_level) {
+        return Err(AppError::validation("skill level must be between 1 and 5"));
+    }
     let issuer = optional(request.issuer.as_deref(), 200, "issuer")?;
     let license_number = optional(request.license_number.as_deref(), 200, "license number")?;
     let status = required_enum(
@@ -430,6 +435,7 @@ pub async fn save_skill_license(
         request.id.as_deref().map(str::trim),
         &staff_id,
         &skill_name,
+        skill_level,
         &issuer,
         &license_number,
         request.issued_on,

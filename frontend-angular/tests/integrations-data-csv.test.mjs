@@ -137,6 +137,7 @@ test('opening stock is owner-approved, exact set-to, classified, and previewed',
 test('supplier opening finance stays separate, approved, balanced, and settleable', () => {
   const controls = readFileSync('../backend-rust/migrations/0343_supplier_opening_financial_controls.sql', 'utf8');
   const signedFix = readFileSync('../backend-rust/migrations/0344_supplier_opening_signed_total_fix.sql', 'utf8');
+  const branchConfirmation = readFileSync('../backend-rust/migrations/0347_opening_payable_branch_confirmation.sql', 'utf8');
   const adapter = readFileSync('../backend-rust/src/services/migration_adapter_service.rs', 'utf8');
   const repository = readFileSync('../backend-rust/src/repositories/migration_repository.rs', 'utf8');
   const purchases = readFileSync('../backend-rust/src/repositories/purchase_repository.rs', 'utf8');
@@ -148,16 +149,22 @@ test('supplier opening finance stays separate, approved, balanced, and settleabl
   assert.match(controls, /unallocated_approved/);
   assert.match(controls, /supplier_payments_single_payable_source_check/);
   assert.match(signedFix, /source_outstanding_total_pai_check/);
+  assert.match(branchConfirmation, /OPENING_PAYABLE_BRANCH_CONFIRMATION_REQUIRED/);
   assert.match(adapter, /OPENING_PAYABLE_UNALLOCATED_APPROVAL_REQUIRED/);
   assert.match(adapter, /OPENING_PAYABLE_CURRENCY_UNSUPPORTED/);
   assert.match(repository, /migration\.opening_payable\.finance_approved/);
+  assert.match(repository, /migration\.opening_payable\.branch_confirmed/);
+  assert.match(repository, /openingPayableBranchConfirmation\/confirmed/);
   assert.match(repository, /OPENING_PAYABLE_APPROVAL_REQUIRED/);
   assert.match(repository, /account_code: advance_account/);
   assert.match(purchases, /'opening:'\|\|line\.id/);
   assert.match(purchases, /opening_payable_id/);
   assert.match(routes, /require_opening_payable_finance/);
+  assert.match(routes, /require_opening_payable_branch_manager/);
   assert.match(store, /openingPayablePreview/);
   assert.match(template, /Supplier opening financial dry run/);
+  assert.match(template, /Branch balance confirmation/);
+  assert.match(template, /branchConfirmed/);
   assert.match(template, /Owner final approval/);
 });
 

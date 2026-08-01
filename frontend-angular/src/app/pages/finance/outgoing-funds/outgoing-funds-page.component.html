@@ -377,7 +377,7 @@
             @if (supplierPaymentMode === 'payable') {
               <label class="full"><span>Payable</span><select [(ngModel)]="supplierPaymentDraft.receiptId" (ngModelChange)="supplierPayableChanged()" [disabled]="supplierPaymentLoading() || busy()"><option value="">Select unpaid balance</option>@for (row of supplierPayables(); track row.purchaseReceiptId) {@if (row.balancePaise > 0) {<option [value]="row.purchaseReceiptId">{{ row.sourceType === 'opening_migration' ? 'Opening migration · ' : '' }}{{ row.supplierInvoiceNumber }} · {{ money(row.balancePaise) }} unpaid</option>}}</select></label>
             }
-            <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="supplierPaymentDraft.amount" [disabled]="supplierPaymentLoading() || busy()" /></label>
+            <label><span>Amount</span><input type="number" min="0.01" step="0.01" inputmode="decimal" [(ngModel)]="supplierPaymentDraft.amount" [disabled]="supplierPaymentLoading() || busy()" />@if (supplierPaymentMode === 'payable') { <small>Any excess will be saved as supplier advance</small> }</label>
             <label><span>Payment method</span><select [(ngModel)]="supplierPaymentDraft.method" [disabled]="supplierPaymentLoading() || busy()"><option value="bank">Bank</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="other">Other</option></select></label>
             <label class="full"><span>Reference</span><input type="text" maxlength="160" [(ngModel)]="supplierPaymentDraft.reference" [disabled]="supplierPaymentLoading() || busy()" /></label>
           </div>

@@ -1,7 +1,7 @@
 export type SupplierMetricInput = { gstin: string; contactName: string; phone: string; email: string; address: string };
 export type SupplierOrderMetricInput = { supplierId: string; status: string };
 export type SupplierPayableMetricInput = { supplierId: string; totalPaise: number; returnedPaise: number; balancePaise: number };
-export type SupplierPaymentMetricInput = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number };
+export type SupplierPaymentMetricInput = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number; pendingBillsPaise?: number };
 
 export function supplierCompleteness(supplier: SupplierMetricInput) {
   return [supplier.gstin, supplier.contactName, supplier.phone || supplier.email, supplier.address]
@@ -31,5 +31,6 @@ export function supplierPaymentStatus(metric: SupplierPaymentMetricInput) {
   if (metric.unpaidPaise > 0) return 'Unpaid';
   if (metric.extraPaidPaise > 0) return 'Credit';
   if (metric.paidPaise > 0) return 'Paid';
+  if ((metric.pendingBillsPaise || 0) > 0) return 'Pending bill';
   return 'No payments';
 }

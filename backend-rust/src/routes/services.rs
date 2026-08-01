@@ -63,6 +63,12 @@ pub struct ProductConsumptionLine {
     pub waste_percent: f64,
     pub owner_approval_percent: f64,
     pub hit_limit: i64,
+    #[serde(default = "default_usage_profile")]
+    pub usage_profile: String,
+}
+
+fn default_usage_profile() -> String {
+    "custom".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -691,6 +697,14 @@ fn product_consumption_json(
                 "productConsumption percentages must be between 0 and 100",
             ));
         }
+        if !matches!(
+            line.usage_profile.as_str(),
+            "root_touch_up" | "full_colour" | "custom"
+        ) {
+            return Err(AppError::validation(
+                "productConsumption usageProfile is invalid",
+            ));
+        }
     }
     serde_json::to_string(lines)
         .map_err(|_| AppError::validation("productConsumption must be valid"))
@@ -915,6 +929,7 @@ mod tests {
             waste_percent: 5.0,
             owner_approval_percent: 20.0,
             hit_limit: 3,
+            usage_profile: "root_touch_up".into(),
         }
     }
 

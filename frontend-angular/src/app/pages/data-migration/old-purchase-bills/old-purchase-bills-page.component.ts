@@ -24,6 +24,8 @@ type PilotMetric = { matched: number; checked: number; accuracyBps?: number; thr
 type PilotGrouping = { supplierBatch: string; groupKey: string; detectedPageCount: number; approvedPageCount?: number; confidenceBps: number; confidenceLevel: 'green' | 'yellow' | 'red'; status: 'auto_grouped' | 'suggested' | 'blocked' | 'approved' | 'rejected'; signals: string[]; documentIds: string[]; fileNames: string[]; decidedBy?: string; decidedAt?: string };
 type PilotReport = { cutoverId: string; documents: PilotDocument[]; summary: { uploadedDocuments: number; recognizedBills: number; totalPages: number; extractedProductLines: number; failedOrQuarantinedDocuments: number; duplicateFilesOrBills: number; duplicateArchiveCommits: number; silentSkippedDocuments: number; mappedSuppliers: number; unmappedSuppliers: number; mappedProducts: number; unmappedProducts: number; manualCorrections: number; averageConfidenceBps?: number; financiallyReconciledDocuments: number; groupedBills: number; groupingApprovalRequired: number; groupingBlocked: number; stockEffectPaise: number; accountingEffectPaise: number; gstEffectPaise: number }; accuracy: { supplier: PilotMetric; invoiceNumberAndDate: PilotMetric; financial: PilotMetric; productLineDetection: PilotMetric; quantityRateAndTax: PilotMetric; batchAndExpiry: PilotMetric; supplierMapping: PilotMetric; productMapping: PilotMetric }; grouping: { suggestions: PilotGrouping[]; acceptanceRule: string } };
 type PilotCandidate = { key: string; sourceFileId: string; sourceArtifactId?: string; fileName: string; supplierBatch: string; pageCount: number; sha256: string };
+type EvidenceFile = HistoricalEvidenceReport['files'][number];
+type EvidenceCorrection = { file: EvidenceFile; action: 'correct_supplier' | 'exclude' | 'restore'; supplierBatch: string; reason: string };
 type BulkItem = { id: string; draftId: string; sourceFileId: string; sourceArtifactId?: string; fileName: string; sha256: string; status: string; pageCount: number; attempts: number; retryEligible: boolean; errorCode: string; errorMessage: string; suggestedCorrection: string; supplierName: string; invoiceNumber: string; invoiceDate?: string; totalPaise: number; confidenceBps: number; reviewDecision: string; archivedBillId?: string; duplicateOfBillId?: string; heartbeatAt?: string };
 type BulkSummary = { uploaded: number; profiling: number; extracting: number; reviewRequired: number; ready: number; archived: number; duplicates: number; quarantined: number; failed: number; dependencyPending: number; rejected: number; cancelled: number; accounted: number; totalDocuments: number; totalPages: number; sourceTotalPaise: number; archiveTotalPaise: number; stockEffectPaise: number; accountingEffectPaise: number; gstEffectPaise: number; payableEffectPaise: number };
 type BulkBatch = { jobId: string; cutoverId: string; supplierBatch: string; provider: string; postingMode: string; expectedBillCount: number; expectedTotalPaise?: number; mappingVersion: number; transformerVersion: string; workerLimit: number; jobStatus: string; heartbeatAt?: string; lastError: string; partialApproval: boolean; summary: BulkSummary; items: BulkItem[] };
@@ -38,6 +40,7 @@ export class OldPurchaseBillsPageComponent implements OnInit, OnDestroy {
   selectedBill: BillDetail | null = null; loading = true; drawerLoading = false; busy = false; error = '';
   search = ''; provider = ''; vendor = ''; fromDate = ''; toDate = ''; mappingStatus = '';
   evidenceKind: 'historical_bill' | 'physical_inventory' | 'supplier_outstanding' = 'historical_bill'; supplierBatch = ''; evidenceRetentionDays = 3650; uploadProgress = 0; uploadStatus = '';
+  evidenceCorrection: EvidenceCorrection | null = null;
   readonly pilotSelection = new Set<string>();
   bulkSourceFileId = ''; bulkSupplierBatch = ''; bulkProvider = 'auto'; bulkExpectedBillCount: number | null = null; bulkExpectedTotalRupees = ''; bulkMappingVersion: number | null = null; bulkWorkerLimit = 4; bulkApprovalReason = ''; bulkAllowPartial = false; bulkAllowLiveCollisions = false;
   mappingReasons: Record<string, string> = {}; mappingTargets: Record<string, string> = {}; mappingDrawer: MappingDrawer | null = null; mappingCreate: MappingCreateForm = this.emptyMappingCreate(); bulkMappingReason = '';
@@ -50,7 +53,7 @@ export class OldPurchaseBillsPageComponent implements OnInit, OnDestroy {
   get canApproveBulk() { return this.canApproveCutover; }
   get canCreateProduct() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('inventory.manage') || this.auth.hasPermission('inventory.write'); }
   get canCreateVendor() { return this.auth.hasRole('owner', 'admin', 'superadmin', 'super-admin') || this.auth.hasPermission('purchases.manage') || this.auth.hasPermission('inventory.manage'); }
-  get bulkSources() { return (this.evidence?.files || []).filter((file) => file.kind === 'historical_bill'); }
+  get bulkSources() { return (this.evidence?.files || []).filter((file) => file.kind === 'historical_bill' && file.evidenceState === 'active'); }
   get bulkActiveCount() { return (this.bulk?.batches || []).filter((batch) => ['queued', 'processing', 'paused'].includes(batch.jobStatus)).length; }
   get providers() { return [...new Set(this.bills.map((bill) => bill.provider).filter(Boolean))].sort(); }
   get vendorNames() { return [...new Set(this.bills.map((bill) => bill.supplierName).filter(Boolean))].sort(); }
@@ -58,11 +61,12 @@ export class OldPurchaseBillsPageComponent implements OnInit, OnDestroy {
   get unmappedProducts() { return this.products.filter((row) => !row.currentMapping || row.currentMapping.decision === 'reject'); }
   get reconciliation() { return this.cutover?.reconciliation; }
   get pilotCandidates(): PilotCandidate[] {
-    return (this.evidence?.files || []).filter((file) => file.kind === 'historical_bill').flatMap((file) =>
+    const candidates = (this.evidence?.files || []).filter((file) => file.kind === 'historical_bill' && file.evidenceState === 'active').flatMap((file) =>
       file.format === 'zip'
         ? (file.artifacts || []).filter((artifact) => ['pdf', 'png', 'jpeg', 'webp'].includes(artifact.format)).map((artifact) => ({ key: `${file.sourceFileId}:${artifact.id}`, sourceFileId: file.sourceFileId, sourceArtifactId: artifact.id, fileName: artifact.entryName, supplierBatch: file.supplierBatch, pageCount: artifact.pageCount, sha256: artifact.sha256 }))
         : [{ key: file.sourceFileId, sourceFileId: file.sourceFileId, fileName: file.originalFileName, supplierBatch: file.supplierBatch, pageCount: file.pageCount, sha256: file.sha256 }],
     );
+    return candidates.filter((candidate) => this.evidenceGroup(candidate.key)?.status !== 'rejected').map((candidate) => ({ ...candidate, pageCount: this.evidenceGroup(candidate.key)?.approvedPageCount || candidate.pageCount }));
   }
 
   async ngOnInit() { await this.reload(); this.bulkReloadTimer = setInterval(() => { if (this.activeTab === 'bulk' && this.bulkActiveCount) void this.reloadBulk(); }, 5000); }
@@ -86,6 +90,8 @@ export class OldPurchaseBillsPageComponent implements OnInit, OnDestroy {
           firstValueFrom(this.api.get<ApiEnvelope<BulkReport>>(`/settings/integrations/historical-purchase-bulk?cutoverId=${cutoverId}`)),
         ]);
         this.evidence = evidence.data || null; this.pilot = pilot.data || null; this.bulk = bulk.data || null;
+        const eligible = new Set(this.pilotCandidates.map((candidate) => candidate.key));
+        for (const key of this.pilotSelection) if (!eligible.has(key)) this.pilotSelection.delete(key);
       } else { this.evidence = null; this.pilot = null; this.bulk = null; }
     } catch (error) { this.error = this.message(error, 'Historical purchase archive could not be loaded'); }
     finally { this.loading = false; }
@@ -105,6 +111,17 @@ export class OldPurchaseBillsPageComponent implements OnInit, OnDestroy {
     }, 'Evidence upload could not be completed');
   }
   async decideGroup(group: HistoricalEvidenceReport['groups'][number], decision: 'approved' | 'rejected') { if (!this.canManage || !this.cutover) return; const approvedPageCount = Number(group.approvedPageCount || group.detectedPageCount); if (approvedPageCount <= 0) { this.error = 'Enter the verified page count before approval'; return; } await this.run(async () => { await firstValueFrom(this.api.post('/settings/integrations/historical-purchase-evidence/group-decisions', { cutoverId: this.cutover!.id, supplierBatch: group.supplierBatch, groupKey: group.groupKey, decision, approvedPageCount })); await this.reload(); }, 'Grouping decision could not be saved'); }
+  evidenceGroup(candidateKey: string) { return this.evidence?.groups.find((group) => group.documentKeys.includes(candidateKey)); }
+  openEvidenceCorrection(file: EvidenceFile, action: EvidenceCorrection['action']) { if (!this.canManage || file.kind !== 'historical_bill' || file.downstreamUsed) return; this.evidenceCorrection = { file, action, supplierBatch: action === 'correct_supplier' ? file.supplierBatch : '', reason: '' }; }
+  titleCaseEvidenceBatch() { if (this.evidenceCorrection) this.evidenceCorrection.supplierBatch = this.evidenceCorrection.supplierBatch.replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()); }
+  async saveEvidenceCorrection() {
+    const correction = this.evidenceCorrection;
+    if (!correction || !this.cutover || correction.reason.trim().length < 5 || (correction.action === 'correct_supplier' && !correction.supplierBatch.trim())) { this.error = 'Enter the supplier batch and a reason of at least 5 characters'; return; }
+    await this.run(async () => {
+      await firstValueFrom(this.api.post(`/settings/integrations/historical-purchase-evidence/${encodeURIComponent(correction.file.sourceFileId)}/corrections`, { cutoverId: this.cutover!.id, action: correction.action, supplierBatch: correction.action === 'correct_supplier' ? correction.supplierBatch.trim() : '', reason: correction.reason.trim() }));
+      this.evidenceCorrection = null; await this.reload();
+    }, 'Evidence correction could not be saved');
+  }
   async approveCutover() { if (!this.canApproveCutover || !this.cutover) return; await this.run(async () => { await firstValueFrom(this.api.post('/settings/integrations/historical-purchase-evidence/cutover-approval', { cutoverId: this.cutover!.id })); await this.reload(); }, 'Owner cutover approval could not be saved'); }
   pilotSelected(candidate: PilotCandidate) { return this.pilotSelection.has(candidate.key); }
   togglePilot(candidate: PilotCandidate, selected: boolean) { selected ? this.pilotSelection.add(candidate.key) : this.pilotSelection.delete(candidate.key); }

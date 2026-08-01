@@ -59,6 +59,11 @@
       <button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">Save policy</button>
     </section>
   }
+  @if (activeTab === 'master-data') {
+    <section class="command-strip" aria-label="Master data actions">
+      <button type="button" class="primary-button" [disabled]="savingPolicy" (click)="saveMasterValue()">Save master</button>
+    </section>
+  }
   @if (activeTab === 'operations') {
     <section class="command-strip" aria-label="Operations actions">
       @if (canRunAutomation) { <button type="button" [disabled]="automationBusy || !autonomous.policy.enabled" (click)="runAutomation()">Run automation</button> }
@@ -169,13 +174,22 @@
   <section class="panel">
     <header><h2>{{ 'inventory.ui.3835314865' | translate }}</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="savePolicy()">{{ savingPolicy ? 'Saving…' : 'Save policy' }}</button></header>
     <div class="policy-grid">
-      <label>{{ 'inventory.ui.f1d1c11769' | translate }}<select [(ngModel)]="policy.negativeStockRule"><option value="block">{{ 'inventory.ui.82dd2cdf36' | translate }}</option><option value="approval_required">{{ 'inventory.ui.b8d012c200' | translate }}</option></select></label>
+      <label>{{ 'inventory.ui.f1d1c11769' | translate }}<select [(ngModel)]="policy.negativeStockRule"><option value="block">{{ 'inventory.ui.82dd2cdf36' | translate }}</option><option value="approval_required">{{ 'inventory.ui.b8d012c200' | translate }}</option><option value="allow_with_warning">Allow with warning</option></select></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.autoCheckoutRetailSales" />Automatic retail-sale checkout</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.autoCheckoutServiceConsumption" />Automatic service-consumption checkout</label>
       <label>{{ 'inventory.ui.2dfbcefb7b' | translate }}<select [(ngModel)]="policy.valuationMethod"><option value="weighted_average">{{ 'inventory.ui.c74e4e7c5c' | translate }}</option><option value="fifo">{{ 'inventory.ui.07c257b166' | translate }}</option></select></label>
       <label>{{ 'inventory.ui.e3d400bee8' | translate }}<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
       <label>{{ 'inventory.ui.a692bbeff4' | translate }}<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
       @if (supportsCountValueVarianceThreshold) { <label>Stock-count value approval (₹)<input type="number" min="0" step="0.01" [(ngModel)]="countValueVarianceThresholdRupees" /></label> }
       <label>Reorder history (days)<input type="number" min="14" max="365" [(ngModel)]="policy.reorderHistoryDays" /></label>
       <label>Reorder coverage (days)<input type="number" min="7" max="180" [(ngModel)]="policy.reorderCoverageDays" /></label>
+      <label>Partial delivery<select [(ngModel)]="policy.partialDeliveryPolicy"><option value="allow">Allow</option><option value="block">Block</option></select></label>
+      <label>Excess receiving<select [(ngModel)]="policy.excessReceivingPolicy"><option value="block">Block</option><option value="permission_required">Permission required</option></select></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.priceDifferencePrompt" />Warn on receiving price difference</label>
+      <label>Price difference threshold (%)<input type="number" min="0" max="100" step="0.01" [ngModel]="policy.priceDifferenceThresholdBps / 100" (ngModelChange)="setPriceDifferenceThreshold($event)" /></label>
+      <label>Financial lock date<as-date-picker [(value)]="policy.financialLockDate" ariaLabel="Inventory financial lock date"></as-date-picker></label>
+      <label>Edit lock (days)<input type="number" min="0" max="3650" [(ngModel)]="policy.editLockDays" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.masterEditLock" />Lock product master editing</label>
       <label>Transfer base transport (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferBaseTransportRupees" /></label>
       <label>Transfer transport per km (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferCostPerKmRupees" /></label>
       <label>Transfer handling per unit (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferHandlingPerUnitRupees" /></label>
@@ -192,6 +206,26 @@
     }</td></tr>
   }</tbody></table></div>
 }  </section>
+}
+
+@if (activeTab === 'master-data') {
+  <section class="panel">
+    <header><h2>Inventory Master Data</h2><button type="button" class="primary-button" [disabled]="savingPolicy" (click)="saveMasterValue()">Save master</button></header>
+    <div class="policy-grid">
+      <label>Type<select [(ngModel)]="masterDraft.kind"><option value="category">Category</option><option value="subcategory">Subcategory</option><option value="brand">Brand</option><option value="adjustment_reason">Adjustment reason</option><option value="action_label">Action label</option></select></label>
+      <label>Code<input maxlength="80" [(ngModel)]="masterDraft.code" /></label>
+      <label>Label<input maxlength="120" [ngModel]="masterDraft.label" (ngModelChange)="masterDraft.label = titleCase($event)" /></label>
+      <label>Parent code<input maxlength="80" [(ngModel)]="masterDraft.parentCode" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="masterDraft.active" />Active</label>
+    </div>
+    <div class="table-scroll"><table><thead><tr><th>Type</th><th>Code</th><th>Label</th><th>Parent</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      @for (row of masterData.values; track row.id) { <tr><td>{{ row.kind.replace('_',' ') }}</td><td>{{ row.code }}</td><td><strong>{{ row.label }}</strong></td><td>{{ row.parentCode || '—' }}</td><td><span class="status" [class.critical]="!row.active">{{ row.active ? 'Active' : 'Inactive' }}</span></td><td><button type="button" (click)="editMasterValue(row)">Edit</button></td></tr> }
+      @empty { <tr><td colspan="6" class="empty-state">No records yet</td></tr> }
+    </tbody></table></div>
+    <div class="table-scroll"><table><thead><tr><th>UoM</th><th>Label</th><th>Dimension</th><th>Status</th></tr></thead><tbody>
+      @for (row of masterData.units; track row.code) { <tr><td><strong>{{ row.code }}</strong></td><td>{{ row.label }}</td><td>{{ row.dimension }}</td><td>{{ row.active ? 'Active' : 'Inactive' }}</td></tr> }
+    </tbody></table></div>
+  </section>
 }
 
 @if (activeTab === 'operations') {

@@ -9,6 +9,9 @@ export type BackbarRecipeLine = {
   standardQty?: number;
   quantity?: number;
   qty?: number;
+  minQty?: number;
+  maxQty?: number;
+  usageProfile?: 'root_touch_up' | 'full_colour' | 'custom';
 };
 
 export type BackbarService = {
@@ -24,10 +27,13 @@ export type BackbarItem = {
   brand: string;
   sku: string;
   unit: string;
+  packageUnit: string;
+  unitsPerPackage: number;
   stockQuantity: number;
   reorderPoint: number;
   unitCostPaise: number;
   dualUseStock: boolean;
+  productUsage: 'retail' | 'consumable' | 'dual_use';
   active: boolean;
 };
 
@@ -66,6 +72,7 @@ export type BackbarUsage = {
   dualUseStock: boolean;
   retailShelfQuantity: number;
   sealedBackbarQuantity: number;
+  sealedBackbarBalance: number;
   openContainerBalance: number;
   notes: string;
   reviewNote: string;
@@ -95,13 +102,154 @@ export type BackbarContainer = {
   dualUseStock: boolean;
   retailShelfQuantity: number;
   sealedBackbarQuantity: number;
+  sealedBackbarBalance: number;
   openContainerBalance: number;
+  locationCode: string;
+  custodianStaffId?: string;
+  custodianStaffName?: string;
   openedAt?: string;
   closedAt?: string;
   pendingOverrideId?: string;
   events: BackbarContainerEvent[];
 };
 export type BackbarContainerLabel={id:string;productName:string;barcode:string;capacityQuantity:number;unit:string;status:string;batchNumber:string;qrSvg:string};
+
+export type ColorBowlLine = {
+  usageId: string;
+  componentType: 'base' | 'fashion' | 'developer' | 'other';
+  inventoryItemId: string;
+  itemName: string;
+  itemBrand: string;
+  usageProfile: 'root_touch_up' | 'full_colour' | 'custom';
+  minQuantity: number;
+  expectedQuantity: number;
+  maxQuantity: number;
+  actualQuantity: number;
+  varianceQuantity: number;
+  unit: string;
+  unitCostPaise: number;
+  containerId?: string;
+  status: string;
+  wasteReason: string;
+  notes: string;
+};
+
+export type ColorBowl = {
+  id: string;
+  appointmentId: string;
+  clientId: string;
+  clientName: string;
+  serviceId: string;
+  serviceName: string;
+  servicePricePaise?: number;
+  staffId: string;
+  staffName: string;
+  notes: string;
+  status: string;
+  expectedQuantity: number;
+  actualQuantity: number;
+  expectedCostPaise: number;
+  actualCostPaise: number;
+  createdAt: string;
+  lines: ColorBowlLine[];
+};
+
+export type ColorDailyVariance = {
+  date: string;
+  inventoryItemId: string;
+  itemName: string;
+  itemBrand: string;
+  unit: string;
+  expectedQuantity: number;
+  actualQuantity: number;
+  varianceQuantity: number;
+  expectedCostPaise: number;
+  actualCostPaise: number;
+  varianceCostPaise: number;
+  bowlCount: number;
+};
+
+export type ColorStaffShiftRow = {
+  date: string;
+  staffId: string;
+  staffName: string;
+  shiftStatus: string;
+  shift1Start?: string;
+  shift1End?: string;
+  shift2Start?: string;
+  shift2End?: string;
+  attendanceStatus: string;
+  clockInAt?: string;
+  clockOutAt?: string;
+  unit: string;
+  bowlCount: number;
+  clientCount: number;
+  rootTouchUpCount: number;
+  fullColourCount: number;
+  expectedQuantity: number;
+  actualQuantity: number;
+  varianceQuantity: number;
+  varianceCostPaise: number;
+  excessLineCount: number;
+  wasteLineCount: number;
+  pendingApprovalCount: number;
+};
+
+export type FormulaRecommendation = {
+  sourceBowlId: string;
+  usedAt: string;
+  lines: Array<{
+    componentType: 'base' | 'fashion' | 'developer' | 'other';
+    inventoryItemId: string;
+    itemName: string;
+    itemBrand: string;
+    suggestedQuantity: number;
+    unit: string;
+    usageProfile: 'root_touch_up' | 'full_colour' | 'custom';
+  }>;
+};
+
+export type ColorServiceMargin = {
+  date: string;
+  serviceId: string;
+  serviceName: string;
+  bowlCount: number;
+  pricedBowlCount: number;
+  revenuePaise: number;
+  expectedCostPaise: number;
+  actualCostPaise: number;
+  marginPaise?: number;
+  marginBps?: number;
+};
+
+export type ReorderForecast = {
+  run: { id: string; modelVersion: string; createdAt: string };
+  recommendations: Array<{
+    id: string;
+    inventoryItemId: string;
+    productName: string;
+    sku: string;
+    currentStock: number;
+    reorderLevel: number;
+    suggestedQuantity: number;
+    unitCostPaise: number;
+    confidenceBps: number;
+    status: string;
+    explanation: Record<string, unknown>;
+  }>;
+};
+
+export type InventoryAnomalySuggestion = {
+  key: string;
+  category: string;
+  severity: string;
+  title: string;
+  explanation: string;
+  recommendedAction: string;
+  confidenceBps: number;
+  route: string;
+  approval: { required: boolean; status: string; mode: string };
+};
 
 export type BackbarProduct360 = {
   product: BackbarItem & { category?: string; barcode?: string; batchTracked?: boolean };
@@ -114,10 +262,20 @@ export type BackbarProduct360 = {
   consumedQuantity: number;
   retailShelfQuantity: number;
   sealedBackbarQuantity: number;
+  sealedBackbarBalance: number;
   openContainerBalance: number;
+  physicalTotalQuantity: number;
   openContainerUnit?: string;
   kitComponents: Array<{ componentName?: string; quantity?: number }>;
 };
+
+export type FloorLocation = { code:string; name:string; locationType:'store'|'backbar'|'station'|'trolley'; active:boolean; updatedAt:string };
+export type FloorBalance = { inventoryItemId:string; productName:string; productUsage:'retail'|'consumable'|'dual_use'; unit:string; unopenedQuantity:number; storeUnopened:number; sealedCount:number; sealedBalance:number; sealedBackbarReserve:number; retailAvailable:number; consumableAvailable:number; openBalance:number; openFloorBalance:number; damagedQuarantine:number; inTransit:number; unifiedOnHand:number; physicalTotal:number; actualConsumed:number };
+export type FloorCustodyEvent = { id:string; containerId:string; barcode:string; productName:string; fromLocationCode:string; toLocationCode:string; fromStaffId?:string; toStaffId?:string; reason:string; actorUserId:string; createdAt:string };
+export type FloorClosingLine = { containerId:string; barcode:string; productName:string; expectedRemaining:number; countedRemaining:number; varianceQuantity:number; reason:string; unit:string };
+export type FloorClosing = { id:string; businessDate:string; shiftLabel:string; status:string; requestedBy:string; reviewedBy?:string; reviewedAt?:string; reviewNote:string; createdAt:string; lines:FloorClosingLine[] };
+export type OperationalMovement = { id:string; inventoryItemId:string; productName:string; action:string; sourceBucket:string; destinationBucket:string; quantity:number; unit:string; unitCostPaise:number; stockValuePaise:number; employeeId?:string; employeeName:string; actorUserId:string; comment:string; referenceType:string; referenceId:string; warning:boolean; reversalOfId?:string; reversed:boolean; metadata:Record<string,unknown>; createdAt:string };
+export type FloorControl = { locations:FloorLocation[]; balances:FloorBalance[]; custodyEvents:FloorCustodyEvent[]; closings:FloorClosing[]; operationalMovements:OperationalMovement[] };
 
 @Injectable({ providedIn: 'root' })
 export class BackbarControlService {
@@ -158,6 +316,49 @@ export class BackbarControlService {
     return this.get<BackbarUsage[]>(`/inventory/backbar-usage?${query}`);
   }
 
+  bowls(date = '', clientId = '', appointmentId = '') {
+    const query = new URLSearchParams();
+    if (date) query.set('date', date);
+    if (clientId) query.set('clientId', clientId);
+    if (appointmentId) query.set('appointmentId', appointmentId);
+    return this.get<ColorBowl[]>(`/inventory/color-bowls?${query}`);
+  }
+
+  dailyColorVariance(date = '') {
+    const query = new URLSearchParams();
+    if (date) query.set('date', date);
+    return this.get<ColorDailyVariance[]>(`/inventory/color-bowls/daily-variance?${query}`);
+  }
+
+  colorStaffShiftDashboard(date = '') {
+    const query = new URLSearchParams();
+    if (date) query.set('date', date);
+    return this.get<ColorStaffShiftRow[]>(`/inventory/color-bowls/staff-shift-dashboard?${query}`);
+  }
+
+  formulaRecommendation(clientId: string, serviceId: string) {
+    const query = new URLSearchParams({ clientId, serviceId });
+    return this.get<FormulaRecommendation | null>(`/inventory/color-bowls/formula-recommendation?${query}`);
+  }
+
+  colorServiceMargins(date = '') {
+    const query = new URLSearchParams();
+    if (date) query.set('date', date);
+    return this.get<ColorServiceMargin[]>(`/inventory/color-bowls/service-margins?${query}`);
+  }
+
+  reorderForecast() { return this.get<ReorderForecast | null>('/inventory/reorder-forecasts'); }
+  runReorderForecast() { return firstValueFrom(this.api.post('/inventory/reorder-forecasts', {})); }
+
+  async colorAnomalySuggestions() {
+    const response = await this.get<{ recommendations: InventoryAnomalySuggestion[] }>('/inventory/command-center');
+    return response.recommendations.filter((row) => ['consumption_variance', 'unusual_staff_product_usage', 'container_rule_violation', 'missing_recipe'].includes(row.category));
+  }
+
+  recordBowl(payload: Record<string, unknown>) {
+    return firstValueFrom(this.api.post('/inventory/color-bowls', payload));
+  }
+
   async appointments() {
     const rows = await firstValueFrom(this.api.get<BackbarAppointment[]>('/appointments'));
     return Array.isArray(rows) ? rows : [];
@@ -194,6 +395,15 @@ export class BackbarControlService {
   reviewOverride(id: string, decision: 'approve' | 'reject', reviewNote: string) {
     return firstValueFrom(this.api.post(`/inventory/backbar-overrides/${id}/review`, { decision, reviewNote, idempotencyKey: crypto.randomUUID() }));
   }
+
+  floorControl() { return this.get<FloorControl>('/inventory/floor-control'); }
+  checkout(payload:Record<string,unknown>) { return firstValueFrom(this.api.post('/inventory/checkouts',payload)); }
+  convert(payload:Record<string,unknown>) { return firstValueFrom(this.api.post('/inventory/conversions',payload)); }
+  reverseMovement(id:string,comment:string) { return firstValueFrom(this.api.post(`/inventory/operational-movements/${id}/reverse`,{comment,idempotencyKey:crypto.randomUUID()})); }
+  saveFloorLocation(payload:Record<string,unknown>) { return firstValueFrom(this.api.post('/inventory/floor-locations',payload)); }
+  transferCustody(id:string,payload:Record<string,unknown>) { return firstValueFrom(this.api.post(`/inventory/backbar-containers/${id}/custody`,payload)); }
+  createFloorClosing(payload:Record<string,unknown>) { return firstValueFrom(this.api.post('/inventory/floor-closings',payload)); }
+  reviewFloorClosing(id:string,payload:Record<string,unknown>) { return firstValueFrom(this.api.post(`/inventory/floor-closings/${id}/review`,payload)); }
 
   private async get<T>(path: string) {
     const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path));

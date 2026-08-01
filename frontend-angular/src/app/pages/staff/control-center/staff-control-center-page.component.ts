@@ -9,7 +9,7 @@ import { DatePickerComponent } from '../../../shared/date-picker/date-picker.com
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { AuthService } from '../../../core/services/auth.service';
 
-type WorkspaceTab = 'command' | 'workforce' | 'development' | 'systems' | 'governance' | 'content';
+type WorkspaceTab = 'command' | 'workforce' | 'hrms' | 'development' | 'systems' | 'governance' | 'content';
 type Row = Record<string, any>;
 type SectionRequest = { label: string; run: Promise<void> };
 
@@ -29,6 +29,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   readonly tabs: Array<{ key: WorkspaceTab; label: string; icon: string }> = [
     { key: 'command', label: 'Command center', icon: 'bi-speedometer2' },
     { key: 'workforce', label: 'Workforce', icon: 'bi-calendar2-week' },
+    { key: 'hrms', label: 'HRMS', icon: 'bi-diagram-3' },
     { key: 'development', label: 'Development', icon: 'bi-mortarboard' },
     { key: 'systems', label: 'Systems', icon: 'bi-fingerprint' },
     { key: 'governance', label: 'Governance', icon: 'bi-shield-check' },
@@ -53,6 +54,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   reviews: Row[] = [];
   coachingGoals: Row[] = [];
   training: Row[] = [];
+  lms: Row = { courses: [], enrolments: [], requirements: [], skillMatrix: [], recommendations: [] };
   devices: Row[] = [];
   gateways: Row[] = [];
   mappings: Row[] = [];
@@ -71,6 +73,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   selfService: Row | null = null;
   rosterDraft: Row | null = null;
   staffAi: Row | null = null;
+  hrms: Row = { jobOpenings: [], applications: [], lifecycleCases: [], orgChart: [], documentAlerts: [], appraisalCycles: [], goalTemplates: [], appraisalReviews: [], learning: {}, successionPlans: [], promotionReadiness: { items: [] }, operationsIntelligence: { summary: {}, expiryAlerts: [], onboardingOverdue: [], missedTasks: [], exceptions: { items: [] }, completion: {}, benchmarks: { branch: {}, staff: [] }, monthlyOwnerSummary: {} } };
   contentTasks: Row[] = [];
   contentOffers: Row[] = [];
   penaltyRules: Row[] = [];
@@ -111,11 +114,18 @@ export class StaffControlCenterPageComponent implements OnInit {
       this.section('staff AI', this.loadOne(`/staff/intelligence/ai-analysis?${period}`, (value) => this.staffAi = value)),
     ];
     if (tab === 'development') return [
-      this.section('skill matrix', this.loadList('/staff-enterprise/skill-matrix', (value) => this.skillMatrix = value)),
+      this.section('learning and skills', this.loadOne('/staff-enterprise/lms', (value) => {
+        this.lms = value;
+        this.skillMatrix = this.arrayValue(value['skillMatrix']);
+      })),
       this.section('skill licenses', this.loadList('/staff/skill-licenses', (value) => this.licenses = value)),
       this.section('performance reviews', this.loadList('/staff/performance-reviews', (value) => this.reviews = value)),
       this.section('coaching goals', this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value)),
       this.section('training', this.loadList('/staff-enterprise/training', (value) => this.training = value)),
+    ];
+    if (tab === 'hrms') return [
+      this.section('enterprise HRMS', this.loadOne('/staff/hrms', (value) => this.hrms = value)),
+      this.section('HR operations intelligence', this.loadOne(`/staff/hrms/operations-intelligence?${new URLSearchParams({ from: this.periodStart, to: this.periodEnd })}`, (value) => this.hrms['operationsIntelligence'] = value)),
     ];
     if (tab === 'systems') return [
       this.section('biometric devices', this.loadList('/staff/biometric/devices', (value) => this.devices = value)),
@@ -238,6 +248,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       id: row?.['id'] || undefined,
       staffId,
       skillName,
+      skillLevel: Number(row?.['skillLevel'] || 1),
       issuer: row?.['issuer'] || this.askOptional('Issuer'),
       licenseNumber: row?.['licenseNumber'] || this.askOptional('License number'),
       issuedOn: row?.['issuedOn'] || this.askOptional('Issued on YYYY-MM-DD'),
@@ -278,6 +289,51 @@ export class StaffControlCenterPageComponent implements OnInit {
       description: this.askOptional('Description'),
       priority: this.askChoice('Priority', ['medium', 'low', 'high', 'urgent']) || 'medium',
       dueAt: dueDate ? `${dueDate}T23:59:00+05:30` : undefined,
+    });
+  }
+
+  async configureCourse(row: Row) {
+    const skillName = this.askOptional('Skill name (empty for general SOP)', row['skillName'] || '');
+    const skillLevel = Number(this.ask('Skill level 1-5', row['skillLevel'] || 1));
+    const expectedMinutes = Number(this.ask('Expected minutes', row['expectedMinutes'] || 0));
+    const certificationValidDays = Number(this.ask('Certification validity days (0 for none)', row['certificationValidDays'] || 0));
+    if (![skillLevel, expectedMinutes, certificationValidDays].every(Number.isInteger)) return;
+    await this.action(`/staff-enterprise/lms/courses/${row['id']}/profile`, {
+      skillName, skillLevel, expectedMinutes, certificationValidDays, version: row['profileVersion'] || undefined,
+    });
+  }
+
+  async assignCourse(row?: Row) {
+    const staffId = this.ask('Staff ID');
+    const courseId = String(row?.['id'] || this.ask('Course ID') || '');
+    if (!staffId || !courseId) return;
+    const dueDate = this.askOptional('Due date YYYY-MM-DD');
+    await this.action('/staff-enterprise/lms/enrolments', {
+      staffId, courseId,
+      priority: this.askChoice('Priority', ['medium', 'low', 'high', 'urgent']) || 'medium',
+      dueAt: dueDate ? `${dueDate}T23:59:00+05:30` : undefined,
+    });
+  }
+
+  async saveSkillRequirement(row?: Row) {
+    const scopeType = String(row?.['scopeType'] || this.askChoice('Scope', ['role', 'service']) || '');
+    const scopeId = String(row?.['scopeId'] || this.ask('Role or service ID') || '');
+    const skillName = String(row?.['skillName'] || this.ask('Required skill') || '');
+    const requiredLevel = Number(this.ask('Required level 1-5', row?.['requiredLevel'] || 1));
+    if (!scopeType || !scopeId || !skillName || !Number.isInteger(requiredLevel)) return;
+    await this.action('/staff-enterprise/lms/skill-requirements', {
+      scopeType, scopeId, skillName, requiredLevel,
+      certificationRequired: row?.['certificationRequired'] ?? true,
+      active: row?.['active'] ?? true,
+      version: row?.['version'],
+    });
+  }
+
+  async renewCertification(row: Row) {
+    const expiresOn = this.ask('New expiry YYYY-MM-DD');
+    if (!expiresOn) return;
+    await this.action(`/staff-enterprise/lms/certifications/${row['id']}/renew`, {
+      version: row['version'], expiresOn, documentUrl: this.askOptional('Renewal evidence URL'),
     });
   }
 
@@ -489,6 +545,193 @@ export class StaffControlCenterPageComponent implements OnInit {
       dueAt: dueDate ? `${dueDate}T23:59:00+05:30` : undefined,
       status: 'open',
     });
+  }
+
+  async createJobOpening() {
+    const title = this.ask('Job title');
+    const employmentType = this.askChoice('Employment type', ['full_time', 'part_time', 'contract', 'intern']);
+    if (!title || !employmentType) return;
+    await this.action('/staff/hrms/job-openings', { title, employmentType, department: this.askOptional('Department'), openingsCount: Number(this.askOptional('Openings')) || 1, description: this.askOptional('Description') });
+  }
+
+  async updateJobOpening(row: Row) {
+    const status = this.askChoice('Status', row['status'] === 'open' ? ['paused', 'closed'] : row['status'] === 'paused' ? ['open', 'closed'] : ['open', 'closed']);
+    if (status) await this.action(`/staff/hrms/job-openings/${row['id']}`, { status, version: row['version'] }, true, 'patch');
+  }
+
+  async createApplication(row?: Row) {
+    const jobOpeningId = String(row?.['id'] || this.ask('Job opening ID') || '');
+    const firstName = this.ask('Candidate first name');
+    if (!jobOpeningId || !firstName) return;
+    await this.action('/staff/hrms/applications', { jobOpeningId, firstName, lastName: this.askOptional('Last name'), email: this.askOptional('Email'), phone: this.askOptional('Phone'), source: this.askOptional('Source'), resumeUrl: this.askOptional('Resume URL'), notes: this.askOptional('Notes') });
+  }
+
+  async updateApplication(row: Row) {
+    const next: Record<string, string[]> = { applied: ['screening', 'rejected', 'withdrawn'], screening: ['interview', 'rejected', 'withdrawn'], interview: ['offer', 'rejected'], offer: ['hired', 'rejected', 'withdrawn'] };
+    const stage = this.askChoice('Stage', next[row['stage']] || []);
+    if (!stage) return;
+    const linkedStaffId = stage === 'hired' ? this.ask('Existing Staff ID') : '';
+    if (stage === 'hired' && !linkedStaffId) return;
+    const probationEndDate = stage === 'hired' ? this.askOptional('Probation end date YYYY-MM-DD') : '';
+    await this.action(`/staff/hrms/applications/${row['id']}`, { stage, linkedStaffId, probationEndDate: probationEndDate || null, version: row['version'] }, true, 'patch');
+  }
+
+  async createLifecycleCase(caseType: 'onboarding' | 'offboarding') {
+    const staffId = this.askOptional('Staff ID');
+    const applicationId = caseType === 'onboarding' ? this.askOptional('Application ID') : '';
+    if (!staffId && !applicationId) return;
+    const checklist = this.csv(this.ask('Checklist tasks, comma separated'));
+    if (!checklist.length) return;
+    const effectiveDate = this.ask('Effective date YYYY-MM-DD', this.periodEnd);
+    if (!effectiveDate) return;
+    await this.action('/staff/hrms/lifecycle-cases', { staffId, applicationId, caseType, effectiveDate, checklist });
+  }
+
+  async updateLifecycleTask(row: Row, task: Row) {
+    await this.action(`/staff/hrms/lifecycle-cases/${row['id']}/tasks/${task['id']}`, { completed: !task['completed'], version: row['version'] }, true, 'patch');
+  }
+
+  async completeSettlement(row: Row) {
+    const reference = this.ask('Final settlement reference');
+    if (!reference) return;
+    const payrollRunId = this.askOptional('Paid payroll run ID (optional)');
+    await this.action(`/staff/hrms/lifecycle-cases/${row['id']}/settlement`, { reference, payrollRunId: payrollRunId || null, version: row['version'] }, true, 'patch');
+  }
+
+  async updateEmployment(row: Row) {
+    const current = String(row['employmentStatus'] || 'confirmed');
+    const status = this.askChoice('Employment status', current === 'probation' ? ['confirmed', 'notice_period'] : ['notice_period']);
+    if (!status) return;
+    const effectiveDate = this.ask('Effective date YYYY-MM-DD', this.periodEnd);
+    if (!effectiveDate) return;
+    await this.action(`/staff/hrms/employees/${row['staffId']}/employment`, { status, effectiveDate, version: row['employmentVersion'] }, true, 'patch');
+  }
+
+  async createAppraisalCycle() {
+    const name = this.ask('Cycle name');
+    if (name) await this.action('/staff/hrms/appraisal-cycles', { name, periodStart: this.periodStart, periodEnd: this.periodEnd });
+  }
+
+  async updateAppraisalCycle(row: Row) {
+    const next: Record<string, string[]> = { draft: ['active'], active: ['review'], review: ['calibration'], calibration: ['closed'] };
+    const status = this.askChoice('Status', next[row['status']] || []);
+    if (status) await this.action(`/staff/hrms/appraisal-cycles/${row['id']}`, { status, version: row['version'] }, true, 'patch');
+  }
+
+  async createGoalTemplate() {
+    const name = this.ask('OKR template name');
+    const raw = this.ask('Key results: Title|unit|target|weight bps; separate each with semicolon');
+    if (!name || !raw) return;
+    const keyResults = raw.split(';').map((entry) => {
+      const [title, metricUnit, targetValue, weightBasisPoints] = entry.split('|').map((value) => value.trim());
+      return { title, metricUnit, targetValue: Number(targetValue), weightBasisPoints: Number(weightBasisPoints) };
+    });
+    if (keyResults.some((item) => !item.title || !['count', 'percent', 'minutes', 'paise'].includes(item.metricUnit) || !Number.isInteger(item.targetValue) || !Number.isInteger(item.weightBasisPoints))) {
+      this.error = 'Use Title|count/percent/minutes/paise|target|weight bps.';
+      return;
+    }
+    await this.action('/staff/hrms/goal-templates', { name, description: this.askOptional('Description'), keyResults });
+  }
+
+  async populateAppraisalCycle(row: Row) {
+    const templateId = this.ask('Goal template ID');
+    const staffIds = this.csv(this.ask('Employee IDs, comma separated'));
+    if (!templateId || !staffIds.length) return;
+    await this.action(`/staff/hrms/appraisal-cycles/${row['id']}/populate`, { templateId, staffIds });
+  }
+
+  async submitManagerAppraisal(row: Row) {
+    const score = Number(this.ask('Manager score 0-100'));
+    if (!Number.isInteger(score)) return;
+    const incentiveAmountPaise = this.contentRupeesToPaise(this.askOptional('Incentive amount in rupees (optional)')) || 0;
+    await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/manager`, {
+      score,
+      strengths: this.askOptional('Strengths'),
+      improvementAreas: this.askOptional('Improvement areas'),
+      goals: this.askOptional('Manager goals'),
+      comments: this.askOptional('Manager comments'),
+      coachingGoalId: this.askOptional('Existing coaching goal ID (optional)') || null,
+      incentiveAmountPaise,
+      incentiveEvidence: this.csv(this.askOptional('Incentive evidence, comma separated')),
+      version: row['version'],
+    }, true, 'patch');
+  }
+
+  async calibrateAppraisal(row: Row) {
+    const score = Number(this.ask('Calibrated score 0-100', row['managerScore']));
+    const comments = this.ask('Calibration comments');
+    if (!Number.isInteger(score) || !comments) return;
+    await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/calibrate`, { score, comments, version: row['version'] }, true, 'patch');
+  }
+
+  async approveAppraisal(row: Row) {
+    if (!window.confirm(`Approve final rating for ${row['staffName']}?`)) return;
+    await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/approve`, { version: row['version'] }, true, 'patch');
+  }
+
+  async createSuccessionPlan() {
+    const roleTitle = this.ask('Critical role title');
+    if (!roleTitle) return;
+    await this.action('/staff/hrms/succession-plans', { roleTitle, targetRoleId: this.askOptional('Target Role ID (optional)') || null, criticalRole: true, incumbentStaffId: this.askOptional('Incumbent Staff ID'), targetDate: this.askOptional('Target date YYYY-MM-DD') || null, notes: this.askOptional('Notes') });
+  }
+
+  async addSuccessionCandidate(plan: Row) {
+    const staffId = this.ask('Candidate Staff ID');
+    if (!staffId) return;
+    await this.action(`/staff/hrms/succession-plans/${plan['id']}/candidates`, { staffId, evidence: this.csv(this.askOptional('Additional evidence, comma separated')), developmentActions: this.csv(this.askOptional('Development actions, comma separated')) });
+  }
+
+  async closeSuccessionPlan(plan: Row) {
+    if (!window.confirm('Close this plan after all nominations are resolved?')) return;
+    await this.action(`/staff/hrms/succession-plans/${plan['id']}`, { status: 'closed', closureNote: this.askOptional('Closure note'), version: plan['version'] }, true, 'patch');
+  }
+
+  async updateSuccessionCandidate(row: Row) {
+    const status = this.askChoice('Action', ['proposed', 'removed']);
+    if (!status) return;
+    await this.action(`/staff/hrms/succession-candidates/${row['id']}`, {
+      status,
+      evidence: this.csv(this.askOptional('Additional evidence, comma separated', this.arrayValue(row['evidence']).join(', '))),
+      developmentActions: this.csv(this.askOptional('Development actions, comma separated', this.arrayValue(row['developmentActions']).join(', '))),
+      version: row['version'],
+    }, true, 'patch');
+  }
+
+  async decideSuccessionCandidate(row: Row, decision: 'approved' | 'rejected') {
+    const note = this.ask(`${decision === 'approved' ? 'Approval' : 'Rejection'} note`);
+    if (!note) return;
+    await this.action(`/staff/hrms/succession-candidates/${row['candidateId']}/decision`, { decision, note, version: row['version'] });
+  }
+
+  async runHrOperationsAutomations() {
+    await this.action('/staff/hrms/operations-intelligence/automations/run', { from: this.periodStart, to: this.periodEnd });
+  }
+
+  exportEmployeeLifecycle() {
+    const rows = this.arrayValue(this.hrms['lifecycleCases']).map((row) => [
+      row['staffId'] || '', row['staffName'] || row['candidateName'] || '', row['caseType'] || '', row['effectiveDate'] || '',
+      row['status'] || '', row['settlementStatus'] || '', this.arrayValue(row['tasks']).length,
+      this.arrayValue(row['tasks']).filter((task) => task['completed']).length,
+    ]);
+    this.downloadCsv([
+      ['staffId', 'staffName', 'caseType', 'effectiveDate', 'status', 'settlementStatus', 'taskCount', 'completedTaskCount'],
+      ...rows,
+    ], `employee-lifecycle-${this.periodStart}-${this.periodEnd}.csv`);
+  }
+
+  exportHrHealth() {
+    const intelligence = this.hrms['operationsIntelligence'] || {};
+    const branch = intelligence['benchmarks']?.['branch'] || {};
+    const rows = this.arrayValue(intelligence['benchmarks']?.['staff']).map((row) => [
+      row['staffId'] || '', row['employeeCode'] || '', row['staffName'] || '', row['jobTitle'] || '',
+      row['attendancePercent'] ?? '', row['appraisalPercent'] ?? '', row['trainingPercent'] ?? '',
+      row['operationsPercent'] ?? '', row['healthScore'] ?? '', row['coveragePercent'] ?? '',
+    ]);
+    this.downloadCsv([
+      ['branchHealthScore', branch['healthScore'] ?? '', 'periodStart', this.periodStart, 'periodEnd', this.periodEnd],
+      ['staffId', 'employeeCode', 'staffName', 'jobTitle', 'attendancePercent', 'appraisalPercent', 'trainingPercent', 'operationsPercent', 'healthScore', 'coveragePercent'],
+      ...rows,
+    ], `hr-health-${this.periodStart}-${this.periodEnd}.csv`);
   }
 
   openRuleEditor(row?: Row) {
@@ -800,6 +1043,7 @@ export class StaffControlCenterPageComponent implements OnInit {
     const amount = Number(value);
     return Number.isInteger(amount) && amount > 0 ? amount : undefined;
   }
+  private csv(value: string | null) { return String(value || '').split(',').map((item) => item.trim()).filter(Boolean); }
 
   private emptyRuleDraft(): Row {
     return { documentKey: '', documentType: 'sop', category: 'service', title: '', content: '', effectiveDate: this.periodEnd, expiresOn: '', mandatoryAcknowledgement: true, trainingAttachmentUrl: '', quizPassScore: 80 };
@@ -807,7 +1051,7 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   private isoDate(value: Date) { return value.toISOString().slice(0, 10); }
   private ask(label: string, initial = '') { const value = window.prompt(label, String(initial || ''))?.trim(); return value || null; }
-  private askOptional(label: string) { return window.prompt(label, '')?.trim() || ''; }
+  private askOptional(label: string, initial = '') { return window.prompt(label, initial)?.trim() || ''; }
   private askChoice(label: string, values: string[]) {
     const value = window.prompt(`${label}: ${values.join(' / ')}`, values[0])?.trim().toLowerCase();
     return value && values.includes(value) ? value : null;
@@ -816,6 +1060,14 @@ export class StaffControlCenterPageComponent implements OnInit {
     const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+  private downloadCsv(rows: unknown[][], filename: string) {
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     link.download = filename;
     link.click();
     URL.revokeObjectURL(link.href);
