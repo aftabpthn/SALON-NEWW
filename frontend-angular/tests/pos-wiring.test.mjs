@@ -296,6 +296,8 @@ test('invoice register links invoice, client, staff and payment mode to their re
 });
 
 test('invoice reports consolidate old report logic into five connected workspaces', () => {
+  assert.match(invoiceReports, /\/api\/v1\/inventory\?pageSize=200/);
+  assert.doesNotMatch(invoiceReports, /'\/api\/v1\/products/);
   assert.match(invoiceReports, /type ReportTab = 'invoice-360' \| 'receivable-recovery' \| 'payment-wallet' \| 'staff-service-360' \| 'finance-control'[\s\S]*'detailed-invoice'[\s\S]*'payment-collection'[\s\S]*'staff-service-discount'/);
   assert.match(invoiceReports, /forkJoin\(requests\.map/);
   assert.match(invoiceReports, /sourceTabsForActive\(\)[\s\S]*'due-recovery', 'recovery-history'/);

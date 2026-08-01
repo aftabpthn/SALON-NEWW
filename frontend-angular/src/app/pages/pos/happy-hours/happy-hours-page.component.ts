@@ -1039,7 +1039,7 @@ export class HappyHoursPageComponent implements OnInit {
 
   private loadCatalog(): void {
     this.readCatalog('/api/v1/services', (rows) => this.services = rows);
-    this.readCatalog('/api/v1/products', (rows) => this.products = rows);
+    this.readCatalog('/api/v1/inventory?pageSize=200', (rows) => this.products = rows);
     this.readCatalog('/api/v1/clients', (rows) => this.clients = rows);
   }
 

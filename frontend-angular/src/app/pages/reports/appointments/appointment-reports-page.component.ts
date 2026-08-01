@@ -110,7 +110,7 @@ export class AppointmentReportsPageComponent implements OnInit {
       const [register, staff, branches, report] = await Promise.all([
         firstValueFrom(this.api.get<any>('/api/v1/appointment-activity/register?limit=1000')),
         firstValueFrom(this.api.get<any>('/api/v1/staff?limit=500')).catch(() => []),
-        firstValueFrom(this.api.get<any>('/api/v1/branches?limit=500')).catch(() => []),
+        firstValueFrom(this.api.get<any>('/api/v1/settings/branches')).catch(() => []),
         firstValueFrom(this.api.get<any>('/api/v1/appointment-activity/reports?limit=1000')).catch(() => null),
       ]);
       const body = register?.data ?? register;

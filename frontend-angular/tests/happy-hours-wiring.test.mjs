@@ -121,4 +121,6 @@ test('Happy Hours management is wired to the existing POS rule engine', () => {
   assert.match(tenantMiddleware, /regional_head/);
   assert.match(template, /Risk-scored fraud guard/);
   assert.match(template, /Coupon return on discount/);
+  assert.match(page, /\/api\/v1\/inventory\?pageSize=200/);
+  assert.doesNotMatch(page, /'\/api\/v1\/products/);
 });

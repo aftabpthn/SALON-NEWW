@@ -251,7 +251,7 @@ paymentModeRows: PaymentModeReportRow[] = [];
     this.api.get<any>('/api/clients').subscribe({ next: (res) => this.clients = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })) });
     this.api.get<any>('/api/staff').subscribe({ next: (res) => this.staff = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })) });
     this.api.get<any>('/api/services?pageSize=500').subscribe({ next: (res) => this.services = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })) });
-    this.api.get<any>('/api/v1/products?pageSize=500').subscribe({ next: (res) => this.products = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })) });
+    this.api.get<any>('/api/v1/inventory?pageSize=200').subscribe({ next: (res) => this.products = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })) });
     this.api.get<any>('/api/pos/payment-methods').subscribe({ next: (res) => this.modes = this.list(res).map((item) => ({ code: String(item.code ?? item.id), name: String(item.name ?? item.label) })) });
   }
 
