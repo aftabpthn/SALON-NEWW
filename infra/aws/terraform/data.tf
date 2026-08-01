@@ -66,28 +66,28 @@ resource "aws_db_parameter_group" "postgres" {
 resource "aws_db_instance" "postgres" {
   identifier = "${local.name}-postgres"
 
-  engine                      = "postgres"
-  engine_version              = "16"
-  instance_class              = var.db_instance_class
-  allocated_storage           = var.db_allocated_storage_gb
-  max_allocated_storage       = var.db_max_allocated_storage_gb
-  storage_type                = "gp3"
-  storage_encrypted           = true
-  db_name                     = "aurashine"
-  username                    = "aurashine_admin"
-  password                    = random_password.database.result
-  port                        = 5432
-  multi_az                    = var.db_multi_az
-  publicly_accessible         = false
-  db_subnet_group_name        = aws_db_subnet_group.main.name
-  parameter_group_name        = aws_db_parameter_group.postgres.name
-  vpc_security_group_ids      = [aws_security_group.database.id]
-  backup_retention_period     = var.db_backup_retention_days
-  backup_window               = "19:00-20:00"
-  maintenance_window          = "sun:20:30-sun:21:30"
-  auto_minor_version_upgrade  = true
-  deletion_protection         = var.db_deletion_protection
-  copy_tags_to_snapshot       = true
+  engine                       = "postgres"
+  engine_version               = "16"
+  instance_class               = var.db_instance_class
+  allocated_storage            = var.db_allocated_storage_gb
+  max_allocated_storage        = var.db_max_allocated_storage_gb
+  storage_type                 = "gp3"
+  storage_encrypted            = true
+  db_name                      = "aurashine"
+  username                     = "aurashine_admin"
+  password                     = random_password.database.result
+  port                         = 5432
+  multi_az                     = var.db_multi_az
+  publicly_accessible          = false
+  db_subnet_group_name         = aws_db_subnet_group.main.name
+  parameter_group_name         = aws_db_parameter_group.postgres.name
+  vpc_security_group_ids       = [aws_security_group.database.id]
+  backup_retention_period      = var.db_backup_retention_days
+  backup_window                = "19:00-20:00"
+  maintenance_window           = "sun:20:30-sun:21:30"
+  auto_minor_version_upgrade   = true
+  deletion_protection          = var.db_deletion_protection
+  copy_tags_to_snapshot        = true
   performance_insights_enabled = var.environment == "prod"
   enabled_cloudwatch_logs_exports = [
     "postgresql",
