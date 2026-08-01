@@ -538,6 +538,11 @@ pub async fn operational_bucket_balance(
     .fetch_one(&mut **tx).await
 }
 
+fn split_floor_stock(available: i64, quantity: i32) -> (i32,i32) {
+    let floor=available.max(0).min(i64::from(quantity)) as i32;
+    (floor,quantity-floor)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn record_operational_movement(
     tx: &mut Transaction<'_, Postgres>,
@@ -594,11 +599,10 @@ pub async fn record_automatic_stock_out(
     key: &str,
     warning: bool,
 ) -> Result<(), sqlx::Error> {
-    let preferred=operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?.max(0).min(i64::from(quantity)) as i32;
+    let (preferred,from_store)=split_floor_stock(operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?,quantity);
     if preferred>0 {
         record_operational_movement(tx,tenant,branch,item,action,preferred_bucket,if action=="auto_retail_sale"{"sold"}else{"consumed"},preferred,unit_cost_paise,employee,actor,"",reference_type,reference_id,&format!("{key}:floor"),warning,&serde_json::json!({"automatic":true})).await?;
     }
-    let from_store=quantity-preferred;
     if from_store>0 {
         record_operational_movement(tx,tenant,branch,item,action,"store_unopened",if action=="auto_retail_sale"{"sold"}else{"consumed"},from_store,unit_cost_paise,employee,actor,"",reference_type,reference_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
     }
@@ -619,14 +623,26 @@ pub async fn record_automatic_transfer_out(
     key: &str,
     warning: bool,
 ) -> Result<(), sqlx::Error> {
-    let preferred=operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?.max(0).min(i64::from(quantity)) as i32;
+    let (preferred,from_store)=split_floor_stock(operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?,quantity);
     if preferred>0 {
         record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout",preferred_bucket,"in_transit",preferred,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:floor"),warning,&serde_json::json!({"automatic":true})).await?;
     }
-    if quantity>preferred {
-        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout","store_unopened","in_transit",quantity-preferred,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
+    if from_store>0 {
+        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout","store_unopened","in_transit",from_store,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod phase4_tests {
+    use super::split_floor_stock;
+
+    #[test]
+    fn automatic_checkout_uses_floor_then_store_without_losing_quantity() {
+        assert_eq!(split_floor_stock(7,10),(7,3));
+        assert_eq!(split_floor_stock(-4,10),(0,10));
+        assert_eq!(split_floor_stock(20,10),(10,0));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
