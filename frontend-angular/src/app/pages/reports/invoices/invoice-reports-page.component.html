@@ -87,6 +87,8 @@
   <p class="state">{{ message }}</p>
   }@if (error) {
   <p class="error">{{ error }}</p>
+  }@if (optionsError()) {
+  <p class="error">{{ optionsError() }}</p>
 }
 
 @if (!loading && (activeTab === 'invoice-360' || activeTab === 'detailed-invoice') && detailedSummary; as summary) {

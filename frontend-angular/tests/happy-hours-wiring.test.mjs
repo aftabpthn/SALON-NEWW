@@ -123,4 +123,7 @@ test('Happy Hours management is wired to the existing POS rule engine', () => {
   assert.match(template, /Coupon return on discount/);
   assert.match(page, /\/api\/v1\/inventory\?pageSize=200/);
   assert.doesNotMatch(page, /'\/api\/v1\/products/);
+  assert.match(page, /catalogFailures\.add\(label\)/);
+  assert.match(page, /Unable to load \$\{\[\.\.\.this\.catalogFailures\]\.join\(', '\)\}/);
+  assert.match(template, /\{\{ catalogError\(\) \}\}/);
 });

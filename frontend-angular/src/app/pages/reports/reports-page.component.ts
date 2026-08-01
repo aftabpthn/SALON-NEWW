@@ -123,6 +123,8 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
   profitTab: ProfitTab = 'overview';
   profitLoading = false;
   profitError = '';
+  /** Set when an optional profit panel fails, so an empty panel is not read as "no data". */
+  profitPanelError = '';
   profitScope: ProfitScope = 'branch';
   profitLevel: ProfitLevel = 'contribution';
   comparePrevious = false;
@@ -535,6 +537,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
     this.profitReload$.next();
     this.profitLoading = true;
     this.profitError = '';
+    this.profitPanelError = '';
     const query = new URLSearchParams({ fromDate: this.fromDate, toDate: this.toDate, scope: this.profitScope, view: this.profitTab });
     const previous = this.previousPeriod();
     const previousQuery = new URLSearchParams({ fromDate: previous.fromDate, toDate: previous.toDate, scope: this.profitScope, view: this.profitTab });
@@ -553,6 +556,11 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
       const saved = savedViews ? this.data<{ reports: CustomReport[] }>(savedViews)?.reports ?? [] : [];
       this.profitSavedViews = saved.filter((report) => report.active && this.isProfitSavedView(report));
       this.previousAdvanced = previousAdvanced ? this.data<AdvancedProfit>(previousAdvanced) : null;
+      // These two panels are optional; a failure must not read as "nothing saved" or "no change".
+      const failedPanels: string[] = [];
+      if (!savedViews) failedPanels.push('saved views');
+      if (this.comparePrevious && !previousAdvanced) failedPanels.push('previous period');
+      this.profitPanelError = failedPanels.length ? `Unable to load ${failedPanels.join(' and ')}` : '';
       await this.loadProfitTabData();
     } catch (error: any) {
       if (requestId !== this.profitRequestId) return;

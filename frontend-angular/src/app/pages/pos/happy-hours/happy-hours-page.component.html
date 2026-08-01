@@ -736,6 +736,9 @@
         <label><span>{{ draft.scope === 'service' ? 'Services' : 'Products' }}</span><select multiple [(ngModel)]="draft.eligibleItemIds">@for (item of availableItems(); track item) {
         <option [value]="item.id">{{ catalogName(item) }}</option>
       }</select></label>
+      @if (catalogError()) {
+        <p class="error">{{ catalogError() }}</p>
+      }
     }
     <label><span>Client categories</span><input type="text" [ngModel]="draft.clientCategories" (ngModelChange)="setCategories($event)" placeholder="Comma separated" /></label>
     <label><span>Minimum margin %</span><input type="number" min="0" max="100" step="0.01" [(ngModel)]="draft.minMarginPercent" /></label>

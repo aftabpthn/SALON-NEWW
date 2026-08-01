@@ -59,6 +59,8 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   verificationId = ''; verificationOtp = '';
   approvalRecipient = ''; approvalChannel = 'whatsapp'; approvalPath = '';
   loading = false; busy = false; message = ''; error = '';
+  /** Set when the delivery profile fails to load, so the blank form is not saved over real settings. */
+  notificationError = '';
   private liveUpdates?: Subscription;
 
   constructor(private readonly api: ApiService, private readonly realtime: PosRealtimeService) {}
@@ -96,7 +98,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
       next: (response) => { this.drawer = response?.data ?? null; done(); },
       error: () => { this.drawer = null; done(); },
     });
-    this.api.get<any>('/api/v1/invoice-notifications/profile').subscribe({ next: (response) => { const row = response?.data ?? response; if (row) this.notification = row; }, error: () => {} });
+    this.api.get<any>('/api/v1/invoice-notifications/profile').subscribe({ next: (response) => { const row = response?.data ?? response; if (row) this.notification = row; this.notificationError = ''; }, error: () => this.notificationError = 'Unable to load delivery profile' });
     this.api.get<any>('/api/v1/invoice-notifications/queue').subscribe({ next: (response) => { const row = response?.data ?? response; this.notificationQueue = Array.isArray(row) ? row : []; }, error: () => this.notificationQueue = [] });
   }
 
