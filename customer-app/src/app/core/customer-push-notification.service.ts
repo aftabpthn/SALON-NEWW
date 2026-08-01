@@ -11,6 +11,7 @@ import { MarketplaceService } from "./marketplace.service";
 export class CustomerPushNotificationService {
   private initialization?: Promise<void>;
   private registrationRequested = false;
+  private readonly fcmConfigured = false;
 
   constructor(
     private readonly auth: AuthService,
@@ -28,7 +29,7 @@ export class CustomerPushNotificationService {
   }
 
   initialize(): Promise<void> {
-    if (!this.isSupported()) return Promise.resolve();
+    if (!this.isSupported() || !this.fcmConfigured) return Promise.resolve();
     if (!this.initialization) this.initialization = this.attachListeners();
     return this.initialization;
   }
@@ -60,7 +61,7 @@ export class CustomerPushNotificationService {
   }
 
   private async registerForPush(): Promise<void> {
-    if (!this.isSupported() || this.registrationRequested) return;
+    if (!this.isSupported() || !this.fcmConfigured || this.registrationRequested) return;
     this.registrationRequested = true;
     try {
       await this.initialize();
