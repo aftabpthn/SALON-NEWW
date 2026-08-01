@@ -803,7 +803,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-currency { color: var(--ms-accent); }
 
     /* Appointments & Rebooking */
-    .ms-appointment { display: grid; grid-template-columns: 60px minmax(0,1fr) 44px; align-items: center; gap: 14px; padding: 18px 14px 18px 18px; border: 1px solid color-mix(in srgb, var(--ms-accent) 24%, var(--ms-line)); border-radius: 22px; background: #fff; box-shadow: 0 14px 36px rgba(37,31,27,.07); }
+    .ms-appointment { display: grid; grid-template-columns: 60px minmax(0,1fr) 44px; align-items: center; gap: 14px; padding: 18px 14px 18px 18px; border: 1px solid color-mix(in srgb, var(--ms-accent) 24%, var(--ms-line)); border-radius: 22px; background: #fff; box-shadow: 0 14px 36px rgba(16,24,40,.06); }
     .ms-date-tile { width: 60px; height: 70px; display: grid; place-items: center; align-content: center; border-radius: 18px; color: #fff; background: var(--ms-accent); }
     .ms-date-tile span { font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     .ms-date-tile strong { font-size: 1.6rem; line-height: 1; }
@@ -1013,9 +1013,6 @@ export class MySalonPage implements OnInit {
     if (cat === "All") return services;
     return services.filter((s) => s.category === cat);
   });
-
-  readonly salonAccent = computed(() => this.salonPalette(this.dash()?.salon?.name).accent);
-  readonly salonAccentSoft = computed(() => this.salonPalette(this.dash()?.salon?.name).soft);
 
   constructor(
     private readonly marketplace: MarketplaceService,
@@ -1297,15 +1294,4 @@ export class MySalonPage implements OnInit {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
-  private salonPalette(name = ""): { accent: string; soft: string } {
-    const palettes = [
-      { accent: "#8a4f5e", soft: "#f5e9ec" },
-      { accent: "#6f5a46", soft: "#f1ebe3" },
-      { accent: "#4d6a62", soft: "#e6efec" },
-      { accent: "#66567d", soft: "#eee9f4" },
-      { accent: "#8a5a3b", soft: "#f5ebe3" }
-    ];
-    const hash = [...String(name)].reduce((total, character) => total + character.charCodeAt(0), 0);
-    return palettes[hash % palettes.length];
-  }
 }

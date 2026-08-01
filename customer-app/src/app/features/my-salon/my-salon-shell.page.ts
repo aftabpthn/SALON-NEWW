@@ -51,7 +51,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
     .shell-brand, .shell-actions, .shell-actions button, .shell-back { display: inline-flex; align-items: center; }
     .shell-back { flex: 0 0 auto; width: 34px; height: 34px; justify-content: center; padding: 0; border: 1px solid rgba(99, 102, 241, 0.16); border-radius: 999px; color: var(--primary, #6366F1); background: rgba(255, 255, 255, 0.78); font-size: 1rem; }
-    .shell-brand { flex: 1 1 auto; min-width: 0; gap: 8px; color: var(--text, #07192b); text-decoration: none; }
+    .shell-brand { flex: 1 1 auto; min-width: 0; gap: 8px; color: var(--text, #101828); text-decoration: none; }
     .shell-brand-mark { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: var(--ms-shell-accent); box-shadow: 0 10px 22px color-mix(in srgb, var(--ms-shell-accent) 30%, transparent); }
     .shell-brand span:last-child { display: grid; min-width: 0; line-height: 1.05; }
     .shell-brand strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; letter-spacing: -0.025em; }
