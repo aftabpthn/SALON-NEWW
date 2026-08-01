@@ -22,6 +22,17 @@ test('production app shell installs and reloads while offline', async ({ page, c
   }
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL || ''))
     .toMatch(/ngsw-worker\.js$/);
+  await expect.poll(() => page.evaluate(async () => {
+    const manifest = await fetch('/ngsw.json').then((response) => response.json()) as {
+      assetGroups?: Array<{ name: string; urls: string[] }>;
+    };
+    const required = manifest.assetGroups?.find((group) => group.name === 'app-shell')?.urls || [];
+    const cachedRequests = (await Promise.all(
+      (await caches.keys()).map(async (name) => (await caches.open(name)).keys()),
+    )).flat();
+    const cachedPaths = new Set(cachedRequests.map((request) => new URL(request.url).pathname));
+    return required.length > 0 && required.every((url) => cachedPaths.has(url));
+  })).toBe(true);
 
   await context.setOffline(true);
   try {
