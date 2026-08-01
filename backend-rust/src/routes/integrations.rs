@@ -27,9 +27,10 @@ use crate::{
         },
         migration_file::{
             CompleteMigrationUploadRequest, CompleteMigrationUploadResponse,
-            CreateMigrationUploadRequest, HistoricalEvidenceCutoverApprovalRequest,
-            HistoricalEvidenceGroupDecisionRequest, MigrationSourceFile, MigrationSourceProfile,
-            MigrationUploadPartReceipt, MigrationUploadSession,
+            CreateMigrationUploadRequest, HistoricalEvidenceCorrectionRequest,
+            HistoricalEvidenceCutoverApprovalRequest, HistoricalEvidenceGroupDecisionRequest,
+            MigrationSourceFile, MigrationSourceProfile, MigrationUploadPartReceipt,
+            MigrationUploadSession,
         },
     },
     routes::{
@@ -130,6 +131,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/historical-purchase-evidence/group-decisions",
             post(decide_historical_purchase_evidence_group),
+        )
+        .route(
+            "/settings/integrations/historical-purchase-evidence/:source_file_id/corrections",
+            post(correct_historical_purchase_evidence),
         )
         .route(
             "/settings/integrations/historical-purchase-evidence/cutover-approval",
@@ -262,6 +267,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/import-jobs/:id/opening-payable-controls",
             post(approve_opening_payable_controls),
+        )
+        .route(
+            "/settings/integrations/import-jobs/:id/opening-payable-branch-confirmation",
+            post(confirm_opening_payable_branch),
         )
         .route(
             "/settings/integrations/import-jobs/:id/yellow-approval",
@@ -726,6 +735,28 @@ async fn decide_historical_purchase_evidence_group(
     )))
 }
 
+async fn correct_historical_purchase_evidence(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(source_file_id): Path<String>,
+    Json(request): Json<HistoricalEvidenceCorrectionRequest>,
+) -> ApiResult<Value> {
+    require_migration_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        migration_file_service::correct_historical_evidence(
+            &s.db,
+            &t,
+            &b,
+            &c.sub,
+            &source_file_id,
+            request,
+        )
+        .await?,
+    )))
+}
+
 async fn approve_historical_purchase_evidence_cutover(
     State(s): State<AppState>,
     Extension(c): Extension<AuthClaims>,
@@ -793,7 +824,11 @@ async fn decide_historical_purchase_pilot_group(
     let (tenant, branch) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         purchase_bill_drafts::decide_historical_pilot_group(
-            &state, &tenant, &branch, &claims.sub, request,
+            &state,
+            &tenant,
+            &branch,
+            &claims.sub,
+            request,
         )
         .await?,
     )))
@@ -1193,6 +1228,17 @@ fn require_opening_payable_finance(claims: &AuthClaims) -> Result<(), AppError> 
     }
 }
 
+fn require_opening_payable_branch_manager(claims: &AuthClaims) -> Result<(), AppError> {
+    require_migration_manage(claims)?;
+    if claims.role.eq_ignore_ascii_case("manager") {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "Branch Manager confirmation is required",
+        ))
+    }
+}
+
 fn require_migration_permission(claims: &AuthClaims, permission: &str) -> Result<(), AppError> {
     let denied = claims
         .denied_permissions
@@ -1268,7 +1314,11 @@ async fn download_cutover_proof_pack(
     let pack = migration_service::cutover_proof_pack(&s.db, &s.settings, &t, &b, &id).await?;
     let content = serde_json::to_vec_pretty(&pack)
         .map_err(|_| AppError::internal("failed to serialize cutover proof pack"))?;
-    attachment_response(content, "application/json", "migration-cutover-proof-pack.json")
+    attachment_response(
+        content,
+        "application/json",
+        "migration-cutover-proof-pack.json",
+    )
 }
 
 async fn analyze_import(
@@ -1444,6 +1494,20 @@ async fn approve_opening_payable_controls(
     migration_service::approve_opening_payable_controls(&s.db, &t, &b, &id, &c.sub, request)
         .await?;
     Ok(Json(ApiResponse::ok(json!({"approved":true}))))
+}
+
+async fn confirm_opening_payable_branch(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(request): Json<MigrationApprovalRequest>,
+) -> ApiResult<Value> {
+    require_opening_payable_branch_manager(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let confirmed = request.approved;
+    migration_service::confirm_opening_payable_branch(&s.db, &t, &b, &id, &c.sub, request).await?;
+    Ok(Json(ApiResponse::ok(json!({"confirmed":confirmed}))))
 }
 
 async fn list_import_mapping_versions(
@@ -1854,5 +1918,17 @@ mod migration_permission_tests {
         assert!(
             require_migration_export(&claims("owner", &[], &["data_migration.export"])).is_err()
         );
+    }
+
+    #[test]
+    fn opening_payable_branch_confirmation_requires_manager_role() {
+        assert!(require_opening_payable_branch_manager(&claims("manager", &[], &[])).is_ok());
+        assert!(require_opening_payable_branch_manager(&claims("owner", &[], &[])).is_err());
+        assert!(require_opening_payable_branch_manager(&claims(
+            "manager",
+            &[],
+            &["data_migration.manage"]
+        ))
+        .is_err());
     }
 }

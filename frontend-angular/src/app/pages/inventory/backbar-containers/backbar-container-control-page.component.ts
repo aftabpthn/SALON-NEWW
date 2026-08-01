@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
+import { TitleCaseInputsDirective } from '../../../shared/directives/title-case-inputs.directive';
 import { AuthService } from '../../../core/services/auth.service';
 import {
   BackbarContainer,
@@ -9,16 +11,19 @@ import {
   BackbarControlService,
   BackbarItem,
   BackbarProduct360,
+  BackbarStaff,
   BackbarUsage,
+  FloorControl,
+  FloorClosing,
 } from '../../../features/inventory/backbar-control.service';
 
-type ContainerTab = 'containers' | 'lifecycle' | 'overrides' | 'product360';
+type ContainerTab = 'containers' | 'floor' | 'checkout' | 'history' | 'closings' | 'lifecycle' | 'overrides' | 'product360';
 type LifecycleRow = BackbarContainerEvent & { containerId: string; productName: string; barcode: string };
 
 @Component({
   selector: 'page-backbar-container-control',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent, TitleCaseInputsDirective],
   templateUrl: './backbar-container-control-page.component.html',
   styleUrls: ['./backbar-container-control-page.component.css'],
 })
@@ -29,6 +34,8 @@ export class BackbarContainerControlPageComponent implements OnInit {
   items: BackbarItem[] = [];
   containers: BackbarContainer[] = [];
   usage: BackbarUsage[] = [];
+  staff: BackbarStaff[] = [];
+  floor: FloorControl = { locations: [], balances: [], custodyEvents: [], closings: [], operationalMovements: [] };
   activeTab: ContainerTab = 'containers';
   search = '';
   status = '';
@@ -44,11 +51,19 @@ export class BackbarContainerControlPageComponent implements OnInit {
   error = '';
   notice = '';
   consumeQuantity: Record<string, number | null> = {};
+  custodyDraft: Record<string, { locationCode:string; staffId:string; reason:string }> = {};
+  closingCount: Record<string, number | null> = {};
+  closingReason: Record<string, string> = {};
+  closingDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+  closingShift = '';
+  locationDraft = { code:'', name:'', locationType:'backbar' as 'store'|'backbar'|'station'|'trolley' };
+  checkoutDraft = { inventoryItemId:'', destinationBucket:'consumable_available', quantity:null as number|null, employeeId:'', comment:'' };
+  conversionDraft = { inventoryItemId:'', sourceBucket:'retail_available', destinationBucket:'consumable_available', quantity:null as number|null, employeeId:'', comment:'' };
   draft = this.emptyDraft();
 
   ngOnInit() { void this.load(); }
 
-  get canReview() { return this.auth.hasRole('owner') || this.auth.hasPermission('inventory.approve'); }
+  get canReview() { return ['owner', 'admin', 'manager', 'inventory manager', 'inventory_manager', 'inventoryManager'].some((role) => this.auth.hasRole(role)) || this.auth.hasPermission('inventory.approve'); }
   get sealedCount() { return this.containers.filter((row) => row.status === 'sealed').length; }
   get openCount() { return this.containers.filter((row) => row.status === 'open').length; }
   get nearEmptyCount() { return this.containers.filter((row) => row.status === 'open' && row.remainingQuantity <= Math.max(1, Math.ceil(row.capacityQuantity * .1))).length; }
@@ -66,11 +81,17 @@ export class BackbarContainerControlPageComponent implements OnInit {
   get productContainers() { return this.containers.filter((row) => row.inventoryItemId === this.selectedProductId); }
   get productUsage() { return this.usage.filter((row) => row.inventoryItemId === this.selectedProductId); }
   get productWastage() { return this.productUsage.filter((row) => row.varianceQuantity > 0); }
+  get openContainers() { return this.containers.filter((row) => row.status === 'open'); }
+  get pendingClosings() { return this.floor.closings.filter((row) => row.status === 'pending_approval'); }
 
   async load() {
     this.loading = true; this.clearFeedback();
     try {
-      [this.containers, this.usage] = await Promise.all([this.backbar.containers(), this.backbar.usage()]);
+      [this.containers, this.usage, this.floor, this.staff] = await Promise.all([this.backbar.containers(), this.backbar.usage(), this.backbar.floorControl(), this.backbar.staff()]);
+      for (const row of this.containers) {
+        this.custodyDraft[row.id] ||= { locationCode: row.locationCode || 'BACKBAR', staffId: row.custodianStaffId || '', reason: '' };
+        if (row.status === 'open' && this.closingCount[row.id] === undefined) this.closingCount[row.id] = row.remainingQuantity;
+      }
       void this.backbar.items().then((items) => { this.items = items; if (this.selectedProductId && !items.some((row) => row.id === this.selectedProductId)) this.closeProduct360(); })
         .catch((error) => { this.error ||= this.message(error, 'Products could not be loaded'); });
     } catch (error) { this.error = this.message(error, 'Unable to load backbar containers'); }
@@ -78,6 +99,12 @@ export class BackbarContainerControlPageComponent implements OnInit {
   }
 
   openRegister() { this.draft = this.emptyDraft(); this.registerOpen = true; this.clearFeedback(); }
+  containerProductChanged() {
+    const item = this.items.find((row) => row.id === this.draft.inventoryItemId);
+    if (!item) return;
+    this.draft.capacityQuantity = item.unitsPerPackage;
+    this.draft.unit = item.unit;
+  }
   closeRegister() { if (!this.saving) this.registerOpen = false; }
   closeProduct360() { this.productDrawerOpen = false; this.product360 = null; this.selectedProductId = ''; }
 
@@ -97,8 +124,6 @@ export class BackbarContainerControlPageComponent implements OnInit {
   }
 
   async openContainer(row: BackbarContainer) {
-    const active = this.containers.find((candidate) => candidate.inventoryItemId === row.inventoryItemId && candidate.status === 'open');
-    if (active) { this.error = `Close the active ${row.productName} container before opening another one`; return; }
     await this.action(() => this.backbar.openContainer(row.id), 'Container opened and package stock posted');
   }
 
@@ -136,6 +161,60 @@ export class BackbarContainerControlPageComponent implements OnInit {
     await this.action(() => this.backbar.reviewOverride(row.pendingOverrideId!, decision, reviewNote || ''), `Override ${decision}d`);
   }
 
+  async saveLocation() {
+    if (!this.locationDraft.code.trim() || !this.locationDraft.name.trim()) { this.error='Location code and name are required'; return; }
+    await this.action(() => this.backbar.saveFloorLocation({ ...this.locationDraft, active:true }), 'Floor location saved');
+    if (!this.error) this.locationDraft={ code:'',name:'',locationType:'backbar' };
+  }
+
+  async checkoutStock() {
+    const quantity=Number(this.checkoutDraft.quantity);
+    if (!this.checkoutDraft.inventoryItemId || !this.checkoutDraft.employeeId || !Number.isInteger(quantity) || quantity<=0) { this.error='Product, employee and positive quantity are required'; return; }
+    await this.action(() => this.backbar.checkout({ ...this.checkoutDraft,quantity,idempotencyKey:crypto.randomUUID() }), 'Store-to-floor checkout posted');
+    if (!this.error) this.checkoutDraft={ inventoryItemId:'',destinationBucket:'consumable_available',quantity:null,employeeId:'',comment:'' };
+  }
+
+  conversionDirectionChanged() {
+    this.conversionDraft.destinationBucket=this.conversionDraft.sourceBucket==='retail_available'?'consumable_available':'retail_available';
+  }
+
+  async convertStock() {
+    const quantity=Number(this.conversionDraft.quantity);
+    if (!this.conversionDraft.inventoryItemId || !this.conversionDraft.employeeId || !Number.isInteger(quantity) || quantity<=0) { this.error='Dual-use product, employee and positive quantity are required'; return; }
+    await this.action(() => this.backbar.convert({ ...this.conversionDraft,quantity,idempotencyKey:crypto.randomUUID() }), 'Retail/consumable conversion posted without value change');
+    if (!this.error) this.conversionDraft={ inventoryItemId:'',sourceBucket:'retail_available',destinationBucket:'consumable_available',quantity:null,employeeId:'',comment:'' };
+  }
+
+  async reverseMovement(id:string) {
+    const comment=window.prompt('Reversal reason')?.trim();
+    if (!comment) return;
+    await this.action(() => this.backbar.reverseMovement(id,comment), 'Operational movement reversed');
+  }
+
+  async transferCustody(row:BackbarContainer) {
+    const draft=this.custodyDraft[row.id];
+    if (!draft?.locationCode || !draft.reason.trim()) { this.error='Target location and custody reason are required'; return; }
+    await this.action(() => this.backbar.transferCustody(row.id,{ toLocationCode:draft.locationCode,toStaffId:draft.staffId||null,reason:draft.reason.trim(),idempotencyKey:crypto.randomUUID() }), 'Container custody transferred');
+  }
+
+  async submitFloorClosing() {
+    if (!this.closingDate || !this.closingShift.trim()) { this.error='Business date and shift are required'; return; }
+    const lines=[] as Array<{containerId:string;countedRemaining:number;reason:string}>;
+    for (const row of this.openContainers) {
+      const counted=Number(this.closingCount[row.id]); const reason=(this.closingReason[row.id]||'').trim();
+      if (!Number.isInteger(counted) || counted<0 || counted>row.capacityQuantity || (counted!==row.remainingQuantity && !reason)) { this.error=`Valid count and variance reason required for ${row.productName}`; return; }
+      lines.push({containerId:row.id,countedRemaining:counted,reason});
+    }
+    await this.action(() => this.backbar.createFloorClosing({ businessDate:this.closingDate,shiftLabel:this.closingShift.trim(),lines,idempotencyKey:crypto.randomUUID() }), 'Floor closing recorded');
+    if (!this.error) { this.closingShift=''; this.closingReason={}; }
+  }
+
+  async reviewFloorClosing(row:FloorClosing,decision:'approve'|'reject') {
+    const reviewNote=decision==='reject' ? window.prompt('Rejection reason')?.trim() : '';
+    if (decision==='reject' && !reviewNote) return;
+    await this.action(() => this.backbar.reviewFloorClosing(row.id,{decision,reviewNote:reviewNote||'',idempotencyKey:crypto.randomUUID()}),`Floor closing ${decision}d`);
+  }
+
   scan() {
     const code = this.scanCode.trim().toLowerCase();
     if (!code) return;
@@ -156,15 +235,17 @@ export class BackbarContainerControlPageComponent implements OnInit {
   productSelectionChanged() { if (this.selectedProductId) void this.openProduct360(this.selectedProductId); else this.product360 = null; }
   date(value?: string) { return value ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'; }
   quantity(value: number, unit = '') { return `${Number(value || 0).toLocaleString('en-IN')} ${unit}`.trim(); }
+  money(value:number) { return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(Number(value||0)/100); }
   statusLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase()); }
+  totalVariance(row:FloorClosing) { return row.lines.reduce((total,line) => total + line.varianceQuantity, 0); }
 
   private async action(run: () => Promise<unknown>, notice: string) {
     this.saving = true; this.clearFeedback();
     try { await run(); await this.load(); this.notice = notice; }
-    catch (error) { this.error = this.message(error, notice); }
+    catch (error) { const message = this.message(error, notice); await this.load(); this.error = message; }
     finally { this.saving = false; }
   }
-  private emptyDraft() { return { inventoryItemId: '', barcode: '', capacityQuantity: null as number | null, unit: 'ml' }; }
+  private emptyDraft() { return { inventoryItemId: '', barcode: '', capacityQuantity: null as number | null, unit: '' }; }
   private message(error: any, fallback: string) { return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback; }
   private clearFeedback() { this.error = ''; this.notice = ''; }
 }

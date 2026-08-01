@@ -14,6 +14,7 @@
           }
         </select>
         <button type="button" (click)="reload()">{{ 'inventory.ui.56e3badc4e' | translate }}</button>
+        <label class="import-button"><input type="file" accept=".csv,text/csv" (change)="importOrderCsv($event)" [disabled]="importingOrder" />{{ importingOrder ? 'Importing…' : 'Import PO CSV' }}</label>
         <button class="primary" type="button" (click)="openOrder()">{{ 'inventory.ui.4e5d96a3c3' | translate }}</button>
       </div>
     } @else {
@@ -33,7 +34,7 @@
         <button type="button" (click)="reload()">{{ 'inventory.ui.cfea419c3b' | translate }}</button><button class="primary" type="button" [disabled]="!ledgerRows.length" (click)="exportLedger()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button>
       }
       @if (tab === 'reorder') {
-        <select [attr.aria-label]="'inventory.ui.5739b1bc2f' | translate" [(ngModel)]="reorderPriority"><option value="">{{ 'inventory.ui.bc6ba0d1bb' | translate }}</option><option value="critical">{{ 'inventory.ui.04b7b26c8c' | translate }}</option><option value="high">{{ 'inventory.ui.b1a5954a48' | translate }}</option><option value="medium">{{ 'inventory.ui.d404968ea9' | translate }}</option></select>
+        <select [attr.aria-label]="'inventory.ui.5739b1bc2f' | translate" [ngModel]="reorderPriority" (ngModelChange)="onReorderPriorityChange($event)"><option value="">{{ 'inventory.ui.bc6ba0d1bb' | translate }}</option><option value="critical">{{ 'inventory.ui.04b7b26c8c' | translate }}</option><option value="high">{{ 'inventory.ui.b1a5954a48' | translate }}</option><option value="medium">{{ 'inventory.ui.d404968ea9' | translate }}</option></select>
         <button type="button" (click)="reload()">{{ 'inventory.ui.56e3badc4e' | translate }}</button><button class="primary" type="button" (click)="generateReorder()" [disabled]="saving">{{ 'inventory.ui.79c085d365' | translate }}</button>
       }
       @if (tab === 'valuation') {
@@ -185,7 +186,7 @@
     @if (ledgerRows.length) {
       <table><thead><tr><th scope="col">{{ 'inventory.ui.7b34c0edf9' | translate }}</th><th scope="col">{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th scope="col">{{ 'inventory.ui.dc812752b7' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.44f6af6945' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.8dce170de2' | translate }}</th><th scope="col">Source / evidence</th><th scope="col" class="numeric">Before â†’ after</th><th scope="col">Trust</th></tr></thead>
       <tbody>@for (row of ledgerRows; track row) {
-        <tr><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td><span class="status">{{ row.movementType.replace('_', ' ') }}</span></td><td class="numeric">{{ row.quantityDelta }}</td><td class="numeric">{{ money(row.valuePaise) }}</td><td><strong>{{ row.sourceType.replaceAll('_', ' ') }}</strong><br><small>{{ row.source || row.sourceId || 'â€”' }} @if (row.batchAllocations.length) { Â· {{ row.batchAllocations.length }} batch evidence }</small></td><td class="numeric">{{ row.stockBeforeQuantity }} â†’ {{ row.stockAfterQuantity }}</td><td><span class="status trust" [attr.data-status]="row.snapshotStatus">{{ row.snapshotStatus }}</span>@if (!row.provenanceComplete) {<small class="trust-warning">Missing provenance</small>}</td></tr>
+        <tr><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td><span class="status">{{ movementLabel(row.movementType) }}</span></td><td class="numeric">{{ row.quantityDelta }}</td><td class="numeric">{{ money(row.valuePaise) }}</td><td><strong>{{ row.sourceType.replaceAll('_', ' ') }}</strong><br><small>{{ row.source || row.sourceId || 'â€”' }} @if (row.batchAllocations.length) { Â· {{ row.batchAllocations.length }} batch evidence }</small></td><td class="numeric">{{ row.stockBeforeQuantity }} â†’ {{ row.stockAfterQuantity }}</td><td><span class="status trust" [attr.data-status]="row.snapshotStatus">{{ row.snapshotStatus }}</span>@if (!row.provenanceComplete) {<small class="trust-warning">Missing provenance</small>}</td></tr>
       }</tbody>
     </table>
   } @else {
@@ -201,7 +202,7 @@
     @if (filteredReorderRows.length) {
       <table><thead><tr><th scope="col">{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.2ee762355b' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.1e19570fd7' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.ui.e5f508a828' | translate }}</th><th scope="col">{{ 'inventory.ui.886cbff9d9' | translate }}</th><th scope="col">{{ 'inventory.ui.f219cc0614' | translate }}</th><th scope="col">{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
       <tbody>@for (row of filteredReorderRows; track row) {
-        <tr><td><strong>{{ row.productName }}</strong><small>{{ row.sku || 'â€”' }}</small></td><td class="numeric">{{ row.currentStock }}</td><td class="numeric">{{ row.reorderLevel }}</td><td class="numeric">{{ row.suggestedQuantity }}</td><td><span class="status" [class.muted]="row.priority === 'medium'">{{ row.priority }}</span></td><td>{{ row.reason }}</td><td><button type="button" [disabled]="saving" (click)="approveReorder(row)">{{ row.id ? 'Approve & create PO' : ('inventory.ui.f0312e44ab' | translate) }}</button></td></tr>
+        <tr><td><strong>{{ row.productName }}</strong><small>{{ row.sku || 'â€”' }}</small></td><td class="numeric">{{ row.currentStock }}</td><td class="numeric">{{ row.reorderLevel }}</td><td class="numeric">{{ row.suggestedQuantity }}</td><td><span class="status" [class.muted]="row.priority === 'medium'">{{ row.priority }}</span></td><td>{{ row.reason }}</td><td><button type="button" [disabled]="saving || row.status === 'converted' || row.status === 'converting'" (click)="approveReorder(row)">{{ row.status === 'converted' ? 'PO created' : row.status === 'converting' ? 'Creating PO…' : row.id ? 'Approve & create PO' : ('inventory.ui.f0312e44ab' | translate) }}</button></td></tr>
       }</tbody>
     </table>
   } @else {
@@ -331,7 +332,7 @@
       @if (filteredOrders.length) {
         <table><thead><tr><th>{{ 'inventory.ui.7c17176d8e' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.41cb6080cc' | translate }}</th><th>{{ 'inventory.ui.0b941ea96a' | translate }}</th><th>{{ 'inventory.ui.44d25b5d1b' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
         <tbody>@for (row of filteredOrders; track row) {
-          <tr><td><strong>{{ row.orderNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.createdAt) }}</td><td>{{ date(row.expectedDate) }}</td><td>{{ row.lineCount }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td><span class="status" [class.muted]="row.status === 'received' || row.status === 'rejected'">{{ row.status.replace('_', ' ') }}</span></td><td class="actions">@if (row.status === 'draft') {
+          <tr><td><strong>{{ row.orderNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.createdAt) }}</td><td>{{ date(row.expectedDate) }}</td><td>{{ row.lineCount }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td><span class="status" [class.muted]="row.status === 'received' || row.status === 'rejected'">{{ orderStatusLabel(row.status) }}</span></td><td class="actions">@if (row.status === 'draft') {
           <button type="button" (click)="orderAction(row, 'submit')">{{ 'inventory.ui.2dacf65959' | translate }}</button>
           }@if (row.status === 'pending_approval') {
           <button type="button" (click)="orderAction(row, 'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button>
@@ -363,7 +364,7 @@
     @if (filteredReceipts.length) {
       <table><thead><tr><th>GRR</th><th>{{ 'inventory.ui.7917c7e686' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.254500c364' | translate }}</th><th>Invoice date</th><th>{{ 'inventory.ui.addd568c75' | translate }}</th><th>{{ 'inventory.ui.d6d11f54ee' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th></th></tr></thead>
       <tbody>@for (row of filteredReceipts; track row) {
-        <tr><td><strong>{{ row.grrNumber }}</strong></td><td>{{ date(row.receivedDate) }}</td><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.supplierInvoiceNumber }}</td><td>{{ date(row.supplierInvoiceDate) }}</td><td>{{ money(row.taxablePaise) }}</td><td>{{ money(receiptGst(row)) }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td class="actions"><button type="button" (click)="openReturn(row)">{{ 'inventory.ui.24f096b221' | translate }}</button></td></tr>
+        <tr><td><strong>{{ row.grrNumber }}</strong></td><td>{{ date(row.receivedDate) }}</td><td><strong>{{ row.supplierName }}</strong></td><td>{{ row.supplierInvoiceNumber }}</td><td>{{ date(row.supplierInvoiceDate) }}</td><td>{{ money(row.taxablePaise) }}</td><td>{{ money(receiptGst(row)) }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td class="actions"><button type="button" (click)="printGrnLabels(row)">Print labels</button><button type="button" (click)="openReturn(row)">{{ 'inventory.ui.24f096b221' | translate }}</button></td></tr>
       }</tbody>
     </table>
   } @else {
@@ -371,6 +372,9 @@
   }
   <div class="register-count">Showing {{ filteredReceipts.length }} of {{ receipts.length }} bills</div>
 </section>
+  @if (priceUpdateRequests.length) {
+    <section class="table-card"><header class="register-head"><strong>Pending master price updates</strong></header><table><thead><tr><th>GRR</th><th>Supplier</th><th>Product</th><th>Current</th><th>Received</th><th>Requested</th><th></th></tr></thead><tbody>@for (row of priceUpdateRequests; track row.id) {<tr><td>{{ row.grrNumber }}</td><td>{{ row.supplierName }}</td><td>{{ row.productName }}</td><td>{{ row.currentUnitCostPaise == null ? 'Not set' : money(row.currentUnitCostPaise) }}</td><td>{{ money(row.requestedUnitCostPaise) }}</td><td>{{ date(row.requestedAt) }}</td><td class="actions"><button type="button" (click)="reviewPriceUpdate(row,true)">Approve</button><button type="button" (click)="reviewPriceUpdate(row,false)">Reject</button></td></tr>}</tbody></table></section>
+  }
 }
 
 @if (!loading && tab === 'returns') {
@@ -404,21 +408,38 @@
 }
 
 @if (!loading && tab === 'transfers') {
+  <form class="filters" (ngSubmit)="saveTransferSettings()">
+    <select [(ngModel)]="transferSettings.centerRole" name="transferCenterRole" aria-label="Center role"><option value="branch">Branch</option><option value="warehouse">Warehouse</option><option value="franchise">Franchise</option></select>
+    <select [(ngModel)]="transferSettings.defaultRetailWarehouseBranchId" name="defaultRetailWarehouse" aria-label="Default retail warehouse"><option value="">Retail warehouse</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select>
+    <select [(ngModel)]="transferSettings.defaultConsumableWarehouseBranchId" name="defaultConsumableWarehouse" aria-label="Default consumable warehouse"><option value="">Consumable warehouse</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select>
+    <label class="check"><input type="checkbox" [(ngModel)]="transferSettings.autoCheckoutTransfers" name="autoCheckoutTransfers" /> Auto checkout</label>
+    <label class="check"><input type="checkbox" [(ngModel)]="transferSettings.cannotRaiseTransfer" name="cannotRaiseTransfer" /> Block transfer raising</label>
+    @if (canManageTransfers) {<button type="submit" [disabled]="saving">Save settings</button>}
+  </form>
   <section class="table-card">
     @if (transfers.length) {
-      <table><thead><tr><th>{{ 'inventory.ui.931401ab79' | translate }}</th><th>{{ 'inventory.ui.772f110053' | translate }}</th><th>{{ 'inventory.ui.ff07201ae2' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th></th></tr></thead>
+      <table><thead><tr><th>Transfer</th><th>Mode</th><th>{{ 'inventory.ui.931401ab79' | translate }}</th><th>{{ 'inventory.ui.772f110053' | translate }}</th><th>Date</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th></th></tr></thead>
       <tbody>@for (row of transfers; track row) {
-        <tr><td>{{ row.sourceBranchId | branchName }}</td><td>{{ row.destinationBranchId | branchName }}</td><td>{{ date(row.dispatchedAt) }}</td><td><span class="status">{{ row.status.replace('_', ' ') }}</span></td><td class="actions">@if (row.status === 'in_transit') {
-        <button type="button" (click)="transferAction(row, 'receive')">{{ 'inventory.ui.965fb2ddf6' | translate }}</button>
-        }@if (row.status === 'in_transit') {
-        <button type="button" (click)="transferAction(row, 'cancel')">{{ 'inventory.ui.77dfd2135f' | translate }}</button>
-      }</td></tr>
+        <tr><td><strong>{{ row.transferNumber }}</strong></td><td>{{ row.mode.replaceAll('_',' ') }}</td><td>{{ row.sourceBranchId | branchName }}</td><td>{{ row.destinationBranchId | branchName }}</td><td>{{ date(row.dispatchedAt || row.createdAt) }}</td><td><span class="status">{{ row.status.replaceAll('_', ' ') }}</span></td><td class="actions">
+          @if (canManageTransfers && row.status === 'draft') {<button type="button" (click)="transferAction(row, 'raise')">Raise</button>}
+          @if (canApproveTransfers && row.status === 'raised') {<button type="button" (click)="transferAction(row, 'approve')">Approve</button><button type="button" (click)="transferAction(row, 'reject')">Reject</button>}
+          @if (canManageTransfers && ['approved','dispatched','in_transit','partially_received'].includes(row.status)) {<button type="button" (click)="openTransferShipment(row)">Dispatch</button>}
+          @if (canManageTransfers && row.status === 'dispatched') {<button type="button" (click)="shipNextTransferShipment(row)">Ship</button>}
+          @if (canManageTransfers && ['in_transit','partially_received'].includes(row.status)) {<button type="button" (click)="openTransferReceipt(row)">Receive</button>}
+          @if (canManageTransfers && ['partially_received','received'].includes(row.status)) {<button type="button" (click)="openTransferReturn(row)">Return</button>}
+          @if (canManageTransfers && ['draft','raised','approved','dispatched'].includes(row.status)) {<button type="button" (click)="transferAction(row, 'cancel')">Cancel</button>}
+        </td></tr>
     }</tbody>
   </table>
 } @else {
   <div class="empty-state">{{ 'inventory.ui.e619c5b961' | translate }}</div>
 }
 </section>
+  @if (transferMismatches.length) {
+    <section class="table-card"><table><thead><tr><th>Shipment</th><th>Product</th><th>Route</th><th>Dispatched</th><th>Received</th><th>Damaged / Expired / Short</th><th>Reason</th></tr></thead><tbody>
+      @for (row of transferMismatches; track row.shipmentId + row.sku) {<tr><td><strong>{{ row.shipmentNumber }}</strong><small>{{ row.transferNumber }}</small></td><td>{{ row.productName }} · {{ row.sku }}</td><td>{{ row.sourceBranchId | branchName }} → {{ row.destinationBranchId | branchName }}</td><td>{{ row.dispatchedQuantity }}</td><td>{{ row.receivedQuantity }}</td><td>{{ row.damagedQuantity }} / {{ row.expiredQuantity }} / {{ row.shortQuantity }}</td><td>{{ row.varianceReason || row.status.replaceAll('_',' ') }}</td></tr>}
+    </tbody></table></section>
+  }
 }
 
 </section>
@@ -428,7 +449,7 @@
 }
 @if (drawer) {
   <aside class="drawer" role="dialog" aria-modal="true">
-    <header><h2>{{ drawer === 'product' ? (productCreating ? 'Add product' : 'Product 360') : drawer === 'kit' ? 'Product kit' : drawer === 'supplier' ? (supplierId ? 'Supplier 360' : 'New supplier') : drawer === 'order' ? 'New purchase order' : drawer === 'orderHistory' ? 'Purchase order timeline' : drawer === 'grn' ? (pageTitle || 'Post GRN') : drawer === 'return' ? 'Purchase return' : drawer === 'transfer' ? 'Inventory transfer' : 'Supplier payment' }}</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
+    <header><h2>{{ drawer === 'product' ? (productCreating ? 'Add product' : 'Product 360') : drawer === 'kit' ? 'Product kit' : drawer === 'supplier' ? (supplierId ? 'Supplier 360' : 'New supplier') : drawer === 'order' ? 'New purchase order' : drawer === 'orderHistory' ? 'Purchase order timeline' : drawer === 'grn' ? (pageTitle || 'Post GRN') : drawer === 'return' ? 'Purchase return' : drawer === 'transfer' ? (transferWorkflow === 'create' ? 'Inventory transfer' : transferWorkflow === 'dispatch' ? 'Dispatch shipment' : transferWorkflow === 'receive' ? 'Receive shipment' : 'Return transfer') : 'Supplier payment' }}</h2><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.bbfa773e5a' | translate" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>
     <div class="drawer-body">
       @if (error) {
         <p class="message error">{{ error }}</p>
@@ -445,7 +466,7 @@
             </header>
             @if (!productEditing) {
               <div class="product-detail-grid">
-                <article><h3>{{ 'inventory.ui.d8e528cb29' | translate }}</h3><span>{{ 'inventory.ui.2ee762355b' | translate }}<b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>Packaging<b>{{ packageSummary(detail.product) }}</b></span><span>{{ 'inventory.ui.1e19570fd7' | translate }}<b>{{ detail.product.reorderPoint }} {{ detail.product.unit }}</b></span><span>Base unit cost<b>{{ money(detail.product.unitCostPaise) }} / {{ detail.product.unit }}</b></span><span>Package cost<b>{{ money(packageCostPaise(detail.product)) }} / {{ detail.product.packageUnit }}</b></span><span>{{ 'inventory.ui.8e54dc5331' | translate }}<b>{{ detail.product.barcode || 'â€”' }}</b></span><span>{{ 'inventory.ui.e81a151bd0' | translate }}<b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
+                <article><h3>{{ 'inventory.ui.d8e528cb29' | translate }}</h3><span>Use<b>{{ detail.product.productUsage.replace('_',' + ') }}</b></span><span>Center<b>{{ detail.product.centerAvailable ? 'Available' : 'Unavailable' }}</b></span><span>{{ 'inventory.ui.2ee762355b' | translate }}<b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>Packaging<b>{{ packageSummary(detail.product) }}</b></span><span>Alert / order / desired / safety<b>{{ detail.product.alertLevel }} / {{ detail.product.orderLevel }} / {{ detail.product.desiredLevel }} / {{ detail.product.safetyStockLevel }}</b></span><span>Base unit cost<b>{{ money(detail.product.unitCostPaise) }} / {{ detail.product.unit }}</b></span><span>Package cost<b>{{ money(packageCostPaise(detail.product)) }} / {{ detail.product.packageUnit }}</b></span><span>Barcodes<b>{{ detail.product.barcodes.join(', ') || 'â€”' }}</b></span><span>{{ 'inventory.ui.e81a151bd0' | translate }}<b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
                 @if (detail.product.dualUseStock) {
                   <article><h3>Retail / Backbar stock</h3><span>Retail shelf<b>{{ detail.retailShelfQuantity }}</b></span><span>Sealed backbar<b>{{ detail.sealedBackbarQuantity }}</b></span><span>Open balance<b>{{ detail.openContainerBalance }} {{ detail.openContainerUnit || '' }}</b></span></article>
                 }
@@ -482,7 +503,8 @@
               <form class="stocktake-form" (ngSubmit)="applyStocktake()">
                 <h3>{{ 'inventory.ui.c3fdc4327e' | translate }}</h3>
                 <label>{{ 'inventory.ui.29106b3ec6' | translate }}<input required type="number" [min]="inventoryPolicy.negativeStockRule === 'approval_required' ? null : 0" step="1" [(ngModel)]="stocktakeDraft.stockQuantity" name="stocktakeQuantity" /></label>
-                <label>{{ 'inventory.ui.2e0df972d4' | translate }}<input required maxlength="240" [(ngModel)]="stocktakeDraft.reason" name="stocktakeReason" /></label>
+                <label>{{ 'inventory.ui.2e0df972d4' | translate }}<input required list="inventory-adjustment-reasons" maxlength="240" [(ngModel)]="stocktakeDraft.reason" name="stocktakeReason" /></label>
+                <datalist id="inventory-adjustment-reasons">@for (row of masterValues('adjustment_reason'); track row.id) { <option [value]="row.label"></option> }</datalist>
                 <button class="primary" type="submit" [disabled]="saving">{{ saving ? 'Postingâ€¦' : 'Post stocktake' }}</button>
               </form>
             }
@@ -491,19 +513,28 @@
             <form class="form-grid" (ngSubmit)="saveProduct()" id="product-form">
               <label>{{ 'inventory.ui.d59192b9c8' | translate }}<input maxlength="120" [(ngModel)]="productDraft.sku" name="productSku" /></label>
               <label>{{ 'inventory.ui.63c0fe8e4b' | translate }}<input required maxlength="160" [ngModel]="productDraft.name" (ngModelChange)="productDraft.name = titleCase($event)" name="productName" /></label>
-              <label>{{ 'inventory.ui.a3c686e711' | translate }}<input maxlength="120" [ngModel]="productDraft.category" (ngModelChange)="productDraft.category = titleCase($event)" name="productCategory" /></label>
-              <label>Brand<input maxlength="120" [ngModel]="productDraft.brand" (ngModelChange)="productDraft.brand = titleCase($event)" name="productBrand" /></label>
-              <label>Stock unit<select required [(ngModel)]="productDraft.unit" name="productUnit"><option value="" disabled>Select stock unit</option><option value="pcs">pcs</option><option value="bottle">bottle</option><option value="kit">kit</option><option value="ml">ml</option><option value="g">g</option></select></label>
-              <label>Package type<select required [(ngModel)]="productDraft.packageUnit" name="productPackageUnit"><option value="" disabled>Select package</option><option value="pcs">pcs</option><option value="box">box</option><option value="bottle">bottle</option><option value="jar">jar</option><option value="tube">tube</option><option value="pouch">pouch</option><option value="pack">pack</option></select></label>
+              <label>{{ 'inventory.ui.a3c686e711' | translate }}<input list="inventory-categories" maxlength="120" [ngModel]="productDraft.category" (ngModelChange)="productDraft.category = titleCase($event)" name="productCategory" /></label>
+              <datalist id="inventory-categories">@for (row of masterValues('category'); track row.id) { <option [value]="row.label"></option> }</datalist>
+              <label>Subcategory<input list="inventory-subcategories" maxlength="120" [ngModel]="productDraft.subcategory" (ngModelChange)="productDraft.subcategory = titleCase($event)" name="productSubcategory" /></label>
+              <datalist id="inventory-subcategories">@for (row of masterValues('subcategory'); track row.id) { <option [value]="row.label"></option> }</datalist>
+              <label>Brand<input list="inventory-brands" maxlength="120" [ngModel]="productDraft.brand" (ngModelChange)="productDraft.brand = titleCase($event)" name="productBrand" /></label>
+              <datalist id="inventory-brands">@for (row of masterValues('brand'); track row.id) { <option [value]="row.label"></option> }</datalist>
+              <label>Product use<select required [(ngModel)]="productDraft.productUsage" name="productUsage"><option value="retail">Retail</option><option value="consumable">Consumable</option><option value="dual_use">Retail + consumable</option></select></label>
+              <label>Stock unit<select required [(ngModel)]="productDraft.unit" name="productUnit"><option value="" disabled>Select stock unit</option>@for (row of baseUnits; track row.code) { <option [value]="row.code">{{ row.label }} ({{ row.code }})</option> }</select></label>
+              <label>Purchase pack<select required [(ngModel)]="productDraft.packageUnit" name="productPackageUnit"><option value="" disabled>Select package</option>@for (row of packageUnits; track row.code) { <option [value]="row.code">{{ row.label }}</option> }</select></label>
               <label>Units per package<input required type="number" min="1" step="1" [(ngModel)]="productDraft.unitsPerPackage" name="productUnitsPerPackage" /></label>
               <label>{{ 'inventory.ui.1e19570fd7' | translate }}<input required type="number" min="0" [(ngModel)]="productDraft.reorderPoint" name="productReorder" /></label>
+              <label>Alert level<input required type="number" min="0" [(ngModel)]="productDraft.alertLevel" name="productAlert" /></label>
+              <label>Desired level<input required type="number" min="0" [(ngModel)]="productDraft.desiredLevel" name="productDesired" /></label>
+              <label>Order level<input required type="number" min="0" [(ngModel)]="productDraft.orderLevel" name="productOrderLevel" /></label>
+              <label>Safety stock<input required type="number" min="0" [(ngModel)]="productDraft.safetyStockLevel" name="productSafetyStock" /></label>
               <label>Package cost (₹)<input required type="number" min="0" step="0.01" [(ngModel)]="productDraft.packageCostRupees" name="productCost" /></label>
               <div class="receiving-variance span-2">1 {{ productDraft.packageUnit || 'package' }} = <b>{{ productDraft.unitsPerPackage || 1 }} {{ productDraft.unit || 'stock units' }}</b> · Base cost <b>{{ money(draftBaseCostPaise()) }} / {{ productDraft.unit || 'unit' }}</b></div>
               <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input required type="number" min="0" max="100" [(ngModel)]="productDraft.gstPercent" name="productGst" /></label>
               <label>{{ 'inventory.ui.a24e739437' | translate }}<input maxlength="8" [(ngModel)]="productDraft.hsnCode" name="productHsn" /></label>
-              <label>{{ 'inventory.ui.8e54dc5331' | translate }}<input maxlength="120" [(ngModel)]="productDraft.barcode" name="productBarcode" /></label>
+              <label class="span-2">Barcodes (primary first, comma-separated)<input maxlength="1200" [(ngModel)]="productDraft.barcodesText" name="productBarcodes" /></label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.batchTracked" name="productBatchTracked" />{{ 'inventory.ui.084c5a5702' | translate }}</label>
-              <label class="check span-2"><input type="checkbox" [(ngModel)]="productDraft.dualUseStock" name="productDualUseStock" />Same SKU is sold at retail and used in backbar</label>
+              <label class="check"><input type="checkbox" [(ngModel)]="productDraft.centerAvailable" name="productCenterAvailable" />Available at this center</label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.active" name="productActive" />{{ 'inventory.ui.a733b809d2' | translate }}</label>
             </form>
           }
@@ -514,7 +545,7 @@
           <header class="product-summary"><div><strong>{{ detail.product.name }}</strong><span>{{ detail.product.sku || 'â€”' }}</span></div><span class="status">{{ detail.product.stockQuantity }} {{ detail.product.unit }}</span></header>
           <form class="form-grid" (ngSubmit)="saveKit()" id="kit-form">
             <div class="line-list span-2">@for (line of kitDraft.components; track line; let i = $index) {
-              <div class="entry-line kit-line"><label>{{ 'inventory.ui.c92c529e07' | translate }}<select required [(ngModel)]="line.inventoryItemId" [name]="'kitItem' + i"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of items; track item) {
+              <div class="entry-line kit-line"><label>{{ 'inventory.ui.c92c529e07' | translate }}<select required [(ngModel)]="line.inventoryItemId" [name]="'kitItem' + i"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of activeCenterItems; track item) {
               <option [value]="item.id" [disabled]="item.id === detail.product.id">{{ item.name }} Â· {{ item.sku }}</option>
               }</select></label><label>{{ 'inventory.ui.44f6af6945' | translate }}<input required type="number" min="1" step="1" [(ngModel)]="line.quantity" [name]="'kitQty' + i" /></label><button class="icon-button remove" type="button" [attr.aria-label]="'inventory.ui.200c431175' | translate" (click)="removeKitComponent(i)" [disabled]="kitDraft.components.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
               }<button class="add-line" type="button" (click)="addKitComponent()"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{ 'inventory.ui.8ea9062f54' | translate }}</button></div>
@@ -544,12 +575,12 @@
               @for (row of supplierReplacements(supplierId); track row) {<tr><td><strong>{{ row.replacementSupplierName }}</strong></td><td>{{ row.productName }}</td><td>{{ row.leadTimeDays }} days</td><td>{{ row.minimumOrderQuantity }} / {{ row.packSize }}</td><td>{{ row.priceDifferencePaise === null || row.priceDifferencePaise === undefined ? 'â€”' : money(row.priceDifferencePaise) }}</td></tr>}
               @if (!supplierReplacements(supplierId).length) {<tr><td colspan="5" class="empty-state">No replacement supplier configured</td></tr>}
             </tbody></table></div>
-            <div class="governance-form terms-form"><select [(ngModel)]="supplierTermsDraft.inventoryItemId"><option value="">{{ 'inventory.ui.c8f58ff077' | translate }}</option>@for (item of items; track item) {
+            <div class="governance-form terms-form"><select [(ngModel)]="supplierTermsDraft.inventoryItemId"><option value="">{{ 'inventory.ui.c8f58ff077' | translate }}</option>@for (item of activeCenterItems; track item) {
             <option [value]="item.id">{{ item.name }}</option>
-            }</select><input type="number" min="0" max="365" [(ngModel)]="supplierTermsDraft.leadTimeDays" [attr.placeholder]="'inventory.ui.ea22cfdf62' | translate" /><input type="number" min="1" [(ngModel)]="supplierTermsDraft.minimumOrderQuantity" [attr.placeholder]="'inventory.ui.e3d6af36dc' | translate" /><input type="number" min="1" [(ngModel)]="supplierTermsDraft.packSize" [attr.placeholder]="'inventory.ui.87dd2c9768' | translate" /><button type="button" (click)="saveSupplierTerms()" [disabled]="saving">{{ 'inventory.ui.6fae42f2c7' | translate }}</button></div>
-            <div class="governance-form"><select [(ngModel)]="supplierPriceDraft.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (item of items; track item) {
+            }</select><input maxlength="120" [(ngModel)]="supplierTermsDraft.vendorPartNumber" placeholder="Vendor part number" /><select [(ngModel)]="supplierTermsDraft.purchaseUnit" aria-label="Purchase unit">@for (row of packageUnits; track row.code) { <option [value]="row.code">{{ row.label }}</option> }</select><input type="number" min="1" [(ngModel)]="supplierTermsDraft.conversionQuantity" placeholder="Base units per pack" /><input type="number" min="0" max="365" [(ngModel)]="supplierTermsDraft.leadTimeDays" [attr.placeholder]="'inventory.ui.ea22cfdf62' | translate" /><input type="number" min="1" [(ngModel)]="supplierTermsDraft.minimumOrderQuantity" [attr.placeholder]="'inventory.ui.e3d6af36dc' | translate" /><input type="number" min="1" [(ngModel)]="supplierTermsDraft.packSize" [attr.placeholder]="'inventory.ui.87dd2c9768' | translate" /><label class="check"><input type="checkbox" [(ngModel)]="supplierTermsDraft.centerAvailable" />Center available</label><button type="button" (click)="saveSupplierTerms()" [disabled]="saving">{{ 'inventory.ui.6fae42f2c7' | translate }}</button></div>
+            <div class="governance-form"><select [(ngModel)]="supplierPriceDraft.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option>@for (item of activeCenterItems; track item) {
             <option [value]="item.id">{{ item.name }}</option>
-            }</select><input type="number" min="0" step="0.01" [(ngModel)]="supplierPriceDraft.unitCostRupees" [attr.placeholder]="'inventory.ui.d08d6cc065' | translate" /><as-date-picker [(value)]="supplierPriceDraft.effectiveFrom" ariaLabel="Price effective date"></as-date-picker><button type="button" (click)="saveSupplierPrice()" [disabled]="saving">{{ 'inventory.ui.6a897ddb18' | translate }}</button></div>
+            }</select><input type="number" min="0" step="0.01" [(ngModel)]="supplierPriceDraft.unitCostRupees" [attr.placeholder]="'inventory.ui.d08d6cc065' | translate" /><input type="number" min="0" max="100" step="0.01" [(ngModel)]="supplierPriceDraft.discountPercent" placeholder="Discount %" /><input type="number" min="0" max="100" step="1" [(ngModel)]="supplierPriceDraft.gstPercent" placeholder="Tax %" /><as-date-picker [(value)]="supplierPriceDraft.effectiveFrom" ariaLabel="Price effective date"></as-date-picker><button type="button" (click)="saveSupplierPrice()" [disabled]="saving">{{ 'inventory.ui.6a897ddb18' | translate }}</button></div>
             <h3>{{ 'inventory.ui.c3304f5a87' | translate }}</h3>
             <div class="governance-form"><select [(ngModel)]="supplierCommunicationDraft.channel"><option value="email">{{ 'inventory.ui.84add5b295' | translate }}</option><option value="whatsapp">{{ 'inventory.ui.b336fc5587' | translate }}</option></select><input [(ngModel)]="supplierCommunicationDraft.destination" [attr.placeholder]="'inventory.ui.d42713493c' | translate" /><input [(ngModel)]="supplierCommunicationDraft.subject" [attr.placeholder]="'inventory.ui.8d183dbdce' | translate" /><input [(ngModel)]="supplierCommunicationDraft.message" [attr.placeholder]="'inventory.ui.68f4145fee' | translate" /><button type="button" (click)="queueSupplierCommunication()" [disabled]="saving">{{ 'inventory.ui.d325fcd919' | translate }}</button></div>
           </section>
@@ -612,6 +643,7 @@
       <label>Shipping charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.shippingRupees" name="grnShipping" /></label>
       <label>Handling charges<input type="number" min="0" step="0.01" [(ngModel)]="grnDraft.handlingRupees" name="grnHandling" /></label>
       @if (canApproveBackdatedGrn) {<label class="span-2"><input type="checkbox" [(ngModel)]="grnDraft.backdatedOperationalApproval" name="backdatedOperationalApproval" /> Owner approval: post a pre-cutover invoice as operational GRN after reconciliation</label>}
+      <label class="span-2"><input type="checkbox" [(ngModel)]="grnDraft.acceptExcess" name="acceptExcess" /> Accept excess delivery (permission required)</label>
       <div class="receiving-scan span-2"><label>Scan product barcode<input maxlength="160" autocomplete="off" [(ngModel)]="grnScanCode" name="grnScanCode" (keyup.enter)="$event.preventDefault(); scanGrnBarcode()" /></label><button type="button" [disabled]="grnScanBusy || !grnScanCode.trim()" (click)="scanGrnBarcode()">{{ grnScanBusy ? 'Matching' : 'Receive scan' }}</button></div>
       <ng-container *ngTemplateOutlet="lineEditor; context: { $implicit: grnDraft.lines, kind: 'grn' }"></ng-container>
     </form>
@@ -635,19 +667,54 @@
   </form>
 }
 @if (drawer === 'transfer') {
-  <form class="form-grid" (ngSubmit)="saveTransfer()" id="transfer-form">
-    <label>{{ 'inventory.ui.dba51c9f85' | translate }}<select required [(ngModel)]="transferDraft.destinationBranchId" name="destinationBranch"><option value="">Select branch</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select></label>
-    <label>{{ 'inventory.ui.70440046a3' | translate }}<input maxlength="500" [(ngModel)]="transferDraft.notes" name="transferNotes" /></label>
-    <div class="line-list span-2">@for (line of transferDraft.lines; track line; let i = $index) {
-      <div class="entry-line transfer-line"><label>{{ 'inventory.ui.c6ec7bda74' | translate }}<select required [(ngModel)]="line.sourceInventoryItemId" [name]="'sourceItem' + i"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of items; track item) {
-      <option [value]="item.id">{{ item.name }} Â· {{ item.sku }}</option>
-      }</select></label><label>{{ 'inventory.ui.f6f23c1104' | translate }}<input required [(ngModel)]="line.destinationInventoryItemId" [name]="'destinationItem' + i" /></label><label>{{ 'inventory.ui.44f6af6945' | translate }}<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="'transferQty' + i" /></label><button class="icon-button remove" type="button" [attr.aria-label]="'inventory.ui.c54cf886e3' | translate" (click)="removeTransferLine(i)" [disabled]="transferDraft.lines.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
-      }<button class="add-line" type="button" (click)="addTransferLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>{{ 'inventory.ui.a147e4e01e' | translate }}</button></div>
+  @if (transferWorkflow === 'create') {
+    <form class="form-grid" (ngSubmit)="saveTransfer()" id="transfer-create-form">
+      <label>Transfer mode<select required [(ngModel)]="transferDraft.mode" name="transferMode"><option value="push">Push transfer</option><option value="pull">Pull / request transfer</option><option value="franchise_purchase">Franchise purchase</option></select></label>
+      @if (transferDraft.mode === 'push') {<label>Destination branch<select required [(ngModel)]="transferDraft.destinationBranchId" name="destinationBranch"><option value="">Select branch</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select></label>}
+      @if (transferDraft.mode !== 'push') {<label>Source warehouse<select [(ngModel)]="transferDraft.sourceBranchId" name="sourceBranch"><option value="">Use configured default</option>@for (branch of branches; track branch.branchId) {<option [value]="branch.branchId">{{ branch.branchName }}</option>}</select></label>}
+      <label class="span-2">Notes<input maxlength="500" [(ngModel)]="transferDraft.notes" name="transferNotes" /></label>
+      <div class="line-list span-2">@for (line of transferDraft.lines; track line; let i = $index) {
+        <div class="entry-line"><label>Product<select required [(ngModel)]="line.sourceInventoryItemId" (ngModelChange)="syncTransferLine(line)" [name]="'sourceItem' + i"><option value="">Select product</option>@for (item of activeCenterItems; track item.id) {<option [value]="item.id">{{ item.name }} · {{ item.sku }}</option>}</select></label>
+          @if (transferAllowsRetail(line)) {<label>Retail quantity<input type="number" min="0" [(ngModel)]="line.retailQuantity" [name]="'transferRetail' + i" /></label>}
+          @if (transferAllowsConsumable(line)) {<label>Consumable quantity<input type="number" min="0" [(ngModel)]="line.consumableQuantity" [name]="'transferConsumable' + i" /></label>}
+          <label>Transfer price (₹)<input type="number" min="0" step="0.01" [(ngModel)]="line.transferPriceRupees" [name]="'transferPrice' + i" /></label>
+          <label>Discount %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="line.discountPercent" [name]="'transferDiscount' + i" /></label>
+          <label>GST %<input type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="'transferGst' + i" /></label>
+          <button class="icon-button remove" type="button" aria-label="Remove line" (click)="removeTransferLine(i)" [disabled]="transferDraft.lines.length === 1"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+      }<button class="add-line" type="button" (click)="addTransferLine()"><i class="bi bi-plus-lg" aria-hidden="true"></i>Add line</button></div>
     </form>
+  }
+  @if (transferWorkflow === 'dispatch') {
+    <form class="form-grid" (ngSubmit)="saveTransferShipment()" id="transfer-dispatch-form">
+      <label>Shipping (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferShipmentDraft.shippingRupees" name="transferShipping" /></label>
+      <label>Handling (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferShipmentDraft.handlingRupees" name="transferHandling" /></label>
+      <label>Other charges (₹)<input type="number" min="0" step="0.01" [(ngModel)]="transferShipmentDraft.otherChargesRupees" name="transferOtherCharges" /></label>
+      <div class="line-list span-2">@for (line of transferShipmentDraft.lines; track line.transferLineId; let i = $index) {<div class="entry-line"><strong>{{ line.productName }}</strong>@if (line.maxRetail > 0) {<label>Retail <input type="number" min="0" [max]="line.maxRetail" [(ngModel)]="line.retailQuantity" [name]="'shipmentRetail' + i" /><small>Reserved {{ line.maxRetail }}</small></label>}@if (line.maxConsumable > 0) {<label>Consumable <input type="number" min="0" [max]="line.maxConsumable" [(ngModel)]="line.consumableQuantity" [name]="'shipmentConsumable' + i" /><small>Reserved {{ line.maxConsumable }}</small></label>}</div>}</div>
+    </form>
+  }
+  @if (transferWorkflow === 'receive') {
+    <form class="form-grid" (ngSubmit)="saveTransferReceipt()" id="transfer-receive-form">
+      <label class="span-2">Shipment<input [value]="transferReceiptDraft.shipmentNumber" readonly /></label>
+      <label class="span-2">Receipt notes<input maxlength="500" [(ngModel)]="transferReceiptDraft.notes" name="receiptNotes" /></label>
+      <div class="line-list span-2">@for (line of transferReceiptDraft.lines; track line.shipmentLineId; let i = $index) {<div class="entry-line"><strong>{{ line.productName }}</strong>
+        @if (line.maxRetail > 0) {<label>Retail received<input type="number" min="0" [max]="line.maxRetail" [(ngModel)]="line.receivedRetailQuantity" [name]="'receivedRetail' + i" /></label>}
+        @if (line.maxConsumable > 0) {<label>Consumable received<input type="number" min="0" [max]="line.maxConsumable" [(ngModel)]="line.receivedConsumableQuantity" [name]="'receivedConsumable' + i" /></label>}
+        <label>Damaged<input type="number" min="0" [(ngModel)]="line.damagedQuantity" [name]="'damaged' + i" /></label><label>Expired<input type="number" min="0" [(ngModel)]="line.expiredQuantity" [name]="'expired' + i" /></label><label>Short<input type="number" min="0" [(ngModel)]="line.shortQuantity" [name]="'short' + i" /></label><label>Variance reason<input maxlength="300" [(ngModel)]="line.varianceReason" [name]="'varianceReason' + i" /></label>
+      </div>}</div>
+    </form>
+  }
+  @if (transferWorkflow === 'return') {
+    <form class="form-grid" (ngSubmit)="saveTransferReturn()" id="transfer-return-form">
+      <label>Return reason<select [(ngModel)]="transferReturnDraft.reason" name="transferReturnReason"><option value="damaged">Damaged</option><option value="expired">Expired</option><option value="mismatch">Mismatch</option><option value="other">Other</option></select></label>
+      <label>Notes<input maxlength="500" [(ngModel)]="transferReturnDraft.notes" name="transferReturnNotes" /></label>
+      <div class="line-list span-2">@for (line of transferReturnDraft.lines; track line.transferLineId; let i = $index) {<div class="entry-line"><strong>{{ line.productName }}</strong>@if (line.maxRetail > 0) {<label>Retail return<input type="number" min="0" [max]="line.maxRetail" [(ngModel)]="line.retailQuantity" [name]="'returnRetail' + i" /><small>Received {{ line.maxRetail }}</small></label>}@if (line.maxConsumable > 0) {<label>Consumable return<input type="number" min="0" [max]="line.maxConsumable" [(ngModel)]="line.consumableQuantity" [name]="'returnConsumable' + i" /><small>Received {{ line.maxConsumable }}</small></label>}</div>}</div>
+    </form>
+  }
   }
 </div>
 @if (drawer !== 'product' && drawer !== 'kit' && drawer !== 'orderHistory') {
-  <footer><button type="button" (click)="closeDrawer()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="submit" [disabled]="saving" [attr.form]="drawer + '-form'">{{ saving ? 'Savingâ€¦' : 'Save' }}</button></footer>
+  <footer><button type="button" (click)="closeDrawer()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="submit" [disabled]="saving" [attr.form]="drawer === 'transfer' ? 'transfer-' + transferWorkflow + '-form' : drawer + '-form'">{{ saving ? 'Savingâ€¦' : 'Save' }}</button></footer>
 }
 @if (drawer === 'orderHistory') {
   <footer><button type="button" (click)="closeDrawer()">{{ 'inventory.ui.bbfa773e5a' | translate }}</button></footer>
@@ -669,16 +736,19 @@
   <div class="line-list span-2">
     @for (line of lines; track line; let i = $index) {
       <div class="entry-line" [class.batch-line]="kind === 'grn' && isBatchTracked(line.inventoryItemId)">
-        <label>{{ 'inventory.ui.ecdda59aea' | translate }}<select required [(ngModel)]="line.inventoryItemId" (ngModelChange)="syncItem(line)" [name]="kind + 'Item' + i" [disabled]="!!grnDraft.purchaseOrderId && kind === 'grn'"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of items; track item) {
+        <label>{{ 'inventory.ui.ecdda59aea' | translate }}<select required [(ngModel)]="line.inventoryItemId" (ngModelChange)="syncItem(line)" [name]="kind + 'Item' + i" [disabled]="!!grnDraft.purchaseOrderId && kind === 'grn'"><option value="">{{ 'inventory.ui.b0946c471b' | translate }}</option>@for (item of activeCenterItems; track item) {
         <option [value]="item.id">{{ item.name }} Â· {{ item.sku }}</option>
       }</select></label>
-      <label>{{ kind === 'grn' ? 'Delivered packages' : 'Package quantity' }}<input required type="number" min="1" [(ngModel)]="line.quantity" [name]="kind + 'Qty' + i" /><small>{{ linePackageSummary(line) }}</small></label>
+      @if (allowsRetail(line)) {<label>{{ kind === 'grn' ? 'Retail received' : 'Retail quantity' }}<input type="number" min="0" [(ngModel)]="line.retailQuantity" (ngModelChange)="syncLineQuantities(line, kind === 'grn')" [name]="kind + 'RetailQty' + i" /></label>}
+      @if (allowsConsumable(line)) {<label>{{ kind === 'grn' ? 'Consumable received' : 'Consumable quantity' }}<input type="number" min="0" [(ngModel)]="line.consumableQuantity" (ngModelChange)="syncLineQuantities(line, kind === 'grn')" [name]="kind + 'ConsumableQty' + i" /></label>}
+      <label>{{ kind === 'grn' ? 'Delivered total' : 'Package total' }}<input required type="number" min="1" [ngModel]="line.quantity" [name]="kind + 'Qty' + i" readonly /><small>{{ linePackageSummary(line) }}</small></label>
       <label>Package cost (₹)<input required type="number" min="0" step="0.01" [(ngModel)]="line.unitCostRupees" [name]="kind + 'Cost' + i" /></label>
       <label>Line discount %<input type="number" min="0" max="100" step="0.01" [(ngModel)]="line.discountPercent" [name]="kind + 'Discount' + i" /></label>
       <label>{{ 'inventory.ui.76592ccc0c' | translate }}<input required type="number" min="0" max="100" [(ngModel)]="line.gstPercent" [name]="kind + 'Gst' + i" /></label>
       @if (kind === 'grn') {
-        <label>Damaged quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.damagedQuantity" [name]="kind + 'Damaged' + i" /></label>
-        <label>Rejected quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.rejectedQuantity" [name]="kind + 'Rejected' + i" /></label>
+        <label>Damaged quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.damagedQuantity" (ngModelChange)="syncLineQuantities(line,true)" [name]="kind + 'Damaged' + i" /></label>
+        <label>Rejected quantity<input type="number" min="0" [max]="line.quantity || 0" [(ngModel)]="line.rejectedQuantity" (ngModelChange)="syncLineQuantities(line,true)" [name]="kind + 'Rejected' + i" /></label>
+        <label class="check"><input type="checkbox" [(ngModel)]="line.requestMasterPriceUpdate" [name]="kind + 'PriceUpdate' + i" />Request master price update</label>
         @if (line.orderedRemaining !== undefined) {
           <div class="receiving-variance">Ordered <b>{{ line.orderedRemaining }}</b> · Received <b>{{ line.quantity || 0 }}</b> · Accepted <b>{{ accepted(line) }}</b> · Rejected <b>{{ line.rejectedQuantity || 0 }}</b> · Quarantine <b>{{ line.damagedQuantity || 0 }}</b> · Short <b>{{ short(line) }}</b> · Excess <b>{{ excess(line) }}</b></div>
         }

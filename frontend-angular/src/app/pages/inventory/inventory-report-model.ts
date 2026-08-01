@@ -2,6 +2,9 @@ export type ReportBatch = { inventoryItemId:string; productName:string; batchNum
 export type ReportLedger = { inventoryItemId:string; itemName:string; movementType:string; quantityDelta:number; sourceType:string; sourceId:string; createdAt:string; batchAllocations:Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }> };
 export type AuditDetails = { session:{ id:string; name:string; status:string; createdAt:string }; items:Array<{ inventoryItemId:string; itemName:string; sku:string; unit:string; expectedQuantity?:number; approvedQuantity?:number; varianceQuantity?:number; varianceReason:string; postedAt?:string }> };
 
+export const csvContent = (headers:string[], rows:(string|number)[][]) => [headers, ...rows]
+  .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+
 const day = (value:string) => Math.floor(Date.parse(`${value.slice(0,10)}T00:00:00Z`) / 86_400_000);
 
 export function ageingRows(batches:ReportBatch[], asOf:string) {

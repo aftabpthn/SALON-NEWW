@@ -3,7 +3,10 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{collections::{HashMap, HashSet}, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use crate::{
     models::{common::AppError, migration_file::HistoricalEvidenceGroupDecisionRequest},
@@ -12,7 +15,7 @@ use crate::{
     },
     services::{
         migration_adapter_service, migration_file_service,
-        purchase_service::{self, ReceiptInput, ReceiptLineInput},
+        purchase_service::{self, ReceiptInput, ReceiptLineInput, ReceiptTaxTotals},
     },
     state::AppState,
 };
@@ -450,6 +453,43 @@ pub async fn start_historical_pilot(
             "Owner-approved Phase 1 cutover is required before the pilot",
         ));
     }
+    let evidence_report =
+        migration_file_service::historical_evidence_report(&state.db, tenant, branch, cutover_id)
+            .await?;
+    let active_files = evidence_report["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|file| file["evidenceState"] == "active")
+        .filter_map(|file| file["sourceFileId"].as_str())
+        .collect::<HashSet<_>>();
+    let rejected_documents = evidence_report["groups"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|group| group["status"] == "rejected")
+        .flat_map(|group| {
+            group["documentKeys"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+        })
+        .collect::<HashSet<_>>();
+    if documents.iter().any(|document| {
+        let source_file_id = document.source_file_id.trim();
+        let key = document
+            .source_artifact_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(|artifact_id| format!("{source_file_id}:{}", artifact_id.trim()))
+            .unwrap_or_else(|| source_file_id.to_string());
+        !active_files.contains(source_file_id) || rejected_documents.contains(key.as_str())
+    }) {
+        return Err(AppError::conflict(
+            "excluded or rejected evidence cannot be selected for the pilot",
+        ));
+    }
 
     let mut tx = state
         .db
@@ -719,8 +759,8 @@ fn grouping_similarity(
         score += 500;
         signals.push("total_amount");
     }
-    let same_layout = !left.layout_fingerprint.is_empty()
-        && left.layout_fingerprint == right.layout_fingerprint;
+    let same_layout =
+        !left.layout_fingerprint.is_empty() && left.layout_fingerprint == right.layout_fingerprint;
     if same_layout {
         score += 1_000;
         signals.push("layout");
@@ -783,7 +823,9 @@ fn pilot_grouping_suggestions(documents: &[PilotGroupingDocument]) -> Vec<Value>
         let confidence_bps = member_scores.into_iter().min().unwrap_or(0);
         let mut pages = members
             .iter()
-            .filter_map(|index| (documents[*index].page_number > 0).then_some(documents[*index].page_number))
+            .filter_map(|index| {
+                (documents[*index].page_number > 0).then_some(documents[*index].page_number)
+            })
             .collect::<Vec<_>>();
         pages.sort_unstable();
         pages.dedup();
@@ -881,11 +923,15 @@ pub async fn historical_pilot_report(
                     .migration_source_artifact_id
                     .as_deref()
                     .and_then(|artifact_id| {
-                        source.artifacts_json.as_array()?.iter().find_map(|artifact| {
-                            (artifact.get("id")?.as_str()? == artifact_id)
-                                .then(|| artifact.get("pageCount")?.as_i64())
-                                .flatten()
-                        })
+                        source
+                            .artifacts_json
+                            .as_array()?
+                            .iter()
+                            .find_map(|artifact| {
+                                (artifact.get("id")?.as_str()? == artifact_id)
+                                    .then(|| artifact.get("pageCount")?.as_i64())
+                                    .flatten()
+                            })
                     })
                     .or(Some(i64::from(source.page_count)))
             })
@@ -916,16 +962,44 @@ pub async fn historical_pilot_report(
             grouping_documents.push(PilotGroupingDocument {
                 draft_id: draft.id.clone(),
                 file_name: draft.source_file_name.clone(),
-                supplier_batch: source.map(|row| row.supplier_batch.clone()).unwrap_or_else(|| "Unidentified-Supplier".into()),
-                supplier_name: raw.get("supplier_name").and_then(Value::as_str).unwrap_or_default().to_string(),
-                supplier_gstin: raw.get("supplier_gstin").and_then(Value::as_str).unwrap_or_default().to_string(),
-                invoice_number: raw.get("bill_number").and_then(Value::as_str).unwrap_or_default().to_string(),
-                invoice_date: raw.get("bill_date").and_then(Value::as_str).unwrap_or_default().to_string(),
+                supplier_batch: source
+                    .map(|row| row.supplier_batch.clone())
+                    .unwrap_or_else(|| "Unidentified-Supplier".into()),
+                supplier_name: raw
+                    .get("supplier_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                supplier_gstin: raw
+                    .get("supplier_gstin")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                invoice_number: raw
+                    .get("bill_number")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                invoice_date: raw
+                    .get("bill_date")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
                 total_paise: raw.get("total_paise").and_then(Value::as_i64).unwrap_or(0),
-                page_number: contract.get("pageNumber").and_then(Value::as_i64).unwrap_or(0),
+                page_number: contract
+                    .get("pageNumber")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
                 page_count: document_pages.max(1),
-                carry_forward_paise: contract.get("carryForwardPaise").and_then(Value::as_i64).unwrap_or(0),
-                layout_fingerprint: contract.get("layoutFingerprint").and_then(Value::as_str).unwrap_or_default().to_string(),
+                carry_forward_paise: contract
+                    .get("carryForwardPaise")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
+                layout_fingerprint: contract
+                    .get("layoutFingerprint")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
             });
             observe_text(
                 &mut supplier_accuracy,
@@ -1063,11 +1137,22 @@ pub async fn historical_pilot_report(
     }
     let decision_map = grouping_decisions
         .iter()
-        .map(|decision| ((decision.supplier_batch.as_str(), decision.group_key.as_str()), decision))
+        .map(|decision| {
+            (
+                (
+                    decision.supplier_batch.as_str(),
+                    decision.group_key.as_str(),
+                ),
+                decision,
+            )
+        })
         .collect::<HashMap<_, _>>();
     let mut grouping_suggestions = pilot_grouping_suggestions(&grouping_documents);
     for group in &mut grouping_suggestions {
-        let supplier_batch = group["supplierBatch"].as_str().unwrap_or_default().to_string();
+        let supplier_batch = group["supplierBatch"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         let group_key = group["groupKey"].as_str().unwrap_or_default().to_string();
         if let Some(decision) = decision_map.get(&(supplier_batch.as_str(), group_key.as_str())) {
             group["status"] = json!(decision.decision);
@@ -1086,16 +1171,26 @@ pub async fn historical_pilot_report(
         .filter_map(Value::as_str)
         .collect::<HashSet<_>>();
     let recognized = accepted_groups.len()
-        + drafts.iter().filter(|draft| {
-            !accepted_members.contains(draft.id.as_str()) && !draft.bill_number.trim().is_empty()
-        }).count();
+        + drafts
+            .iter()
+            .filter(|draft| {
+                !accepted_members.contains(draft.id.as_str())
+                    && !draft.bill_number.trim().is_empty()
+            })
+            .count();
     let mut invoice_identities = HashSet::new();
-    let duplicate_bills = drafts.iter().filter(|draft| {
-        if accepted_members.contains(draft.id.as_str()) || draft.bill_number.trim().is_empty() {
-            return false;
-        }
-        !invoice_identities.insert((normalize_product_text(&draft.supplier_name), draft.bill_number.trim().to_ascii_lowercase()))
-    }).count();
+    let duplicate_bills = drafts
+        .iter()
+        .filter(|draft| {
+            if accepted_members.contains(draft.id.as_str()) || draft.bill_number.trim().is_empty() {
+                return false;
+            }
+            !invoice_identities.insert((
+                normalize_product_text(&draft.supplier_name),
+                draft.bill_number.trim().to_ascii_lowercase(),
+            ))
+        })
+        .count();
     let failed = drafts
         .iter()
         .filter(|draft| matches!(draft.status.as_str(), "extraction_failed" | "quarantined"))
@@ -1182,26 +1277,40 @@ pub async fn decide_historical_pilot_group(
         || request.group_key.trim().is_empty()
         || request.approved_page_count <= 0
     {
-        return Err(AppError::validation("pilot group decision, group identity and positive page count are required"));
+        return Err(AppError::validation(
+            "pilot group decision, group identity and positive page count are required",
+        ));
     }
     let report = historical_pilot_report(state, tenant, branch, request.cutover_id.trim()).await?;
     let group = report["grouping"]["suggestions"]
         .as_array()
-        .and_then(|groups| groups.iter().find(|group| {
-            group["supplierBatch"] == request.supplier_batch.trim()
-                && group["groupKey"] == request.group_key.trim()
-        }))
+        .and_then(|groups| {
+            groups.iter().find(|group| {
+                group["supplierBatch"] == request.supplier_batch.trim()
+                    && group["groupKey"] == request.group_key.trim()
+            })
+        })
         .ok_or_else(|| AppError::not_found("pilot grouping suggestion was not found"))?;
     let detected_pages = group["detectedPageCount"].as_i64().unwrap_or(0);
     if i64::from(request.approved_page_count) != detected_pages {
-        return Err(AppError::validation("approvedPageCount must exactly match the detected pilot pages"));
+        return Err(AppError::validation(
+            "approvedPageCount must exactly match the detected pilot pages",
+        ));
     }
     if decision == "approved" && group["confidenceLevel"] == "red" {
-        return Err(AppError::validation("Red pilot grouping cannot be approved"));
+        return Err(AppError::validation(
+            "Red pilot grouping cannot be approved",
+        ));
     }
     migration_file_repository::decide_historical_evidence_group(
-        &state.db, tenant, branch, actor, request.cutover_id.trim(),
-        request.supplier_batch.trim(), request.group_key.trim(), &decision,
+        &state.db,
+        tenant,
+        branch,
+        actor,
+        request.cutover_id.trim(),
+        request.supplier_batch.trim(),
+        request.group_key.trim(),
+        &decision,
         request.approved_page_count,
     )
     .await
@@ -1240,9 +1349,9 @@ pub async fn start_historical_bulk(
     let pilot = historical_pilot_report(state, tenant, branch, cutover_id).await?;
     let pilot_documents = pilot["documents"].as_array().cloned().unwrap_or_default();
     let pilot_summary = &pilot["summary"];
-    let pilot_accuracy_passed = pilot["accuracy"]
-        .as_object()
-        .is_some_and(|metrics| !metrics.is_empty() && metrics.values().all(|metric| metric["accepted"] == true));
+    let pilot_accuracy_passed = pilot["accuracy"].as_object().is_some_and(|metrics| {
+        !metrics.is_empty() && metrics.values().all(|metric| metric["accepted"] == true)
+    });
     let recognized_bills = pilot_summary["recognizedBills"].as_u64().unwrap_or(0);
     if !(20..=50).contains(&recognized_bills)
         || pilot_documents.iter().any(|document| {
@@ -1261,7 +1370,10 @@ pub async fn start_historical_bulk(
             .as_u64()
             .unwrap_or(0)
             != pilot_documents.len() as u64
-        || pilot_summary["groupingApprovalRequired"].as_u64().unwrap_or(1) > 0
+        || pilot_summary["groupingApprovalRequired"]
+            .as_u64()
+            .unwrap_or(1)
+            > 0
         || pilot_summary["groupingBlocked"].as_u64().unwrap_or(1) > 0
         || !pilot_accuracy_passed
     {
@@ -1769,8 +1881,8 @@ pub async fn save_header(
             "imageQualityScoreBps",
             "qualityWarnings",
         ]
-            .iter()
-            .any(|key| before.bill_contract.get(key) != input.bill_contract.get(key))
+        .iter()
+        .any(|key| before.bill_contract.get(key) != input.bill_contract.get(key))
     {
         return Err(AppError::validation(
             "document quality, page and grouping evidence cannot be manually overwritten",
@@ -2446,6 +2558,10 @@ pub async fn confirm(
         branch,
         actor,
         actor_role,
+        matches!(
+            actor_role.trim().to_ascii_lowercase().as_str(),
+            "owner" | "admin" | "manager" | "inventory manager"
+        ),
         ReceiptInput {
             supplier_id: Some(supplier.clone()),
             purchase_order_id: current.draft.purchase_order_id.clone(),
@@ -2462,16 +2578,25 @@ pub async fn confirm(
                 .saturating_add(contract_i64(
                     &current.draft.bill_contract,
                     "otherChargesPaise",
-                ))
-                .saturating_add(contract_i64(&current.draft.bill_contract, "roundOffPaise")),
+                )),
+            round_off_paise: contract_i64(&current.draft.bill_contract, "roundOffPaise"),
+            tax_totals: Some(ReceiptTaxTotals {
+                cgst_paise: current.draft.cgst_paise,
+                sgst_paise: current.draft.sgst_paise,
+                igst_paise: current.draft.igst_paise,
+            }),
             idempotency_key: format!("purchase-bill-draft:{id}"),
             backdated_operational_approval: false,
+            accept_excess: false,
+            request_master_price_updates: std::collections::HashSet::new(),
             lines: current
                 .lines
                 .iter()
                 .map(|line| ReceiptLineInput {
                     inventory_item_id: line.inventory_item_id.clone().unwrap_or_default(),
                     quantity: line.purchase_quantity,
+                    retail_quantity: None,
+                    consumable_quantity: None,
                     free_quantity: contract_i32(&line.product_contract, "freeQuantity"),
                     unit_cost_paise: line.unit_cost_paise,
                     discount_bps: line.discount_bps,
@@ -3004,20 +3129,20 @@ fn readiness_issues(draft: &repo::DraftRecord, lines: &[repo::DraftLineRecord]) 
     }
     let extras = contract_i64(&draft.bill_contract, "freightPaise")
         .saturating_add(contract_i64(&draft.bill_contract, "handlingPaise"))
-        .saturating_add(contract_i64(&draft.bill_contract, "otherChargesPaise"))
-        .saturating_add(contract_i64(&draft.bill_contract, "roundOffPaise"));
+        .saturating_add(contract_i64(&draft.bill_contract, "otherChargesPaise"));
     if contract_i64(&draft.bill_contract, "freightPaise") < 0
         || contract_i64(&draft.bill_contract, "handlingPaise") < 0
         || contract_i64(&draft.bill_contract, "otherChargesPaise") < 0
         || extras < 0
     {
-        issues.push("Freight, handling and other charges must be non-negative; signed round-off cannot make landed charges negative".into());
+        issues.push("Freight, handling and other charges must be non-negative".into());
     }
     let header_expected = draft
         .subtotal_paise
         .checked_sub(draft.discount_paise)
         .and_then(|value| value.checked_add(draft.cgst_paise + draft.sgst_paise + draft.igst_paise))
-        .and_then(|value| value.checked_add(extras));
+        .and_then(|value| value.checked_add(extras))
+        .and_then(|value| value.checked_add(contract_i64(&draft.bill_contract, "roundOffPaise")));
     if header_expected.map_or(true, |expected| differs(draft.total_paise, expected)) {
         issues.push("Header total does not reconcile".into());
     }

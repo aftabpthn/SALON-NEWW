@@ -5385,22 +5385,36 @@ async fn list_pos_invoice_consumption(
     }
     let rows = sqlx::query_as::<_, InvoiceInventoryConsumptionRow>(
         r#"
-        SELECT ledger.id,
-               ledger.inventory_item_id,
-               item.name AS item_name,
-               ABS(ledger.quantity_delta)::BIGINT AS quantity,
-               ledger.unit_cost_paise,
-               ledger.created_at
+        SELECT consumption.id,consumption.inventory_item_id,consumption.item_name,
+               consumption.quantity,consumption.unit_cost_paise,consumption.created_at
+        FROM (
+          SELECT ledger.id,ledger.inventory_item_id,item.name AS item_name,
+                 ABS(ledger.quantity_delta)::BIGINT AS quantity,ledger.unit_cost_paise,ledger.created_at
           FROM inventory_stock_ledger ledger
-          JOIN inventory_items item
-            ON item.tenant_id=ledger.tenant_id
-           AND item.branch_id=ledger.branch_id
-           AND item.id=ledger.inventory_item_id
-         WHERE ledger.tenant_id=$1
-           AND ledger.branch_id=$2
-           AND ledger.sale_id=$3
-           AND ledger.movement_type='sale'
-         ORDER BY ledger.created_at, ledger.id
+          JOIN inventory_items item ON item.tenant_id=ledger.tenant_id
+            AND item.branch_id=ledger.branch_id AND item.id=ledger.inventory_item_id
+          WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2 AND ledger.sale_id=$3
+            AND ledger.movement_type='sale'
+          UNION ALL
+          SELECT usage.id,usage.inventory_item_id,item.name,usage.actual_quantity::BIGINT,
+                 usage.unit_cost_paise,usage.created_at
+          FROM inventory_backbar_usage usage
+          JOIN inventory_items item ON item.tenant_id=usage.tenant_id
+            AND item.branch_id=usage.branch_id AND item.id=usage.inventory_item_id
+          WHERE usage.tenant_id=$1 AND usage.branch_id=$2 AND usage.sale_id=$3
+            AND usage.status='recorded'
+          UNION ALL
+          SELECT event.id,container.inventory_item_id,item.name,ABS(event.quantity_delta)::BIGINT,
+                 COALESCE((event.metadata->>'unitCostPaise')::BIGINT,item.unit_cost_paise),event.created_at
+          FROM inventory_backbar_container_events event
+          JOIN inventory_backbar_containers container ON container.id=event.container_id
+            AND container.tenant_id=event.tenant_id AND container.branch_id=event.branch_id
+          JOIN inventory_items item ON item.id=container.inventory_item_id
+            AND item.tenant_id=container.tenant_id AND item.branch_id=container.branch_id
+          WHERE event.tenant_id=$1 AND event.branch_id=$2 AND event.event_type='consumed'
+            AND event.metadata->>'saleId'=$3
+        ) consumption
+        ORDER BY consumption.created_at,consumption.id
         "#,
     )
     .bind(&tenant_id)

@@ -31,7 +31,12 @@ pub fn router() -> Router<AppState> {
             "/purchases/suppliers/:id",
             axum::routing::patch(update_supplier),
         )
+        .route("/purchases/suppliers/:id/ledger", get(supplier_ledger))
         .route("/purchases/orders", get(list_orders).post(create_order))
+        .route(
+            "/purchases/orders/import",
+            axum::routing::post(import_order),
+        )
         .route("/purchases/orders/:id", get(get_order))
         .route(
             "/purchases/orders/:id/submit",
@@ -64,6 +69,15 @@ pub fn router() -> Router<AppState> {
         .route("/purchases/orders/:id/events", get(order_events))
         .route("/purchases/grn", get(list_receipts).post(receive))
         .route("/purchases/grn/:id", get(get_receipt))
+        .route("/purchases/grn/:id/barcode-labels", get(grn_barcode_labels))
+        .route(
+            "/purchases/price-update-requests",
+            get(price_update_requests),
+        )
+        .route(
+            "/purchases/price-update-requests/:id/review",
+            axum::routing::post(review_price_update),
+        )
         .route("/purchases/returns", get(list_returns).post(create_return))
         .route("/purchases/payables", get(list_payables))
         .route("/purchases/payment-summary", get(payment_summary))
@@ -107,6 +121,10 @@ struct OrderRequest {
 struct OrderLineRequest {
     inventory_item_id: String,
     quantity: i32,
+    #[serde(default)]
+    retail_quantity: i32,
+    #[serde(default)]
+    consumable_quantity: i32,
     unit_cost_paise: i64,
     #[serde(default)]
     discount_bps: i32,
@@ -138,9 +156,15 @@ struct ReceiptRequest {
     shipping_paise: i64,
     #[serde(default)]
     handling_paise: i64,
+    #[serde(default)]
+    round_off_paise: i64,
     idempotency_key: String,
     #[serde(default)]
     backdated_operational_approval: bool,
+    #[serde(default)]
+    accept_excess: bool,
+    #[serde(default)]
+    request_master_price_updates: Vec<String>,
     lines: Vec<ReceiptLineRequest>,
 }
 
@@ -149,6 +173,8 @@ struct ReceiptRequest {
 struct ReceiptLineRequest {
     inventory_item_id: String,
     quantity: i32,
+    retail_quantity: Option<i32>,
+    consumable_quantity: Option<i32>,
     #[serde(default)]
     free_quantity: i32,
     unit_cost_paise: i64,
@@ -328,6 +354,8 @@ async fn create_order(
             .map(|line| OrderLineInput {
                 inventory_item_id: line.inventory_item_id,
                 quantity: line.quantity,
+                retail_quantity: line.retail_quantity,
+                consumable_quantity: line.consumable_quantity,
                 unit_cost_paise: line.unit_cost_paise,
                 discount_bps: line.discount_bps,
                 gst_percent: line.gst_percent,
@@ -336,6 +364,27 @@ async fn create_order(
     };
     Ok(Json(ApiResponse::ok(
         purchase_service::create_order(&state, &tenant_id, &branch_id, &claims.sub, input).await?,
+    )))
+}
+
+async fn import_order(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<PurchaseOrderImportRequest>,
+) -> ApiResult<purchase_service::PurchaseOrderImportResult> {
+    require_purchase_import(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_service::import_order_csv(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &payload.file_name,
+            &payload.csv,
+        )
+        .await?,
     )))
 }
 
@@ -467,6 +516,83 @@ async fn get_receipt(
     )))
 }
 
+async fn grn_barcode_labels(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<BarcodeLabelQuery>,
+) -> ApiResult<Vec<purchase_repository::PurchaseBarcodeLabel>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    purchase_service::details(&state, &tenant_id, &branch_id, &id).await?;
+    let usage = query.product_usage.unwrap_or_else(|| "all".to_owned());
+    if !matches!(usage.as_str(), "all" | "retail" | "consumable") {
+        return Err(AppError::validation(
+            "productUsage must be all, retail, or consumable",
+        ));
+    }
+    let mut rows = purchase_repository::barcode_labels(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load GRN barcode labels"))?;
+    rows.retain(|row| {
+        !row.barcode.is_empty()
+            && match usage.as_str() {
+                "retail" => row.retail_quantity > 0,
+                "consumable" => row.consumable_quantity > 0,
+                _ => row.retail_quantity + row.consumable_quantity > 0,
+            }
+    });
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn price_update_requests(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PriceUpdateQuery>,
+) -> ApiResult<Vec<purchase_repository::PurchasePriceUpdateRequest>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if query
+        .status
+        .as_deref()
+        .is_some_and(|status| !matches!(status, "pending" | "approved" | "rejected"))
+    {
+        return Err(AppError::validation(
+            "status must be pending, approved, or rejected",
+        ));
+    }
+    let rows = purchase_repository::list_price_update_requests(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.status.as_deref(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load master price requests"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn review_price_update(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PriceUpdateReviewRequest>,
+) -> ApiResult<purchase_service::PriceUpdateReviewResult> {
+    require_approver(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_service::review_price_update(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &id,
+            &claims.sub,
+            payload.approve,
+            &payload.note,
+        )
+        .await?,
+    )))
+}
+
 async fn receive(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -487,14 +613,20 @@ async fn receive(
         delivery_reference: payload.delivery_reference,
         shipping_paise: payload.shipping_paise,
         handling_paise: payload.handling_paise,
+        round_off_paise: payload.round_off_paise,
+        tax_totals: None,
         idempotency_key: payload.idempotency_key,
         backdated_operational_approval: payload.backdated_operational_approval,
+        accept_excess: payload.accept_excess,
+        request_master_price_updates: payload.request_master_price_updates.into_iter().collect(),
         lines: payload
             .lines
             .into_iter()
             .map(|line| ReceiptLineInput {
                 inventory_item_id: line.inventory_item_id,
                 quantity: line.quantity,
+                retail_quantity: line.retail_quantity,
+                consumable_quantity: line.consumable_quantity,
                 free_quantity: line.free_quantity,
                 unit_cost_paise: line.unit_cost_paise,
                 discount_bps: line.discount_bps,
@@ -515,6 +647,7 @@ async fn receive(
             &branch_id,
             &claims.sub,
             &claims.role,
+            can_receive_excess(&claims),
             input,
         )
         .await?,
@@ -588,6 +721,46 @@ async fn payment_summary(
         .await
         .map_err(|_| AppError::internal("failed to load supplier payment summary"))?;
     Ok(Json(ApiResponse::ok(summary)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PurchaseOrderImportRequest {
+    file_name: String,
+    csv: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PriceUpdateReviewRequest {
+    approve: bool,
+    #[serde(default)]
+    note: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PriceUpdateQuery {
+    status: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BarcodeLabelQuery {
+    product_usage: Option<String>,
+}
+
+async fn supplier_ledger(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<purchase_repository::SupplierLedgerResponse> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let ledger = purchase_repository::supplier_ledger(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load supplier ledger"))?
+        .ok_or_else(|| AppError::not_found("supplier was not found"))?;
+    Ok(Json(ApiResponse::ok(ledger)))
 }
 
 async fn create_payment(
@@ -667,6 +840,35 @@ fn require_approver(claims: &AuthClaims) -> Result<(), AppError> {
     } else {
         Err(AppError::forbidden(
             "purchase order approval permission is required",
+        ))
+    }
+}
+
+fn can_receive_excess(claims: &AuthClaims) -> bool {
+    matches!(
+        claims.role.trim().to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager" | "inventory manager"
+    ) || claims.permissions.iter().any(|value| {
+        matches!(
+            value.as_str(),
+            "purchases.receive_excess" | "inventory.manage"
+        )
+    })
+}
+
+fn require_purchase_import(claims: &AuthClaims) -> Result<(), AppError> {
+    if matches!(
+        claims.role.trim().to_ascii_lowercase().as_str(),
+        "owner" | "admin" | "manager" | "inventory manager"
+    ) || claims
+        .permissions
+        .iter()
+        .any(|value| matches!(value.as_str(), "purchases.import" | "inventory.manage"))
+    {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(
+            "purchase order import permission is required",
         ))
     }
 }

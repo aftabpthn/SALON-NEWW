@@ -9,7 +9,7 @@
       <button type="button" (click)="load()">{{ 'inventory.ui.56e3badc4e' | translate }}</button>
       <button type="button" (click)="openScanner()"><i class="bi bi-upc-scan" aria-hidden="true"></i> Scan</button>
       <button type="button" (click)="openContainers()"><i class="bi bi-box-seam" aria-hidden="true"></i> Containers</button>
-      <button class="primary" type="button" (click)="openRecord()">Record Usage</button>
+      <button class="primary" type="button" (click)="openRecord()">Record Bowl Slip</button>
     </div>
   </header>
 
@@ -19,6 +19,8 @@
   <nav class="tabs" *ngIf="!loading" [attr.aria-label]="'inventory.ui.35195a733f' | translate">
     <button type="button" [class.active]="activeTab === 'usage'" (click)="activeTab = 'usage'">Live Consume</button>
     <button type="button" [class.active]="activeTab === 'daily'" (click)="activeTab = 'daily'">{{ 'inventory.ui.398069e1ea' | translate }}</button>
+    <button type="button" [class.active]="activeTab === 'staff'" (click)="activeTab = 'staff'">Staff &amp; shifts</button>
+    <button type="button" [class.active]="activeTab === 'automation'" (click)="activeTab = 'automation'">Automation</button>
     <button type="button" [class.active]="activeTab === 'variance'" (click)="activeTab = 'variance'">{{ 'inventory.ui.eb39bbf6cc' | translate }}</button>
     <button type="button" [class.active]="activeTab === 'approvals'" (click)="activeTab = 'approvals'">{{ 'inventory.ui.deb9d03cf0' | translate }}</button>
     <button type="button" [class.active]="activeTab === 'audit'" (click)="activeTab = 'audit'">{{ 'inventory.ui.fa1703dd78' | translate }}</button>
@@ -30,7 +32,7 @@
     <article class="teal"><i class="bi bi-plus-minus" aria-hidden="true"></i><span>{{ 'inventory.ui.eb39bbf6cc' | translate }}</span><strong>{{ quantity(varianceTotal) }}</strong></article>
     <article class="green"><i class="bi bi-exclamation-lg" aria-hidden="true"></i><span>{{ 'inventory.ui.6ac383a960' | translate }}</span><strong>{{ pendingApprovals }}</strong></article>
   </section>
-  <section class="table-card" *ngIf="!loading">
+  <section class="table-card" *ngIf="!loading && activeTab !== 'daily' && activeTab !== 'staff' && activeTab !== 'automation'">
     <header><h2>{{ tableTitle }}</h2><div><select [attr.aria-label]="'inventory.ui.640aa76d00' | translate" [(ngModel)]="workflow"><option value="">{{ 'inventory.ui.203295911c' | translate }}</option><option value="recorded">{{ 'inventory.ui.4e836fdc25' | translate }}</option><option value="pending_approval">{{ 'inventory.ui.25d1b4bbf1' | translate }}</option><option value="rejected">{{ 'inventory.ui.27eeb7a291' | translate }}</option><option value="auto_consumed">{{ 'inventory.ui.ac9041e768' | translate }}</option></select><button type="button" [disabled]="!visibleUsage.length" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button></div></header>
     <div class="table-scroll" *ngIf="visibleUsage.length; else empty"><table><thead><tr><th>{{ 'inventory.ui.eb9a4bc1c0' | translate }}</th><th>Appointment</th><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.7aad070f69' | translate }}</th><th>{{ 'inventory.ui.329cb8b6ba' | translate }}</th><th>{{ 'inventory.ui.a4730a22cf' | translate }}</th><th>Client</th><th>{{ 'inventory.ui.6ac87f3446' | translate }}</th><th>{{ 'inventory.ui.7bb2ee60f7' | translate }}</th><th>{{ 'inventory.ui.eb39bbf6cc' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th *ngIf="activeTab === 'audit'">{{ 'inventory.ui.70440046a3' | translate }}</th><th *ngIf="activeTab === 'approvals' && canReview">{{ 'inventory.ui.c3cd636a58' | translate }}</th></tr></thead>
       <tbody><tr *ngFor="let row of visibleUsage"><td>{{ date(row.createdAt) }}</td><td>{{ appointmentReference(row.appointmentId) }}</td><td><strong>{{ row.itemName }}</strong><small *ngIf="row.itemBrand">{{ row.itemBrand }}</small></td><td>{{ row.source }}</td><td>{{ row.serviceName || '—' }}</td><td>{{ row.staffName || '—' }}</td><td>{{ row.clientName || '—' }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td><td *ngIf="activeTab === 'audit'">{{ row.reviewNote || row.notes || '—' }}</td><td *ngIf="activeTab === 'approvals' && canReview"><div class="row-actions"><button type="button" [disabled]="saving" (click)="review(row, 'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button><button class="danger" type="button" [disabled]="saving" (click)="review(row, 'reject')">{{ 'inventory.ui.2b03b59293' | translate }}</button></div></td></tr></tbody>
@@ -38,6 +40,59 @@
     <ng-template #empty><div class="empty-state"><i class="bi bi-box-seam" aria-hidden="true"></i><strong>No usage recorded</strong></div></ng-template>
     <footer>Showing {{ visibleUsage.length }} usage records</footer>
   </section>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'usage'">
+    <header><h2>Client formula history</h2><span>{{ visibleBowls.length }} bowl slips</span></header>
+    <div class="table-scroll" *ngIf="visibleBowls.length; else noBowls"><table><thead><tr><th>Date</th><th>Client</th><th>Service</th><th>Stylist</th><th>Formula</th><th>Expected</th><th>Actual</th><th>Cost</th><th>Status</th></tr></thead><tbody>
+      <tr *ngFor="let bowl of visibleBowls"><td>{{ date(bowl.createdAt) }}</td><td><strong>{{ bowl.clientName }}</strong></td><td>{{ bowl.serviceName }}</td><td>{{ bowl.staffName }}</td><td><span class="formula-line" *ngFor="let line of bowl.lines"><b>{{ line.componentType }}</b> {{ line.itemName }} · {{ usageProfileLabel(line.usageProfile) }} · {{ quantity(line.actualQuantity, line.unit) }}<small *ngIf="line.wasteReason">{{ wasteReasonLabel(line.wasteReason) }}{{ line.notes ? ' · ' + line.notes : '' }}</small></span></td><td>{{ quantity(bowl.expectedQuantity, 'g') }}</td><td>{{ quantity(bowl.actualQuantity, 'g') }}</td><td>{{ money(bowl.actualCostPaise) }}</td><td><span class="status">{{ statusLabel(bowl.status) }}</span></td></tr>
+    </tbody></table></div>
+    <ng-template #noBowls><div class="empty-state"><strong>No colour formulas yet</strong></div></ng-template>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'daily'">
+    <header><h2>Daily colour variance</h2><span>{{ dailyVariance.length }} products</span></header>
+    <div class="table-scroll" *ngIf="dailyVariance.length; else noDailyVariance"><table><thead><tr><th>Product</th><th>Bowls</th><th>Expected</th><th>Actual</th><th>Variance</th><th>Expected Cost</th><th>Actual Cost</th><th>Cost Variance</th></tr></thead><tbody>
+      <tr *ngFor="let row of dailyVariance"><td><strong>{{ row.itemName }}</strong><small *ngIf="row.itemBrand">{{ row.itemBrand }}</small></td><td>{{ row.bowlCount }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td><strong>{{ money(row.varianceCostPaise) }}</strong></td></tr>
+    </tbody></table></div>
+    <ng-template #noDailyVariance><div class="empty-state"><strong>No colour usage for this date</strong></div></ng-template>
+  </section>
+
+  <section class="table-card" *ngIf="!loading && activeTab === 'staff'">
+    <header><h2>Staff &amp; shift colour control</h2><span>{{ visibleStaffShiftRows.length }} staff</span></header>
+    <div class="table-scroll" *ngIf="visibleStaffShiftRows.length; else noStaffRows"><table><thead><tr><th>Staff</th><th>Shift</th><th>Attendance</th><th>Bowls</th><th>Clients</th><th>Root</th><th>Full colour</th><th>Expected</th><th>Actual</th><th>Variance</th><th>Variance cost</th><th>Excess</th><th>Waste</th><th>Pending</th></tr></thead><tbody>
+      <tr *ngFor="let row of visibleStaffShiftRows"><td><strong>{{ row.staffName }}</strong></td><td>{{ shiftLabel(row) }}</td><td>{{ row.attendanceStatus ? statusLabel(row.attendanceStatus) : '—' }}</td><td>{{ row.bowlCount }}</td><td>{{ row.clientCount }}</td><td>{{ row.rootTouchUpCount }}</td><td>{{ row.fullColourCount }}</td><td>{{ quantity(row.expectedQuantity, row.unit) }}</td><td>{{ quantity(row.actualQuantity, row.unit) }}</td><td>{{ quantity(row.varianceQuantity, row.unit) }}</td><td>{{ money(row.varianceCostPaise) }}</td><td>{{ row.excessLineCount }}</td><td>{{ row.wasteLineCount }}</td><td>{{ row.pendingApprovalCount }}</td></tr>
+    </tbody></table></div>
+    <ng-template #noStaffRows><div class="empty-state"><strong>No staff records for this date</strong></div></ng-template>
+  </section>
+
+  <ng-container *ngIf="!loading && activeTab === 'automation'">
+    <p class="message error" *ngIf="automationError">{{ automationError }}</p>
+    <div class="loading" *ngIf="automationLoading">Loading colour automation…</div>
+    <section class="table-card" *ngIf="!automationLoading">
+      <header><h2>Low-stock forecast</h2><button type="button" [disabled]="saving" (click)="generateLowStockForecast()">Refresh forecast</button></header>
+      <div class="table-scroll" *ngIf="lowStockForecastRows.length; else noForecast"><table><thead><tr><th>Product</th><th>Current</th><th>Reorder level</th><th>Suggested</th><th>Confidence</th><th>Status</th></tr></thead><tbody>
+        <tr *ngFor="let row of lowStockForecastRows"><td><strong>{{ row.productName }}</strong><small>{{ row.sku }}</small></td><td>{{ row.currentStock }}</td><td>{{ row.reorderLevel }}</td><td>{{ row.suggestedQuantity }}</td><td>{{ percent(row.confidenceBps) }}</td><td><span class="status">{{ statusLabel(row.status) }}</span></td></tr>
+      </tbody></table></div>
+      <ng-template #noForecast><div class="empty-state"><strong>No colour low-stock forecast</strong></div></ng-template>
+    </section>
+
+    <section class="table-card" *ngIf="!automationLoading">
+      <header><h2>Cost &amp; margin per colour service</h2><span>{{ serviceMargins.length }} services</span></header>
+      <div class="table-scroll" *ngIf="serviceMargins.length; else noMargins"><table><thead><tr><th>Service</th><th>Bowls</th><th>Revenue</th><th>Expected colour cost</th><th>Actual colour cost</th><th>Formula margin</th><th>Margin %</th></tr></thead><tbody>
+        <tr *ngFor="let row of serviceMargins"><td><strong>{{ row.serviceName }}</strong></td><td>{{ row.bowlCount }}</td><td>{{ row.pricedBowlCount === row.bowlCount ? money(row.revenuePaise) : 'Incomplete' }}</td><td>{{ money(row.expectedCostPaise) }}</td><td>{{ money(row.actualCostPaise) }}</td><td>{{ row.marginPaise == null ? '—' : money(row.marginPaise) }}</td><td>{{ percent(row.marginBps) }}</td></tr>
+      </tbody></table></div>
+      <ng-template #noMargins><div class="empty-state"><strong>No recorded colour margins for this date</strong></div></ng-template>
+    </section>
+
+    <section class="table-card" *ngIf="!automationLoading">
+      <header><h2>AI anomaly suggestions</h2><span>Suggestions only</span></header>
+      <div class="table-scroll" *ngIf="anomalySuggestions.length; else noSuggestions"><table><thead><tr><th>Severity</th><th>Suggestion</th><th>Evidence</th><th>Recommended review</th><th>Confidence</th></tr></thead><tbody>
+        <tr *ngFor="let row of anomalySuggestions"><td><span class="status">{{ statusLabel(row.severity) }}</span></td><td><strong>{{ row.title }}</strong></td><td>{{ row.explanation }}</td><td>{{ row.recommendedAction }}</td><td>{{ percent(row.confidenceBps) }}</td></tr>
+      </tbody></table></div>
+      <ng-template #noSuggestions><div class="empty-state"><strong>No colour anomalies detected</strong></div></ng-template>
+      <footer>No inventory, formula or purchase action is executed automatically</footer>
+    </section>
+  </ng-container>
 </section>
 
 <div class="drawer-backdrop" *ngIf="drawerOpen" (click)="closeRecord()"></div>
@@ -49,10 +104,27 @@
     <label>Client<select [(ngModel)]="draft.clientId" (ngModelChange)="draftClientChanged()"><option value="">No client attribution</option><option *ngFor="let row of clients" [value]="row.id">{{ clientName(row) }}</option></select></label>
     <label>Appointment<select [(ngModel)]="draft.appointmentId" (ngModelChange)="appointmentChanged()"><option value="">No appointment attribution</option><option *ngFor="let row of draftAppointments" [value]="row.id">{{ appointmentLabel(row) }}</option></select></label>
     <label>{{ 'inventory.ui.329cb8b6ba' | translate }}<select [(ngModel)]="draft.serviceId" (ngModelChange)="serviceChanged()"><option value="">{{ 'inventory.ui.c8588f8dfe' | translate }}</option><option *ngFor="let row of availableServices" [value]="row.id">{{ row.name }}</option></select></label>
-    <label>{{ 'inventory.ui.dd3b86d1ef' | translate }}<select required [(ngModel)]="draft.inventoryItemId"><option value="">{{ 'inventory.ui.596d90e58c' | translate }}</option><option *ngFor="let row of availableItems" [value]="row.id">{{ row.name }}{{ row.brand ? ' · ' + row.brand : '' }} · {{ row.stockQuantity }} {{ row.unit }}</option></select></label>
     <label>{{ 'inventory.ui.a4730a22cf' | translate }}<select [(ngModel)]="draft.staffId"><option value="">{{ 'inventory.ui.7f4946a53f' | translate }}</option><option *ngFor="let row of staff" [value]="row.id">{{ staffName(row) }}</option></select></label>
-    <div class="quantity-grid"><label>Recipe expected quantity<input [value]="expectedQuantity || '—'" readonly /></label><label>Actual mixed quantity<input required type="number" min="1" step="1" [(ngModel)]="draft.actualQuantity" /></label></div>
-    <label>Variance / wastage reason<textarea maxlength="500" [(ngModel)]="draft.notes"></textarea></label>
+    <div class="loading" *ngIf="recommendationLoading">Checking client formula history…</div>
+    <div class="approval-rule" *ngIf="formulaRecommendation"><span>Last recorded formula · {{ date(formulaRecommendation.usedAt) }} · {{ formulaRecommendation.lines.length }} lines</span><button type="button" (click)="applyFormulaRecommendation()">Use formula</button></div>
+    <section class="bowl-lines">
+      <header><strong>Bluetooth digital scale</strong><span>{{ scaleReading == null ? '—' : quantity(scaleReading, 'g') }}</span></header>
+      <div class="quantity-grid"><label>Target line<select [(ngModel)]="scaleLineIndex"><option *ngFor="let line of draft.lines; let index = index" [ngValue]="index">Line {{ index + 1 }}</option></select></label><label>Calibration<input type="number" min="0.01" max="10" step="0.01" [(ngModel)]="scaleCalibration" (change)="updateScaleCalibration()" /></label></div>
+      <div class="row-actions"><button type="button" [disabled]="!scaleSupported || scaleConnected" (click)="connectScale()">Connect</button><button type="button" [disabled]="!scaleConnected" (click)="tareScale()">Tare</button><button type="button" [disabled]="!scaleConnected" (click)="disconnectScale()">Disconnect</button></div>
+      <small>{{ scaleSupported ? (scaleStatus || 'Ready') : 'Bluetooth scale is not supported in this browser' }}</small>
+    </section>
+    <section class="bowl-lines">
+      <header><strong>Scale readings</strong><button type="button" [disabled]="draft.lines.length >= 12" (click)="addLine()">Add Shade</button></header>
+      <article class="bowl-line" *ngFor="let line of draft.lines; let index = index">
+        <div class="line-head"><strong>Line {{ index + 1 }}</strong><button class="icon-button" type="button" aria-label="Remove bowl line" [disabled]="draft.lines.length === 1" (click)="removeLine(index)"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
+        <label>Type<select [(ngModel)]="line.componentType"><option value="base">Base</option><option value="fashion">Fashion shade</option><option value="developer">Developer</option><option value="other">Other</option></select></label>
+        <label>Colour / product<select required [(ngModel)]="line.inventoryItemId"><option value="">Select product</option><option *ngFor="let row of availableItemsFor(line.inventoryItemId)" [value]="row.id">{{ row.name }}{{ row.brand ? ' · ' + row.brand : '' }}</option></select><small *ngIf="line.inventoryItemId">{{ itemBalance(line.inventoryItemId) }}</small></label>
+        <div class="quantity-grid"><label>Range (min / target / max)<input [value]="usageRange(line.inventoryItemId)" readonly /></label><label>Scale reading (g)<input required type="number" min="1" step="1" [(ngModel)]="line.actualQuantity" /></label></div>
+        <label>Waste reason<select [(ngModel)]="line.wasteReason"><option value="">No waste</option><option value="long_hair">Long hair</option><option value="thick_hair">Thick hair</option><option value="colour_correction">Colour correction</option><option value="spillage">Spillage</option><option value="overmix">Overmix</option><option value="client_change">Client change</option><option value="tube_residue">Tube residue</option><option value="other">Other</option></select></label>
+        <label>Variance details<textarea maxlength="500" [(ngModel)]="line.notes"></textarea></label>
+      </article>
+    </section>
+    <label>Bowl note<textarea maxlength="500" [(ngModel)]="draft.notes"></textarea></label>
   </div>
-  <footer><button type="button" (click)="closeRecord()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : 'Submit Usage' }}</button></footer>
+  <footer><button type="button" (click)="closeRecord()">{{ 'inventory.ui.77dfd2135f' | translate }}</button><button class="primary" type="button" [disabled]="saving" (click)="save()">{{ saving ? 'Saving…' : 'Save Bowl Slip' }}</button></footer>
 </aside>

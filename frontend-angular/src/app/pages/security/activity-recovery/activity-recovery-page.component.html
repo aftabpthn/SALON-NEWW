@@ -12,7 +12,7 @@
   @if (error) { <div class="message error" role="alert">{{ error }} <button type="button" (click)="reload()">Retry</button></div> }
   <section class="table-card" [attr.aria-busy]="loading">
     @if (loading) { <div class="loading-state"><span></span><span></span><span></span></div> }
-    @else if (!filteredEvents.length) { <div class="empty-state"><i class="bi bi-clock-history"></i><h2>No activity records yet</h2></div> }
+    @else if (!filteredEvents.length) { <div class="empty-state"><i class="bi bi-clock-history"></i><h2>{{ events.length ? 'No matching activity records' : 'No activity records yet' }}</h2></div> }
     @else { <div class="table-wrap"><table>
       <thead><tr><th>Module</th><th>Action</th><th>Record</th><th>Performed by</th><th>Date & Time</th><th>Reason</th><th>Status</th><th class="actions">Actions</th></tr></thead>
       <tbody>@for (event of visibleEvents; track event.id) { <tr>
@@ -27,7 +27,7 @@
   @if (selected) {
     <button type="button" class="drawer-backdrop" aria-label="Close details" (click)="closeDetails()"></button>
     <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="activity-title">
-      <header><div><span class="eyebrow">Audit record</span><h2 id="activity-title">{{ recordName(selected) }}</h2></div><button type="button" class="icon-button" aria-label="Close details" (click)="closeDetails()"><i class="bi bi-x-lg"></i></button></header>
+      <header><div><span class="eyebrow">Audit record</span><h2 id="activity-title">{{ recordName(selected) === '—' ? 'Audit record' : recordName(selected) }}</h2></div><button type="button" class="icon-button" aria-label="Close details" (click)="closeDetails()"><i class="bi bi-x-lg"></i></button></header>
       <div class="drawer-body">
         <dl><div><dt>Module</dt><dd>{{ moduleName(selected) }}</dd></div><div><dt>Action</dt><dd>{{ actionName(selected) | titlecase }}</dd></div><div><dt>Performed by</dt><dd>{{ selected.actorName || selected.identity || 'System' }}</dd></div><div><dt>Date & Time</dt><dd>{{ formatDate(selected.createdAt) }}</dd></div><div><dt>Status</dt><dd>{{ selected.outcome }}</dd></div><div><dt>Reason</dt><dd>{{ reason(selected) }}</dd></div><div><dt>Record ID</dt><dd>{{ recordId(selected) || '—' }}</dd></div><div><dt>IP address</dt><dd>{{ selected.ipAddress || '—' }}</dd></div></dl>
         <section class="timeline"><h3>Audit timeline</h3>@for (event of relatedEvents; track event.id) { <div class="timeline-item"><span></span><div><strong>{{ actionName(event) | titlecase }}</strong><small>{{ formatDate(event.createdAt) }} · {{ event.actorName || 'System' }}</small></div></div> }</section>

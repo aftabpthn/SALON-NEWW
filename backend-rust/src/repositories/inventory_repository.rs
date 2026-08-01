@@ -32,18 +32,26 @@ pub struct InventoryRecord {
     pub sku: String,
     pub name: String,
     pub category: String,
+    pub subcategory: String,
     pub brand: String,
+    pub product_usage: String,
     pub unit: String,
     pub package_unit: String,
     pub units_per_package: i32,
     pub stock_quantity: i32,
     pub reorder_point: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
     pub hsn_code: String,
     pub gst_percent: i32,
     pub barcode: String,
+    pub barcodes: Vec<String>,
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
+    pub center_available: bool,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -137,7 +145,9 @@ pub struct InventoryProduct360Summary {
     pub consumed_quantity: i64,
     pub retail_shelf_quantity: i64,
     pub sealed_backbar_quantity: i64,
+    pub sealed_backbar_balance: i64,
     pub open_container_balance: i64,
+    pub physical_total_quantity: i64,
     pub open_container_unit: Option<String>,
 }
 
@@ -151,8 +161,21 @@ pub struct InventoryLedgerRecord {
     pub quantity_delta: i64,
     pub unit_cost_paise: i64,
     pub value_paise: i64,
-    pub stock_after_quantity: Option<i32>,
+    pub stock_before_quantity: i32,
+    pub stock_after_quantity: i32,
+    pub recorded_stock_after_quantity: Option<i32>,
     pub source: String,
+    pub source_type: String,
+    pub source_id: String,
+    pub actor_user_id: Option<String>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
+    pub service_id: Option<String>,
+    pub staff_id: Option<String>,
+    pub backbar_container_id: Option<String>,
+    pub batch_allocations: Value,
+    pub provenance_complete: bool,
+    pub snapshot_status: String,
     pub created_at: DateTime<Utc>,
 }
 
@@ -204,6 +227,13 @@ pub struct BackbarUsageForReview {
     pub actual_quantity: i32,
     pub actor_user_id: String,
     pub status: String,
+    pub container_id: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct OpenBackbarContainer {
+    pub id: String,
+    pub remaining_quantity: i32,
 }
 
 pub struct CreateInventory<'a> {
@@ -212,18 +242,25 @@ pub struct CreateInventory<'a> {
     pub sku: &'a str,
     pub name: &'a str,
     pub category: &'a str,
+    pub subcategory: &'a str,
     pub brand: &'a str,
+    pub product_usage: &'a str,
     pub unit: &'a str,
     pub package_unit: &'a str,
     pub units_per_package: i32,
     pub stock_quantity: i32,
     pub reorder_point: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
     pub hsn_code: &'a str,
     pub gst_percent: i32,
     pub barcode: &'a str,
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
+    pub center_available: bool,
     pub active: bool,
 }
 
@@ -234,17 +271,24 @@ pub struct UpdateInventory<'a> {
     pub sku: Option<&'a str>,
     pub name: Option<&'a str>,
     pub category: Option<&'a str>,
+    pub subcategory: Option<&'a str>,
     pub brand: Option<&'a str>,
+    pub product_usage: Option<&'a str>,
     pub unit: Option<&'a str>,
     pub package_unit: Option<&'a str>,
     pub units_per_package: Option<i32>,
     pub reorder_point: Option<i32>,
+    pub alert_level: Option<i32>,
+    pub desired_level: Option<i32>,
+    pub order_level: Option<i32>,
+    pub safety_stock_level: Option<i32>,
     pub unit_cost_paise: Option<i64>,
     pub hsn_code: Option<&'a str>,
     pub gst_percent: Option<i32>,
     pub barcode: Option<&'a str>,
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
+    pub center_available: Option<bool>,
     pub active: Option<bool>,
 }
 
@@ -456,7 +500,7 @@ pub async fn list_ledger(
     if has_query {
         let query_param = next_param;
         where_sql.push_str(&format!(
-            " AND (LOWER(item.name) LIKE ${query_param}\n         OR LOWER(item.sku) LIKE ${query_param}\n         OR LOWER(item.category) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.source_id, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.source_label, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.reversal_reason, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.reversal_of_ledger_id, '')) LIKE ${query_param}\n         OR LOWER(ledger.source_type) LIKE ${query_param})\n"
+            " AND (LOWER(item.name) LIKE ${query_param}\n         OR LOWER(item.sku) LIKE ${query_param}\n         OR LOWER(item.category) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.source_id, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(ledger.source_label, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(source_ledger.reversal_reason, '')) LIKE ${query_param}\n         OR LOWER(COALESCE(source_ledger.reversal_of_ledger_id, '')) LIKE ${query_param}\n         OR LOWER(ledger.source_type) LIKE ${query_param})\n"
         ));
         next_param += 1;
     }
@@ -468,10 +512,10 @@ pub async fn list_ledger(
                ledger.unit_cost_paise, ledger.value_paise,
                ledger.stock_before_quantity, ledger.stock_after_quantity,
                ledger.recorded_stock_after_quantity,
-               COALESCE(NULLIF(ledger.reversal_reason, ''), NULLIF(ledger.source_label, ''), ledger.source_id) AS source,
-               CASE WHEN ledger.reversal_of_ledger_id IS NULL THEN ledger.source_type ELSE 'ledger_reversal' END AS source_type,
-               COALESCE(ledger.reversal_of_ledger_id, ledger.source_id) AS source_id,
-               COALESCE(NULLIF(ledger.reversed_by_user_id, ''), ledger.actor_user_id) AS actor_user_id,
+               COALESCE(NULLIF(source_ledger.reversal_reason, ''), NULLIF(ledger.source_label, ''), ledger.source_id) AS source,
+               CASE WHEN source_ledger.reversal_of_ledger_id IS NULL THEN ledger.source_type ELSE 'ledger_reversal' END AS source_type,
+               COALESCE(source_ledger.reversal_of_ledger_id, ledger.source_id) AS source_id,
+               COALESCE(NULLIF(source_ledger.reversed_by_user_id, ''), ledger.actor_user_id) AS actor_user_id,
                ledger.client_id, ledger.appointment_id, ledger.service_id, ledger.staff_id,
                ledger.backbar_container_id, ledger.batch_allocations,
                ledger.provenance_complete, ledger.snapshot_status,
@@ -479,6 +523,8 @@ pub async fn list_ledger(
         FROM inventory_digital_twin_ledger ledger
         JOIN inventory_items item ON item.id = ledger.inventory_item_id
           AND item.tenant_id = ledger.tenant_id AND item.branch_id = ledger.branch_id
+        JOIN inventory_stock_ledger source_ledger ON source_ledger.id = ledger.id
+          AND source_ledger.tenant_id = ledger.tenant_id AND source_ledger.branch_id = ledger.branch_id
         WHERE ledger.tenant_id = $1
           AND ledger.branch_id = $2{where_sql}
         ORDER BY ledger.created_at DESC, ledger.id DESC
@@ -717,15 +763,24 @@ pub async fn product_360_summary(
                 SELECT 1 FROM jsonb_array_elements(service.product_consumption_json) entry
                 WHERE COALESCE(entry->>'itemId', entry->>'productId', entry->>'inventoryItemId')=$3
               )) AS recipe_count,
-          COALESCE((SELECT SUM(ABS(ledger.quantity_delta)::BIGINT)
-            FROM inventory_stock_ledger ledger
-            JOIN pos_sale_lines line ON line.id=ledger.sale_line_id
-             AND line.tenant_id=ledger.tenant_id AND line.branch_id=ledger.branch_id
-            WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
-              AND ledger.inventory_item_id=$3 AND ledger.movement_type='sale'
-              AND line.line_type='service'), 0)::BIGINT AS consumed_quantity,
+          (
+            COALESCE((SELECT SUM(ABS(ledger.quantity_delta)::BIGINT)
+              FROM inventory_stock_ledger ledger
+              LEFT JOIN pos_sale_lines line ON line.id=ledger.sale_line_id
+               AND line.tenant_id=ledger.tenant_id AND line.branch_id=ledger.branch_id
+              WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2
+                AND ledger.inventory_item_id=$3
+                AND ((ledger.movement_type='sale' AND line.line_type='service')
+                  OR (ledger.movement_type='consumption' AND ledger.backbar_container_id IS NULL))), 0)
+            + COALESCE((SELECT SUM(ABS(event.quantity_delta)::BIGINT)
+              FROM inventory_backbar_container_events event
+              JOIN inventory_backbar_containers container ON container.id=event.container_id
+               AND container.tenant_id=event.tenant_id AND container.branch_id=event.branch_id
+              WHERE event.tenant_id=$1 AND event.branch_id=$2
+                AND container.inventory_item_id=$3 AND event.event_type='consumed'), 0)
+          )::BIGINT AS consumed_quantity,
           COALESCE((SELECT CASE WHEN item.dual_use_stock THEN GREATEST(item.stock_quantity-
-              (SELECT COUNT(*)::INTEGER FROM inventory_backbar_containers container
+              (SELECT COALESCE(SUM(container.capacity_quantity),0)::INTEGER FROM inventory_backbar_containers container
                WHERE container.tenant_id=$1 AND container.branch_id=$2
                  AND container.inventory_item_id=$3 AND container.status='sealed'),0)
             ELSE item.stock_quantity END::BIGINT
@@ -734,10 +789,17 @@ pub async fn product_360_summary(
           (SELECT COUNT(*)::BIGINT FROM inventory_backbar_containers container
            WHERE container.tenant_id=$1 AND container.branch_id=$2
              AND container.inventory_item_id=$3 AND container.status='sealed') AS sealed_backbar_quantity,
+          COALESCE((SELECT SUM(container.capacity_quantity)::BIGINT FROM inventory_backbar_containers container
+           WHERE container.tenant_id=$1 AND container.branch_id=$2
+             AND container.inventory_item_id=$3 AND container.status='sealed'),0)::BIGINT AS sealed_backbar_balance,
           COALESCE((SELECT SUM(container.remaining_quantity)::BIGINT
            FROM inventory_backbar_containers container
            WHERE container.tenant_id=$1 AND container.branch_id=$2
              AND container.inventory_item_id=$3 AND container.status='open'),0)::BIGINT AS open_container_balance,
+          COALESCE((SELECT item.stock_quantity::BIGINT+COALESCE((SELECT SUM(container.remaining_quantity)::BIGINT
+           FROM inventory_backbar_containers container WHERE container.tenant_id=$1 AND container.branch_id=$2
+             AND container.inventory_item_id=$3 AND container.status='open'),0)
+           FROM inventory_items item WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.id=$3),0)::BIGINT AS physical_total_quantity,
           (SELECT CASE WHEN COUNT(DISTINCT container.unit)=1 THEN MIN(container.unit)
                   WHEN COUNT(*)=0 THEN NULL ELSE 'mixed' END
            FROM inventory_backbar_containers container
@@ -753,19 +815,24 @@ pub async fn product_360_summary(
 }
 
 pub async fn create(
-    db: &PgPool,
+    tx: &mut Transaction<'_, Postgres>,
     input: CreateInventory<'_>,
 ) -> Result<InventoryRecord, sqlx::Error> {
     sqlx::query_as::<_, InventoryRecord>(
         r#"
         INSERT INTO inventory_items (
-          tenant_id, branch_id, sku, name, category, brand, unit, package_unit, units_per_package,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active
+          tenant_id, branch_id, sku, name, category, subcategory, brand, product_usage,
+          unit, package_unit, units_per_package, stock_quantity, reorder_point, alert_level,
+          desired_level, order_level, safety_stock_level, unit_cost_paise, hsn_code, gst_percent,
+          barcode, batch_tracked, dual_use_stock, center_available, active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
         RETURNING
-          id, tenant_id, branch_id, sku, name, category, brand, unit, package_unit, units_per_package,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
+          id,tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,
+          package_unit,units_per_package,stock_quantity,reorder_point,alert_level,desired_level,
+          order_level,safety_stock_level,unit_cost_paise,hsn_code,gst_percent,barcode,
+          CASE WHEN barcode='' THEN ARRAY[]::TEXT[] ELSE ARRAY[barcode]::TEXT[] END AS barcodes,
+          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -773,20 +840,27 @@ pub async fn create(
     .bind(input.sku)
     .bind(input.name)
     .bind(input.category)
+    .bind(input.subcategory)
     .bind(input.brand)
+    .bind(input.product_usage)
     .bind(input.unit)
     .bind(input.package_unit)
     .bind(input.units_per_package)
     .bind(input.stock_quantity)
     .bind(input.reorder_point)
+    .bind(input.alert_level)
+    .bind(input.desired_level)
+    .bind(input.order_level)
+    .bind(input.safety_stock_level)
     .bind(input.unit_cost_paise)
     .bind(input.hsn_code)
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
+    .bind(input.center_available)
     .bind(input.active)
-    .fetch_one(db)
+    .fetch_one(&mut **tx)
     .await
 }
 
@@ -801,23 +875,35 @@ pub async fn update(
           sku = COALESCE($4, sku),
           name = COALESCE($5, name),
           category = COALESCE($6, category),
-          brand = COALESCE($7, brand),
-          unit = COALESCE($8, unit),
-          package_unit = COALESCE($9, package_unit),
-          units_per_package = COALESCE($10, units_per_package),
-          reorder_point = COALESCE($11, reorder_point),
-          unit_cost_paise = COALESCE($12, unit_cost_paise),
-          hsn_code = COALESCE($13, hsn_code),
-          gst_percent = COALESCE($14, gst_percent),
-          barcode = COALESCE($15, barcode),
-          batch_tracked = COALESCE($16, batch_tracked),
-          dual_use_stock = COALESCE($17, dual_use_stock),
-          active = COALESCE($18, active),
+          subcategory = COALESCE($7, subcategory),
+          brand = COALESCE($8, brand),
+          product_usage = COALESCE($9, product_usage),
+          unit = COALESCE($10, unit),
+          package_unit = COALESCE($11, package_unit),
+          units_per_package = COALESCE($12, units_per_package),
+          reorder_point = COALESCE($13, reorder_point),
+          alert_level = COALESCE($14, alert_level),
+          desired_level = COALESCE($15, desired_level),
+          order_level = COALESCE($16, order_level),
+          safety_stock_level = COALESCE($17, safety_stock_level),
+          unit_cost_paise = COALESCE($18, unit_cost_paise),
+          hsn_code = COALESCE($19, hsn_code),
+          gst_percent = COALESCE($20, gst_percent),
+          barcode = COALESCE($21, barcode),
+          batch_tracked = COALESCE($22, batch_tracked),
+          dual_use_stock = COALESCE($23, dual_use_stock),
+          center_available = COALESCE($24, center_available),
+          active = COALESCE($25, active),
           updated_at = NOW()
         WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
         RETURNING
-          id, tenant_id, branch_id, sku, name, category, brand, unit, package_unit, units_per_package,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
+          id,tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,
+          package_unit,units_per_package,stock_quantity,reorder_point,alert_level,desired_level,
+          order_level,safety_stock_level,unit_cost_paise,hsn_code,gst_percent,barcode,
+          COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
+            FROM inventory_item_barcodes entry WHERE entry.tenant_id=$1 AND entry.branch_id=$2
+              AND entry.inventory_item_id=inventory_items.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
+          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -826,20 +912,104 @@ pub async fn update(
     .bind(input.sku)
     .bind(input.name)
     .bind(input.category)
+    .bind(input.subcategory)
     .bind(input.brand)
+    .bind(input.product_usage)
     .bind(input.unit)
     .bind(input.package_unit)
     .bind(input.units_per_package)
     .bind(input.reorder_point)
+    .bind(input.alert_level)
+    .bind(input.desired_level)
+    .bind(input.order_level)
+    .bind(input.safety_stock_level)
     .bind(input.unit_cost_paise)
     .bind(input.hsn_code)
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
+    .bind(input.center_available)
     .bind(input.active)
     .fetch_optional(&mut **tx)
     .await
+}
+
+pub async fn replace_barcodes(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+    barcodes: &[String],
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM inventory_item_barcodes WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).execute(&mut **tx).await?;
+    for (index, value) in barcodes.iter().enumerate() {
+        sqlx::query("INSERT INTO inventory_item_barcodes(tenant_id,branch_id,inventory_item_id,barcode,is_primary) VALUES($1,$2,$3,$4,$5)")
+            .bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(value).bind(index == 0)
+            .execute(&mut **tx).await?;
+    }
+    Ok(())
+}
+
+pub async fn upsert_product_master_value(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    kind: &str,
+    label: &str,
+    parent_code: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    if label.trim().is_empty() {
+        return Ok(());
+    }
+    let code = label
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() {
+                value
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let code = code.trim_matches('-');
+    if code.is_empty() {
+        return Ok(());
+    }
+    sqlx::query("INSERT INTO inventory_master_values(tenant_id,branch_id,kind,code,label,parent_code,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,branch_id,kind,(LOWER(code))) DO UPDATE SET label=EXCLUDED.label,parent_code=EXCLUDED.parent_code,active=TRUE,updated_at=NOW()")
+        .bind(tenant_id).bind(branch_id).bind(kind).bind(code).bind(label.trim()).bind(parent_code).bind(actor_user_id)
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn master_edit_locked(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT COALESCE((SELECT master_edit_lock FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),FALSE)")
+        .bind(tenant_id).bind(branch_id).fetch_one(&mut **tx).await
+}
+
+pub async fn has_open_product_operations(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(r#"SELECT EXISTS(
+      SELECT 1 FROM purchase_order_lines line JOIN purchase_orders po ON po.id=line.purchase_order_id
+      WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.inventory_item_id=$3
+        AND po.status IN ('draft','pending_approval','approved','partially_received')
+      UNION ALL
+      SELECT 1 FROM stock_count_session_items audit_item JOIN stock_count_sessions audit ON audit.id=audit_item.session_id
+      WHERE audit_item.tenant_id=$1 AND audit_item.branch_id=$2 AND audit_item.inventory_item_id=$3
+        AND audit.status NOT IN ('posted','cancelled','rejected')
+    )"#).bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_one(&mut **tx).await
 }
 
 pub async fn lock_for_adjustment(
@@ -1163,20 +1333,29 @@ pub async fn insert_backbar_usage(
     client_id: Option<&str>,
     appointment_id: Option<&str>,
     unit: &str,
+    min_quantity: i32,
     expected_quantity: i32,
     actual_quantity: i32,
     max_quantity: i32,
+    usage_profile: &str,
+    waste_reason: &str,
     wastage_percent: f64,
     approval_threshold_percent: f64,
     status: &str,
     notes: &str,
     actor_user_id: &str,
     idempotency_key: &str,
+    bowl_id: Option<&str>,
+    bowl_line_no: i32,
+    component_type: &str,
+    container_id: Option<&str>,
+    unit_cost_paise: i64,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO inventory_backbar_usage (id,tenant_id,branch_id,inventory_item_id,service_id,staff_id,client_id,appointment_id,unit,expected_quantity,actual_quantity,max_quantity,wastage_percent,approval_threshold_percent,status,notes,actor_user_id,idempotency_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)")
+    sqlx::query("INSERT INTO inventory_backbar_usage (id,tenant_id,branch_id,inventory_item_id,service_id,staff_id,client_id,appointment_id,unit,min_quantity,expected_quantity,actual_quantity,max_quantity,usage_profile,waste_reason,wastage_percent,approval_threshold_percent,status,notes,actor_user_id,idempotency_key,bowl_id,bowl_line_no,component_type,container_id,unit_cost_paise) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)")
         .bind(id).bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(service_id).bind(staff_id)
-        .bind(client_id).bind(appointment_id).bind(unit).bind(expected_quantity).bind(actual_quantity).bind(max_quantity).bind(wastage_percent)
-        .bind(approval_threshold_percent).bind(status).bind(notes).bind(actor_user_id).bind(idempotency_key)
+        .bind(client_id).bind(appointment_id).bind(unit).bind(min_quantity).bind(expected_quantity).bind(actual_quantity).bind(max_quantity)
+        .bind(usage_profile).bind(waste_reason).bind(wastage_percent).bind(approval_threshold_percent).bind(status).bind(notes).bind(actor_user_id).bind(idempotency_key)
+        .bind(bowl_id).bind(bowl_line_no).bind(component_type).bind(container_id).bind(unit_cost_paise)
         .execute(&mut **tx).await?;
     Ok(())
 }
@@ -1187,8 +1366,45 @@ pub async fn lock_backbar_usage_for_review(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<BackbarUsageForReview>, sqlx::Error> {
-    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,actor_user_id,status FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,actor_user_id,status,container_id FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
+}
+
+pub async fn lock_open_backbar_container(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<Option<OpenBackbarContainer>, sqlx::Error> {
+    sqlx::query_as("SELECT id,remaining_quantity FROM inventory_backbar_containers WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND status='open' FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_optional(&mut **tx).await
+}
+
+pub async fn has_backbar_containers(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inventory_backbar_containers WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND status IN ('sealed','open'))")
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_one(&mut **tx).await
+}
+
+pub async fn consume_open_backbar_container(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    container_id: &str,
+    quantity: i32,
+    actor_user_id: &str,
+    idempotency_key: &str,
+    usage_id: &str,
+) -> Result<i32, sqlx::Error> {
+    let remaining = sqlx::query_scalar::<_, i32>("UPDATE inventory_backbar_containers SET remaining_quantity=remaining_quantity-$4,status=CASE WHEN remaining_quantity-$4=0 THEN 'empty' ELSE status END,closed_by=CASE WHEN remaining_quantity-$4=0 THEN $5 ELSE closed_by END,closed_at=CASE WHEN remaining_quantity-$4=0 THEN NOW() ELSE closed_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='open' AND remaining_quantity >= $4 RETURNING remaining_quantity")
+        .bind(tenant_id).bind(branch_id).bind(container_id).bind(quantity).bind(actor_user_id).fetch_one(&mut **tx).await?;
+    sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,quantity_delta,remaining_after,actor_user_id,idempotency_key,metadata) VALUES($1,$2,$3,'consumed',$4,$5,$6,$7,jsonb_build_object('backbarUsageId',$8))")
+        .bind(tenant_id).bind(branch_id).bind(container_id).bind(-quantity).bind(remaining).bind(actor_user_id).bind(idempotency_key).bind(usage_id).execute(&mut **tx).await?;
+    Ok(remaining)
 }
 
 pub async fn review_backbar_usage(
@@ -1243,6 +1459,251 @@ pub async fn add_backbar_ledger(
     sqlx::query_scalar("INSERT INTO inventory_stock_ledger (tenant_id,branch_id,inventory_item_id,sale_id,sale_line_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,backbar_usage_id) VALUES ($1,$2,$3,NULL,NULL,'consumption',$4,$5,$6,$7) RETURNING id")
         .bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(-quantity).bind(unit_cost_paise)
         .bind(stock_after).bind(usage_id).fetch_one(&mut **tx).await
+}
+
+pub async fn color_bowl_identity_by_key(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    idempotency_key: &str,
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    sqlx::query_as("SELECT id,request_hash FROM inventory_color_bowls WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+        .bind(tenant_id).bind(branch_id).bind(idempotency_key).fetch_optional(&mut **tx).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn insert_color_bowl(
+    tx: &mut Transaction<'_, Postgres>,
+    id: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+    client_id: &str,
+    service_id: &str,
+    staff_id: &str,
+    notes: &str,
+    actor_user_id: &str,
+    idempotency_key: &str,
+    request_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO inventory_color_bowls(id,tenant_id,branch_id,appointment_id,client_id,service_id,staff_id,notes,actor_user_id,idempotency_key,request_hash,service_price_paise) SELECT $1,$2,$3,$4,$5,service.id,$7,$8,$9,$10,$11,service.price_paise FROM services service WHERE service.tenant_id=$2 AND service.branch_id=$3 AND service.id=$6 AND service.active=TRUE")
+        .bind(id).bind(tenant_id).bind(branch_id).bind(appointment_id).bind(client_id).bind(service_id).bind(staff_id).bind(notes).bind(actor_user_id).bind(idempotency_key).bind(request_hash).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn color_bowl_by_id(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+          'id',bowl.id,'appointmentId',bowl.appointment_id,'clientId',bowl.client_id,
+          'clientName',COALESCE(NULLIF(BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),''),
+          'serviceId',bowl.service_id,'serviceName',service.name,'servicePricePaise',bowl.service_price_paise,'staffId',bowl.staff_id,
+          'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),''),
+          'notes',bowl.notes,'createdAt',bowl.created_at,
+          'status',CASE WHEN EXISTS(SELECT 1 FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id AND u.status='pending_approval') THEN 'pending_approval'
+                        WHEN EXISTS(SELECT 1 FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id AND u.status='rejected') THEN 'rejected' ELSE 'recorded' END,
+          'expectedQuantity',COALESCE((SELECT SUM(u.expected_quantity) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'actualQuantity',COALESCE((SELECT SUM(u.actual_quantity) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'expectedCostPaise',COALESCE((SELECT SUM(u.expected_quantity::BIGINT*u.unit_cost_paise) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'actualCostPaise',COALESCE((SELECT SUM(u.actual_quantity::BIGINT*u.unit_cost_paise) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'lines',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'usageId',u.id,'componentType',u.component_type,'inventoryItemId',u.inventory_item_id,
+            'itemName',item.name,'itemBrand',item.brand,'usageProfile',u.usage_profile,
+            'minQuantity',u.min_quantity,'expectedQuantity',u.expected_quantity,'maxQuantity',u.max_quantity,
+            'actualQuantity',u.actual_quantity,'varianceQuantity',u.actual_quantity-u.expected_quantity,
+            'unit',u.unit,'unitCostPaise',u.unit_cost_paise,'containerId',u.container_id,
+            'status',u.status,'wasteReason',u.waste_reason,'notes',u.notes) ORDER BY u.bowl_line_no)
+            FROM inventory_backbar_usage u JOIN inventory_items item ON item.id=u.inventory_item_id
+              AND item.tenant_id=u.tenant_id AND item.branch_id=u.branch_id WHERE u.bowl_id=bowl.id),'[]'::JSONB)
+        ) FROM inventory_color_bowls bowl
+        JOIN clients client ON client.id=bowl.client_id AND client.tenant_id=bowl.tenant_id AND client.branch_id=bowl.branch_id
+        JOIN services service ON service.id=bowl.service_id AND service.tenant_id=bowl.tenant_id AND service.branch_id=bowl.branch_id
+        JOIN staff ON staff.id=bowl.staff_id AND staff.tenant_id=bowl.tenant_id AND staff.branch_id=bowl.branch_id
+        WHERE bowl.tenant_id=$1 AND bowl.branch_id=$2 AND bowl.id=$3"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
+}
+
+pub async fn list_color_bowls(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: Option<NaiveDate>,
+    client_id: &str,
+    appointment_id: &str,
+    limit: i64,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+          'id',bowl.id,'appointmentId',bowl.appointment_id,'clientId',bowl.client_id,
+          'clientName',COALESCE(NULLIF(BTRIM(CONCAT_WS(' ',client.first_name,client.last_name)),''),''),
+          'serviceId',bowl.service_id,'serviceName',service.name,'servicePricePaise',bowl.service_price_paise,'staffId',bowl.staff_id,
+          'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),''),
+          'notes',bowl.notes,'createdAt',bowl.created_at,
+          'status',CASE WHEN EXISTS(SELECT 1 FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id AND u.status='pending_approval') THEN 'pending_approval'
+                        WHEN EXISTS(SELECT 1 FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id AND u.status='rejected') THEN 'rejected' ELSE 'recorded' END,
+          'expectedQuantity',COALESCE((SELECT SUM(u.expected_quantity) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'actualQuantity',COALESCE((SELECT SUM(u.actual_quantity) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'expectedCostPaise',COALESCE((SELECT SUM(u.expected_quantity::BIGINT*u.unit_cost_paise) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'actualCostPaise',COALESCE((SELECT SUM(u.actual_quantity::BIGINT*u.unit_cost_paise) FROM inventory_backbar_usage u WHERE u.bowl_id=bowl.id),0),
+          'lines',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'usageId',u.id,'componentType',u.component_type,'inventoryItemId',u.inventory_item_id,
+            'itemName',item.name,'itemBrand',item.brand,'usageProfile',u.usage_profile,
+            'minQuantity',u.min_quantity,'expectedQuantity',u.expected_quantity,'maxQuantity',u.max_quantity,
+            'actualQuantity',u.actual_quantity,'varianceQuantity',u.actual_quantity-u.expected_quantity,
+            'unit',u.unit,'unitCostPaise',u.unit_cost_paise,'containerId',u.container_id,
+            'status',u.status,'wasteReason',u.waste_reason,'notes',u.notes) ORDER BY u.bowl_line_no)
+            FROM inventory_backbar_usage u JOIN inventory_items item ON item.id=u.inventory_item_id
+              AND item.tenant_id=u.tenant_id AND item.branch_id=u.branch_id WHERE u.bowl_id=bowl.id),'[]'::JSONB)
+        ) FROM inventory_color_bowls bowl
+        JOIN clients client ON client.id=bowl.client_id AND client.tenant_id=bowl.tenant_id AND client.branch_id=bowl.branch_id
+        JOIN services service ON service.id=bowl.service_id AND service.tenant_id=bowl.tenant_id AND service.branch_id=bowl.branch_id
+        JOIN staff ON staff.id=bowl.staff_id AND staff.tenant_id=bowl.tenant_id AND staff.branch_id=bowl.branch_id
+        WHERE bowl.tenant_id=$1 AND bowl.branch_id=$2
+          AND ($3::DATE IS NULL OR (bowl.created_at AT TIME ZONE 'Asia/Kolkata')::DATE=$3)
+          AND ($4='' OR bowl.client_id=$4) AND ($5='' OR bowl.appointment_id=$5)
+        ORDER BY bowl.created_at DESC,bowl.id DESC LIMIT $6"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(business_date).bind(client_id).bind(appointment_id).bind(limit).fetch_all(db).await
+}
+
+pub async fn client_formula_recommendation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    service_id: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar::<_, Value>(
+        r#"WITH latest AS (
+          SELECT bowl.id,bowl.created_at
+          FROM inventory_color_bowls bowl
+          WHERE bowl.tenant_id=$1 AND bowl.branch_id=$2 AND bowl.client_id=$3 AND bowl.service_id=$4
+            AND EXISTS (SELECT 1 FROM inventory_backbar_usage usage WHERE usage.bowl_id=bowl.id AND usage.status='recorded')
+            AND NOT EXISTS (SELECT 1 FROM inventory_backbar_usage usage WHERE usage.bowl_id=bowl.id AND usage.status<>'recorded')
+          ORDER BY bowl.created_at DESC,bowl.id DESC LIMIT 1
+        ) SELECT jsonb_build_object(
+          'sourceBowlId',latest.id,'usedAt',latest.created_at,
+          'lines',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'componentType',usage.component_type,'inventoryItemId',usage.inventory_item_id,
+            'itemName',item.name,'itemBrand',item.brand,'suggestedQuantity',usage.actual_quantity,
+            'unit',usage.unit,'usageProfile',usage.usage_profile) ORDER BY usage.bowl_line_no)
+            FROM inventory_backbar_usage usage
+            JOIN inventory_items item ON item.id=usage.inventory_item_id AND item.tenant_id=usage.tenant_id AND item.branch_id=usage.branch_id AND item.active=TRUE
+            WHERE usage.bowl_id=latest.id AND usage.status='recorded'),'[]'::JSONB)
+        ) FROM latest"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(service_id).fetch_optional(db).await
+}
+
+pub async fn color_service_margins(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH bowl_cost AS (
+          SELECT bowl.id,bowl.service_id,bowl.service_price_paise,
+            SUM(usage.expected_quantity::BIGINT*usage.unit_cost_paise)::BIGINT expected_cost_paise,
+            SUM(usage.actual_quantity::BIGINT*usage.unit_cost_paise)::BIGINT actual_cost_paise
+          FROM inventory_color_bowls bowl
+          JOIN inventory_backbar_usage usage ON usage.bowl_id=bowl.id AND usage.tenant_id=bowl.tenant_id AND usage.branch_id=bowl.branch_id
+          WHERE bowl.tenant_id=$1 AND bowl.branch_id=$2
+            AND (bowl.created_at AT TIME ZONE 'Asia/Kolkata')::DATE=$3
+            AND NOT EXISTS (SELECT 1 FROM inventory_backbar_usage blocked WHERE blocked.bowl_id=bowl.id AND blocked.status<>'recorded')
+          GROUP BY bowl.id,bowl.service_id,bowl.service_price_paise
+        ) SELECT jsonb_build_object(
+          'date',$3::DATE,'serviceId',cost.service_id,'serviceName',service.name,
+          'bowlCount',COUNT(*)::BIGINT,'pricedBowlCount',COUNT(cost.service_price_paise)::BIGINT,
+          'revenuePaise',COALESCE(SUM(cost.service_price_paise),0)::BIGINT,
+          'expectedCostPaise',COALESCE(SUM(cost.expected_cost_paise),0)::BIGINT,
+          'actualCostPaise',COALESCE(SUM(cost.actual_cost_paise),0)::BIGINT,
+          'marginPaise',CASE WHEN COUNT(cost.service_price_paise)=COUNT(*) THEN SUM(cost.service_price_paise)-SUM(cost.actual_cost_paise) ELSE NULL END,
+          'marginBps',CASE WHEN COUNT(cost.service_price_paise)=COUNT(*) AND SUM(cost.service_price_paise)>0
+            THEN ((SUM(cost.service_price_paise)-SUM(cost.actual_cost_paise))*10000/SUM(cost.service_price_paise))::BIGINT ELSE NULL END)
+        FROM bowl_cost cost
+        JOIN services service ON service.id=cost.service_id AND service.tenant_id=$1 AND service.branch_id=$2
+        GROUP BY cost.service_id,service.name
+        ORDER BY SUM(cost.actual_cost_paise) DESC,service.name"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(business_date).fetch_all(db).await
+}
+
+pub async fn daily_color_variance(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+          'date',$3::DATE,'inventoryItemId',usage.inventory_item_id,'itemName',item.name,'itemBrand',item.brand,
+          'unit',usage.unit,'expectedQuantity',SUM(usage.expected_quantity)::BIGINT,
+          'actualQuantity',SUM(usage.actual_quantity)::BIGINT,
+          'varianceQuantity',SUM(usage.actual_quantity-usage.expected_quantity)::BIGINT,
+          'expectedCostPaise',SUM(usage.expected_quantity::BIGINT*usage.unit_cost_paise)::BIGINT,
+          'actualCostPaise',SUM(usage.actual_quantity::BIGINT*usage.unit_cost_paise)::BIGINT,
+          'varianceCostPaise',SUM((usage.actual_quantity-usage.expected_quantity)::BIGINT*usage.unit_cost_paise)::BIGINT,
+          'bowlCount',COUNT(DISTINCT usage.bowl_id)::BIGINT)
+        FROM inventory_backbar_usage usage
+        JOIN inventory_items item ON item.id=usage.inventory_item_id AND item.tenant_id=usage.tenant_id AND item.branch_id=usage.branch_id
+        WHERE usage.tenant_id=$1 AND usage.branch_id=$2 AND usage.bowl_id IS NOT NULL
+          AND (usage.created_at AT TIME ZONE 'Asia/Kolkata')::DATE=$3
+        GROUP BY usage.inventory_item_id,item.name,item.brand,usage.unit
+        ORDER BY ABS(SUM((usage.actual_quantity-usage.expected_quantity)::BIGINT*usage.unit_cost_paise)) DESC,item.name"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(business_date).fetch_all(db).await
+}
+
+pub async fn color_staff_shift_dashboard(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+          'date',$3::DATE,'staffId',staff.id,
+          'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),staff.id),
+          'shiftStatus',COALESCE(schedule.status,'not_set'),
+          'shift1Start',CASE WHEN schedule.shift1_start IS NULL THEN NULL ELSE TO_CHAR(schedule.shift1_start,'HH24:MI') END,
+          'shift1End',CASE WHEN schedule.shift1_end IS NULL THEN NULL ELSE TO_CHAR(schedule.shift1_end,'HH24:MI') END,
+          'shift2Start',CASE WHEN schedule.shift2_start IS NULL THEN NULL ELSE TO_CHAR(schedule.shift2_start,'HH24:MI') END,
+          'shift2End',CASE WHEN schedule.shift2_end IS NULL THEN NULL ELSE TO_CHAR(schedule.shift2_end,'HH24:MI') END,
+          'attendanceStatus',COALESCE(attendance.status,''),'clockInAt',attendance.clock_in_at,'clockOutAt',attendance.clock_out_at,
+          'unit',COALESCE(metrics.unit,''),'bowlCount',COALESCE(metrics.bowl_count,0),
+          'clientCount',COALESCE(metrics.client_count,0),'rootTouchUpCount',COALESCE(metrics.root_touch_up_count,0),
+          'fullColourCount',COALESCE(metrics.full_colour_count,0),'expectedQuantity',COALESCE(metrics.expected_quantity,0),
+          'actualQuantity',COALESCE(metrics.actual_quantity,0),'varianceQuantity',COALESCE(metrics.variance_quantity,0),
+          'varianceCostPaise',COALESCE(metrics.variance_cost_paise,0),'excessLineCount',COALESCE(metrics.excess_line_count,0),
+          'wasteLineCount',COALESCE(metrics.waste_line_count,0),'pendingApprovalCount',COALESCE(metrics.pending_approval_count,0))
+        FROM staff
+        LEFT JOIN staff_schedules schedule ON schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.staff_id=staff.id AND schedule.schedule_date=$3
+        LEFT JOIN staff_attendance_records attendance ON attendance.tenant_id=$1 AND attendance.branch_id=$2 AND attendance.staff_id=staff.id AND attendance.business_date=$3
+        LEFT JOIN LATERAL (
+          SELECT CASE WHEN COUNT(DISTINCT usage.unit)=1 THEN MIN(usage.unit) ELSE 'mixed' END unit,
+            COUNT(DISTINCT usage.bowl_id)::BIGINT bowl_count,COUNT(DISTINCT usage.client_id)::BIGINT client_count,
+            COUNT(DISTINCT usage.bowl_id) FILTER (WHERE usage.usage_profile='root_touch_up')::BIGINT root_touch_up_count,
+            COUNT(DISTINCT usage.bowl_id) FILTER (WHERE usage.usage_profile='full_colour')::BIGINT full_colour_count,
+            COALESCE(SUM(usage.expected_quantity),0)::BIGINT expected_quantity,
+            COALESCE(SUM(usage.actual_quantity),0)::BIGINT actual_quantity,
+            COALESCE(SUM(usage.actual_quantity-usage.expected_quantity),0)::BIGINT variance_quantity,
+            COALESCE(SUM((usage.actual_quantity-usage.expected_quantity)::BIGINT*usage.unit_cost_paise),0)::BIGINT variance_cost_paise,
+            COUNT(*) FILTER (WHERE usage.max_quantity>0 AND usage.actual_quantity>usage.max_quantity)::BIGINT excess_line_count,
+            COUNT(*) FILTER (WHERE usage.waste_reason<>'')::BIGINT waste_line_count,
+            COUNT(*) FILTER (WHERE usage.status='pending_approval')::BIGINT pending_approval_count
+          FROM inventory_backbar_usage usage WHERE usage.tenant_id=$1 AND usage.branch_id=$2 AND usage.staff_id=staff.id
+            AND usage.bowl_id IS NOT NULL AND (usage.created_at AT TIME ZONE 'Asia/Kolkata')::DATE=$3
+        ) metrics ON TRUE
+        WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+        ORDER BY COALESCE(metrics.variance_cost_paise,0) DESC,staff.first_name,staff.last_name,staff.id"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(business_date).fetch_all(db).await
 }
 
 pub async fn list_batches(
@@ -1556,9 +2017,15 @@ fn select_sql(where_clause: &str) -> String {
     format!(
         r#"
         SELECT
-          id, tenant_id, branch_id, sku, name, category, brand, unit, package_unit, units_per_package,
-          stock_quantity, reorder_point, unit_cost_paise, hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, active, created_at, updated_at
-        FROM inventory_items
+          item.id,item.tenant_id,item.branch_id,item.sku,item.name,item.category,item.subcategory,item.brand,
+          item.product_usage,item.unit,item.package_unit,item.units_per_package,item.stock_quantity,
+          item.reorder_point,item.alert_level,item.desired_level,item.order_level,item.safety_stock_level,
+          item.unit_cost_paise,item.hsn_code,item.gst_percent,item.barcode,
+          COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
+            FROM inventory_item_barcodes entry WHERE entry.tenant_id=item.tenant_id
+              AND entry.branch_id=item.branch_id AND entry.inventory_item_id=item.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
+          item.batch_tracked,item.dual_use_stock,item.center_available,item.active,item.created_at,item.updated_at
+        FROM inventory_items item
         {where_clause}
         "#,
     )

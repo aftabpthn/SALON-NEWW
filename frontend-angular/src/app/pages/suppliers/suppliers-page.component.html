@@ -45,7 +45,7 @@
   </section>
 
   <section class="vendor-payments" aria-label="Vendor payment summary">
-    <h2>Vendor Payments</h2>
+    <header class="section-heading"><h2>Vendor Payments</h2><button type="button" class="pending-total" [class.active]="paymentSummary.pendingBillsPaise > 0" (click)="setQuickFilter('pendingBill')">Pending bills {{ ordersLoaded ? money(paymentSummary.pendingBillsPaise) : '—' }}</button></header>
     <div class="metrics finance-metrics">
       <article class="paid"><i class="bi bi-check-circle" aria-hidden="true"></i><div><span>Paid</span><strong>{{ ordersLoaded ? money(paymentSummary.paidPaise) : '—' }}</strong></div></article>
       <article class="unpaid"><i class="bi bi-clock" aria-hidden="true"></i><div><span>Unpaid</span><strong>{{ ordersLoaded ? money(paymentSummary.unpaidPaise) : '—' }}</strong></div></article>
@@ -60,6 +60,7 @@
         <div class="quick-filters">
           <button type="button" [class.active]="quickFilter === 'gstin'" (click)="setQuickFilter('gstin')">{{ 'inventory.ui.30919853ec' | translate }}</button>
           <button type="button" [class.active]="quickFilter === 'openPo'" (click)="setQuickFilter('openPo')">{{ 'inventory.ui.429a117678' | translate }}</button>
+          <button type="button" [class.active]="quickFilter === 'pendingBill'" (click)="setQuickFilter('pendingBill')">Pending bills</button>
         </div>
       </header>
       @if (loading) {
@@ -77,6 +78,7 @@
                 <th scope="col">{{ 'inventory.ui.184c052113' | translate }}</th>
                 <th scope="col" class="numeric">{{ 'inventory.ui.489f487724' | translate }}</th>
                 <th scope="col" class="numeric">{{ 'inventory.ui.14eeee8d40' | translate }}</th>
+                <th scope="col" class="numeric">Pending bills</th>
                 <th scope="col" class="numeric">Paid</th>
                 <th scope="col" class="numeric">Unpaid</th>
                 <th scope="col">Payment status</th>
@@ -89,22 +91,23 @@
             <tbody>
               @for (supplier of filteredSuppliers; track supplier) {
                 <tr>
-                  <td><strong>{{ supplier.name }}</strong><small>{{ supplier.code }}</small></td>
+                  <td><button type="button" class="supplier-name-link" (click)="openPayments(supplier)">{{ supplier.name }}</button><small>{{ supplier.code }}</small></td>
                   <td><strong>{{ supplier.contactName || '—' }}</strong><small>{{ supplier.phone || supplier.email || '—' }} · {{ supplier.gstin || 'GSTIN missing' }}</small></td>
                   <td class="numeric"><span class="score">{{ score(supplier) }}%</span></td>
                   <td class="numeric">{{ ordersLoaded ? money(metricsFor(supplier.id).spendPaise) : '—' }}</td>
+                  <td class="numeric"><button type="button" class="amount-link pending-link" (click)="openPayments(supplier)">{{ ordersLoaded ? money(paymentMetricsFor(supplier.id).pendingBillsPaise) : '—' }}</button></td>
                   <td class="numeric"><button type="button" class="amount-link" (click)="openPayments(supplier)">{{ ordersLoaded ? money(paymentMetricsFor(supplier.id).paidPaise) : '—' }}</button></td>
                   <td class="numeric"><button type="button" class="amount-link unpaid-link" (click)="openPayments(supplier)">{{ ordersLoaded ? money(paymentMetricsFor(supplier.id).unpaidPaise) : '—' }}</button></td>
                   <td><button type="button" class="payment-status" [attr.data-status]="paymentStatus(supplier.id)" (click)="openPayments(supplier)">{{ ordersLoaded ? paymentStatus(supplier.id) : '—' }}</button></td>
                   <td class="numeric">{{ openOrdersFor(supplier.id) }}</td>
                   <td><span class="compliance" [class.risk]="score(supplier) < 75">{{ compliance(supplier) }}</span></td>
                   <td><span class="status" [class.inactive]="!supplier.active">{{ supplier.active ? 'Active' : 'Inactive' }}</span></td>
-                  <td class="row-actions"><button type="button" class="payment-action" (click)="openPayments(supplier)">{{ paymentMetricsFor(supplier.id).unpaidPaise > 0 ? 'Pay now' : 'View payments' }} <i class="bi bi-arrow-right" aria-hidden="true"></i></button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
+                  <td class="row-actions"><button type="button" class="payment-action" (click)="openPayments(supplier)">View ledger <i class="bi bi-arrow-right" aria-hidden="true"></i></button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.7f86540a2b' | translate" (click)="openEdit(supplier)"><i class="bi bi-pencil" aria-hidden="true"></i></button></td>
                 </tr>
               }
               @if (!filteredSuppliers.length) {
                 <tr>
-                  <td class="empty-state" colspan="11">{{ 'inventory.ui.e619c5b961' | translate }}</td>
+                  <td class="empty-state" colspan="12">{{ 'inventory.ui.e619c5b961' | translate }}</td>
                 </tr>
               }
             </tbody>

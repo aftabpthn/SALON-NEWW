@@ -893,12 +893,19 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         }
         if (((path_starts_with(path, "/inventory/backbar-usage")
             || path_starts_with(path, "/inventory/backbar-overrides")
+            || path_starts_with(path, "/inventory/floor-closings")
             || path_starts_with(path, "/inventory/negative-stock-requests")
             || path_starts_with(path, "/inventory/exception-recommendations")
             || path_starts_with(path, "/inventory/autonomous-operations/actions"))
             && path.ends_with("/review"))
             || (path_starts_with(path, "/inventory/stock-audits")
                 && (path.ends_with("/approve") || path.ends_with("/reject"))))
+            && !is_read_method(method)
+        {
+            return Some(access(OWNER_ROLES, &["inventory.approve"]));
+        }
+        if path_starts_with(path, "/inventory/transfers/")
+            && (path.ends_with("/approve") || path.ends_with("/reject"))
             && !is_read_method(method)
         {
             return Some(access(OWNER_ROLES, &["inventory.approve"]));

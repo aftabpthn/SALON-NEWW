@@ -871,12 +871,17 @@ pub async fn publish_central_services(
 
     published += sqlx::query(
         r#"INSERT INTO inventory_items(
-             tenant_id,branch_id,sku,name,category,unit,stock_quantity,reorder_point,
-             unit_cost_paise,hsn_code,gst_percent,barcode,batch_tracked,active,central_master_item_id
+             tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,package_unit,
+             units_per_package,stock_quantity,reorder_point,alert_level,desired_level,order_level,
+             safety_stock_level,unit_cost_paise,hsn_code,gst_percent,barcode,batch_tracked,
+             dual_use_stock,center_available,active,central_master_item_id
            )
            SELECT $1,COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT),master.sku,master.name,
-                  master.category,master.unit,0,0,0,master.hsn_code,master.gst_percent,
-                  master.barcode,master.batch_tracked,master.active,master.id
+                  master.category,master.subcategory,master.brand,master.product_usage,master.unit,
+                  master.package_unit,master.units_per_package,0,master.reorder_point,master.alert_level,
+                  master.desired_level,master.order_level,master.safety_stock_level,0,master.hsn_code,
+                  master.gst_percent,master.barcode,master.batch_tracked,master.dual_use_stock,
+                  master.center_available,master.active,master.id
              FROM inventory_items master
              JOIN tenants tenant ON COALESCE(NULLIF(tenant.scope_id,''),tenant.id::TEXT)=$1
              JOIN branches branch ON branch.tenant_id=tenant.id AND branch.active=TRUE
@@ -888,11 +893,23 @@ pub async fn publish_central_services(
              sku=CASE WHEN 'sku'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.sku ELSE EXCLUDED.sku END,
              name=CASE WHEN 'name'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.name ELSE EXCLUDED.name END,
              category=CASE WHEN 'category'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.category ELSE EXCLUDED.category END,
+             subcategory=CASE WHEN 'subcategory'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.subcategory ELSE EXCLUDED.subcategory END,
+             brand=CASE WHEN 'brand'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.brand ELSE EXCLUDED.brand END,
+             product_usage=CASE WHEN 'productUsage'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.product_usage ELSE EXCLUDED.product_usage END,
              unit=CASE WHEN 'unit'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.unit ELSE EXCLUDED.unit END,
+             package_unit=CASE WHEN 'packageUnit'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.package_unit ELSE EXCLUDED.package_unit END,
+             units_per_package=CASE WHEN 'unitsPerPackage'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.units_per_package ELSE EXCLUDED.units_per_package END,
+             reorder_point=CASE WHEN 'reorderPoint'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.reorder_point ELSE EXCLUDED.reorder_point END,
+             alert_level=CASE WHEN 'alertLevel'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.alert_level ELSE EXCLUDED.alert_level END,
+             desired_level=CASE WHEN 'desiredLevel'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.desired_level ELSE EXCLUDED.desired_level END,
+             order_level=CASE WHEN 'orderLevel'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.order_level ELSE EXCLUDED.order_level END,
+             safety_stock_level=CASE WHEN 'safetyStockLevel'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.safety_stock_level ELSE EXCLUDED.safety_stock_level END,
              hsn_code=CASE WHEN 'hsnCode'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.hsn_code ELSE EXCLUDED.hsn_code END,
              gst_percent=CASE WHEN 'gstPercent'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.gst_percent ELSE EXCLUDED.gst_percent END,
              barcode=CASE WHEN 'barcode'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.barcode ELSE EXCLUDED.barcode END,
              batch_tracked=CASE WHEN 'batchTracked'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.batch_tracked ELSE EXCLUDED.batch_tracked END,
+             dual_use_stock=CASE WHEN 'productUsage'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.dual_use_stock ELSE EXCLUDED.dual_use_stock END,
+             center_available=CASE WHEN 'centerAvailable'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.center_available ELSE EXCLUDED.center_available END,
              active=CASE WHEN 'active'=ANY(inventory_items.franchise_override_fields) THEN inventory_items.active ELSE EXCLUDED.active END,
              updated_at=NOW()"#,
     )
@@ -901,6 +918,30 @@ pub async fn publish_central_services(
     .execute(&mut **tx)
     .await?
     .rows_affected();
+
+    sqlx::query(
+        r#"DELETE FROM inventory_item_barcodes barcode
+             USING inventory_items target
+            WHERE barcode.tenant_id=$1 AND barcode.branch_id=target.branch_id
+              AND barcode.inventory_item_id=target.id AND target.tenant_id=$1
+              AND target.branch_id<>$2 AND target.central_master_item_id IS NOT NULL
+              AND NOT ('barcode'=ANY(target.franchise_override_fields))"#,
+    )
+    .bind(tenant_id)
+    .bind(central_branch_id)
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO inventory_item_barcodes(tenant_id,branch_id,inventory_item_id,barcode,is_primary,active)
+           SELECT target.tenant_id,target.branch_id,target.id,barcode.barcode,barcode.is_primary,barcode.active
+             FROM inventory_items target
+             JOIN inventory_item_barcodes barcode ON barcode.tenant_id=target.tenant_id
+              AND barcode.branch_id=$2 AND barcode.inventory_item_id=target.central_master_item_id
+            WHERE target.tenant_id=$1 AND target.branch_id<>$2
+              AND target.central_master_item_id IS NOT NULL
+              AND NOT ('barcode'=ANY(target.franchise_override_fields))
+           ON CONFLICT(tenant_id,branch_id,barcode) DO NOTHING"#,
+    ).bind(tenant_id).bind(central_branch_id).execute(&mut **tx).await?;
 
     Ok(published)
 }
@@ -940,11 +981,22 @@ pub async fn central_sync_gap_snapshot(
                  OR (NOT ('sku'=ANY(linked.franchise_override_fields)) AND linked.sku<>master.sku)
                  OR (NOT ('name'=ANY(linked.franchise_override_fields)) AND linked.name<>master.name)
                  OR (NOT ('category'=ANY(linked.franchise_override_fields)) AND linked.category<>master.category)
+                 OR (NOT ('subcategory'=ANY(linked.franchise_override_fields)) AND linked.subcategory<>master.subcategory)
+                 OR (NOT ('brand'=ANY(linked.franchise_override_fields)) AND linked.brand<>master.brand)
+                 OR (NOT ('productUsage'=ANY(linked.franchise_override_fields)) AND linked.product_usage<>master.product_usage)
                  OR (NOT ('unit'=ANY(linked.franchise_override_fields)) AND linked.unit<>master.unit)
+                 OR (NOT ('packageUnit'=ANY(linked.franchise_override_fields)) AND linked.package_unit<>master.package_unit)
+                 OR (NOT ('unitsPerPackage'=ANY(linked.franchise_override_fields)) AND linked.units_per_package<>master.units_per_package)
+                 OR (NOT ('reorderPoint'=ANY(linked.franchise_override_fields)) AND linked.reorder_point<>master.reorder_point)
+                 OR (NOT ('alertLevel'=ANY(linked.franchise_override_fields)) AND linked.alert_level<>master.alert_level)
+                 OR (NOT ('desiredLevel'=ANY(linked.franchise_override_fields)) AND linked.desired_level<>master.desired_level)
+                 OR (NOT ('orderLevel'=ANY(linked.franchise_override_fields)) AND linked.order_level<>master.order_level)
+                 OR (NOT ('safetyStockLevel'=ANY(linked.franchise_override_fields)) AND linked.safety_stock_level<>master.safety_stock_level)
                  OR (NOT ('hsnCode'=ANY(linked.franchise_override_fields)) AND linked.hsn_code<>master.hsn_code)
                  OR (NOT ('gstPercent'=ANY(linked.franchise_override_fields)) AND linked.gst_percent<>master.gst_percent)
                  OR (NOT ('barcode'=ANY(linked.franchise_override_fields)) AND linked.barcode<>master.barcode)
                  OR (NOT ('batchTracked'=ANY(linked.franchise_override_fields)) AND linked.batch_tracked<>master.batch_tracked)
+                 OR (NOT ('centerAvailable'=ANY(linked.franchise_override_fields)) AND linked.center_available<>master.center_available)
                  OR (NOT ('active'=ANY(linked.franchise_override_fields)) AND linked.active<>master.active))) AS product_gap"#,
     )
     .bind(tenant_id)

@@ -7,10 +7,13 @@ import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { AuthService } from '../../../core/services/auth.service';
+import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'operations';
+type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'master-data' | 'operations';
 type NegativeStockRequest = { id:string; productName:string; requestedStockQuantity:number; reason:string; status:string; requestedBy:string; requestedAt:string };
-type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required'; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; countValueVarianceThresholdPaise?: number; reorderHistoryDays: number; reorderCoverageDays: number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string> };
+type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning'; autoCheckoutRetailSales:boolean; autoCheckoutServiceConsumption:boolean; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; countValueVarianceThresholdPaise?: number; reorderHistoryDays: number; reorderCoverageDays: number; partialDeliveryPolicy: 'allow' | 'block'; financialLockDate: string; editLockDays: number; masterEditLock: boolean; excessReceivingPolicy:'block'|'permission_required'; priceDifferencePrompt:boolean; priceDifferenceThresholdBps:number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string> };
+type MasterValue = { id:string; kind:'category'|'subcategory'|'brand'|'adjustment_reason'|'action_label'; code:string; label:string; parentCode:string; active:boolean };
+type InventoryMasterData = { values:MasterValue[]; units:Array<{ code:string; label:string; dimension:string; active:boolean }> };
 type OperationsHealth = {
   queue: { queued:number; processing:number; retryScheduled:number; terminalFailed:number; oldestPendingAt?:string; lastSentAt?:string; lastFailure?:string };
   invariants: { ledgerStockMismatch:number; negativeStock:number; ledgerSnapshotMissing:number; ledgerSnapshotMismatch:number; provenanceIncomplete:number; batchEvidenceMissing:number; trustedLedgerRows:number; reconstructedLedgerRows:number };
@@ -38,7 +41,7 @@ type AdvancedControls = {
 
 @Component({
     selector: 'page-inventory-advanced-controls',
-    imports: [FormsModule, RouterLink, TranslatePipe],
+    imports: [FormsModule, RouterLink, TranslatePipe, DatePickerComponent],
     templateUrl: './advanced-controls-page.component.html',
     styleUrls: ['./advanced-controls-page.component.css']
 })
@@ -55,6 +58,7 @@ export class AdvancedControlsPageComponent implements OnInit {
     { id: 'expiry', label: 'Expiry' },
     { id: 'dead-stock', label: 'Dead Stock' },
     { id: 'policy', label: 'Policy' },
+    { id: 'master-data', label: 'Master Data' },
     { id: 'operations', label: 'Operations' },
   ];
   activeTab: Tab = 'exceptions';
@@ -63,7 +67,9 @@ export class AdvancedControlsPageComponent implements OnInit {
   loading = true;
   error = '';
   controls: AdvancedControls = this.emptyControls();
-  policy: InventoryPolicy = { negativeStockRule: 'block', valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, countValueVarianceThresholdPaise: 10_000, reorderHistoryDays: 60, reorderCoverageDays: 30, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' } };
+  policy: InventoryPolicy = { negativeStockRule: 'block', autoCheckoutRetailSales:true, autoCheckoutServiceConsumption:true, valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, countValueVarianceThresholdPaise: 10_000, reorderHistoryDays: 60, reorderCoverageDays: 30, partialDeliveryPolicy:'allow', financialLockDate:'', editLockDays:90, masterEditLock:false, excessReceivingPolicy:'permission_required', priceDifferencePrompt:true, priceDifferenceThresholdBps:0, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' } };
+  masterData: InventoryMasterData = { values:[], units:[] };
+  masterDraft = { kind:'category' as MasterValue['kind'], code:'', label:'', parentCode:'', active:true };
   countValueVarianceThresholdRupees: number | null = 100;
   supportsCountValueVarianceThreshold = false;
   transferBaseTransportRupees: number | null = null;
@@ -122,6 +128,7 @@ export class AdvancedControlsPageComponent implements OnInit {
   async selectTab(tab: Tab) {
     this.activeTab = tab;
     if (tab === 'policy' || tab === 'operations') await this.loadSupportingData();
+    if (tab === 'master-data') await this.loadMasterData();
   }
 
   async onBranchScopeChange() {
@@ -135,7 +142,7 @@ export class AdvancedControlsPageComponent implements OnInit {
       firstValueFrom(this.api.get<ApiEnvelope<OperationsHealth>>('/inventory/operations-health')),
       firstValueFrom(this.api.get<ApiEnvelope<AutonomousOperations>>('/inventory/autonomous-operations')),
     ]);
-    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = policy.value.data; this.supportsCountValueVarianceThreshold = Number.isSafeInteger(this.policy.countValueVarianceThresholdPaise); this.syncTransferCostInputs(); }
+    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = { ...policy.value.data, financialLockDate:policy.value.data.financialLockDate || '' }; this.supportsCountValueVarianceThreshold = Number.isSafeInteger(this.policy.countValueVarianceThresholdPaise); this.syncTransferCostInputs(); }
     if (negativeRequests.status === 'fulfilled' && negativeRequests.value.data) this.negativeStockRequests = negativeRequests.value.data;
     if (operations.status === 'fulfilled' && operations.value.data) this.operations = operations.value.data;
     if (autonomous.status === 'fulfilled' && autonomous.value.data) {
@@ -155,6 +162,7 @@ export class AdvancedControlsPageComponent implements OnInit {
     try {
       const response = await firstValueFrom(this.api.put<ApiEnvelope<InventoryPolicy>>('/inventory/policy', {
         ...this.policy,
+        financialLockDate: this.policy.financialLockDate || null,
         ...(this.supportsCountValueVarianceThreshold ? { countValueVarianceThresholdPaise: this.toPaise(this.countValueVarianceThresholdRupees) ?? 0 } : {}),
         transferBaseTransportCostPaise: this.toPaise(this.transferBaseTransportRupees),
         transferCostPerKmPaise: this.toPaise(this.transferCostPerKmRupees),
@@ -164,6 +172,27 @@ export class AdvancedControlsPageComponent implements OnInit {
       if (!response.data) throw new Error('Policy response was empty');
       this.policy = response.data; this.syncTransferCostInputs(); this.notice = this.language.text('inventory.message.b65d768d7a'); await this.reload();
     } catch (error: any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Inventory policy could not be saved'; }
+    finally { this.savingPolicy = false; }
+  }
+
+  setPriceDifferenceThreshold(value: number | string) {
+    this.policy.priceDifferenceThresholdBps = Math.round(Number(value || 0) * 100);
+  }
+
+  async loadMasterData() {
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<InventoryMasterData>>('/inventory/master-data'));
+      this.masterData = response.data ?? { values:[], units:[] };
+    } catch (error:any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Inventory master data could not be loaded'; }
+  }
+  editMasterValue(row:MasterValue) { this.masterDraft = { kind:row.kind, code:row.code, label:row.label, parentCode:row.parentCode, active:row.active }; }
+  async saveMasterValue() {
+    if (!this.masterDraft.code.trim() || !this.masterDraft.label.trim()) return;
+    this.savingPolicy = true; this.error = ''; this.notice = '';
+    try {
+      await firstValueFrom(this.api.post('/inventory/master-data/values', { ...this.masterDraft, code:this.masterDraft.code.trim().toLowerCase(), label:this.titleCase(this.masterDraft.label) }));
+      await this.loadMasterData(); this.notice = 'Inventory master saved';
+    } catch (error:any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Inventory master could not be saved'; }
     finally { this.savingPolicy = false; }
   }
 

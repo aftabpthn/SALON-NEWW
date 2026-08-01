@@ -417,8 +417,8 @@ export class OutgoingFundsPageComponent implements OnInit {
       this.error.set('Enter a valid supplier payment amount');
       return;
     }
-    if (this.supplierPaymentMode === 'payable' && (!payable || amountPaise > payable.balancePaise)) {
-      this.error.set('Payment cannot exceed the selected unpaid balance');
+    if (this.supplierPaymentMode === 'payable' && !payable) {
+      this.error.set('Select an unpaid supplier bill');
       return;
     }
     this.busy.set(true);

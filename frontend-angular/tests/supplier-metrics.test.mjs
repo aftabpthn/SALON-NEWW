@@ -17,4 +17,5 @@ test('supplier payment status distinguishes payable and credit states', () => {
   assert.equal(supplierPaymentStatus({ paidPaise: 0, unpaidPaise: 300, extraPaidPaise: 0 }), 'Unpaid');
   assert.equal(supplierPaymentStatus({ paidPaise: 500, unpaidPaise: 0, extraPaidPaise: 100 }), 'Credit');
   assert.equal(supplierPaymentStatus({ paidPaise: 500, unpaidPaise: 0, extraPaidPaise: 0 }), 'Paid');
+  assert.equal(supplierPaymentStatus({ paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0, pendingBillsPaise: 1_000 }), 'Pending bill');
 });

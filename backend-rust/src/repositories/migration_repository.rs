@@ -3172,6 +3172,103 @@ pub async fn approve_opening_payable_controls(
     Ok(true)
 }
 
+pub async fn confirm_opening_payable_branch(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    actor: &str,
+    confirmed: bool,
+    note: &str,
+) -> Result<bool, sqlx::Error> {
+    let preview = opening_payable_preview(db, tenant, branch, id).await?;
+    if preview.get("status").and_then(Value::as_str) != Some("ready") {
+        return Ok(false);
+    }
+    let mut tx = db.begin().await?;
+    let job = sqlx::query_as::<_, (String, String, String, String, Value)>(
+        "SELECT entity,status,approval_status,source_hash,analysis_json FROM integration_import_jobs WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((entity, status, approval_status, source_hash, analysis)) = job else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let data_hash: String = sqlx::query_scalar(
+        "SELECT ENCODE(DIGEST(COALESCE(STRING_AGG(source_payload::TEXT,'|' ORDER BY source_sheet,source_row_number),''),'sha256'),'hex') FROM integration_import_row_results WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let finance_approved_at = analysis
+        .pointer("/openingPayableControls/approvedAt")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if entity != MigrationEntity::OpeningPayables.as_str()
+        || status != "validated"
+        || approval_status != "pending"
+        || finance_approved_at.is_empty()
+        || analysis
+            .pointer("/openingPayableControls/financeApproved")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || analysis
+            .pointer("/openingPayableControls/sourceHash")
+            .and_then(Value::as_str)
+            != Some(source_hash.as_str())
+        || analysis
+            .pointer("/openingPayableControls/dataHash")
+            .and_then(Value::as_str)
+            != Some(data_hash.as_str())
+    {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query(
+        r#"UPDATE integration_import_jobs
+              SET analysis_json=COALESCE(analysis_json,'{}'::JSONB)||JSONB_BUILD_OBJECT(
+                'openingPayableBranchConfirmation',JSONB_BUILD_OBJECT(
+                  'confirmed',$4,'approvedBy',$5,'approvedAt',NOW(),'sourceHash',$6,
+                  'dataHash',$7,'financeApprovedAt',$8,'note',$9)),updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .bind(confirmed)
+    .bind(actor)
+    .bind(&source_hash)
+    .bind(&data_hash)
+    .bind(finance_approved_at)
+    .bind(note)
+    .execute(&mut *tx)
+    .await?;
+    insert_audit(
+        &mut tx,
+        tenant,
+        branch,
+        Some(id),
+        None,
+        if confirmed {
+            "migration.opening_payable.branch_confirmed"
+        } else {
+            "migration.opening_payable.branch_rejected"
+        },
+        "success",
+        actor,
+        json!({"confirmed":confirmed,"sourceHash":source_hash,"dataHash":data_hash,"financeApprovedAt":finance_approved_at,"note":note}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
 pub async fn decide_approval(
     db: &PgPool,
     tenant: &str,
@@ -3263,6 +3360,24 @@ pub async fn decide_approval(
                     .pointer("/openingPayableControls/supplierAdvanceAccount")
                     .and_then(Value::as_str)
                     == Some("SUPPLIER_ADVANCE_ASSET")
+                && analysis
+                    .pointer("/openingPayableBranchConfirmation/confirmed")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                && analysis
+                    .pointer("/openingPayableBranchConfirmation/sourceHash")
+                    .and_then(Value::as_str)
+                    == Some(source_hash.as_str())
+                && analysis
+                    .pointer("/openingPayableBranchConfirmation/dataHash")
+                    .and_then(Value::as_str)
+                    == Some(current_data_hash.as_str())
+                && analysis
+                    .pointer("/openingPayableBranchConfirmation/financeApprovedAt")
+                    .and_then(Value::as_str)
+                    == analysis
+                        .pointer("/openingPayableControls/approvedAt")
+                        .and_then(Value::as_str)
         } else {
             true
         };
@@ -3553,6 +3668,9 @@ async fn opening_payable_preview(
                  'financeApproved',COALESCE((analysis_json->'openingPayableControls'->>'financeApproved')::BOOLEAN,FALSE),
                  'financeApprovedBy',analysis_json->'openingPayableControls'->>'approvedBy',
                  'financeApprovedAt',analysis_json->'openingPayableControls'->>'approvedAt',
+                 'branchConfirmed',COALESCE((analysis_json->'openingPayableBranchConfirmation'->>'confirmed')::BOOLEAN,FALSE),
+                 'branchConfirmedBy',analysis_json->'openingPayableBranchConfirmation'->>'approvedBy',
+                 'branchConfirmedAt',analysis_json->'openingPayableBranchConfirmation'->>'approvedAt',
                  'ownerApproved',approval_status='approved','ownerApprovedBy',approval_decided_by,
                  'openingBalanceAccount',analysis_json->'openingPayableControls'->>'openingBalanceAccount',
                  'payableAccount',analysis_json->'openingPayableControls'->>'payableAccount',
@@ -4146,7 +4264,7 @@ pub async fn proof_pack(
            ) summary"#,
     ).bind(tenant).bind(branch).bind(id).fetch_one(db).await?;
     let approvals: Value = sqlx::query_scalar(
-        "SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('eventType',event_type,'outcome',outcome,'actorUserId',actor_user_id,'details',details_json,'createdAt',created_at) ORDER BY created_at),'[]'::JSONB) FROM integration_import_audit_events WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND event_type IN ('migration.governance.yellow_approved','migration.opening_payable.finance_approved','migration.governance.approved','migration.governance.rejected')",
+        "SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('eventType',event_type,'outcome',outcome,'actorUserId',actor_user_id,'details',details_json,'createdAt',created_at) ORDER BY created_at),'[]'::JSONB) FROM integration_import_audit_events WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3 AND event_type IN ('migration.governance.yellow_approved','migration.opening_payable.finance_approved','migration.opening_payable.branch_confirmed','migration.opening_payable.branch_rejected','migration.governance.approved','migration.governance.rejected')",
     ).bind(tenant).bind(branch).bind(id).fetch_one(db).await?;
     let mut pack = json!({"schemaVersion":"1.2","generatedAt":Utc::now(),"governance":governance,"approvalHistory":approvals,"transformationSummary":transformations,"rowResults":row_results,"auditEvents":audit,"batches":batches,"chunks":chunks,"signatureProfile":{"required":true,"algorithm":"HMAC-SHA256","keyManagement":"environment-secret-or-external-KMS-injection"}});
     let payload_sha256 = format!("{:x}", Sha256::digest(pack.to_string().as_bytes()));
@@ -6294,7 +6412,8 @@ async fn apply_extended_row(
                        tenant_id,branch_id,import_job_id,source_file_id,cutover_id,source_checksum,
                        source_outstanding_total_paise,opening_balance_account,currency,
                        payable_account,supplier_advance_account,finance_approved_by,
-                       finance_approved_at,approved_by,owner_approved_at
+                       finance_approved_at,branch_confirmed_by,branch_confirmed_at,
+                       approved_by,owner_approved_at
                      )
                      SELECT job.tenant_id,job.branch_id,job.id,job.source_file_id,
                             job.analysis_json->'postingContract'->>'cutoverId',job.source_hash,$4,$5,$6,
@@ -6302,6 +6421,8 @@ async fn apply_extended_row(
                             job.analysis_json->'openingPayableControls'->>'supplierAdvanceAccount',
                             job.analysis_json->'openingPayableControls'->>'approvedBy',
                             (job.analysis_json->'openingPayableControls'->>'approvedAt')::TIMESTAMPTZ,
+                            job.analysis_json->'openingPayableBranchConfirmation'->>'approvedBy',
+                            (job.analysis_json->'openingPayableBranchConfirmation'->>'approvedAt')::TIMESTAMPTZ,
                             job.approval_decided_by,job.approval_decided_at
                        FROM integration_import_jobs job
                        JOIN integration_migration_cutovers cutover

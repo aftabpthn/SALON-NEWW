@@ -1192,6 +1192,37 @@ pub async fn approve_opening_payable_controls(
     Ok(())
 }
 
+pub async fn confirm_opening_payable_branch(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    actor: &str,
+    request: MigrationApprovalRequest,
+) -> Result<(), AppError> {
+    let note = request.note.trim();
+    if note.chars().count() > 500 {
+        return Err(AppError::validation("confirmation note is too long"));
+    }
+    if !migration_repository::confirm_opening_payable_branch(
+        db,
+        tenant,
+        branch,
+        id,
+        actor,
+        request.approved,
+        note,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to record Branch Manager confirmation"))?
+    {
+        return Err(AppError::conflict(
+            "Branch Manager confirmation requires a current Finance-approved opening payable preview",
+        ));
+    }
+    Ok(())
+}
+
 pub async fn governance_report(
     db: &PgPool,
     tenant: &str,

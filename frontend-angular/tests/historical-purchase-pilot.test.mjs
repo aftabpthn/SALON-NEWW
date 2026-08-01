@@ -14,6 +14,7 @@ test('historical pilot reuses evidence drafts and cannot post live effects', () 
   const template = read('../src/app/pages/inventory/purchase-bill-drafts/purchase-bill-drafts-page.component.html');
 
   assert.match(service, /historical pilot requires 20 to 50 evidence documents/);
+  assert.match(service, /excluded or rejected evidence cannot be selected for the pilot/);
   assert.match(service, /workflow_mode == "historical_pilot"/);
   assert.match(service, /historical pilot review cannot post a GRN, stock, accounting, GST, or payable entry/);
   assert.match(service, /"stockEffectPaise":0/);

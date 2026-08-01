@@ -527,9 +527,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   get calendarColumns() {
     const staffCount = Math.max(1, this.calendarColumnsData.length);
-    const timeWidth = this.activeStaffGridMode === 'Compact Grid' ? 72 : 84;
     const staffWidth = this.activeStaffGridMode === 'Compact Grid' ? 'minmax(150px, 1fr)' : 'minmax(220px, 1fr)';
-    return `${timeWidth}px repeat(${staffCount}, ${staffWidth})`;
+    return `var(--time-width) repeat(${staffCount}, ${staffWidth})`;
   }
 
   get calendarColumnsData(): CalendarColumn[] {

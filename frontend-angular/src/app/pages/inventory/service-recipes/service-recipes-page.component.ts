@@ -22,8 +22,9 @@ type RecipeLine = {
   wastePercent?: number;
   ownerApprovalPercent?: number;
   hitLimit?: number;
+  usageProfile?: 'root_touch_up' | 'full_colour' | 'custom';
 };
-type RecipeDraftLine = { productId: string; productName: string; unit: string; minQty: number | null; standardQty: number | null; maxQty: number | null; wastePercent: number | null; ownerApprovalPercent: number | null; hitLimit: number | null };
+type RecipeDraftLine = { productId: string; productName: string; unit: string; usageProfile: 'root_touch_up' | 'full_colour' | 'custom'; minQty: number | null; standardQty: number | null; maxQty: number | null; wastePercent: number | null; ownerApprovalPercent: number | null; hitLimit: number | null };
 type Service = { id: string; name: string; category: string; pricePaise: number; active: boolean; productConsumption: RecipeLine[] };
 type Item = { id: string; name: string; sku: string; unit: string; unitCostPaise: number; active: boolean };
 type Usage = { id: string; inventoryItemId: string; itemName: string; serviceId?: string; serviceName: string; staffName: string; expectedQuantity: number; actualQuantity: number; varianceQuantity: number; approvalThresholdPercent: number; status: string; unit: string; createdAt: string };
@@ -137,6 +138,7 @@ export class ServiceRecipesPageComponent implements OnInit {
       const item = this.items.find((row) => row.id === productId);
       return {
         productId, productName: String(line.productName ?? item?.name ?? ''), unit: String(line.unit ?? item?.unit ?? 'pcs'),
+        usageProfile: line.usageProfile ?? 'custom',
         minQty: this.savedNumber(line.minQty), standardQty: this.savedNumber(line.standardQty ?? line.quantity ?? line.qty),
         maxQty: this.savedNumber(line.maxQty), wastePercent: this.savedNumber(line.wastePercent),
         ownerApprovalPercent: this.savedNumber(line.ownerApprovalPercent), hitLimit: this.savedNumber(line.hitLimit),
@@ -146,7 +148,7 @@ export class ServiceRecipesPageComponent implements OnInit {
     void this.loadRecipeVersions(service.id);
     if (clear) this.clearFeedback();
   }
-  addLine() { if (this.selectedServiceId) this.lines.push({ productId: '', productName: '', unit: '', minQty: null, standardQty: null, maxQty: null, wastePercent: null, ownerApprovalPercent: null, hitLimit: null }); }
+  addLine() { if (this.selectedServiceId) this.lines.push({ productId: '', productName: '', unit: '', usageProfile: 'custom', minQty: null, standardQty: null, maxQty: null, wastePercent: null, ownerApprovalPercent: null, hitLimit: null }); }
   removeLine(index: number) { this.lines.splice(index, 1); }
   selectItem(line: RecipeDraftLine) {
     const item = this.items.find((row) => row.id === line.productId);
@@ -182,10 +184,12 @@ export class ServiceRecipesPageComponent implements OnInit {
     if (!service) { this.error = this.language.text('inventory.message.c950ccc9e2'); return; }
     const productIds = this.lines.map((line) => line.productId);
     if (this.lines.some((line) => !line.productId || !Number.isInteger(Number(line.standardQty)) || Number(line.standardQty) <= 0)) { this.error = this.language.text('inventory.message.4ac5f19264'); return; }
+    if (this.lines.some((line) => this.number(line.minQty) > Number(line.standardQty) || (this.number(line.maxQty) > 0 && Number(line.standardQty) > this.number(line.maxQty)))) { this.error = 'Usage range must follow minimum ≤ target ≤ maximum'; return; }
     if (new Set(productIds).size !== productIds.length) { this.error = this.language.text('inventory.message.387a7a34b0'); return; }
     if (!this.lines.length && this.originalLineCount && !confirm(this.language.text('inventory.message.34da7a31a7'))) return;
     const payload = this.lines.map((line) => ({
       productId: line.productId, productName: line.productName, unit: line.unit,
+      usageProfile: line.usageProfile,
       minQty: this.number(line.minQty), standardQty: this.number(line.standardQty), maxQty: this.number(line.maxQty),
       wastePercent: this.number(line.wastePercent), ownerApprovalPercent: this.number(line.ownerApprovalPercent), hitLimit: Math.trunc(this.number(line.hitLimit)),
     }));

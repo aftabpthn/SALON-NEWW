@@ -20,6 +20,23 @@ struct TermsRequest {
     minimum_order_quantity: i32,
     pack_size: i32,
     safety_stock_days: i32,
+    #[serde(default)]
+    vendor_part_number: String,
+    #[serde(default = "default_purchase_unit")]
+    purchase_unit: String,
+    #[serde(default = "default_conversion_quantity")]
+    conversion_quantity: i32,
+    #[serde(default = "default_true")]
+    center_available: bool,
+}
+fn default_purchase_unit() -> String {
+    "pack".to_owned()
+}
+fn default_conversion_quantity() -> i32 {
+    1
+}
+fn default_true() -> bool {
+    true
 }
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -93,6 +110,10 @@ async fn save_terms(
         payload.minimum_order_quantity,
         payload.pack_size,
         payload.safety_stock_days,
+        &payload.vendor_part_number,
+        &payload.purchase_unit,
+        payload.conversion_quantity,
+        payload.center_available,
     )
     .await?;
     Ok(Json(ApiResponse::ok(())))

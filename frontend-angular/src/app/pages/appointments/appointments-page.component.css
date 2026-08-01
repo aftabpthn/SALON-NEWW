@@ -781,7 +781,7 @@ button.active {
 }
 
 .calendar-grid {
-  --time-width: 84px;
+  --time-width: 68px;
   --staff-width: minmax(220px, 1fr);
   --calendar-slot-height: 48px;
   display: grid;
@@ -829,6 +829,7 @@ button.active {
 }
 
 .compact-grid-mode {
+  --time-width: 64px;
   --calendar-slot-height: 38px;
 }
 
@@ -1019,7 +1020,7 @@ button.active {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 0 10px 0 0;
+  padding: 0 6px 0 0;
   border-bottom: 1px solid var(--as-soft-line);
   color: var(--as-muted);
   font-size: 12px;

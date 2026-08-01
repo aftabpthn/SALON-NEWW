@@ -2,7 +2,7 @@ use crate::state::AppState;
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::inventory_repository::{self, InventoryRecord},
-    routes::context::tenant_branch,
+    routes::context::{current_business_date, tenant_branch},
     services::{
         auth_service::AuthClaims,
         inventory_adjustment_service::{self, InventoryUpdateInput},
@@ -76,8 +76,56 @@ pub struct BackbarUsageRequest {
     pub client_id: Option<String>,
     pub appointment_id: Option<String>,
     pub actual_quantity: i32,
+    pub waste_reason: Option<String>,
     pub notes: Option<String>,
     pub idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ColorBowlLineRequest {
+    pub component_type: String,
+    pub inventory_item_id: String,
+    pub actual_quantity: i32,
+    #[serde(default)]
+    pub waste_reason: String,
+    #[serde(default)]
+    pub notes: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ColorBowlRequest {
+    pub appointment_id: String,
+    pub client_id: String,
+    pub service_id: String,
+    pub staff_id: String,
+    #[serde(default)]
+    pub notes: String,
+    pub idempotency_key: String,
+    pub lines: Vec<ColorBowlLineRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorBowlQuery {
+    pub date: Option<chrono::NaiveDate>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorVarianceQuery {
+    pub date: Option<chrono::NaiveDate>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormulaRecommendationQuery {
+    pub client_id: String,
+    pub service_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,18 +185,26 @@ pub struct InventoryWriteRequest {
     pub sku: Option<String>,
     pub name: Option<String>,
     pub category: Option<String>,
+    pub subcategory: Option<String>,
     pub brand: Option<String>,
+    pub product_usage: Option<String>,
     pub unit: Option<String>,
     pub package_unit: Option<String>,
     pub units_per_package: Option<i32>,
     pub stock_quantity: Option<i32>,
     pub reorder_point: Option<i32>,
+    pub alert_level: Option<i32>,
+    pub desired_level: Option<i32>,
+    pub order_level: Option<i32>,
+    pub safety_stock_level: Option<i32>,
     pub unit_cost_paise: Option<i64>,
     pub hsn_code: Option<String>,
     pub gst_percent: Option<i32>,
     pub barcode: Option<String>,
+    pub barcodes: Option<Vec<String>>,
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
+    pub center_available: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<String>,
     pub idempotency_key: Option<String>,
@@ -183,18 +239,26 @@ pub struct InventoryResponse {
     pub sku: String,
     pub name: String,
     pub category: String,
+    pub subcategory: String,
     pub brand: String,
+    pub product_usage: String,
     pub unit: String,
     pub package_unit: String,
     pub units_per_package: i32,
     pub stock_quantity: i32,
     pub reorder_point: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
     pub hsn_code: String,
     pub gst_percent: i32,
     pub barcode: String,
+    pub barcodes: Vec<String>,
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
+    pub center_available: bool,
     pub active: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -213,7 +277,9 @@ pub struct Product360Response {
     pub consumed_quantity: i64,
     pub retail_shelf_quantity: i64,
     pub sealed_backbar_quantity: i64,
+    pub sealed_backbar_balance: i64,
     pub open_container_balance: i64,
+    pub physical_total_quantity: i64,
     pub open_container_unit: Option<String>,
     pub kit_components: Vec<inventory_repository::InventoryKitComponentRecord>,
     pub branch_stocks: serde_json::Value,
@@ -272,6 +338,26 @@ pub fn router() -> Router<AppState> {
         .route(
             "/inventory/backbar-usage/:id/review",
             axum::routing::patch(review_backbar_usage),
+        )
+        .route(
+            "/inventory/color-bowls",
+            axum::routing::get(list_color_bowls).post(record_color_bowl),
+        )
+        .route(
+            "/inventory/color-bowls/daily-variance",
+            axum::routing::get(daily_color_variance),
+        )
+        .route(
+            "/inventory/color-bowls/formula-recommendation",
+            axum::routing::get(formula_recommendation),
+        )
+        .route(
+            "/inventory/color-bowls/service-margins",
+            axum::routing::get(color_service_margins),
+        )
+        .route(
+            "/inventory/color-bowls/staff-shift-dashboard",
+            axum::routing::get(color_staff_shift_dashboard),
         )
         .route(
             "/inventory/service-recipes/:id/versions",
@@ -397,6 +483,7 @@ async fn record_backbar_usage(
             client_id: payload.client_id.as_deref(),
             appointment_id: payload.appointment_id.as_deref(),
             actual_quantity: payload.actual_quantity,
+            waste_reason: payload.waste_reason.as_deref().unwrap_or_default(),
             notes: payload.notes.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
             idempotency_key: &payload.idempotency_key,
@@ -437,6 +524,134 @@ async fn review_backbar_usage(
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_color_bowls(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ColorBowlQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = inventory_repository::list_color_bowls(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.date,
+        query.client_id.as_deref().unwrap_or_default(),
+        query.appointment_id.as_deref().unwrap_or_default(),
+        query.limit.unwrap_or(100).clamp(1, 500),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to list colour bowls"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn record_color_bowl(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
+    Json(payload): Json<ColorBowlRequest>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = inventory_adjustment_service::record_color_bowl(
+        &state,
+        inventory_adjustment_service::ColorBowlInput {
+            tenant_id: &tenant_id,
+            branch_id: &branch_id,
+            appointment_id: &payload.appointment_id,
+            client_id: &payload.client_id,
+            service_id: &payload.service_id,
+            staff_id: &payload.staff_id,
+            notes: &payload.notes,
+            actor_user_id: &claims.sub,
+            idempotency_key: &payload.idempotency_key,
+            lines: payload
+                .lines
+                .into_iter()
+                .map(|line| inventory_adjustment_service::ColorBowlLineInput {
+                    component_type: line.component_type,
+                    inventory_item_id: line.inventory_item_id,
+                    actual_quantity: line.actual_quantity,
+                    waste_reason: line.waste_reason,
+                    notes: line.notes,
+                })
+                .collect(),
+        },
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn daily_color_variance(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ColorVarianceQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = inventory_repository::daily_color_variance(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.date.unwrap_or_else(current_business_date),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load daily colour variance"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn formula_recommendation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<FormulaRecommendationQuery>,
+) -> ApiResult<Option<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if query.client_id.trim().is_empty() || query.service_id.trim().is_empty() {
+        return Err(AppError::validation("clientId and serviceId are required"));
+    }
+    let row = inventory_repository::client_formula_recommendation(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.client_id.trim(),
+        query.service_id.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load client formula recommendation"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn color_service_margins(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ColorVarianceQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = inventory_repository::color_service_margins(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.date.unwrap_or_else(current_business_date),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load colour service margins"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn color_staff_shift_dashboard(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ColorVarianceQuery>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = inventory_repository::color_staff_shift_dashboard(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.date.unwrap_or_else(current_business_date),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load colour staff dashboard"))?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn advanced_controls(
@@ -845,7 +1060,9 @@ async fn product_360(
         consumed_quantity: summary.consumed_quantity,
         retail_shelf_quantity: summary.retail_shelf_quantity,
         sealed_backbar_quantity: summary.sealed_backbar_quantity,
+        sealed_backbar_balance: summary.sealed_backbar_balance,
         open_container_balance: summary.open_container_balance,
+        physical_total_quantity: summary.physical_total_quantity,
         open_container_unit: summary.open_container_unit,
         kit_components,
         branch_stocks: extended["branchStocks"].clone(),
@@ -871,53 +1088,132 @@ async fn service_recipe_versions(
 
 async fn create_inventory(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<InventoryWriteRequest>,
 ) -> ApiResult<InventoryResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let name = required_text(payload.name, "name is required")?;
+    let product_usage =
+        inventory_product_usage(payload.product_usage.as_deref().unwrap_or_else(|| {
+            if payload.dual_use_stock.unwrap_or(false) {
+                "dual_use"
+            } else {
+                "retail"
+            }
+        }))?;
     let unit = inventory_unit(payload.unit.as_deref().unwrap_or("pcs"))?;
     let package_unit = inventory_package_unit(payload.package_unit.as_deref().unwrap_or("pcs"))?;
     let units_per_package = positive_i32(payload.units_per_package, "unitsPerPackage")?;
     let hsn_code = tax_code(payload.hsn_code.as_deref(), "hsnCode")?;
-    let barcode = barcode(payload.barcode.as_deref())?;
+    let barcodes = inventory_barcodes(payload.barcode.as_deref(), payload.barcodes.as_deref())?;
+    let barcode = barcodes.first().cloned().unwrap_or_default();
     let stock_quantity = non_negative_i32(payload.stock_quantity, "stockQuantity")?;
+    let reorder_point = non_negative_i32(payload.reorder_point, "reorderPoint")?;
     if payload.batch_tracked.unwrap_or(false) && stock_quantity > 0 {
         return Err(AppError::validation(
             "batch-tracked products must start at zero stock and be received through a GRN",
         ));
     }
-    let row = inventory_repository::create(
-        &state.db,
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start inventory master transaction"))?;
+    if inventory_repository::master_edit_locked(&mut tx, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to read inventory edit lock"))?
+    {
+        return Err(AppError::conflict(
+            "inventory master editing is locked by policy",
+        ));
+    }
+    let mut row = inventory_repository::create(
+        &mut tx,
         inventory_repository::CreateInventory {
             tenant_id: &tenant_id,
             branch_id: &branch_id,
             sku: payload.sku.as_deref().unwrap_or_default(),
             name: &name,
             category: payload.category.as_deref().unwrap_or_default(),
+            subcategory: payload.subcategory.as_deref().unwrap_or_default(),
             brand: payload.brand.as_deref().unwrap_or_default(),
+            product_usage: &product_usage,
             unit: &unit,
             package_unit: &package_unit,
             units_per_package,
             stock_quantity,
-            reorder_point: non_negative_i32(payload.reorder_point, "reorderPoint")?,
+            reorder_point,
+            alert_level: payload.alert_level.map_or(Ok(reorder_point), |value| {
+                non_negative_i32(Some(value), "alertLevel")
+            })?,
+            desired_level: payload.desired_level.map_or(Ok(reorder_point), |value| {
+                non_negative_i32(Some(value), "desiredLevel")
+            })?,
+            order_level: payload.order_level.map_or(Ok(reorder_point), |value| {
+                non_negative_i32(Some(value), "orderLevel")
+            })?,
+            safety_stock_level: non_negative_i32(payload.safety_stock_level, "safetyStockLevel")?,
             unit_cost_paise: non_negative_i64(payload.unit_cost_paise, "unitCostPaise")?,
             hsn_code: &hsn_code,
             gst_percent: non_negative_i32(payload.gst_percent, "gstPercent")?,
             barcode: &barcode,
             batch_tracked: payload.batch_tracked.unwrap_or(false),
-            dual_use_stock: payload.dual_use_stock.unwrap_or(false),
+            dual_use_stock: product_usage == "dual_use",
+            center_available: payload.center_available.unwrap_or(true),
             active: payload.active.unwrap_or(true),
         },
     )
     .await
     .map_err(|_| AppError::conflict("SKU or barcode already exists in this branch"))?;
+    inventory_repository::replace_barcodes(&mut tx, &tenant_id, &branch_id, &row.id, &barcodes)
+        .await
+        .map_err(|_| AppError::conflict("one or more barcodes already exist in this branch"))?;
+    inventory_repository::upsert_product_master_value(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        "category",
+        payload.category.as_deref().unwrap_or_default(),
+        "",
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save product category master"))?;
+    let category_code = master_code(payload.category.as_deref().unwrap_or_default());
+    inventory_repository::upsert_product_master_value(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        "subcategory",
+        payload.subcategory.as_deref().unwrap_or_default(),
+        &category_code,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save product subcategory master"))?;
+    inventory_repository::upsert_product_master_value(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        "brand",
+        payload.brand.as_deref().unwrap_or_default(),
+        "",
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save product brand master"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit inventory master"))?;
+    row.barcodes = barcodes;
 
     Ok(Json(ApiResponse::ok(InventoryResponse::from(row))))
 }
 
 async fn update_inventory(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<InventoryWriteRequest>,
@@ -938,10 +1234,24 @@ async fn update_inventory(
         .as_deref()
         .map(|value| tax_code(Some(value), "hsnCode"))
         .transpose()?;
-    let barcode = payload
-        .barcode
+    let barcodes = payload
+        .barcodes
         .as_deref()
-        .map(|value| barcode(Some(value)))
+        .map(|values| inventory_barcodes(payload.barcode.as_deref(), Some(values)))
+        .transpose()?;
+    let barcode = if let Some(values) = barcodes.as_ref() {
+        Some(values.first().cloned().unwrap_or_default())
+    } else {
+        payload
+            .barcode
+            .as_deref()
+            .map(|value| barcode(Some(value)))
+            .transpose()?
+    };
+    let product_usage = payload
+        .product_usage
+        .as_deref()
+        .map(inventory_product_usage)
         .transpose()?;
     let row = inventory_adjustment_service::update(
         &state,
@@ -952,21 +1262,33 @@ async fn update_inventory(
             sku: payload.sku.as_deref(),
             name: payload.name.as_deref(),
             category: payload.category.as_deref(),
+            subcategory: payload.subcategory.as_deref(),
             brand: payload.brand.as_deref(),
+            product_usage: product_usage.as_deref(),
             unit: unit.as_deref(),
             package_unit: package_unit.as_deref(),
             units_per_package,
             stock_quantity: payload.stock_quantity,
             reorder_point: payload.reorder_point,
+            alert_level: payload.alert_level,
+            desired_level: payload.desired_level,
+            order_level: payload.order_level,
+            safety_stock_level: payload.safety_stock_level,
             unit_cost_paise: payload.unit_cost_paise,
             hsn_code: hsn_code.as_deref(),
             gst_percent: payload.gst_percent.map(|value| value.max(0)),
             barcode: barcode.as_deref(),
+            barcodes: barcodes.as_deref(),
             batch_tracked: payload.batch_tracked,
-            dual_use_stock: payload.dual_use_stock,
+            dual_use_stock: product_usage
+                .as_ref()
+                .map(|value| value == "dual_use")
+                .or(payload.dual_use_stock),
+            center_available: payload.center_available,
             active: payload.active,
             adjustment_reason: payload.adjustment_reason.as_deref(),
             idempotency_key: payload.idempotency_key.as_deref(),
+            actor_user_id: &claims.sub,
         },
     )
     .await?
@@ -1003,20 +1325,60 @@ fn required_text(value: Option<String>, message: &'static str) -> Result<String,
 
 fn inventory_unit(value: &str) -> Result<String, AppError> {
     let unit = value.trim().to_ascii_lowercase();
-    matches!(unit.as_str(), "pcs" | "bottle" | "kit" | "ml" | "g")
+    matches!(unit.as_str(), "pcs" | "bottle" | "kit" | "ml" | "g" | "oz")
         .then_some(unit)
-        .ok_or_else(|| AppError::validation("unit must be pcs, bottle, kit, ml, or g"))
+        .ok_or_else(|| AppError::validation("unit must be g, ml, oz, pcs, bottle, or kit"))
+}
+
+fn inventory_product_usage(value: &str) -> Result<String, AppError> {
+    let value = value.trim().to_ascii_lowercase();
+    matches!(value.as_str(), "retail" | "consumable" | "dual_use")
+        .then_some(value)
+        .ok_or_else(|| AppError::validation("productUsage must be retail, consumable, or dual_use"))
+}
+
+fn inventory_barcodes(
+    primary: Option<&str>,
+    values: Option<&[String]>,
+) -> Result<Vec<String>, AppError> {
+    let mut result = Vec::new();
+    for raw in primary
+        .into_iter()
+        .chain(values.into_iter().flatten().map(String::as_str))
+    {
+        let value = barcode(Some(raw))?;
+        if !value.is_empty() && !result.iter().any(|existing| existing == &value) {
+            result.push(value);
+        }
+    }
+    if result.len() > 10 {
+        return Err(AppError::validation(
+            "a product can have at most 10 barcodes",
+        ));
+    }
+    Ok(result)
+}
+
+fn master_code(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
 }
 
 fn inventory_package_unit(value: &str) -> Result<String, AppError> {
     let unit = value.trim().to_ascii_lowercase();
     matches!(
         unit.as_str(),
-        "pcs" | "box" | "bottle" | "jar" | "tube" | "pouch" | "pack"
+        "pcs" | "box" | "bottle" | "jar" | "tube" | "pouch" | "pack" | "kit"
     )
     .then_some(unit)
     .ok_or_else(|| {
-        AppError::validation("packageUnit must be pcs, box, bottle, jar, tube, pouch, or pack")
+        AppError::validation("packageUnit must be pcs, box, bottle, jar, tube, pouch, pack, or kit")
     })
 }
 
@@ -1091,18 +1453,26 @@ impl From<InventoryRecord> for InventoryResponse {
             sku: record.sku,
             name: record.name,
             category: record.category,
+            subcategory: record.subcategory,
             brand: record.brand,
+            product_usage: record.product_usage,
             unit: record.unit,
             package_unit: record.package_unit,
             units_per_package: record.units_per_package,
             stock_quantity: record.stock_quantity,
             reorder_point: record.reorder_point,
+            alert_level: record.alert_level,
+            desired_level: record.desired_level,
+            order_level: record.order_level,
+            safety_stock_level: record.safety_stock_level,
             unit_cost_paise: record.unit_cost_paise,
             hsn_code: record.hsn_code,
             gst_percent: record.gst_percent,
             barcode: record.barcode,
+            barcodes: record.barcodes,
             batch_tracked: record.batch_tracked,
             dual_use_stock: record.dual_use_stock,
+            center_available: record.center_available,
             active: record.active,
             created_at: record.created_at,
             updated_at: record.updated_at,

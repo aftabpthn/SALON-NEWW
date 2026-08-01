@@ -15,6 +15,10 @@ test('reorder forecast renders real inventory stock and reorder levels', () => {
     path.join(frontend, 'src/app/pages/inventory/inventory-page.component.ts'),
     'utf8',
   );
+  const template = fs.readFileSync(
+    path.join(frontend, 'src/app/pages/inventory/inventory-page.component.html'),
+    'utf8',
+  );
 
   assert.match(repository, /item\.stock_quantity current_stock/);
   assert.match(repository, /item\.reorder_point reorder_level/);
@@ -24,5 +28,9 @@ test('reorder forecast renders real inventory stock and reorder levels', () => {
   }
   assert.match(component, /currentStock: row\.currentStock/);
   assert.match(component, /reorderLevel: row\.reorderLevel/);
+  assert.match(component, /item\.stockQuantity < item\.reorderPoint/);
+  assert.match(component, /await this\.loadOperationalTab\('orders'\)/);
+  assert.match(template, /onReorderPriorityChange\(\$event\)/);
+  assert.match(template, /row\.status === 'converted' \? 'PO created'/);
   assert.doesNotMatch(component, /currentStock: 0, reorderLevel: 0/);
 });

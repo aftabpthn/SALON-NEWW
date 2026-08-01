@@ -49,7 +49,7 @@ The ingestion path streams CSV validation through a one-chunk channel. Cross-chu
 | SSRF protection | HTTPS only, no URL credentials/fragments, public DNS/IP validation, pinned DNS, redirects disabled | READY |
 | MIME/file validation | Extension, declared type, magic bytes, UTF-8 CSV and OOXML structure | READY |
 | ZIP bomb protection | Entry, per-entry, total-uncompressed and compression-ratio limits; enclosed paths only | READY |
-| Malware scanning | Original decrypted source and every extracted ZIP artifact are streamed to `clamd`; missing scanner, timeout, scanner error, incomplete/unknown verdict and `FOUND` all fail closed before database persistence | LOCAL RUNTIME PASS 2026-07-30 (clean + EICAR); each deployment requires `MIGRATION_CLAMD_ADDRESS` |
+| Malware scanning | Original decrypted source and every extracted ZIP artifact are streamed to `clamd`; missing scanner, timeout, scanner error, incomplete/unknown verdict and `FOUND` all fail closed before database persistence | LOCAL RUNTIME PASS 2026-07-30; AWS ECS ClamAV sidecar and `MIGRATION_CLAMD_ADDRESS` READY, deployment evidence pending |
 | Formula/CSV injection | Backend never evaluates formulas; generated error CSV prefixes spreadsheet control characters | READY |
 | PII-safe logs | Worker logs IDs and safe provider codes, not rows/tokens/provider messages | READY |
 | Tenant/branch RBAC | Tenant/branch-scoped repositories plus read/manage permissions | READY |
@@ -70,7 +70,7 @@ The ingestion path streams CSV validation through a one-chunk channel. Cross-chu
 | Authenticated browser UAT | Tenant/branch user, dry-run/approval/quarantine/resume/proof-pack capture | PASS authenticated shell/import drawer; PENDING real-source workflow |
 | Real provider dry-run | Original Zenoti and DINGG evidence | PENDING EXTERNAL |
 | Source-versus-target reconciliation | Counts and all financial/inventory balances | PENDING REAL RUN |
-| Signed proof pack | Source hash, mapping/transformer versions, approvals, reconciliation and HMAC/KMS metadata | PENDING REAL RUN |
+| Signed proof pack | Source hash, mapping/transformer versions, approvals, reconciliation and HMAC/KMS metadata | AWS Secrets Manager HMAC key READY; PENDING REAL RUN and dedicated KMS policy |
 
 Certification result is `PASS` only when every row above is `PASS`. `READY`, `PENDING` or `BLOCKED` must never be presented as certified.
 

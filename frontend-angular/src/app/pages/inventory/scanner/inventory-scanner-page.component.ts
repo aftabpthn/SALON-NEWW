@@ -81,7 +81,7 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
       if (this.workflow === 'transfer') {
         const quantity = this.validQuantity(false);
         if (!this.destinationBranchId.trim() || !this.destinationInventoryItemId.trim()) throw new Error('Destination branch and item ID are required');
-        await firstValueFrom(this.api.post('/inventory/transfers', { destinationBranchId: this.destinationBranchId.trim(), notes: this.notes.trim() || 'Scanner transfer', idempotencyKey: crypto.randomUUID(), lines: [{ sourceInventoryItemId: item.id, destinationInventoryItemId: this.destinationInventoryItemId.trim(), quantity }] }));
+        await firstValueFrom(this.api.post('/inventory/transfers', { mode:'push', destinationBranchId: this.destinationBranchId.trim(), notes: this.notes.trim() || 'Scanner transfer draft', idempotencyKey: crypto.randomUUID(), lines: [{ sourceInventoryItemId: item.id, destinationInventoryItemId: this.destinationInventoryItemId.trim(), quantity }] }));
       } else if (this.workflow === 'count') {
         const quantity = this.validQuantity(true);
         if (!this.auditSessionId) throw new Error('Select an active stock audit session for this count');
@@ -90,7 +90,7 @@ export class InventoryScannerPageComponent implements OnInit, OnDestroy {
         const quantity = this.validQuantity(false); const stockQuantity = adjustedStock(item.stockQuantity, this.workflow, quantity);
         await firstValueFrom(this.api.patch(`/inventory/${item.id}`, { stockQuantity, adjustmentReason: this.notes.trim() || `Scanner ${this.workflow}`, idempotencyKey: crypto.randomUUID() }));
       }
-      const label = this.workflows.find((row) => row.id === this.workflow)?.label ?? this.workflow;
+      const label = this.workflow === 'transfer' ? 'Transfer draft' : this.workflows.find((row) => row.id === this.workflow)?.label ?? this.workflow;
       await this.match(false); this.quantity = null; this.notice = `${label} saved`;
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.4d12d6a31f')); }
     finally { this.saving = false; }

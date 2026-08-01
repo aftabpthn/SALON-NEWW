@@ -28,11 +28,15 @@ textarea { resize:vertical; }
 .view-tabs button.active { border-bottom-color:var(--blue); color:#1456ae; }
 .metrics article { min-height:82px; display:grid; grid-template-columns:36px minmax(0,1fr); align-items:center; gap:10px; padding:10px 14px; border:1px solid var(--line); border-top:3px solid #94a3b8; border-radius:10px; background:#fff; box-shadow:0 8px 20px rgba(17,44,76,.07); }
 .metrics article>i { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:#eef5ff; color:var(--blue); font-size:16px; }
+.metrics article>div { min-width:0; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
 .metrics article.blue { border-top-color:var(--blue); }.metrics article.amber { border-top-color:#d97706; }.metrics article.teal { border-top-color:#0f766e; }.metrics article.green { border-top-color:var(--green); }
 .metrics article.amber>i { background:#fff7ed; color:#d97706; }.metrics article.teal>i { background:#ecfeff; color:#0f766e; }.metrics article.green>i { background:#f0fdf4; color:var(--green); }
 .metrics span { color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase; }
 .metrics strong { font-size:22px; font-weight:700; }
 .vendor-payments { display:grid; gap:10px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 5px 16px rgba(17,44,76,.04); }
+.section-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.pending-total { min-height:30px; padding:0 10px; border:1px solid #c8d5e5; border-radius:999px; background:#fff; color:var(--muted); font-size:11px; }
+.pending-total.active { border-color:#fed7aa; background:#fff7ed; color:#a85400; }
 .finance-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .finance-metrics article { min-height:78px; }
 .finance-metrics article.paid { border-top-color:var(--green); }
@@ -66,10 +70,14 @@ tbody tr:last-child td { border-bottom:0; }
 .amount-link { padding:2px 0; border:0; background:transparent; color:#1456ae; font-variant-numeric:tabular-nums; text-decoration:underline; text-underline-offset:3px; }
 .amount-link:hover,.amount-link:focus-visible { color:#0b438d; }
 .unpaid-link { color:#b54708; }
+.pending-link { color:#a85400; }
+.supplier-name-link { padding:0; border:0; background:transparent; color:#10213b; font-weight:600; text-align:left; }
+.supplier-name-link:hover,.supplier-name-link:focus-visible { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
 .payment-status { display:inline-flex; min-height:26px; align-items:center; padding:3px 9px; border:0; border-radius:999px; background:#eef2f7; color:#53657d; font-size:11px; font-weight:700; }
 .payment-status[data-status='Paid'] { background:#e7f7ef; color:#087247; }
 .payment-status[data-status='Unpaid'],.payment-status[data-status='Part paid'] { background:#fff3e8; color:#a85400; }
 .payment-status[data-status='Credit'] { background:#eef5ff; color:#1456ae; }
+.payment-status[data-status='Pending bill'] { background:#fff3e8; color:#a85400; }
 .row-actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; }
 .payment-action { min-height:34px; display:inline-flex; align-items:center; gap:6px; padding:0 10px; border:1px solid #c8d5e5; border-radius:6px; background:#fff; color:#1456ae; white-space:nowrap; }
 .payment-action:hover,.payment-action:focus-visible { border-color:var(--blue); background:#edf5ff; }

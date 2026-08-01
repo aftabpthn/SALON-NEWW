@@ -33,10 +33,10 @@ type PurchaseOrder = {
 };
 
 type Payable = { supplierId: string; totalPaise: number; returnedPaise: number; paidPaise: number; balancePaise: number };
-type SupplierPaymentMetric = { supplierId: string; paidPaise: number; unpaidPaise: number; extraPaidPaise: number };
-type SupplierPaymentSummary = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number; suppliers: SupplierPaymentMetric[] };
+type SupplierPaymentMetric = { supplierId: string; paidPaise: number; unpaidPaise: number; extraPaidPaise: number; pendingBillCount: number; pendingBillsPaise: number };
+type SupplierPaymentSummary = { paidPaise: number; unpaidPaise: number; extraPaidPaise: number; pendingBillsPaise: number; suppliers: SupplierPaymentMetric[] };
 type View = 'register' | 'compliance' | 'price';
-type QuickFilter = 'all' | 'gstin' | 'openPo';
+type QuickFilter = 'all' | 'gstin' | 'openPo' | 'pendingBill';
 
 @Component({
     selector: 'page-suppliers',
@@ -85,7 +85,9 @@ export class SuppliersPageComponent implements OnInit {
       ].some((value) => value.toLowerCase().includes(query));
       const metrics = this.metricsFor(supplier.id);
       const matchesQuickFilter = this.quickFilter === 'all'
-        || (this.quickFilter === 'gstin' ? !supplier.gstin.trim() : metrics.openOrders > 0);
+        || (this.quickFilter === 'gstin' && !supplier.gstin.trim())
+        || (this.quickFilter === 'openPo' && metrics.openOrders > 0)
+        || (this.quickFilter === 'pendingBill' && this.paymentMetricsFor(supplier.id).pendingBillsPaise > 0);
       return matchesStatus && matchesSearch && matchesQuickFilter;
     });
   }
@@ -182,7 +184,7 @@ export class SuppliersPageComponent implements OnInit {
 
   paymentMetricsFor(supplierId: string): SupplierPaymentMetric {
     return this.paymentSummary.suppliers.find((row) => row.supplierId === supplierId)
-      ?? { supplierId, paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0 };
+      ?? { supplierId, paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0, pendingBillCount: 0, pendingBillsPaise: 0 };
   }
 
   paymentStatus(supplierId: string) {
@@ -190,13 +192,7 @@ export class SuppliersPageComponent implements OnInit {
   }
 
   openPayments(supplier: Supplier) {
-    const metric = this.paymentMetricsFor(supplier.id);
-    void this.router.navigate(['/finance/outgoing-funds'], {
-      queryParams: {
-        supplierPayment: metric.unpaidPaise > 0 ? 'pay' : 'view',
-        supplierId: supplier.id,
-      },
-    });
+    void this.router.navigate(['/suppliers', supplier.id, 'ledger']);
   }
   compliance(supplier: Supplier) { const score = this.score(supplier); return score === 100 ? 'Complete' : score >= 75 ? 'Review' : 'At risk'; }
   money(paise: number) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format((paise || 0) / 100); }
@@ -288,7 +284,7 @@ export class SuppliersPageComponent implements OnInit {
   }
 
   private emptyPaymentSummary(): SupplierPaymentSummary {
-    return { paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0, suppliers: [] };
+    return { paidPaise: 0, unpaidPaise: 0, extraPaidPaise: 0, pendingBillsPaise: 0, suppliers: [] };
   }
 }
 

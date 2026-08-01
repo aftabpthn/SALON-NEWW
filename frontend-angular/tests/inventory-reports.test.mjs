@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ageingRows, nearExpiryRows, supplierPerformanceRows, traceabilityRows, varianceRows } from '../src/app/pages/inventory/inventory-report-model.ts';
+import { ageingRows, csvContent, nearExpiryRows, supplierPerformanceRows, traceabilityRows, varianceRows } from '../src/app/pages/inventory/inventory-report-model.ts';
 
 test('inventory reports derive ageing, expiry, traceability, variance and supplier performance', () => {
   const batches = [
@@ -14,4 +14,5 @@ test('inventory reports derive ageing, expiry, traceability, variance and suppli
   assert.deepEqual(varianceRows({ session:{ id:'a1', name:'July Audit', status:'posted', createdAt:'2026-07-27' }, items:[{ inventoryItemId:'p1', itemName:'Serum', sku:'S1', unit:'pcs', expectedQuantity:4, approvedQuantity:3, varianceQuantity:-1, varianceReason:'Damage' }, { inventoryItemId:'p2', itemName:'Oil', sku:'O1', unit:'pcs', varianceQuantity:0, varianceReason:'' }] }).map((row) => row.inventoryItemId), ['p1']);
   const suppliers = supplierPerformanceRows([{ id:'s1', name:'Supplier One' }], { scorecards:[{ supplierId:'s1', purchaseOrders:4, receivedOrders:3, fillRateBps:7500 }], qualityEvents:[{ supplierId:'s1', returnCount:1, returnedQuantity:2, returnedValuePaise:900, reasons:['Damaged'] }], expiryRisk:[] });
   assert.deepEqual([suppliers[0].supplierName, suppliers[0].returnedValuePaise], ['Supplier One', 900]);
+  assert.equal(csvContent(['Supplier', 'Returns'], [['Supplier "One"', 1]]), '"Supplier","Returns"\r\n"Supplier ""One""","1"');
 });

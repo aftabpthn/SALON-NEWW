@@ -551,20 +551,52 @@ pub async fn post_purchase_grn(
     igst_paise: i64,
     shipping_paise: i64,
     handling_paise: i64,
+    round_off_paise: i64,
 ) -> Result<(), AppError> {
+    let lines = purchase_grn_lines(
+        taxable_paise,
+        cgst_paise,
+        sgst_paise,
+        igst_paise,
+        shipping_paise,
+        handling_paise,
+        round_off_paise,
+    )?;
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "purchase_grn",
+        receipt_id,
+        "Purchase goods receipt",
+        lines,
+    )
+    .await
+}
+
+fn purchase_grn_lines(
+    taxable_paise: i64,
+    cgst_paise: i64,
+    sgst_paise: i64,
+    igst_paise: i64,
+    shipping_paise: i64,
+    handling_paise: i64,
+    round_off_paise: i64,
+) -> Result<Vec<JournalLine<'static>>, AppError> {
     let total_paise = taxable_paise
         .saturating_add(cgst_paise)
         .saturating_add(sgst_paise)
         .saturating_add(igst_paise)
         .saturating_add(shipping_paise)
-        .saturating_add(handling_paise);
+        .saturating_add(handling_paise)
+        .saturating_add(round_off_paise);
     if taxable_paise < 0
         || cgst_paise < 0
         || sgst_paise < 0
         || igst_paise < 0
         || shipping_paise < 0
         || handling_paise < 0
-        || total_paise == 0
+        || total_paise <= 0
     {
         return Err(AppError::validation("GRN accounting totals are invalid"));
     }
@@ -609,16 +641,20 @@ pub async fn post_purchase_grn(
             credit_paise: 0,
         });
     }
-    post_entry(
-        tx,
-        tenant_id,
-        branch_id,
-        "purchase_grn",
-        receipt_id,
-        "Purchase goods receipt",
-        lines,
-    )
-    .await
+    if round_off_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "ROUNDING_EXPENSE",
+            debit_paise: round_off_paise,
+            credit_paise: 0,
+        });
+    } else if round_off_paise < 0 {
+        lines.push(JournalLine {
+            account_code: "ROUNDING_INCOME",
+            debit_paise: 0,
+            credit_paise: -round_off_paise,
+        });
+    }
+    Ok(lines)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1076,7 +1112,20 @@ pub async fn post_cogs(
     branch_id: &str,
     sale_id: &str,
 ) -> Result<(), AppError> {
-    let cost_paise = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(ABS(quantity_delta)::BIGINT * unit_cost_paise),0)::BIGINT FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND movement_type='sale'")
+    let cost_paise = sqlx::query_scalar::<_, i64>(r#"SELECT (
+        COALESCE((SELECT SUM(ABS(quantity_delta)::BIGINT*unit_cost_paise) FROM inventory_stock_ledger
+          WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND movement_type='sale'),0)
+        +COALESCE((SELECT SUM(actual_quantity::BIGINT*unit_cost_paise) FROM inventory_backbar_usage
+          WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND status='recorded'),0)
+        +COALESCE((SELECT SUM(ABS(event.quantity_delta)::BIGINT*COALESCE((event.metadata->>'unitCostPaise')::BIGINT,item.unit_cost_paise))
+          FROM inventory_backbar_container_events event
+          JOIN inventory_backbar_containers container ON container.id=event.container_id
+            AND container.tenant_id=event.tenant_id AND container.branch_id=event.branch_id
+          JOIN inventory_items item ON item.id=container.inventory_item_id
+            AND item.tenant_id=container.tenant_id AND item.branch_id=container.branch_id
+          WHERE event.tenant_id=$1 AND event.branch_id=$2 AND event.event_type='consumed'
+            AND event.metadata->>'saleId'=$3),0)
+      )::BIGINT"#)
         .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await.map_err(|_| AppError::internal("failed to calculate COGS"))?;
     if cost_paise == 0 {
         return Ok(());
@@ -1495,8 +1544,8 @@ fn payment_account(method: &str) -> &'static str {
 mod tests {
     use super::{
         customer_credit_lines, invoice_correction_lines, is_balanced, payroll_deductions_payable,
-        refund_journal_lines, reverse_lines, InvoiceAccountingTotals, JournalLine,
-        RefundSettlement,
+        purchase_grn_lines, refund_journal_lines, reverse_lines, InvoiceAccountingTotals,
+        JournalLine, RefundSettlement,
     };
 
     #[test]
@@ -1533,6 +1582,19 @@ mod tests {
             debit_paise: -100,
             credit_paise: 0
         }]));
+    }
+
+    #[test]
+    fn purchase_grn_allows_signed_round_off_and_stays_balanced() {
+        let lines = purchase_grn_lines(1_388_730, 124_986, 124_986, 0, 0, 0, -2)
+            .expect("signed purchase round-off");
+        assert!(is_balanced(&lines));
+        assert!(lines.iter().any(|line| {
+            line.account_code == "ACCOUNTS_PAYABLE" && line.credit_paise == 1_638_700
+        }));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "ROUNDING_INCOME" && line.credit_paise == 2 }));
     }
 
     #[test]
