@@ -52,6 +52,9 @@
       @if (canManage('staff.manage')) { <button type="button" (click)="createAppraisalCycle()">Add appraisal cycle</button> }
       @if (canManage('staff.manage')) { <button type="button" (click)="createGoalTemplate()">Add OKR template</button> }
       @if (canManage('staff.manage')) { <button type="button" (click)="createSuccessionPlan()">Add succession plan</button> }
+      @if (canManage('staff.manage')) { <button type="button" (click)="runHrOperationsAutomations()">Run HR alerts</button> }
+      <button type="button" (click)="exportEmployeeLifecycle()">Export lifecycle</button>
+      <button type="button" (click)="exportHrHealth()">Export HR health</button>
     </section>
   }
   @if (activeTab === 'systems') {
@@ -81,6 +84,47 @@
 
   @if (activeTab === 'hrms') {
     <section class="summary-strip"><div><span>Openings</span><strong>{{ arrayValue(hrms['jobOpenings']).length }}</strong></div><div><span>Candidates</span><strong>{{ arrayValue(hrms['applications']).length }}</strong></div><div><span>Lifecycle cases</span><strong>{{ arrayValue(hrms['lifecycleCases']).length }}</strong></div><div><span>Appraisal cycles</span><strong>{{ arrayValue(hrms['appraisalCycles']).length }}</strong></div><div><span>Appraisal reviews</span><strong>{{ arrayValue(hrms['appraisalReviews']).length }}</strong></div><div><span>Succession plans</span><strong>{{ arrayValue(hrms['successionPlans']).length }}</strong></div></section>
+    <section class="data-card"><header><div><h2>HR operations intelligence</h2><span>{{ formatDate(hrms['operationsIntelligence']?.['dateFrom']) }} – {{ formatDate(hrms['operationsIntelligence']?.['dateTo']) }}</span></div></header><div class="key-list">
+      <div><span>HR health score</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['hrHealthScore']) }}%</strong></div>
+      <div><span>Expiry alerts</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['expiryAlertCount']) }}</strong></div>
+      <div><span>Onboarding overdue</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['onboardingOverdueCount']) }}</strong></div>
+      <div><span>Missed tasks</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['missedTaskCount']) }}</strong></div>
+      <div><span>Attendance exceptions</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['attendanceExceptionCount']) }}</strong></div>
+      <div><span>Payroll exceptions</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['payrollExceptionCount']) }}</strong></div>
+    </div></section>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Document and certification expiry</h2><span>{{ arrayValue(hrms['operationsIntelligence']?.['expiryAlerts']).length }} alerts</span></div></header>
+        @for (row of arrayValue(hrms['operationsIntelligence']?.['expiryAlerts']); track row['id']) { <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ label(row['source']) }} · {{ row['title'] }} · {{ formatDate(row['expiryDate']) }}</small></div><span class="status" [ngClass]="statusClass(row['state'])">{{ row['state'] }}</span></article> }
+        @if (arrayValue(hrms['operationsIntelligence']?.['expiryAlerts']).length === 0) { <div class="empty">No expiry alerts</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Overdue and missed tasks</h2><span>{{ arrayValue(hrms['operationsIntelligence']?.['onboardingOverdue']).length + arrayValue(hrms['operationsIntelligence']?.['missedTasks']).length }} records</span></div></header>
+        @for (row of arrayValue(hrms['operationsIntelligence']?.['onboardingOverdue']); track row['caseId']) { <article class="record"><div><strong>{{ row['staffName'] || row['caseId'] }}</strong><small>Onboarding · {{ row['overdueTaskCount'] }} tasks · {{ row['daysOverdue'] }} days overdue</small></div><span class="status bad">Overdue</span></article> }
+        @for (row of arrayValue(hrms['operationsIntelligence']?.['missedTasks']); track row['id']) { <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ row['title'] }} · {{ label(row['source']) }} · {{ formatDate(row['dueDate']) }}</small></div><span class="status bad">{{ row['daysOverdue'] }} days</span></article> }
+        @if (arrayValue(hrms['operationsIntelligence']?.['onboardingOverdue']).length + arrayValue(hrms['operationsIntelligence']?.['missedTasks']).length === 0) { <div class="empty">No overdue tasks</div> }
+      </section>
+    </div>
+    <div class="two-column">
+      <section class="data-card"><header><div><h2>Attendance and payroll exceptions</h2><span>{{ arrayValue(hrms['operationsIntelligence']?.['exceptions']?.['items']).length }} records</span></div></header>
+        @for (row of arrayValue(hrms['operationsIntelligence']?.['exceptions']?.['items']); track row['id']) { <article class="record"><div><strong>{{ row['staffName'] }}</strong><small>{{ label(row['category']) }} · {{ row['detail'] }} · {{ formatDate(row['eventDate']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ label(row['status']) }}</span></article> }
+        @if (arrayValue(hrms['operationsIntelligence']?.['exceptions']?.['items']).length === 0) { <div class="empty">No attendance or payroll exceptions</div> }
+      </section>
+      <section class="data-card"><header><div><h2>Appraisal and training completion</h2><span>Selected period</span></div></header><div class="key-list">
+        <div><span>Appraisals assigned</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['appraisal']?.['assignedCount']) }}</strong></div>
+        <div><span>Appraisals acknowledged</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['appraisal']?.['acknowledgedCount']) }}</strong></div>
+        <div><span>Appraisal completion</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['appraisal']?.['completionPercent']) }}%</strong></div>
+        <div><span>Training assigned</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['training']?.['assignedCount']) }}</strong></div>
+        <div><span>Training completed</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['training']?.['completedCount']) }}</strong></div>
+        <div><span>Training completion</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['training']?.['completionPercent']) }}%</strong></div>
+      </div></section>
+    </div>
+    <section class="data-card"><header><div><h2>Branch and staff HR-health benchmark</h2><span>Branch {{ text(hrms['operationsIntelligence']?.['benchmarks']?.['branch']?.['healthScore']) }}%</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">Staff</th><th scope="col">Attendance</th><th scope="col">Appraisal</th><th scope="col">Training</th><th scope="col">Operations</th><th scope="col">HR health</th><th scope="col">Evidence</th></tr></thead><tbody>@for (row of arrayValue(hrms['operationsIntelligence']?.['benchmarks']?.['staff']); track row['staffId']) {
+      <tr><td><strong>{{ row['staffName'] }}</strong><small>{{ row['employeeCode'] }} · {{ row['jobTitle'] }}</small></td><td>{{ text(row['attendancePercent']) }}%</td><td>{{ text(row['appraisalPercent']) }}%</td><td>{{ text(row['trainingPercent']) }}%</td><td>{{ text(row['operationsPercent']) }}%</td><td><strong>{{ text(row['healthScore']) }}%</strong></td><td>{{ text(row['coveragePercent']) }}%</td></tr>
+    }</tbody></table></div>@if (arrayValue(hrms['operationsIntelligence']?.['benchmarks']?.['staff']).length === 0) { <div class="empty">No benchmark records</div> }</section>
+    <section class="data-card"><header><div><h2>Monthly owner summary</h2><span>Idempotent notification outbox</span></div></header><div class="key-list">
+      <div><span>Period</span><strong>{{ formatDate(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['periodStart']) }} – {{ formatDate(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['periodEnd']) }}</strong></div>
+      <div><span>HR health</span><strong>{{ text(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['hrHealthScore']) }}%</strong></div>
+      <div><span>Requires attention</span><strong>{{ text(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['requiresAttention']) }}</strong></div>
+    </div></section>
     <div class="two-column">
       <section class="data-card"><header><div><h2>Recruitment openings</h2><span>{{ arrayValue(hrms['jobOpenings']).length }} records</span></div>@if (canManage('staff.manage')) { <button type="button" (click)="createJobOpening()">Add</button> }</header>
         @for (row of arrayValue(hrms['jobOpenings']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ row['department'] || 'No department' }} · {{ label(row['employmentType']) }} · {{ row['applicationCount'] }} candidates</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span>@if (canManage('staff.manage') && row['status'] !== 'closed') { <div class="row-actions"><button type="button" (click)="createApplication(row)">Candidate</button><button type="button" (click)="updateJobOpening(row)">Status</button></div> }</article> }

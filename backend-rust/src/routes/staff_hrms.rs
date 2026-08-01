@@ -129,10 +129,8 @@ async fn run_operations_intelligence_automations(
 ) -> ApiResult<Value> {
     manage(&c)?;
     let (t, b) = tenant_branch(&h)?;
-    let row = staff_hrms_service::run_operations_intelligence_automations(
-        &s.db, &t, &b, &c.sub, p,
-    )
-    .await?;
+    let row = staff_hrms_service::run_operations_intelligence_automations(&s.db, &t, &b, &c.sub, p)
+        .await?;
     audited(&s, &c, &b, "staff.hrms.operations_intelligence.run", &row).await;
     Ok(Json(ApiResponse::ok(row)))
 }

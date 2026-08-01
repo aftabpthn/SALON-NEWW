@@ -171,9 +171,18 @@ pub async fn operations_intelligence(
         'attendancePercent',attendance_rate,'appraisalPercent',appraisal_rate,'trainingPercent',training_rate,'operationsPercent',operations_rate,
         'healthScore',COALESCE(health_score,0),'coveragePercent',coverage) ORDER BY health_score DESC NULLS LAST,staff_name),'[]'::JSONB)) FROM scored"#)
         .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
-    let (expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks) =
-        tokio::try_join!(expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks)?;
-    let health_score = benchmarks.pointer("/branch/healthScore").and_then(Value::as_f64).unwrap_or(0.0);
+    let (expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks) = tokio::try_join!(
+        expiry_alerts,
+        onboarding_overdue,
+        missed_tasks,
+        exceptions,
+        completion,
+        benchmarks
+    )?;
+    let health_score = benchmarks
+        .pointer("/branch/healthScore")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
     Ok(serde_json::json!({
         "dateFrom": from,
         "dateTo": to,
