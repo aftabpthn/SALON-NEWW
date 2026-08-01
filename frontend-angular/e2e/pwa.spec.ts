@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('production app shell installs and reloads while offline', async ({ page, context }) => {
-  await page.goto('/login');
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 
   const manifestUrl = await page.locator('link[rel="manifest"]').getAttribute('href');
