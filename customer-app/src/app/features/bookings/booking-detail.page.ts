@@ -1,21 +1,17 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
-import { AlertController, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, helpCircleOutline, locationOutline, navigateOutline, repeatOutline, shareSocialOutline, storefrontOutline, timeOutline } from "ionicons/icons";
 import { Business } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
+import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-header.component";
 
 @Component({
   standalone: true,
-  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar, RouterLink],
+  imports: [IonButton, IonContent, IonIcon, RouterLink, CustomerMobileHeaderComponent],
   template: `
-    <ion-header class="ion-no-border detail-header">
-      <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button [defaultHref]="backHref()"></ion-back-button></ion-buttons>
-        <ion-title>Booking details</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <aura-customer-mobile-header title="Booking details" [subtitle]="booking()?.businessName || ''" [backHref]="backHref()" />
     <ion-content>
       @if (booking(); as booking) {
         <main class="page-narrow detail-page">
@@ -98,68 +94,80 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 <summary>More booking options</summary>
                 <div class="option-list">
                   @if (isActive()) {
-                    <button type="button" class="option-row" (click)="reschedule()">
-                      <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
-                      <span>Edit appointment</span>
-                      <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                    </button>
-                  }
-                  <details class="contact-options">
-                    <summary class="option-row">
-                      <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
-                      <span>Contact salon</span>
-                      <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                    </summary>
-                    <div class="contact-suboptions">
-                      <a class="option-row" [routerLink]="bookingChatLink(booking.id)">
-                        <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
-                        <span>Message salon</span>
+                    <section class="action-section" aria-label="Manage appointment">
+                      <h2>Manage appointment</h2>
+                      <button type="button" class="option-row" (click)="reschedule()">
+                        <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                        <span>Edit appointment</span>
                         <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                      </a>
-                      @if (salonPhone(); as phone) {
-                        <a class="option-row" [href]="phone.href">
-                          <ion-icon name="call-outline" aria-hidden="true"></ion-icon>
-                          <span>Call salon</span>
+                      </button>
+                      <button type="button" class="option-row" (click)="rebook()">
+                        <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
+                        <span>Book another appointment</span>
+                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                      </button>
+                    </section>
+                  }
+
+                  <section class="action-section" aria-label="Contact and support">
+                    <h2>Contact & support</h2>
+                    <details class="contact-options">
+                      <summary class="option-row">
+                        <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
+                        <span>Contact salon</span>
+                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                      </summary>
+                      <div class="contact-suboptions">
+                        <a class="option-row" [routerLink]="bookingChatLink(booking.id)">
+                          <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
+                          <span>Message salon</span>
                           <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                         </a>
-                      }
-                    </div>
-                  </details>
-                  @if (salonRoute(); as salonLink) {
-                    <a class="option-row" [routerLink]="salonLink">
-                      <ion-icon name="storefront-outline" aria-hidden="true"></ion-icon>
-                      <span>View salon</span>
+                        @if (salonPhone(); as phone) {
+                          <a class="option-row" [href]="phone.href">
+                            <ion-icon name="call-outline" aria-hidden="true"></ion-icon>
+                            <span>Call salon</span>
+                            <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                          </a>
+                        }
+                      </div>
+                    </details>
+                    @if (salonRoute(); as salonLink) {
+                      <a class="option-row" [routerLink]="salonLink">
+                        <ion-icon name="storefront-outline" aria-hidden="true"></ion-icon>
+                        <span>View salon</span>
+                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                      </a>
+                    }
+                    <button type="button" class="option-row" (click)="requestSupport()">
+                      <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+                      <span>Request support</span>
                       <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                    </a>
-                  }
-                  @if (isActive()) {
-                    <button type="button" class="option-row" (click)="rebook()">
-                      <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
-                      <span>Book another appointment</span>
-                      <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                     </button>
-                  }
-                  <button type="button" class="option-row" (click)="requestSupport()">
-                    <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
-                    <span>Request support</span>
-                    <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                  </button>
-                  <button type="button" class="option-row" (click)="shareBooking()">
-                    <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
-                    <span>Share booking</span>
-                  </button>
-                  @if (isActive()) {
-                    <button type="button" class="option-row" (click)="downloadInvoice($event)">
-                      <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
-                      <span>Download invoice</span>
+                  </section>
+
+                  <section class="action-section" aria-label="Records and sharing">
+                    <h2>Records & sharing</h2>
+                    <button type="button" class="option-row" (click)="shareBooking()">
+                      <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                      <span>Share booking</span>
                     </button>
-                  }
+                    @if (isActive()) {
+                      <button type="button" class="option-row" (click)="downloadInvoice($event)">
+                        <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
+                        <span>Download invoice</span>
+                      </button>
+                    }
+                  </section>
+
                   @if (isActive()) {
-                    <div class="option-divider" aria-hidden="true"></div>
-                    <button type="button" class="option-row destructive-action" (click)="cancel()">
-                      <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
-                      <span>Cancel booking</span>
-                    </button>
+                    <section class="action-section danger-section" aria-label="Danger zone">
+                      <h2>Danger zone</h2>
+                      <button type="button" class="option-row destructive-action" (click)="cancel()">
+                        <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+                        <span>Cancel booking</span>
+                      </button>
+                    </section>
                   }
                 </div>
               </details>
@@ -190,6 +198,21 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <small>General FAQs and account help</small>
           </div>
         </main>
+
+        @if (cancelSheetOpen()) {
+          <div class="cancel-sheet-backdrop" role="presentation" (click)="closeCancelSheet()">
+            <section class="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-sheet-title" (click)="$event.stopPropagation()">
+              <div class="cancel-sheet-copy">
+                <h2 id="cancel-sheet-title">Cancel this booking?</h2>
+                <p>This will cancel your appointment at {{ booking.businessName }}. The salon may apply its cancellation policy.</p>
+              </div>
+              <div class="cancel-sheet-actions">
+                <button type="button" class="neutral-action" (click)="closeCancelSheet()">Keep booking</button>
+                <button type="button" class="destructive-confirm" (click)="confirmCancelBooking(booking.id)">Cancel booking</button>
+              </div>
+            </section>
+          </div>
+        }
       } @else {
         <main class="page-narrow detail-page" aria-live="polite">
           @if (marketplace.loading()) {
@@ -366,7 +389,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
     .more-options[open] > summary::before { transform: rotate(90deg); }
     .option-list, .direct-options, .contact-suboptions { display: grid; }
-    .option-list { padding-bottom: 4px; }
+    .option-list { gap: 10px; padding: 2px 0 6px; }
+    .action-section { display: grid; gap: 2px; padding: 10px 0 0; border-top: 1px solid var(--border); }
+    .action-section:first-child { border-top: 0; }
+    .action-section h2 { margin: 0 8px 4px; color: var(--muted); font-size: 0.68rem; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; }
+    .danger-section { margin-top: 2px; padding: 10px 8px 8px; border: 1px solid rgba(180, 35, 24, 0.18); border-radius: 14px; background: rgba(255, 251, 250, 0.82); }
+    .danger-section h2 { margin-inline: 0; color: #B42318; }
     .contact-options { min-width: 0; }
     .contact-options > summary { list-style: none; }
     .contact-options > summary::-webkit-details-marker { display: none; }
@@ -449,6 +477,33 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .state-panel h1 { margin: 0; font-size: 1.25rem; letter-spacing: -0.03em; }
     .state-panel p { margin: 8px 0 14px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
 
+    .cancel-sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      align-items: end;
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+      background: rgba(16, 24, 40, 0.34);
+    }
+    .cancel-sheet {
+      width: min(100%, 520px);
+      display: grid;
+      gap: 16px;
+      margin: 0 auto;
+      padding: 20px;
+      border: 1px solid rgba(180, 35, 24, 0.16);
+      border-radius: 24px;
+      background: #FFFFFF;
+      box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+    }
+    .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+    .cancel-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cancel-sheet-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
+    .neutral-action { border: 1px solid var(--border); color: var(--text); background: #FFFFFF; }
+    .destructive-confirm { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
+
     @media (min-width: 480px) {
       .booking-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .booking-facts .venue-fact { grid-column: 1 / -1; }
@@ -463,7 +518,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .detail-page, .itinerary-card, .booking-status-pill, .detail-actions ion-button, .utility-action, .option-row, .contact-options > summary .row-chevron, .more-options > summary::before, .policy-strip summary::before { animation: none; transition: none; }
+      .detail-page, .itinerary-card, .booking-status-pill, .detail-actions ion-button, .utility-action, .option-row, .contact-options > summary .row-chevron, .more-options > summary::before, .policy-strip summary::before, .cancel-sheet { animation: none; transition: none; }
       .option-row:active { transform: none; }
     }
   `]
@@ -500,7 +555,9 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   });
   readonly moreActionCount = computed(() => (this.isActive() ? 7 : 3) + (this.salonRoute() ? 1 : 0));
 
-  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly alerts: AlertController) {
+  readonly cancelSheetOpen = signal(false);
+
+  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, helpCircleOutline, locationOutline, navigateOutline, repeatOutline, shareSocialOutline, storefrontOutline, timeOutline });
   }
 
@@ -867,17 +924,17 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   async cancel() {
-    const booking = this.booking();
-    if (!booking) return;
-    const alert = await this.alerts.create({
-      header: "Cancel booking?",
-      message: "This will call the customer booking cancellation API.",
-      buttons: [
-        { text: "Keep booking", role: "cancel" },
-        { text: "Cancel booking", role: "destructive", handler: () => void this.marketplace.cancelBooking(booking.id) }
-      ]
-    });
-    await alert.present();
+    if (!this.booking()) return;
+    this.cancelSheetOpen.set(true);
+  }
+
+  closeCancelSheet(): void {
+    this.cancelSheetOpen.set(false);
+  }
+
+  async confirmCancelBooking(id: string) {
+    this.cancelSheetOpen.set(false);
+    await this.marketplace.cancelBooking(id).catch(() => undefined);
   }
 
   async reschedule() {
@@ -893,7 +950,8 @@ export class BookingDetailPage implements OnInit, OnDestroy {
         serviceId: booking.serviceId,
         staffId: booking.staffId || undefined,
         date: this.localDateKey(this.parseDate(booking.startAt || booking.startsAt) || new Date()),
-        step: 1,
+        slotStartAt: booking.startAt || booking.startsAt || undefined,
+        step: 3,
         rescheduleBookingId: booking.id
       }
     });

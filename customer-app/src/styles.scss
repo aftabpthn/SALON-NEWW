@@ -31,10 +31,7 @@ body {
   min-height: 100%;
   overflow-x: hidden;
   padding-top: var(--safe-top);
-  background:
-    radial-gradient(circle at 92% 2%, rgba(238, 242, 255, 0.72), transparent 30%),
-    radial-gradient(circle at 8% 34%, rgba(253, 242, 248, 0.64), transparent 34%),
-    linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 58%, #F8FAFC 100%);
+  background: #FFFFFF;
   color: var(--text);
   font-family: var(--ion-font-family);
 }
@@ -49,19 +46,11 @@ body::after {
 
 body::before {
   inset: 0;
-  background:
-    linear-gradient(115deg, rgba(16, 24, 40, 0.018), transparent 32%, rgba(99, 102, 241, 0.04)),
-    radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.72), transparent 42%);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0));
 }
 
 body::after {
-  width: 420px;
-  height: 420px;
-  right: -180px;
-  bottom: 8%;
-  border-radius: 999px;
-  background: rgba(236, 253, 245, 0.72);
-  filter: blur(8px);
+  display: none;
 }
 
 ion-app {
@@ -162,10 +151,7 @@ ion-button:focus-visible {
 }
 
 ion-content {
-  --background:
-    radial-gradient(circle at 16% 0%, rgba(99, 102, 241, 0.1), transparent 28%),
-    radial-gradient(circle at 88% 6%, rgba(99, 102, 241, 0.08), transparent 34%),
-    linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 52%, #F8FAFC 100%);
+  --background: #FFFFFF;
   scrollbar-width: none;
 }
 
@@ -206,9 +192,9 @@ ion-toolbar {
 }
 
 ion-searchbar {
-  --background: rgba(255, 255, 255, 0.92);
-  --border-radius: 22px;
-  --box-shadow: 0 16px 36px rgba(16, 24, 40, 0.1);
+  --background: #FFFFFF;
+  --border-radius: 16px;
+  --box-shadow: none;
   --color: var(--text);
   --placeholder-color: var(--muted);
   padding-inline: 0;
@@ -341,10 +327,8 @@ ion-tab-button ion-label {
 .premium-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96) 48%, rgba(231, 240, 248, 0.82)),
-    var(--surface);
-  box-shadow: var(--shadow-soft);
+  background: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.05);
   animation: aura-card-in var(--motion-slow) both;
   transform-origin: center top;
   transform-style: preserve-3d;
@@ -359,9 +343,9 @@ ion-tab-button ion-label {
 .glass-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(20px);
+  background: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.05);
+  backdrop-filter: none;
   animation: aura-card-in var(--motion-slow) both;
   transform-style: preserve-3d;
   perspective: 1200px;
@@ -378,7 +362,7 @@ ion-tab-button ion-label {
   --background-activated: var(--primary-active);
   --color: #FFFFFF;
   --color-activated: #FFFFFF;
-  --box-shadow: 0 18px 38px rgba(99, 102, 241, 0.24);
+  --box-shadow: 0 10px 22px rgba(99, 102, 241, 0.22);
   --border-radius: 999px;
   font-weight: 900;
   letter-spacing: 0;
@@ -437,7 +421,7 @@ ion-tab-button ion-label {
   background: rgba(255, 255, 255, 0.94);
   font-size: 0.92rem;
   font-weight: 900;
-  box-shadow: 0 10px 22px rgba(16, 24, 40, 0.08);
+  box-shadow: none;
   transition:
     color var(--motion-fast),
     border-color var(--motion-fast),
@@ -484,17 +468,15 @@ ion-tab-button ion-label {
 .rating-pill {
   color: var(--brand-800);
   border-color: rgba(99, 102, 241, 0.28);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(231, 240, 248, 0.84));
-  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(14px);
+  background: #FFFFFF;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .status-pill {
   color: var(--brand-800);
   border-color: rgba(99, 102, 241, 0.24);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
+  background: var(--primary-soft);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
 }
 
@@ -534,10 +516,10 @@ ion-tab-button ion-label {
   gap: 14px;
   padding: 12px;
   border: 1px solid rgba(99, 102, 241, 0.24);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 56px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(22px);
+  border-radius: 20px;
+  background: #FFFFFF;
+  box-shadow: 0 12px 34px rgba(16, 24, 40, 0.12);
+  backdrop-filter: none;
   transition: transform var(--motion-medium), box-shadow var(--motion-medium);
 }
 
@@ -697,9 +679,7 @@ ion-button::part(native)::after {
   display: none;
 }
 
-.primary-gradient {
-  animation: aura-gold-breath 3.8s ease-in-out infinite, aura-button-depth 4.8s ease-in-out infinite;
-}
+.primary-gradient { animation: none; }
 
 @media (hover: hover) {
   button:hover,

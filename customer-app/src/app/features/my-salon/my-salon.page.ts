@@ -335,7 +335,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               </div>
 
               @if (d.offers.length) {
-                <div class="ms-offer-rail">
+                <div class="ms-offer-rail" aria-label="Salon offers carousel">
                   @for (offer of d.offers; track offer.id) {
                     <article class="ms-offer">
                       <span class="ms-offer-value">{{ offerDiscount(offer.discountType, offer.discountValue) }}</span>
@@ -374,6 +374,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                       type="button"
                       class="ms-cat-pill"
                       [class.active]="activeCategory() === cat"
+                      [attr.aria-pressed]="activeCategory() === cat"
                       (click)="setCategory(cat)">
                       {{ cat }}
                     </button>
@@ -416,7 +417,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               </div>
 
               @if (d.staff.length) {
-                <div class="ms-staff-rail">
+                <div class="ms-staff-rail" aria-label="Salon team carousel">
                   @for (staff of d.staff; track staff.id) {
                     <a class="ms-staff" [routerLink]="salonBookLink(d.salon)">
                       <span class="ms-staff-avatar" aria-hidden="true">{{ staffInitials(staff.name) }}</span>
@@ -676,6 +677,22 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       --ms-rose: #f43f5e;
       --ms-accent: var(--primary, #6366F1);
       --ms-accent-soft: var(--primary-soft, #EEF2FF);
+      --ms-radius-card: 22px;
+      --ms-radius-item: 18px;
+      --ms-elevation: 0 14px 36px rgba(16, 24, 40, 0.07);
+      --ms-elevation-soft: 0 8px 22px rgba(16, 24, 40, 0.05);
+      --ms-gap: 12px;
+      --ms-card-padding: 18px;
+      --ms-item-padding: 12px;
+      --ms-button-height: 46px;
+      --ms-motion: 180ms ease;
+      --ms-focus-ring: color-mix(in srgb, var(--ms-accent) 70%, white);
+      --ms-type-label: 0.72rem;
+      --ms-type-small: 0.76rem;
+      --ms-type-body: 0.84rem;
+      --ms-type-title: 0.96rem;
+      --ms-lh-tight: 1.18;
+      --ms-lh-body: 1.45;
     }
     .ms-content {
       --background: var(--customer-bg-premium, #FFFFFF);
@@ -686,6 +703,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       margin: 0 auto;
       padding: calc(76px + env(safe-area-inset-top)) 16px calc(48px + var(--safe-bottom));
       color: var(--ms-ink);
+      overflow-x: clip;
+    }
+    .ms-page *, .ms-page *::before, .ms-page *::after { box-sizing: border-box; }
+    .ms-page a, .ms-page button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    .ms-page a:focus-visible, .ms-page button:focus-visible, .ms-primary-button:focus-visible {
+      outline: 2px solid var(--ms-focus-ring);
+      outline-offset: 3px;
     }
     .ms-mode-tools {
       position: relative;
@@ -708,11 +732,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       justify-content: center;
       cursor: pointer;
     }
-    .ms-switch-button { gap: 6px; padding: 0 14px; font: inherit; font-size: .78rem; font-weight: 750; }
+    .ms-switch-button { gap: 6px; padding: 0 14px; font: inherit; font-size: .78rem; font-weight: 750; transition: background-color var(--ms-motion), border-color var(--ms-motion), transform var(--ms-motion); }
+    .ms-switch-button:active { transform: scale(.98); }
     .ms-switch-button ion-icon { font-size: 17px; color: var(--ms-accent); }
     .ms-mode-tools-spacer { width: 44px; min-height: 44px; }
-    .ms-kicker { color: var(--ms-accent); font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .ms-kicker { color: var(--ms-accent); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
     .ms-section { display: grid; gap: 14px; margin-top: 36px; }
+
     .ms-section-head, .ms-picker-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
     .ms-section-head > div, .ms-picker-head > div { display: grid; gap: 4px; }
     .ms-section-head h2, .ms-picker-head h2 { margin: 0; color: var(--ms-ink); font-size: clamp(1.35rem, 5vw, 1.8rem); font-weight: 700; letter-spacing: -.035em; line-height: 1.1; }
@@ -724,9 +750,10 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-picker-note { margin: 0; color: var(--ms-muted); font-size: .78rem; line-height: 1.45; }
     .ms-text-action { width: fit-content; border: 0; color: var(--ms-accent); background: transparent; font-weight: 900; text-decoration: underline; cursor: pointer; }
     .ms-choice-list { display: grid; gap: 8px; width: 100%; }
-    .ms-choice { width: 100%; min-height: 64px; display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--ms-line); border-radius: 18px; color: var(--ms-ink); background: rgba(255,255,255,.7); font: inherit; text-align: left; cursor: pointer; transition: all .2s ease; }
+    .ms-choice { width: 100%; min-height: 64px; display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--ms-line); border-radius: 18px; color: var(--ms-ink); background: rgba(255,255,255,.7); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--ms-motion), border-color var(--ms-motion), box-shadow var(--ms-motion), transform var(--ms-motion); }
     .ms-choice.selected { border-color: var(--ms-accent); background: var(--ms-accent-soft); box-shadow: 0 4px 14px rgba(0,0,0,.04); }
     .ms-choice:disabled { cursor: wait; opacity: .55; }
+    .ms-choice:active { transform: scale(.995); }
     .ms-choice-avatar, .ms-salon-mark, .ms-staff-avatar { display: grid; place-items: center; color: white; background: var(--ms-accent); font-weight: 780; letter-spacing: -.03em; }
     .ms-choice-avatar { width: 46px; height: 46px; border-radius: 16px; font-size: .84rem; }
     .ms-choice-copy { min-width: 0; display: grid; gap: 3px; }
@@ -737,8 +764,8 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-choice-badge.is-active { color: #fff; background: var(--ms-accent); }
 
     /* Salon Hero Card */
-    .ms-hero { position: relative; overflow: hidden; display: grid; gap: 22px; margin-top: 16px; padding: 24px 20px 22px; border: 1px solid var(--ms-line); border-radius: 26px; color: var(--ms-ink); background: rgba(255,255,255,.96); box-shadow: 0 18px 48px rgba(16,24,40,.08); }
-    .ms-hero::after { content: ""; position: absolute; width: 220px; height: 220px; right: -90px; top: -100px; border: 1px solid rgba(99,102,241,.12); border-radius: 50%; box-shadow: 0 0 0 30px rgba(238,242,255,.42); pointer-events: none; }
+    .ms-hero { position: relative; overflow: hidden; display: grid; gap: 18px; margin-top: 12px; padding: 20px 16px; border: 1px solid var(--ms-line); border-radius: 22px; color: var(--ms-ink); background: #FFFFFF; box-shadow: 0 10px 28px rgba(16,24,40,.06); }
+    .ms-hero::after { display: none; }
     .ms-hero-main { position: relative; z-index: 1; display: grid; grid-template-columns: 62px minmax(0,1fr); align-items: center; gap: 14px; }
     .ms-salon-mark { width: 62px; height: 62px; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 20px; box-shadow: inset 0 1px rgba(255,255,255,.25); }
     .ms-salon-mark-img { width: 100%; height: 100%; object-fit: cover; }
@@ -756,14 +783,14 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-contact-item ion-icon { flex: 0 0 16px; margin-top: 2px; color: var(--ms-accent); font-size: 17px; }
     .ms-star-icon { color: #f59e0b !important; }
     .ms-hero-actions { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr; gap: 10px; }
-    .ms-book-button, .ms-profile-button { min-height: 48px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: .86rem; font-weight: 780; text-decoration: none; }
-    .ms-book-button { color: #fff; background: var(--ms-accent); box-shadow: 0 12px 28px rgba(99,102,241,.22); }
+    .ms-book-button, .ms-profile-button { min-height: 48px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: .86rem; font-weight: 780; text-decoration: none; transition: background-color var(--ms-motion), border-color var(--ms-motion), box-shadow var(--ms-motion), transform var(--ms-motion); }
+    .ms-book-button { color: #fff; background: var(--ms-accent); box-shadow: 0 10px 22px rgba(99,102,241,.2); }
     .ms-profile-button { border: 1px solid var(--ms-line); color: var(--ms-ink); background: #fff; }
 
     /* Quick Shortcuts Bar */
     .ms-quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding: 10px 2px 12px; border-bottom: 1px solid var(--ms-line); overflow: visible; }
     .ms-quick-actions::-webkit-scrollbar { display: none; }
-    .ms-quick-actions a { min-width: 0; min-height: 62px; display: grid; justify-items: center; align-content: center; gap: 5px; padding: 6px 4px; border-radius: 16px; color: var(--ms-ink); font-size: .68rem; font-weight: 750; text-align: center; text-decoration: none; white-space: normal; transition: background .15s ease; }
+    .ms-quick-actions a { min-width: 0; min-height: 62px; display: grid; justify-items: center; align-content: center; gap: 5px; padding: 6px 4px; border-radius: 16px; color: var(--ms-ink); font-size: .68rem; font-weight: 750; text-align: center; text-decoration: none; white-space: normal; transition: background-color var(--ms-motion), transform var(--ms-motion); }
     .ms-quick-actions a:hover { background: rgba(0,0,0,.03); }
     .ms-quick-actions ion-icon { color: var(--ms-accent); font-size: 21px; }
 
@@ -771,9 +798,9 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-relationship { margin-top: 32px; }
     .ms-relationship-label { padding: 6px 12px; border-radius: 999px; color: var(--ms-accent); background: var(--ms-accent-soft); font-size: .74rem; font-weight: 780; text-transform: capitalize; }
     .ms-snapshot { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-top: 4px; }
-    .ms-snapshot-item { min-width: 0; min-height: 114px; display: grid; align-content: space-between; gap: 6px; padding: 16px; border: 1px solid var(--ms-line); border-radius: 20px; color: inherit; background: rgba(255,255,255,.75); text-decoration: none; transition: transform .2s ease, box-shadow .2s ease; }
+    .ms-snapshot-item { min-width: 0; min-height: 114px; display: grid; align-content: space-between; gap: 6px; padding: 16px; border: 1px solid var(--ms-line); border-radius: 20px; color: inherit; background: rgba(255,255,255,.75); text-decoration: none; transition: transform var(--ms-motion), box-shadow var(--ms-motion), border-color var(--ms-motion); }
     .ms-snapshot-item:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,.05); }
-    .ms-snap-top { display: flex; align-items: center; justify-content: space-between; color: var(--ms-muted); font-size: .7rem; font-weight: 750; text-transform: uppercase; }
+    .ms-snap-top { display: flex; align-items: center; justify-content: space-between; color: var(--ms-muted); font-size: .72rem; font-weight: 750; letter-spacing: .01em; }
     .ms-snap-top ion-icon { color: var(--ms-accent); font-size: 17px; }
     .ms-snapshot-item strong { overflow: hidden; font-size: 1.25rem; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }
     .ms-snapshot-item small { color: var(--ms-muted); font-size: .7rem; line-height: 1.25; }
@@ -782,10 +809,10 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     /* Appointments & Rebooking */
     .ms-appointment { display: grid; grid-template-columns: 60px minmax(0,1fr) 44px; align-items: center; gap: 14px; padding: 18px 14px 18px 18px; border: 1px solid color-mix(in srgb, var(--ms-accent) 24%, var(--ms-line)); border-radius: 22px; background: #fff; box-shadow: 0 14px 36px rgba(16,24,40,.06); }
     .ms-date-tile { width: 60px; height: 70px; display: grid; place-items: center; align-content: center; border-radius: 18px; color: #fff; background: var(--ms-accent); }
-    .ms-date-tile span { font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .ms-date-tile span { font-size: .68rem; font-weight: 800; letter-spacing: .01em; }
     .ms-date-tile strong { font-size: 1.6rem; line-height: 1; }
     .ms-appointment-copy { min-width: 0; display: grid; gap: 4px; }
-    .ms-status-chip { width: max-content; color: var(--ms-accent); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
+    .ms-status-chip { width: max-content; color: var(--ms-accent); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
     .ms-appointment h3, .ms-empty-panel h3 { margin: 0; font-size: 1.05rem; letter-spacing: -.02em; }
     .ms-appointment p, .ms-empty-panel p { margin: 0; color: var(--ms-muted); font-size: .75rem; line-height: 1.35; display: flex; align-items: center; gap: 5px; }
     .ms-price { font-size: .84rem; color: var(--ms-accent); }
@@ -796,13 +823,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     
     .ms-rebook-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border: 1px solid var(--ms-line); border-radius: 18px; background: rgba(255,255,255,.8); }
     .ms-rebook-info { display: grid; gap: 2px; }
-    .ms-rebook-tag { color: var(--ms-accent); font-size: .64rem; font-weight: 800; text-transform: uppercase; }
+    .ms-rebook-tag { color: var(--ms-accent); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
     .ms-rebook-info strong { font-size: .86rem; }
     .ms-rebook-info small { color: var(--ms-muted); font-size: .7rem; }
     .ms-rebook-action { min-height: 38px; padding: 0 14px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; color: var(--ms-accent); background: var(--ms-accent-soft); font-size: .76rem; font-weight: 780; text-decoration: none; }
 
     /* Happy Hours & Offers Rail */
-    .ms-offer-rail, .ms-staff-rail { display: grid; grid-auto-flow: column; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
+    .ms-offer-rail, .ms-staff-rail { display: grid; grid-auto-flow: column; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; scroll-padding-inline: 16px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; contain: layout style; }
     .ms-offer-rail::-webkit-scrollbar, .ms-staff-rail::-webkit-scrollbar { display: none; }
     .ms-offer-rail { grid-auto-columns: minmax(260px, 82vw); gap: 12px; margin-inline: -16px; padding: 2px 16px 8px; }
     .ms-offer { min-height: 180px; scroll-snap-align: start; display: grid; align-content: space-between; gap: 8px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; color: var(--ms-ink); background: #fff; box-shadow: 0 12px 30px rgba(16,24,40,.06); }
@@ -817,9 +844,10 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-empty-line a { color: var(--ms-accent); font-weight: 760; text-decoration: none; }
 
     /* Category Filter & Service Menu */
-    .ms-cat-pills { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+    .ms-cat-pills { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; scroll-padding-inline: 2px; -webkit-overflow-scrolling: touch; }
     .ms-cat-pills::-webkit-scrollbar { display: none; }
-    .ms-cat-pill { padding: 7px 14px; border: 1px solid var(--ms-line); border-radius: 999px; color: var(--ms-ink); background: rgba(255,255,255,.7); font: inherit; font-size: .75rem; font-weight: 740; cursor: pointer; white-space: nowrap; }
+    .ms-cat-pill { min-height: 38px; padding: 7px 14px; border: 1px solid var(--ms-line); border-radius: 999px; color: var(--ms-ink); background: rgba(255,255,255,.7); font: inherit; font-size: .75rem; font-weight: 740; cursor: pointer; white-space: nowrap; transition: background-color var(--ms-motion), border-color var(--ms-motion), color var(--ms-motion), transform var(--ms-motion); }
+    .ms-cat-pill:active { transform: scale(.98); }
     .ms-cat-pill.active { border-color: var(--ms-accent); color: #fff; background: var(--ms-accent); }
     .ms-service-list { display: grid; gap: 8px; border-top: 1px solid var(--ms-line); }
     .ms-service { min-height: 68px; display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--ms-line); color: inherit; }
@@ -833,7 +861,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
 
     /* Staff Rail */
     .ms-staff-rail { grid-auto-columns: 140px; gap: 10px; margin-inline: -16px; padding: 2px 16px 8px; }
-    .ms-staff { min-height: 180px; scroll-snap-align: start; display: grid; justify-items: center; align-content: space-between; gap: 6px; padding: 16px 10px; border: 1px solid var(--ms-line); border-radius: 22px; color: inherit; background: rgba(255,255,255,.75); text-align: center; text-decoration: none; transition: transform .2s ease; }
+    .ms-staff { min-height: 180px; scroll-snap-align: start; display: grid; justify-items: center; align-content: space-between; gap: 6px; padding: 16px 10px; border: 1px solid var(--ms-line); border-radius: 22px; color: inherit; background: rgba(255,255,255,.75); text-align: center; text-decoration: none; transition: transform var(--ms-motion), border-color var(--ms-motion), box-shadow var(--ms-motion); }
     .ms-staff:hover { transform: translateY(-2px); }
     .ms-staff-avatar { width: 56px; height: 56px; border-radius: 20px; font-size: .9rem; }
     .ms-staff strong, .ms-staff small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -845,7 +873,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-benefit-grid { display: grid; gap: 12px; }
     .ms-benefit { min-height: 148px; display: grid; align-content: start; gap: 6px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: rgba(255,255,255,.8); }
     .ms-benefit.ms-membership { color: var(--ms-ink); border-color: var(--ms-line); background: #fff; }
-    .ms-benefit-chip { width: max-content; padding: 4px 10px; border-radius: 999px; color: var(--ms-accent); background: var(--ms-accent-soft); font-size: .64rem; font-weight: 800; text-transform: uppercase; }
+    .ms-benefit-chip { width: max-content; padding: 4px 10px; border-radius: 999px; color: var(--ms-accent); background: var(--ms-accent-soft); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
     .ms-pkg-chip { color: #3b82f6; background: #eff6ff; }
     .ms-benefit h3 { margin: 4px 0 0; font-size: 1.05rem; }
     .ms-benefit > strong { font-size: .8rem; }
@@ -858,11 +886,11 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-wallet-container { display: grid; gap: 12px; }
     .ms-wallet-card { padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.04); }
     .ms-wallet-top { display: flex; align-items: center; justify-content: space-between; }
-    .ms-wallet-top span { color: var(--ms-muted); font-size: .76rem; font-weight: 750; text-transform: uppercase; }
+    .ms-wallet-top span { color: var(--ms-muted); font-size: .76rem; font-weight: 750; letter-spacing: .01em; }
     .ms-wallet-amount { font-size: 1.5rem; color: var(--ms-accent); font-weight: 800; }
     .ms-wallet-hint { margin: 10px 0 0; color: var(--ms-muted); font-size: .76rem; }
     .ms-tx-list { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ms-line); display: grid; gap: 8px; }
-    .ms-tx-head { color: var(--ms-muted); font-size: .68rem; font-weight: 780; text-transform: uppercase; }
+    .ms-tx-head { color: var(--ms-muted); font-size: .72rem; font-weight: 780; letter-spacing: .01em; }
     .ms-tx-item { display: flex; align-items: center; justify-content: space-between; font-size: .78rem; }
     .ms-tx-item strong.is-credit { color: var(--ms-emerald); }
 
@@ -871,7 +899,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-gift-card ion-icon { color: var(--ms-accent); font-size: 22px; }
     .ms-gift-card strong { display: block; font-size: .84rem; }
     .ms-gift-card small { color: var(--ms-muted); font-size: .7rem; }
-    .ms-gift-status { padding: 4px 8px; border-radius: 999px; background: var(--ms-accent-soft); color: var(--ms-accent); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
+    .ms-gift-status { padding: 4px 8px; border-radius: 999px; background: var(--ms-accent-soft); color: var(--ms-accent); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
 
     /* History & Invoices */
     .ms-history-list, .ms-invoice-list, .ms-notif-list { display: grid; gap: 6px; border-top: 1px solid var(--ms-line); }
@@ -883,7 +911,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-history-price { font-size: .82rem; }
     .ms-invoice-item ion-icon { color: var(--ms-accent); font-size: 20px; }
     .ms-invoice-right { display: grid; justify-items: end; gap: 2px; }
-    .ms-inv-status { color: var(--ms-emerald); font-size: .64rem; font-weight: 800; text-transform: uppercase; }
+    .ms-inv-status { color: var(--ms-emerald); font-size: .72rem; font-weight: 800; letter-spacing: .01em; }
 
     /* Notifications */
     .ms-notif-item { display: grid; grid-template-columns: 36px minmax(0,1fr); gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--ms-line); }
@@ -895,7 +923,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     /* More & Support Grid */
     .ms-more { margin-bottom: 24px; }
     .ms-more-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
-    .ms-more-grid a { min-height: 110px; display: grid; align-content: space-between; gap: 10px; padding: 16px; border: 1px solid var(--ms-line); border-radius: 20px; color: inherit; background: rgba(255,255,255,.6); text-decoration: none; transition: transform .2s ease; }
+    .ms-more-grid a { min-height: 110px; display: grid; align-content: space-between; gap: 10px; padding: 16px; border: 1px solid var(--ms-line); border-radius: 20px; color: inherit; background: rgba(255,255,255,.6); text-decoration: none; transition: transform var(--ms-motion), border-color var(--ms-motion), box-shadow var(--ms-motion); }
     .ms-more-grid a:hover { transform: translateY(-2px); }
     .ms-more-grid ion-icon { color: var(--ms-accent); font-size: 22px; }
     .ms-more-grid strong { display: block; font-size: .84rem; }
@@ -909,10 +937,103 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-state .ms-choice-list { max-width: 480px; margin-top: 14px; text-align: left; }
     .ms-primary-button { min-height: 48px; margin-top: 10px; --background: var(--ms-accent); --background-hover: var(--ms-accent); --border-radius: 999px; --box-shadow: none; }
     .ms-loading { display: grid; gap: 14px; padding-top: 16px; }
-    .ms-skeleton { min-height: 96px; border-radius: 22px; background: linear-gradient(100deg, #ebe7df 20%, #f7f4ef 38%, #ebe7df 58%); background-size: 220% 100%; animation: ms-shimmer 1.4s ease-in-out infinite; }
+    .ms-skeleton { min-height: 96px; border-radius: 22px; background: linear-gradient(100deg, #ebe7df 20%, #f7f4ef 38%, #ebe7df 58%); background-size: 220% 100%; animation: none; }
     .ms-skeleton-hero { min-height: 280px; border-radius: 26px; }
     .ms-skeleton-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
     .ms-skeleton-wide { min-height: 150px; }
+
+    .ms-picker, .ms-hero, .ms-snapshot-item, .ms-appointment, .ms-empty-panel, .ms-rebook-card, .ms-offer, .ms-empty-line, .ms-staff, .ms-benefit, .ms-wallet-card, .ms-gift-card, .ms-more-grid a {
+      border-width: 1px;
+      border-style: solid;
+      border-radius: var(--ms-radius-card);
+      box-shadow: var(--ms-elevation-soft);
+    }
+    .ms-choice, .ms-cat-pill, .ms-quick-actions a {
+      border-radius: var(--ms-radius-item);
+    }
+    .ms-picker, .ms-hero, .ms-offer, .ms-benefit, .ms-wallet-card {
+      padding: var(--ms-card-padding);
+    }
+    .ms-choice, .ms-gift-card, .ms-empty-line {
+      padding: var(--ms-item-padding);
+    }
+    .ms-book-button, .ms-profile-button, .ms-empty-panel > a, .ms-rebook-action, .ms-offer-book, .ms-service-book-btn, .ms-primary-button {
+      min-height: var(--ms-button-height);
+      border-radius: 999px;
+    }
+    .ms-picker, .ms-section, .ms-benefit-grid, .ms-wallet-container {
+      gap: var(--ms-gap);
+    }
+    .ms-kicker, .ms-snap-top, .ms-status-chip, .ms-rebook-tag, .ms-benefit-chip, .ms-wallet-top span, .ms-tx-head, .ms-gift-status, .ms-inv-status, .ms-relationship-label {
+      font-size: var(--ms-type-label);
+      letter-spacing: 0.01em;
+      line-height: var(--ms-lh-tight);
+      text-transform: none;
+    }
+    .ms-section-head h2, .ms-picker-head h2 {
+      line-height: 1.16;
+      letter-spacing: -0.025em;
+    }
+    .ms-hero h1 {
+      line-height: 1.06;
+      letter-spacing: -0.032em;
+    }
+    .ms-appointment h3, .ms-empty-panel h3, .ms-offer h3, .ms-benefit h3 {
+      font-size: var(--ms-type-title);
+      line-height: 1.2;
+      letter-spacing: -0.015em;
+    }
+    .ms-snapshot-item strong, .ms-wallet-amount {
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+    }
+    .ms-picker-note, .ms-contact-item, .ms-appointment p, .ms-empty-panel p, .ms-offer p, .ms-state p, .ms-more-grid small, .ms-notif-item p {
+      font-size: var(--ms-type-body);
+      line-height: var(--ms-lh-body);
+    }
+    .ms-choice-copy small, .ms-snapshot-item small, .ms-rebook-info small, .ms-offer-footer small, .ms-service-copy small, .ms-staff small, .ms-benefit > small, .ms-gift-card small, .ms-history-copy small, .ms-invoice-copy small, .ms-notif-item small {
+      font-size: var(--ms-type-small);
+      line-height: 1.35;
+    }
+    .ms-service-copy strong, .ms-history-copy strong, .ms-invoice-copy strong, .ms-notif-item strong, .ms-more-grid strong, .ms-staff strong, .ms-choice-copy strong, .ms-gift-card strong {
+      font-size: var(--ms-type-title);
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+    .ms-book-button:active, .ms-profile-button:active, .ms-rebook-action:active, .ms-offer-book:active, .ms-service-book-btn:active, .ms-primary-button:active, .ms-arrow-link:active, .ms-more-grid a:active, .ms-staff:active, .ms-snapshot-item:active {
+      transform: scale(.99);
+    }
+
+    @media (hover: none) {
+      .ms-snapshot-item:hover, .ms-staff:hover, .ms-more-grid a:hover {
+        transform: none;
+        box-shadow: var(--ms-elevation-soft);
+      }
+    }
+
+    @media (max-width: 380px) {
+      .ms-page { padding-inline: 12px; }
+      .ms-hero-main { grid-template-columns: 54px minmax(0,1fr); gap: 12px; }
+      .ms-salon-mark { width: 54px; height: 54px; border-radius: 18px; }
+      .ms-quick-actions { gap: 6px; }
+      .ms-snapshot { gap: 8px; }
+      .ms-appointment { grid-template-columns: 52px minmax(0,1fr) 40px; gap: 10px; padding: 14px 10px 14px 14px; }
+      .ms-date-tile { width: 52px; height: 64px; border-radius: 16px; }
+      .ms-service { grid-template-columns: 24px minmax(0,1fr); gap: 8px; }
+      .ms-service-right { grid-column: 2; justify-content: space-between; width: 100%; }
+      .ms-gift-card, .ms-history-item, .ms-invoice-item { gap: 8px; }
+      .ms-offer-rail { grid-auto-columns: minmax(236px, 86vw); }
+      .ms-staff-rail { grid-auto-columns: 132px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ms-page *, .ms-page *::before, .ms-page *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
 
     @media (min-width: 430px) {
       .ms-hero-actions { grid-template-columns: 1.15fr .85fr; }
@@ -1131,6 +1252,7 @@ export class MySalonPage implements OnInit {
 
   private scopedUrl(...segments: Array<string | number>): string {
     const context = this.currentSalonContext();
+    if (!context.tenantId || !context.branchId) return "/tabs/home";
     const encoded = segments.map((segment) => encodeURIComponent(String(segment))).join("/");
     return `/my-salon/${encodeURIComponent(context.tenantId)}/${encodeURIComponent(context.branchId)}${encoded ? `/${encoded}` : ""}`;
   }
@@ -1139,8 +1261,8 @@ export class MySalonPage implements OnInit {
     const salon = this.dash()?.salon;
     const primary = this.marketplace.primarySalon();
     const stored = this.marketplace.salonModeContext();
-    const tenantId = salon?.tenantId || primary?.tenantId || this.route.snapshot.paramMap.get("tenantId") || stored?.tenantId || "default";
-    const branchId = salon?.branchId || primary?.branchId || this.route.snapshot.paramMap.get("branchId") || stored?.branchId || "default";
+    const tenantId = salon?.tenantId || primary?.tenantId || this.route.snapshot.paramMap.get("tenantId") || stored?.tenantId || "";
+    const branchId = salon?.branchId || primary?.branchId || this.route.snapshot.paramMap.get("branchId") || stored?.branchId || "";
     return {
       tenantId,
       branchId,

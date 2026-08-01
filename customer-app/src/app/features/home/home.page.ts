@@ -404,10 +404,8 @@ interface ConsultationChatMessage {
       overflow: visible;
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
-      background:
-        radial-gradient(circle at 12% 12%, rgba(99, 102, 241, 0.16), transparent 34%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.92));
-      box-shadow: 0 28px 74px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+      background: #FFFFFF;
+      box-shadow: 0 12px 34px rgba(16, 24, 40, 0.06);
     }
 
     .location-notice {
@@ -771,7 +769,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: 30px;
       background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
     }
 
     .home-search-wrap {
@@ -1057,7 +1055,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: inherit;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
+      background: #FFFFFF;
       text-align: left;
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -1815,7 +1813,7 @@ interface ConsultationChatMessage {
       }
       .dashboard-hero .eyebrow,
       .dashboard-hero .page-title { display: none; }
-      .dashboard-hero .search-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 6px; }
+      .dashboard-hero .search-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 4px; border-radius: 18px; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06); }
       .dashboard-hero .search-panel ion-button { width: 44px; min-width: 44px; height: 44px; font-size: 0; --padding-start: 0; --padding-end: 0; }
       .next-appointment {
         grid-template-columns: 54px minmax(0, 1fr) auto;
@@ -1823,15 +1821,19 @@ interface ConsultationChatMessage {
         width: 100%;
         padding: 12px;
         border-radius: 20px;
-        background: linear-gradient(145deg, var(--brand-900), var(--brand-700));
-        box-shadow: 0 14px 32px rgba(16, 24, 40, 0.18);
+        color: var(--text);
+        background: #FFFFFF;
+        border-color: var(--border);
+        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.06);
       }
       .next-appointment > a { grid-column: auto; justify-self: end; min-width: 60px; margin: 0; padding-inline: 10px; }
-      .appointment-date { width: 54px; min-width: 54px; height: 58px; border-radius: 15px; background: rgba(255, 255, 255, 0.14); }
-      .appointment-date span { color: #fff; }
-      .appointment-date strong { color: #fff; font-size: 1.55rem; }
-      .appointment-copy h2 { margin-block: 2px; color: #fff; font-size: 1rem; }
-      .appointment-copy p { color: rgba(255, 255, 255, 0.88); font-size: 0.74rem; line-height: 1.25; }
+      .appointment-date { width: 54px; min-width: 54px; height: 58px; border-radius: 15px; color: var(--primary); background: var(--primary-soft); }
+      .appointment-date span { color: var(--primary); }
+      .appointment-date strong { color: var(--primary); font-size: 1.55rem; }
+      .appointment-copy .eyebrow { color: var(--primary); }
+      .appointment-copy h2 { margin-block: 2px; color: var(--text); font-size: 1rem; }
+      .appointment-copy p { color: var(--muted); font-size: 0.74rem; line-height: 1.25; }
+      .next-appointment > a { color: #FFFFFF; background: var(--primary); }
       .account-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 0; }
       .account-shortcuts a {
         grid-template-columns: minmax(0, 1fr);

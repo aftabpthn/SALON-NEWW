@@ -52,7 +52,9 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
       background: color-mix(in srgb, var(--ms-shell-accent, var(--primary, #6366F1)) 13%, rgba(255, 255, 255, 0.94));
       box-shadow: 0 18px 46px rgba(16, 24, 40, 0.18);
       backdrop-filter: blur(18px);
+      contain: layout paint;
       transform: translateX(-50%);
+      will-change: transform;
     }
     .header-back, .header-brand, .header-action { display: inline-flex; align-items: center; }
     .header-back {
@@ -90,9 +92,9 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
       letter-spacing: -0.03em;
     }
     .header-logo img { width: 100%; height: 100%; object-fit: cover; }
-    .header-copy { display: grid; min-width: 0; line-height: 1.05; }
-    .header-copy strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.86rem; letter-spacing: -0.025em; }
-    .header-copy small { color: var(--muted, #667085); font-size: 0.67rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+    .header-copy { display: grid; min-width: 0; line-height: 1.14; }
+    .header-copy strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88rem; letter-spacing: -0.015em; }
+    .header-copy small { color: var(--muted, #667085); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.01em; }
     .header-action {
       flex: 0 0 auto;
       gap: 5px;
@@ -104,6 +106,18 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
       background: rgba(255, 255, 255, 0.78);
       font-size: 0.76rem;
       font-weight: 950;
+    }
+    .header-back, .header-brand, .header-action {
+      transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+      touch-action: manipulation;
+    }
+    .header-back:focus-visible, .header-brand:focus-visible, .header-action:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--ms-shell-accent, var(--primary, #6366F1)) 72%, white);
+      outline-offset: 3px;
+    }
+    .header-back:active, .header-brand:active, .header-action:active { transform: scale(0.98); }
+    @media (prefers-reduced-motion: reduce) {
+      .header-back, .header-brand, .header-action { transition: none; }
     }
     @media (max-width: 430px) {
       .header-copy strong { max-width: 150px; }

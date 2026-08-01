@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { AlertController, IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
+import { IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
 import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, chevronForwardOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
@@ -153,6 +153,21 @@ type WaitlistDialog = {
           </section>
         </div>
       }
+
+      @if (cancelDialog(); as booking) {
+        <div class="cancel-backdrop" role="presentation" (click)="closeCancelDialog()">
+          <section class="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-booking-title" (click)="$event.stopPropagation()">
+            <div>
+              <h2 id="cancel-booking-title">Cancel this booking?</h2>
+              <p>{{ booking.serviceName }} at {{ booking.businessName }} will be cancelled. The salon may apply its cancellation policy.</p>
+            </div>
+            <div class="cancel-actions">
+              <button type="button" class="neutral-action" (click)="closeCancelDialog()">Keep booking</button>
+              <button type="button" class="destructive-action" (click)="confirmCancel(booking.id)">Cancel booking</button>
+            </div>
+          </section>
+        </div>
+      }
     </ion-content>
   `,
   styles: [`
@@ -214,7 +229,7 @@ type WaitlistDialog = {
       padding: 10px;
       border-radius: 16px;
       color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
+      background: var(--primary);
     }
 
     .command-card strong {
@@ -247,7 +262,7 @@ type WaitlistDialog = {
     ion-segment-button::part(indicator-background) {
       height: 3px;
       border-radius: 999px 999px 0 0;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
+      background: var(--primary);
     }
 
     .booking-stack {
@@ -272,7 +287,7 @@ type WaitlistDialog = {
       align-content: center;
       border-radius: 24px;
       color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
+      background: var(--primary);
     }
 
     .date-block span {
@@ -359,7 +374,7 @@ type WaitlistDialog = {
     .booking-card:hover .view-details-btn {
       color: #ffffff;
       border-color: transparent;
-      background: linear-gradient(135deg, var(--primary), var(--brand-800, #6366F1));
+        background: var(--primary);
       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
     }
     .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
@@ -408,6 +423,33 @@ type WaitlistDialog = {
       background: rgba(17, 24, 39, 0.42);
       backdrop-filter: blur(5px);
     }
+
+    .cancel-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      display: grid;
+      align-items: end;
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+      background: rgba(17, 24, 39, 0.42);
+    }
+    .cancel-sheet {
+      width: min(100%, 520px);
+      display: grid;
+      gap: 16px;
+      margin: 0 auto;
+      padding: 20px;
+      border: 1px solid rgba(180, 35, 24, 0.16);
+      border-radius: 24px;
+      background: #FFFFFF;
+      box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+    }
+    .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+    .cancel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cancel-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
+    .cancel-actions .neutral-action { border: 1px solid var(--border); color: var(--text); background: #FFFFFF; }
+    .cancel-actions .destructive-action { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
     .waitlist-sheet {
       width: min(100%, 560px);
@@ -472,7 +514,7 @@ type WaitlistDialog = {
       padding: 10px;
       border-radius: 16px;
       color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
+      background: var(--primary);
       box-shadow: 0 12px 24px rgba(99, 102, 241, 0.14);
     }
 
@@ -549,7 +591,7 @@ type WaitlistDialog = {
     .waitlist-options button.active {
       border-color: transparent;
       color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      background: var(--primary);
       box-shadow: 0 12px 24px rgba(99, 102, 241, 0.15);
     }
 
@@ -692,47 +734,47 @@ type WaitlistDialog = {
         gap: 8px;
       }
 
-      .booking-card {
-        grid-template-columns: 48px minmax(0, 1fr);
+        .booking-card {
+          grid-template-columns: 54px minmax(0, 1fr);
         align-items: stretch;
-        gap: 8px;
-        min-height: 84px;
-        padding: 6px;
-        border-radius: 14px;
+        gap: 12px;
+          min-height: 104px;
+          padding: 10px 12px;
+          border-radius: 18px;
       }
 
       .date-block {
-        width: 48px;
-        min-height: 72px;
+          width: 54px;
+          min-height: 84px;
         grid-template-columns: 1fr;
         grid-template-rows: auto auto;
         justify-content: center;
         gap: 2px;
-        padding: 7px 3px;
-        border-radius: 11px;
+        padding: 8px 4px;
+          border-radius: 15px;
       }
 
       .date-block span {
-        font-size: 0.56rem;
-        letter-spacing: 0.06em;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
       }
 
       .date-block strong {
-        font-size: 1.24rem;
+          font-size: 1.48rem;
       }
 
-      .booking-content { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; align-self: stretch; height: 100%; overflow: hidden; }
-      .booking-title-row { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 2px; }
-      .booking-content .status-pill { align-self: flex-start; margin-top: 0; min-height: 16px; padding: 1px 5px; font-size: 0.52rem; }
-      .booking-bottom-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; margin-top: auto; }
-      .view-details-btn { align-self: flex-end; padding: 2px 6px; font-size: 0.58rem; gap: 2px; }
-      .view-details-btn ion-icon { font-size: 0.60rem; }
+      .booking-content { display: grid; gap: 6px; min-width: 0; align-self: stretch; height: 100%; overflow: visible; }
+      .booking-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; margin: 0; }
+      .booking-content .status-pill { align-self: flex-start; margin-top: 0; min-height: 24px; padding: 3px 8px; font-size: 0.72rem; }
+      .booking-bottom-row { display: grid; gap: 6px; margin-top: 0; }
+      .view-details-btn { justify-self: start; min-height: 36px; padding: 0 12px; font-size: 0.78rem; gap: 4px; }
+      .view-details-btn ion-icon { font-size: 0.8rem; }
 
       .booking-content h2 {
         margin: 0;
         overflow: hidden;
-        font-size: 0.88rem;
-        line-height: 1.05;
+        font-size: 1rem;
+        line-height: 1.18;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -740,22 +782,22 @@ type WaitlistDialog = {
       .booking-content p {
         margin: 0 0 3px;
         overflow: hidden;
-        font-size: 0.68rem;
-        line-height: 1.08;
+        font-size: 0.82rem;
+        line-height: 1.25;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
       .booking-meta {
-        gap: 1px;
+        gap: 5px;
         min-width: 0;
-        font-size: 0.61rem;
-        line-height: 1.08;
+        font-size: 0.78rem;
+        line-height: 1.25;
       }
 
       .booking-meta span {
         min-width: 0;
-        gap: 4px;
+        gap: 6px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -763,7 +805,7 @@ type WaitlistDialog = {
 
       .booking-meta ion-icon {
         flex: 0 0 auto;
-        font-size: 0.66rem;
+        font-size: 0.86rem;
       }
 
       .actions {
@@ -821,6 +863,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   readonly tab = signal<BookingTab>("upcoming");
   readonly actionLoading = signal("");
   readonly waitlistDialog = signal<WaitlistDialog | null>(null);
+  readonly cancelDialog = signal<Booking | null>(null);
   readonly filtered = computed(() => this.marketplace.bookings());
   readonly waitlistTimeOptions: Array<{ value: WaitlistDialog["preferredTime"]; label: string }> = [
     { value: "any", label: "Any time" },
@@ -836,7 +879,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   ];
   private midnightRefreshId: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly router: Router, private readonly toasts: ToastController) {
+  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly toasts: ToastController) {
     addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
   }
 
@@ -916,18 +959,15 @@ export class BookingsPage implements OnDestroy, OnInit {
   async cancel(event: Event, id: string) {
     event.preventDefault();
     event.stopPropagation();
-    const alert = await this.alerts.create({
-      header: "Cancel booking?",
-      message: "This will request cancellation from the booking API.",
-      buttons: [
-        { text: "Keep booking", role: "cancel" },
-        { text: "Cancel booking", role: "destructive", handler: () => void this.confirmCancel(id) }
-      ]
-    });
-    await alert.present();
+    this.cancelDialog.set(this.marketplace.bookings().find((booking) => booking.id === id) ?? null);
   }
 
-  private async confirmCancel(id: string) {
+  closeCancelDialog(): void {
+    this.cancelDialog.set(null);
+  }
+
+  async confirmCancel(id: string) {
+    this.cancelDialog.set(null);
     await this.marketplace.cancelBooking(id).catch(() => undefined);
     // Re-fetch so a cancelled booking drops out of the Upcoming list immediately.
     this.reload();

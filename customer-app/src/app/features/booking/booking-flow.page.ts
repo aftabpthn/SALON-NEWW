@@ -1,11 +1,12 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
-import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AvailabilityDay, AvailabilitySlot, ServiceItem, StaffMember } from "../../core/api.types";
 import { BookingProgressComponent, BookingProgressStepId } from "./booking-progress.component";
+import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-header.component";
 
 const PENDING_BOOKING_INTENT_KEY = "auraCustomerPendingBookingIntent";
 
@@ -30,23 +31,18 @@ type BookingFlowItem = {
 
 @Component({
   standalone: true,
-  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar, BookingProgressComponent],
+  imports: [IonButton, IonContent, IonIcon, BookingProgressComponent, CustomerMobileHeaderComponent],
   template: `
-    <ion-header class="ion-no-border">
-      <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button [defaultHref]="backHref()"></ion-back-button></ion-buttons>
-        @if (isRescheduling()) {
-          <ion-title class="edit-toolbar-title">Edit appointment</ion-title>
-        }
-      </ion-toolbar>
-    </ion-header>
+    <aura-customer-mobile-header
+      [title]="isRescheduling() ? 'Edit appointment' : 'Book appointment'"
+      [subtitle]="business()?.businessName || 'Select your service'"
+      [backHref]="backHref()" />
 
     <ion-content>
       @if (business(); as business) {
         <main class="page booking-page" [class.editing]="isRescheduling()">
           @if (!isRescheduling()) {
             <section class="booking-hero premium-card">
-              <img [src]="business.coverImage || 'assets/icons/icon.svg'" [alt]="business.businessName" />
               <div>
                 <h1 class="page-title">Book your visit</h1>
                 <p class="muted">{{ business.businessName }} · {{ business.area }} · {{ business.ratingAverage }} rating</p>
@@ -58,6 +54,14 @@ type BookingFlowItem = {
             <section class="state-card premium-card error"><h2>Booking data unavailable</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }
 
+          @if (isRescheduling()) {
+            <section class="edit-context-card premium-card" aria-label="Current appointment being edited">
+              <span>Edit appointment</span>
+              <strong>{{ activeService()?.name || selectedServices()[0]?.name || 'Selected service' }}</strong>
+              <small>{{ itemSlotLabel(0) || 'Current time will be preserved until changed' }} · {{ activeStaffName() }}</small>
+            </section>
+          }
+
           <app-booking-progress [currentStep]="currentBookingStep()" (stepSelect)="goToStep($event)" />
 
           @if (currentBookingStep() === 1) {
@@ -66,13 +70,13 @@ type BookingFlowItem = {
               <div class="service-list">
                 @for (service of business.services; track service.id) {
                   <button class="service-choice premium-card" [class.selected]="isServiceSelected(service.id)" (click)="toggleService(service.id)">
-                    <div>
+                    <div class="service-choice-copy">
                       <h3>{{ service.name }}</h3>
-                      <p>{{ service.description }}</p>
-                      <strong>{{ servicePriceLabel(service) }}</strong>
+                      @if (service.description) { <p>{{ service.description }}</p> }
+                      <span>{{ service.durationMinutes || 0 }} min</span>
                     </div>
-                    <span class="flow-service-media">
-                      <img [src]="serviceImage(service, $index)" [alt]="service.name + ' service image'" loading="lazy" />
+                    <span class="service-choice-side">
+                      <strong>{{ money(service.pricePaise) }}</strong>
                       <span class="choice-action">{{ isServiceSelected(service.id) ? "Added" : "Add" }}</span>
                     </span>
                     @if (service.popular) { <span class="offer-pill">Popular</span> }
@@ -143,17 +147,17 @@ type BookingFlowItem = {
                             <strong>Any available professional</strong>
                             <span>Auto-matches top available specialist</span>
                           </div>
-                          <em>Recommended</em>
+                          <em>{{ item.staffId === null ? "Selected" : "Recommended" }}</em>
                         </button>
                         @for (staff of staffForService(service); track staff.id) {
-                          <article class="staff-choice premium-card" [class.selected]="item.staffId === staff.id" (click)="setItemStaff(activeItemIndex(), staff.id)">
+                          <button type="button" class="staff-choice premium-card" [class.selected]="item.staffId === staff.id" (click)="setItemStaff(activeItemIndex(), staff.id)">
                             <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
                             <div>
                               <strong>{{ staff.name }}</strong>
                               <span>{{ staff.title }} @if (staff.rating) { · {{ staff.rating }} rating }</span>
                             </div>
-                            <button type="button" class="check-slots-button" (click)="checkItemSlots($event, activeItemIndex(), staff.id)">Pick Time</button>
-                          </article>
+                            <em>{{ item.staffId === staff.id ? "Selected" : "Select" }}</em>
+                          </button>
                         } @empty {
                           <p class="muted">Any available professional will be assigned.</p>
                         }
@@ -169,10 +173,15 @@ type BookingFlowItem = {
             <section class="panel">
               <div class="section-heading"><div><h2 class="section-title">Pick date and time</h2><p class="muted">Each service needs its own non-overlapping slot.</p></div></div>
               @if (bookingItems().length > 1) {
-                <div class="multi-service-progress-banner">
-                  <p>Step 3: Selecting slot for <strong>Service {{ activeItemIndex() + 1 }} of {{ bookingItems().length }}</strong> ({{ activeService()?.name }})</p>
-                  <small>{{ slotsSelectedSummary() }}</small>
-                </div>
+                <article class="schedule-context-card premium-card" aria-live="polite">
+                  <div class="schedule-context-count">
+                     <span>Service {{ activeItemIndex() + 1 }} of {{ bookingItems().length }}</span>
+                  </div>
+                  <div class="schedule-context-copy">
+                     <strong>{{ activeService()?.name }}</strong>
+                     <span>{{ activeStaffName() }} @if (activeService(); as service) { · {{ service.durationMinutes || 0 }} min }</span>
+                  </div>
+                </article>
               }
               <div class="booking-item-tabs" aria-label="Selected services">
                 @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
@@ -185,42 +194,85 @@ type BookingFlowItem = {
                   }
                 }
               </div>
+              @if (scheduledServiceSummaries().length) {
+                <section class="scheduled-services-card premium-card" aria-label="Scheduled services">
+                  <span>Already scheduled</span>
+                  <div>
+                    @for (scheduled of scheduledServiceSummaries(); track scheduled.index) {
+                      <button type="button" [class.active]="scheduled.active" (click)="setActiveItem(scheduled.index)">
+                        <strong>{{ scheduled.index + 1 }}. {{ scheduled.name }}</strong>
+                        <small>{{ scheduled.time }} · {{ scheduled.staff }}</small>
+                      </button>
+                    }
+                  </div>
+                </section>
+              }
               <article class="selected-staff-card premium-card">
                 <div class="any-avatar"><ion-icon name="person-outline"></ion-icon></div>
                 <div>
                   <span>Available times for {{ activeService()?.name }}</span>
                   <strong>{{ activeStaffName() }}</strong>
                   @if (activeService(); as service) { <small>{{ activeServiceLabel(service) }}</small> }
+                  <small class="selected-slot-note">{{ activeSlotStatusLabel() }}</small>
                 </div>
               </article>
-              @if (marketplace.loading()) {
-                <section class="state-card premium-card"><h2>Loading availability</h2></section>
-              }
               <div class="date-row">
-                @for (date of availabilityDays(); track date.date) {
-                  <button class="date-card" [class.selected]="activeItem().date === date.date" [class.availability-full]="dateAvailabilityClass(date) === 'full'" [class.availability-many]="dateAvailabilityClass(date) === 'many'" [class.availability-partial]="dateAvailabilityClass(date) === 'partial'" (click)="setDate(date.date)">
-                    <strong>{{ date.dayLabel }}</strong>
-                    <span>{{ date.label }}</span>
-                    <em>{{ dateAvailabilityLabel(date) }}</em>
-                  </button>
-                } @empty {
-                  <section class="state-card premium-card"><h2>No slots available</h2></section>
+                @if (marketplace.loading() && !availabilityDays().length) {
+                  @for (item of [1, 2, 3, 4, 5]; track item) {
+                    <div class="date-card skeleton-date" aria-hidden="true">
+                      <span class="skeleton-line short"></span>
+                      <span class="skeleton-line"></span>
+                      <span class="skeleton-line mini"></span>
+                    </div>
+                  }
+                } @else {
+                  @for (date of availabilityDays(); track date.date) {
+                    <button
+                      class="date-card"
+                      [class.selected]="activeItem().date === date.date"
+                      [disabled]="dateAvailabilityClass(date) === 'full'"
+                      [attr.aria-label]="dateCardLabel(date)"
+                      [attr.aria-pressed]="activeItem().date === date.date"
+                      (click)="setDate(date.date)">
+                      <strong>{{ date.dayLabel }}</strong>
+                      <span>{{ date.label }}</span>
+                      <em aria-hidden="true"></em>
+                    </button>
+                  } @empty {
+                    <section class="state-card premium-card stable-state"><h2>No slots available</h2></section>
+                  }
                 }
               </div>
               <div class="slot-sections">
-                @for (group of slotGroups(); track group.label) {
-                  <section class="slot-group premium-card">
-                    <h3>{{ group.label }}</h3>
+                @if (marketplace.loading() && !slotGroups().length) {
+                  <section class="slot-group premium-card skeleton-slot-group" aria-label="Loading time slots" aria-busy="true">
+                    <span class="skeleton-line heading"></span>
                     <div class="slot-grid">
-                      @for (slot of group.slots; track slot.startAt) {
-                        <button class="slot" [disabled]="!isSlotSelectable(slot)" [class.selected]="activeItem().slotStartAt === slot.startAt" (click)="selectActiveSlot(slot)">
-                          {{ slot.displayTime }}
-                        </button>
+                      @for (item of [1, 2, 3, 4, 5, 6]; track item) {
+                        <span class="slot skeleton-slot" aria-hidden="true"></span>
                       }
                     </div>
                   </section>
-                } @empty {
-                  <section class="state-card premium-card"><h2>No time slots</h2></section>
+                } @else {
+                  @for (group of slotGroups(); track group.label) {
+                    <section class="slot-group premium-card">
+                      <h3>{{ group.label }}</h3>
+                      <div class="slot-grid">
+                        @for (slot of group.slots; track slot.startAt) {
+                          <button
+                            class="slot"
+                            [disabled]="!isSlotSelectable(slot) || activeItem().slotStartAt === slot.startAt"
+                            [class.selected]="activeItem().slotStartAt === slot.startAt"
+                            [attr.aria-pressed]="activeItem().slotStartAt === slot.startAt"
+                            (click)="selectActiveSlot(slot)">
+                            {{ slot.displayTime }}
+                          </button>
+                        }
+                      </div>
+                    </section>
+                  } @empty {
+                    <section class="state-card premium-card stable-state"><h2>No time slots</h2></section>
+                  }
                 }
               </div>
             </section>
@@ -230,34 +282,41 @@ type BookingFlowItem = {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
                 <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
-                <dl class="multi-service-summary-dl">
-                  <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
-                  <div><dt>Selected Services</dt><dd>{{ selectedServices().length }} service{{ selectedServices().length === 1 ? "" : "s" }} ({{ bookingTotalLabel() }})</dd></div>
-                  @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
-                    @if (serviceById(item.serviceId); as service) {
-                      <div class="confirm-service-row">
-                        <dt>
-                          <span><span class="step-num">{{ itemIndex + 1 }}</span><strong>{{ service.name }}</strong></span>
-                          <small>{{ servicePriceLabel(service) }}</small>
-                        </dt>
-                        <dd>
-                          <span><ion-icon name="person-outline"></ion-icon> {{ itemStaffName(item) }}</span>
-                          <span><ion-icon name="time-outline"></ion-icon> {{ itemSlotLabel(itemIndex) || "No time selected" }}</span>
-                        </dd>
-                      </div>
+                <section class="review-group review-priority-group" aria-label="Booking summary">
+                  <div class="review-summary-strip">
+                    <span><small>Services</small><strong>{{ serviceCountLabel() }}</strong></span>
+                    <span><small>Duration</small><strong>{{ durationLabel() }}</strong></span>
+                    <span class="review-total"><small>Total</small><strong>{{ totalPriceLabel() }}</strong></span>
+                  </div>
+                </section>
+
+                <section class="review-group" aria-label="Services and times">
+                  <h3>Services & times</h3>
+                  <dl class="multi-service-summary-dl">
+                    @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
+                      @if (serviceById(item.serviceId); as service) {
+                        <div class="confirm-service-row">
+                          <dt>
+                            <span><span class="step-num">{{ itemIndex + 1 }}</span><strong>{{ service.name }}</strong></span>
+                            <small>{{ servicePriceLabel(service) }}</small>
+                          </dt>
+                          <dd>
+                            <span><ion-icon name="person-outline"></ion-icon> {{ itemStaffName(item) }}</span>
+                            <span><ion-icon name="time-outline"></ion-icon> {{ itemSlotLabel(itemIndex) || "No time selected" }}</span>
+                          </dd>
+                        </div>
+                      }
                     }
-                  }
-                  <div><dt>Payment</dt><dd>Pay at salon</dd></div>
-                </dl>
-              </article>
-              <article class="premium-card trust-card">
-                <ion-icon name="checkmark-circle-outline"></ion-icon>
-                @if (marketplace.isAuthenticated()) {
-                  <h3>Ready to book</h3>
-                  <p>Your {{ selectedServices().length }} appointment{{ selectedServices().length === 1 ? '' : 's' }} will be reserved immediately.</p>
-                } @else {
-                  <h3>Sign in to reserve</h3>
-                }
+                  </dl>
+                </section>
+
+                <section class="review-group" aria-label="Salon and payment">
+                  <h3>Salon & payment</h3>
+                  <dl class="review-meta-dl">
+                    <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
+                    <div><dt>Payment</dt><dd>Pay at salon</dd></div>
+                  </dl>
+                </section>
               </article>
             </section>
           }
@@ -265,15 +324,16 @@ type BookingFlowItem = {
 
         <div class="booking-cta sticky-cta">
           <div class="bottom-action-card">
-            <div>
-              <small>{{ selectedServicesSummary() || "Select services" }}</small>
-              <strong>{{ bookingTotalLabel() || business.businessName }}</strong>
+            <div class="booking-summary-metrics" aria-label="Booking summary">
+              <strong>{{ serviceCountLabel() }} · {{ durationLabel() }}</strong>
+              <span>{{ totalPriceLabel() }}</span>
             </div>
             @if (currentBookingStep() < 4) {
               <ion-button class="primary-gradient" [disabled]="!canContinue()" (click)="next()">Continue</ion-button>
             } @else {
               <ion-button class="primary-gradient" [disabled]="!canConfirm() || marketplace.loading()" (click)="confirmBooking()">
-                  {{ isRescheduling() ? "Save changes" : (marketplace.isAuthenticated() ? "Confirm booking" : "Sign in to book") }}
+                  @if (marketplace.loading()) { <span class="button-spinner" aria-hidden="true"></span> }
+                  <span>{{ isRescheduling() ? "Save changes" : (marketplace.isAuthenticated() ? "Confirm booking" : "Sign in to book") }}</span>
               </ion-button>
             }
           </div>
@@ -281,7 +341,16 @@ type BookingFlowItem = {
       } @else {
         <main class="page-narrow">
           @if (marketplace.loading()) {
-            <section class="state-card premium-card"><h1>Loading booking flow</h1></section>
+            <section class="state-card premium-card booking-flow-skeleton" aria-label="Loading booking flow" aria-busy="true">
+              <span class="skeleton-line title"></span>
+              <span class="skeleton-line wide"></span>
+              <span class="skeleton-line"></span>
+              <div class="slot-grid">
+                @for (item of [1, 2, 3, 4, 5, 6]; track item) {
+                  <span class="slot skeleton-slot" aria-hidden="true"></span>
+                }
+              </div>
+            </section>
           } @else {
             <section class="state-card premium-card error"><h1>Booking unavailable</h1><p>{{ marketplace.error() || "The business could not be loaded." }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }
@@ -290,7 +359,8 @@ type BookingFlowItem = {
     </ion-content>
   `,
   styles: [`
-    .booking-page { max-width: 980px; padding-bottom: 14px; }
+    :host { --booking-footer-height: 88px; --booking-footer-gap: 16px; }
+    .booking-page { max-width: 980px; padding-bottom: calc(var(--booking-footer-height) + var(--booking-footer-gap) + env(safe-area-inset-bottom)); }
     .edit-toolbar-title {
       padding-inline: 0 16px;
       color: var(--text);
@@ -301,11 +371,22 @@ type BookingFlowItem = {
     }
     .booking-page.editing { padding-top: 8px; }
     .booking-page.editing app-booking-progress { display: block; margin-top: 2px; }
-    .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
-    .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)); }
-    .booking-hero { display: grid; gap: 10px; align-items: center; padding: 10px; }
-    .booking-hero img { width: 100%; aspect-ratio: 16 / 7; max-height: 150px; height: auto; border-radius: 20px; object-fit: cover; }
+    .booking-cta { width: min(980px, calc(100% - 24px)); margin: 0 auto; }
+    .booking-cta.sticky-cta { bottom: calc(8px + env(safe-area-inset-bottom)); }
+    .booking-cta .bottom-action-card { height: var(--booking-footer-height); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; overflow: hidden; }
+    .booking-summary-metrics { min-width: 0; display: grid; gap: 4px; }
+    .booking-summary-metrics strong, .booking-summary-metrics span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .booking-summary-metrics strong { color: var(--text); font-size: 0.88rem; font-weight: 900; line-height: 1.15; }
+    .booking-summary-metrics span { color: var(--primary); font-size: 1rem; font-weight: 950; line-height: 1.1; }
+    .booking-cta .bottom-action-card ion-button { min-width: 128px; height: 48px; margin: 0; }
+    .button-spinner { width: 16px; height: 16px; display: inline-block; margin-right: 8px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 999px; animation: button-spin 700ms linear infinite; vertical-align: -3px; }
+    .booking-hero { display: grid; gap: 4px; align-items: center; padding: 16px; }
     .booking-hero .page-title { font-size: clamp(1.45rem, 4vw, 2.7rem); }
+    .edit-context-card { display: grid; gap: 4px; padding: 12px 16px; border-color: rgba(99, 102, 241, 0.24); background: var(--primary-soft); }
+    .edit-context-card span { color: var(--primary); font-size: 0.76rem; font-weight: 900; }
+    .edit-context-card strong, .edit-context-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .edit-context-card strong { color: var(--text); font-size: 0.96rem; }
+    .edit-context-card small { color: var(--muted); font-size: 0.82rem; font-weight: 800; }
     .booking-intent-row, .resource-grid, .time-mode-row { display: grid; gap: 10px; margin-bottom: 14px; }
     .booking-intent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-soft); font-weight: 900; }
@@ -329,21 +410,25 @@ type BookingFlowItem = {
     .time-mode-row button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 10px; }
     .service-list, .staff-list, .slot-sections { display: grid; gap: 12px; }
     .service-choice, .staff-choice { width: 100%; display: grid; gap: 12px; align-items: center; padding: 16px; border-color: var(--border); color: var(--text); text-align: left; }
-    .service-choice { grid-template-columns: minmax(0, 1fr) 112px; align-items: start; }
-    .flow-service-media { display: grid; justify-items: center; color: inherit; }
-    .flow-service-media img { width: 108px; height: 88px; border-radius: 17px; object-fit: cover; background: var(--surface-soft); box-shadow: 0 10px 22px rgba(16, 24, 40, 0.1); }
-    .choice-action { min-width: 76px; min-height: 34px; margin-top: -14px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 12px; color: var(--primary); background: #FFFFFF; font-size: 0.82rem; font-weight: 950; box-shadow: 0 8px 18px rgba(16, 24, 40, 0.1); }
-    .service-choice.selected .choice-action { color: #059669; border-color: rgba(16, 185, 129, 0.32); background: #D1FAE5; }
-    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(99, 102, 241, 0.48); background: var(--primary-soft); box-shadow: 0 16px 34px rgba(99, 102, 241, 0.14); }
-    .service-choice h3 { margin: 0 0 6px; font-size: 1.12rem; letter-spacing: -0.035em; }
-    .service-choice p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
-    .service-choice strong { color: var(--primary-2); }
-    .staff-choice { grid-template-columns: auto minmax(0, 1fr) auto; }
-    .staff-choice img, .any-avatar { width: 62px; height: 62px; border-radius: 22px; object-fit: cover; }
-    .any-avatar { display: grid; place-items: center; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800)); font-size: 1.35rem; }
-    .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.35; }
-    .staff-choice em { color: var(--primary-2); font-weight: 900; text-align: right; }
-    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(99, 102, 241, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
+    .service-choice { grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-height: 76px; gap: 12px; padding: 12px; transition: none; }
+    .service-choice-copy { min-width: 0; display: grid; gap: 4px; }
+    .service-choice-side { display: grid; justify-items: end; gap: 8px; color: inherit; }
+    .choice-action { min-width: 72px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.24); border-radius: 999px; color: var(--primary); background: #FFFFFF; font-size: 0.8rem; font-weight: 950; }
+    .service-choice.selected .choice-action { color: #FFFFFF; border-color: transparent; background: var(--primary); }
+    .service-choice.selected, .staff-choice.selected { border-color: rgba(99, 102, 241, 0.48); background: var(--primary-soft); box-shadow: 0 12px 24px rgba(99, 102, 241, 0.12); }
+    .service-choice h3 { margin: 0 0 4px; font-size: 1.06rem; letter-spacing: -0.035em; line-height: 1.15; }
+    .service-choice p { display: -webkit-box; margin: 0; overflow: hidden; color: var(--muted); font-size: 0.82rem; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+    .service-choice-copy span { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+    .service-choice strong { color: var(--primary); font-size: 0.92rem; }
+    .staff-choice { position: relative; grid-template-columns: auto minmax(0, 1fr) auto; min-height: 76px; gap: 10px; padding: 12px 14px; transition: none; }
+    .staff-choice.selected { outline: 2px solid rgba(99, 102, 241, 0.28); outline-offset: 2px; }
+    .staff-choice img, .any-avatar { width: 54px; height: 54px; border-radius: 18px; object-fit: cover; }
+    .any-avatar { display: grid; place-items: center; color: #FFFFFF; background: var(--primary); font-size: 1.35rem; }
+    .staff-choice strong { display: block; line-height: 1.15; }
+    .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.25; }
+    .staff-choice em { min-width: 68px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 999px; color: var(--primary); background: #FFFFFF; font-size: 0.78rem; font-weight: 900; text-align: center; }
+    .staff-choice.selected em { color: #FFFFFF; background: var(--primary); }
+    .check-slots-button { justify-self: end; min-height: 40px; padding: 0 13px; border: 1px solid rgba(99, 102, 241, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-size: 0.8rem; font-weight: 900; white-space: nowrap; }
     .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
     .multi-service-stack { display: grid; gap: 14px; }
     .service-schedule-card { display: grid; gap: 12px; padding: 16px; }
@@ -351,9 +436,23 @@ type BookingFlowItem = {
     .service-schedule-head h3 { margin: 0 0 3px; font-size: 1rem; letter-spacing: -0.025em; }
     .service-schedule-head small { color: var(--muted); font-weight: 850; }
     .service-schedule-head > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-weight: 950; }
+    .schedule-context-card { position: sticky; top: 0; z-index: 16; display: grid; gap: 4px; align-items: center; margin-bottom: 12px; padding: 12px 14px; border-color: rgba(99, 102, 241, 0.24); background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(14px); }
+    .schedule-context-count span { color: var(--primary); font-size: 0.76rem; font-weight: 900; line-height: 1.2; }
+    .schedule-context-copy { min-width: 0; display: grid; gap: 3px; }
+    .schedule-context-copy strong, .schedule-context-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .schedule-context-copy strong { color: var(--text); font-size: 1rem; line-height: 1.12; }
+    .schedule-context-copy span { color: var(--muted); font-size: 0.82rem; font-weight: 800; }
+    .scheduled-services-card { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px; }
+    .scheduled-services-card > span { color: var(--muted); font-size: 0.68rem; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; }
+    .scheduled-services-card > div { display: grid; gap: 7px; }
+    .scheduled-services-card button { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-height: 48px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--surface); text-align: left; }
+    .scheduled-services-card button.active { border-color: rgba(99, 102, 241, 0.4); background: var(--primary-soft); }
+    .scheduled-services-card strong, .scheduled-services-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scheduled-services-card strong { font-size: 0.82rem; }
+    .scheduled-services-card small { color: var(--muted); font-size: 0.74rem; font-weight: 800; }
     .staff-list.compact { gap: 8px; }
-    .staff-list.compact .staff-choice { padding: 11px; border-radius: 16px; }
-    .staff-list.compact .staff-choice img, .staff-list.compact .any-avatar { width: 44px; height: 44px; border-radius: 15px; }
+    .staff-list.compact .staff-choice { min-height: 68px; padding: 9px 10px; border-radius: 16px; }
+    .staff-list.compact .staff-choice img, .staff-list.compact .any-avatar { width: 42px; height: 42px; border-radius: 14px; }
     .booking-item-tabs { display: grid; gap: 8px; margin-bottom: 14px; }
     .booking-item-tabs button { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface); text-align: left; box-shadow: var(--shadow-soft); }
     .booking-item-tabs button > span { grid-row: span 2; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-weight: 950; }
@@ -363,72 +462,107 @@ type BookingFlowItem = {
     .booking-item-tabs button.done > span { color: #059669; background: #D1FAE5; }
     .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(99, 102, 241, 0.28); background: var(--primary-soft); }
     .selected-staff-card span, .selected-staff-card small { display: block; color: var(--muted); line-height: 1.35; }
-    .selected-staff-card span { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+    .selected-staff-card span { font-size: 0.78rem; font-weight: 900; letter-spacing: 0; }
     .selected-staff-card strong { display: block; margin-top: 3px; color: var(--text); font-size: 1.02rem; font-weight: 900; }
     .selected-staff-card small { margin-top: 2px; font-weight: 800; }
-    .date-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+    .selected-staff-card .selected-slot-note { color: var(--primary); }
+    .date-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(98px, 1fr); gap: 8px; overflow-x: auto; padding: 2px 1px 12px; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .date-row::-webkit-scrollbar { display: none; }
     .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); font-weight: 900; }
-    .date-card { position: relative; display: grid; gap: 5px; justify-items: center; padding: 14px 10px; overflow: hidden; }
-    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--border-strong); }
-    .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36); background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), rgba(255, 255, 255, 0.96)); }
-    .date-card.availability-many::before { background: #21a657; }
-    .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42); background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), rgba(255, 255, 255, 0.96)); }
-    .date-card.availability-partial::before { background: #f09a22; }
-    .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38); background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), rgba(255, 255, 255, 0.96)); }
-    .date-card.availability-full::before { background: #d94141; }
-    .date-card span { color: var(--muted); font-size: 0.86rem; }
-    .date-card em { color: var(--muted); font-size: 0.72rem; font-style: normal; font-weight: 950; text-transform: uppercase; }
-    .date-card.availability-many em { color: #157c40; }
-    .date-card.availability-partial em { color: #a96108; }
-    .date-card.availability-full em { color: #aa2e2e; }
+    .date-card { position: relative; display: grid; gap: 4px; justify-items: center; min-height: 78px; padding: 12px 10px 10px; overflow: hidden; scroll-snap-align: start; }
+    .date-card.selected { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 10px 24px rgba(99, 102, 241, 0.16); }
+    .date-card.selected span { color: rgba(255,255,255,.82); }
+    .date-card:disabled { color: var(--muted); border-color: var(--border); background: var(--surface-soft); opacity: .58; box-shadow: none; }
+    .date-card strong { line-height: 1.05; }
+    .date-card span { color: var(--muted); font-size: 0.78rem; line-height: 1.05; }
+    .date-card em { display: none; }
+    .skeleton-line { display: block; width: 100%; height: 12px; border-radius: 999px; background: linear-gradient(90deg, rgba(234, 236, 240, 0.92), rgba(248, 250, 252, 0.98), rgba(234, 236, 240, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; }
+    .skeleton-line.title { width: min(260px, 75%); height: 28px; border-radius: 12px; }
+    .skeleton-line.heading { width: 112px; height: 18px; margin-bottom: 12px; border-radius: 10px; }
+    .skeleton-line.wide { width: min(520px, 100%); }
+    .skeleton-line.short { width: 58%; }
+    .skeleton-line.mini { width: 42%; height: 9px; }
+    .date-card.skeleton-date { min-height: 89px; align-content: center; gap: 8px; pointer-events: none; }
     .slot-group, .state-card { padding: 16px; }
     .slot-group h3, .state-card h2, .state-card h1 { margin: 0 0 12px; letter-spacing: -0.035em; }
     .state-card.error p { color: #EF4444; }
+    .state-card.stable-state { min-height: 96px; display: grid; align-content: center; }
+    .booking-flow-skeleton { min-height: 320px; display: grid; align-content: start; gap: 14px; }
+    .skeleton-slot-group { min-height: 158px; }
     .slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .slot { padding: 12px 8px; }
-    .slot:disabled { color: rgba(82, 101, 121, 0.48); background: var(--surface-soft); text-decoration: line-through; }
-    .confirm-grid { display: grid; gap: 14px; }
-    .confirm-card, .trust-card { padding: 20px; }
+    .slot { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border-color: var(--border); color: var(--text); background: #FFFFFF; font-size: 0.9rem; line-height: 1; transition: none; }
+    .slot:not(:disabled):not(.selected):hover, .slot:not(:disabled):not(.selected):focus-visible { border-color: rgba(99, 102, 241, 0.42); }
+    .slot.skeleton-slot { min-height: 45px; border-color: transparent; background: linear-gradient(90deg, rgba(234, 236, 240, 0.92), rgba(248, 250, 252, 0.98), rgba(234, 236, 240, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; pointer-events: none; }
+    .slot.selected { position: relative; color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22); text-decoration: none; opacity: 1; }
+    .slot.selected::after { content: none; }
+    .slot:disabled:not(.selected) { color: rgba(82, 101, 121, 0.42); border-color: rgba(234, 236, 240, 0.9); background: var(--surface-soft); text-decoration: none; box-shadow: none; }
+    .confirm-grid { display: grid; gap: 12px; }
+    .confirm-card, .trust-card { padding: 16px; }
     .confirm-card h2, .trust-card h3 { margin: 0 0 10px; letter-spacing: -0.04em; }
-    dl { display: grid; gap: 2px; margin: 18px 0 0; }
-    dl div { display: flex; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .review-group { display: grid; gap: 10px; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+    .review-priority-group { padding-top: 0; margin-top: 0; border-top: 0; }
+    .review-group h3 { margin: 0; color: var(--muted); font-size: 0.74rem; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; }
+    .review-summary-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .review-summary-strip span { min-width: 0; display: grid; gap: 3px; padding: 11px 10px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+    .review-summary-strip small { color: var(--muted); font-size: 0.64rem; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; }
+    .review-summary-strip strong { overflow: hidden; color: var(--text); font-size: 0.92rem; font-weight: 950; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+    .review-summary-strip .review-total { border-color: rgba(99, 102, 241, 0.34); background: var(--primary-soft); }
+    .review-summary-strip .review-total strong { color: var(--primary); font-size: 1.08rem; }
+    dl { display: grid; gap: 2px; margin: 0; }
+    dl div { display: flex; justify-content: space-between; gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--border); }
     dt { color: var(--muted); font-weight: 800; }
     dd { margin: 0; font-weight: 900; text-align: right; }
-    .trust-card ion-icon { color: #10B981; font-size: 2rem; }
-    .trust-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .trust-card { display: grid; gap: 6px; align-content: start; }
+    .trust-card ion-icon { color: #10B981; font-size: 1.55rem; }
+    .trust-card h3 { margin-bottom: 0; }
+    .trust-card p { margin: 0; color: var(--muted); line-height: 1.38; }
       .sticky-cta { bottom: calc(24px + env(safe-area-inset-bottom)); }
       .sticky-cta--confirm { bottom: calc(8px + env(safe-area-inset-bottom)); }
     @media (max-width: 599px) {
-      .booking-page {
-        padding-bottom: calc(196px + var(--safe-bottom));
-      }
+      .booking-page { padding-bottom: calc(var(--booking-footer-height) + 24px + env(safe-area-inset-bottom)); }
 
-      .sticky-cta {
-        bottom: calc(14px + env(safe-area-inset-bottom));
-      }
+      .sticky-cta { bottom: calc(10px + env(safe-area-inset-bottom)); }
 
       .sticky-cta--confirm {
         bottom: calc(2px + env(safe-area-inset-bottom));
       }
 
-      .bottom-action-card {
-        padding: 10px 12px;
-        border-radius: 20px;
-      }
+      .booking-cta { width: min(100% - 16px, 980px); }
+      .booking-cta .bottom-action-card { height: var(--booking-footer-height); gap: 8px; padding: 12px; border-radius: 20px; }
+      .booking-summary-metrics strong { font-size: 0.82rem; }
+      .booking-summary-metrics span { font-size: 0.94rem; }
 
-      .bottom-action-card ion-button {
-        min-width: 112px;
-      }
+      .booking-cta .bottom-action-card ion-button { min-width: 112px; height: 44px; }
 
       .booking-intent-row, .resource-grid, .time-mode-row { grid-template-columns: 1fr; }
-      .service-choice { grid-template-columns: minmax(0, 1fr) 98px; }
-      .flow-service-media img { width: 94px; height: 78px; border-radius: 15px; }
-      .choice-action { min-width: 68px; min-height: 31px; font-size: 0.78rem; }
-      .staff-choice { grid-template-columns: 1fr; }
-      .staff-choice em { text-align: left; }
-      .check-slots-button { justify-self: start; }
-      .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .service-list { gap: 8px; }
+      .service-choice { grid-template-columns: minmax(0, 1fr) auto; min-height: 72px; gap: 8px; padding: 10px 12px; border-radius: 18px; }
+      .service-choice h3 { margin-bottom: 3px; font-size: 0.98rem; line-height: 1.12; }
+      .service-choice p { margin-bottom: 6px; font-size: 0.82rem; line-height: 1.28; }
+      .service-choice strong { font-size: 0.84rem; }
+      .choice-action { min-width: 64px; min-height: 34px; padding-inline: 10px; font-size: 0.76rem; }
+      .staff-choice { grid-template-columns: 44px minmax(0, 1fr) auto; min-height: 64px; gap: 9px; padding: 9px 10px; }
+      .staff-choice img, .any-avatar { width: 44px; height: 44px; border-radius: 14px; }
+      .staff-choice strong { font-size: 0.92rem; }
+      .staff-choice span { font-size: 0.78rem; }
+      .staff-choice em { font-size: 0.72rem; text-align: right; }
+      .check-slots-button { justify-self: end; min-height: 38px; padding-inline: 10px; font-size: 0.74rem; }
+      .schedule-context-card { gap: 4px; padding: 10px 12px; border-radius: 18px; }
+      .schedule-context-copy strong { font-size: 0.92rem; }
+      .schedule-context-copy span { font-size: 0.76rem; }
+      .scheduled-services-card { padding: 10px; }
+      .scheduled-services-card button { min-height: 44px; padding: 8px 9px; }
+      .date-row { grid-auto-columns: minmax(88px, 31%); gap: 7px; }
+      .date-card { min-height: 76px; padding: 11px 8px 9px; border-radius: 16px; }
+      .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .slot { min-height: 44px; font-size: 0.84rem; }
+      .confirm-card, .trust-card { padding: 14px; }
+      .review-summary-strip { gap: 6px; }
+      .review-summary-strip span { padding: 9px 8px; border-radius: 14px; }
+      .review-summary-strip small { font-size: 0.56rem; }
+      .review-summary-strip strong { font-size: 0.78rem; }
+      .review-summary-strip .review-total strong { font-size: 0.94rem; }
+      dl div { padding: 9px 0; gap: 10px; }
     }
     @media (min-width: 768px) {
       .booking-hero { grid-template-columns: 180px minmax(0, 1fr); }
@@ -438,7 +572,7 @@ type BookingFlowItem = {
     }
     .multi-staff-quick-bar { margin-bottom: 12px; }
     .quick-staff-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.84rem; font-weight: 900; }
-    .multi-service-progress-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 12px; border-radius: 18px; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-700, #0F4C81), var(--primary, #6366F1)); }
+    .multi-service-progress-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 12px; border: 1px solid rgba(99, 102, 241, 0.24); border-radius: 18px; color: var(--text); background: var(--primary-soft); }
     .multi-service-progress-banner p { margin: 0; font-size: 0.88rem; }
     .multi-service-progress-banner small { opacity: 0.88; font-weight: 850; font-size: 0.78rem; }
     .confirm-service-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto !important; align-items: start !important; gap: 8px !important; }
@@ -446,6 +580,11 @@ type BookingFlowItem = {
     .confirm-service-row dt .step-num { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 999px; color: #fff; background: var(--primary); font-size: 0.72rem; font-weight: 950; margin-right: 6px; }
     .confirm-service-row dd { display: grid; gap: 4px; justify-items: end; text-align: right; font-size: 0.84rem; }
     .confirm-service-row dd ion-icon { vertical-align: middle; margin-right: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton-line, .slot.skeleton-slot { animation: none; }
+    }
+    @keyframes booking-skeleton { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+    @keyframes button-spin { to { transform: rotate(360deg); } }
   `]
 })
 export class BookingFlowPage implements OnInit {
@@ -454,7 +593,7 @@ export class BookingFlowPage implements OnInit {
     serviceId,
     staffId: this.route.snapshot.queryParamMap.get("staffId") || null,
     date: this.route.snapshot.queryParamMap.get("date") ?? "",
-    slotStartAt: ""
+    slotStartAt: this.route.snapshot.queryParamMap.get("slotStartAt") ?? ""
   })));
   readonly activeItemIndex = signal(0);
   readonly rescheduleBookingId = this.route.snapshot.queryParamMap.get("rescheduleBookingId") ?? "";
@@ -469,6 +608,16 @@ export class BookingFlowPage implements OnInit {
   readonly selectedAvailabilityDay = computed(() => this.availabilityDays().find((day) => day.date === (this.activeItem()?.date || "")) ?? this.availabilityDays()[0] ?? null);
   readonly slotGroups = computed(() => this.selectedAvailabilityDay()?.periods ?? []);
   readonly currentBookingStep = computed(() => this.normalizedStep(this.step()));
+  readonly scheduledServiceSummaries = computed(() => this.bookingItems()
+    .map((item, index) => ({
+      index,
+      active: index === this.activeItemIndex(),
+      name: this.serviceById(item.serviceId)?.name || `Service ${index + 1}`,
+      staff: this.itemStaffName(item),
+      time: this.itemSlotLabel(index),
+      scheduled: !!item.slotStartAt
+    }))
+    .filter((item) => item.scheduled));
 
   isRescheduling(): boolean {
     return !!this.rescheduleBookingId;
@@ -569,7 +718,8 @@ export class BookingFlowPage implements OnInit {
   }
 
   setDate(date: string) {
-    this.bookingItems.update((items) => items.map((item) => ({ ...item, date, slotStartAt: "" })));
+    const currentIndex = this.activeItemIndex();
+    this.bookingItems.update((items) => items.map((item, index) => index === currentIndex ? { ...item, date, slotStartAt: "" } : item));
     void this.reloadAvailability();
   }
 
@@ -606,6 +756,11 @@ export class BookingFlowPage implements OnInit {
     return "Filling fast";
   }
 
+  dateCardLabel(day: AvailabilityDay): string {
+    const selected = this.activeItem()?.date === day.date ? "Selected, " : "";
+    return `${selected}${day.dayLabel}, ${day.label}, ${this.dateAvailabilityLabel(day)}`;
+  }
+
   canContinue(): boolean {
     if (this.currentBookingStep() === 1) return this.bookingItems().length > 0;
     if (this.currentBookingStep() === 2) return this.bookingItems().length > 0;
@@ -633,6 +788,21 @@ export class BookingFlowPage implements OnInit {
     const minutes = this.selectedServices().reduce((sum, service) => sum + service.durationMinutes, 0);
     if (!total) return "";
     return minutes > 0 ? `${this.money(total)} · Total ${minutes} min` : this.money(total);
+  }
+
+  serviceCountLabel(): string {
+    const count = this.selectedServices().length;
+    return `${count} service${count === 1 ? "" : "s"}`;
+  }
+
+  durationLabel(): string {
+    const minutes = this.selectedServices().reduce((sum, service) => sum + service.durationMinutes, 0);
+    return minutes ? `${minutes} min` : "0 min";
+  }
+
+  totalPriceLabel(): string {
+    const total = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
+    return total ? this.money(total) : this.money(0);
   }
 
   servicePriceLabel(service: ServiceItem): string {
@@ -686,16 +856,27 @@ export class BookingFlowPage implements OnInit {
       await this.router.navigateByUrl(this.bookingDetailUrl(this.rescheduleBookingId), { replaceUrl: true });
       return;
     }
-    for (const item of items) {
-      await this.marketplace.createBooking({
-        businessSlug: business.slug,
-        businessId: business.id,
-        serviceId: item.serviceId,
-        staffId: item.staffId || undefined,
-        startAt: item.slotStartAt,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        paymentMode: "pay_at_venue"
-      });
+    let createdCount = 0;
+    try {
+      for (const item of items) {
+        await this.marketplace.createBooking({
+          businessSlug: business.slug,
+          businessId: business.id,
+          serviceId: item.serviceId,
+          staffId: item.staffId || undefined,
+          startAt: item.slotStartAt,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          paymentMode: "pay_at_venue"
+        });
+        createdCount += 1;
+      }
+    } catch {
+      const remaining = items.length - createdCount;
+      this.marketplace.error.set(createdCount > 0
+        ? `${createdCount} service${createdCount === 1 ? "" : "s"} were booked, but ${remaining} could not be completed. Please check My bookings before trying again.`
+        : this.marketplace.error() || "Could not complete booking. Please try again.");
+      this.step.set(4);
+      return;
     }
     this.clearPendingIntent();
     this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success");
@@ -761,9 +942,19 @@ export class BookingFlowPage implements OnInit {
     return item.staffId ? this.business()?.staff.find((staff) => staff.id === item.staffId)?.name ?? "Selected staff" : "Any professional";
   }
 
+  staffActionLabel(item: BookingFlowItem, staff: StaffMember): string {
+    if (item.staffId !== staff.id) return "Select";
+    return item.slotStartAt ? "Change time" : "Choose time";
+  }
+
   activeStaffName(): string {
     const item = this.activeItem();
     return item ? this.itemStaffName(item) : "Any available professional";
+  }
+
+  activeSlotStatusLabel(): string {
+    const label = this.itemSlotLabel(this.activeItemIndex());
+    return label ? `Selected time: ${label}` : "Choose a time";
   }
 
   itemSlotLabel(index: number): string {
@@ -845,6 +1036,10 @@ export class BookingFlowPage implements OnInit {
 
   private restorePendingIntent() {
     try {
+      if (this.hasExplicitBookingIntent()) {
+        this.clearPendingIntent();
+        return;
+      }
       const raw = localStorage.getItem(PENDING_BOOKING_INTENT_KEY);
       if (!raw) return;
       const intent = JSON.parse(raw) as PendingBookingIntent;
@@ -863,6 +1058,11 @@ export class BookingFlowPage implements OnInit {
     } catch {
       this.clearPendingIntent();
     }
+  }
+
+  private hasExplicitBookingIntent(): boolean {
+    const params = this.route.snapshot.queryParamMap;
+    return ["serviceId", "serviceIds", "staffId", "date", "slotStartAt", "rescheduleBookingId", "rebookFrom"].some((key) => params.has(key));
   }
 
   private clearPendingIntent() {

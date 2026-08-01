@@ -51,7 +51,7 @@ interface ProfessionalResult {
   imports: [RouterLink, IonButton, IonContent, IonIcon, BusinessCardComponent],
   template: `
     <ion-content>
-      <main class="page search-page">
+      <main class="page search-page" [class.keyboard-open]="keyboardOpen()">
         <section class="premium-discovery-top" aria-label="Salon discovery">
           <section class="search-command-bar">
             <div class="search-command-row">
@@ -59,7 +59,7 @@ interface ProfessionalResult {
               <ion-icon name="arrow-back-outline"></ion-icon>
             </button>
             <div class="search-command-input-wrap">
-              <input class="search-command-input" type="search" [placeholder]="placeholder()" [value]="query()" (input)="setQuery($any($event.target).value || '')" aria-label="Search salons" />
+              <input class="search-command-input" type="search" [placeholder]="placeholder()" [value]="query()" (focus)="setKeyboardFocus(true)" (blur)="setKeyboardFocus(false)" (input)="setQuery($any($event.target).value || '')" aria-label="Search salons" />
               <div class="search-command-actions" aria-label="Search filters and sorting">
                   <button type="button" class="search-command-action" [class.active]="filterPanelOpen() || activeFilterCount()" [attr.data-count]="activeFilterCount() || null" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
                     <ion-icon name="options-outline"></ion-icon>
@@ -94,7 +94,7 @@ interface ProfessionalResult {
 
           <div class="premium-result-row">
             <div>
-              <strong>✨ {{ resultCount() }} salons near you</strong>
+              <strong>{{ resultCount() }} salons near you</strong>
               <span>Sorted by <button type="button" (click)="toggleSortPanel()">Distance</button></span>
             </div>
             <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
@@ -391,12 +391,12 @@ interface ProfessionalResult {
       border: 1px solid var(--border);
       border-radius: 18px;
       background: #ffffff;
-      box-shadow: 0 10px 26px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.06);
     }
 
     .search-command-bar:focus-within {
       border-color: var(--focus);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 12px 28px rgba(16, 24, 40, 0.12);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 8px 22px rgba(16, 24, 40, 0.08);
     }
 
     .search-command-row {
@@ -484,6 +484,26 @@ interface ProfessionalResult {
     .search-command-action span,
     .search-command-action small {
       display: none;
+    }
+
+    .search-page.keyboard-open .premium-discovery-top {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      padding-bottom: 8px;
+      background: var(--background, #FFFFFF);
+    }
+    .search-page.keyboard-open .premium-chip-row,
+    .search-page.keyboard-open .premium-result-row {
+      display: none;
+    }
+    .search-page.keyboard-open .results-panel {
+      padding-bottom: calc(160px + env(safe-area-inset-bottom));
+    }
+    .search-page.keyboard-open .suggestion-panel {
+      max-height: min(44vh, 320px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .search-command-action[data-count]::after {
@@ -686,9 +706,9 @@ interface ProfessionalResult {
       padding: 8px;
       border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 20px;
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 22px 44px rgba(17, 24, 39, 0.12);
-      backdrop-filter: blur(18px);
+      background: #FFFFFF;
+      box-shadow: 0 12px 30px rgba(17, 24, 39, 0.1);
+      backdrop-filter: none;
     }
 
     .suggestion-panel button {
@@ -788,7 +808,7 @@ interface ProfessionalResult {
       padding: 14px;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.84);
+      background: #FFFFFF;
     }
 
     .result-meta strong,
@@ -1186,6 +1206,47 @@ interface ProfessionalResult {
       .search-page {
         width: min(calc(100% - 20px), var(--container-mobile));
         padding-top: 0;
+      }
+
+      .premium-discovery-top {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .premium-chip-row {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 2px 0 4px;
+        scrollbar-width: none;
+      }
+
+      .premium-chip-row button {
+        flex: 0 0 auto;
+        min-height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text);
+        background: #FFFFFF;
+        font-size: 0.76rem;
+        font-weight: 850;
+      }
+
+      .premium-chip-row button.selected {
+        color: var(--primary);
+        border-color: rgba(99, 102, 241, 0.26);
+        background: var(--primary-soft);
+      }
+
+      .premium-result-row,
+      .result-meta {
+        display: none;
+      }
+
+      .results {
+        gap: 10px;
       }
 
       .fresha-search-top {
@@ -2522,6 +2583,9 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly locationTimeoutMs = 20000;
   private panStart: { x: number; y: number; center: { lat: number; lng: number } } | null = null;
   private routeSubscription?: Subscription;
+  private visualViewportListener?: () => void;
+  readonly keyboardOpen = signal(false);
+  readonly inputFocused = signal(false);
   readonly mapCenter = signal<{ lat: number; lng: number }>(this.defaultCenter);
   readonly placeholder = computed(() => {
     if (this.mode() === "services") return "Search services";
@@ -2760,14 +2824,40 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     if (host && host.parentNode !== document.body) {
       document.body.appendChild(host);
     }
+    this.installKeyboardWatcher();
   }
 
   ngOnDestroy() {
     this.routeSubscription?.unsubscribe();
+    if (this.visualViewportListener && typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", this.visualViewportListener);
+      window.visualViewport.removeEventListener("scroll", this.visualViewportListener);
+    }
     const host = this.overlayHost?.nativeElement;
     if (host && host.parentNode) {
       host.parentNode.removeChild(host);
     }
+  }
+
+  private installKeyboardWatcher(): void {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    this.visualViewportListener = () => {
+      this.keyboardOpen.set(window.innerHeight - viewport.height > 140);
+    };
+    viewport.addEventListener("resize", this.visualViewportListener);
+    viewport.addEventListener("scroll", this.visualViewportListener);
+    this.visualViewportListener();
+  }
+
+  setKeyboardFocus(focused: boolean): void {
+    this.inputFocused.set(focused);
+    if (!focused) {
+      if (typeof window === "undefined") this.keyboardOpen.set(false);
+      else window.setTimeout(() => this.keyboardOpen.set(false), 120);
+      return;
+    }
+    if (typeof window === "undefined" || !window.visualViewport) this.keyboardOpen.set(true);
   }
 
   reset() {

@@ -82,8 +82,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96)), var(--surface);
-      box-shadow: var(--shadow-soft);
+      background: #FFFFFF;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.05);
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
     }
@@ -113,12 +113,12 @@ import { MarketplaceService } from "../core/marketplace.service";
       position: absolute;
       inset: 0;
       content: "";
-      background: linear-gradient(180deg, rgba(16, 24, 40, 0.02), rgba(16, 24, 40, 0.42));
+      background: linear-gradient(180deg, rgba(16, 24, 40, 0.02), rgba(16, 24, 40, 0.28));
       pointer-events: none;
     }
 
     .business-card.variant-personal {
-      box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.05);
     }
 
     .business-card.variant-discovery {
@@ -165,7 +165,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       top: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 14px 26px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
     }
 
     .cover-actions {
@@ -190,8 +190,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.88);
-      box-shadow: 0 14px 28px rgba(16, 24, 40, 0.14);
-      backdrop-filter: blur(14px);
+      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
+      backdrop-filter: none;
     }
 
     .favorite.saved {
@@ -205,7 +205,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       bottom: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
+      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
     }
 
     .content {
@@ -246,7 +246,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 999px;
       color: var(--brand-800);
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
+      background: var(--primary-soft);
       font-size: 0.76rem;
       font-weight: 900;
       white-space: nowrap;
@@ -256,7 +256,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     .countdown-pill.warning {
       color: var(--primary);
       border-color: rgba(99, 102, 241, 0.3);
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
+      background: var(--primary-soft);
     }
 
     .countdown-pill.closed {
@@ -351,6 +351,69 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     @media (max-width: 599px) {
+      .business-card:not(.variant-rail):not(.variant-mini-rail) {
+        grid-template-columns: 96px minmax(0, 1fr);
+        grid-template-rows: auto;
+        align-items: stretch;
+        min-height: 118px;
+        border-radius: 18px;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover {
+        width: 96px;
+        height: 100%;
+        min-height: 118px;
+        aspect-ratio: auto;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover::after,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .rating-pill,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover-actions,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .topline {
+        display: none;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .content {
+        align-content: center;
+        min-width: 0;
+        padding: 10px 10px 10px 12px;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) h3 {
+        font-size: 0.98rem;
+        line-height: 1.15;
+        -webkit-line-clamp: 1;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .service-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-top: 2px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .service-row span,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding-top: 0;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row ion-button {
+        min-width: 70px;
+        min-height: 36px;
+        height: 36px;
+      }
+
       .business-card.variant-rail {
         grid-template-columns: 68px minmax(0, 1fr) 36px;
         grid-template-rows: auto auto auto;
