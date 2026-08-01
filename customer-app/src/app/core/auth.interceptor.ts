@@ -5,8 +5,11 @@ import { catchError, from, switchMap, throwError } from "rxjs";
 
 const ACCESS_TOKEN_KEY = "auraCustomerAccessToken";
 const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
+const API_ORIGIN_KEY = "auraCustomerApiOrigin";
 const DEVICE_ID_KEY = "auraCustomerDeviceId";
+const LAST_ROUTE_KEY = "auraCustomerLastRoute";
 const SESSION_RETRY_HEADER = "x-aura-session-retry";
+const SALON_MODE_KEY = "aura_salon_mode";
 const SALON_MODE_CONTEXT_KEY = "aura_salon_mode_context";
 
 // Events let AuthService keep its in-memory signals in sync with token changes the
@@ -48,11 +51,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         if (error.status === 401 && shouldAttachToken && !req.headers.has(SESSION_RETRY_HEADER)) {
           return from(refreshCustomerSessionOnce(req.url)).pipe(
             switchMap((session) => {
-              saveCustomerSession(session);
+              saveCustomerSession(session, req.url);
               return next(withCustomerHeaders(req, session.accessToken, true));
             }),
             catchError((refreshError: unknown) => {
-              if (isPermanentRefreshFailure(refreshError)) {
+              if (isPermanentAuthFailure(refreshError)) {
                 expireCustomerSession();
                 void router.navigateByUrl("/login");
                 return throwError(() => new Error("Your session expired. Please sign in again."));
@@ -130,6 +133,10 @@ function isPermanentRefreshFailure(error: unknown): boolean {
   return error instanceof SessionRefreshError && [400, 401, 403].includes(error.status);
 }
 
+function isPermanentAuthFailure(error: unknown): boolean {
+  return isPermanentRefreshFailure(error) || (error instanceof HttpErrorResponse && [401, 403].includes(error.status));
+}
+
 function refreshUrlFor(requestUrl: string): string {
   const marker = "/customer/";
   const index = requestUrl.indexOf(marker);
@@ -157,9 +164,10 @@ function refreshErrorMessage(payload: any): string {
   return "Refresh failed";
 }
 
-function saveCustomerSession(session: CustomerSessionRefresh) {
+function saveCustomerSession(session: CustomerSessionRefresh, requestUrl: string) {
   setStoredValue(ACCESS_TOKEN_KEY, session.accessToken);
   if (session.refreshToken) setStoredValue(REFRESH_TOKEN_KEY, session.refreshToken);
+  setStoredValue(API_ORIGIN_KEY, apiOrigin(requestUrl));
   dispatchSessionEvent(SESSION_REFRESHED_EVENT);
 }
 
@@ -167,6 +175,10 @@ function expireCustomerSession() {
   try {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(API_ORIGIN_KEY);
+    localStorage.removeItem(LAST_ROUTE_KEY);
+    localStorage.removeItem(SALON_MODE_KEY);
+    localStorage.removeItem(SALON_MODE_CONTEXT_KEY);
   } catch {
     // Storage may be unavailable; the event below still resets in-memory state.
   }
@@ -176,6 +188,14 @@ function expireCustomerSession() {
 function dispatchSessionEvent(name: string) {
   if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
     window.dispatchEvent(new CustomEvent(name));
+  }
+}
+
+function apiOrigin(requestUrl: string): string {
+  try {
+    return new URL(requestUrl, window.location.origin).origin;
+  } catch {
+    return "";
   }
 }
 

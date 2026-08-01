@@ -785,9 +785,9 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-profile-button { border: 1px solid rgba(255,255,255,.24); color: #fff; background: rgba(255,255,255,.1); }
 
     /* Quick Shortcuts Bar */
-    .ms-quick-actions { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 6px; margin-top: 14px; padding: 10px 2px; border-bottom: 1px solid var(--ms-line); overflow-x: auto; scrollbar-width: none; }
+    .ms-quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding: 10px 2px 12px; border-bottom: 1px solid var(--ms-line); overflow: visible; }
     .ms-quick-actions::-webkit-scrollbar { display: none; }
-    .ms-quick-actions a { min-width: 60px; min-height: 62px; display: grid; justify-items: center; align-content: center; gap: 5px; border-radius: 16px; color: var(--ms-ink); font-size: .7rem; font-weight: 750; text-decoration: none; transition: background .15s ease; }
+    .ms-quick-actions a { min-width: 0; min-height: 62px; display: grid; justify-items: center; align-content: center; gap: 5px; padding: 6px 4px; border-radius: 16px; color: var(--ms-ink); font-size: .68rem; font-weight: 750; text-align: center; text-decoration: none; white-space: normal; transition: background .15s ease; }
     .ms-quick-actions a:hover { background: rgba(0,0,0,.03); }
     .ms-quick-actions ion-icon { color: var(--ms-accent); font-size: 21px; }
 
@@ -948,7 +948,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       .ms-hero-main { grid-column: 1; }
       .ms-contact-list { grid-column: 1; }
       .ms-hero-actions { grid-column: 2; grid-row: 1 / span 2; grid-template-columns: 1fr; align-self: stretch; align-content: end; }
-      .ms-quick-actions { grid-template-columns: repeat(6, minmax(0,1fr)); overflow: visible; }
+      .ms-quick-actions { grid-template-columns: repeat(6, minmax(0,1fr)); }
       .ms-snapshot { grid-template-columns: repeat(4, minmax(0,1fr)); }
       .ms-offer-rail { grid-auto-columns: minmax(280px, 38%); margin-inline: 0; padding-inline: 0; }
       .ms-staff-rail { margin-inline: 0; padding-inline: 0; }
@@ -1069,25 +1069,42 @@ export class MySalonPage implements OnInit {
   async loadDashboard(): Promise<void> {
     this.loading.set(true);
     this.loadError.set("");
-    try {
-      await Promise.all([
-        this.marketplace.loadMySalons().catch(() => undefined),
-        this.marketplace.loadBookings().catch(() => undefined)
-      ]);
-      const dashboard = await this.marketplace.loadMySalonDashboard();
-      this.dash.set(dashboard);
-      if (!dashboard) this.loadError.set("This salon space is currently unavailable.");
-    } catch {
-      this.dash.set(null);
-      this.loadError.set(this.marketplace.error() || "Please check your network connection and try again.");
-    } finally {
-      if (this.dash()?.salon) {
-        this.marketplace.enterSalonMode(this.currentSalonContext());
-      } else {
-        this.marketplace.exitSalonMode();
+    let lastError = "";
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await Promise.all([
+          this.marketplace.loadMySalons().catch(() => undefined),
+          this.marketplace.loadBookings().catch(() => undefined)
+        ]);
+        const dashboard = await this.marketplace.loadMySalonDashboard();
+        this.dash.set(dashboard);
+        if (!dashboard) this.loadError.set("This salon space is currently unavailable.");
+        if (this.dash()?.salon) this.marketplace.enterSalonMode(this.currentSalonContext());
+        this.loading.set(false);
+        return;
+      } catch {
+        lastError = this.marketplace.error() || "Please check your network connection and try again.";
+        if (this.isAuthFailure(lastError)) {
+          this.marketplace.exitSalonMode();
+          this.loading.set(false);
+          this.loadError.set("Please sign in again to open My Salon.");
+          void this.router.navigate(["/login"]);
+          return;
+        }
+        if (attempt < 3) await this.sleep(450 * attempt);
       }
-      this.loading.set(false);
     }
+    this.dash.set(null);
+    this.loadError.set(lastError);
+    this.loading.set(false);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isAuthFailure(message: string): boolean {
+    return /session expired|sign in|unauthorized|reconnect to your session/i.test(message);
   }
 
   exitSalonMode(): void {

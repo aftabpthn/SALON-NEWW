@@ -5,13 +5,17 @@ import { AuthSession, CustomerDeviceInfo, CustomerDeviceSession, CustomerProfile
 import { SESSION_EXPIRED_EVENT, SESSION_REFRESHED_EVENT } from "./auth.interceptor";
 import { CustomerApiService } from "./customer-api.service";
 import { FirebaseCustomerAuthService } from "./firebase-customer-auth.service";
+import { environment } from "../../environments/environment";
 
 const ACCESS_TOKEN_KEY = "auraCustomerAccessToken";
 const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
+const API_ORIGIN_KEY = "auraCustomerApiOrigin";
 const DEVICE_ID_KEY = "auraCustomerDeviceId";
 const BIOMETRIC_ENABLED_KEY = "auraCustomerBiometricEnabled";
 const BIOMETRIC_CREDENTIAL_KEY = "auraCustomerBiometricCredentialId";
 const LAST_ROUTE_KEY = "auraCustomerLastRoute";
+const SALON_MODE_KEY = "aura_salon_mode";
+const SALON_MODE_CONTEXT_KEY = "aura_salon_mode_context";
 
 @Injectable({ providedIn: "root" })
 export class AuthService {
@@ -31,6 +35,7 @@ export class AuthService {
 
   constructor(private readonly api: CustomerApiService, private readonly firebaseAuth: FirebaseCustomerAuthService) {
     this.ensureDeviceId();
+    this.clearSessionIfApiOriginChanged();
     this.listenForSessionEvents();
     if (this.accessToken() && !this.biometricLocked() && !this.isPublicAuthRoute()) void this.loadMe();
   }
@@ -569,6 +574,7 @@ export class AuthService {
   private saveSession(session: AuthSession) {
     localStorage.setItem(ACCESS_TOKEN_KEY, session.accessToken);
     if (session.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, session.refreshToken);
+    localStorage.setItem(API_ORIGIN_KEY, this.apiOrigin());
     this.accessToken.set(session.accessToken);
     if (session.refreshToken) this.refreshToken.set(session.refreshToken);
     this.customer.set({ ...session.customer, isLoggedIn: true });
@@ -600,7 +606,10 @@ export class AuthService {
   private clearSession() {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    localStorage.removeItem(API_ORIGIN_KEY);
     localStorage.removeItem(LAST_ROUTE_KEY);
+    localStorage.removeItem(SALON_MODE_KEY);
+    localStorage.removeItem(SALON_MODE_CONTEXT_KEY);
     this.accessToken.set(null);
     this.refreshToken.set(null);
     this.customer.set(null);
@@ -610,6 +619,22 @@ export class AuthService {
     this.codeEmail.set("");
     this.devices.set([]);
     this.biometricLocked.set(false);
+  }
+
+  private clearSessionIfApiOriginChanged() {
+    const current = this.apiOrigin();
+    const stored = localStorage.getItem(API_ORIGIN_KEY);
+    if (!this.readToken(ACCESS_TOKEN_KEY) && !this.readToken(REFRESH_TOKEN_KEY)) return;
+    if (stored === current) return;
+    this.clearSession();
+  }
+
+  private apiOrigin(): string {
+    try {
+      return new URL(environment.apiBaseUrl, window.location.origin).origin;
+    } catch {
+      return environment.apiBaseUrl;
+    }
   }
 
   private isPublicAuthRoute(): boolean {

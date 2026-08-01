@@ -44,12 +44,14 @@ function requestedSalon(access, context = {}) {
   const relationship = getAllRelationships(access.userId).find(
     (row) => row.tenantId === tenantId && row.branchId === branchId
   );
-  if (!relationship) throw unauthorized("Customer does not have access to this salon context");
+  const primary = getPrimarySalon(access.userId);
+  const salon = relationship || (primary?.tenantId === tenantId && primary.branchId === branchId ? primary : null);
+  if (!salon) throw unauthorized("Customer does not have access to this salon context");
   return {
-    tenantId: relationship.tenantId,
-    branchId: relationship.branchId,
-    businessId: relationship.businessId,
-    businessName: relationship.businessName,
+    tenantId: salon.tenantId,
+    branchId: salon.branchId,
+    businessId: salon.businessId,
+    businessName: salon.businessName,
   };
 }
 

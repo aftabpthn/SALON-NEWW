@@ -968,6 +968,7 @@ export class LoginPage implements OnInit, OnDestroy {
       window.location.replace(`http://localhost:${window.location.port}${window.location.pathname}${window.location.search}${window.location.hash}`);
       return;
     }
+    this.auth.error.set("");
     void this.resumeExistingSession();
     void this.handleProviderRedirectResult();
   }
@@ -1242,6 +1243,7 @@ export class LoginPage implements OnInit, OnDestroy {
 
   async continueWithDemo() {
     this.notice = "";
+    this.auth.error.set("");
     await this.auth.demoLogin()
       .then((session) => this.afterProviderSignIn(session))
       .catch(() => undefined);
