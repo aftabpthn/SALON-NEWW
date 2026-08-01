@@ -77,7 +77,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
     }
 
     .salon-header {
@@ -134,7 +134,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       width: 36px;
       height: 36px;
       border-radius: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       background: rgba(255, 255, 255, 0.7);
       color: var(--text);
       display: grid;
@@ -154,7 +154,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       justify-content: center;
       gap: 6px;
       padding: 10px 12px;
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 14px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.72);
@@ -173,7 +173,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .action-pill:hover {
         transform: translateY(-2px);
-        border-color: rgba(11, 70, 120, 0.42);
+        border-color: rgba(99, 102, 241, 0.42);
       }
     }
 

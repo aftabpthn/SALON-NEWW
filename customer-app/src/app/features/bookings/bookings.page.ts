@@ -318,7 +318,7 @@ type WaitlistDialog = {
       padding: 1px 7px;
       border: 1px solid rgba(16, 185, 129, 0.42);
       border-radius: 999px;
-      color: #047857;
+      color: #059669;
       background: rgba(16, 185, 129, 0.14);
       font-size: 0.60rem;
       font-weight: 850;
@@ -345,10 +345,10 @@ type WaitlistDialog = {
       align-items: center;
       gap: 3px;
       padding: 3px 9px;
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 999px;
       color: var(--primary);
-      background: var(--primary-soft, rgba(11, 70, 120, 0.08));
+      background: var(--primary-soft, rgba(99, 102, 241, 0.08));
       font-size: 0.68rem;
       font-weight: 850;
       letter-spacing: -0.01em;
@@ -359,8 +359,8 @@ type WaitlistDialog = {
     .booking-card:hover .view-details-btn {
       color: #ffffff;
       border-color: transparent;
-      background: linear-gradient(135deg, var(--primary), var(--brand-800, #0B4678));
-      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.25);
+      background: linear-gradient(135deg, var(--primary), var(--brand-800, #6366F1));
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
     }
     .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
 
@@ -415,12 +415,12 @@ type WaitlistDialog = {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       overflow: hidden;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       background:
         linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98) 48%, rgba(231, 240, 248, 0.92)),
         #FFFFFF;
-      box-shadow: 0 28px 70px rgba(6, 23, 43, 0.2);
+      box-shadow: 0 28px 70px rgba(16, 24, 40, 0.2);
     }
 
     .sheet-head {
@@ -461,7 +461,7 @@ type WaitlistDialog = {
       gap: 12px;
       align-items: center;
       padding: 14px;
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.72);
     }
@@ -473,7 +473,7 @@ type WaitlistDialog = {
       border-radius: 16px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-      box-shadow: 0 12px 24px rgba(11, 70, 120, 0.14);
+      box-shadow: 0 12px 24px rgba(99, 102, 241, 0.14);
     }
 
     .waitlist-summary strong,
@@ -500,7 +500,7 @@ type WaitlistDialog = {
     .waitlist-field input,
     .waitlist-field textarea {
       width: 100%;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 18px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.88);
@@ -523,8 +523,8 @@ type WaitlistDialog = {
 
     .waitlist-field input:focus,
     .waitlist-field textarea:focus {
-      border-color: rgba(11, 70, 120, 0.56);
-      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+      border-color: rgba(99, 102, 241, 0.56);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
     }
 
     .waitlist-options {
@@ -539,7 +539,7 @@ type WaitlistDialog = {
 
     .waitlist-options button {
       min-height: 44px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.78);
@@ -550,7 +550,7 @@ type WaitlistDialog = {
       border-color: transparent;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      box-shadow: 0 12px 24px rgba(11, 70, 120, 0.15);
+      box-shadow: 0 12px 24px rgba(99, 102, 241, 0.15);
     }
 
     .waitlist-error {

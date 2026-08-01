@@ -391,12 +391,12 @@ interface ProfessionalResult {
       border: 1px solid var(--border);
       border-radius: 18px;
       background: #ffffff;
-      box-shadow: 0 10px 26px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 10px 26px rgba(16, 24, 40, 0.1);
     }
 
     .search-command-bar:focus-within {
       border-color: var(--focus);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 12px 28px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 12px 28px rgba(16, 24, 40, 0.12);
     }
 
     .search-command-row {
@@ -532,7 +532,7 @@ interface ProfessionalResult {
       border-radius: 12px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 6px 16px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08);
       cursor: pointer;
       position: relative;
       z-index: 20;
@@ -634,12 +634,12 @@ interface ProfessionalResult {
     .location-select-row ion-select {
       min-height: 46px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.9);
       font-weight: 900;
-      box-shadow: 0 8px 18px rgba(11, 70, 120, 0.06);
+      box-shadow: 0 8px 18px rgba(99, 102, 241, 0.06);
     }
 
     .selected-area-row {
@@ -648,7 +648,7 @@ interface ProfessionalResult {
       justify-content: space-between;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 22px;
       color: var(--text);
       background: rgba(231, 240, 248, 0.78);
@@ -684,7 +684,7 @@ interface ProfessionalResult {
       display: grid;
       gap: 6px;
       padding: 8px;
-      border: 1px solid rgba(11, 70, 120, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.98);
       box-shadow: 0 22px 44px rgba(17, 24, 39, 0.12);
@@ -707,7 +707,7 @@ interface ProfessionalResult {
 
     .suggestion-panel button:hover,
     .suggestion-panel button:focus-visible {
-      background: rgba(11, 70, 120, 0.08);
+      background: rgba(99, 102, 241, 0.08);
     }
 
     .suggestion-panel strong,
@@ -813,8 +813,8 @@ interface ProfessionalResult {
       --color: var(--muted);
       --color-checked: var(--primary);
       --background-checked: var(--primary-soft);
-      --background-hover: rgba(11, 70, 120, 0.06);
-      --background-focused: rgba(37, 99, 235, 0.1);
+      --background-hover: rgba(99, 102, 241, 0.06);
+      --background-focused: rgba(99, 102, 241, 0.1);
       font-size: 0.76rem;
       font-weight: 900;
     }
@@ -860,7 +860,7 @@ interface ProfessionalResult {
       max-height: calc(100vh - 32px);
       border-radius: 28px;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98));
-      box-shadow: 0 30px 90px rgba(6, 23, 43, 0.24);
+      box-shadow: 0 30px 90px rgba(16, 24, 40, 0.24);
     }
 
     .aura-map-card.fullscreen-map .map-copy,
@@ -930,7 +930,7 @@ interface ProfessionalResult {
 
     .live-map.picking {
       cursor: crosshair;
-      outline: 3px solid rgba(37, 99, 235, 0.4);
+      outline: 3px solid rgba(99, 102, 241, 0.4);
       outline-offset: -3px;
     }
 
@@ -959,7 +959,7 @@ interface ProfessionalResult {
       border: 3px solid #ffffff;
       border-radius: 999px;
       transform: translate(-50%, -50%);
-      box-shadow: 0 14px 24px rgba(11, 70, 120, 0.26);
+      box-shadow: 0 14px 24px rgba(99, 102, 241, 0.26);
     }
 
     .venue-pin {
@@ -980,9 +980,9 @@ interface ProfessionalResult {
       width: 38px;
       height: 38px;
       background: var(--brand-900);
-      outline: 4px solid rgba(37, 99, 235, 0.3);
+      outline: 4px solid rgba(99, 102, 241, 0.3);
       outline-offset: 2px;
-      box-shadow: 0 18px 32px rgba(11, 70, 120, 0.3);
+      box-shadow: 0 18px 32px rgba(99, 102, 241, 0.3);
     }
 
     .live-map .venue-pin,
@@ -1199,7 +1199,7 @@ interface ProfessionalResult {
         padding: 3px 6px;
         border-radius: 14px;
         background: #FFFFFF;
-        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
       }
 
       .fresha-search-top h1 {
@@ -1230,10 +1230,10 @@ interface ProfessionalResult {
         display: block;
         margin-bottom: 14px;
         padding: 0 8px;
-        border: 1px solid rgba(11, 70, 120, 0.12);
+        border: 1px solid rgba(99, 102, 241, 0.12);
         border-radius: 16px;
         background: #ffffff;
-        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
       }
 
       .search-input-wrap {
@@ -1401,14 +1401,14 @@ interface ProfessionalResult {
     }
 
     .map-toggle-button {
-      border-color: rgba(11, 70, 120, 0.18);
+      border-color: rgba(99, 102, 241, 0.18);
       color: var(--primary);
     }
 
     .header-change-button {
       min-height: 36px;
       padding: 0 14px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.94);
@@ -1468,7 +1468,7 @@ interface ProfessionalResult {
     }
 
     .fresha-filter-row button.active:not(.filter-icon-button) {
-      border-color: rgba(11, 70, 120, 0.5);
+      border-color: rgba(99, 102, 241, 0.5);
       color: var(--primary);
       background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }
@@ -1549,7 +1549,7 @@ interface ProfessionalResult {
       flex: 0 0 auto;
       min-height: 32px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.35);
+      border: 1px solid rgba(99, 102, 241, 0.35);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.94);
@@ -1584,10 +1584,10 @@ interface ProfessionalResult {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       max-height: min(82vh, 760px);
-      border: 1px solid rgba(11, 70, 120, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.32);
       border-radius: 28px 28px 0 0;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.98));
-      box-shadow: 0 -24px 70px rgba(6, 23, 43, 0.2);
+      box-shadow: 0 -24px 70px rgba(16, 24, 40, 0.2);
       overflow: hidden;
     }
 
@@ -1605,7 +1605,7 @@ interface ProfessionalResult {
 
     .sheet-header {
       top: 0;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.18);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     .sheet-header div {
@@ -1629,7 +1629,7 @@ interface ProfessionalResult {
     .sheet-header button {
       min-height: 36px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.88);
@@ -1675,12 +1675,12 @@ interface ProfessionalResult {
       gap: 4px;
       min-height: 72px;
       padding: 12px 14px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.9);
       text-align: left;
-      box-shadow: 0 10px 22px rgba(6, 23, 43, 0.06);
+      box-shadow: 0 10px 22px rgba(16, 24, 40, 0.06);
     }
 
     .option-grid button.selected {
@@ -1766,7 +1766,7 @@ interface ProfessionalResult {
       width: 100%;
       min-height: 44px;
       padding: 0 12px 0 28px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 14px;
       background: #fff;
       color: var(--text);
@@ -1776,7 +1776,7 @@ interface ProfessionalResult {
 
     .sheet-footer {
       bottom: 0;
-      border-top: 1px solid rgba(11, 70, 120, 0.18);
+      border-top: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     .apply-button {
@@ -1796,7 +1796,7 @@ interface ProfessionalResult {
       align-items: center;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 16px;
       color: var(--primary);
       background: var(--primary-soft);
@@ -1815,7 +1815,7 @@ interface ProfessionalResult {
 
     .option-grid button.needs-location.selected {
       opacity: 1;
-      border-color: rgba(11, 70, 120, 0.4);
+      border-color: rgba(99, 102, 241, 0.4);
       background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(203, 213, 225, 0.76));
       color: var(--brand-800);
     }
@@ -1845,11 +1845,11 @@ interface ProfessionalResult {
       place-items: center;
       width: 40px;
       height: 40px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 10px 20px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 10px 20px rgba(16, 24, 40, 0.08);
     }
 
     .professional-card .favorite.saved {
@@ -1912,10 +1912,10 @@ interface ProfessionalResult {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid rgba(11, 70, 120, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.32);
       border-radius: 24px;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.94));
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12);
     }
 
     .filter-popover.compact {
@@ -1966,7 +1966,7 @@ interface ProfessionalResult {
       color: var(--text);
       background: rgba(255, 255, 255, 0.76);
       text-align: left;
-      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.06);
+      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.06);
     }
 
     .popover-grid button.active {
@@ -2055,7 +2055,7 @@ interface ProfessionalResult {
     }
 
     .filter-icon-button.active {
-      border-color: rgba(11, 70, 120, 0.5);
+      border-color: rgba(99, 102, 241, 0.5);
       color: var(--primary);
       background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }

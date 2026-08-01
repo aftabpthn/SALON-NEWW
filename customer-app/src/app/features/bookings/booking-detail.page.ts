@@ -213,7 +213,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border-radius: var(--radius-md);
       color: #FFFFFF;
       background: var(--brand-900);
-      box-shadow: 0 14px 34px rgba(6, 23, 43, 0.15);
+      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.15);
     }
     .download-booking {
       position: absolute;
@@ -243,7 +243,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       width: fit-content;
       min-height: 20px;
       padding: 4px 6px;
-      color: #047857;
+      color: #059669;
       border-color: rgba(52, 211, 153, 0.38);
       background: #D1FAE5;
       border-radius: 999px;
@@ -275,7 +275,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .appointment-time ion-icon { grid-row: 1 / span 2; align-self: center; color: #FFFFFF; font-size: 1.2rem; }
     .appointment-time span { color: rgba(255, 255, 255, 0.82); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.035em; }
     .appointment-time strong { color: #FFFFFF; font-size: clamp(1rem, 4.5vw, 1.2rem); line-height: 1.3; overflow-wrap: anywhere; }
-    .booking-facts { display: grid; margin: 0; background: rgba(11, 70, 120, 0.34); }
+    .booking-facts { display: grid; margin: 0; background: rgba(99, 102, 241, 0.34); }
     .booking-facts div { min-width: 0; padding: 11px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
     .booking-facts div:last-child { border-bottom: 0; }
     .booking-facts dt { display: flex; align-items: center; gap: 7px; margin: 0 0 3px; color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 700; }
@@ -398,7 +398,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       cursor: pointer;
     }
     .option-row:hover { background: var(--primary-soft); }
-    .option-row:active { background: rgba(11, 70, 120, 0.12); transform: scale(0.99); }
+    .option-row:active { background: rgba(99, 102, 241, 0.12); transform: scale(0.99); }
     .option-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     .option-row > ion-icon:first-child { color: var(--primary); font-size: 1.05rem; }
     .option-row > span { min-width: 0; color: inherit; overflow-wrap: anywhere; }

@@ -102,7 +102,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-size: 1.8rem;
-      box-shadow: 0 18px 38px rgba(11, 70, 120, 0.24);
+      box-shadow: 0 18px 38px rgba(99, 102, 241, 0.24);
     }
 
     .summary-hero h1,

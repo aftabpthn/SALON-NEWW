@@ -32,9 +32,9 @@ body {
   overflow-x: hidden;
   padding-top: var(--safe-top);
   background:
-    radial-gradient(circle at 12% 0%, rgba(11, 70, 120, 0.12), transparent 30%),
-    radial-gradient(circle at 90% 12%, rgba(7, 90, 156, 0.1), transparent 34%),
-    linear-gradient(180deg, #FFFFFF 0%, #F6F9FC 52%, #F1F5F9 100%);
+    radial-gradient(circle at 92% 2%, rgba(238, 242, 255, 0.72), transparent 30%),
+    radial-gradient(circle at 8% 34%, rgba(253, 242, 248, 0.64), transparent 34%),
+    linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 58%, #F8FAFC 100%);
   color: var(--text);
   font-family: var(--ion-font-family);
 }
@@ -50,7 +50,7 @@ body::after {
 body::before {
   inset: 0;
   background:
-    linear-gradient(115deg, rgba(6, 23, 43, 0.035), transparent 32%, rgba(11, 70, 120, 0.06)),
+    linear-gradient(115deg, rgba(16, 24, 40, 0.018), transparent 32%, rgba(99, 102, 241, 0.04)),
     radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.72), transparent 42%);
 }
 
@@ -60,7 +60,7 @@ body::after {
   right: -180px;
   bottom: 8%;
   border-radius: 999px;
-  background: rgba(11, 70, 120, 0.08);
+  background: rgba(236, 253, 245, 0.72);
   filter: blur(8px);
 }
 
@@ -163,9 +163,9 @@ ion-button:focus-visible {
 
 ion-content {
   --background:
-    radial-gradient(circle at 16% 0%, rgba(11, 70, 120, 0.1), transparent 28%),
-    radial-gradient(circle at 88% 6%, rgba(7, 90, 156, 0.08), transparent 34%),
-    linear-gradient(180deg, #FFFFFF 0%, #F6F9FC 52%, #F1F5F9 100%);
+    radial-gradient(circle at 16% 0%, rgba(99, 102, 241, 0.1), transparent 28%),
+    radial-gradient(circle at 88% 6%, rgba(99, 102, 241, 0.08), transparent 34%),
+    linear-gradient(180deg, #FFFFFF 0%, #FFFFFF 52%, #F8FAFC 100%);
   scrollbar-width: none;
 }
 
@@ -190,7 +190,7 @@ ion-router-outlet > .ion-page {
     position: fixed;
     inset: 98px max(22px, calc((100vw - 1504px) / 2)) 22px;
     z-index: -1;
-    border: 1px solid rgba(11, 70, 120, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.1);
     border-radius: 38px;
     background: linear-gradient(180deg, rgba(246, 249, 252, 0.48), rgba(255, 255, 255, 0.2));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
@@ -208,7 +208,7 @@ ion-toolbar {
 ion-searchbar {
   --background: rgba(255, 255, 255, 0.92);
   --border-radius: 22px;
-  --box-shadow: 0 16px 36px rgba(6, 23, 43, 0.1);
+  --box-shadow: 0 16px 36px rgba(16, 24, 40, 0.1);
   --color: var(--text);
   --placeholder-color: var(--muted);
   padding-inline: 0;
@@ -222,7 +222,7 @@ ion-tab-bar {
   margin: 0 auto calc(12px + env(safe-area-inset-bottom));
   border: 1px solid var(--border);
   border-radius: 999px;
-  box-shadow: 0 24px 54px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24px 54px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(24px);
   animation: aura-tabbar-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -231,10 +231,10 @@ ion-tab-button {
   --background: transparent;
   --background-focused: var(--primary-soft);
   --background-focused-opacity: 1;
-  --background-hover: rgba(11, 70, 120, 0.08);
+  --background-hover: rgba(99, 102, 241, 0.08);
   --color: var(--muted);
   --color-selected: var(--primary);
-  --ripple-color: rgba(11, 70, 120, 0.14);
+  --ripple-color: rgba(99, 102, 241, 0.14);
   font-weight: 800;
   transition: color var(--motion-fast), transform var(--motion-fast), opacity var(--motion-fast);
 }
@@ -245,7 +245,7 @@ ion-tab-button.tab-selected ion-icon {
   border-radius: 999px;
   color: #FFFFFF;
   background: linear-gradient(135deg, var(--brand-600), var(--brand-700) 48%, var(--brand-800));
-  box-shadow: 0 10px 20px rgba(11, 70, 120, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 20px rgba(99, 102, 241, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.82);
   animation: aura-tab-pop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both, aura-gold-ring 2.8s ease-in-out infinite 420ms;
 }
 
@@ -378,7 +378,7 @@ ion-tab-button ion-label {
   --background-activated: var(--primary-active);
   --color: #FFFFFF;
   --color-activated: #FFFFFF;
-  --box-shadow: 0 18px 38px rgba(11, 70, 120, 0.24);
+  --box-shadow: 0 18px 38px rgba(99, 102, 241, 0.24);
   --border-radius: 999px;
   font-weight: 900;
   letter-spacing: 0;
@@ -437,7 +437,7 @@ ion-tab-button ion-label {
   background: rgba(255, 255, 255, 0.94);
   font-size: 0.92rem;
   font-weight: 900;
-  box-shadow: 0 10px 22px rgba(6, 23, 43, 0.08);
+  box-shadow: 0 10px 22px rgba(16, 24, 40, 0.08);
   transition:
     color var(--motion-fast),
     border-color var(--motion-fast),
@@ -483,16 +483,16 @@ ion-tab-button ion-label {
 
 .rating-pill {
   color: var(--brand-800);
-  border-color: rgba(11, 70, 120, 0.28);
+  border-color: rgba(99, 102, 241, 0.28);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(231, 240, 248, 0.84));
-  box-shadow: 0 10px 24px rgba(6, 23, 43, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(14px);
 }
 
 .status-pill {
   color: var(--brand-800);
-  border-color: rgba(11, 70, 120, 0.24);
+  border-color: rgba(99, 102, 241, 0.24);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
@@ -533,10 +533,10 @@ ion-tab-button ion-label {
   justify-content: space-between;
   gap: 14px;
   padding: 12px;
-  border: 1px solid rgba(11, 70, 120, 0.24);
+  border: 1px solid rgba(99, 102, 241, 0.24);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 56px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  box-shadow: 0 24px 56px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(22px);
   transition: transform var(--motion-medium), box-shadow var(--motion-medium);
 }
@@ -718,8 +718,8 @@ ion-button::part(native)::after {
   .favorite:hover,
   .check-slots-button:hover {
     transform: translateY(-3px);
-    border-color: rgba(11, 70, 120, 0.38);
-    box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12), 0 0 24px rgba(11, 70, 120, 0.1);
+    border-color: rgba(99, 102, 241, 0.38);
+    box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12), 0 0 24px rgba(99, 102, 241, 0.1);
     filter: saturate(1.08) brightness(1.03);
   }
 
@@ -741,7 +741,7 @@ ion-button::part(native)::after {
   }
 
   ion-button:hover::part(native) {
-    box-shadow: 0 18px 42px rgba(11, 70, 120, 0.22);
+    box-shadow: 0 18px 42px rgba(99, 102, 241, 0.22);
   }
 
   ion-button:hover ion-icon,
@@ -754,8 +754,8 @@ ion-button::part(native)::after {
   .premium-card:hover,
   .glass-card:hover {
     transform: translateY(-3px);
-    border-color: rgba(11, 70, 120, 0.34);
-    box-shadow: 0 24px 58px rgba(6, 23, 43, 0.14), 0 0 34px rgba(11, 70, 120, 0.08);
+    border-color: rgba(99, 102, 241, 0.34);
+    box-shadow: 0 24px 58px rgba(16, 24, 40, 0.14), 0 0 34px rgba(99, 102, 241, 0.08);
   }
 
   .premium-card:hover .image-fill,
@@ -779,7 +779,7 @@ ion-button::part(native)::after {
 
   .bottom-action-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 28px 64px rgba(6, 23, 43, 0.18), 0 0 34px rgba(11, 70, 120, 0.1);
+    box-shadow: 0 28px 64px rgba(16, 24, 40, 0.18), 0 0 34px rgba(99, 102, 241, 0.1);
   }
 }
 
@@ -908,37 +908,37 @@ ion-button::part(native)::after {
 
 @keyframes aura-gold-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(11, 70, 120, 0.28);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.28);
   }
   72% {
-    box-shadow: 0 0 0 12px rgba(11, 70, 120, 0);
+    box-shadow: 0 0 0 12px rgba(99, 102, 241, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(11, 70, 120, 0);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
   }
 }
 
 @keyframes aura-selected-glow {
   0%,
   100% {
-    box-shadow: 0 16px 34px rgba(11, 70, 120, 0.18);
+    box-shadow: 0 16px 34px rgba(99, 102, 241, 0.18);
     filter: saturate(1) brightness(1);
   }
   50% {
-    box-shadow: 0 18px 40px rgba(11, 70, 120, 0.28), 0 0 26px rgba(7, 90, 156, 0.1);
+    box-shadow: 0 18px 40px rgba(99, 102, 241, 0.28), 0 0 26px rgba(99, 102, 241, 0.1);
     filter: saturate(1.12) brightness(1.04);
   }
 }
 
 @keyframes aura-focus-spark {
   0% {
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.38);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.38);
   }
   55% {
-    box-shadow: 0 0 0 7px rgba(37, 99, 235, 0.12), 0 16px 34px rgba(6, 23, 43, 0.12);
+    box-shadow: 0 0 0 7px rgba(99, 102, 241, 0.12), 0 16px 34px rgba(16, 24, 40, 0.12);
   }
   100% {
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18), 0 16px 34px rgba(6, 23, 43, 0.12);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18), 0 16px 34px rgba(16, 24, 40, 0.12);
   }
 }
 
@@ -1074,8 +1074,8 @@ ion-segment-button {
   --color-checked: var(--primary);
   --indicator-color: var(--primary);
   --background-checked: var(--primary-soft);
-  --background-hover: rgba(11, 70, 120, 0.08);
-  --background-focused: rgba(37, 99, 235, 0.1);
+  --background-hover: rgba(99, 102, 241, 0.08);
+  --background-focused: rgba(99, 102, 241, 0.1);
 }
 
 input,
@@ -1115,9 +1115,9 @@ select,
 }
 
 .notice-text {
-  border-color: rgba(37, 99, 235, 0.26);
+  border-color: rgba(99, 102, 241, 0.26);
   color: var(--focus);
-  background: rgba(37, 99, 235, 0.1);
+  background: rgba(99, 102, 241, 0.1);
 }
 
 .bottom-action-card ion-button::part(native),
@@ -1168,7 +1168,7 @@ select,
 .booking-card *,
 .profile-card *,
 .empty * {
-  border-color: rgba(11, 70, 120, 0.16);
+  border-color: rgba(99, 102, 241, 0.16);
 }
 
 .section-title,
@@ -1222,7 +1222,7 @@ label,
   border-color: var(--border);
   color: var(--text);
   background: var(--surface);
-  box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
+  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.08);
 }
 
 .pill.active,
@@ -1235,7 +1235,7 @@ label,
   color: #FFFFFF;
   border-color: transparent;
   background: var(--primary);
-  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.2);
+  box-shadow: 0 16px 34px rgba(99, 102, 241, 0.2);
   animation: aura-selected-glow 3.2s ease-in-out infinite;
 }
 
@@ -1243,16 +1243,16 @@ label,
 .service-choice.selected,
 .staff-choice.selected {
   color: var(--text);
-  border-color: rgba(11, 70, 120, 0.42);
+  border-color: rgba(99, 102, 241, 0.42);
   background: var(--primary-soft);
-  box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14);
+  box-shadow: 0 16px 34px rgba(99, 102, 241, 0.14);
 }
 
 .status-pill,
 .rating-pill,
 .offer-pill,
 .countdown-pill {
-  border: 1px solid rgba(11, 70, 120, 0.24);
+  border: 1px solid rgba(99, 102, 241, 0.24);
 }
 
 .offer-pill {
@@ -1280,7 +1280,7 @@ textarea::placeholder {
 .location-panel {
   border-color: var(--border);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 28px 70px rgba(6, 23, 43, 0.14);
+  box-shadow: 0 28px 70px rgba(16, 24, 40, 0.14);
 }
 
 .premium-card,
@@ -1366,10 +1366,10 @@ textarea::placeholder {
   .modal-card:hover,
   .bottom-action-card:hover {
     transform: translate3d(0, -3px, 0) scale(1.002);
-    border-color: rgba(11, 70, 120, 0.4);
+    border-color: rgba(99, 102, 241, 0.4);
     box-shadow:
-      0 34px 74px rgba(6, 23, 43, 0.18),
-      0 14px 30px rgba(11, 70, 120, 0.12),
+      0 34px 74px rgba(16, 24, 40, 0.18),
+      0 14px 30px rgba(99, 102, 241, 0.12),
       inset 0 1px 0 rgba(255, 255, 255, 0.78);
     filter: saturate(1.06) brightness(1.025);
     animation-play-state: paused;
@@ -1411,8 +1411,8 @@ textarea::placeholder {
   .check-slots-button:hover {
     transform: translate3d(0, -2px, 0) scale(1.003);
     box-shadow:
-      0 20px 42px rgba(6, 23, 43, 0.14),
-      0 8px 18px rgba(11, 70, 120, 0.1);
+      0 20px 42px rgba(16, 24, 40, 0.14),
+      0 8px 18px rgba(99, 102, 241, 0.1);
   }
 }
 
@@ -1495,14 +1495,14 @@ ion-button:active,
     position: relative;
     z-index: 2;
     transform: none;
-    border-color: rgba(11, 70, 120, 0.28);
+    border-color: rgba(99, 102, 241, 0.28);
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.82),
-      inset 0 -1px 0 rgba(11, 70, 120, 0.18),
-      inset 10px 0 18px rgba(11, 70, 120, 0.1),
-      inset -10px 0 18px rgba(6, 23, 43, 0.04);
+      inset 0 -1px 0 rgba(99, 102, 241, 0.18),
+      inset 10px 0 18px rgba(99, 102, 241, 0.1),
+      inset -10px 0 18px rgba(16, 24, 40, 0.04);
   }
 
   .menu a:hover ion-icon,
@@ -1680,8 +1680,8 @@ ion-button:active,
 @media (prefers-color-scheme: dark) {
   body.aura-dark-ready {
     background:
-      radial-gradient(circle at 12% 0%, rgba(11, 70, 120, 0.18), transparent 30%),
-      linear-gradient(180deg, #06172B 0%, #0B1F3A 100%);
+      radial-gradient(circle at 92% 2%, rgba(238, 242, 255, 0.72), transparent 30%),
+      linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
   }
 }
 
@@ -1729,9 +1729,10 @@ ion-button:active,
 /* Aura Shine customer app premium SaaS polish layer. */
 :root {
   --customer-bg-premium:
-    radial-gradient(circle at 12% 0%, rgba(11, 70, 120, 0.1), transparent 32%),
-    radial-gradient(circle at 88% 8%, rgba(7, 90, 156, 0.08), transparent 34%),
-    linear-gradient(180deg, var(--surface) 0%, var(--app-bg) 48%, var(--surface-soft) 100%);
+    radial-gradient(circle at 92% 2%, rgba(238, 242, 255, 0.72), transparent 32%),
+    radial-gradient(circle at 8% 36%, rgba(253, 242, 248, 0.58), transparent 34%),
+    radial-gradient(circle at 54% 100%, rgba(236, 253, 245, 0.48), transparent 34%),
+    linear-gradient(180deg, #FFFFFF 0%, var(--surface) 54%, var(--surface-soft) 100%);
   --customer-surface: var(--surface);
   --customer-surface-soft: var(--surface-soft);
   --customer-text: var(--text);
@@ -1765,7 +1766,7 @@ ion-toolbar {
   --background: rgba(255, 255, 255, 0.92);
   --color: var(--customer-text);
   --border-color: var(--customer-border);
-  box-shadow: 0 10px 28px rgba(6, 23, 43, 0.06);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.04);
 }
 
 ion-searchbar {
@@ -1780,7 +1781,7 @@ ion-tab-bar {
   --background: rgba(255, 255, 255, 0.94);
   --border: 1px solid var(--customer-border);
   border-color: var(--customer-border-strong);
-  box-shadow: 0 22px 52px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 44px rgba(16, 24, 40, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 ion-tab-bar::before {
@@ -1789,20 +1790,20 @@ ion-tab-bar::before {
   inset: 7px;
   z-index: -1;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(231, 240, 248, 0.8));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 252, 0.92));
 }
 
 ion-tab-button {
   --color: var(--customer-muted);
   --color-selected: var(--customer-primary);
-  --background-hover: rgba(11, 70, 120, 0.08);
+  --background-hover: rgba(99, 102, 241, 0.08);
   --background-focused: var(--primary-soft);
 }
 
 ion-tab-button.tab-selected ion-icon {
   color: #FFFFFF;
   background: linear-gradient(135deg, var(--brand-600), var(--brand-700));
-  box-shadow: 0 10px 22px rgba(11, 70, 120, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 22px rgba(99, 102, 241, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.82);
 }
 
 .page,
@@ -1900,7 +1901,7 @@ ion-button.primary-gradient {
   --background-hover: var(--primary-hover);
   --background-activated: var(--primary-active);
   --color: #FFFFFF;
-  --box-shadow: 0 14px 30px rgba(11, 70, 120, 0.24);
+  --box-shadow: 0 14px 30px rgba(99, 102, 241, 0.24);
 }
 
 .secondary-button,
@@ -1931,7 +1932,7 @@ ion-button.secondary-button {
   border-radius: 14px;
   color: var(--customer-text);
   background: var(--customer-surface);
-  box-shadow: 0 8px 20px rgba(6, 23, 43, 0.06);
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.06);
 }
 
 .pill.active,
@@ -1943,23 +1944,23 @@ ion-button.secondary-button {
 .slot.selected {
   color: #fff;
   background: var(--primary);
-  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2);
+  box-shadow: 0 14px 30px rgba(99, 102, 241, 0.2);
 }
 
 .date-card.selected,
 .service-choice.selected,
 .staff-choice.selected {
   color: var(--text);
-  border-color: rgba(11, 70, 120, 0.42);
+  border-color: rgba(99, 102, 241, 0.42);
   background: var(--primary-soft);
-  box-shadow: 0 14px 30px rgba(11, 70, 120, 0.14);
+  box-shadow: 0 14px 30px rgba(99, 102, 241, 0.14);
 }
 
 .status-pill,
 .rating-pill,
 .offer-pill,
 .countdown-pill {
-  border-color: rgba(11, 70, 120, 0.18);
+  border-color: rgba(99, 102, 241, 0.18);
   background: var(--primary-soft);
   color: var(--customer-primary);
 }
@@ -2060,14 +2061,14 @@ ion-segment-button {
 
   ion-toolbar {
     --min-height: 58px;
-    border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.1);
   }
 
   ion-searchbar {
     min-height: 48px;
     padding: 0;
     --border-radius: 14px;
-    --box-shadow: 0 6px 18px rgba(6, 23, 43, 0.08);
+    --box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
   }
 
   ion-tab-bar {
@@ -2159,7 +2160,7 @@ ion-segment-button {
     border: 1px solid var(--customer-border);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09);
+    box-shadow: 0 10px 28px rgba(16, 24, 40, 0.09);
     backdrop-filter: blur(18px);
   }
 
@@ -2344,13 +2345,13 @@ ion-segment-button {
   .premium-card,
   .glass-card {
     border-radius: 14px;
-    box-shadow: 0 4px 14px rgba(6, 23, 43, 0.07);
+    box-shadow: 0 4px 14px rgba(16, 24, 40, 0.07);
   }
 
   .search-card,
   .offer-card {
     position: relative;
-    border: 1px solid rgba(11, 70, 120, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.1);
     background: #FFFFFF;
   }
 
@@ -2360,7 +2361,7 @@ ion-segment-button {
     position: absolute;
     inset: auto 12px 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(11, 70, 120, 0.4), transparent);
+    background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
     pointer-events: none;
   }
 
@@ -2460,7 +2461,7 @@ ion-segment-button {
     min-height: 28px;
     margin: 0 0 6px;
     padding: 0 11px;
-    border: 1px solid rgba(11, 70, 120, 0.24);
+    border: 1px solid rgba(99, 102, 241, 0.24);
     border-radius: 999px;
     color: var(--primary);
     background: var(--primary-soft);
@@ -2966,7 +2967,7 @@ ion-segment-button {
   padding: 0 24px 20px;
   gap: 20px;
   background: var(--app-bg);
-  background-image: radial-gradient(circle at 52% 20%, rgba(11, 70, 120, 0.1), transparent 42%);
+  background-image: radial-gradient(circle at 52% 20%, rgba(99, 102, 241, 0.1), transparent 42%);
 }
 
 .premium-topbar {
@@ -3133,7 +3134,7 @@ ion-segment-button {
 .premium-discovery-top .sticky-search.fresha-search-card {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 28px rgba(6, 23, 43, 0.09);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.09);
 }
 
 .premium-discovery-top .fresha-search-card ion-searchbar {
@@ -3166,13 +3167,13 @@ ion-segment-button {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 10px 26px rgba(6, 23, 43, 0.1);
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.1);
   overflow: visible;
 }
 
 .premium-discovery-top .sticky-search.fresha-search-card:focus-within {
   border-color: var(--focus);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14), 0 12px 28px rgba(6, 23, 43, 0.12);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 12px 28px rgba(16, 24, 40, 0.12);
 }
 
 .premium-discovery-top .search-input-wrap {

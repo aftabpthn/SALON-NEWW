@@ -189,7 +189,7 @@ import { Business } from "../../core/api.types";
       border: 1px solid var(--border);
       border-radius: 22px;
       background: var(--surface);
-      box-shadow: 0 12px 30px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
     }
 
     .explore-search-bar {
@@ -354,7 +354,7 @@ import { Business } from "../../core/api.types";
     }
 
     .category-view-all {
-      border-color: rgba(11, 70, 120, 0.26);
+      border-color: rgba(99, 102, 241, 0.26);
       background: var(--primary-soft);
     }
 
@@ -379,7 +379,7 @@ import { Business } from "../../core/api.types";
         radial-gradient(circle at 90% 8%, rgba(255, 255, 255, 0.15), transparent 34%),
         linear-gradient(145deg, var(--brand-800), var(--primary));
       text-decoration: none;
-      box-shadow: 0 16px 34px rgba(6, 23, 43, 0.14);
+      box-shadow: 0 16px 34px rgba(16, 24, 40, 0.14);
     }
 
     .feature-primary > span {
@@ -448,7 +448,7 @@ import { Business } from "../../core/api.types";
       gap: 10px;
       min-height: 78px;
       padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 19px;
       color: #fff;
       background: var(--brand-900);
@@ -539,7 +539,7 @@ import { Business } from "../../core/api.types";
     .professional-list > a > ion-icon { color: var(--primary); }
 
     .explore-loading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-    .skeleton-card { height: 260px; border-radius: 16px; background: linear-gradient(90deg, rgba(11, 70, 120, 0.06), rgba(11, 70, 120, 0.14), rgba(11, 70, 120, 0.06)); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    .skeleton-card { height: 260px; border-radius: 16px; background: linear-gradient(90deg, rgba(99, 102, 241, 0.06), rgba(99, 102, 241, 0.14), rgba(99, 102, 241, 0.06)); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
     .explore-state { display: grid; justify-items: start; gap: 8px; padding: 22px; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); }
     .explore-state h2, .explore-state p { margin: 0; }
     .explore-state h2 { color: var(--text); font-size: 1.2rem; }
@@ -553,12 +553,12 @@ import { Business } from "../../core/api.types";
     }
 
     @media (hover: hover) and (pointer: fine) {
-      .explore-search-bar:hover { border-color: rgba(11, 70, 120, 0.4); box-shadow: 0 12px 28px rgba(6, 23, 43, 0.09); }
-      .chip:hover { border-color: rgba(11, 70, 120, 0.4); background: var(--primary-soft); }
-      .category-card:hover { border-color: rgba(11, 70, 120, 0.4); }
+      .explore-search-bar:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 28px rgba(16, 24, 40, 0.09); }
+      .chip:hover { border-color: rgba(99, 102, 241, 0.4); background: var(--primary-soft); }
+      .category-card:hover { border-color: rgba(99, 102, 241, 0.4); }
     }
 
-    a:focus-visible, button:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.42); outline-offset: 3px; }
+    a:focus-visible, button:focus-visible { outline: 3px solid rgba(99, 102, 241, 0.42); outline-offset: 3px; }
 
     @media (max-width: 349px) {
       .explore-categories { grid-template-columns: repeat(3, minmax(0, 1fr)); }

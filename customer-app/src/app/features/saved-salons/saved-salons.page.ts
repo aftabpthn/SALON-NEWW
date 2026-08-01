@@ -260,7 +260,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: 14px;
       background: var(--surface);
-      box-shadow: 0 4px 14px rgba(6, 23, 43, 0.04);
+      box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
       transition: border-color 200ms ease, box-shadow 200ms ease, transform 180ms ease;
     }
 
@@ -290,7 +290,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-content: center;
       justify-items: center;
       gap: 4px;
-      color: #0f4f65;
+      color: #4F46E5;
       background: linear-gradient(145deg, #e8f5fa, #c8e9f3 52%, #a8dbe9);
     }
 
@@ -458,7 +458,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .card-action.primary {
       color: #fff;
       background: var(--primary);
-      box-shadow: 0 4px 10px rgba(11, 70, 120, 0.14);
+      box-shadow: 0 4px 10px rgba(99, 102, 241, 0.14);
     }
 
     .card-action.secondary {
@@ -475,7 +475,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: 18px;
       background: var(--surface);
-      box-shadow: 0 8px 22px rgba(6, 23, 43, 0.05);
+      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.05);
     }
 
     .state-card h2 {
@@ -571,7 +571,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .saved-card:hover {
         border-color: var(--border-strong);
-        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
       }
 
       .saved-card:hover .salon-image img {

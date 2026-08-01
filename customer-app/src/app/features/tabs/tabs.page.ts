@@ -262,9 +262,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
       justify-content: space-between;
       min-height: 58px;
       padding: 8px 14px;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.18);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.18);
       background: rgba(255, 255, 255, 0.97);
-      box-shadow: 0 8px 24px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
       backdrop-filter: blur(18px);
     }
 
@@ -290,7 +290,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .salon-mode-back {
       min-height: 36px;
       padding: 0 14px;
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 999px;
       display: inline-flex;
       align-items: center;
@@ -378,7 +378,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 12px;
       padding: 10px 12px 8px;
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.92));
-      border-bottom: 1px solid rgba(11, 70, 120, 0.14);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.14);
       backdrop-filter: blur(18px);
     }
 
@@ -402,17 +402,17 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     ion-tab-bar {
       --background: rgba(255, 255, 255, 0.96);
-      --border: 1px solid rgba(11, 70, 120, 0.18);
+      --border: 1px solid rgba(99, 102, 241, 0.18);
       min-height: calc(62px + env(safe-area-inset-bottom));
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-      box-shadow: 0 -12px 32px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 -12px 32px rgba(16, 24, 40, 0.12);
       backdrop-filter: blur(18px);
     }
 
     ion-tab-button {
       --color: var(--muted);
       --color-selected: var(--primary);
-      --ripple-color: rgba(11, 70, 120, 0.18);
+      --ripple-color: rgba(99, 102, 241, 0.18);
       min-width: 0;
       border-radius: 16px;
       font-size: 0.68rem;
@@ -430,7 +430,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .explore-tab ion-icon {
       color: var(--primary);
       font-size: 1.42rem;
-      filter: drop-shadow(0 2px 4px rgba(11, 70, 120, 0.2));
+      filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
     }
 
     .explore-tab.tab-selected ion-icon {
@@ -506,7 +506,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 8px 18px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
     }
 
     .mobile-menu-backdrop {
@@ -529,13 +529,13 @@ import { MarketplaceService } from "../../core/marketplace.service";
       align-content: start;
       gap: 14px;
       padding: 16px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       overflow: auto;
       background:
         radial-gradient(circle at top right, rgba(255,255,255,0.52), transparent 22%),
         linear-gradient(180deg, rgba(255,255,255,0.99), rgba(241,245,249,0.96));
-      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.14);
+      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.14);
     }
 
     .menu-sheet-head {
@@ -564,7 +564,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 6px;
       min-height: 38px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--brand-800);
       background: rgba(255,255,255,0.86);
@@ -588,7 +588,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       gap: 3px;
       padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 16px;
       background: rgba(255,255,255,0.76);
     }
@@ -611,10 +611,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 12px;
       justify-content: space-between;
       padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
       background: radial-gradient(circle at 0 0, rgba(255,255,255,0.7), transparent 38%), rgba(255,255,255,0.86);
-      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
     }
 
     .menu-avatar {
@@ -656,7 +656,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 8px;
       min-height: 52px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
       color: #1d1307;
       background: rgba(255,255,255,0.8);
@@ -666,14 +666,14 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .mobile-menu-list {
       display: grid;
-      border-top: 1px solid rgba(11, 70, 120, 0.16);
+      border-top: 1px solid rgba(99, 102, 241, 0.16);
     }
 
     .mobile-menu-list a {
       justify-content: space-between;
       gap: 10px;
       min-height: 48px;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.12);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.12);
       color: #3a2713;
       text-decoration: none;
       font-weight: 850;
@@ -764,7 +764,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         border: 1px solid rgba(17, 24, 39, 0.14);
         border-radius: 999px;
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.84));
-        box-shadow: 0 18px 42px rgba(6, 23, 43, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
         backdrop-filter: blur(24px);
         transform: translateX(-50%);
         animation: aura-web-nav-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -791,7 +791,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         width: 44px;
         height: 44px;
         border-radius: 15px;
-        box-shadow: 0 10px 24px rgba(11, 70, 120, 0.13);
+        box-shadow: 0 10px 24px rgba(99, 102, 241, 0.13);
         transition: transform var(--motion-medium), box-shadow var(--motion-medium);
       }
 
@@ -839,7 +839,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       .nav-links a.active {
         color: #FFFFFF;
         background: linear-gradient(135deg, var(--brand-600), var(--primary));
-        box-shadow: 0 12px 26px rgba(11, 70, 120, 0.18);
+        box-shadow: 0 12px 26px rgba(99, 102, 241, 0.18);
       }
 
       .nav-actions {
@@ -885,16 +885,16 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
       .location-chip:hover,
       .icon-link:hover {
-        border-color: rgba(11, 70, 120, 0.32);
+        border-color: rgba(99, 102, 241, 0.32);
         color: var(--primary);
         background: #ffffff;
         transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(6, 23, 43, 0.09);
+        box-shadow: 0 12px 24px rgba(16, 24, 40, 0.09);
       }
 
       .brand:hover .brand-mark {
         transform: rotate(-3deg) scale(1.04);
-        box-shadow: 0 14px 30px rgba(6, 23, 43, 0.14);
+        box-shadow: 0 14px 30px rgba(16, 24, 40, 0.14);
       }
     }
 

@@ -282,7 +282,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .edit-profile-page .hero-card,
     .edit-profile-page .editor-card {
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
     }
 
     .edit-profile-page .hero-card *,
@@ -296,7 +296,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         transform: none;
         filter: none;
         animation-play-state: running;
-        box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
+        box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
       }
 
       .edit-profile-page .hero-card:hover ion-icon,
@@ -390,7 +390,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       font-size: 1.2rem;
-      box-shadow: 0 14px 28px rgba(11, 70, 120, 0.18);
+      box-shadow: 0 14px 28px rgba(99, 102, 241, 0.18);
     }
 
     .section-icon.danger {
@@ -430,7 +430,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       gap: 10px;
       padding: 14px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
       background: var(--primary-soft);
     }
@@ -470,7 +470,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .notice-text {
       color: var(--primary);
       background: var(--aura-gold-soft);
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     .error-text {
@@ -503,12 +503,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .delete-input-row {
       min-height: 72px;
-      border: 1px solid rgba(11, 70, 120, 0.26);
+      border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 18px;
       background:
         linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
       box-shadow:
-        0 14px 32px rgba(6, 23, 43, 0.09),
+        0 14px 32px rgba(16, 24, 40, 0.09),
         inset 0 1px 0 rgba(255, 255, 255, 0.84);
       --background: transparent;
       --padding-start: 16px;
@@ -548,10 +548,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .delete-input-row:focus-within {
-      border-color: rgba(11, 70, 120, 0.58);
+      border-color: rgba(99, 102, 241, 0.58);
       box-shadow:
-        0 14px 30px rgba(6, 23, 43, 0.1),
-        0 0 0 4px rgba(37, 99, 235, 0.18),
+        0 14px 30px rgba(16, 24, 40, 0.1),
+        0 0 0 4px rgba(99, 102, 241, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
 

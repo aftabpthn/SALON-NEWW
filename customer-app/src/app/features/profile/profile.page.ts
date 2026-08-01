@@ -265,11 +265,11 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       min-width: 86px;
       min-height: 42px;
       padding: 0 16px;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      box-shadow: 0 12px 24px rgba(11, 70, 120, 0.18);
+      box-shadow: 0 12px 24px rgba(99, 102, 241, 0.18);
       font: inherit;
       font-size: 0.8rem;
       font-weight: 900;
@@ -287,7 +287,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     .edit-profile-button:focus-visible {
       outline: none;
       transform: translateY(-1px);
-      box-shadow: 0 14px 28px rgba(11, 70, 120, 0.22);
+      box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22);
     }
 
     .avatar {
@@ -298,7 +298,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       border-radius: 30px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-      box-shadow: 0 16px 34px rgba(11, 70, 120, 0.2);
+      box-shadow: 0 16px 34px rgba(99, 102, 241, 0.2);
       font-size: 2rem;
       font-weight: 900;
     }
@@ -324,10 +324,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.38), transparent 34%),
         linear-gradient(135deg, var(--brand-600) 0%, var(--primary) 48%, var(--brand-900) 100%);
       box-shadow:
-        0 28px 56px rgba(6, 23, 43, 0.22),
-        0 10px 22px rgba(11, 70, 120, 0.22),
+        0 28px 56px rgba(16, 24, 40, 0.22),
+        0 10px 22px rgba(99, 102, 241, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.58),
-        inset 0 -18px 34px rgba(6, 23, 43, 0.16);
+        inset 0 -18px 34px rgba(16, 24, 40, 0.16);
       transform: perspective(1100px) translate3d(0, 0, 0);
       transform-style: preserve-3d;
       backface-visibility: hidden;
@@ -344,7 +344,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       content: "";
       pointer-events: none;
       background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(6, 23, 43, 0.14)),
+        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(16, 24, 40, 0.14)),
         radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.3), transparent 20%);
       transform: translateZ(18px);
     }
@@ -389,7 +389,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     .pass-card ion-icon {
       flex: 0 0 auto;
       font-size: 2.4rem;
-      filter: drop-shadow(0 10px 16px rgba(6, 23, 43, 0.24));
+      filter: drop-shadow(0 10px 16px rgba(16, 24, 40, 0.24));
       transform: translateZ(42px);
     }
 
@@ -397,10 +397,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       .pass-card:hover {
         transform: perspective(1100px) translate3d(0, -8px, 26px) rotateX(1.4deg) rotateY(-1.8deg) scale(1.01);
         box-shadow:
-          0 38px 82px rgba(6, 23, 43, 0.25),
-          0 16px 34px rgba(11, 70, 120, 0.24),
+          0 38px 82px rgba(16, 24, 40, 0.25),
+          0 16px 34px rgba(99, 102, 241, 0.24),
           inset 0 1px 0 rgba(255, 255, 255, 0.72),
-          inset 0 -20px 38px rgba(6, 23, 43, 0.16);
+          inset 0 -20px 38px rgba(16, 24, 40, 0.16);
         filter: saturate(1.06) brightness(1.03);
         animation-play-state: paused;
       }
@@ -508,7 +508,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       display: grid;
       gap: 10px;
       padding: 14px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
       background: var(--primary-soft);
     }
@@ -588,7 +588,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     }
 
     .menu-item.disabled ion-icon {
-      color: rgba(11, 70, 120, 0.58);
+      color: rgba(99, 102, 241, 0.58);
     }
 
     .menu-item small {

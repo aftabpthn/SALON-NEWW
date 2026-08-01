@@ -368,7 +368,7 @@ interface ConsultationChatMessage {
       gap: 10px;
       align-items: center;
       padding: 10px 16px 8px;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.12);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.12);
       background: rgba(255, 255, 255, 0.97);
       backdrop-filter: blur(16px);
     }
@@ -493,7 +493,7 @@ interface ConsultationChatMessage {
       position: relative;
       min-width: 0;
       overflow: hidden;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
       background: #FFFFFF;
     }
 
@@ -529,7 +529,7 @@ interface ConsultationChatMessage {
       flex: 0 0 auto;
       min-height: 44px;
       padding: 0 14px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 999px;
       color: var(--brand-800);
       background: #FFFFFF;
@@ -629,10 +629,10 @@ interface ConsultationChatMessage {
       width: min(100%, 820px);
       max-width: 100%;
       padding: 16px;
-      border: 1px solid rgba(11, 70, 120, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
       background: #FFFFFF;
-      box-shadow: 0 10px 28px rgba(6, 23, 43, 0.06);
+      box-shadow: 0 10px 28px rgba(16, 24, 40, 0.06);
     }
 
     .answer-copy,
@@ -649,7 +649,7 @@ interface ConsultationChatMessage {
       gap: 8px;
       margin-inline: 16px;
       padding: 10px 0 14px;
-      border-block: 1px solid rgba(11, 70, 120, 0.12);
+      border-block: 1px solid rgba(99, 102, 241, 0.12);
       background: #FFFFFF;
     }
 
@@ -690,7 +690,7 @@ interface ConsultationChatMessage {
     ion-textarea:focus-within,
     ion-textarea::part(native):focus {
       border-color: var(--focus);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
       outline: none;
     }
 
@@ -711,7 +711,7 @@ interface ConsultationChatMessage {
     .upload-button {
       min-height: 44px;
       padding: 0 13px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 12px;
     }
 
@@ -726,7 +726,7 @@ interface ConsultationChatMessage {
       font-size: 0.8rem;
       font-weight: 800;
       text-decoration: underline;
-      text-decoration-color: rgba(11, 70, 120, 0.3);
+      text-decoration-color: rgba(99, 102, 241, 0.3);
       text-underline-offset: 3px;
     }
 
@@ -777,7 +777,7 @@ interface ConsultationChatMessage {
     .nearby-context {
       width: min(100%, 760px);
       padding-block: 2px;
-      border-block: 1px solid rgba(11, 70, 120, 0.1);
+      border-block: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .nearby-context summary {
@@ -816,7 +816,7 @@ interface ConsultationChatMessage {
       gap: 10px;
       margin-top: 6px;
       padding-top: 12px;
-      border-top: 1px solid rgba(11, 70, 120, 0.12);
+      border-top: 1px solid rgba(99, 102, 241, 0.12);
     }
 
     .problem-grid label {
@@ -843,7 +843,7 @@ interface ConsultationChatMessage {
 
     .problem-grid input:focus-visible {
       border-color: var(--focus);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.13);
     }
 
     .photo-strip {
@@ -879,7 +879,7 @@ interface ConsultationChatMessage {
       border-radius: 50%;
       color: var(--brand-950);
       background: #FFFFFF;
-      box-shadow: 0 2px 8px rgba(6, 23, 43, 0.18);
+      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.18);
     }
 
     .inline-notice,
@@ -910,7 +910,7 @@ interface ConsultationChatMessage {
     .consult-summary-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
       padding-block: 8px;
-      border-block: 1px solid rgba(11, 70, 120, 0.1);
+      border-block: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .consult-summary-grid article {
@@ -919,7 +919,7 @@ interface ConsultationChatMessage {
       align-content: start;
       gap: 3px;
       padding-inline: 8px;
-      border-left: 1px solid rgba(11, 70, 120, 0.1);
+      border-left: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .consult-summary-grid article:first-child {
@@ -945,7 +945,7 @@ interface ConsultationChatMessage {
     .result-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       margin-top: 6px;
-      border-top: 1px solid rgba(11, 70, 120, 0.1);
+      border-top: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .result-grid section {
@@ -953,7 +953,7 @@ interface ConsultationChatMessage {
       align-content: start;
       gap: 7px;
       padding: 12px 4px;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .result-grid h3 {
@@ -985,7 +985,7 @@ interface ConsultationChatMessage {
       min-width: 0;
       min-height: 52px;
       padding: 9px 10px;
-      border: 1px solid rgba(11, 70, 120, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 10px;
       text-align: left;
     }
@@ -1032,7 +1032,7 @@ interface ConsultationChatMessage {
       gap: 8px;
       align-items: start;
       padding: 9px 0;
-      border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
     }
 
     .context-list ion-icon {
@@ -1112,7 +1112,7 @@ interface ConsultationChatMessage {
       .consult-summary-grid article {
         padding: 7px 0;
         border-left: 0;
-        border-bottom: 1px solid rgba(11, 70, 120, 0.1);
+        border-bottom: 1px solid rgba(99, 102, 241, 0.1);
       }
 
       .workspace-actions .primary-gradient {
@@ -1130,9 +1130,9 @@ interface ConsultationChatMessage {
         height: min(820px, calc(100dvh - 126px));
         min-height: 620px;
         overflow: hidden;
-        border: 1px solid rgba(11, 70, 120, 0.12);
+        border: 1px solid rgba(99, 102, 241, 0.12);
         border-radius: 20px;
-        box-shadow: 0 18px 48px rgba(6, 23, 43, 0.09);
+        box-shadow: 0 18px 48px rgba(16, 24, 40, 0.09);
       }
 
       .conversation-scroll {

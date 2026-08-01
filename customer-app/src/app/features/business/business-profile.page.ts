@@ -547,11 +547,11 @@ import { Subscription } from "rxjs";
       padding: 5px 10px;
       border: 1px solid rgba(16, 185, 129, 0.38);
       border-radius: 999px;
-      color: #047857;
+      color: #059669;
       background: #D1FAE5;
       font-size: 0.72rem;
       font-weight: 950;
-      box-shadow: 0 8px 18px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.12);
     }
 
     .hero-open-pill.closed {
@@ -563,7 +563,7 @@ import { Subscription } from "rxjs";
     .hero-business-name {
       margin: 0;
       max-width: min(620px, 100%);
-      color: #0B1F33;
+      color: #101828;
       font-size: clamp(0.98rem, 4vw, 1.65rem);
       font-weight: 900;
       letter-spacing: -0.055em;
@@ -615,7 +615,7 @@ import { Subscription } from "rxjs";
       min-width: 34px;
       min-height: 34px;
       margin: 0;
-      --color: #0B1F33;
+      --color: #101828;
       --background: transparent;
       --box-shadow: none;
       --border-radius: 0;
@@ -672,7 +672,7 @@ import { Subscription } from "rxjs";
       justify-content: space-between;
       gap: 12px;
       padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
       background: rgba(255, 255, 255, 0.76);
     }
@@ -712,7 +712,7 @@ import { Subscription } from "rxjs";
 
     .primary-salon-action.secondary {
       color: var(--primary);
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       background: #FFFFFF;
     }
 
@@ -774,7 +774,7 @@ import { Subscription } from "rxjs";
       background: var(--surface);
       font-size: 0.88rem;
       font-weight: 600;
-      box-shadow: 0 2px 8px rgba(11, 70, 120, 0.04);
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.04);
       transition: border-color 180ms ease, box-shadow 180ms ease;
     }
 
@@ -835,7 +835,7 @@ import { Subscription } from "rxjs";
       border-color: var(--primary);
       background: var(--primary);
       color: #ffffff;
-      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.18);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
     }
 
     .service-empty-card {
@@ -878,11 +878,11 @@ import { Subscription } from "rxjs";
       gap: 14px;
       min-height: 132px;
       padding: 16px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 18px;
       color: var(--text);
       background: #FFFFFF;
-      box-shadow: 0 8px 22px rgba(6, 23, 43, 0.07);
+      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.07);
       text-align: left;
       cursor: pointer;
     }
@@ -893,7 +893,7 @@ import { Subscription } from "rxjs";
       gap: 10px;
       margin-top: 2px;
       padding: 12px;
-      border: 1px solid rgba(11, 70, 120, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.12);
       border-radius: 15px;
       background: rgba(246, 249, 252, 0.88);
     }
@@ -920,7 +920,7 @@ import { Subscription } from "rxjs";
       align-items: center;
       gap: 6px;
       padding: 0 11px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 999px;
       color: var(--brand-800);
       background: #FFFFFF;
@@ -938,7 +938,7 @@ import { Subscription } from "rxjs";
       resize: vertical;
       min-height: 118px;
       padding: 14px 13px;
-      border: 1px solid rgba(11, 70, 120, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 12px;
       outline: none;
       color: var(--text);
@@ -953,8 +953,8 @@ import { Subscription } from "rxjs";
     }
 
     .service-note-input:focus {
-      border-color: rgba(11, 70, 120, 0.42);
-      box-shadow: 0 0 0 3px rgba(11, 70, 120, 0.1);
+      border-color: rgba(99, 102, 241, 0.42);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
     }
 
     .service-popup-backdrop {
@@ -965,7 +965,7 @@ import { Subscription } from "rxjs";
       align-items: center;
       justify-items: center;
       padding: 16px;
-      background: rgba(6, 23, 43, 0.42);
+      background: rgba(16, 24, 40, 0.42);
       backdrop-filter: blur(8px);
     }
 
@@ -980,7 +980,7 @@ import { Subscription } from "rxjs";
       padding: 24px 18px 18px;
       border-radius: 26px;
       background: #FFFFFF;
-      box-shadow: 0 24px 70px rgba(6, 23, 43, 0.28);
+      box-shadow: 0 24px 70px rgba(16, 24, 40, 0.28);
     }
 
     .service-popup-close {
@@ -1033,10 +1033,10 @@ import { Subscription } from "rxjs";
       width: 106px;
       height: 92px;
       border-radius: 20px;
-      background-color: #E7F0F8;
+      background-color: #EEF2FF;
       background-position: center;
       background-size: cover;
-      box-shadow: 0 12px 28px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.1);
     }
 
     .service-popup-section {
@@ -1064,7 +1064,7 @@ import { Subscription } from "rxjs";
       font-size: 0.98rem;
       font-weight: 950;
       cursor: pointer;
-      box-shadow: 0 14px 30px rgba(11, 70, 120, 0.22);
+      box-shadow: 0 14px 30px rgba(99, 102, 241, 0.22);
     }
 
     .salon-service-item.is-picked {
@@ -1136,11 +1136,11 @@ import { Subscription } from "rxjs";
       height: 92px;
       display: block;
       border-radius: 18px;
-      background-color: #E7F0F8;
+      background-color: #EEF2FF;
       background-position: center;
       background-size: cover;
       background-repeat: no-repeat;
-      box-shadow: 0 12px 28px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.1);
       visibility: visible;
       opacity: 1;
     }
@@ -1154,14 +1154,14 @@ import { Subscription } from "rxjs";
       justify-content: center;
       gap: 4px;
       padding: 0 14px;
-      border: 1px solid rgba(11, 70, 120, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 12px;
       color: var(--primary);
       background: #FFFFFF;
       font-size: 0.86rem;
       font-weight: 950;
       cursor: pointer;
-      box-shadow: 0 10px 20px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 10px 20px rgba(16, 24, 40, 0.1);
       visibility: visible;
       opacity: 1;
       z-index: 2;
@@ -1169,7 +1169,7 @@ import { Subscription } from "rxjs";
     }
 
     .salon-service-add.selected {
-      color: #047857;
+      color: #059669;
       border-color: rgba(16, 185, 129, 0.32);
       background: #D1FAE5;
       box-shadow: none;
@@ -1339,7 +1339,7 @@ import { Subscription } from "rxjs";
     }
 
     .coupon-offer .offer-icon {
-      background: linear-gradient(135deg, rgba(11, 70, 120, 0.12), rgba(7, 90, 156, 0.08));
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.08));
     }
 
     .coupon-offer .offer-icon ion-icon {
@@ -1417,8 +1417,8 @@ import { Subscription } from "rxjs";
     }
 
     .loyalty-card.primary-card {
-      background: linear-gradient(135deg, rgba(11, 70, 120, 0.1), rgba(7, 90, 156, 0.06));
-      border-color: rgba(11, 70, 120, 0.25);
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.06));
+      border-color: rgba(99, 102, 241, 0.25);
     }
 
     .loyalty-card ion-icon {
@@ -1672,7 +1672,7 @@ import { Subscription } from "rxjs";
       border-radius: 15px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 7px 18px rgba(6, 23, 43, 0.07);
+      box-shadow: 0 7px 18px rgba(16, 24, 40, 0.07);
       text-decoration: none;
       scroll-snap-align: start;
     }
@@ -1684,7 +1684,7 @@ import { Subscription } from "rxjs";
       place-items: center;
       border-radius: 11px;
       color: #704812;
-      background: rgba(11, 70, 120, 0.14);
+      background: rgba(99, 102, 241, 0.14);
       font-size: 0.82rem;
       font-weight: 950;
     }

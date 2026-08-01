@@ -151,7 +151,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       border: 1px solid var(--border);
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 14px 34px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.08);
     }
     .identity-avatar {
       width: 56px;
@@ -171,7 +171,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       border: 1px solid var(--border);
       border-radius: 24px;
       background: #ffffff;
-      box-shadow: 0 16px 38px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 16px 38px rgba(16, 24, 40, 0.08);
     }
     .settings-section-heading {
       padding: 18px 18px 14px;
@@ -231,7 +231,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       line-height: 1.45;
     }
     .empty-state { color: var(--muted); background: var(--surface-soft); }
-    .notice-text { color: var(--primary); background: var(--primary-soft); border: 1px solid rgba(11, 70, 120, 0.22); }
+    .notice-text { color: var(--primary); background: var(--primary-soft); border: 1px solid rgba(99, 102, 241, 0.22); }
     .error-text { color: #EF4444; background: #fff1f2; border: 1px solid rgba(225, 29, 72, 0.16); }
     .settings-card .empty-state { margin: 14px 18px 0; }
     strong, span { display: block; }

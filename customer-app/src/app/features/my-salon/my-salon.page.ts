@@ -41,10 +41,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
   imports: [RouterLink, IonButton, IonContent, IonIcon],
   template: `
     <ion-content class="ms-content">
-      <main
-        class="ms-page"
-        [style.--ms-accent]="salonAccent()"
-        [style.--ms-accent-soft]="salonAccentSoft()">
+      <main class="ms-page">
 
         <!-- ─── TOP TOOLBAR HEADER ─── -->
         <header class="ms-toolbar">
@@ -683,15 +680,17 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
   `,
   styles: [`
     :host {
-      --ms-ink: #191817;
-      --ms-muted: #68635e;
-      --ms-ivory: #fbf8f2;
-      --ms-line: rgba(36, 32, 29, .12);
+      --ms-ink: var(--text, #101828);
+      --ms-muted: var(--muted, #667085);
+      --ms-ivory: var(--surface, #FFFFFF);
+      --ms-line: var(--border, #EAECF0);
       --ms-emerald: #10b981;
       --ms-rose: #f43f5e;
+      --ms-accent: var(--primary, #6366F1);
+      --ms-accent-soft: var(--primary-soft, #EEF2FF);
     }
     .ms-content {
-      --background: linear-gradient(180deg, #fcfaf6 0%, #f5f2ec 62%, #f8f7f4 100%);
+      --background: var(--customer-bg-premium, #FFFFFF);
     }
     .ms-page {
       width: min(100%, 1120px);
@@ -711,8 +710,8 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       min-height: 64px;
       margin-inline: -16px;
       padding: 8px 16px;
-      border-bottom: 1px solid rgba(36, 32, 29, .08);
-      background: rgba(252, 250, 246, .92);
+      border-bottom: 1px solid var(--ms-line);
+      background: rgba(255, 255, 255, .94);
       backdrop-filter: blur(18px);
     }
     .ms-icon-button, .ms-switch-button {
@@ -744,7 +743,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-picker-count { color: var(--ms-accent); font-size: .78rem; font-weight: 760; }
 
     /* Picker Drawer */
-    .ms-picker { position: relative; z-index: 15; display: grid; gap: 14px; margin: 10px 0 18px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 20px 50px rgba(41,34,29,.14); }
+    .ms-picker { position: relative; z-index: 15; display: grid; gap: 14px; margin: 10px 0 18px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 18px 44px rgba(16,24,40,.08); }
     .ms-picker-note { margin: 0; color: var(--ms-muted); font-size: .78rem; line-height: 1.45; }
     .ms-text-action { width: fit-content; border: 0; color: var(--ms-accent); background: transparent; font-weight: 900; text-decoration: underline; cursor: pointer; }
     .ms-choice-list { display: grid; gap: 8px; width: 100%; }
@@ -761,28 +760,28 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-choice-badge.is-active { color: #fff; background: var(--ms-accent); }
 
     /* Salon Hero Card */
-    .ms-hero { position: relative; overflow: hidden; display: grid; gap: 22px; margin-top: 16px; padding: 24px 20px 22px; border-radius: 26px; color: #fff; background: linear-gradient(145deg, #1b1b1a 0%, #292724 65%, color-mix(in srgb, var(--ms-accent) 45%, #191817)); box-shadow: 0 24px 60px rgba(31,27,24,.2); }
-    .ms-hero::after { content: ""; position: absolute; width: 220px; height: 220px; right: -90px; top: -100px; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; box-shadow: 0 0 0 30px rgba(255,255,255,.025); pointer-events: none; }
+    .ms-hero { position: relative; overflow: hidden; display: grid; gap: 22px; margin-top: 16px; padding: 24px 20px 22px; border: 1px solid var(--ms-line); border-radius: 26px; color: var(--ms-ink); background: rgba(255,255,255,.96); box-shadow: 0 18px 48px rgba(16,24,40,.08); }
+    .ms-hero::after { content: ""; position: absolute; width: 220px; height: 220px; right: -90px; top: -100px; border: 1px solid rgba(99,102,241,.12); border-radius: 50%; box-shadow: 0 0 0 30px rgba(238,242,255,.42); pointer-events: none; }
     .ms-hero-main { position: relative; z-index: 1; display: grid; grid-template-columns: 62px minmax(0,1fr); align-items: center; gap: 14px; }
-    .ms-salon-mark { width: 62px; height: 62px; overflow: hidden; border: 1px solid rgba(255,255,255,.24); border-radius: 20px; box-shadow: inset 0 1px rgba(255,255,255,.25); }
+    .ms-salon-mark { width: 62px; height: 62px; overflow: hidden; border: 1px solid var(--ms-line); border-radius: 20px; box-shadow: inset 0 1px rgba(255,255,255,.25); }
     .ms-salon-mark-img { width: 100%; height: 100%; object-fit: cover; }
     .ms-hero-copy { min-width: 0; display: grid; gap: 4px; }
-    .ms-hero .ms-kicker { color: rgba(255,255,255,.7); }
+    .ms-hero .ms-kicker { color: var(--ms-accent); }
     .ms-hero h1 { margin: 0; overflow-wrap: anywhere; font-size: clamp(1.75rem, 7vw, 2.5rem); font-weight: 700; letter-spacing: -.04em; line-height: 1.02; }
-    .ms-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: rgba(255,255,255,.76); font-size: .75rem; margin-top: 2px; }
+    .ms-status-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--ms-muted); font-size: .75rem; margin-top: 2px; }
     .ms-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
     .ms-dot { width: 8px; height: 8px; border-radius: 50%; background: #f43f5e; box-shadow: 0 0 0 3px rgba(244,63,94,.2); }
     .ms-status.is-open .ms-dot { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.25); }
-    .ms-hours-chip { display: inline-flex; align-items: center; gap: 4px; color: rgba(255,255,255,.8); font-size: .74rem; }
+    .ms-hours-chip { display: inline-flex; align-items: center; gap: 4px; color: var(--ms-muted); font-size: .74rem; }
     .ms-contact-list { position: relative; z-index: 1; display: grid; gap: 8px; }
-    .ms-contact-item { min-width: 0; display: flex; align-items: flex-start; gap: 10px; color: rgba(255,255,255,.76); font-size: .8rem; line-height: 1.4; text-decoration: none; }
-    .ms-contact-item.ms-link:hover { color: #fff; }
-    .ms-contact-item ion-icon { flex: 0 0 16px; margin-top: 2px; color: rgba(255,255,255,.9); font-size: 17px; }
+    .ms-contact-item { min-width: 0; display: flex; align-items: flex-start; gap: 10px; color: var(--ms-muted); font-size: .8rem; line-height: 1.4; text-decoration: none; }
+    .ms-contact-item.ms-link:hover { color: var(--ms-accent); }
+    .ms-contact-item ion-icon { flex: 0 0 16px; margin-top: 2px; color: var(--ms-accent); font-size: 17px; }
     .ms-star-icon { color: #f59e0b !important; }
     .ms-hero-actions { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr; gap: 10px; }
     .ms-book-button, .ms-profile-button { min-height: 48px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: .86rem; font-weight: 780; text-decoration: none; }
-    .ms-book-button { color: #171614; background: #fff; box-shadow: 0 10px 28px rgba(0,0,0,.2); }
-    .ms-profile-button { border: 1px solid rgba(255,255,255,.24); color: #fff; background: rgba(255,255,255,.1); }
+    .ms-book-button { color: #fff; background: var(--ms-accent); box-shadow: 0 12px 28px rgba(99,102,241,.22); }
+    .ms-profile-button { border: 1px solid var(--ms-line); color: var(--ms-ink); background: #fff; }
 
     /* Quick Shortcuts Bar */
     .ms-quick-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; padding: 10px 2px 12px; border-bottom: 1px solid var(--ms-line); overflow: visible; }
@@ -829,7 +828,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-offer-rail, .ms-staff-rail { display: grid; grid-auto-flow: column; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
     .ms-offer-rail::-webkit-scrollbar, .ms-staff-rail::-webkit-scrollbar { display: none; }
     .ms-offer-rail { grid-auto-columns: minmax(260px, 82vw); gap: 12px; margin-inline: -16px; padding: 2px 16px 8px; }
-    .ms-offer { min-height: 180px; scroll-snap-align: start; display: grid; align-content: space-between; gap: 8px; padding: 20px; border-radius: 24px; color: #fff; background: linear-gradient(145deg, var(--ms-accent), color-mix(in srgb, var(--ms-accent) 70%, #1c1a18)); box-shadow: 0 14px 30px color-mix(in srgb, var(--ms-accent) 20%, transparent); }
+    .ms-offer { min-height: 180px; scroll-snap-align: start; display: grid; align-content: space-between; gap: 8px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; color: var(--ms-ink); background: #fff; box-shadow: 0 12px 30px rgba(16,24,40,.06); }
     .ms-offer:nth-child(even) { color: var(--ms-ink); background: var(--ms-accent-soft); box-shadow: none; }
     .ms-offer-value { width: max-content; padding: 5px 10px; border: 1px solid currentColor; border-radius: 999px; font-size: .66rem; font-weight: 850; }
     .ms-offer h3 { margin: 4px 0 0; font-size: 1.15rem; letter-spacing: -.03em; }
@@ -868,13 +867,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     /* Benefits Grid */
     .ms-benefit-grid { display: grid; gap: 12px; }
     .ms-benefit { min-height: 148px; display: grid; align-content: start; gap: 6px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: rgba(255,255,255,.8); }
-    .ms-benefit.ms-membership { color: #fff; border-color: transparent; background: linear-gradient(145deg, #282622, #171716); }
+    .ms-benefit.ms-membership { color: var(--ms-ink); border-color: var(--ms-line); background: #fff; }
     .ms-benefit-chip { width: max-content; padding: 4px 10px; border-radius: 999px; color: var(--ms-accent); background: var(--ms-accent-soft); font-size: .64rem; font-weight: 800; text-transform: uppercase; }
     .ms-pkg-chip { color: #3b82f6; background: #eff6ff; }
     .ms-benefit h3 { margin: 4px 0 0; font-size: 1.05rem; }
     .ms-benefit > strong { font-size: .8rem; }
     .ms-benefit > small { color: var(--ms-muted); font-size: .7rem; }
-    .ms-membership > small { color: rgba(255,255,255,.7); }
+    .ms-membership > small { color: var(--ms-muted); }
     .ms-progress { height: 6px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: rgba(36,32,29,.1); }
     .ms-progress span { display: block; height: 100%; border-radius: inherit; background: var(--ms-accent); transition: width .4s ease; }
 

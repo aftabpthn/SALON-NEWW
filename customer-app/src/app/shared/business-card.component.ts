@@ -93,13 +93,13 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .business-card:focus-visible {
-      outline: 3px solid rgba(37, 99, 235, 0.4);
+      outline: 3px solid rgba(99, 102, 241, 0.4);
       outline-offset: 3px;
     }
 
     .business-card.highlighted {
-      border-color: rgba(11, 70, 120, 0.62);
-      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.16), 0 0 36px rgba(11, 70, 120, 0.14);
+      border-color: rgba(99, 102, 241, 0.62);
+      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.16), 0 0 36px rgba(99, 102, 241, 0.14);
     }
 
     .cover {
@@ -113,17 +113,17 @@ import { MarketplaceService } from "../core/marketplace.service";
       position: absolute;
       inset: 0;
       content: "";
-      background: linear-gradient(180deg, rgba(6, 23, 43, 0.02), rgba(6, 23, 43, 0.42));
+      background: linear-gradient(180deg, rgba(16, 24, 40, 0.02), rgba(16, 24, 40, 0.42));
       pointer-events: none;
     }
 
     .business-card.variant-personal {
-      box-shadow: 0 12px 30px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
     }
 
     .business-card.variant-discovery {
-      border-color: rgba(11, 70, 120, 0.2);
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.11);
+      border-color: rgba(99, 102, 241, 0.2);
+      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.11);
     }
 
     .cover-fallback {
@@ -134,7 +134,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       gap: 4px;
       text-align: center;
       background: linear-gradient(135deg, #e8f5fa 0%, #c8e9f3 50%, #a8dbe9 100%);
-      color: #0b4678;
+      color: #6366F1;
     }
 
     .cover-fallback span {
@@ -144,8 +144,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       place-items: center;
       border-radius: 12px;
       background: #ffffff;
-      box-shadow: 0 4px 12px rgba(11, 70, 120, 0.14);
-      color: #0b4678;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.14);
+      color: #6366F1;
       font-size: 1rem;
       font-weight: 900;
       letter-spacing: -0.02em;
@@ -165,7 +165,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       top: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 14px 26px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      box-shadow: 0 14px 26px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.68);
     }
 
     .cover-actions {
@@ -186,17 +186,17 @@ import { MarketplaceService } from "../core/marketplace.service";
       height: 44px;
       display: grid;
       place-items: center;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.88);
-      box-shadow: 0 14px 28px rgba(6, 23, 43, 0.14);
+      box-shadow: 0 14px 28px rgba(16, 24, 40, 0.14);
       backdrop-filter: blur(14px);
     }
 
     .favorite.saved {
       color: #FFFFFF;
-      border-color: rgba(11, 70, 120, 0.42);
+      border-color: rgba(99, 102, 241, 0.42);
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
@@ -205,7 +205,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       bottom: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.12);
     }
 
     .content {
@@ -243,7 +243,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       align-items: center;
       min-height: 28px;
       padding: 0 10px;
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 999px;
       color: var(--brand-800);
       background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
@@ -255,7 +255,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .countdown-pill.warning {
       color: var(--primary);
-      border-color: rgba(11, 70, 120, 0.3);
+      border-color: rgba(99, 102, 241, 0.3);
       background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.9));
     }
 
@@ -318,7 +318,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       margin-top: 6px;
       padding: 12px;
       border-radius: 18px;
-      border: 1px solid rgba(11, 70, 120, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       background: rgba(255, 255, 255, 0.94);
     }
 
@@ -345,7 +345,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .business-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(11, 70, 120, 0.34);
+        border-color: rgba(99, 102, 241, 0.34);
         box-shadow: var(--shadow-card);
       }
     }
@@ -687,7 +687,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         width: 100%;
         min-width: 0;
         border-radius: 18px;
-        box-shadow: 0 8px 22px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
       }
 
       .business-card.variant-discovery .cover {

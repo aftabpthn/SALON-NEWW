@@ -314,7 +314,7 @@ type BookingFlowItem = {
     .booking-hero .page-title { font-size: clamp(1.45rem, 4vw, 2.7rem); }
     .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 8px; }
     .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: var(--surface); font-weight: 900; }
-    .stepper button.active, .stepper button.done { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2); }
+    .stepper button.active, .stepper button.done { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 30px rgba(99, 102, 241, 0.2); }
     .stepper ion-icon { font-size: 1.15rem; }
     .booking-intent-row, .resource-grid, .time-mode-row { display: grid; gap: 10px; margin-bottom: 14px; }
     .booking-intent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -325,7 +325,7 @@ type BookingFlowItem = {
     .booking-intent-row ion-icon { grid-row: span 2; font-size: 1.25rem; }
     .booking-intent-row small, .resource-grid small { color: inherit; opacity: 0.72; line-height: 1.35; }
     .readiness-note, .addon-panel, .resource-panel { display: grid; gap: 8px; padding: 16px; margin-bottom: 14px; }
-    .readiness-note { border-color: rgba(11, 70, 120, 0.22); background: var(--primary-soft); }
+    .readiness-note { border-color: rgba(99, 102, 241, 0.22); background: var(--primary-soft); }
     .readiness-note strong, .readiness-note span, .addon-panel small, .resource-panel small { line-height: 1.45; }
     .readiness-note span, .addon-panel small, .resource-panel small { color: var(--muted); }
     .addon-panel h3, .resource-panel h3 { margin: 0; letter-spacing: 0; }
@@ -341,10 +341,10 @@ type BookingFlowItem = {
     .service-choice, .staff-choice { width: 100%; display: grid; gap: 12px; align-items: center; padding: 16px; border-color: var(--border); color: var(--text); text-align: left; }
     .service-choice { grid-template-columns: minmax(0, 1fr) 112px; align-items: start; }
     .flow-service-media { display: grid; justify-items: center; color: inherit; }
-    .flow-service-media img { width: 108px; height: 88px; border-radius: 17px; object-fit: cover; background: var(--surface-soft); box-shadow: 0 10px 22px rgba(6, 23, 43, 0.1); }
-    .choice-action { min-width: 76px; min-height: 34px; margin-top: -14px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid rgba(11, 70, 120, 0.2); border-radius: 12px; color: var(--primary); background: #FFFFFF; font-size: 0.82rem; font-weight: 950; box-shadow: 0 8px 18px rgba(6, 23, 43, 0.1); }
-    .service-choice.selected .choice-action { color: #047857; border-color: rgba(16, 185, 129, 0.32); background: #D1FAE5; }
-    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(11, 70, 120, 0.48); background: var(--primary-soft); box-shadow: 0 16px 34px rgba(11, 70, 120, 0.14); }
+    .flow-service-media img { width: 108px; height: 88px; border-radius: 17px; object-fit: cover; background: var(--surface-soft); box-shadow: 0 10px 22px rgba(16, 24, 40, 0.1); }
+    .choice-action { min-width: 76px; min-height: 34px; margin-top: -14px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 12px; color: var(--primary); background: #FFFFFF; font-size: 0.82rem; font-weight: 950; box-shadow: 0 8px 18px rgba(16, 24, 40, 0.1); }
+    .service-choice.selected .choice-action { color: #059669; border-color: rgba(16, 185, 129, 0.32); background: #D1FAE5; }
+    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(99, 102, 241, 0.48); background: var(--primary-soft); box-shadow: 0 16px 34px rgba(99, 102, 241, 0.14); }
     .service-choice h3 { margin: 0 0 6px; font-size: 1.12rem; letter-spacing: -0.035em; }
     .service-choice p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
     .service-choice strong { color: var(--primary-2); }
@@ -353,7 +353,7 @@ type BookingFlowItem = {
     .any-avatar { display: grid; place-items: center; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800)); font-size: 1.35rem; }
     .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.35; }
     .staff-choice em { color: var(--primary-2); font-weight: 900; text-align: right; }
-    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(11, 70, 120, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
+    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(99, 102, 241, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
     .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
     .multi-service-stack { display: grid; gap: 14px; }
     .service-schedule-card { display: grid; gap: 12px; padding: 16px; }
@@ -369,9 +369,9 @@ type BookingFlowItem = {
     .booking-item-tabs button > span { grid-row: span 2; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-weight: 950; }
     .booking-item-tabs button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .booking-item-tabs button small { color: var(--muted); font-weight: 800; }
-    .booking-item-tabs button.active { border-color: rgba(11, 70, 120, 0.44); background: var(--primary-soft); }
-    .booking-item-tabs button.done > span { color: #047857; background: #D1FAE5; }
-    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(11, 70, 120, 0.28); background: var(--primary-soft); }
+    .booking-item-tabs button.active { border-color: rgba(99, 102, 241, 0.44); background: var(--primary-soft); }
+    .booking-item-tabs button.done > span { color: #059669; background: #D1FAE5; }
+    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(99, 102, 241, 0.28); background: var(--primary-soft); }
     .selected-staff-card span, .selected-staff-card small { display: block; color: var(--muted); line-height: 1.35; }
     .selected-staff-card span { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
     .selected-staff-card strong { display: block; margin-top: 3px; color: var(--text); font-size: 1.02rem; font-weight: 900; }
@@ -448,8 +448,8 @@ type BookingFlowItem = {
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     .multi-staff-quick-bar { margin-bottom: 12px; }
-    .quick-staff-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(11, 70, 120, 0.28); border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.84rem; font-weight: 900; }
-    .multi-service-progress-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 12px; border-radius: 18px; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-700, #0F4C81), var(--primary, #0B4678)); }
+    .quick-staff-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.84rem; font-weight: 900; }
+    .multi-service-progress-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; margin-bottom: 12px; border-radius: 18px; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-700, #0F4C81), var(--primary, #6366F1)); }
     .multi-service-progress-banner p { margin: 0; font-size: 0.88rem; }
     .multi-service-progress-banner small { opacity: 0.88; font-weight: 850; font-size: 0.78rem; }
     .confirm-service-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto !important; align-items: start !important; gap: 8px !important; }

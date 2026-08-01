@@ -382,7 +382,7 @@ interface ConsultationChatMessage {
       gap: 6px;
       min-height: 32px;
       padding: 0 12px;
-      border: 1px solid rgba(11, 70, 120, 0.3);
+      border: 1px solid rgba(99, 102, 241, 0.3);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.94);
@@ -405,9 +405,9 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
       background:
-        radial-gradient(circle at 12% 12%, rgba(11, 70, 120, 0.16), transparent 34%),
+        radial-gradient(circle at 12% 12%, rgba(99, 102, 241, 0.16), transparent 34%),
         linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.92));
-      box-shadow: 0 28px 74px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+      box-shadow: 0 28px 74px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.78);
     }
 
     .location-notice {
@@ -437,10 +437,10 @@ interface ConsultationChatMessage {
       gap: 12px;
       min-width: 0;
       padding: 18px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 28px;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
-      box-shadow: 0 28px 60px rgba(6, 23, 43, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      box-shadow: 0 28px 60px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
 
     .consultation-topline,
@@ -474,7 +474,7 @@ interface ConsultationChatMessage {
 
     .consultation-topline small {
       padding: 6px 9px;
-      color: #0F766E;
+      color: #6366F1;
       background: rgba(15, 118, 110, 0.1);
     }
 
@@ -513,7 +513,7 @@ interface ConsultationChatMessage {
     .consultation-secondary,
     .consultation-upload {
       min-height: 38px;
-      border: 1px solid rgba(11, 70, 120, 0.34);
+      border: 1px solid rgba(99, 102, 241, 0.34);
       border-radius: 999px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.72);
@@ -528,7 +528,7 @@ interface ConsultationChatMessage {
     .consultation-goals button.active {
       color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
-      border-color: rgba(11, 70, 120, 0.4);
+      border-color: rgba(99, 102, 241, 0.4);
     }
 
     .consultation-chat {
@@ -547,15 +547,15 @@ interface ConsultationChatMessage {
       border-radius: 16px 16px 16px 6px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.78);
-      border: 1px solid rgba(11, 70, 120, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
     }
 
     .consultation-message.customer {
       justify-self: end;
       border-radius: 16px 16px 6px 16px;
       color: #fff;
-      background: #0F766E;
-      border-color: #0F766E;
+      background: #6366F1;
+      border-color: #6366F1;
     }
 
     .consultation-message strong {
@@ -580,7 +580,7 @@ interface ConsultationChatMessage {
     .consultation-input-label textarea {
       width: 100%;
       min-height: 104px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 18px;
       padding: 13px 14px;
       color: var(--text);
@@ -592,8 +592,8 @@ interface ConsultationChatMessage {
     }
 
     .consultation-input-label textarea:focus {
-      border-color: rgba(11, 70, 120, 0.46);
-      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+      border-color: rgba(99, 102, 241, 0.46);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
     }
 
     .consultation-upload,
@@ -628,7 +628,7 @@ interface ConsultationChatMessage {
       width: 74px;
       height: 74px;
       overflow: hidden;
-      border: 1px solid rgba(11, 70, 120, 0.26);
+      border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 18px;
       padding: 0;
       background: #fff;
@@ -649,7 +649,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       padding: 3px;
       color: #fff;
-      background: rgba(6, 23, 43, 0.78);
+      background: rgba(16, 24, 40, 0.78);
       font-size: 0.62rem;
       font-weight: 900;
       text-align: center;
@@ -677,7 +677,7 @@ interface ConsultationChatMessage {
       color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-weight: 1000;
-      box-shadow: 0 14px 30px rgba(11, 70, 120, 0.22);
+      box-shadow: 0 14px 30px rgba(99, 102, 241, 0.22);
     }
 
     .consultation-send:disabled {
@@ -688,7 +688,7 @@ interface ConsultationChatMessage {
     .consultation-results {
       display: grid;
       gap: 12px;
-      border-top: 1px solid rgba(11, 70, 120, 0.22);
+      border-top: 1px solid rgba(99, 102, 241, 0.22);
       padding-top: 12px;
     }
 
@@ -721,7 +721,7 @@ interface ConsultationChatMessage {
       display: grid;
       gap: 3px;
       width: 100%;
-      border: 1px solid rgba(11, 70, 120, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 16px;
       padding: 10px 42px 10px 12px;
       color: var(--text);
@@ -771,7 +771,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: 30px;
       background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
 
     .home-search-wrap {
@@ -794,14 +794,14 @@ interface ConsultationChatMessage {
       gap: 7px;
       min-height: 44px;
       padding: 0 13px;
-      border: 1px solid rgba(11, 70, 120, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
       color: var(--primary);
       background: rgba(255, 255, 255, 0.94);
       font-size: 0.88rem;
       font-weight: 900;
       white-space: nowrap;
-      box-shadow: 0 10px 22px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 10px 22px rgba(16, 24, 40, 0.08);
     }
 
     .home-control-button.map {
@@ -823,10 +823,10 @@ interface ConsultationChatMessage {
       display: grid;
       gap: 6px;
       padding: 8px;
-      border: 1px solid rgba(11, 70, 120, 0.26);
+      border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.14);
+      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.14);
       backdrop-filter: blur(18px);
     }
 
@@ -886,10 +886,10 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background:
-        radial-gradient(circle at 10% 10%, rgba(11, 70, 120, 0.14), transparent 34%),
+        radial-gradient(circle at 10% 10%, rgba(99, 102, 241, 0.14), transparent 34%),
         linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9)),
         var(--surface);
-      box-shadow: 0 24px 58px rgba(6, 23, 43, 0.12);
+      box-shadow: 0 24px 58px rgba(16, 24, 40, 0.12);
     }
 
     .welcome-card h2,
@@ -935,11 +935,11 @@ interface ConsultationChatMessage {
       gap: 4px;
       min-width: 124px;
       padding: 13px 12px;
-      border: 1px solid rgba(11, 70, 120, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
       color: var(--text);
       background: linear-gradient(145deg, #ffffff, var(--primary-soft));
-      box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
+      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.08);
       text-decoration: none;
     }
 
@@ -969,7 +969,7 @@ interface ConsultationChatMessage {
     }
 
     .customer-quick-actions.primary-salon-actions ion-icon {
-      color: #0F766E;
+      color: #6366F1;
     }
 
     .customer-metrics {
@@ -986,7 +986,7 @@ interface ConsultationChatMessage {
       border-radius: var(--radius-md);
       color: inherit;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 252, 0.94));
-      box-shadow: 0 18px 42px rgba(6, 23, 43, 0.1);
+      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
       text-decoration: none;
     }
 
@@ -1078,8 +1078,8 @@ interface ConsultationChatMessage {
     .visited-fallback {
       display: grid;
       place-items: center;
-      color: #0f4f65;
-      background: linear-gradient(145deg, #dff3fb, #bde6f7 42%, #7cd0e8 100%);
+      color: #4F46E5;
+      background: linear-gradient(145deg, #EEF2FF, #E0E7FF 42%, #C7D2FE 100%);
       font-size: 1.2rem;
       font-weight: 1000;
       letter-spacing: -0.04em;
@@ -1115,7 +1115,7 @@ interface ConsultationChatMessage {
     @media (hover: hover) and (pointer: fine) {
       .visited-card:hover {
         transform: translateY(-3px);
-        border-color: rgba(11, 70, 120, 0.34);
+        border-color: rgba(99, 102, 241, 0.34);
         box-shadow: var(--shadow-card);
       }
     }
@@ -1195,7 +1195,7 @@ interface ConsultationChatMessage {
       min-height: 360px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(90deg, rgba(11, 70, 120, 0.08), rgba(7, 90, 156, 0.14), rgba(11, 70, 120, 0.08));
+      background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.14), rgba(99, 102, 241, 0.08));
       animation: pulse 1.15s ease-in-out infinite;
       box-shadow: var(--shadow-soft);
     }
@@ -1341,7 +1341,7 @@ interface ConsultationChatMessage {
         padding: 12px;
         border-radius: 22px;
         background: rgba(255, 255, 255, 0.9);
-        box-shadow: 0 12px 28px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 12px 28px rgba(16, 24, 40, 0.08);
       }
 
       .home-search-wrap ion-searchbar {
@@ -1480,7 +1480,7 @@ interface ConsultationChatMessage {
         margin-inline: 0;
         padding: 0;
         border-radius: 16px;
-        box-shadow: 0 7px 18px rgba(6, 23, 43, 0.08);
+        box-shadow: 0 7px 18px rgba(16, 24, 40, 0.08);
       }
       .home-page .home-search-wrap {
         position: relative;
@@ -1642,7 +1642,7 @@ interface ConsultationChatMessage {
       border-radius: 26px;
       color: #fff;
       background: linear-gradient(145deg, var(--brand-800), var(--primary));
-      box-shadow: 0 24px 54px rgba(6, 23, 43, 0.22);
+      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.22);
     }
 
     .appointment-date {
@@ -1710,7 +1710,7 @@ interface ConsultationChatMessage {
       color: var(--text);
       background: var(--surface);
       text-decoration: none;
-      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.06);
+      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.06);
     }
 
     .account-shortcuts ion-icon { grid-row: span 2; color: var(--primary); font-size: 1.2rem; }
@@ -1744,7 +1744,7 @@ interface ConsultationChatMessage {
       border-radius: 18px;
       color: var(--text);
       background: var(--surface);
-      box-shadow: 0 10px 24px rgba(6, 23, 43, 0.07);
+      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.07);
       text-decoration: none;
     }
     .favourite-mini-card img,
@@ -1757,8 +1757,8 @@ interface ConsultationChatMessage {
     .favourite-mini-card > b {
       display: grid;
       place-items: center;
-      color: #0b4678;
-      background: linear-gradient(145deg, #dff3fb, #bde6f7 45%, #8bd4e8);
+      color: #6366F1;
+      background: linear-gradient(145deg, #EEF2FF, #E0E7FF 45%, #C7D2FE);
       font-size: 1rem;
       font-weight: 950;
     }
@@ -1786,7 +1786,7 @@ interface ConsultationChatMessage {
 
     button:focus-visible,
     a:focus-visible {
-      outline: 3px solid rgba(37, 99, 235, 0.42);
+      outline: 3px solid rgba(99, 102, 241, 0.42);
       outline-offset: 3px;
     }
 
@@ -1824,7 +1824,7 @@ interface ConsultationChatMessage {
         padding: 12px;
         border-radius: 20px;
         background: linear-gradient(145deg, var(--brand-900), var(--brand-700));
-        box-shadow: 0 14px 32px rgba(6, 23, 43, 0.18);
+        box-shadow: 0 14px 32px rgba(16, 24, 40, 0.18);
       }
       .next-appointment > a { grid-column: auto; justify-self: end; min-width: 60px; margin: 0; padding-inline: 10px; }
       .appointment-date { width: 54px; min-width: 54px; height: 58px; border-radius: 15px; background: rgba(255, 255, 255, 0.14); }
