@@ -5,6 +5,7 @@ import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AvailabilityDay, AvailabilitySlot, ServiceItem, StaffMember } from "../../core/api.types";
+import { BookingProgressComponent, BookingProgressStepId } from "./booking-progress.component";
 
 const PENDING_BOOKING_INTENT_KEY = "auraCustomerPendingBookingIntent";
 
@@ -29,7 +30,7 @@ type BookingFlowItem = {
 
 @Component({
   standalone: true,
-  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar],
+  imports: [IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar, BookingProgressComponent],
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
@@ -57,16 +58,9 @@ type BookingFlowItem = {
             <section class="state-card premium-card error"><h2>Booking data unavailable</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
           }
 
-          <div class="stepper" aria-label="Booking progress">
-            @for (item of steps; track item.id) {
-              <button type="button" [class.active]="step() === item.id" [class.done]="step() > item.id" (click)="step.set(item.id)">
-                <ion-icon [name]="item.icon"></ion-icon>
-                <span>{{ item.label }}</span>
-              </button>
-            }
-          </div>
+          <app-booking-progress [currentStep]="currentBookingStep()" (stepSelect)="goToStep($event)" />
 
-          @if (step() === 1) {
+          @if (currentBookingStep() === 1) {
             <section class="panel">
               <div class="section-heading"><div><h2 class="section-title">Choose a service</h2></div></div>
               <div class="service-list">
@@ -90,7 +84,7 @@ type BookingFlowItem = {
             </section>
           }
 
-          @if (step() === 2) {
+          @if (currentBookingStep() === 2) {
             <section class="panel">
               <div class="section-heading">
                 <div>
@@ -171,7 +165,7 @@ type BookingFlowItem = {
             </section>
           }
 
-          @if (step() === 3) {
+          @if (currentBookingStep() === 3) {
             <section class="panel">
               <div class="section-heading"><div><h2 class="section-title">Pick date and time</h2><p class="muted">Each service needs its own non-overlapping slot.</p></div></div>
               @if (bookingItems().length > 1) {
@@ -232,7 +226,7 @@ type BookingFlowItem = {
             </section>
           }
 
-          @if (step() === 4) {
+          @if (currentBookingStep() === 4) {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
                 <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
@@ -275,7 +269,7 @@ type BookingFlowItem = {
               <small>{{ selectedServicesSummary() || "Select services" }}</small>
               <strong>{{ bookingTotalLabel() || business.businessName }}</strong>
             </div>
-            @if (step() < 4) {
+            @if (currentBookingStep() < 4) {
               <ion-button class="primary-gradient" [disabled]="!canContinue()" (click)="next()">Continue</ion-button>
             } @else {
               <ion-button class="primary-gradient" [disabled]="!canConfirm() || marketplace.loading()" (click)="confirmBooking()">
@@ -306,16 +300,12 @@ type BookingFlowItem = {
       letter-spacing: -0.025em;
     }
     .booking-page.editing { padding-top: 8px; }
-    .booking-page.editing .stepper { margin-top: 2px; }
+    .booking-page.editing app-booking-progress { display: block; margin-top: 2px; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
     .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)); }
     .booking-hero { display: grid; gap: 10px; align-items: center; padding: 10px; }
     .booking-hero img { width: 100%; aspect-ratio: 16 / 7; max-height: 150px; height: auto; border-radius: 20px; object-fit: cover; }
     .booking-hero .page-title { font-size: clamp(1.45rem, 4vw, 2.7rem); }
-    .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 8px; }
-    .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: var(--surface); font-weight: 900; }
-    .stepper button.active, .stepper button.done { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 30px rgba(99, 102, 241, 0.2); }
-    .stepper ion-icon { font-size: 1.15rem; }
     .booking-intent-row, .resource-grid, .time-mode-row { display: grid; gap: 10px; margin-bottom: 14px; }
     .booking-intent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-soft); font-weight: 900; }
@@ -431,7 +421,6 @@ type BookingFlowItem = {
         min-width: 112px;
       }
 
-      .stepper button span { display: none; }
       .booking-intent-row, .resource-grid, .time-mode-row { grid-template-columns: 1fr; }
       .service-choice { grid-template-columns: minmax(0, 1fr) 98px; }
       .flow-service-media img { width: 94px; height: 78px; border-radius: 15px; }
@@ -469,12 +458,6 @@ export class BookingFlowPage implements OnInit {
   })));
   readonly activeItemIndex = signal(0);
   readonly rescheduleBookingId = this.route.snapshot.queryParamMap.get("rescheduleBookingId") ?? "";
-  readonly steps = [
-    { id: 1, label: "Service", icon: "sparkles-outline" },
-    { id: 2, label: "Pro", icon: "person-outline" },
-    { id: 3, label: "Time", icon: "calendar-outline" },
-    { id: 4, label: "Confirm", icon: "checkmark-circle-outline" }
-  ];
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug()));
   readonly selectedServices = computed(() => this.bookingItems().map((item) => this.serviceById(item.serviceId)).filter((service): service is ServiceItem => !!service));
@@ -485,6 +468,7 @@ export class BookingFlowPage implements OnInit {
   readonly availabilityDays = computed(() => this.marketplace.availability());
   readonly selectedAvailabilityDay = computed(() => this.availabilityDays().find((day) => day.date === (this.activeItem()?.date || "")) ?? this.availabilityDays()[0] ?? null);
   readonly slotGroups = computed(() => this.selectedAvailabilityDay()?.periods ?? []);
+  readonly currentBookingStep = computed(() => this.normalizedStep(this.step()));
 
   isRescheduling(): boolean {
     return !!this.rescheduleBookingId;
@@ -530,8 +514,15 @@ export class BookingFlowPage implements OnInit {
   }
 
   next() {
-    this.step.update((value) => Math.min(value + 1, 4));
-    if (this.step() === 3) void this.reloadAvailability();
+    const nextStep = Math.min(this.currentBookingStep() + 1, 4) as BookingProgressStepId;
+    this.step.set(nextStep);
+    if (nextStep === 3) void this.reloadAvailability();
+  }
+
+  goToStep(stepId: BookingProgressStepId) {
+    if (stepId > this.currentBookingStep()) return;
+    this.step.set(stepId);
+    if (stepId === 3) void this.reloadAvailability();
   }
 
   toggleService(serviceId: string) {
@@ -616,14 +607,21 @@ export class BookingFlowPage implements OnInit {
   }
 
   canContinue(): boolean {
-    if (this.step() === 1) return this.bookingItems().length > 0;
-    if (this.step() === 2) return this.bookingItems().length > 0;
-    if (this.step() === 3) return this.bookingItems().length > 0 && this.bookingItems().every((item) => !!item.slotStartAt);
+    if (this.currentBookingStep() === 1) return this.bookingItems().length > 0;
+    if (this.currentBookingStep() === 2) return this.bookingItems().length > 0;
+    if (this.currentBookingStep() === 3) return this.bookingItems().length > 0 && this.bookingItems().every((item) => !!item.slotStartAt);
     return true;
   }
 
   canConfirm(): boolean {
     return !!this.business() && this.bookingItems().length > 0 && this.bookingItems().every((item) => !!this.serviceById(item.serviceId) && !!item.slotStartAt);
+  }
+
+  private normalizedStep(step: number): BookingProgressStepId {
+    const clamped = Math.min(Math.max(Math.trunc(step) || 1, 1), 4) as BookingProgressStepId;
+    if (!this.bookingItems().length) return 1;
+    if (clamped === 4 && !this.canConfirm()) return 3;
+    return clamped;
   }
 
   money(pricePaise: number): string {
@@ -648,7 +646,7 @@ export class BookingFlowPage implements OnInit {
   selectedServicesSummary(): string {
     const count = this.selectedServices().length;
     if (!count) return "";
-    if (this.step() === 3 && count > 1) {
+    if (this.currentBookingStep() === 3 && count > 1) {
       const set = this.bookingItems().filter((item) => !!item.slotStartAt).length;
       if (set < count) return `${set} of ${count} slots chosen — Select time for next service`;
       return `All ${count} slots selected`;
@@ -835,7 +833,7 @@ export class BookingFlowPage implements OnInit {
       items: this.bookingItems(),
       activeItemIndex: this.activeItemIndex(),
       date: this.activeItem()?.date || "",
-      step: this.step(),
+      step: this.currentBookingStep(),
       savedAt: Date.now()
     };
     try {
