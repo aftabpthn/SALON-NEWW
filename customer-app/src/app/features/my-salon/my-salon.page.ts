@@ -3,7 +3,6 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import {
-  arrowBackOutline,
   calendarOutline,
   callOutline,
   cardOutline,
@@ -42,18 +41,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
   template: `
     <ion-content class="ms-content">
       <main class="ms-page">
-
-        <!-- ─── TOP TOOLBAR HEADER ─── -->
-        <header class="ms-toolbar">
-          <button type="button" class="ms-icon-button" (click)="exitSalonMode()" aria-label="Exit My Salon Mode">
-            <ion-icon name="arrow-back-outline" aria-hidden="true"></ion-icon>
-          </button>
-          
-          <div class="ms-toolbar-title">
-            <span class="ms-toolbar-kicker">My Salon Mode</span>
-            <strong>{{ dash()?.salon?.name || 'Your Selected Salon' }}</strong>
-          </div>
-
+        <div class="ms-mode-tools" aria-label="My Salon page controls">
           @if (salonChoices().length > 1 || !dash()?.hasPrimarySalon) {
             <button
               type="button"
@@ -65,9 +53,9 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               <span>Switch Salon ({{ salonChoices().length }})</span>
             </button>
           } @else {
-            <span class="ms-toolbar-spacer" aria-hidden="true"></span>
+            <span class="ms-mode-tools-spacer" aria-hidden="true"></span>
           }
-        </header>
+        </div>
 
         <!-- ─── SALON PICKER DRAWER / MODAL ─── -->
         @if (salonPickerOpen()) {
@@ -696,25 +684,18 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       width: min(100%, 1120px);
       min-height: 100%;
       margin: 0 auto;
-      padding: 0 16px calc(48px + var(--safe-bottom));
+      padding: calc(76px + env(safe-area-inset-top)) 16px calc(48px + var(--safe-bottom));
       color: var(--ms-ink);
     }
-    .ms-toolbar {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      display: grid;
-      grid-template-columns: 44px minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-      min-height: 64px;
-      margin-inline: -16px;
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--ms-line);
-      background: rgba(255, 255, 255, .94);
-      backdrop-filter: blur(18px);
+    .ms-mode-tools {
+      position: relative;
+      z-index: 15;
+      display: flex;
+      justify-content: flex-end;
+      min-height: 44px;
+      margin-bottom: 12px;
     }
-    .ms-icon-button, .ms-switch-button {
+    .ms-switch-button {
       min-width: 44px;
       min-height: 44px;
       border: 1px solid var(--ms-line);
@@ -727,13 +708,9 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       justify-content: center;
       cursor: pointer;
     }
-    .ms-icon-button ion-icon { font-size: 20px; }
     .ms-switch-button { gap: 6px; padding: 0 14px; font: inherit; font-size: .78rem; font-weight: 750; }
     .ms-switch-button ion-icon { font-size: 17px; color: var(--ms-accent); }
-    .ms-toolbar-title { min-width: 0; display: grid; gap: 1px; }
-    .ms-toolbar-kicker { color: var(--ms-accent); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-    .ms-toolbar-title strong { overflow: hidden; font-size: .94rem; text-overflow: ellipsis; white-space: nowrap; }
-    .ms-toolbar-spacer { width: 44px; }
+    .ms-mode-tools-spacer { width: 44px; min-height: 44px; }
     .ms-kicker { color: var(--ms-accent); font-size: .7rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
     .ms-section { display: grid; gap: 14px; margin-top: 36px; }
     .ms-section-head, .ms-picker-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
@@ -942,7 +919,6 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     }
     @media (min-width: 700px) {
       .ms-page { padding-inline: 28px; }
-      .ms-toolbar { margin-inline: -28px; padding-inline: 28px; }
       .ms-hero { grid-template-columns: minmax(0,1.2fr) minmax(260px,.8fr); align-items: center; padding: 32px; }
       .ms-hero-main { grid-column: 1; }
       .ms-contact-list { grid-column: 1; }
@@ -955,7 +931,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       .ms-more-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
     }
     @media (min-width: 1024px) {
-      .ms-page { padding-top: 0; padding-bottom: 70px; }
+      .ms-page { padding-top: calc(76px + env(safe-area-inset-top)); padding-bottom: 70px; }
       .ms-service-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 32px; }
     }
     @keyframes ms-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
@@ -1021,7 +997,6 @@ export class MySalonPage implements OnInit {
     private readonly route: ActivatedRoute
   ) {
     addIcons({
-      arrowBackOutline,
       calendarOutline,
       callOutline,
       cardOutline,
