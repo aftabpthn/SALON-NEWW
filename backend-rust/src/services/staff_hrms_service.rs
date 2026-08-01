@@ -180,11 +180,87 @@ pub struct SuccessionDecisionRequest {
     pub note: Option<String>,
     pub version: i32,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OperationsIntelligenceQuery {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+}
 
 pub async fn dashboard(db: &PgPool, tenant: &str, branch: &str) -> Result<Value, AppError> {
     repository::dashboard(db, tenant, branch)
         .await
         .map_err(internal("load HRMS workspace"))
+}
+
+pub async fn operations_intelligence(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    p: OperationsIntelligenceQuery,
+) -> Result<Value, AppError> {
+    validate_report_period(p.from, p.to)?;
+    repository::operations_intelligence(db, tenant, branch, p.from, p.to)
+        .await
+        .map_err(internal("load HR operations intelligence"))
+}
+
+pub async fn run_operations_intelligence_automations(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    p: OperationsIntelligenceQuery,
+) -> Result<Value, AppError> {
+    validate_report_period(p.from, p.to)?;
+    let report = repository::operations_intelligence(db, tenant, branch, p.from, p.to)
+        .await
+        .map_err(internal("load HR operations intelligence"))?;
+    let summary = &report["summary"];
+    let attention = summary["expiryAlertCount"].as_i64().unwrap_or(0)
+        + summary["onboardingOverdueCount"].as_i64().unwrap_or(0)
+        + summary["missedTaskCount"].as_i64().unwrap_or(0)
+        + summary["attendanceExceptionCount"].as_i64().unwrap_or(0)
+        + summary["payrollExceptionCount"].as_i64().unwrap_or(0);
+    let escalation_key = format!("hrms-escalation:{}:{}", p.from, p.to);
+    let escalation_queued = attention > 0
+        && repository::queue_operations_intelligence_notification(
+            db,
+            tenant,
+            branch,
+            actor,
+            "hrms_operations_escalation",
+            "HR operations items require attention",
+            &format!("{attention} HR operations items require review for {} to {}", p.from, p.to),
+            &json!({"idempotencyKey":escalation_key,"dateFrom":p.from,"dateTo":p.to,"summary":summary}),
+            &escalation_key,
+        )
+        .await
+        .map_err(internal("queue HR operations escalation"))?;
+    let monthly_key = format!("hrms-monthly:{}:{}", p.from, p.to);
+    let monthly_queued = repository::queue_operations_intelligence_notification(
+        db,
+        tenant,
+        branch,
+        actor,
+        "hrms_monthly_owner_summary",
+        "Monthly HR operations summary",
+        &format!(
+            "HR health: {:.2}% | Items requiring attention: {attention}",
+            summary["hrHealthScore"].as_f64().unwrap_or(0.0)
+        ),
+        &json!({"idempotencyKey":monthly_key,"dateFrom":p.from,"dateTo":p.to,"summary":summary}),
+        &monthly_key,
+    )
+    .await
+    .map_err(internal("queue monthly HR owner summary"))?;
+    Ok(json!({
+        "escalationsQueued": i32::from(escalation_queued),
+        "monthlySummariesQueued": i32::from(monthly_queued),
+        "requiresAttention": attention,
+        "transactionalStaffChanges": false,
+        "payrollChanges": false
+    }))
 }
 
 pub async fn create_job_opening(
@@ -1050,6 +1126,15 @@ fn optional(value: Option<&str>, max: usize, field: &str) -> Result<String, AppE
         return Err(AppError::validation(format!("{field} is too long")));
     }
     Ok(v.to_string())
+}
+fn validate_report_period(from: NaiveDate, to: NaiveDate) -> Result<(), AppError> {
+    if to < from || (to - from).num_days() > 366 {
+        Err(AppError::validation(
+            "report period must be valid and no longer than 366 days",
+        ))
+    } else {
+        Ok(())
+    }
 }
 fn one_of(value: &str, allowed: &[&str], field: &str) -> Result<String, AppError> {
     let v = value.trim().to_ascii_lowercase();

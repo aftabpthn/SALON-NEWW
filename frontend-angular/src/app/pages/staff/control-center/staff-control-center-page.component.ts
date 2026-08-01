@@ -73,7 +73,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   selfService: Row | null = null;
   rosterDraft: Row | null = null;
   staffAi: Row | null = null;
-  hrms: Row = { jobOpenings: [], applications: [], lifecycleCases: [], orgChart: [], documentAlerts: [], appraisalCycles: [], goalTemplates: [], appraisalReviews: [], learning: {}, successionPlans: [], promotionReadiness: { items: [] } };
+  hrms: Row = { jobOpenings: [], applications: [], lifecycleCases: [], orgChart: [], documentAlerts: [], appraisalCycles: [], goalTemplates: [], appraisalReviews: [], learning: {}, successionPlans: [], promotionReadiness: { items: [] }, operationsIntelligence: { summary: {}, expiryAlerts: [], onboardingOverdue: [], missedTasks: [], exceptions: { items: [] }, completion: {}, benchmarks: { branch: {}, staff: [] }, monthlyOwnerSummary: {} } };
   contentTasks: Row[] = [];
   contentOffers: Row[] = [];
   penaltyRules: Row[] = [];
@@ -125,6 +125,7 @@ export class StaffControlCenterPageComponent implements OnInit {
     ];
     if (tab === 'hrms') return [
       this.section('enterprise HRMS', this.loadOne('/staff/hrms', (value) => this.hrms = value)),
+      this.section('HR operations intelligence', this.loadOne(`/staff/hrms/operations-intelligence?${new URLSearchParams({ from: this.periodStart, to: this.periodEnd })}`, (value) => this.hrms['operationsIntelligence'] = value)),
     ];
     if (tab === 'systems') return [
       this.section('biometric devices', this.loadList('/staff/biometric/devices', (value) => this.devices = value)),
@@ -702,6 +703,37 @@ export class StaffControlCenterPageComponent implements OnInit {
     await this.action(`/staff/hrms/succession-candidates/${row['candidateId']}/decision`, { decision, note, version: row['version'] });
   }
 
+  async runHrOperationsAutomations() {
+    await this.action('/staff/hrms/operations-intelligence/automations/run', { from: this.periodStart, to: this.periodEnd });
+  }
+
+  exportEmployeeLifecycle() {
+    const rows = this.arrayValue(this.hrms['lifecycleCases']).map((row) => [
+      row['staffId'] || '', row['staffName'] || row['candidateName'] || '', row['caseType'] || '', row['effectiveDate'] || '',
+      row['status'] || '', row['settlementStatus'] || '', this.arrayValue(row['tasks']).length,
+      this.arrayValue(row['tasks']).filter((task) => task['completed']).length,
+    ]);
+    this.downloadCsv([
+      ['staffId', 'staffName', 'caseType', 'effectiveDate', 'status', 'settlementStatus', 'taskCount', 'completedTaskCount'],
+      ...rows,
+    ], `employee-lifecycle-${this.periodStart}-${this.periodEnd}.csv`);
+  }
+
+  exportHrHealth() {
+    const intelligence = this.hrms['operationsIntelligence'] || {};
+    const branch = intelligence['benchmarks']?.['branch'] || {};
+    const rows = this.arrayValue(intelligence['benchmarks']?.['staff']).map((row) => [
+      row['staffId'] || '', row['employeeCode'] || '', row['staffName'] || '', row['jobTitle'] || '',
+      row['attendancePercent'] ?? '', row['appraisalPercent'] ?? '', row['trainingPercent'] ?? '',
+      row['operationsPercent'] ?? '', row['healthScore'] ?? '', row['coveragePercent'] ?? '',
+    ]);
+    this.downloadCsv([
+      ['branchHealthScore', branch['healthScore'] ?? '', 'periodStart', this.periodStart, 'periodEnd', this.periodEnd],
+      ['staffId', 'employeeCode', 'staffName', 'jobTitle', 'attendancePercent', 'appraisalPercent', 'trainingPercent', 'operationsPercent', 'healthScore', 'coveragePercent'],
+      ...rows,
+    ], `hr-health-${this.periodStart}-${this.periodEnd}.csv`);
+  }
+
   openRuleEditor(row?: Row) {
     this.ruleDraft = row ? {
       documentKey: row['documentKey'], documentType: row['documentType'], category: row['category'],
@@ -1028,6 +1060,14 @@ export class StaffControlCenterPageComponent implements OnInit {
     const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+  private downloadCsv(rows: unknown[][], filename: string) {
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     link.download = filename;
     link.click();
     URL.revokeObjectURL(link.href);

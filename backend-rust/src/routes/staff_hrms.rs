@@ -9,7 +9,7 @@ use crate::{
     state::AppState,
 };
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, patch, post},
     Extension, Json, Router,
@@ -19,6 +19,14 @@ use serde_json::{json, Value};
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/staff/hrms", get(dashboard))
+        .route(
+            "/staff/hrms/operations-intelligence",
+            get(operations_intelligence),
+        )
+        .route(
+            "/staff/hrms/operations-intelligence/automations/run",
+            post(run_operations_intelligence_automations),
+        )
         .route("/staff/hrms/job-openings", post(create_job_opening))
         .route("/staff/hrms/job-openings/:id", patch(update_job_opening))
         .route("/staff/hrms/applications", post(create_application))
@@ -100,6 +108,33 @@ async fn dashboard(
     Ok(Json(ApiResponse::ok(
         staff_hrms_service::dashboard(&s.db, &t, &b).await?,
     )))
+}
+async fn operations_intelligence(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Query(p): Query<OperationsIntelligenceQuery>,
+) -> ApiResult<Value> {
+    read(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        staff_hrms_service::operations_intelligence(&s.db, &t, &b, p).await?,
+    )))
+}
+async fn run_operations_intelligence_automations(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<OperationsIntelligenceQuery>,
+) -> ApiResult<Value> {
+    manage(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    let row = staff_hrms_service::run_operations_intelligence_automations(
+        &s.db, &t, &b, &c.sub, p,
+    )
+    .await?;
+    audited(&s, &c, &b, "staff.hrms.operations_intelligence.run", &row).await;
+    Ok(Json(ApiResponse::ok(row)))
 }
 async fn create_job_opening(
     State(s): State<AppState>,

@@ -1,3 +1,4 @@
+use chrono::{NaiveDate, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -41,6 +42,188 @@ pub async fn dashboard(db: &PgPool, tenant: &str, branch: &str) -> Result<Value,
     Ok(
         serde_json::json!({"jobOpenings":openings,"applications":applications,"lifecycleCases":lifecycle,"orgChart":org_chart,"documentAlerts":document_alerts,"appraisalCycles":cycles,"goalTemplates":goal_templates,"appraisalReviews":appraisal_reviews,"learning":learning,"successionPlans":succession,"promotionReadiness":promotion_readiness}),
     )
+}
+
+pub async fn operations_intelligence(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Value, sqlx::Error> {
+    let expiry_alerts = sqlx::query_scalar::<_, Value>(r#"WITH alerts AS (
+      SELECT document.id,document.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) staff_name,
+        'document' source,COALESCE(NULLIF(document.document_name,''),document.document_type) title,document.expiry_date,
+        CASE WHEN document.expiry_date<CURRENT_DATE THEN 'expired' ELSE 'expiring' END state
+      FROM staff_documents document JOIN staff ON staff.tenant_id=document.tenant_id AND staff.branch_id=document.branch_id AND staff.id=document.staff_id
+      WHERE document.tenant_id=$1 AND document.branch_id=$2 AND document.expiry_date<=CURRENT_DATE+30
+      UNION ALL
+      SELECT license.id,license.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
+        'certification',license.skill_name,license.expires_on,
+        CASE WHEN license.expires_on<CURRENT_DATE THEN 'expired' ELSE 'expiring' END
+      FROM staff_skill_licenses license JOIN staff ON staff.tenant_id=license.tenant_id AND staff.branch_id=license.branch_id AND staff.id=license.staff_id
+      WHERE license.tenant_id=$1 AND license.branch_id=$2 AND license.expires_on<=CURRENT_DATE+30 AND license.verification_status<>'rejected'
+    ) SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'staffName',staff_name,'source',source,
+      'title',title,'expiryDate',expiry_date,'state',state) ORDER BY expiry_date,staff_name),'[]'::JSONB) FROM alerts"#)
+        .bind(tenant).bind(branch).fetch_one(db);
+    let onboarding_overdue = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+      'caseId',lifecycle.id,'staffId',lifecycle.staff_id,'staffName',COALESCE(NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),''),TRIM(CONCAT_WS(' ',application.first_name,NULLIF(application.last_name,'')))),
+      'effectiveDate',lifecycle.effective_date,'daysOverdue',CURRENT_DATE-lifecycle.effective_date,'ownerUserId',lifecycle.owner_user_id,
+      'overdueTaskCount',tasks.incomplete_count,'tasks',tasks.incomplete_tasks,'status',lifecycle.status,'version',lifecycle.version
+    ) ORDER BY lifecycle.effective_date),'[]'::JSONB)
+    FROM staff_lifecycle_cases lifecycle
+    LEFT JOIN staff ON staff.tenant_id=lifecycle.tenant_id AND staff.branch_id=lifecycle.branch_id AND staff.id=lifecycle.staff_id
+    LEFT JOIN hr_job_applications application ON application.tenant_id=lifecycle.tenant_id AND application.branch_id=lifecycle.branch_id AND application.id=lifecycle.application_id
+    CROSS JOIN LATERAL (SELECT COUNT(*) incomplete_count,COALESCE(JSONB_AGG(task ORDER BY position),'[]'::JSONB) incomplete_tasks
+      FROM JSONB_ARRAY_ELEMENTS(lifecycle.tasks_json) WITH ORDINALITY item(task,position)
+      WHERE COALESCE((task->>'completed')::BOOLEAN,FALSE)=FALSE) tasks
+    WHERE lifecycle.tenant_id=$1 AND lifecycle.branch_id=$2 AND lifecycle.case_type='onboarding'
+      AND lifecycle.status<>'completed' AND lifecycle.effective_date<CURRENT_DATE AND tasks.incomplete_count>0"#)
+        .bind(tenant).bind(branch).fetch_one(db);
+    let missed_tasks = sqlx::query_scalar::<_, Value>(r#"WITH missed AS (
+      SELECT task.id,task.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) staff_name,
+        'staff_task' source,task.title,task.due_at::DATE due_date,task.status,GREATEST(CURRENT_DATE-task.due_at::DATE,0) days_overdue
+      FROM staff_tasks task JOIN staff ON staff.tenant_id=task.tenant_id AND staff.branch_id=task.branch_id AND staff.id=task.staff_id
+      WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.due_at::DATE BETWEEN $3 AND $4 AND task.due_at<NOW()
+        AND task.status IN ('open','in_progress','blocked')
+      UNION ALL
+      SELECT task.id,task.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
+        'staff_operation',task.task_title,operation.scheduled_date,task.status,GREATEST(CURRENT_DATE-operation.scheduled_date,0)
+      FROM staff_operation_tasks task
+      JOIN staff_operation_schedules operation ON operation.tenant_id=task.tenant_id AND operation.branch_id=task.branch_id AND operation.id=task.operation_id
+      JOIN staff ON staff.tenant_id=task.tenant_id AND staff.branch_id=task.branch_id AND staff.id=task.staff_id
+      WHERE task.tenant_id=$1 AND task.branch_id=$2 AND operation.scheduled_date BETWEEN $3 AND $4 AND task.status='missed'
+    ) SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'staffName',staff_name,'source',source,
+      'title',title,'dueDate',due_date,'status',status,'daysOverdue',days_overdue) ORDER BY due_date,staff_name),'[]'::JSONB) FROM missed"#)
+        .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
+    let exceptions = sqlx::query_scalar::<_, Value>(r#"WITH exception_rows AS (
+      SELECT record.id,record.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) staff_name,
+        'attendance' domain,'overtime_approval' category,record.ot_approval_status status,record.business_date event_date,
+        CONCAT(record.overtime_minutes,' overtime minutes pending approval') detail
+      FROM staff_attendance_records record JOIN staff ON staff.tenant_id=record.tenant_id AND staff.branch_id=record.branch_id AND staff.id=record.staff_id
+      WHERE record.tenant_id=$1 AND record.branch_id=$2 AND record.business_date BETWEEN $3 AND $4
+        AND record.overtime_minutes>0 AND record.ot_approval_status='pending'
+      UNION ALL
+      SELECT exception.id,exception.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
+        'attendance','face_attendance',exception.status,exception.created_at::DATE,exception.reason_code
+      FROM staff_face_attendance_exceptions exception JOIN staff ON staff.tenant_id=exception.tenant_id AND staff.branch_id=exception.branch_id AND staff.id=exception.staff_id
+      WHERE exception.tenant_id=$1 AND exception.branch_id=$2 AND exception.created_at::DATE BETWEEN $3 AND $4 AND exception.status='pending'
+      UNION ALL
+      SELECT correction.id,correction.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
+        'payroll','correction',correction.status,correction.created_at::DATE,correction.reason
+      FROM staff_payroll_corrections correction JOIN staff ON staff.tenant_id=correction.tenant_id AND staff.branch_id=correction.branch_id AND staff.id=correction.staff_id
+      WHERE correction.tenant_id=$1 AND correction.branch_id=$2 AND correction.created_at::DATE BETWEEN $3 AND $4 AND correction.status='pending'
+      UNION ALL
+      SELECT payout.id,payout.staff_id,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
+        'payroll','payout',payout.status,run.period_end,COALESCE(NULLIF(payout.last_error,''),NULLIF(payout.hold_reason,''),'Payout requires attention')
+      FROM staff_payroll_payout_states payout JOIN staff_payroll_runs run ON run.tenant_id=payout.tenant_id AND run.branch_id=payout.branch_id AND run.id=payout.payroll_run_id
+      JOIN staff ON staff.tenant_id=payout.tenant_id AND staff.branch_id=payout.branch_id AND staff.id=payout.staff_id
+      WHERE payout.tenant_id=$1 AND payout.branch_id=$2 AND run.period_start<=$4 AND run.period_end>=$3 AND payout.status IN ('held','failed')
+      UNION ALL
+      SELECT item.id,item.staff_id,item.staff_name,'payroll','validation','invalid',run.period_end,
+        CONCAT(JSONB_ARRAY_LENGTH(item.validation_errors),' payroll validation errors')
+      FROM staff_payroll_items item JOIN staff_payroll_runs run ON run.tenant_id=item.tenant_id AND run.branch_id=item.branch_id AND run.id=item.payroll_run_id
+      WHERE item.tenant_id=$1 AND item.branch_id=$2 AND run.period_start<=$4 AND run.period_end>=$3 AND JSONB_ARRAY_LENGTH(item.validation_errors)>0
+    ) SELECT JSONB_BUILD_OBJECT('attendanceCount',COUNT(*) FILTER(WHERE domain='attendance'),'payrollCount',COUNT(*) FILTER(WHERE domain='payroll'),
+      'items',COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'staffName',staff_name,'domain',domain,'category',category,
+        'status',status,'eventDate',event_date,'detail',detail) ORDER BY event_date DESC,staff_name),'[]'::JSONB)) FROM exception_rows"#)
+        .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
+    let completion = sqlx::query_scalar::<_, Value>(r#"WITH appraisal AS (
+      SELECT COUNT(*) total,COUNT(*) FILTER(WHERE review.status IN ('approved','acknowledged')) approved,
+        COUNT(*) FILTER(WHERE review.status='acknowledged') acknowledged
+      FROM staff_performance_reviews review WHERE review.tenant_id=$1 AND review.branch_id=$2
+        AND review.period_start<=$4 AND review.period_end>=$3 AND review.appraisal_cycle_id IS NOT NULL
+    ), training AS (
+      SELECT COUNT(*) total,COUNT(*) FILTER(WHERE task.status='completed') completed
+      FROM staff_tasks task WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.task_type='training'
+        AND COALESCE(task.due_at::DATE,task.created_at::DATE) BETWEEN $3 AND $4
+    ) SELECT JSONB_BUILD_OBJECT(
+      'appraisal',JSONB_BUILD_OBJECT('assignedCount',appraisal.total,'approvedCount',appraisal.approved,'acknowledgedCount',appraisal.acknowledged,
+        'completionPercent',CASE WHEN appraisal.total=0 THEN 0 ELSE ROUND(appraisal.acknowledged*100.0/appraisal.total,2) END),
+      'training',JSONB_BUILD_OBJECT('assignedCount',training.total,'completedCount',training.completed,
+        'completionPercent',CASE WHEN training.total=0 THEN 0 ELSE ROUND(training.completed*100.0/training.total,2) END)
+    ) FROM appraisal CROSS JOIN training"#)
+        .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
+    let benchmarks = sqlx::query_scalar::<_, Value>(r#"WITH staff_metrics AS (
+      SELECT staff.id,staff.employee_code,TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))) staff_name,staff.job_title,
+        attendance.rate attendance_rate,appraisal.rate appraisal_rate,training.rate training_rate,operations.rate operations_rate
+      FROM staff
+      LEFT JOIN LATERAL (SELECT CASE WHEN COUNT(*)=0 THEN NULL ELSE ROUND((COUNT(*) FILTER(WHERE status IN ('present','clocked_in','clocked_out'))+COUNT(*) FILTER(WHERE status='half_day')*0.5)*100.0/COUNT(*),2) END rate
+        FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=staff.id AND business_date BETWEEN $3 AND $4
+          AND status NOT IN ('leave','special_leave','weekly_off')) attendance ON TRUE
+      LEFT JOIN LATERAL (SELECT CASE WHEN COUNT(*)=0 THEN NULL ELSE ROUND(COUNT(*) FILTER(WHERE status='acknowledged')*100.0/COUNT(*),2) END rate
+        FROM staff_performance_reviews WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=staff.id AND period_start<=$4 AND period_end>=$3 AND appraisal_cycle_id IS NOT NULL) appraisal ON TRUE
+      LEFT JOIN LATERAL (SELECT CASE WHEN COUNT(*)=0 THEN NULL ELSE ROUND(COUNT(*) FILTER(WHERE status='completed')*100.0/COUNT(*),2) END rate
+        FROM staff_tasks WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=staff.id AND task_type='training' AND COALESCE(due_at::DATE,created_at::DATE) BETWEEN $3 AND $4) training ON TRUE
+      LEFT JOIN LATERAL (SELECT CASE WHEN COUNT(*) FILTER(WHERE task.status IN ('completed','approved','missed'))=0 THEN NULL ELSE ROUND(COUNT(*) FILTER(WHERE task.status IN ('completed','approved'))*100.0/COUNT(*) FILTER(WHERE task.status IN ('completed','approved','missed')),2) END rate
+        FROM staff_operation_tasks task JOIN staff_operation_schedules operation ON operation.tenant_id=task.tenant_id AND operation.branch_id=task.branch_id AND operation.id=task.operation_id
+        WHERE task.tenant_id=$1 AND task.branch_id=$2 AND task.staff_id=staff.id AND operation.scheduled_date BETWEEN $3 AND $4) operations ON TRUE
+      WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE
+    ), scored AS (
+      SELECT *,ROUND((COALESCE(attendance_rate,0)+COALESCE(appraisal_rate,0)+COALESCE(training_rate,0)+COALESCE(operations_rate,0))
+        /NULLIF((attendance_rate IS NOT NULL)::INT+(appraisal_rate IS NOT NULL)::INT+(training_rate IS NOT NULL)::INT+(operations_rate IS NOT NULL)::INT,0),2) health_score,
+        ((attendance_rate IS NOT NULL)::INT+(appraisal_rate IS NOT NULL)::INT+(training_rate IS NOT NULL)::INT+(operations_rate IS NOT NULL)::INT)*25 coverage
+      FROM staff_metrics
+    ) SELECT JSONB_BUILD_OBJECT('branch',JSONB_BUILD_OBJECT('activeStaff',COUNT(*),'healthScore',COALESCE(ROUND(AVG(health_score),2),0),
+      'attendancePercent',COALESCE(ROUND(AVG(attendance_rate),2),0),'appraisalPercent',COALESCE(ROUND(AVG(appraisal_rate),2),0),
+      'trainingPercent',COALESCE(ROUND(AVG(training_rate),2),0),'operationsPercent',COALESCE(ROUND(AVG(operations_rate),2),0)),
+      'staff',COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('staffId',id,'employeeCode',employee_code,'staffName',staff_name,'jobTitle',job_title,
+        'attendancePercent',attendance_rate,'appraisalPercent',appraisal_rate,'trainingPercent',training_rate,'operationsPercent',operations_rate,
+        'healthScore',COALESCE(health_score,0),'coveragePercent',coverage) ORDER BY health_score DESC NULLS LAST,staff_name),'[]'::JSONB)) FROM scored"#)
+        .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
+    let (expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks) =
+        tokio::try_join!(expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks)?;
+    let health_score = benchmarks.pointer("/branch/healthScore").and_then(Value::as_f64).unwrap_or(0.0);
+    Ok(serde_json::json!({
+        "dateFrom": from,
+        "dateTo": to,
+        "generatedAt": Utc::now(),
+        "summary": {
+            "hrHealthScore": health_score,
+            "expiryAlertCount": expiry_alerts.as_array().map_or(0, Vec::len),
+            "onboardingOverdueCount": onboarding_overdue.as_array().map_or(0, Vec::len),
+            "missedTaskCount": missed_tasks.as_array().map_or(0, Vec::len),
+            "attendanceExceptionCount": exceptions.get("attendanceCount").and_then(Value::as_i64).unwrap_or(0),
+            "payrollExceptionCount": exceptions.get("payrollCount").and_then(Value::as_i64).unwrap_or(0)
+        },
+        "expiryAlerts": expiry_alerts,
+        "onboardingOverdue": onboarding_overdue,
+        "missedTasks": missed_tasks,
+        "exceptions": exceptions,
+        "completion": completion,
+        "benchmarks": benchmarks,
+        "monthlyOwnerSummary": {
+            "periodStart": from,
+            "periodEnd": to,
+            "hrHealthScore": health_score,
+            "requiresAttention": expiry_alerts.as_array().map_or(0, Vec::len)
+                + onboarding_overdue.as_array().map_or(0, Vec::len)
+                + missed_tasks.as_array().map_or(0, Vec::len)
+                + exceptions.get("attendanceCount").and_then(Value::as_u64).unwrap_or(0) as usize
+                + exceptions.get("payrollCount").and_then(Value::as_u64).unwrap_or(0) as usize
+        }
+    }))
+}
+
+pub async fn queue_operations_intelligence_notification(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    notification_type: &str,
+    title: &str,
+    body: &str,
+    metadata: &Value,
+    idempotency_key: &str,
+) -> Result<bool, sqlx::Error> {
+    let row: Option<String> = sqlx::query_scalar(r#"INSERT INTO notifications(
+      tenant_id,branch_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json)
+      SELECT $1,$2,$3,$4,$5,$6,'staff_hrms',$8,$7 WHERE NOT EXISTS(
+        SELECT 1 FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND notification_type=$4
+          AND metadata_json->>'idempotencyKey'=$8) RETURNING id"#)
+        .bind(tenant).bind(branch).bind(actor).bind(notification_type).bind(title).bind(body)
+        .bind(metadata).bind(idempotency_key).fetch_optional(db).await?;
+    Ok(row.is_some())
 }
 
 pub async fn create_job_opening(
