@@ -33,7 +33,7 @@ type BookingFlowItem = {
   template: `
     <ion-header class="ion-no-border">
       <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button defaultHref="/tabs/home"></ion-back-button></ion-buttons>
+        <ion-buttons slot="start"><ion-back-button [defaultHref]="backHref()"></ion-back-button></ion-buttons>
         @if (isRescheduling()) {
           <ion-title class="edit-toolbar-title">Edit appointment</ion-title>
         }
@@ -309,9 +309,9 @@ type BookingFlowItem = {
     .booking-page.editing .stepper { margin-top: 2px; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
     .booking-cta.sticky-cta { bottom: calc(-30px + env(safe-area-inset-bottom)); }
-    .booking-hero { display: grid; gap: 18px; align-items: center; padding: 14px; }
-    .booking-hero img { width: 100%; aspect-ratio: 16 / 10; height: auto; border-radius: 24px; object-fit: cover; }
-    .booking-hero .page-title { font-size: clamp(2rem, 5vw, 3.6rem); }
+    .booking-hero { display: grid; gap: 10px; align-items: center; padding: 10px; }
+    .booking-hero img { width: 100%; aspect-ratio: 16 / 7; max-height: 150px; height: auto; border-radius: 20px; object-fit: cover; }
+    .booking-hero .page-title { font-size: clamp(1.45rem, 4vw, 2.7rem); }
     .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 8px; }
     .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: var(--surface); font-weight: 900; }
     .stepper button.active, .stepper button.done { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 30px rgba(11, 70, 120, 0.2); }
@@ -442,7 +442,7 @@ type BookingFlowItem = {
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (min-width: 768px) {
-      .booking-hero { grid-template-columns: 260px minmax(0, 1fr); }
+      .booking-hero { grid-template-columns: 180px minmax(0, 1fr); }
       .staff-choice em { text-align: left; }
       .check-slots-button { justify-self: start; }
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -499,9 +499,15 @@ export class BookingFlowPage implements OnInit {
   }
 
   async reload() {
-    const slug = this.slug();
+    const slug = await this.resolveBusinessSlug();
     if (!slug) return;
-    await this.marketplace.loadBusiness(slug).catch(() => undefined);
+    this.slug.set(slug);
+    await this.marketplace.loadBusiness(slug).catch(async () => {
+      const fallbackSlug = await this.mySalonBusinessSlug();
+      if (!fallbackSlug || fallbackSlug === slug) return;
+      this.slug.set(fallbackSlug);
+      await this.marketplace.loadBusiness(fallbackSlug).catch(() => undefined);
+    });
     if (!this.isRescheduling()) this.restorePendingIntent();
     if (!this.route.snapshot.queryParamMap.has("step")) {
       this.step.set(this.bookingItems().length ? 2 : 1);
@@ -509,6 +515,18 @@ export class BookingFlowPage implements OnInit {
       this.step.set(1);
     }
     await this.reloadAvailability();
+  }
+
+  private async resolveBusinessSlug(): Promise<string> {
+    return this.slug() || await this.mySalonBusinessSlug();
+  }
+
+  private async mySalonBusinessSlug(): Promise<string> {
+    if (!this.marketplace.salonMode()) return "";
+    const existing = this.marketplace.mySalonDashboard()?.salon?.slug || "";
+    if (existing) return existing;
+    const dashboard = await this.marketplace.loadMySalonDashboard().catch(() => null);
+    return dashboard?.salon?.slug || "";
   }
 
   next() {
@@ -667,7 +685,7 @@ export class BookingFlowPage implements OnInit {
         staffId: item.staffId || undefined,
         serviceId: item.serviceId
       });
-      await this.router.navigate(["/bookings", this.rescheduleBookingId], { replaceUrl: true });
+      await this.router.navigateByUrl(this.bookingDetailUrl(this.rescheduleBookingId), { replaceUrl: true });
       return;
     }
     for (const item of items) {
@@ -682,7 +700,15 @@ export class BookingFlowPage implements OnInit {
       });
     }
     this.clearPendingIntent();
-    this.router.navigateByUrl("/booking/success");
+    this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success");
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home";
+  }
+
+  private bookingDetailUrl(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
   }
 
   private async revalidateSelectedSlot(): Promise<boolean> {

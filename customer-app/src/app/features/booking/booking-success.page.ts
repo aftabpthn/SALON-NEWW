@@ -24,21 +24,21 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <div><span>Reference</span><strong>{{ booking.reference }}</strong></div>
           </div>
           <div class="actions">
-            <ion-button expand="block" class="primary-gradient" routerLink="/tabs/bookings">View booking</ion-button>
+            <ion-button expand="block" class="primary-gradient" [routerLink]="bookingsLink()">View booking</ion-button>
             <ion-button expand="block" fill="outline" class="secondary-button" (click)="addToCalendar(booking)">
               <ion-icon name="calendar-outline" slot="start"></ion-icon>
               Add to Google Calendar
             </ion-button>
-            <ion-button expand="block" fill="clear" class="home-button" routerLink="/tabs/home">
+            <ion-button expand="block" fill="clear" class="home-button" [routerLink]="homeLink()">
               <ion-icon name="home-outline" slot="start"></ion-icon>
-              Back home
+              {{ marketplace.salonMode() ? 'Back to My Salon' : 'Back home' }}
             </ion-button>
           </div>
         </section>
         } @else {
           <section class="success-card premium-card">
             <h1>No booking loaded</h1>
-            <ion-button expand="block" class="primary-gradient" routerLink="/tabs/bookings">View bookings</ion-button>
+            <ion-button expand="block" class="primary-gradient" [routerLink]="bookingsLink()">View bookings</ion-button>
           </section>
         }
       </main>
@@ -136,8 +136,16 @@ import { MarketplaceService } from "../../core/marketplace.service";
 export class BookingSuccessPage {
   readonly booking = computed(() => this.marketplace.latestBooking());
 
-  constructor(private readonly marketplace: MarketplaceService) {
+  constructor(readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, checkmarkDoneOutline, homeOutline });
+  }
+
+  bookingsLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings") : "/tabs/bookings";
+  }
+
+  homeLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home";
   }
 
   addToCalendar(booking: Booking) {

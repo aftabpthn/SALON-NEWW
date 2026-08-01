@@ -31,6 +31,8 @@ import {
 import { AuthService } from "./auth.service";
 import { CustomerApiService } from "./customer-api.service";
 
+export type SalonModeContext = { tenantId: string; branchId: string; businessId?: string; businessName?: string };
+
 @Injectable({ providedIn: "root" })
 export class MarketplaceService {
   private readonly loadingCount = signal(0);
@@ -57,21 +59,27 @@ export class MarketplaceService {
   readonly mySalonDashboard = signal<MySalonDashboard | null>(null);
   private readonly salonModeStore = signal(false);
   readonly salonMode = this.salonModeStore.asReadonly();
+  private readonly salonModeContextStore = signal<SalonModeContext | null>(null);
+  readonly salonModeContext = this.salonModeContextStore.asReadonly();
   private favoritesLoaded = false;
   private savedSalonsLoaded = false;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {
     try {
       this.salonModeStore.set(localStorage.getItem("aura_salon_mode") === "1");
+      this.salonModeContextStore.set(this.readSalonModeContext());
     } catch {
       this.salonModeStore.set(false);
+      this.salonModeContextStore.set(null);
     }
   }
 
-  enterSalonMode(): void {
+  enterSalonMode(context?: SalonModeContext | null): void {
     this.salonModeStore.set(true);
+    if (context?.tenantId && context.branchId) this.salonModeContextStore.set(context);
     try {
       localStorage.setItem("aura_salon_mode", "1");
+      if (context?.tenantId && context.branchId) localStorage.setItem("aura_salon_mode_context", JSON.stringify(context));
     } catch {
       // storage unavailable — mode stays active for this session
     }
@@ -81,9 +89,36 @@ export class MarketplaceService {
     this.salonModeStore.set(false);
     try {
       localStorage.removeItem("aura_salon_mode");
+      localStorage.removeItem("aura_salon_mode_context");
     } catch {
       // storage unavailable — mode already off for this session
     }
+    this.salonModeContextStore.set(null);
+  }
+
+  syncSalonModeContext(context: SalonModeContext): void {
+    if (!context.tenantId || !context.branchId) return;
+    this.enterSalonMode(context);
+  }
+
+  salonModeUrl(...segments: Array<string | number | null | undefined>): string {
+    const context = this.salonModeContext();
+    const primary = this.primarySalon();
+    const tenantId = primary?.tenantId || context?.tenantId;
+    const branchId = primary?.branchId || context?.branchId;
+    if (!tenantId || !branchId) return "/tabs/my-salon";
+    const tail = segments
+      .filter((segment): segment is string | number => segment !== null && segment !== undefined && String(segment).length > 0)
+      .map((segment) => encodeURIComponent(String(segment)))
+      .join("/");
+    return `/my-salon/${encodeURIComponent(tenantId)}/${encodeURIComponent(branchId)}${tail ? `/${tail}` : ""}`;
+  }
+
+  private readSalonModeContext(): SalonModeContext | null {
+    const raw = localStorage.getItem("aura_salon_mode_context");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SalonModeContext>;
+    return parsed.tenantId && parsed.branchId ? { ...parsed, tenantId: parsed.tenantId, branchId: parsed.branchId } : null;
   }
 
   async loadPublicBusinesses(params: SearchBusinessesParams = {}): Promise<Business[]> {
@@ -360,6 +395,7 @@ export class MarketplaceService {
     return this.run("Unable to set primary salon", async () => {
       const { primarySalon } = await firstValueFrom(this.api.setPrimarySalon(tenantId, { branchId, businessId, businessName, reason: "manual" }));
       this.primarySalon.set(primarySalon);
+      this.syncSalonModeContext({ tenantId, branchId, businessId, businessName });
       this.shouldPromptPrimary.set(false);
       this.suggestedSalon.set(null);
       return primarySalon;

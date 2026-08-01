@@ -92,7 +92,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           </article>
         }
         <div class="menu-highlight-grid">
-          <a routerLink="/tabs/my-salon" (click)="closeMenu()"><ion-icon name="sparkles-outline"></ion-icon><span>My Salon</span></a>
+          <a [routerLink]="mySalonHref()" (click)="closeMenu()"><ion-icon name="sparkles-outline"></ion-icon><span>My Salon</span></a>
           <a routerLink="/tabs/home" (click)="closeMenu()"><ion-icon name="home-outline"></ion-icon><span>Home</span></a>
           <a routerLink="/tabs/search" (click)="closeMenu()"><ion-icon name="compass-outline"></ion-icon><span>Explore</span></a>
           <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="person-outline"></ion-icon><span>Profile</span></a>
@@ -103,7 +103,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <article><span>Quick</span><strong>Explore</strong></article>
         </div>
         <nav class="mobile-menu-list">
-          <a routerLink="/tabs/my-salon" (click)="closeMenu()"><span>My Salon</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="mySalonHref()" (click)="closeMenu()"><span>My Salon</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/home" (click)="closeMenu()"><span>Home</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/search" (click)="closeMenu()"><span>Discover salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/consultation" (click)="closeMenu()"><span>Live consultation</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
@@ -119,7 +119,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </span>
       </a>
       <div class="nav-links">
-        <a routerLink="/tabs/my-salon" routerLinkActive="active">My Salon</a>
+        <a [routerLink]="mySalonHref()" routerLinkActive="active">My Salon</a>
         <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
         <a routerLink="/tabs/search" routerLinkActive="active">Explore</a>
         <a routerLink="/tabs/consultation" routerLinkActive="active">Consult</a>
@@ -152,7 +152,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       </div>
     </nav>
     @if (!salonModeActive()) {
-      <a class="salon-mode-toggle" routerLink="/tabs/my-salon" aria-label="Enter My Salon Mode">
+      <a class="salon-mode-toggle" [routerLink]="mySalonHref()" aria-label="Enter My Salon Mode">
         <span class="salon-mode-entry-icon" aria-hidden="true"><ion-icon name="sparkles-outline"></ion-icon></span>
         <span class="salon-mode-toggle-copy"><strong>MY SALON</strong><small>ENTER</small></span>
       </a>
@@ -946,7 +946,7 @@ export class TabsPage implements OnInit {
   ngOnInit(): void {
     this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
       if (!this.marketplace.salonMode() || this.normalizeSwipeRoute(this.router.url) !== "/tabs/home") return;
-      void this.router.navigateByUrl("/tabs/my-salon", { replaceUrl: true });
+      void this.router.navigateByUrl(this.mySalonHref(), { replaceUrl: true });
     });
   }
 
@@ -1006,11 +1006,20 @@ export class TabsPage implements OnInit {
   }
 
   onSalonDashboard(): boolean {
-    return this.normalizeSwipeRoute(this.router.url) === "/tabs/my-salon";
+    const route = this.normalizeSwipeRoute(this.router.url);
+    return route === "/tabs/my-salon" || route.startsWith("/my-salon/");
   }
 
   goToSalon(): void {
-    void this.router.navigateByUrl("/tabs/my-salon");
+    void this.router.navigateByUrl(this.mySalonHref());
+  }
+
+  mySalonHref(): string {
+    const context = this.marketplace.salonModeContext();
+    const primary = this.marketplace.primarySalon();
+    const tenantId = primary?.tenantId || context?.tenantId;
+    const branchId = primary?.branchId || context?.branchId;
+    return tenantId && branchId ? `/my-salon/${encodeURIComponent(tenantId)}/${encodeURIComponent(branchId)}` : "/tabs/my-salon";
   }
 
   exitSalonMode() {

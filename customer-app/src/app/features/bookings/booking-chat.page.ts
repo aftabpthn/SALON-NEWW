@@ -359,7 +359,7 @@ export class BookingChatPage implements OnInit, OnDestroy {
   readonly sendError = signal("");
   readonly threadClosed = computed(() => this.thread()?.status === "resolved" || this.thread()?.status === "closed");
   readonly bookingReference = computed(() => String(this.booking()?.reference || this.booking()?.id || ""));
-  readonly bookingRoute = computed(() => this.booking()?.id ? ["/bookings", this.booking()!.id] : ["/tabs/bookings"]);
+  readonly bookingRoute = computed(() => this.booking()?.id ? this.bookingDetailUrl(this.booking()!.id) : this.bookingsUrl());
   readonly bookingContext = computed(() => {
     const booking = this.booking();
     if (!booking) return "Booking conversation";
@@ -404,7 +404,15 @@ export class BookingChatPage implements OnInit, OnDestroy {
 
   goBack() {
     const bookingId = this.booking()?.id || this.route.snapshot.paramMap.get("id");
-    void this.router.navigate(bookingId ? ["/bookings", bookingId] : ["/tabs/bookings"], { replaceUrl: true });
+    void this.router.navigateByUrl(bookingId ? this.bookingDetailUrl(bookingId) : this.bookingsUrl(), { replaceUrl: true });
+  }
+
+  private bookingDetailUrl(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
+  }
+
+  private bookingsUrl(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings") : "/tabs/bookings";
   }
 
   ngOnInit() {

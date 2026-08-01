@@ -53,7 +53,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           </section>
 
           <section class="summary-actions" aria-label="Booking actions">
-            <ion-button expand="block" class="primary-gradient" [routerLink]="['/bookings', booking.id]">View booking</ion-button>
+            <ion-button expand="block" class="primary-gradient" [routerLink]="bookingLink(booking.id)">View booking</ion-button>
             <ion-button expand="block" fill="outline" class="secondary-button" (click)="addToCalendar(booking)">
               <ion-icon name="calendar-outline" slot="start"></ion-icon>
               Add to calendar
@@ -66,7 +66,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         } @else {
           <section class="premium-card empty-state">
             <h2>No booking loaded</h2>
-            <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+            <ion-button class="primary-gradient" [routerLink]="discoverLink()">Discover salons</ion-button>
           </section>
         }
       </main>
@@ -239,6 +239,14 @@ export class BookingSummaryPage {
 
   money(pricePaise: number): string {
     return pricePaise > 0 ? this.marketplace.formatMoney(pricePaise) : "Shown at checkout";
+  }
+
+  bookingLink(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
   }
 
   addToCalendar(booking: Booking) {

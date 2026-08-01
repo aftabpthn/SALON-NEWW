@@ -24,7 +24,7 @@ interface HelpItem {
     <ion-header class="ion-no-border help-header">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button defaultHref="/tabs/profile" aria-label="Back to profile"></ion-back-button>
+          <ion-back-button [defaultHref]="backHref()" aria-label="Back"></ion-back-button>
         </ion-buttons>
         <ion-title>Help &amp; Support</ion-title>
       </ion-toolbar>
@@ -64,7 +64,7 @@ interface HelpItem {
               <h2 id="booking-support-title">{{ booking.serviceName }}</h2>
               <p>{{ booking.businessName }} · {{ bookingDate(booking) }}</p>
             </div>
-            <a [routerLink]="['/bookings', booking.id]" [attr.aria-label]="'Get help with ' + booking.serviceName">View</a>
+            <a [routerLink]="bookingLink(booking.id)" [attr.aria-label]="'Get help with ' + booking.serviceName">View</a>
           </section>
         }
 
@@ -118,7 +118,7 @@ interface HelpItem {
                     <div class="faq-answer" [id]="item.id + '-answer'">
                       <p>{{ item.body }}</p>
                       @if (item.route && item.actionLabel) {
-                        <a [routerLink]="item.route">{{ item.actionLabel }}</a>
+                        <a [routerLink]="helpRoute(item.route)">{{ item.actionLabel }}</a>
                       }
                     </div>
                   }
@@ -140,11 +140,11 @@ interface HelpItem {
             <h2 id="human-support-title">Talk to our support team</h2>
             <p>Get help with bookings, payments, refunds, or your account.</p>
           </div>
-          <ion-button routerLink="/tabs/support">
+          <ion-button [routerLink]="supportLink()">
             <ion-icon name="chatbubbles-outline" slot="start"></ion-icon>
             Contact support
           </ion-button>
-          <ion-button fill="outline" class="security-button" routerLink="/tabs/support">
+          <ion-button fill="outline" class="security-button" [routerLink]="supportLink()">
             <ion-icon name="shield-checkmark-outline" slot="start"></ion-icon>
             Report a security issue
           </ion-button>
@@ -801,6 +801,25 @@ export class HelpPage implements OnInit {
 
   constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
     addIcons({ calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline });
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile";
+  }
+
+  bookingLink(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
+  }
+
+  supportLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+  }
+
+  helpRoute(route: string | undefined): string | undefined {
+    if (!route || !this.marketplace.salonMode()) return route;
+    if (route.startsWith("/bookings/")) return this.marketplace.salonModeUrl("bookings", route.slice("/bookings/".length));
+    if (route.startsWith("/tabs/")) return this.marketplace.salonModeUrl(route.slice("/tabs/".length));
+    return route;
   }
 
   ngOnInit() {

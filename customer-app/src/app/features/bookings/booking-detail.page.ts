@@ -12,7 +12,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
   template: `
     <ion-header class="ion-no-border detail-header">
       <ion-toolbar>
-        <ion-buttons slot="start"><ion-back-button defaultHref="/tabs/bookings"></ion-back-button></ion-buttons>
+        <ion-buttons slot="start"><ion-back-button [defaultHref]="backHref()"></ion-back-button></ion-buttons>
         <ion-title>Booking details</ion-title>
       </ion-toolbar>
     </ion-header>
@@ -111,7 +111,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                       <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                     </summary>
                     <div class="contact-suboptions">
-                      <a class="option-row" [routerLink]="['/bookings', booking.id, 'chat']">
+                      <a class="option-row" [routerLink]="bookingChatLink(booking.id)">
                         <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
                         <span>Message salon</span>
                         <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
@@ -186,7 +186,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <p>{{ booking.cancellationPolicy || "The business policy will appear here when returned by the API." }}</p>
           </details>
           <div class="help-centre">
-            <a class="help-link" routerLink="/help">Help centre</a>
+            <a class="help-link" [routerLink]="helpLink()">Help centre</a>
             <small>General FAQs and account help</small>
           </div>
         </main>
@@ -488,7 +488,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   readonly salonPhone = computed(() => this.resolveSalonPhone(this.resolvedBusiness()));
   readonly salonRoute = computed(() => {
     const slug = this.resolvedBusiness()?.slug;
-    return slug ? ["/business", slug] : null;
+    return slug ? this.businessProfileUrl(slug) : null;
   });
   readonly directionsUrl = computed(() => this.resolveDirectionsUrl());
   readonly canAddToCalendar = computed(() => this.calendarStart() !== null);
@@ -510,6 +510,26 @@ export class BookingDetailPage implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.copyResetTimer) clearTimeout(this.copyResetTimer);
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings") : "/tabs/bookings";
+  }
+
+  bookingChatLink(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id, "chat") : `/bookings/${encodeURIComponent(id)}/chat`;
+  }
+
+  helpLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("help") : "/help";
+  }
+
+  private businessProfileUrl(slug: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug) : `/business/${encodeURIComponent(slug)}`;
+  }
+
+  private businessBookUrl(slug: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug, "book") : `/business/${encodeURIComponent(slug)}/book`;
   }
 
   async reload() {
@@ -562,7 +582,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     if (!booking) return;
     const businessIdentity = this.resolvedBusiness()?.slug || booking.businessId;
     if (businessIdentity) {
-      void this.router.navigate(["/business", businessIdentity, "book"], {
+      void this.router.navigate([this.businessBookUrl(businessIdentity)], {
         queryParams: {
           serviceId: booking.serviceId || undefined,
           staffId: booking.staffId || undefined,
@@ -572,13 +592,13 @@ export class BookingDetailPage implements OnInit, OnDestroy {
       });
       return;
     }
-    void this.router.navigate(["/search"], { queryParams: { q: [booking.businessName, booking.serviceName].filter(Boolean).join(" ") } });
+    void this.router.navigate([this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/search"], { queryParams: { q: [booking.businessName, booking.serviceName].filter(Boolean).join(" ") } });
   }
 
   requestSupport() {
     const booking = this.booking();
     if (!booking) return;
-    void this.router.navigate(["/tabs/support"], { queryParams: { mode: "booking", bookingId: booking.id } });
+    void this.router.navigate([this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support"], { queryParams: { mode: "booking", bookingId: booking.id } });
   }
 
   addToCalendar() {
@@ -868,7 +888,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
       this.setFeedback("Rescheduling is unavailable for this booking");
       return;
     }
-    await this.router.navigate(["/business", businessIdentity, "book"], {
+    await this.router.navigate([this.businessBookUrl(businessIdentity)], {
       queryParams: {
         serviceId: booking.serviceId,
         staffId: booking.staffId || undefined,

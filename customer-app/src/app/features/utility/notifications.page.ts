@@ -20,7 +20,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
             <div>
               <p class="wallet-eyebrow">Aura inbox</p>
               <div class="wallet-title-row">
-                <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+                <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
                 <h1 id="notifications-title">Notifications</h1>
               </div>
               <p class="wallet-intro">{{ unreadCount() }} unread &mdash; booking updates, payments, offers and account activity.</p>
@@ -101,7 +101,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
                     <div class="wallet-state-icon"><ion-icon name="notifications-outline" aria-hidden="true"></ion-icon></div>
                     <h3>No notifications</h3>
                     <p>New booking, payment and offer updates will appear here.</p>
-                    <a routerLink="/tabs/search">Discover salons <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    <a [routerLink]="discoverLink()">Discover salons <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                   </div>
                 }
               </section>
@@ -124,7 +124,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
                   </div>
                 </div>
                 <p class="wallet-guide-note">Notification preferences can be managed from your profile settings.</p>
-                <a class="wallet-help-link" routerLink="/settings">
+                <a class="wallet-help-link" [routerLink]="settingsLink()">
                   <ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>
                   Manage preferences
                 </a>
@@ -271,6 +271,18 @@ export class NotificationsPage implements OnInit {
     addIcons({ calendarOutline, ellipsisVerticalOutline, notificationsOutline, pricetagOutline, walletOutline });
   }
 
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile";
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
+  }
+
+  settingsLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("settings") : "/settings";
+  }
+
   ngOnInit() {
     this.reload();
   }
@@ -379,12 +391,23 @@ export class NotificationsPage implements OnInit {
   }
 
   private deepLinkFor(item: CustomerNotification): string {
-    if (item.deepLink && this.isSafeDeepLink(item.deepLink)) return item.deepLink;
+    if (item.deepLink && this.isSafeDeepLink(item.deepLink)) return this.scopeDeepLink(item.deepLink);
     const text = this.searchText(item);
-    if (text.includes("payment") || text.includes("invoice") || text.includes("wallet")) return "/tabs/wallet";
-    if (text.includes("offer") || text.includes("deal") || text.includes("promo")) return "/tabs/offers";
-    if (text.includes("booking") || text.includes("appointment")) return "/tabs/bookings";
-    return "/tabs/profile";
+    if (text.includes("payment") || text.includes("invoice") || text.includes("wallet")) return this.scopeDeepLink("/tabs/wallet");
+    if (text.includes("offer") || text.includes("deal") || text.includes("promo")) return this.scopeDeepLink("/tabs/offers");
+    if (text.includes("booking") || text.includes("appointment")) return this.scopeDeepLink("/tabs/bookings");
+    return this.scopeDeepLink("/tabs/profile");
+  }
+
+  private scopeDeepLink(value: string): string {
+    if (!this.marketplace.salonMode()) return value;
+    if (value.startsWith("/bookings/")) return this.marketplace.salonModeUrl("bookings", value.slice("/bookings/".length));
+    if (value.startsWith("/tabs/")) {
+      const segment = value.slice("/tabs/".length);
+      return segment === "profile" || segment === "search" || segment === "offers" ? this.marketplace.salonModeUrl() : this.marketplace.salonModeUrl(segment);
+    }
+    if (value === "/notifications") return this.marketplace.salonModeUrl("notifications");
+    return value;
   }
 
   private searchText(item: CustomerNotification): string {

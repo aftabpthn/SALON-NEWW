@@ -43,22 +43,22 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
         @if (section() === "menu") {
           <section class="settings-menu premium-card">
-            <a routerLink="/tabs/profile/edit/personal">
+            <a [routerLink]="editRoute('personal')">
               <span class="section-icon"><ion-icon name="person-outline"></ion-icon></span>
             <span><strong>Personal information</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/notifications">
+            <a [routerLink]="editRoute('notifications')">
               <span class="section-icon"><ion-icon name="notifications-outline"></ion-icon></span>
               <span><strong>Notifications</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/password">
+            <a [routerLink]="editRoute('password')">
               <span class="section-icon"><ion-icon name="lock-closed-outline"></ion-icon></span>
               <span><strong>Change password</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/delete" class="danger-link">
+            <a [routerLink]="editRoute('delete')" class="danger-link">
               <span class="section-icon danger"><ion-icon name="trash-outline"></ion-icon></span>
               <span><strong>Delete account</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
@@ -683,7 +683,12 @@ export class ProfileEditPage implements OnInit {
   }
 
   backHref(): string {
-    return this.section() === "menu" ? "/tabs/profile" : "/tabs/profile/edit";
+    if (!this.marketplace.salonMode()) return this.section() === "menu" ? "/tabs/profile" : "/tabs/profile/edit";
+    return this.section() === "menu" ? this.marketplace.salonModeUrl("profile") : this.marketplace.salonModeUrl("profile", "edit");
+  }
+
+  editRoute(section: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("profile", "edit", section) : `/tabs/profile/edit/${encodeURIComponent(section)}`;
   }
 
   emailChanged(): boolean {
@@ -848,7 +853,7 @@ export class ProfileEditPage implements OnInit {
   async deleteAccount() {
     if (this.deleteConfirm !== "DELETE") return;
     await this.marketplace.deleteAccount(this.deletePassword)
-      .then(() => this.router.navigateByUrl("/tabs/home"))
+      .then(() => this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home"))
       .catch(() => undefined);
   }
 

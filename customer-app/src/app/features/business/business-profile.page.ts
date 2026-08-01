@@ -38,7 +38,7 @@ import { Subscription } from "rxjs";
       @if (business(); as b) {
       <main class="profile-page">
         <section class="cover">
-          <ion-back-button class="cover-back-button" defaultHref="/tabs/home"></ion-back-button>
+          <ion-back-button class="cover-back-button" [defaultHref]="backHref()"></ion-back-button>
           <img [src]="b.coverImage || b.galleryImages[0] || b.logoUrl || 'assets/icons/icon.svg'" [alt]="b.businessName + ' cover image'" />
           <div class="cover-overlay"></div>
           <div class="cover-actions">
@@ -98,7 +98,7 @@ import { Subscription } from "rxjs";
               </div>
               <div class="other-branches-rail" aria-label="Other branches from this salon group">
                 @for (branch of otherBranches(); track branch.branchId || branch.id) {
-                  <a class="branch-option" [routerLink]="['/business', branch.slug]">
+                  <a class="branch-option" [routerLink]="businessProfileLink(branch.slug)">
                     <span class="branch-option-mark">{{ branch.businessName.slice(0, 1).toUpperCase() }}</span>
                     <span class="branch-option-copy">
                       <strong>{{ branch.businessName }}</strong>
@@ -278,7 +278,7 @@ import { Subscription } from "rxjs";
                     <span>{{ staff.title }}</span>
                     <small>Star {{ staff.rating }} · {{ staff.specialty }}</small>
                     <em>{{ staff.nextAvailable }}</em>
-                    <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="['/business', b.slug, 'book']">Book with {{ staff.name.split(' ')[0] }}</ion-button>
+                    <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="businessBookLink(b.slug)">Book with {{ staff.name.split(' ')[0] }}</ion-button>
                   </article>
                 } @empty {
                   <section class="state-card premium-card"><h2>No staff available</h2></section>
@@ -314,21 +314,21 @@ import { Subscription } from "rxjs";
                 </div>
               </div>
               <div class="loyalty-grid">
-                <a class="loyalty-card" routerLink="/tabs/wallet">
+                <a class="loyalty-card" [routerLink]="hubLink('wallet')">
                   <ion-icon name="wallet-outline"></ion-icon>
                   <div>
                     <strong>Wallet</strong>
                     <span>View credits, balance, and payment history for this salon</span>
                   </div>
                 </a>
-                <a class="loyalty-card" routerLink="/tabs/rewards">
+                <a class="loyalty-card" [routerLink]="hubLink('rewards')">
                   <ion-icon name="ribbon-outline"></ion-icon>
                   <div>
                     <strong>Rewards</strong>
                     <span>Loyalty points, referrals, and redemption options</span>
                   </div>
                 </a>
-                <a class="loyalty-card" routerLink="/tabs/memberships">
+                <a class="loyalty-card" [routerLink]="hubLink('memberships')">
                   <ion-icon name="card-outline"></ion-icon>
                   <div>
                     <strong>Memberships</strong>
@@ -402,7 +402,7 @@ import { Subscription } from "rxjs";
             <div class="rail-row"><span><ion-icon name="time-outline"></ion-icon> Hours</span><strong>{{ b.hoursLabel || "Published" }}</strong></div>
             <div class="rail-row"><span><ion-icon name="location-outline"></ion-icon> Area</span><strong>{{ b.area }}</strong></div>
             <div class="rail-row"><span><ion-icon name="card-outline"></ion-icon> Payment</span><strong>{{ paymentLabel() }}</strong></div>
-            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="['/business', b.slug || b.id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
+            <ion-button expand="block" size="large" class="primary-gradient" [routerLink]="businessBookLink(b.slug || b.id)" [queryParams]="bookingQueryParams()">Book now</ion-button>
           </aside>
         </section>
       </main>
@@ -419,7 +419,7 @@ import { Subscription } from "rxjs";
               <strong>{{ b.nextAvailableSlot || "Check availability" }}</strong>
             }
           </div>
-          <ion-button class="primary-gradient" [routerLink]="['/business', b.slug || b.id, 'book']" [queryParams]="bookingQueryParams()">Book now</ion-button>
+          <ion-button class="primary-gradient" [routerLink]="businessBookLink(b.slug || b.id)" [queryParams]="bookingQueryParams()">Book now</ion-button>
         </div>
       </div>
       }
@@ -1955,6 +1955,22 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     if (ids.length > 1) return { serviceIds: ids.join(","), step: 2 };
     if (ids.length === 1) return { serviceId: ids[0], step: 2 };
     return { step: 2 };
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home";
+  }
+
+  businessProfileLink(slug: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug) : `/business/${encodeURIComponent(slug)}`;
+  }
+
+  businessBookLink(slug: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug, "book") : `/business/${encodeURIComponent(slug)}/book`;
+  }
+
+  hubLink(hub: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl(hub) : `/tabs/${encodeURIComponent(hub)}`;
   }
 
   serviceImage(service: ServiceItem, index: number): string {

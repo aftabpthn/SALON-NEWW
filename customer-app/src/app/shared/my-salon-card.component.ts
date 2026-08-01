@@ -29,15 +29,15 @@ import { MarketplaceService } from "../core/marketplace.service";
           </button>
         </div>
         <nav class="salon-actions" aria-label="Quick actions for your primary salon">
-          <a [routerLink]="['/business', primarySalon.businessId, 'book']" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'business', primarySalon.businessId, 'book')" class="action-pill">
             <ion-icon name="calendar-outline"></ion-icon>
             <span>Book</span>
           </a>
-          <a routerLink="/tabs/rewards" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'rewards')" class="action-pill">
             <ion-icon name="ribbon-outline"></ion-icon>
             <span>Rewards</span>
           </a>
-          <a routerLink="/tabs/profile" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'wallet')" class="action-pill">
             <ion-icon name="wallet-outline"></ion-icon>
             <span>Wallet</span>
           </a>
@@ -338,6 +338,11 @@ export class MySalonCardComponent {
 
   confirmSetPrimary(salon: import("../core/api.types").CustomerSalonRelationship): void {
     this.setPrimary.emit(salon);
+  }
+
+  mySalonLink(salon: CustomerPrimarySalon, ...segments: Array<string | number>): string {
+    const tail = segments.map((segment) => encodeURIComponent(String(segment))).join("/");
+    return `/my-salon/${encodeURIComponent(salon.tenantId)}/${encodeURIComponent(salon.branchId)}${tail ? `/${tail}` : ""}`;
   }
 
   suggestionCopy(salon: CustomerSalonRelationship): string {

@@ -36,6 +36,23 @@ function assertCustomer(access = {}) {
   }
 }
 
+function requestedSalon(access, context = {}) {
+  const tenantId = String(context.tenantId || "").trim();
+  const branchId = String(context.branchId || "").trim();
+  if (!tenantId || !branchId) return getPrimarySalon(access.userId);
+
+  const relationship = getAllRelationships(access.userId).find(
+    (row) => row.tenantId === tenantId && row.branchId === branchId
+  );
+  if (!relationship) throw unauthorized("Customer does not have access to this salon context");
+  return {
+    tenantId: relationship.tenantId,
+    branchId: relationship.branchId,
+    businessId: relationship.businessId,
+    businessName: relationship.businessName,
+  };
+}
+
 function json(value, fallback) {
   if (Array.isArray(value) || (value && typeof value === "object")) return value;
   if (!value) return fallback;
@@ -475,11 +492,11 @@ function activeOffers(tenantId, branchId) {
 
 // ─── Dashboard (main) ─────────────────────────────────────────────
 
-export function getMySalonDashboard(access) {
+export function getMySalonDashboard(access, context = {}) {
   assertCustomer(access);
 
-  const primary = getPrimarySalon(access.userId);
-  if (!primary) {
+  const salonContext = requestedSalon(access, context);
+  if (!salonContext) {
     return {
       hasPrimarySalon: false,
       salon: null,
@@ -498,7 +515,7 @@ export function getMySalonDashboard(access) {
     };
   }
 
-  const { tenantId, branchId } = primary;
+  const { tenantId, branchId } = salonContext;
   const salon = resolveSalonProfile(tenantId, branchId);
 
   // Relationship
@@ -558,27 +575,27 @@ export function getMySalonDashboard(access) {
 
 // ─── Services list (for lazy load / refresh) ──────────────────────
 
-export function getMySalonServices(access) {
+export function getMySalonServices(access, context = {}) {
   assertCustomer(access);
-  const primary = getPrimarySalon(access.userId);
-  if (!primary) return { services: [] };
-  return { services: salonServices(primary.tenantId, primary.branchId) };
+  const salonContext = requestedSalon(access, context);
+  if (!salonContext) return { services: [] };
+  return { services: salonServices(salonContext.tenantId, salonContext.branchId) };
 }
 
 // ─── Staff list (for lazy load / refresh) ─────────────────────────
 
-export function getMySalonStaff(access) {
+export function getMySalonStaff(access, context = {}) {
   assertCustomer(access);
-  const primary = getPrimarySalon(access.userId);
-  if (!primary) return { staff: [] };
-  return { staff: salonStaff(primary.tenantId, primary.branchId) };
+  const salonContext = requestedSalon(access, context);
+  if (!salonContext) return { staff: [] };
+  return { staff: salonStaff(salonContext.tenantId, salonContext.branchId) };
 }
 
 // ─── Offers list (for lazy load / refresh) ────────────────────────
 
-export function getMySalonOffers(access) {
+export function getMySalonOffers(access, context = {}) {
   assertCustomer(access);
-  const primary = getPrimarySalon(access.userId);
-  if (!primary) return { offers: [] };
-  return { offers: activeOffers(primary.tenantId, primary.branchId) };
+  const salonContext = requestedSalon(access, context);
+  if (!salonContext) return { offers: [] };
+  return { offers: activeOffers(salonContext.tenantId, salonContext.branchId) };
 }

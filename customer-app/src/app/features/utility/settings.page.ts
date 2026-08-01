@@ -16,7 +16,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       <main class="page-narrow settings-page">
         <section class="settings-hero">
           <div class="content-title-row">
-            <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+            <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
             <div>
               <p class="settings-eyebrow">Account controls</p>
               <h1 class="page-title">Preferences</h1>
@@ -260,6 +260,10 @@ export class SettingsPage implements OnInit {
     addIcons({ fingerPrintOutline, phonePortraitOutline, trashOutline });
   }
 
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile";
+  }
+
   async ngOnInit() {
     if (this.marketplace.isAuthenticated()) {
       await this.marketplace.loadCustomer().then(() => {
@@ -296,7 +300,7 @@ export class SettingsPage implements OnInit {
     const confirmed = window.confirm("Logout all active devices? You will need to sign in again.");
     if (!confirmed) return;
     await this.auth.logoutAllDevices()
-      .then(() => this.router.navigateByUrl("/tabs/home"))
+      .then(() => this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home"))
       .catch(() => undefined);
   }
 

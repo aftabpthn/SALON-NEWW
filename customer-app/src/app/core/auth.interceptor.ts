@@ -7,6 +7,7 @@ const ACCESS_TOKEN_KEY = "auraCustomerAccessToken";
 const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
 const DEVICE_ID_KEY = "auraCustomerDeviceId";
 const SESSION_RETRY_HEADER = "x-aura-session-retry";
+const SALON_MODE_CONTEXT_KEY = "aura_salon_mode_context";
 
 // Events let AuthService keep its in-memory signals in sync with token changes the
 // interceptor makes directly in localStorage, without creating an HttpClient → AuthService
@@ -39,9 +40,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const isCustomerRequest = req.url.includes("/customer/");
   const isCustomerAuthRequest = req.url.includes("/customer/auth/");
   const shouldAttachToken = !!token && isCustomerRequest && !isCustomerAuthRequest;
-  const request = token && isCustomerRequest && !isCustomerAuthRequest
-    ? withAccessToken(req, token)
-    : req;
+  const request = isCustomerAuthRequest ? req : withCustomerHeaders(req, shouldAttachToken ? token : null);
 
   return next(request).pipe(
     catchError((error: unknown) => {
@@ -50,7 +49,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
           return from(refreshCustomerSessionOnce(req.url)).pipe(
             switchMap((session) => {
               saveCustomerSession(session);
-              return next(withAccessToken(req, session.accessToken, true));
+              return next(withCustomerHeaders(req, session.accessToken, true));
             }),
             catchError((refreshError: unknown) => {
               if (isPermanentRefreshFailure(refreshError)) {
@@ -70,13 +69,27 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-function withAccessToken(req: Parameters<HttpInterceptorFn>[0], accessToken: string, retried = false) {
-  return req.clone({
-    setHeaders: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(retried ? { [SESSION_RETRY_HEADER]: "1" } : {})
-    }
-  });
+function withCustomerHeaders(req: Parameters<HttpInterceptorFn>[0], accessToken: string | null, retried = false) {
+  const salonHeaders = salonModeHeaders();
+  const setHeaders = {
+    ...salonHeaders,
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    ...(retried ? { [SESSION_RETRY_HEADER]: "1" } : {})
+  };
+  return Object.keys(setHeaders).length ? req.clone({ setHeaders }) : req;
+}
+
+function salonModeHeaders(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(SALON_MODE_CONTEXT_KEY);
+    if (!raw) return {};
+    const context = JSON.parse(raw) as { tenantId?: string; branchId?: string };
+    return context.tenantId && context.branchId
+      ? { "x-tenant-id": context.tenantId, "x-branch-id": context.branchId, "x-user-role": "customer" }
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function refreshCustomerSessionOnce(requestUrl: string): Promise<CustomerSessionRefresh> {

@@ -25,7 +25,7 @@ type WaitlistDialog = {
       <main class="page bookings-page">
         <section class="bookings-hero">
           <div class="content-title-row">
-            <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+            <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
             <h1 class="page-title">My bookings</h1>
           </div>
           <div class="booking-command-grid">
@@ -85,7 +85,7 @@ type WaitlistDialog = {
             } @empty {
               <section class="empty premium-card">
                 <h2>No bookings yet</h2>
-                <ion-button class="primary-gradient" routerLink="/tabs/search">Find a place</ion-button>
+                <ion-button class="primary-gradient" [routerLink]="discoverLink()">Find a place</ion-button>
               </section>
             }
           </div>
@@ -855,17 +855,33 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   openBooking(booking: Booking) {
-    void this.router.navigate(["/bookings", booking.id]);
+    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
   openBookingDetails(booking: Booking) {
-    void this.router.navigate(["/bookings", booking.id]);
+    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
   handleBookingKeydown(event: KeyboardEvent, booking: Booking) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     this.openBooking(booking);
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile";
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
+  }
+
+  private bookingDetailUrl(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
+  }
+
+  private businessBookUrl(slugOrId: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slugOrId, "book") : `/business/${encodeURIComponent(slugOrId)}/book`;
   }
 
   reload() {
@@ -921,7 +937,7 @@ export class BookingsPage implements OnDestroy, OnInit {
     event.preventDefault();
     event.stopPropagation();
     if (booking.businessId) {
-      void this.router.navigate(["/business", booking.businessId, "book"], {
+      void this.router.navigate([this.businessBookUrl(booking.businessId)], {
         queryParams: {
           serviceId: booking.serviceId || undefined,
           staffId: booking.staffId || undefined,
@@ -931,7 +947,7 @@ export class BookingsPage implements OnDestroy, OnInit {
       });
       return;
     }
-    void this.router.navigateByUrl("/tabs/search");
+    void this.router.navigateByUrl(this.discoverLink());
   }
 
   canRebook(booking: Booking): boolean {
@@ -996,7 +1012,7 @@ export class BookingsPage implements OnDestroy, OnInit {
     this.actionLoading.set(`reschedule:${booking.id}`);
     try {
       const business = await this.marketplace.loadBusiness(booking.businessId);
-      await this.router.navigate(["/business", business.slug, "book"], {
+      await this.router.navigate([this.businessBookUrl(business.slug)], {
         queryParams: {
           serviceId: booking.serviceId,
           staffId: booking.staffId || undefined,

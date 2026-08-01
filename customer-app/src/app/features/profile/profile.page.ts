@@ -21,7 +21,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
               <h1>{{ profileName() || "Loading profile" }}</h1>
               <p class="muted">{{ marketplace.customer()?.email || "No email saved" }} · {{ marketplace.customer()?.phone || "No phone saved" }}</p>
             </div>
-            <button type="button" class="edit-profile-button" routerLink="/tabs/profile/edit" aria-label="Edit profile">
+            <button type="button" class="edit-profile-button" [routerLink]="profileRoute('profile/edit')" aria-label="Edit profile">
               <ion-icon name="create-outline"></ion-icon>
               <span>Edit</span>
             </button>
@@ -54,22 +54,22 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
           </section>
 
           <section class="account-grid">
-            <a class="summary-card premium-card" routerLink="/tabs/wishlist">
+            <a class="summary-card premium-card" [routerLink]="profileRoute('wishlist')">
               <ion-icon name="heart-outline"></ion-icon>
               <strong>{{ savedSalonsCount() }} liked salons</strong>
               <span>Salons you have liked</span>
             </a>
-            <a class="summary-card premium-card" routerLink="/tabs/saved-salons">
+            <a class="summary-card premium-card" [routerLink]="profileRoute('saved-salons')">
               <ion-icon name="bookmark-outline"></ion-icon>
               <strong>{{ marketplace.savedSalons().length }} saved salons</strong>
               <span>Your shortlist for later</span>
             </a>
-            <a class="summary-card premium-card" routerLink="/tabs/bookings">
+            <a class="summary-card premium-card" [routerLink]="profileRoute('bookings')">
               <ion-icon name="sparkles-outline"></ion-icon>
               <strong>{{ upcomingCount() }} upcoming</strong>
               <span>Confirmed and pending visits</span>
             </a>
-            <a class="summary-card premium-card" routerLink="/tabs/rewards">
+            <a class="summary-card premium-card" [routerLink]="profileRoute('rewards')">
               <ion-icon name="ribbon-outline"></ion-icon>
               <strong>{{ customer.membershipLabel || "Starter" }}</strong>
               <span>Loyalty and rewards status</span>
@@ -216,21 +216,21 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
         <nav class="menu premium-card" aria-label="Profile menu">
           <div class="menu-section-title">Hub</div>
-          <a routerLink="/tabs/bookings"><ion-icon name="sparkles-outline"></ion-icon><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/wishlist"><ion-icon name="heart-outline"></ion-icon><span>Liked Salons / Wishlist</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/saved-salons"><ion-icon name="bookmark-outline"></ion-icon><span>Saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/wallet"><ion-icon name="wallet-outline"></ion-icon><span>Wallet and payments</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/rewards"><ion-icon name="ribbon-outline"></ion-icon><span>Loyalty rewards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/memberships"><ion-icon name="heart-circle-outline"></ion-icon><span>Memberships</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/packages"><ion-icon name="ticket-outline"></ion-icon><span>Packages</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/gift-cards"><ion-icon name="gift-outline"></ion-icon><span>Gift cards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/referrals"><ion-icon name="share-social-outline"></ion-icon><span>Referrals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/family"><ion-icon name="people-outline"></ion-icon><span>Family profiles</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/corporate"><ion-icon name="briefcase-outline"></ion-icon><span>Corporate benefits</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/goals"><ion-icon name="color-palette-outline"></ion-icon><span>Beauty goals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/notifications"><ion-icon name="notifications-outline"></ion-icon><span>Notifications</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/support"><ion-icon name="help-circle-outline"></ion-icon><span>Help, support and AI</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/settings"><ion-icon name="shield-checkmark-outline"></ion-icon><span>Privacy and settings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('bookings')"><ion-icon name="sparkles-outline"></ion-icon><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('wishlist')"><ion-icon name="heart-outline"></ion-icon><span>Liked Salons / Wishlist</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('saved-salons')"><ion-icon name="bookmark-outline"></ion-icon><span>Saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('wallet')"><ion-icon name="wallet-outline"></ion-icon><span>Wallet and payments</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('rewards')"><ion-icon name="ribbon-outline"></ion-icon><span>Loyalty rewards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('memberships')"><ion-icon name="heart-circle-outline"></ion-icon><span>Memberships</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('packages')"><ion-icon name="ticket-outline"></ion-icon><span>Packages</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('gift-cards')"><ion-icon name="gift-outline"></ion-icon><span>Gift cards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('referrals')"><ion-icon name="share-social-outline"></ion-icon><span>Referrals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('family')"><ion-icon name="people-outline"></ion-icon><span>Family profiles</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('corporate')"><ion-icon name="briefcase-outline"></ion-icon><span>Corporate benefits</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('goals')"><ion-icon name="color-palette-outline"></ion-icon><span>Beauty goals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('notifications')"><ion-icon name="notifications-outline"></ion-icon><span>Notifications</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('support')"><ion-icon name="help-circle-outline"></ion-icon><span>Help, support and AI</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="profileRoute('settings')"><ion-icon name="shield-checkmark-outline"></ion-icon><span>Privacy and settings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
         </nav>
 
         @if (marketplace.isAuthenticated()) {
@@ -855,7 +855,12 @@ export class ProfilePage implements OnInit {
       })
       .catch(() => {
         this.emailVerification.notice = this.marketplace.error() || "Could not send email verification code.";
-      });
+    });
+  }
+
+  profileRoute(path: string): string {
+    if (!this.marketplace.salonMode()) return path === "notifications" || path === "settings" ? `/${path}` : `/tabs/${path}`;
+    return this.marketplace.salonModeUrl(...path.split("/"));
   }
 
   async verifyEmailChange() {

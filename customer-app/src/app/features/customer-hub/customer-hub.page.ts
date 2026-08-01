@@ -185,7 +185,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <p>{{ supportLoadError() }}</p>
                   <div class="support-inline-actions">
                     <ion-button class="primary-gradient" (click)="loadBookingSupportContext()">Retry</ion-button>
-                    <ion-button fill="outline" class="secondary-button" routerLink="/help">General help</ion-button>
+                    <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/help')">General help</ion-button>
                   </div>
                 </section>
               } @else if (supportTicket(); as ticket) {
@@ -196,7 +196,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <div><dt>Ticket ID</dt><dd>{{ ticket.id }}</dd></div>
                     <div><dt>Status</dt><dd>{{ ticket.status }}</dd></div>
                   </dl>
-                  <ion-button class="primary-gradient" [routerLink]="['/bookings', ticket.bookingId]">Back to booking</ion-button>
+                  <ion-button class="primary-gradient" [routerLink]="hubRoute('/bookings/' + ticket.bookingId)">Back to booking</ion-button>
                 </section>
               } @else if (supportBooking(); as booking) {
                 <section class="support-booking-card" aria-label="Verified booking details">
@@ -278,7 +278,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Your credits, refunds and wallet activity in one place.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/invoices" aria-label="View invoices">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/invoices')" aria-label="View invoices">
                 <ion-icon class="wallet-header-receipt" name="receipt-outline" aria-hidden="true"></ion-icon>
                 <span>View invoices</span>
                 <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
@@ -329,11 +329,11 @@ const hubConfigs: Record<string, HubConfig> = {
                   <small>Applied only where wallet payment is eligible.</small>
                 </div>
                 <div class="wallet-actions" aria-label="Wallet actions">
-                  <a class="wallet-action wallet-action-primary" routerLink="/tabs/search">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
                     <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                     Explore services
                   </a>
-                  <a class="wallet-action wallet-action-secondary" routerLink="/tabs/invoices">
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/invoices')">
                     <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
                     Check invoices
                   </a>
@@ -376,7 +376,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
                       <h3>No wallet activity yet</h3>
                       <p>Credits, eligible refunds and wallet payments will appear here automatically.</p>
-                      <a routerLink="/tabs/search">Explore salons <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Explore salons' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
                 </section>
@@ -398,7 +398,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <p><strong>Payments</strong><small>Wallet use depends on the salon, service and invoice.</small></p>
                     </div>
                   </div>
-                  <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'payment' }">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
                     Payment and wallet help
                     <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                   </a>
@@ -424,7 +424,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Track due payments, past invoices and your payment history.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/wallet" aria-label="View wallet">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/wallet')" aria-label="View wallet">
                 <ion-icon class="wallet-header-receipt" name="wallet-outline" aria-hidden="true"></ion-icon>
                 <span>View wallet</span>
                 <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
@@ -475,11 +475,11 @@ const hubConfigs: Record<string, HubConfig> = {
                   <small>{{ invoiceDueCount() }} {{ invoiceDueCount() === 1 ? "invoice" : "invoices" }} with balance due</small>
                 </div>
                 <div class="wallet-actions" aria-label="Invoice actions">
-                  <a class="wallet-action wallet-action-primary" routerLink="/tabs/wallet">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/wallet')">
                     <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon>
                     View wallet
                   </a>
-                  <a class="wallet-action wallet-action-secondary" routerLink="/tabs/search">
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
                     <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                     Explore services
                   </a>
@@ -534,7 +534,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
                       <h3>No invoices yet</h3>
                       <p>Your booking invoices will appear here automatically after each completed visit.</p>
-                      <a routerLink="/tabs/search">Book a service <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
                 </section>
@@ -556,7 +556,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <p><strong>Due invoices</strong><small>Payments can be split across multiple visits and invoices.</small></p>
                     </div>
                   </div>
-                  <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'payment' }">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
                     Invoice and payment help
                     <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                   </a>
@@ -582,7 +582,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Every payment across your bookings and invoices, in one secure place.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/invoices" aria-label="View invoices">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/invoices')" aria-label="View invoices">
                 <ion-icon class="wallet-header-receipt" name="receipt-outline" aria-hidden="true"></ion-icon>
                 <span>View invoices</span>
                 <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
@@ -633,11 +633,11 @@ const hubConfigs: Record<string, HubConfig> = {
                   <small>{{ paymentLatestLabel() }}</small>
                 </div>
                 <div class="wallet-actions" aria-label="Payment actions">
-                  <a class="wallet-action wallet-action-primary" routerLink="/tabs/invoices">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/invoices')">
                     <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
                     View invoices
                   </a>
-                  <a class="wallet-action wallet-action-secondary" routerLink="/tabs/search">
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
                     <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                     Explore services
                   </a>
@@ -680,7 +680,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
                       <h3>No payments yet</h3>
                       <p>Your booking and invoice payments will appear here automatically after each settlement.</p>
-                      <a routerLink="/tabs/search">Book a service <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
                 </section>
@@ -702,7 +702,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <p><strong>Refunds</strong><small>Eligible refunds move back to your wallet and appear in history here.</small></p>
                     </div>
                   </div>
-                  <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'payment' }">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
                     Payment and wallet help
                     <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                   </a>
@@ -728,7 +728,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Points, tier and booking rewards from your activity.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Book a service">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
                 <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                 <span>Book now</span>
               </a>
@@ -742,11 +742,11 @@ const hubConfigs: Record<string, HubConfig> = {
                   <small><span class="wallet-status"><span aria-hidden="true"></span>{{ rewards.tier }} tier</span></small>
                 </div>
                 <div class="wallet-actions" aria-label="Reward actions">
-                  <a class="wallet-action wallet-action-primary" routerLink="/tabs/home">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/home')">
                     <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
                     View tier benefits
                   </a>
-                  <a class="wallet-action wallet-action-secondary" routerLink="/tabs/search">
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
                     <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                     Book & earn
                   </a>
@@ -789,7 +789,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <div class="wallet-state-icon"><ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon></div>
                       <h3>No reward activity yet</h3>
                       <p>Points are earned from completed bookings and referrals. They will appear here automatically.</p>
-                      <a routerLink="/tabs/search">Book a service <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
                 </section>
@@ -815,7 +815,7 @@ const hubConfigs: Record<string, HubConfig> = {
                       <p><strong>Points expiry</strong><small>Points are valid for 12 months from the date they are earned.</small></p>
                     </div>
                   </div>
-                  <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'rewards' }">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'rewards' }">
                     <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                     Help with rewards
                   </a>
@@ -865,7 +865,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Active plans, benefits and available memberships.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Book a service">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
                 <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                 <span>Book now</span>
               </a>
@@ -905,11 +905,11 @@ const hubConfigs: Record<string, HubConfig> = {
                       <small><span class="wallet-status"><span aria-hidden="true"></span>{{ membershipList[0].status }}</span></small>
                     </div>
                     <div class="wallet-actions" aria-label="Membership actions">
-                      <a class="wallet-action wallet-action-primary" routerLink="/tabs/search">
+                        <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
                         <ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon>
                         Explore plans
                       </a>
-                      <a class="wallet-action wallet-action-secondary" routerLink="/help" [queryParams]="{ topic: 'memberships' }">
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'memberships' }">
                         <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                         Help
                       </a>
@@ -955,7 +955,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <div class="wallet-state-icon"><ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon></div>
                         <h3>No memberships yet</h3>
                         <p>Purchase a membership plan to unlock exclusive benefits, discounts and credits.</p>
-                        <a routerLink="/tabs/search">Browse plans <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                        <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Browse plans' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                       </div>
                     }
                   </section>
@@ -1004,7 +1004,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <p><strong>Auto-renew</strong><small>Memberships can be set to auto-renew so you never lose your benefits.</small></p>
                       </div>
                     </div>
-                    <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'memberships' }">
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'memberships' }">
                       <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                       Help with memberships
                     </a>
@@ -1024,7 +1024,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Profiles, preferences and shared bookings for your family.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Book a service">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
                 <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                 <span>Book now</span>
               </a>
@@ -1094,7 +1094,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <p><strong>Shared history</strong><small>View past visits and preferences for every family member from one account.</small></p>
                   </div>
                 </div>
-                <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'family' }">
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'family' }">
                   <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                   Help with family bookings
                 </a>
@@ -1112,7 +1112,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Invite friends and earn rewards when they book.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Invite friends">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Invite friends">
                 <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
                 <span>Invite now</span>
               </a>
@@ -1125,11 +1125,11 @@ const hubConfigs: Record<string, HubConfig> = {
                 <small><span class="wallet-status"><span aria-hidden="true"></span>Share with friends to unlock booking rewards</span></small>
               </div>
               <div class="wallet-actions" aria-label="Referral actions">
-                <a class="wallet-action wallet-action-primary" routerLink="/tabs/search">
+                <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
                   <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
                   Share code
                 </a>
-                <a class="wallet-action wallet-action-secondary" routerLink="/help" [queryParams]="{ topic: 'referrals' }">
+                <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'referrals' }">
                   <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                   How it works
                 </a>
@@ -1208,7 +1208,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <p><strong>Get rewarded</strong><small>Credits are added to your wallet automatically once the booking is completed.</small></p>
                   </div>
                 </div>
-                <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'referrals' }">
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'referrals' }">
                   <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                   Help with referrals
                 </a>
@@ -1226,7 +1226,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Purchase, redeem and track your gift card balances.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Browse services">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Browse services">
                 <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
                 <span>Buy a gift card</span>
               </a>
@@ -1270,7 +1270,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
                         Buy new
                       </a>
-                      <a class="wallet-action wallet-action-secondary" routerLink="/help" [queryParams]="{ topic: 'gift-cards' }">
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'gift-cards' }">
                         <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                         Help
                       </a>
@@ -1336,7 +1336,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <p><strong>Track balance</strong><small>Your remaining balance and transaction history are always visible here.</small></p>
                       </div>
                     </div>
-                    <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'gift-cards' }">
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'gift-cards' }">
                       <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                       Help with gift cards
                     </a>
@@ -1356,7 +1356,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Workplace benefits, packages and reimbursements.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Browse services">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Browse services">
                 <ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon>
                 <span>Explore</span>
               </a>
@@ -1429,7 +1429,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <p><strong>Reimbursements</strong><small>Submit invoices for HR reimbursement directly from the app.</small></p>
                   </div>
                 </div>
-                <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'corporate' }">
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'corporate' }">
                   <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                   Help with corporate benefits
                 </a>
@@ -1447,7 +1447,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Track your treatment plans, routines and progress.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Find services">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Find services">
                 <ion-icon name="color-palette-outline" aria-hidden="true"></ion-icon>
                 <span>Discover</span>
               </a>
@@ -1517,7 +1517,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <p><strong>Track progress</strong><small>Mark visits as completed and watch your goal progress grow over time.</small></p>
                   </div>
                 </div>
-                <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'goals' }">
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'goals' }">
                   <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                   Help with beauty goals
                 </a>
@@ -1535,7 +1535,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Sessions, balances and package redemptions.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/tabs/search" aria-label="Book a service">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
                 <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                 <span>Book now</span>
               </a>
@@ -1575,11 +1575,11 @@ const hubConfigs: Record<string, HubConfig> = {
                       <small><span class="wallet-status"><span aria-hidden="true"></span>{{ packageList[0].status }}</span></small>
                     </div>
                     <div class="wallet-actions" aria-label="Package actions">
-                      <a class="wallet-action wallet-action-primary" routerLink="/tabs/search">
+                        <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
                         <ion-icon name="ticket-outline" aria-hidden="true"></ion-icon>
                         Browse packages
                       </a>
-                      <a class="wallet-action wallet-action-secondary" routerLink="/help" [queryParams]="{ topic: 'packages' }">
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'packages' }">
                         <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                         Help
                       </a>
@@ -1627,7 +1627,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <div class="wallet-state-icon"><ion-icon name="ticket-outline" aria-hidden="true"></ion-icon></div>
                         <h3>No packages yet</h3>
                         <p>Purchase a service package for discounted rates on your favourite treatments.</p>
-                        <a routerLink="/tabs/search">Browse packages <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                        <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Browse packages' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                       </div>
                     }
                   </section>
@@ -1649,7 +1649,7 @@ const hubConfigs: Record<string, HubConfig> = {
                         <p><strong>Track balance</strong><small>Your remaining credits and package status are always visible in this section.</small></p>
                       </div>
                     </div>
-                    <a class="wallet-help-link" routerLink="/help" [queryParams]="{ topic: 'packages' }">
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'packages' }">
                       <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                       Help with packages
                     </a>
@@ -1669,7 +1669,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 </div>
                 <p class="wallet-intro">Your support tickets and help resources.</p>
               </div>
-              <a class="wallet-header-link" routerLink="/help" aria-label="Help centre">
+              <a class="wallet-header-link" [routerLink]="hubRoute('/help')" aria-label="Help centre">
                 <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                 <span>Help centre</span>
                 <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
@@ -1740,7 +1740,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   } @else if (supportTickets().length) {
                     <div class="wallet-transactions">
                       @for (ticket of supportTickets(); track ticket.id) {
-                        <article class="wallet-transaction" [routerLink]="ticket.bookingId ? ['/bookings', ticket.bookingId] : undefined">
+                        <article class="wallet-transaction" [routerLink]="ticket.bookingId ? hubRoute('/bookings/' + ticket.bookingId) : undefined">
                           <div class="transaction-icon">
                             <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
                           </div>
@@ -1760,14 +1760,14 @@ const hubConfigs: Record<string, HubConfig> = {
                       <div class="wallet-state-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
                       <h3>No support tickets</h3>
                       <p>You haven&rsquo;t submitted any support requests yet. Visit a booking to get help.</p>
-                      <a routerLink="/tabs/bookings">View my bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/bookings')">View my bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
 
                   @if (supportTickets().length > 0) {
                     <div class="wallet-empty" style="margin-top:12px">
                       <p>Need help with a specific booking? Use the help option on any booking detail page.</p>
-                      <a routerLink="/tabs/bookings">Go to bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <a [routerLink]="hubRoute('/tabs/bookings')">Go to bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
                 </section>
@@ -1789,11 +1789,11 @@ const hubConfigs: Record<string, HubConfig> = {
                       <p><strong>Help centre</strong><small>Browse FAQs and guides for common topics like payments, cancellations and account management.</small></p>
                     </div>
                   </div>
-                  <a class="wallet-help-link" routerLink="/help">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')">
                     <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                     Visit help centre
                   </a>
-                  <a class="wallet-help-link" routerLink="/tabs/bookings" style="margin-top:6px">
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/tabs/bookings')" style="margin-top:6px">
                     <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
                     View my bookings
                   </a>
@@ -1808,17 +1808,17 @@ const hubConfigs: Record<string, HubConfig> = {
           <h1>{{ config().title }}</h1>
           <span>{{ config().subtitle }}</span>
           <div class="hero-actions">
-            <ion-button class="primary-gradient" routerLink="/tabs/search">
+            <ion-button class="primary-gradient" [routerLink]="hubRoute('/tabs/search')">
               <ion-icon name="search-outline" slot="start"></ion-icon>
               Discover salons
             </ion-button>
-            <ion-button fill="outline" class="secondary-button" routerLink="/tabs/home">Back to home</ion-button>
+            <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/tabs/home')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Back to home' }}</ion-button>
           </div>
         </section>
 
         <section class="hub-grid" aria-label="Customer hub sections">
           @for (item of hubModules; track item.route) {
-            <a class="premium-card hub-tile" [class.active]="slug() === item.slug" [routerLink]="item.route">
+            <a class="premium-card hub-tile" [class.active]="slug() === item.slug" [routerLink]="hubRoute(item.route)">
               <ion-icon [name]="item.icon"></ion-icon>
               <strong>{{ item.label }}</strong>
               <small>{{ item.copy }}</small>
@@ -1829,7 +1829,7 @@ const hubConfigs: Record<string, HubConfig> = {
         @if (!marketplace.isAuthenticated()) {
           <section class="premium-card state-card">
             <h2>Login required</h2>
-            <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: config().route }">Log in</ion-button>
+            <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: hubRoute(config().route) }">Log in</ion-button>
           </section>
         } @else {
           @if (marketplace.loading()) {
@@ -1882,7 +1882,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <small>{{ record.date }}</small>
                   }
                   @if (record.route) {
-                    <ion-button fill="outline" class="secondary-button record-action" [routerLink]="record.route">
+                    <ion-button fill="outline" class="secondary-button record-action" [routerLink]="hubRoute(record.route)">
                       Open section
                     </ion-button>
                   }
@@ -3172,7 +3172,7 @@ export class CustomerHubPage implements OnInit {
   readonly walletMode = computed(() => this.slug() === "wallet");
   readonly invoicesMode = computed(() => this.slug() === "invoices");
   readonly paymentsMode = computed(() => this.slug() === "payments");
-  readonly hubBackHref = computed(() => (this.marketplace.salonMode() ? "/tabs/my-salon" : "/tabs/profile"));
+  readonly hubBackHref = computed(() => (this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile"));
   readonly rewardsMode = computed(() => this.slug() === "rewards");
   readonly membershipsMode = computed(() => this.slug() === "memberships");
   readonly packagesMode = computed(() => this.slug() === "packages");
@@ -3310,6 +3310,17 @@ export class CustomerHubPage implements OnInit {
       trendingUpOutline,
       walletOutline
     });
+  }
+
+  hubRoute(route: string | undefined): string | undefined {
+    if (!route || !this.marketplace.salonMode()) return route;
+    if (route.startsWith("/tabs/")) {
+      const segment = route.slice("/tabs/".length);
+      return segment === "home" || segment === "search" ? this.marketplace.salonModeUrl() : this.marketplace.salonModeUrl(segment);
+    }
+    if (route.startsWith("/bookings/")) return this.marketplace.salonModeUrl("bookings", route.slice("/bookings/".length));
+    if (route === "/help" || route === "/settings" || route === "/notifications") return this.marketplace.salonModeUrl(route.slice(1));
+    return route;
   }
 
   ngOnInit() {

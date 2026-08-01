@@ -1,8 +1,9 @@
 import { Component, OnDestroy, OnInit } from "@angular/core";
 import { IonApp, IonRouterOutlet } from "@ionic/angular/standalone";
-import { NavigationEnd, Router } from "@angular/router";
+import { NavigationEnd, NavigationStart, Router } from "@angular/router";
 import { filter, Subscription } from "rxjs";
 import { CustomerPushNotificationService } from "./core/customer-push-notification.service";
+import { MarketplaceService } from "./core/marketplace.service";
 
 const ACCESS_TOKEN_KEY = "auraCustomerAccessToken";
 const REFRESH_TOKEN_KEY = "auraCustomerRefreshToken";
@@ -20,14 +21,19 @@ const LAST_ROUTE_KEY = "auraCustomerLastRoute";
 })
 export class AppComponent implements OnInit, OnDestroy {
   private navigationSubscription?: Subscription;
+  private salonBoundarySubscription?: Subscription;
+  private redirectingToSalon = false;
 
-  constructor(private readonly router: Router, private readonly pushNotifications: CustomerPushNotificationService) {}
+  constructor(private readonly router: Router, private readonly pushNotifications: CustomerPushNotificationService, private readonly marketplace: MarketplaceService) {}
 
   ngOnInit() {
     void this.pushNotifications.initialize();
     this.navigationSubscription = this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe((event) => this.rememberRoute(event.urlAfterRedirects));
+    this.salonBoundarySubscription = this.router.events
+      .pipe(filter((event): event is NavigationStart => event instanceof NavigationStart))
+      .subscribe((event) => this.enforceSalonBoundary(event.url));
 
     if (!this.hasStoredSession() || !this.isStartupRoute()) return;
     const route = this.readLastRoute();
@@ -36,6 +42,19 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.navigationSubscription?.unsubscribe();
+    this.salonBoundarySubscription?.unsubscribe();
+  }
+
+  private enforceSalonBoundary(url: string) {
+    if (!this.marketplace.salonMode() || this.redirectingToSalon) return;
+    const path = url.split(/[?#]/)[0].replace(/\/+$/, "") || "/";
+    if (path.startsWith("/my-salon/") || path === "/login") return;
+    this.redirectingToSalon = true;
+    setTimeout(() => {
+      void this.router.navigateByUrl(this.marketplace.salonModeUrl(), { replaceUrl: true }).finally(() => {
+        this.redirectingToSalon = false;
+      });
+    }, 0);
   }
 
   private hasStoredSession(): boolean {
@@ -70,6 +89,6 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private isRestorableRoute(route: string): boolean {
-    return /^(?:\/tabs\/|\/business\/|\/booking\/|\/bookings\/|\/notifications(?:[/?]|$)|\/settings(?:[/?]|$)|\/help(?:[/?]|$)|\/search(?:[/?]|$))/.test(route);
+    return /^(?:\/my-salon\/|\/tabs\/|\/business\/|\/booking\/|\/bookings\/|\/notifications(?:[/?]|$)|\/settings(?:[/?]|$)|\/help(?:[/?]|$)|\/search(?:[/?]|$))/.test(route);
   }
 }

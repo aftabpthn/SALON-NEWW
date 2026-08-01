@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
-import { Router, RouterLink } from "@angular/router";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import {
@@ -113,7 +113,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
             } @else {
               <div class="ms-inline-empty">
                 <p>You haven't visited or booked at another salon yet.</p>
-                <a routerLink="/tabs/search">Explore All Salons</a>
+                <button type="button" class="ms-text-action" (click)="exitSalonMode()">Exit My Salon</button>
               </div>
             }
           </section>
@@ -197,11 +197,11 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               </div>
 
               <div class="ms-hero-actions">
-                <a class="ms-book-button" [routerLink]="['/business', d.salon.slug, 'book']">
+                <a class="ms-book-button" [routerLink]="salonBookLink(d.salon)">
                   <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
                   Book Appointment
                 </a>
-                <a class="ms-profile-button" [routerLink]="['/business', d.salon.slug]">
+                <a class="ms-profile-button" [routerLink]="salonProfileLink(d.salon)">
                   Salon Details
                   <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                 </a>
@@ -210,22 +210,22 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
 
             <!-- 2. QUICK ACTION SHORTCUT STRIP -->
             <nav class="ms-quick-actions" aria-label="Salon quick navigation">
-              <a [routerLink]="['/business', d.salon.slug, 'book']">
+              <a [routerLink]="salonBookLink(d.salon)">
                 <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon><span>Book</span>
               </a>
-              <a routerLink="/tabs/wallet">
+              <a [routerLink]="scopedLink('wallet')">
                 <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon><span>Wallet</span>
               </a>
-              <a routerLink="/tabs/rewards">
+              <a [routerLink]="scopedLink('rewards')">
                 <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon><span>Loyalty</span>
               </a>
-              <a routerLink="/tabs/memberships">
+              <a [routerLink]="scopedLink('memberships')">
                 <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon><span>Membership</span>
               </a>
-              <a routerLink="/tabs/packages">
+              <a [routerLink]="scopedLink('packages')">
                 <ion-icon name="gift-outline" aria-hidden="true"></ion-icon><span>Packages</span>
               </a>
-              <a routerLink="/notifications">
+              <a [routerLink]="scopedLink('notifications')">
                 <ion-icon name="notifications-outline" aria-hidden="true"></ion-icon><span>Updates</span>
               </a>
             </nav>
@@ -244,17 +244,17 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
 
               <div class="ms-snapshot">
                 <!-- Membership -->
-                <a routerLink="/tabs/memberships" class="ms-snapshot-item">
+                <a [routerLink]="scopedLink('memberships')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
                     <span>Membership</span>
                     <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
                   </div>
                   <strong>{{ d.membership?.planName || 'Not Enrolled' }}</strong>
-                  <small>{{ d.membership ? safeCount(d.membership.creditsRemaining) + ' service credits left' : 'Explore plans' }}</small>
+                  <small>{{ d.membership ? safeCount(d.membership.creditsRemaining) + ' service credits left' : 'No active plan' }}</small>
                 </a>
 
                 <!-- Salon Wallet -->
-                <a routerLink="/tabs/wallet" class="ms-snapshot-item">
+                <a [routerLink]="scopedLink('wallet')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
                     <span>Salon Wallet</span>
                     <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon>
@@ -264,7 +264,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                 </a>
 
                 <!-- Loyalty Points -->
-                <a routerLink="/tabs/rewards" class="ms-snapshot-item">
+                <a [routerLink]="scopedLink('rewards')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
                     <span>{{ d.loyalty?.tier || 'Loyalty Tier' }}</span>
                     <ion-icon name="star-outline" aria-hidden="true"></ion-icon>
@@ -274,7 +274,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                 </a>
 
                 <!-- Active Package Credits -->
-                <a routerLink="/tabs/packages" class="ms-snapshot-item">
+                <a [routerLink]="scopedLink('packages')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
                     <span>Package Credits</span>
                     <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
@@ -292,7 +292,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <span class="ms-kicker">Schedule & Visits</span>
                   <h2 id="upcoming-title">Upcoming Appointment</h2>
                 </div>
-                <a routerLink="/tabs/bookings">View All Bookings</a>
+                <a [routerLink]="scopedLink('bookings')">View All Bookings</a>
               </div>
 
               @if (upcomingBooking(); as booking) {
@@ -309,7 +309,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                       <strong class="ms-price">{{ formatMoney(booking.totalPricePaise) }}</strong>
                     }
                   </div>
-                  <a class="ms-arrow-link" [routerLink]="['/bookings', booking.id]" aria-label="View appointment details">
+                  <a class="ms-arrow-link" [routerLink]="scopedLink('bookings', booking.id)" aria-label="View appointment details">
                     <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                   </a>
                 </article>
@@ -320,7 +320,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                     <h3>No upcoming appointments</h3>
                     <p>Ready for a fresh haircut, facial, or styling session? Book a time at {{ d.salon.name }}.</p>
                   </div>
-                  <a [routerLink]="['/business', d.salon.slug, 'book']">Book New Appointment</a>
+                  <a [routerLink]="salonBookLink(d.salon)">Book New Appointment</a>
                 </div>
               }
 
@@ -332,7 +332,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                     <strong>{{ booking.serviceName }}</strong>
                     <small>With {{ booking.staffName || 'Salon Professional' }}</small>
                   </div>
-                  <a class="ms-rebook-action" [routerLink]="['/business', d.salon.slug, 'book']">
+                  <a class="ms-rebook-action" [routerLink]="salonBookLink(d.salon)">
                     Rebook Service <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                   </a>
                 </div>
@@ -346,7 +346,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <span class="ms-kicker">Happy Hours & Savings</span>
                   <h2 id="offers-title">Exclusive Salon Offers</h2>
                 </div>
-                <a routerLink="/tabs/offers">All Offers</a>
+                <a [routerLink]="scopedLink()">All Offers</a>
               </div>
 
               @if (d.offers.length) {
@@ -358,7 +358,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                       @if (offer.description) { <p>{{ offer.description }}</p> }
                       <div class="ms-offer-footer">
                         <small>Valid {{ formatDate(offer.validFrom) }} – {{ formatDate(offer.validTo) }}</small>
-                        <a class="ms-offer-book" [routerLink]="['/business', d.salon.slug, 'book']">Claim Offer</a>
+                        <a class="ms-offer-book" [routerLink]="salonBookLink(d.salon)">Claim Offer</a>
                       </div>
                     </article>
                   }
@@ -366,7 +366,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               } @else {
                 <div class="ms-empty-line">
                   <span>No active Happy Hours or offers for this salon today.</span>
-                  <a routerLink="/tabs/offers">Check Public Coupons</a>
+                  <a [routerLink]="scopedLink()">Check Public Coupons</a>
                 </div>
               }
             </section>
@@ -378,7 +378,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <span class="ms-kicker">Salon Menu</span>
                   <h2 id="services-title">Services & Pricing</h2>
                 </div>
-                <a [routerLink]="['/business', d.salon.slug]">Full Menu</a>
+                <a [routerLink]="salonProfileLink(d.salon)">Full Menu</a>
               </div>
 
               <!-- Category Filter Pills -->
@@ -407,7 +407,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                       </div>
                       <div class="ms-service-right">
                         <span class="ms-service-price">{{ formatMoney(service.pricePaise) }}</span>
-                        <a class="ms-service-book-btn" [routerLink]="['/business', d.salon.slug, 'book']">Book</a>
+                        <a class="ms-service-book-btn" [routerLink]="salonBookLink(d.salon)">Book</a>
                       </div>
                     </div>
                   }
@@ -415,7 +415,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               } @else {
                 <div class="ms-empty-line">
                   <span>No services available for this category.</span>
-                  <a [routerLink]="['/business', d.salon.slug]">View Profile</a>
+                  <a [routerLink]="salonProfileLink(d.salon)">View Profile</a>
                 </div>
               }
             </section>
@@ -427,13 +427,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <span class="ms-kicker">Our Professionals</span>
                   <h2 id="staff-title">Salon Team</h2>
                 </div>
-                <a [routerLink]="['/business', d.salon.slug, 'book']">Check Availability</a>
+                <a [routerLink]="salonBookLink(d.salon)">Check Availability</a>
               </div>
 
               @if (d.staff.length) {
                 <div class="ms-staff-rail">
                   @for (staff of d.staff; track staff.id) {
-                    <a class="ms-staff" [routerLink]="['/business', d.salon.slug, 'book']">
+                    <a class="ms-staff" [routerLink]="salonBookLink(d.salon)">
                       <span class="ms-staff-avatar" aria-hidden="true">{{ staffInitials(staff.name) }}</span>
                       <strong>{{ staff.name }}</strong>
                       <small>{{ staff.specialty || staff.title || 'Salon Specialist' }}</small>
@@ -489,7 +489,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                     <span class="ms-kicker">Prepaid & Gift Balances</span>
                     <h2 id="wallet-title">Salon Wallet & Gift Cards</h2>
                   </div>
-                  <a routerLink="/tabs/wallet">Manage Wallet</a>
+                  <a [routerLink]="scopedLink('wallet')">Manage Wallet</a>
                 </div>
 
                 <div class="ms-wallet-container">
@@ -540,13 +540,13 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <span class="ms-kicker">Past Experience</span>
                   <h2 id="history-title">Visit History</h2>
                 </div>
-                <a routerLink="/tabs/bookings">Full History</a>
+                <a [routerLink]="scopedLink('bookings')">Full History</a>
               </div>
 
               @if (d.recentBookings.length) {
                 <div class="ms-history-list">
                   @for (booking of d.recentBookings.slice(0, 5); track booking.id) {
-                    <a [routerLink]="['/bookings', booking.id]" class="ms-history-item">
+                    <a [routerLink]="scopedLink('bookings', booking.id)" class="ms-history-item">
                       <span class="ms-history-date">{{ formatDate(booking.startAt) }}</span>
                       <div class="ms-history-copy">
                         <strong>{{ booking.serviceName }}</strong>
@@ -574,12 +574,12 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                     <span class="ms-kicker">Billing & Receipts</span>
                     <h2 id="invoices-title">Invoices & Payments</h2>
                   </div>
-                  <a routerLink="/tabs/invoices">View All Invoices</a>
+                  <a [routerLink]="scopedLink('invoices')">View All Invoices</a>
                 </div>
 
                 <div class="ms-invoice-list">
                   @for (inv of d.invoices; track inv.id) {
-                    <a routerLink="/tabs/invoices" class="ms-invoice-item">
+                    <a [routerLink]="scopedLink('invoices')" class="ms-invoice-item">
                       <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
                       <div class="ms-invoice-copy">
                         <strong>Invoice #{{ inv.invoiceNumber }}</strong>
@@ -603,7 +603,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                     <span class="ms-kicker">Direct Updates</span>
                     <h2 id="notif-title">Salon Notifications</h2>
                   </div>
-                  <a routerLink="/notifications">All Notifications</a>
+                  <a [routerLink]="scopedLink('notifications')">All Notifications</a>
                 </div>
 
                 <div class="ms-notif-list">
@@ -631,19 +631,19 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               </div>
 
               <div class="ms-more-grid">
-                <a routerLink="/tabs/support">
+                <a [routerLink]="scopedLink('support')">
                   <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
                   <span><strong>Customer Support</strong><small>Get help with bookings or billing</small></span>
                 </a>
-                <a [routerLink]="['/business', d.salon.slug]">
+                <a [routerLink]="salonProfileLink(d.salon)">
                   <ion-icon name="document-text-outline" aria-hidden="true"></ion-icon>
                   <span><strong>Booking Policies</strong><small>Cancellation & venue terms</small></span>
                 </a>
-                <a [routerLink]="['/business', d.salon.slug]">
+                <a [routerLink]="salonProfileLink(d.salon)">
                   <ion-icon name="star-outline" aria-hidden="true"></ion-icon>
                   <span><strong>Salon Reviews</strong><small>Ratings & community feedback</small></span>
                 </a>
-                <a routerLink="/tabs/wishlist">
+                <a [routerLink]="scopedLink()">
                   <ion-icon name="heart-outline" aria-hidden="true"></ion-icon>
                   <span><strong>Favorites</strong><small>Saved salons & staff</small></span>
                 </a>
@@ -673,7 +673,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   }
                 </div>
               } @else {
-                <ion-button class="ms-primary-button" routerLink="/tabs/search">Explore & Discover Salons</ion-button>
+                <ion-button class="ms-primary-button" (click)="exitSalonMode()">Exit My Salon</ion-button>
               }
             </section>
           }
@@ -746,6 +746,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     /* Picker Drawer */
     .ms-picker { position: relative; z-index: 15; display: grid; gap: 14px; margin: 10px 0 18px; padding: 20px; border: 1px solid var(--ms-line); border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 20px 50px rgba(41,34,29,.14); }
     .ms-picker-note { margin: 0; color: var(--ms-muted); font-size: .78rem; line-height: 1.45; }
+    .ms-text-action { width: fit-content; border: 0; color: var(--ms-accent); background: transparent; font-weight: 900; text-decoration: underline; cursor: pointer; }
     .ms-choice-list { display: grid; gap: 8px; width: 100%; }
     .ms-choice { width: 100%; min-height: 64px; display: grid; grid-template-columns: 46px minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--ms-line); border-radius: 18px; color: var(--ms-ink); background: rgba(255,255,255,.7); font: inherit; text-align: left; cursor: pointer; transition: all .2s ease; }
     .ms-choice.selected { border-color: var(--ms-accent); background: var(--ms-accent-soft); box-shadow: 0 4px 14px rgba(0,0,0,.04); }
@@ -1020,7 +1021,8 @@ export class MySalonPage implements OnInit {
   constructor(
     private readonly marketplace: MarketplaceService,
     private readonly auth: AuthService,
-    private readonly router: Router
+    private readonly router: Router,
+    private readonly route: ActivatedRoute
   ) {
     addIcons({
       arrowBackOutline,
@@ -1059,7 +1061,8 @@ export class MySalonPage implements OnInit {
       void this.router.navigate(["/login"]);
       return;
     }
-    this.marketplace.enterSalonMode();
+    this.syncRouteSalonContext();
+    this.marketplace.enterSalonMode(this.currentSalonContext());
     void this.loadDashboard();
   }
 
@@ -1079,7 +1082,7 @@ export class MySalonPage implements OnInit {
       this.loadError.set(this.marketplace.error() || "Please check your network connection and try again.");
     } finally {
       if (this.dash()?.salon) {
-        this.marketplace.enterSalonMode();
+        this.marketplace.enterSalonMode(this.currentSalonContext());
       } else {
         this.marketplace.exitSalonMode();
       }
@@ -1113,6 +1116,7 @@ export class MySalonPage implements OnInit {
       this.salonPickerOpen.set(false);
       this.activeCategory.set("All");
       await this.loadDashboard();
+      await this.router.navigateByUrl(this.scopedUrl());
     } catch {
       this.loadError.set(this.marketplace.error() || "Could not switch salon. Please try again.");
     } finally {
@@ -1123,6 +1127,45 @@ export class MySalonPage implements OnInit {
   isSelectedSalon(salon: CustomerSalonRelationship): boolean {
     const primary = this.marketplace.primarySalon();
     return primary?.tenantId === salon.tenantId && primary.branchId === salon.branchId;
+  }
+
+  scopedLink(...segments: Array<string | number | null | undefined>): string {
+    return this.scopedUrl(...segments.filter((segment): segment is string | number => segment !== null && segment !== undefined));
+  }
+
+  salonBookLink(salon: MySalonDashboard["salon"]): string {
+    return salon?.slug ? this.scopedLink("business", salon.slug, "book") : this.scopedLink();
+  }
+
+  salonProfileLink(salon: MySalonDashboard["salon"]): string {
+    return salon?.slug ? this.scopedLink("business", salon.slug) : this.scopedLink();
+  }
+
+  private scopedUrl(...segments: Array<string | number>): string {
+    const context = this.currentSalonContext();
+    const encoded = segments.map((segment) => encodeURIComponent(String(segment))).join("/");
+    return `/my-salon/${encodeURIComponent(context.tenantId)}/${encodeURIComponent(context.branchId)}${encoded ? `/${encoded}` : ""}`;
+  }
+
+  private currentSalonContext(): { tenantId: string; branchId: string; businessId?: string; businessName?: string } {
+    const salon = this.dash()?.salon;
+    const primary = this.marketplace.primarySalon();
+    const stored = this.marketplace.salonModeContext();
+    const tenantId = salon?.tenantId || primary?.tenantId || this.route.snapshot.paramMap.get("tenantId") || stored?.tenantId || "default";
+    const branchId = salon?.branchId || primary?.branchId || this.route.snapshot.paramMap.get("branchId") || stored?.branchId || "default";
+    return {
+      tenantId,
+      branchId,
+      businessId: primary?.businessId || stored?.businessId,
+      businessName: salon?.name || primary?.businessName || stored?.businessName
+    };
+  }
+
+  private syncRouteSalonContext(): void {
+    const tenantId = this.route.snapshot.paramMap.get("tenantId");
+    const branchId = this.route.snapshot.paramMap.get("branchId");
+    if (!tenantId || !branchId) return;
+    this.marketplace.syncSalonModeContext({ tenantId, branchId });
   }
 
   salonInitials(name: string): string {

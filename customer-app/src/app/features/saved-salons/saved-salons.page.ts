@@ -16,12 +16,12 @@ import { MarketplaceService } from "../../core/marketplace.service";
         <header class="saved-header">
           <div class="header-copy">
             <div class="content-title-row">
-              <ion-back-button class="content-back-button" defaultHref="/tabs/profile" text=""></ion-back-button>
+              <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
               <h1>Saved salons</h1>
             </div>
             <p>{{ savedCount() }} {{ savedCount() === 1 ? "salon" : "salons" }} shortlisted for later</p>
           </div>
-          <a class="discover-action" routerLink="/tabs/search">
+          <a class="discover-action" [routerLink]="discoverLink()">
             <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
             <span>Discover</span>
           </a>
@@ -117,8 +117,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
                       }
 
                       <div class="saved-actions">
-                        <a class="card-action primary" [routerLink]="['/business', business.slug || business.id || business.branchId, 'book']">Book</a>
-                        <a class="card-action secondary" [routerLink]="['/business', business.slug || business.id || business.branchId]">View</a>
+                        <a class="card-action primary" [routerLink]="businessBookLink(business)">Book</a>
+                        <a class="card-action secondary" [routerLink]="businessProfileLink(business)">View</a>
                       </div>
                     </div>
                   </article>
@@ -130,7 +130,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                     <h2>No saved salons yet</h2>
                     <p>Tap the bookmark icon on any salon to save it to your shortlist.</p>
                   </div>
-                  <ion-button class="primary-gradient" routerLink="/tabs/search">
+                  <ion-button class="primary-gradient" [routerLink]="discoverLink()">
                     <ion-icon name="search-outline" slot="start"></ion-icon>
                     Explore salons
                   </ion-button>
@@ -653,6 +653,24 @@ export class SavedSalonsPage implements OnInit {
 
   reload() {
     void this.marketplace.ensureSavedSalons().catch(() => undefined);
+  }
+
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("profile") : "/tabs/profile";
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
+  }
+
+  businessProfileLink(business: Business): string {
+    const slug = business.slug || business.id || business.branchId || "";
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug) : `/business/${encodeURIComponent(slug)}`;
+  }
+
+  businessBookLink(business: Business): string {
+    const slug = business.slug || business.id || business.branchId || "";
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug, "book") : `/business/${encodeURIComponent(slug)}/book`;
   }
 
   money(pricePaise: number): string {
