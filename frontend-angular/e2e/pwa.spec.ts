@@ -16,6 +16,13 @@ test('production app shell installs and reloads while offline', async ({ page, c
   });
   expect(scriptUrl).toMatch(/ngsw-worker\.js$/);
 
+  if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  }
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL || ''))
+    .toMatch(/ngsw-worker\.js$/);
+
   await context.setOffline(true);
   try {
     await page.reload({ waitUntil: 'domcontentloaded' });
