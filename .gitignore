@@ -10,6 +10,7 @@ dist/
 www/
 .angular/
 target/
+backend-rust/target-*/
 .codex-target/
 .codex-target-*/
 target_noblock/
@@ -26,10 +27,12 @@ venv/
 .agents/
 .codex/
 .codex-runtime/
+.codex-review/
 .codex-video-review/
 .claude/
 artifacts/
 tmp_zip_extract/
+backend-rust/data/
 *.log
 *.err
 frontend-angular/playwright/.auth/
